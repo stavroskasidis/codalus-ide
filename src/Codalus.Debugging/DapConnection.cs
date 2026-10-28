@@ -34,6 +34,12 @@ public sealed class DapConnection : IAsyncDisposable
     private readonly Stream _output;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<int, TaskCompletionSource<JsonElement>> _pending = new();
+
+    /// <summary>The requests not answered yet: their command and when they were sent (<see cref="Describe"/>).</summary>
+    private readonly ConcurrentDictionary<int, (string Command, long Sent)> _unanswered = new();
+
+    /// <summary>The last messages read (a response's command, an event's name, a reverse request's) and when (<see cref="Describe"/>).</summary>
+    private readonly Queue<(string What, long Read)> _recent = new();
     private readonly Channel<object> _events = Channel.CreateUnbounded<object>(new UnboundedChannelOptions { SingleReader = true });
     private readonly HashSet<string> _accepted = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<JsonElement>>> _handlers = new(StringComparer.Ordinal);
@@ -90,6 +96,7 @@ public sealed class DapConnection : IAsyncDisposable
         var seq = Interlocked.Increment(ref _seq);
         var response = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[seq] = response;
+        _unanswered[seq] = (command, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
             await WriteAsync(writer =>
@@ -119,6 +126,7 @@ public sealed class DapConnection : IAsyncDisposable
         finally
         {
             _pending.TryRemove(seq, out _);
+            _unanswered.TryRemove(seq, out _);
         }
     }
 
@@ -178,6 +186,54 @@ public sealed class DapConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// What the connection waits for and what it heard last, for a session that stopped making progress (the
+    /// linux-arm64 packages' smoke run 40241261003: Run to Cursor's program neither stopped nor ended, and nothing said
+    /// why): the requests the adapter hasn't answered (the oldest first) and its last messages, each with its age.
+    /// </summary>
+    public string Describe()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        string Age(long since) => $"{System.Diagnostics.Stopwatch.GetElapsedTime(since, now).TotalSeconds:0} s";
+        var unanswered = _unanswered.Values.OrderBy(u => u.Sent).Select(u => $"{u.Command} ({Age(u.Sent)})").ToList();
+        List<string> recent;
+        lock (_recent)
+        {
+            recent = [.. _recent.Select(r => $"{r.What} ({Age(r.Read)} ago)")];
+        }
+
+        return $"{unanswered.Count} request(s) unanswered{(unanswered.Count > 0 ? ": " + string.Join(", ", unanswered) : string.Empty)}; "
+               + $"the connection is {(_closed.Task.IsCompleted ? "closed" : "open")}; the last messages read: {(recent.Count > 0 ? string.Join(", ", recent) : "none")}";
+    }
+
+    /// <summary>Keeps a message read for <see cref="Describe"/>: what it was, without its body (the program's output is left out).</summary>
+    private void Remember(string? type, JsonElement message)
+    {
+        string Name(string property) => message.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() ?? "?" : "?";
+        var what = type switch
+        {
+            "response" => $"response {Name("command")}{(message.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False ? " (failed)" : string.Empty)}",
+            "event" when Name("event") == "output" => null,
+            "event" when Name("event") == "stopped" && message.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.Object
+                && body.TryGetProperty("reason", out var reason) && reason.ValueKind == JsonValueKind.String => $"event stopped ({reason.GetString()})",
+            "event" => $"event {Name("event")}",
+            _ => $"{type ?? "message"} {Name("command")}",
+        };
+        if (what is null)
+        {
+            return;
+        }
+
+        lock (_recent)
+        {
+            _recent.Enqueue((what, System.Diagnostics.Stopwatch.GetTimestamp()));
+            if (_recent.Count > 16)
+            {
+                _recent.Dequeue();
+            }
+        }
+    }
+
     private async Task ReadLoopAsync()
     {
         Exception? failure = null;
@@ -193,6 +249,7 @@ public sealed class DapConnection : IAsyncDisposable
                 }
 
                 var type = message.TryGetProperty("type", out var t) ? t.GetString() : null;
+                Remember(type, message);
                 switch (type)
                 {
                     case "response":

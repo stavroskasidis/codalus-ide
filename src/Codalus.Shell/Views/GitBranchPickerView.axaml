@@ -75,7 +75,7 @@
                  AutomationProperties.Name="{l:T gitBranches.branches}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:GitBranchRow">
-              <Panel>
+              <Panel Margin="{Binding Indent}">
                 <TextBlock Text="{Binding HeaderText}" IsVisible="{Binding IsHeader}" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <DockPanel IsVisible="{Binding IsBranch}" Background="Transparent">
                   <controls:Icon DockPanel.Dock="Left" Kind="check" Opacity="{Binding CheckOpacity}" Margin="0,0,6,0" VerticalAlignment="Center" />

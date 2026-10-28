@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Projects.Protocol;
@@ -79,7 +78,10 @@ public sealed class ErrorListViewModel : ObservableObject
     private bool _currentDocumentOnly;
     private int _sourceFilter;
     private string _filter = string.Empty;
-    private bool _refreshScheduled;
+    private int _refreshScheduled;
+    private bool _computing;
+    private bool _computeAgain;
+    private int _generation;
     private int _errors;
     private int _warnings;
     private int _messages;
@@ -170,7 +172,7 @@ public sealed class ErrorListViewModel : ObservableObject
     }
 
     /// <summary>What the list shows: the <see cref="Rows"/>, under an <see cref="ErrorListGroup"/> header per group when grouped.</summary>
-    public ObservableCollection<object> Items { get; } = [];
+    public ResettableCollection<object> Items { get; } = [];
 
     /// <summary>Collapses or expands a group.</summary>
     public void ToggleGroup(ErrorListGroup group)
@@ -196,7 +198,7 @@ public sealed class ErrorListViewModel : ObservableObject
         }
     }
 
-    public ObservableCollection<ErrorListRow> Rows { get; } = [];
+    public ResettableCollection<ErrorListRow> Rows { get; } = [];
 
     public bool ShowErrors
     {
@@ -275,48 +277,135 @@ public sealed class ErrorListViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// A change of diagnostics (published on any thread, a file at a time): one refresh for a burst, its rows built on
+    /// the thread pool. A solution whose packages didn't restore has hundreds of thousands of errors, which froze the
+    /// window when they were built on the UI thread.
+    /// </summary>
     private void ScheduleRefresh()
     {
-        if (_refreshScheduled)
+        if (Interlocked.Exchange(ref _refreshScheduled, 1) == 1)
         {
             return;
         }
 
-        _refreshScheduled = true;
         Dispatcher.UIThread.Post(() =>
         {
-            _refreshScheduled = false;
-            Refresh();
+            Volatile.Write(ref _refreshScheduled, 0);
+            _ = RefreshInBackgroundAsync();
         }, DispatcherPriority.Background);
     }
 
+    /// <summary>
+    /// Builds the rows on the thread pool and shows them, unless a <see cref="Refresh"/> came meanwhile. Changes during a
+    /// build start one more after it, so a stream of them still shows something.
+    /// </summary>
+    private async Task RefreshInBackgroundAsync()
+    {
+        if (_computing)
+        {
+            _computeAgain = true;
+            return;
+        }
+
+        _computing = true;
+        try
+        {
+            do
+            {
+                _computeAgain = false;
+                var generation = _generation;
+                var query = Query();
+                var view = await Task.Run(() => Compute(query, _store, _builds)).ConfigureAwait(true);
+                if (generation == _generation)
+                {
+                    Apply(view);
+                }
+            }
+            while (_computeAgain);
+        }
+        finally
+        {
+            _computing = false;
+        }
+    }
+
+    /// <summary>Shows the diagnostics now (a filter or grouping changed).</summary>
     public void Refresh()
     {
-        var active = _activePath();
-        var projects = _solutions.Projects.Values.ToList();
-        string ProjectName(string path) => ProjectOf(projects, path)?.Name ?? string.Empty;
+        _generation++;
+        Apply(Compute(Query(), _store, _builds));
+    }
 
-        bool InScope(string path) => !_currentDocumentOnly || SolutionService.PathComparer.Equals(path, active);
-        var intelliSense = _sourceFilter == 1
-            ? []
-            : _store.All
-                .Where(f => InScope(f.Path))
-                .SelectMany(f => f.Items.Where(d => d.Severity != DiagnosticSeverity.Hint).Select(d => new ErrorListRow(
-                    d.Severity switch { DiagnosticSeverity.Error => "error", DiagnosticSeverity.Warning => "warning", _ => "info" },
-                    d.Code ?? string.Empty,
-                    d.Message,
-                    ProjectName(f.Path),
-                    Path.GetFileName(f.Path),
-                    d.Range.Start.Line + 1,
-                    d.Range.Start.Character + 1,
-                    f.Path,
-                    d.Range.Start)))
-                .ToList();
-        var all = new List<ErrorListRow>(intelliSense);
-        if (_sourceFilter != 2)
+    /// <summary>What the list shows, read on the UI thread so that <see cref="Compute"/> can run on any.</summary>
+    private sealed record ListQuery(
+        string? ActivePath,
+        IReadOnlyList<ProjectInfo> Projects,
+        bool CurrentDocumentOnly,
+        int SourceFilter,
+        bool ShowErrors,
+        bool ShowWarnings,
+        bool ShowMessages,
+        string Filter,
+        string GroupBy,
+        IReadOnlySet<string> Collapsed);
+
+    private sealed record ListView(List<ErrorListRow> Rows, List<object> Items, int Errors, int Warnings, int Messages);
+
+    private ListQuery Query() => new(
+        _activePath(),
+        [.. _solutions.Projects.Values],
+        _currentDocumentOnly,
+        _sourceFilter,
+        _showErrors,
+        _showWarnings,
+        _showMessages,
+        _filter,
+        GroupByValues[GroupBy],
+        new HashSet<string>(_collapsed, StringComparer.Ordinal));
+
+    private static ListView Compute(ListQuery query, DiagnosticsStore store, BuildService builds)
+    {
+        var projectName = ProjectNames(query.Projects);
+        bool InScope(string path) => !query.CurrentDocumentOnly || SolutionService.PathComparer.Equals(path, query.ActivePath);
+        var all = new List<ErrorListRow>();
+        if (query.SourceFilter != 1)
         {
-            var seen = intelliSense.Select((r, i) => (Key: Key(r), Index: i)).GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Index);
-            foreach (var row in _builds.Diagnostics.Select(FromBuild).Where(r => InScope(r.Path)))
+            foreach (var file in store.All.Where(f => InScope(f.Path)))
+            {
+                // Once per file, not per diagnostic: a file can have thousands.
+                var project = projectName(file.Path);
+                var name = Path.GetFileName(file.Path);
+                foreach (var d in file.Items.Where(d => d.Severity != DiagnosticSeverity.Hint))
+                {
+                    all.Add(new ErrorListRow(
+                        d.Severity switch { DiagnosticSeverity.Error => "error", DiagnosticSeverity.Warning => "warning", _ => "info" },
+                        d.Code ?? string.Empty,
+                        d.Message,
+                        project,
+                        name,
+                        d.Range.Start.Line + 1,
+                        d.Range.Start.Character + 1,
+                        file.Path,
+                        d.Range.Start));
+                }
+            }
+        }
+
+        if (query.SourceFilter != 2 && builds.Diagnostics.Select(FromBuild).Where(r => InScope(r.Path)).ToList() is { Count: > 0 } fromBuild)
+        {
+            // A build diagnostic that a language service also reports marks that row (the first of its kind) instead.
+            var keys = fromBuild.Select(Key).ToHashSet(RowKeyComparer.Instance);
+            var seen = new Dictionary<(string Path, int Line, string Code), int>(RowKeyComparer.Instance);
+            for (var i = 0; i < all.Count; i++)
+            {
+                if (keys.Contains(Key(all[i])))
+                {
+                    seen.TryAdd(Key(all[i]), i);
+                }
+            }
+
+            foreach (var row in fromBuild)
             {
                 if (seen.TryGetValue(Key(row), out var index))
                 {
@@ -329,59 +418,56 @@ public sealed class ErrorListViewModel : ObservableObject
             }
         }
 
-        _errors = all.Count(r => r.IsError);
-        _warnings = all.Count(r => r.IsWarning);
-        _messages = all.Count - _errors - _warnings;
-
+        var errors = all.Count(r => r.IsError);
+        var warnings = all.Count(r => r.IsWarning);
+        var filter = query.Filter;
         var rows = all
             .Where(r => r.Icon switch
             {
-                "error" => _showErrors,
-                "warning" => _showWarnings,
-                _ => _showMessages,
+                "error" => query.ShowErrors,
+                "warning" => query.ShowWarnings,
+                _ => query.ShowMessages,
             })
-            .Where(r => _filter.Length == 0
-                        || r.Description.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-                        || r.Code.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-                        || r.File.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-                        || r.Project.Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            .Where(r => filter.Length == 0
+                        || r.Description.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                        || r.Code.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                        || r.File.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                        || r.Project.Contains(filter, StringComparison.OrdinalIgnoreCase))
             .OrderBy(r => r.Icon switch { "error" => 0, "warning" => 1, _ => 2 })
             .ThenBy(r => r.Project, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.File, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Line)
             .ToList();
 
-        Rows.Clear();
-        foreach (var row in rows)
+        var items = new List<object>(rows.Count);
+        if (query.GroupBy == "none")
         {
-            Rows.Add(row);
-        }
-
-        Items.Clear();
-        var groupBy = GroupByValues[GroupBy];
-        if (groupBy == "none")
-        {
-            foreach (var row in rows)
-            {
-                Items.Add(row);
-            }
+            items.AddRange(rows);
         }
         else
         {
-            foreach (var (key, title, members) in Groups(rows, groupBy))
+            foreach (var (key, title, members) in Groups(rows, query.GroupBy))
             {
-                var expanded = !_collapsed.Contains(key);
-                Items.Add(new ErrorListGroup(key, title, members.Count, expanded));
+                var expanded = !query.Collapsed.Contains(key);
+                items.Add(new ErrorListGroup(key, title, members.Count, expanded));
                 if (expanded)
                 {
-                    foreach (var row in members)
-                    {
-                        Items.Add(row);
-                    }
+                    items.AddRange(members);
                 }
             }
         }
 
+        return new ListView(rows, items, errors, warnings, all.Count - errors - warnings);
+    }
+
+    private void Apply(ListView view)
+    {
+        // One reset each: an Add per row raised a change per row, hundreds of thousands of them.
+        Rows.Reset(view.Rows);
+        Items.Reset(view.Items);
+        _errors = view.Errors;
+        _warnings = view.Warnings;
+        _messages = view.Messages;
         OnPropertyChanged(nameof(ErrorsLabel));
         OnPropertyChanged(nameof(WarningsLabel));
         OnPropertyChanged(nameof(MessagesLabel));
@@ -440,8 +526,13 @@ public sealed class ErrorListViewModel : ObservableObject
     public static ProjectInfo? ProjectOf(IEnumerable<ProjectInfo> projects, string path)
     {
         var list = projects as IReadOnlyCollection<ProjectInfo> ?? [.. projects];
-        return list.FirstOrDefault(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path)))
-               ?? list.Where(p => Path.GetDirectoryName(p.Path) is { } folder && IsUnder(path, folder)).MaxBy(p => p.Path.Length);
+        return list.FirstOrDefault(p => p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path))) ?? ProjectHolding(list, path);
+    }
+
+    /// <summary>The project whose folder holds <paramref name="path"/>, the deepest.</summary>
+    private static ProjectInfo? ProjectHolding(IEnumerable<ProjectInfo> projects, string path)
+    {
+        return projects.Where(p => Path.GetDirectoryName(p.Path) is { } folder && IsUnder(path, folder)).MaxBy(p => p.Path.Length);
 
         static bool IsUnder(string path, string folder) =>
             path.Length > folder.Length && path.StartsWith(folder, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)
@@ -454,7 +545,40 @@ public sealed class ErrorListViewModel : ObservableObject
 
     public Task OpenAsync(ErrorListRow row) => row.Path.Length == 0 ? Task.CompletedTask : _open(row.Path, row.Position);
 
-    private static (string Path, int Line, string Code) Key(ErrorListRow row) => (row.Path.ToUpperInvariant(), row.Line, row.Code);
+    /// <summary>
+    /// The project name of each file, as <see cref="ProjectOf"/> finds it, from one index of the projects' items: looking
+    /// through every project's items for each diagnostic took minutes for a large solution with many errors.
+    /// </summary>
+    internal static Func<string, string> ProjectNames(IReadOnlyList<ProjectInfo> projects)
+    {
+        var listed = new Dictionary<string, string>(SolutionService.PathComparer);
+        foreach (var project in projects)
+        {
+            foreach (var item in project.Items)
+            {
+                listed.TryAdd(item.Path, project.Name); // the first project that lists it, as ProjectOf
+            }
+        }
+
+        var byFolder = new Dictionary<string, string>(SolutionService.PathComparer);
+        return path => listed.TryGetValue(path, out var name) ? name
+            : byFolder.TryGetValue(path, out name) ? name
+            : byFolder[path] = ProjectHolding(projects, path)?.Name ?? string.Empty;
+    }
+
+    private static (string Path, int Line, string Code) Key(ErrorListRow row) => (row.Path, row.Line, row.Code);
+
+    /// <summary>Equal locations and codes, the path compared ignoring case (a build may spell it differently).</summary>
+    private sealed class RowKeyComparer : IEqualityComparer<(string Path, int Line, string Code)>
+    {
+        public static readonly RowKeyComparer Instance = new();
+
+        public bool Equals((string Path, int Line, string Code) x, (string Path, int Line, string Code) y) =>
+            x.Line == y.Line && string.Equals(x.Code, y.Code, StringComparison.Ordinal) && string.Equals(x.Path, y.Path, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Path, int Line, string Code) key) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Path), key.Line, StringComparer.Ordinal.GetHashCode(key.Code));
+    }
 
     /// <summary>A build diagnostic as a row: its file (or the project file when MSBuild gave none), 1-based position.</summary>
     private static ErrorListRow FromBuild(BuildDiagnosticInfo d)

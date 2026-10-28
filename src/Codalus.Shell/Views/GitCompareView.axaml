@@ -40,7 +40,7 @@
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:GitChangeNode">
             <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-            <Setter Property="MinHeight" Value="22" />
+            <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
           </Style>
         </TreeView.Styles>

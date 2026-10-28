@@ -218,6 +218,10 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>The debuggee's process id, once the adapter reported it (DAP <c>process</c> event) or after an attach.</summary>
     public int? ProcessId { get; private set; }
 
+    /// <summary>The session's state and what its adapter is waiting for (<see cref="IDebugAdapter.Describe"/>), for a session that stopped making progress.</summary>
+    public string Describe() =>
+        $"{State}, process {ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "not reported"}; {(_adapter is { } adapter ? adapter.Describe() : "no adapter")}";
+
     public IReadOnlyList<DapThread> Threads { get; private set; } = [];
 
     public int? SelectedThreadId { get; private set; }

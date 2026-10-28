@@ -29,6 +29,8 @@ The branch button at the top of the Git Changes window opens a list of the branc
 - **Delete** always asks, and **Cancel** is the default. When the branch has an upstream, you can also delete it on the server, for everyone; the box lists the commits only the server has. When the branch isn't merged (into its upstream, or into the current branch when the upstream goes too, as git decides), a second confirmation lists the commits that would be lost.
 - **Compare with Current Branch** opens a document named "main → feature" with the files the two branches' latest commits differ in, as a tree or a list with their status letters; double-click one for its diff, the current branch on the left. When they have the same files, it says so and offers **View History**.
 
+With all of a solution's repositories shown, the list has **Common branches** and each repository's branches instead ([Several repositories](#several-repositories)).
+
 Plugins can add to a branch's menu (`gitChanges/branch`).
 
 ## Resolving conflicts
@@ -80,7 +82,23 @@ Git → View History (`Ctrl+0 Ctrl+H`) shows the commits of every branch as a gr
 - **Create Git Repository**: for an open solution that isn't in one, with a .NET `.gitignore`.
 - **Add to .gitignore**: from the Solution Explorer's context menu.
 - **Publish to a Git Host** (Git menu): creates a repository on GitHub, Azure DevOps or GitLab (you choose the owner: you, an organization or group, or an Azure DevOps project; the name; private or public; a description), adds it as `origin` (or another free name), and pushes the branch. A solution that isn't in a repository yet gets one, with a first commit.
-- **Several repositories**: when the solution's projects are in more than one repository (a project in a repository of its own, a submodule), Git Changes shows a **repository picker**, and Git → Switch Repository changes which one Git Changes, the history and the status bar show. Change markers and blame always use each file's own repository.
+- **Several repositories**: when the solution's projects are in more than one repository (a project in a repository of its own, a submodule), Git Changes shows all of them at once. See [Several repositories](#several-repositories).
+
+## Several repositories
+
+When the solution's projects are in more than one repository (a project in a repository of its own, a submodule, a clone beside the solution), Git Changes has a **repository picker** at the top. It starts on **All Repositories**, as the classic IDE does:
+- **Changes** and **Staged Changes** have a tree for each repository, the solution's own first. Staging, discarding and a folder's or file's menu act in that file's repository.
+- **Commit All Repos** commits with the one message in each repository that has changes: its staged changes when any repository has some (**Commit Staged**), otherwise every change. **Amend** belongs to one repository, so it's hidden here.
+- **Fetch**, **Pull**, **Push**, **Sync**, **Stash All…** and **Drop All** run in each repository. Pull skips a branch with no upstream. Push skips a repository with nothing to push. If a repository fails, the rest still run, and one notification lists each failure with git's message (the Git output has them too). Nothing is undone in the repositories that succeeded.
+- The branch button shows the branch every repository is on, or "3 branches", and its tooltip has each repository's. The outgoing and incoming counts are added up across repositories.
+- The [branch drop-down](#the-branch-drop-down) lists **Common branches**, the branches every repository has, checked when every repository is on that branch. Under **All branches** it lists each repository's branches, under its name and current branch. Clicking a common branch checks it out in every repository. Its menu has **New Local Branch From…** (one name, a branch in each repository), **Merge**, **Rebase** and **Delete in Each Repository…**. A repository's own rows act on that repository only. **New Branch…** creates a branch in every repository.
+- A merge, rebase, cherry-pick or revert in progress in any repository shows its banner, named for the repository. **Continue**, **Skip** and **Abort** act there.
+- **View all commits** asks which repository's history to show. A file's history is its own repository's.
+- **Write the Commit Message with AI** describes the staged changes of every repository.
+
+Pick a repository in the picker (or Git → Switch Repository) to see that one alone, as with a single repository. The picker's filter box narrows the list. **Add Repository…** adds a repository that has no project in the solution (docs, build scripts). **Remove from the List** (the × beside a repository) leaves one out; the solution's own repository can't be removed. Your choice, and the repositories you added or removed, are kept with the solution.
+
+Change markers and blame always use each file's own repository.
 
 ## Worktrees
 

@@ -20,10 +20,12 @@ public sealed partial class ShellHost
     /// <summary>Context keys and the commit template, after each status refresh.</summary>
     private void UpdateGitDepthStatus()
     {
-        Workbench.Context.Set("gitOperation", Git.Status?.Operation);
-        Workbench.Context.Set("gitHasConflicts", Git.Status?.Conflicts.Any() == true);
-        GitChanges.Operation = Git.Status?.Operation;
-        if (Git.Root is { } root && _templateLoadedFor != root)
+        var operation = OperationRepository();
+        Workbench.Context.Set("gitOperation", operation.Status?.Operation);
+        Workbench.Context.Set("gitHasConflicts", operation.Status?.Conflicts.Any() == true);
+        GitChanges.OperationRepository = operation;
+        GitChanges.Operation = operation.Status?.Operation;
+        if (Repo.Root is { } root && _templateLoadedFor != root)
         {
             _templateLoadedFor = root;
             _ = LoadCommitTemplateAsync();
@@ -35,7 +37,7 @@ public sealed partial class ShellHost
     {
         try
         {
-            if (await Git.CommitTemplateAsync().ConfigureAwait(true) is { Length: > 0 } template && string.IsNullOrEmpty(GitChanges.Message))
+            if (await Repo.CommitTemplateAsync().ConfigureAwait(true) is { Length: > 0 } template && string.IsNullOrEmpty(GitChanges.Message))
             {
                 GitChanges.Message = template.TrimEnd();
             }
@@ -47,8 +49,12 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ history
 
-    /// <summary>Opens the history window for a query (all branches by default).</summary>
-    public async Task<GitHistoryDocument?> ShowHistoryAsync(GitLogQuery? query = null, string? title = null, (string Path, int Start, int End)? lines = null)
+    /// <summary>
+    /// Opens the history window for a query (all branches by default), of <paramref name="repository"/>: by default the
+    /// repository of the file or lines it's for, else the one a command runs in (<see cref="Repo"/>). With every repository
+    /// shown and none given, it asks which one (ADR 0085), the solution's own first.
+    /// </summary>
+    public async Task<GitHistoryDocument?> ShowHistoryAsync(GitLogQuery? query = null, string? title = null, (string Path, int Start, int End)? lines = null, GitService? repository = null)
     {
         if (Git.Root is null)
         {
@@ -56,15 +62,43 @@ public sealed partial class ShellHost
             return null;
         }
 
+        var path = lines?.Path ?? query?.Path;
+        repository ??= path is not null ? Git.ServiceFor(path) : _repository.Value;
+        if (repository is null && GitChanges.IsAllRepositories)
+        {
+            var items = GitChanges.Services.Select(s => new QuickPickItem(s.Name) { Detail = s.Root, Tag = s }).ToList();
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.allRepositories.historyOfWhichRepository", "The history of which repository?")).ConfigureAwait(true) is not { Tag: GitService picked })
+            {
+                return null;
+            }
+
+            repository = picked;
+        }
+
+        var git = repository ?? Git;
         query ??= new GitLogQuery { AllBranches = true };
-        var id = "git-history:" + (lines is { } l ? $"{l.Path}:{l.Start.ToString(CultureInfo.InvariantCulture)}-{l.End.ToString(CultureInfo.InvariantCulture)}" : $"{query.Path}|{query.Revision}|{query.AllBranches}");
+        var id = "git-history:" + (lines is { } l ? $"{l.Path}:{l.Start.ToString(CultureInfo.InvariantCulture)}-{l.End.ToString(CultureInfo.InvariantCulture)}" : $"{query.Path}|{query.Revision}|{query.AllBranches}")
+            + (git == Git ? string.Empty : "@" + git.Root);
         if (Layout.FindDocument<GitHistoryDocument>(id) is { } open)
         {
             Layout.OpenDocument(open, focus: true);
             return open;
         }
 
-        var viewModel = new GitHistoryViewModel(Git, query, title ?? "History", CommitActionAsync, OpenCommitFileAsync, lines);
+        // With several repositories, the title says whose history it is; its commands run there.
+        title ??= "History";
+        if (git != Git || GitChanges.IsAllRepositories)
+        {
+            title = $"{title} ({git.Name})";
+        }
+
+        var viewModel = new GitHistoryViewModel(
+            git,
+            query,
+            title,
+            (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)),
+            (commit, file) => InRepositoryAsync(git, () => OpenCommitFileAsync(commit, file)),
+            lines);
         var document = new GitHistoryDocument(viewModel, id);
         Layout.OpenDocument(document, focus: true);
         await GitActionAsync(viewModel.LoadAsync).ConfigureAwait(true);
@@ -115,7 +149,7 @@ public sealed partial class ShellHost
         }
 
         var line = controller.Editor.TextArea.Caret.Line;
-        var blame = await Git.BlameAsync(model.Path, model.Text.Text).ConfigureAwait(true);
+        var blame = await Repo.BlameAsync(model.Path, model.Text.Text).ConfigureAwait(true);
         if (blame.FirstOrDefault(r => line >= r.StartLine && line < r.StartLine + r.LineCount) is not { IsUncommitted: false } range)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.thisLineIsntCommittedYet", "This line isn't committed yet."), TimeSpan.FromSeconds(4));
@@ -134,8 +168,8 @@ public sealed partial class ShellHost
         }
 
         var items = new List<QuickPickItem> { new("HEAD") { Tag = "HEAD", Detail = "the last commit" } };
-        items.AddRange((await Git.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).Select(b => new QuickPickItem(b.Name) { Tag = b.Name, Detail = b.IsRemote ? "remote branch" : "branch" }));
-        items.AddRange((await Git.TagsAsync().ConfigureAwait(true)).Select(t => new QuickPickItem(t.Name) { Tag = t.Name, Detail = "tag" }));
+        items.AddRange((await Repo.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).Select(b => new QuickPickItem(b.Name) { Tag = b.Name, Detail = b.IsRemote ? "remote branch" : "branch" }));
+        items.AddRange((await Repo.TagsAsync().ConfigureAwait(true)).Select(t => new QuickPickItem(t.Name) { Tag = t.Name, Detail = "tag" }));
         items.Add(new QuickPickItem("Another Commit…") { Tag = "commit" });
         var picked = await Palette.ShowAsync(items, $"Compare {model.Name} with").ConfigureAwait(true);
         var revision = picked?.Tag as string;
@@ -150,13 +184,14 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (await Git.ResolveAsync(revision).ConfigureAwait(true) is null)
+        if (await Repo.ResolveAsync(revision).ConfigureAwait(true) is null)
         {
             throw new GitException($"'{revision}' isn't a commit.", -1);
         }
 
         var path = model.Path;
-        await OpenRevisionDiffAsync(path, $"{revision}↔{path}", revision, async () => await Git.ShowAsync(path, revision).ConfigureAwait(true) ?? string.Empty, "Working tree", () => Task.FromResult(model.Text.Text)).ConfigureAwait(true);
+        var git = Git.ServiceFor(path);
+        await OpenRevisionDiffAsync(path, $"{revision}↔{path}", revision, async () => await git.ShowAsync(path, revision).ConfigureAwait(true) ?? string.Empty, "Working tree", () => Task.FromResult(model.Text.Text)).ConfigureAwait(true);
     });
 
     private async Task OpenRevisionDiffAsync(string path, string key, string oldTitle, Func<Task<string>> oldText, string newTitle, Func<Task<string>> newText)
@@ -170,15 +205,16 @@ public sealed partial class ShellHost
     /// <summary>A file of a commit against the commit's first parent.</summary>
     private Task OpenCommitFileAsync(GitCommit commit, GitCommitFileRow file) => GitActionAsync(() =>
     {
+        var git = Repo;
         var parent = commit.Parents.Count > 0 ? commit.Parents[0] : null;
         var oldPath = file.OldPath ?? file.Path;
         return OpenRevisionDiffAsync(
             file.Path,
             $"{commit.Hash}:{file.Path}",
             parent is null ? "(none)" : parent[..Math.Min(8, parent.Length)],
-            async () => parent is null || file.Status == 'A' ? string.Empty : await Git.ShowAsync(oldPath, parent).ConfigureAwait(true) ?? string.Empty,
+            async () => parent is null || file.Status == 'A' ? string.Empty : await git.ShowAsync(oldPath, parent).ConfigureAwait(true) ?? string.Empty,
             commit.ShortHash,
-            async () => file.Status == 'D' ? string.Empty : await Git.ShowAsync(file.Path, commit.Hash).ConfigureAwait(true) ?? string.Empty);
+            async () => file.Status == 'D' ? string.Empty : await git.ShowAsync(file.Path, commit.Hash).ConfigureAwait(true) ?? string.Empty);
     });
 
     /// <summary>A command on a commit of the history.</summary>
@@ -187,12 +223,12 @@ public sealed partial class ShellHost
         switch (action)
         {
             case "checkout":
-                await Git.CheckoutAsync(commit.Hash).ConfigureAwait(true);
+                await Repo.CheckoutAsync(commit.Hash).ConfigureAwait(true);
                 break;
             case "branch":
                 if (await AskNameAsync("New Branch", $"A new branch at {commit.ShortHash} (and switch to it):", "Create") is { } branch)
                 {
-                    await Git.CreateBranchAtAsync(branch, commit.Hash, switchTo: true).ConfigureAwait(true);
+                    await Repo.CreateBranchAtAsync(branch, commit.Hash, switchTo: true).ConfigureAwait(true);
                 }
 
                 break;
@@ -200,22 +236,22 @@ public sealed partial class ShellHost
                 await CreateTagAsync(commit.Hash).ConfigureAwait(true);
                 break;
             case "cherryPick":
-                await StopOnConflictAsync(() => Git.CherryPickAsync(commit.Hash), "Cherry-picking").ConfigureAwait(true);
+                await StopOnConflictAsync(() => Repo.CherryPickAsync(commit.Hash), "Cherry-picking").ConfigureAwait(true);
                 break;
             case "revert":
-                await StopOnConflictAsync(() => Git.RevertAsync(commit.Hash), "Reverting").ConfigureAwait(true);
+                await StopOnConflictAsync(() => Repo.RevertAsync(commit.Hash), "Reverting").ConfigureAwait(true);
                 break;
             case "reset-soft" or "reset-mixed":
-                await Git.ResetAsync(commit.Hash, action[6..]).ConfigureAwait(true);
+                await Repo.ResetAsync(commit.Hash, action[6..]).ConfigureAwait(true);
                 break;
             case "reset-hard":
                 var answer = await Dialogs.ShowAsync(new DialogRequest(
-                    $"Reset {Git.Status?.Branch ?? "HEAD"} to {commit.ShortHash}?",
+                    $"Reset {Repo.Status?.Branch ?? "HEAD"} to {commit.ShortHash}?",
                     "Every uncommitted change will be lost, and the commits after it leave the branch.",
                     ["Reset", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
                 if (answer.Button == "Reset")
                 {
-                    await Git.ResetAsync(commit.Hash, "hard").ConfigureAwait(true);
+                    await Repo.ResetAsync(commit.Hash, "hard").ConfigureAwait(true);
                 }
 
                 break;
@@ -249,7 +285,7 @@ public sealed partial class ShellHost
         {
             await operation().ConfigureAwait(true);
         }
-        catch (GitException) when (Git.Status is { Operation: not null })
+        catch (GitException) when (Repo.Status is { Operation: not null })
         {
             Workbench.Notifications.Warning(Localizer.Format("msg.gitDepth.stoppedOnConflictsResolveThemThe", "{0} stopped on conflicts. Resolve them (the merge editor opens from Git Changes), then Continue, or Abort.", what));
             Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
@@ -270,24 +306,24 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ the operation in progress and conflicts
 
-    public Task ContinueOperationAsync() => GitActionAsync(async () =>
+    public Task ContinueOperationAsync() => InRepositoryAsync(_repository.Value ?? OperationRepository(), () => GitActionAsync(async () =>
     {
-        if (Git.Status?.Conflicts.Any() == true)
+        if (Repo.Status?.Conflicts.Any() == true)
         {
             throw new GitException("Resolve the conflicts first (open each in the merge editor, or stage it).", -1);
         }
 
-        await StopOnConflictAsync(() => Git.ContinueAsync(), "Continuing").ConfigureAwait(true);
+        await StopOnConflictAsync(() => Repo.ContinueAsync(), "Continuing").ConfigureAwait(true);
         await RefreshHistoryAsync().ConfigureAwait(true);
-    });
+    }));
 
-    public Task AbortOperationAsync() => GitActionAsync(async () =>
+    public Task AbortOperationAsync() => InRepositoryAsync(_repository.Value ?? OperationRepository(), () => GitActionAsync(async () =>
     {
-        await Git.AbortAsync().ConfigureAwait(true);
+        await Repo.AbortAsync().ConfigureAwait(true);
         await RefreshHistoryAsync().ConfigureAwait(true);
-    });
+    }));
 
-    public Task SkipOperationAsync() => GitActionAsync(() => StopOnConflictAsync(() => Git.SkipAsync(), "Continuing"));
+    public Task SkipOperationAsync() => InRepositoryAsync(_repository.Value ?? OperationRepository(), () => GitActionAsync(() => StopOnConflictAsync(() => Repo.SkipAsync(), "Continuing")));
 
     /// <summary>Opens a conflicted file in the merge editor.</summary>
     public Task<MergeEditorDocument?> OpenMergeEditorAsync(string path) => GitActionResultAsync(async () =>
@@ -298,12 +334,13 @@ public sealed partial class ShellHost
             return open;
         }
 
-        var (@base, ours, theirs) = await Git.ConflictVersionsAsync(path).ConfigureAwait(true);
+        var git = Git.ServiceFor(path);
+        var (@base, ours, theirs) = await git.ConflictVersionsAsync(path).ConfigureAwait(true);
         var (result, format) = File.Exists(path) ? TextFiles.Decode(await File.ReadAllBytesAsync(path).ConfigureAwait(true)) : (string.Empty, TextFileFormat.Default);
         MergeEditorDocument? document = null;
         var viewModel = new MergeEditorViewModel(path, result, ours, theirs, @base, async text =>
         {
-            await Git.ResolveAsync(path, text, format.Encoding).ConfigureAwait(true);
+            await git.ResolveAsync(path, text, format.Encoding).ConfigureAwait(true);
             if (_models.TryGetValue(Path.GetFullPath(path), out var model) && !model.IsModified)
             {
                 await model.ReloadAsync(CancellationToken.None).ConfigureAwait(true);
@@ -323,7 +360,7 @@ public sealed partial class ShellHost
 
     /// <summary>The branch a merge goes into, for the merge editor's "Current: develop" (null outside a merge).</summary>
     private string? CurrentBranchFor(string path) =>
-        Git.Status is { Operation: "merge", Branch: { } branch } status
+        Git.ServiceFor(path).Status is { Operation: "merge", Branch: { } branch } status
         && Path.GetFullPath(path).StartsWith(Path.GetFullPath(status.Root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
             ? branch
             : null;
@@ -454,11 +491,11 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Resolves a conflicted file by taking a whole side.</summary>
-    public Task ResolveWithSideAsync(string path, bool ours) => GitActionAsync(() => Git.ResolveWithAsync(path, ours));
+    public Task ResolveWithSideAsync(string path, bool ours) => GitActionAsync(() => Git.ServiceFor(path).ResolveWithAsync(path, ours));
 
     // ------------------------------------------------------------------ stash
 
-    public Task StashAsync() => GitActionAsync(async () =>
+    public Task StashAsync() => GitChanges.IsAllRepositories && _repository.Value is null ? StashAllRepositoriesAsync() : GitActionAsync(async () =>
     {
         var answer = await Dialogs.ShowAsync(new DialogRequest("Stash Changes", "A message for the stash (optional):", ["Stash", "Cancel"])
         {
@@ -467,7 +504,7 @@ public sealed partial class ShellHost
         }).ConfigureAwait(true);
         if (answer.Button == "Stash")
         {
-            await Git.StashAsync(answer.Input?.Trim(), answer.Checked.Contains("untracked")).ConfigureAwait(true);
+            await Repo.StashAsync(answer.Input?.Trim(), answer.Checked.Contains("untracked")).ConfigureAwait(true);
             StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.changesStashed", "Changes stashed."), TimeSpan.FromSeconds(4));
         }
     });
@@ -475,7 +512,7 @@ public sealed partial class ShellHost
     /// <summary>The stashes: apply, pop or drop one.</summary>
     public Task ShowStashesAsync() => GitActionAsync(async () =>
     {
-        var stashes = await Git.StashesAsync().ConfigureAwait(true);
+        var stashes = await Repo.StashesAsync().ConfigureAwait(true);
         if (stashes.Count == 0)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.noStashes", "No stashes."), TimeSpan.FromSeconds(4));
@@ -490,13 +527,13 @@ public sealed partial class ShellHost
         switch ((await Palette.ShowAsync([new("Apply") { Tag = "apply" }, new("Pop (apply and drop)") { Tag = "pop" }, new("Drop") { Tag = "drop" }], stash.Message).ConfigureAwait(true))?.Tag)
         {
             case "apply":
-                await Git.ApplyStashAsync(stash, pop: false).ConfigureAwait(true);
+                await Repo.ApplyStashAsync(stash, pop: false).ConfigureAwait(true);
                 break;
             case "pop":
-                await Git.ApplyStashAsync(stash, pop: true).ConfigureAwait(true);
+                await Repo.ApplyStashAsync(stash, pop: true).ConfigureAwait(true);
                 break;
             case "drop":
-                await Git.DropStashAsync(stash).ConfigureAwait(true);
+                await Repo.DropStashAsync(stash).ConfigureAwait(true);
                 break;
         }
     });
@@ -504,7 +541,7 @@ public sealed partial class ShellHost
     /// <summary>Drops a stash (by its <c>stash@{n}</c> name) after asking.</summary>
     public Task DropStashAsync(string name) => GitActionAsync(async () =>
     {
-        if ((await Git.StashesAsync().ConfigureAwait(true)).FirstOrDefault(s => s.Name == name) is not { } stash)
+        if ((await Repo.StashesAsync().ConfigureAwait(true)).FirstOrDefault(s => s.Name == name) is not { } stash)
         {
             return;
         }
@@ -515,14 +552,14 @@ public sealed partial class ShellHost
             ["Drop", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
         if (choice.Button == "Drop")
         {
-            await Git.DropStashAsync(stash).ConfigureAwait(true);
+            await Repo.DropStashAsync(stash).ConfigureAwait(true);
         }
     });
 
     /// <summary>Drops every stash after asking.</summary>
-    public Task DropAllStashesAsync() => GitActionAsync(async () =>
+    public Task DropAllStashesAsync() => GitChanges.IsAllRepositories && _repository.Value is null ? DropAllRepositoriesStashesAsync() : GitActionAsync(async () =>
     {
-        var count = (await Git.StashesAsync().ConfigureAwait(true)).Count;
+        var count = (await Repo.StashesAsync().ConfigureAwait(true)).Count;
         if (count == 0)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.noStashes", "No stashes."), TimeSpan.FromSeconds(4));
@@ -535,7 +572,7 @@ public sealed partial class ShellHost
             ["Drop All", "Cancel"]) { DefaultButton = "Cancel" }).ConfigureAwait(true);
         if (choice.Button == "Drop All")
         {
-            await Git.ClearStashesAsync().ConfigureAwait(true);
+            await Repo.ClearStashesAsync().ConfigureAwait(true);
         }
     });
 
@@ -543,10 +580,10 @@ public sealed partial class ShellHost
 
     public Task RebaseAsync() => GitActionAsync(async () =>
     {
-        var branches = (await Git.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).ToList();
-        if (await Palette.ShowAsync([.. branches.Select(b => new QuickPickItem(b.Name) { Tag = b.Name, Detail = b.IsRemote ? "remote" : null })], $"Rebase {Git.Status?.Branch ?? "HEAD"} onto").ConfigureAwait(true) is { Tag: string onto })
+        var branches = (await Repo.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).ToList();
+        if (await Palette.ShowAsync([.. branches.Select(b => new QuickPickItem(b.Name) { Tag = b.Name, Detail = b.IsRemote ? "remote" : null })], $"Rebase {Repo.Status?.Branch ?? "HEAD"} onto").ConfigureAwait(true) is { Tag: string onto })
         {
-            await StopOnConflictAsync(() => Git.RebaseAsync(onto), "The rebase").ConfigureAwait(true);
+            await StopOnConflictAsync(() => Repo.RebaseAsync(onto), "The rebase").ConfigureAwait(true);
             await RefreshHistoryAsync().ConfigureAwait(true);
         }
     });
@@ -554,7 +591,7 @@ public sealed partial class ShellHost
     /// <summary>The interactive rebase editor for the commits after <paramref name="onto"/> (asks for it when null).</summary>
     public Task InteractiveRebaseAsync() => GitActionAsync(async () =>
     {
-        var branches = (await Git.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).ToList();
+        var branches = (await Repo.BranchesAsync().ConfigureAwait(true)).Where(b => !b.IsCurrent).ToList();
         var items = new List<QuickPickItem> { new("HEAD~5") { Tag = "HEAD~5", Detail = "the last five commits" } };
         items.AddRange(branches.Select(b => new QuickPickItem(b.Name) { Tag = b.Name, Detail = b.IsRemote ? "remote" : null }));
         if (await Palette.ShowAsync(items, "Rebase interactively onto (or pick a commit in the history)").ConfigureAwait(true) is { Tag: string onto })
@@ -565,7 +602,7 @@ public sealed partial class ShellHost
 
     private async Task InteractiveRebaseAsync(string onto, string title)
     {
-        var steps = await Git.RebaseTodoAsync(onto).ConfigureAwait(true);
+        var steps = await Repo.RebaseTodoAsync(onto).ConfigureAwait(true);
         if (steps.Count == 0)
         {
             StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.noCommitsAfterToRebase", "No commits after {0} to rebase.", title), TimeSpan.FromSeconds(5));
@@ -582,13 +619,13 @@ public sealed partial class ShellHost
         {
             try
             {
-                await Git.RebaseInteractiveAsync(onto, chosen).ConfigureAwait(true);
+                await Repo.RebaseInteractiveAsync(onto, chosen).ConfigureAwait(true);
                 StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.rebased", "Rebased."), TimeSpan.FromSeconds(5));
             }
             finally
             {
                 await RefreshHistoryAsync().ConfigureAwait(true);
-                if (Git.Status is { Operation: "rebase" })
+                if (Repo.Status is { Operation: "rebase" })
                 {
                     Workbench.Notifications.Warning(Localizer.Get("msg.gitDepth.theRebaseStoppedOnConflictsResolve", "The rebase stopped on conflicts. Resolve them, then Continue, or Abort."));
                     Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
@@ -621,14 +658,14 @@ public sealed partial class ShellHost
         }
 
         var message = await Dialogs.ShowAsync(new DialogRequest("Tag Message", $"A message for {name.Trim()} (empty: a lightweight tag):", ["OK"]) { Input = string.Empty }).ConfigureAwait(true);
-        await Git.CreateTagAsync(name.Trim(), hash, message.Input?.Trim()).ConfigureAwait(true);
+        await Repo.CreateTagAsync(name.Trim(), hash, message.Input?.Trim()).ConfigureAwait(true);
     }
 
     /// <summary>Tags: create, push, delete.</summary>
     public Task ManageTagsAsync() => GitActionAsync(async () =>
     {
         var items = new List<QuickPickItem> { new("+ Create Tag…") { Tag = "create" } };
-        items.AddRange((await Git.TagsAsync().ConfigureAwait(true)).Select(t => new QuickPickItem(t.Name) { Tag = t, Detail = t.Message ?? t.Commit[..Math.Min(8, t.Commit.Length)] }));
+        items.AddRange((await Repo.TagsAsync().ConfigureAwait(true)).Select(t => new QuickPickItem(t.Name) { Tag = t, Detail = t.Message ?? t.Commit[..Math.Min(8, t.Commit.Length)] }));
         switch (await Palette.ShowAsync(items, "Tags").ConfigureAwait(true))
         {
             case { Tag: "create" }:
@@ -638,13 +675,13 @@ public sealed partial class ShellHost
                 switch ((await Palette.ShowAsync([new("Push to origin") { Tag = "push" }, new("Delete") { Tag = "delete" }, new("Delete from origin") { Tag = "deleteRemote" }], tag.Name).ConfigureAwait(true))?.Tag)
                 {
                     case "push":
-                        await Git.PushTagAsync(tag.Name).ConfigureAwait(true);
+                        await Repo.PushTagAsync(tag.Name).ConfigureAwait(true);
                         break;
                     case "delete":
-                        await Git.DeleteTagAsync(tag.Name).ConfigureAwait(true);
+                        await Repo.DeleteTagAsync(tag.Name).ConfigureAwait(true);
                         break;
                     case "deleteRemote":
-                        await Git.DeleteRemoteTagAsync(tag.Name).ConfigureAwait(true);
+                        await Repo.DeleteRemoteTagAsync(tag.Name).ConfigureAwait(true);
                         break;
                 }
 
@@ -656,14 +693,14 @@ public sealed partial class ShellHost
     public Task ManageRemotesAsync() => GitActionAsync(async () =>
     {
         var items = new List<QuickPickItem> { new("+ Add Remote…") { Tag = "add" } };
-        items.AddRange((await Git.RemotesAsync().ConfigureAwait(true)).Select(r => new QuickPickItem(r.Name) { Tag = r, Detail = r.FetchUrl }));
+        items.AddRange((await Repo.RemotesAsync().ConfigureAwait(true)).Select(r => new QuickPickItem(r.Name) { Tag = r, Detail = r.FetchUrl }));
         switch (await Palette.ShowAsync(items, "Remotes").ConfigureAwait(true))
         {
             case { Tag: "add" }:
                 if (await AskNameAsync("Add Remote", "The remote's name:", "Next", "origin") is { } name
                     && await Dialogs.ShowAsync(new DialogRequest("Add Remote", $"The URL of {name}:", ["Add", "Cancel"]) { Input = string.Empty }).ConfigureAwait(true) is { Button: "Add", Input: { Length: > 0 } url })
                 {
-                    await Git.AddRemoteAsync(name, url.Trim()).ConfigureAwait(true);
+                    await Repo.AddRemoteAsync(name, url.Trim()).ConfigureAwait(true);
                 }
 
                 break;
@@ -673,19 +710,19 @@ public sealed partial class ShellHost
                     case "rename":
                         if (await AskNameAsync("Rename Remote", $"A new name for {remote.Name}:", "Rename", remote.Name) is { } newName)
                         {
-                            await Git.RenameRemoteAsync(remote.Name, newName).ConfigureAwait(true);
+                            await Repo.RenameRemoteAsync(remote.Name, newName).ConfigureAwait(true);
                         }
 
                         break;
                     case "url":
                         if (await Dialogs.ShowAsync(new DialogRequest("Change URL", $"The URL of {remote.Name}:", ["Change", "Cancel"]) { Input = remote.FetchUrl }).ConfigureAwait(true) is { Button: "Change", Input: { Length: > 0 } newUrl })
                         {
-                            await Git.SetRemoteUrlAsync(remote.Name, newUrl.Trim()).ConfigureAwait(true);
+                            await Repo.SetRemoteUrlAsync(remote.Name, newUrl.Trim()).ConfigureAwait(true);
                         }
 
                         break;
                     case "remove":
-                        await Git.RemoveRemoteAsync(remote.Name).ConfigureAwait(true);
+                        await Repo.RemoveRemoteAsync(remote.Name).ConfigureAwait(true);
                         break;
                 }
 
@@ -717,7 +754,7 @@ public sealed partial class ShellHost
         try
         {
             StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.cloning", "Cloning {0}…", address.Trim()));
-            await Git.CloneAsync(address.Trim(), destination.Trim(), CancellationToken.None).ConfigureAwait(true);
+            await Repo.CloneAsync(address.Trim(), destination.Trim(), CancellationToken.None).ConfigureAwait(true);
         }
         catch (GitException ex)
         {
@@ -750,7 +787,7 @@ public sealed partial class ShellHost
         }
 
         var folder = solution.Directory;
-        if (Git.Root is not null)
+        if (Repo.Root is not null)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.gitDepth.theSolutionIsAlreadyInA", "The solution is already in a git repository."), TimeSpan.FromSeconds(4));
             return;
@@ -758,7 +795,7 @@ public sealed partial class ShellHost
 
         try
         {
-            await Git.InitAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            await Repo.InitAsync(folder, CancellationToken.None).ConfigureAwait(true);
             await OpenRepositoryAsync(folder).ConfigureAwait(true);
             Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
         }
@@ -770,7 +807,7 @@ public sealed partial class ShellHost
 
     /// <summary>Adds the Solution Explorer's selected file or folder to .gitignore.</summary>
     public Task AddToGitignoreAsync() =>
-        Explorer.Selected?.Node.Path is { } path ? GitActionAsync(() => Git.IgnoreAsync(path)) : Task.CompletedTask;
+        Explorer.Selected?.Node.Path is { } path ? GitActionAsync(() => Git.ServiceFor(path).IgnoreAsync(path)) : Task.CompletedTask;
 
-    public Task UpdateSubmodulesAsync() => GitActionAsync(() => Git.UpdateSubmodulesAsync(), "Updating submodules…");
+    public Task UpdateSubmodulesAsync() => GitActionAsync(() => Repo.UpdateSubmodulesAsync(), "Updating submodules…");
 }

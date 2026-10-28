@@ -78,11 +78,33 @@ public sealed partial class ShellHost : IEditorServices
 
     DiagnosticsStore IEditorServices.Diagnostics => Languages.Diagnostics;
 
+    /// <summary>The number of projects from which the C# host runs with the server garbage collector (<see cref="WithServerGc"/>).</summary>
+    internal const int ServerGcProjects = 20;
+
+    /// <summary>
+    /// The C# host's launch for a solution of <paramref name="projects"/> projects (0.9). A large solution's host runs with
+    /// the server garbage collector: its background pass compiles and binds on many threads at once, which waited on the
+    /// workstation collector's single-threaded collections (measured locally: a 94-project solution's first pass took
+    /// 92 s, 51 s with the server collector, at the same peak of about 6 GB). A small solution keeps the workstation
+    /// collector, which keeps less memory when idle (250 MB against 395 for 50 small projects). The host keeps the
+    /// collector it started with: a file opened before the solution starts it on the workstation one.
+    /// </summary>
+    internal static Rpc.ProcessLaunchInfo? WithServerGc(Rpc.ProcessLaunchInfo? launch, int projects) =>
+        launch is null || projects < ServerGcProjects
+            ? launch
+            : launch with
+            {
+                Environment = new Dictionary<string, string>(launch.Environment ?? new Dictionary<string, string>(), StringComparer.Ordinal)
+                {
+                    ["DOTNET_gcServer"] = "1",
+                },
+            };
+
     private void InitializeEditor()
     {
         EditorOptions = new EditorOptions(Workbench.Settings);
         var registry = Workbench.LanguageServers;
-        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", HostLaunchInfo.Resolve)
+        registry.Register(new LanguageServiceDescriptor(CSharpLanguageId, "C#", [".cs", ".csx"], "C#", () => WithServerGc(HostLaunchInfo.Resolve(), Solutions.Solution?.Projects.Length ?? 0))
         {
             // Razor files go to the C# host, which serves them through the Razor source generator (ADR 0023), and so
             // does Avalonia XAML, on the same projects' type information (ADR 0047).
@@ -205,7 +227,7 @@ public sealed partial class ShellHost : IEditorServices
         Languages.HostRestarted += (_, _) => Ui.Post(RefreshEditors);
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
-        Languages.Diagnostics.Changed += (_, _) => Ui.Post(ScheduleDiagnosticsStatus);
+        Languages.Diagnostics.Changed += (_, _) => ScheduleDiagnosticsStatus();
         Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
         InitializeProfiles();
@@ -1217,22 +1239,26 @@ public sealed partial class ShellHost : IEditorServices
         Workbench.Context.Set("editorHasMultipleSelections", caret.Carets > 1);
     }
 
-    private bool _diagnosticsStatusScheduled;
+    private int _diagnosticsStatusScheduled;
 
+    /// <summary>The error and warning counts, once for a burst of changes (raised on any thread, a file at a time).</summary>
     private void ScheduleDiagnosticsStatus()
     {
-        if (_diagnosticsStatusScheduled)
+        if (Interlocked.Exchange(ref _diagnosticsStatusScheduled, 1) == 1)
         {
             return;
         }
 
-        _diagnosticsStatusScheduled = true;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            _diagnosticsStatusScheduled = false;
-            var all = Languages.Diagnostics.All.SelectMany(f => f.Items).ToList();
-            var errors = all.Count(d => d.Severity == DiagnosticSeverity.Error);
-            var warnings = all.Count(d => d.Severity == DiagnosticSeverity.Warning);
+            Volatile.Write(ref _diagnosticsStatusScheduled, 0);
+            var (errors, warnings) = (0, 0);
+            foreach (var diagnostic in Languages.Diagnostics.All.SelectMany(f => f.Items))
+            {
+                errors += diagnostic.Severity == DiagnosticSeverity.Error ? 1 : 0;
+                warnings += diagnostic.Severity == DiagnosticSeverity.Warning ? 1 : 0;
+            }
+
             var command = BuiltIns.ViewCommandPrefix + ErrorListViewModel.ToolWindowId;
             Workbench.StatusBar.Set(new StatusBarItem("codalus.problems.errors", $"$(error) {errors}", StatusBarAlignment.Left, 100, StatusSource)
             {

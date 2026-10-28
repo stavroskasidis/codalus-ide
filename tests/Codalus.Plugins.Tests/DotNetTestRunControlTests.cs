@@ -26,14 +26,22 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
     {
         var settings = fixture.Workbench.Settings;
         await settings.SetAsync("testing.environment", s_hangEnvironment, SettingScope.User, Timeout());
+        Task? run = null;
         try
         {
             var hangs = fixture.Node(project, project, "CalculatorTests", "Hangs");
             var before = hangs.Leaves().Single().Result;
-            var run = fixture.Tests.RunAsync(TestRunKind.Run, [hangs.Key], Timeout());
+            run = fixture.Tests.RunAsync(TestRunKind.Run, [hangs.Key], Timeout());
 
-            // Running (or at least queued) before cancelling, so the cancellation reaches the test process.
-            await fixture.WaitUntilAsync(() => fixture.Node(project, project, "CalculatorTests", "Hangs").AggregateOutcome() is TestOutcome.Running or TestOutcome.Queued, Timeout());
+            // Running (or at least queued) before cancelling, so the cancellation reaches the test process. A run that
+            // ends first never started it (a failed build or discovery): waiting on for the test hid that for 4 minutes
+            // (runs 39979261891, 40375629247).
+            await fixture.WaitUntilAsync(() => run.IsCompleted || fixture.Node(project, project, "CalculatorTests", "Hangs").AggregateOutcome() is TestOutcome.Running or TestOutcome.Queued, Timeout());
+            if (run.IsCompleted)
+            {
+                Assert.Fail($"The run ended without starting the test. Run output: {(fixture.Tests.Runs is [.., var last] ? last.Output : "none")} Log: {fixture.Log}");
+            }
+
             await Task.Delay(1000, Timeout());
             var started = DateTime.UtcNow;
             fixture.Tests.Cancel();
@@ -47,6 +55,14 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
         }
         finally
         {
+            // A failure before the cancel leaves the hanging test running, and the next project's case then found a run
+            // in progress (macOS CI, run 40568001945): the run ends here whatever happened.
+            if (run is { IsCompleted: false })
+            {
+                fixture.Tests.Cancel();
+                await run.WaitAsync(TimeSpan.FromSeconds(60), CancellationToken.None).ContinueWith(_ => { }, TaskScheduler.Default);
+            }
+
             await settings.SetAsync("testing.environment", (JsonElement?)null, SettingScope.User, CancellationToken.None);
         }
     }

@@ -197,6 +197,8 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
 
     public event EventHandler<string>? Log;
 
+    public string Describe() => Inner.Describe();
+
     private static DapJsonContext Json => DapJsonContext.Default;
 
     private Task OnEventAsync(DapEvent e)

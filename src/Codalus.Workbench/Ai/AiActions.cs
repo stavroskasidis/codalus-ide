@@ -99,9 +99,25 @@ public static partial class AiActions
     }
 
     /// <summary>A commit message for the staged <paramref name="diff"/>.</summary>
-    public static async Task<string> CommitMessageAsync(AiService ai, string diff, string repositoryRoot, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken)
+    public static Task<string> CommitMessageAsync(AiService ai, string diff, string repositoryRoot, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken) =>
+        CommitMessageAsync(ai, [(diff, repositoryRoot)], recentSubjects, cancellationToken);
+
+    /// <summary>
+    /// The commit message for several repositories' staged changes (Commit All Repos, ADR 0085): each diff is filtered
+    /// against its own repository's exclusions, and headed by the repository's name when there are several.
+    /// </summary>
+    public static async Task<string> CommitMessageAsync(AiService ai, IReadOnlyList<(string Diff, string RepositoryRoot)> diffs, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken)
     {
-        var (filtered, excluded) = await FilterDiffAsync(ai, diff, repositoryRoot, cancellationToken).ConfigureAwait(false);
+        var parts = new List<string>();
+        var excluded = new List<string>();
+        foreach (var (diff, root) in diffs)
+        {
+            var (part, left) = await FilterDiffAsync(ai, diff, root, cancellationToken).ConfigureAwait(false);
+            parts.Add(diffs.Count > 1 ? $"# Repository {Path.GetFileName(Path.TrimEndingDirectorySeparator(root))}\n{part}" : part);
+            excluded.AddRange(left);
+        }
+
+        var filtered = string.Join('\n', parts);
         var items = new List<AiContextItem> { new(AiContextKind.Changes, "staged changes", filtered) { Language = "diff" } };
         var question = new StringBuilder("Write the commit message for these staged changes.");
         if (recentSubjects.Count > 0)

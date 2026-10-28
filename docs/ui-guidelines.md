@@ -8,7 +8,7 @@ Review a surface against each line, in Classic and every theme family (Harbor, G
 
 - **Layout**
   - Spacing comes from the 4 px grid (`Shell.Space.*`, `Shell.Padding.*`); no one-off margins.
-  - Lists and trees use rows of `Shell.Size.Row` (22 px) with `Shell.Padding.Row`.
+  - Lists use rows of `Shell.Size.Row` (22 px) with `Shell.Padding.Row`; hierarchy trees (Solution Explorer, Test Explorer and the other tree tool windows) use `Shell.Size.TreeRow` (24 px).
   - Tables keep their column widths: in a narrow pane the header and the rows scroll sideways together (a `ScrollViewer` with horizontal scrolling around a `DockPanel` with a `MinWidth`), never squeezed into each other.
   - The in-window dialog sizes to its content, except a preview of changes: three quarters of the window, at least 640 × 400 where the window has room (`DialogView.PreviewSize`, M34h), so the diff is readable.
   - Code shown outside an editor (a template's preview, a definition) is a `CodeViewer`, in the editor's colors, never plain text in a text box.
@@ -113,7 +113,7 @@ The design's layout differences between the families, as values each theme sets 
 | `Shell.Dock.Margin`, `Shell.Toolbar.Margin`, `.HorizontalAlignment`, `.BorderThickness`, `.CornerRadius` (the dock area and the toolbar) | 0, a full-width band | the same | the same | the same | 6 px of window, a card as wide as its buttons |
 | `Shell.ToolTab.CornerRadius` (the selected tool window tab) | 0 | 0 | 0 | 0 | 0,0,4,4 |
 | `Shell.Row.Margin`, `Shell.Row.CornerRadius`, `Shell.Selection.Indicator`, `.Inactive` (list and tree rows, Solution Explorer's pill) | full width, none | the same | the same | the same | inset 3 px, 4 px corners, the accent pill (muted without the focus) |
-| `Shell.AutoHide.BarThickness`, `Shell.AutoHide.Bar` (auto-hidden tool windows' tabs) | none | none | none | none | a 3 px bar |
+| `Shell.AutoHide.BarThickness` (`.Right` on the right side), `Shell.AutoHide.Bar` (auto-hidden tool windows' tabs) | none | none | none | none | a 3 px bar |
 | `Shell.Control.CornerRadius.Compact` (the tab's pin, the navigation bar) | 2 | 2 | 2 | 2 | 4 |
 | `Shell.Caption.Active.FontWeight`, `.Marker` (the focused tool window's title) | normal (an accent caption) | bold, an accent dot | bold | bold | semibold on the card in Light and Dark (D46), normal on Blue's and High Contrast's captions |
 | `Shell.StatusBar.ShowDot` (a dot for the state) | no | no | no | yes | no |
@@ -128,8 +128,9 @@ The design's layout differences between the families, as values each theme sets 
 | `Shell.Padding.Panel` | 8,6 | Around a panel's content |
 | `Shell.Padding.EmptyState` | 12 | Around empty and error messages |
 | `Shell.Padding.Page` | 16 | Around a document page (Options, properties) |
-| `Shell.Padding.Row` | 0,1 | List and tree rows |
+| `Shell.Padding.Row` | 0,1 | List rows |
 | `Shell.Size.Toolbar` | 28 | A toolbar row |
+| `Shell.Size.TreeRow` | 24 | A hierarchy tree's row |
 | `Shell.Size.ToolbarButton`, `Shell.Size.Input` | 24 | Toolbar buttons; text boxes and combo boxes in toolbars |
 | `Shell.Size.Icon`, `Shell.Size.IconSmall` | 16, 12 | Icons; chevrons and badges |
 | `Shell.Size.Row` | 22 | List and tree rows |

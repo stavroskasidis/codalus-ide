@@ -262,13 +262,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             {
                 // Opening restores only when a project's packages may have changed since its last restore (M34b): a
                 // no-op restore of a large solution costs seconds of processor time next to the design-time builds.
-                if (PackagesUpToDate() is { } upToDate)
+                if (PackagesUpToDate(out var reason) is { } upToDate)
                 {
                     await _events.LogAsync("info", $"Packages of {upToDate} project(s) are up to date: no restore on open.").ConfigureAwait(false);
                     await _events.RestoreStateAsync("succeeded", null).ConfigureAwait(false);
                 }
                 else
                 {
+                    await _events.LogAsync("info", $"Restoring on open: {reason ?? "a project needs it"}.").ConfigureAwait(false);
                     StartRestore(null);
                 }
             }
@@ -287,9 +288,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     /// <summary>
     /// Evaluates <paramref name="projects"/> in parallel, reporting each one as soon as it is done, then queues
-    /// their design-time builds. With <paramref name="reload"/>, their project files are read from disk again first.
+    /// their design-time builds. With <paramref name="reload"/>, their project files are read from disk again first, and
+    /// so are <paramref name="reloadFiles"/> (imports a restore rewrote).
     /// </summary>
-    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always, bool reload = false)
+    private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always, bool reload = false,
+        IReadOnlyCollection<string>? reloadFiles = null)
     {
         await _evaluationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -297,6 +300,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             if (reload)
             {
                 await ReloadAsync(projects, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (reloadFiles is { Count: > 0 })
+            {
+                await ReloadAsync(reloadFiles, cancellationToken).ConfigureAwait(false);
             }
 
             await EvaluateLockedAsync(projects, designTime, cancellationToken).ConfigureAwait(false);
@@ -669,6 +677,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, false)).ConfigureAwait(false);
         }
 
+        var unreadable = new System.Collections.Concurrent.ConcurrentBag<string>();
         await _designTime.BuildAsync(requests, properties, async inputs =>
         {
             if (keys.TryGetValue(inputs.Path, out var key))
@@ -676,9 +685,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 DesignTimeCache.Write(key.Directory, key.Entry, key.Key, inputs);
             }
 
+            if (inputs.State == CompilerInputStates.Failed && NeedsRestore(inputs.Error))
+            {
+                unreadable.Add(inputs.Path);
+            }
+
             await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
+
+        RepairRestore([.. unreadable]);
 
         // A project evaluated again while this batch ran (the restore's assets files can arrive one evaluation at a time)
         // may have changed what a result here was built from: those build again, or their cache entry would keep a key
@@ -724,6 +740,39 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.LogAsync("info", $"Design-time build cache: {cached.Count} hit(s), {misses.Count} miss(es)"
                                            + (misses.Count > 0 ? ": " + string.Join("; ", misses.Take(20)) + (misses.Count > 20 ? $"; and {misses.Count - 20} more" : string.Empty) : ".")).ConfigureAwait(false);
         }
+    }
+
+    private bool _repairRestoreStarted;
+
+    /// <summary>
+    /// Whether a failed design-time build's error is one a restore fixes: the SDK couldn't read the assets file
+    /// (<c>ResolvePackageAssets</c> failing, as 10.0.204's did with a NullReferenceException on a file 10.0.303 wrote), or
+    /// it has none, none for the framework, or one it can't read (NETSDK1004, NETSDK1005, NETSDK1060).
+    /// </summary>
+    internal static bool NeedsRestore(string? error) =>
+        error is not null && (error.Contains("\"ResolvePackageAssets\" task failed", StringComparison.Ordinal)
+                              || error.Contains("NETSDK1004", StringComparison.Ordinal) || error.Contains("NETSDK1005", StringComparison.Ordinal)
+                              || error.Contains("NETSDK1060", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Restores once per session when design-time builds failed for want of a restore (0.9): projects of another repository
+    /// whose <c>global.json</c> pins another SDK carry assets files that SDK wrote, which this one may not read, though
+    /// nothing changed since (41 of a 94-project solution had no IntelliSense, and built again at every open). The restore
+    /// runs in the solution's folder, with its SDK, forced (NuGet would find the inputs unchanged and keep the file), and the
+    /// projects whose assets files it rewrites build again.
+    /// </summary>
+    private void RepairRestore(string[] unreadable)
+    {
+        if (unreadable.Length == 0 || !_restoreOnOpen || _repairRestoreStarted || _lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _repairRestoreStarted = true;
+        _ = _events.LogAsync("info", $"Design-time builds of {unreadable.Length} project(s) couldn't read their packages ("
+                                     + string.Join(", ", unreadable.Take(3).Select(System.IO.Path.GetFileName)) + (unreadable.Length > 3 ? ", …" : string.Empty)
+                                     + "): restoring.");
+        StartRestore(null, force: true);
     }
 
     // ------------------------------------------------------------------ builds
@@ -1031,7 +1080,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     // ------------------------------------------------------------------ restore
 
-    public void StartRestore(string? path)
+    /// <param name="force">Re-resolve every package even when NuGet finds the restore inputs unchanged (<c>--force</c>): an assets file another SDK wrote, or one that can't be read, is rewritten.</param>
+    public void StartRestore(string? path, bool force = false)
     {
         if (!Trusted)
         {
@@ -1054,24 +1104,29 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
         var building = _building;
         _restore = Task.WhenAll(_restore.ContinueWith(_ => { }, TaskScheduler.Default), building)
-            .ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
+            .ContinueWith(_ => RestoreAsync(path ?? Path, force), TaskScheduler.Default).Unwrap();
     }
 
-    private async Task RestoreAsync(string target)
+    private async Task RestoreAsync(string target, bool force = false)
     {
         await _events.RestoreStateAsync("running", null).ConfigureAwait(false);
+
+        // What the restore writes is evaluated once at its end, not project by project as it comes.
+        _watcher?.HoldRestoreOutputs();
+        var taken = false;
         try
         {
-            var code = await RunRestoreAsync(target).ConfigureAwait(false);
+            var (code, unreachable) = await RunRestoreAsync(target, force).ConfigureAwait(false);
             var restoredAlone = 0;
-            if (code != 0 && !ProjectPaths.Contains(target, s_pathComparer))
+            if (code != 0 && !unreachable && !ProjectPaths.Contains(target, s_pathComparer))
             {
                 // One project that can't restore (a MAUI app without its workload, an error in its file) fails the
                 // whole solution's restore before any assets file is written: the others are restored on their own,
-                // so they still build and get their packages' completions.
+                // so they still build and get their packages' completions. Not when a package source couldn't be
+                // reached: each project would wait for it in turn (minutes each off a VPN) and fail the same way.
                 foreach (var project in ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !AssetsWritten(p)).ToList())
                 {
-                    if (await RunRestoreAsync(project).ConfigureAwait(false) == 0)
+                    if ((await RunRestoreAsync(project, force).ConfigureAwait(false)).Code == 0)
                     {
                         restoredAlone++;
                     }
@@ -1091,12 +1146,32 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             }
 
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null
+                : unreachable ? $"dotnet restore exited with code {code}: a package source couldn't be reached (NU1301). Check the network connection or VPN, then restore again."
                 : code != 0 ? $"dotnet restore exited with code {code}." + (restoredAlone > 0 ? $" {restoredAlone} project(s) restored on their own." : "")
                 : $"{netFrameworkFailed} package(s) of non-SDK-style projects couldn't be restored.").ConfigureAwait(false);
 
-            // Only projects whose assets file the restore wrote are evaluated again (M34b); the watcher handles the
-            // NuGet-generated imports it rewrote. Non-SDK-style projects whose packages came are built again too.
-            await EvaluateAsync([.. ProjectPaths.Where(p => AssetsChangedSinceEvaluation(p) || netFrameworkChanged.Contains(p, s_pathComparer))], _lifetime.Token, DesignTimeMode.IfAssetsChanged).ConfigureAwait(false);
+            // Only projects whose assets file the restore wrote, or whose NuGet-generated imports it rewrote, are
+            // evaluated again (M34b), once and together. Non-SDK-style projects whose packages came are built again too.
+            var outputs = _watcher?.TakeRestoreOutputs() ?? new ProjectWatcher.Changes(false, [], []);
+            taken = true;
+            if (outputs.Directories.Count + outputs.MSBuildFiles.Count > 0)
+            {
+                await _events.FilesChangedAsync(new FilesChangedParams([.. outputs.Directories.Concat(outputs.MSBuildFiles.Select(f => System.IO.Path.GetDirectoryName(f)!)).Distinct(s_pathComparer)])).ConfigureAwait(false);
+            }
+
+            // Also a project that knew no assets file and has one now (a multi-targeted project learns its assets file
+            // only from the imports its first restore writes; Linux's watcher can miss files in a new obj folder), and
+            // one whose folder got an assets file or that imports a file the restore rewrote, as the watcher would.
+            var imports = outputs.MSBuildFiles.ToHashSet(s_pathComparer);
+            bool Restored(string project) => _evaluated.TryGetValue(project, out var e)
+                && (e.Imports.Any(imports.Contains)
+                    || (e.AssetsFile is null && e.IntermediateDirectory is { } obj && File.Exists(System.IO.Path.Combine(obj, "project.assets.json"))));
+            await EvaluateAsync(
+                [.. ProjectPaths.Where(p => AssetsChangedSinceEvaluation(p) || netFrameworkChanged.Contains(p, s_pathComparer) || Restored(p)
+                                            || outputs.Directories.Any(d => ProjectFileEditor.IsSameOrUnder(d, System.IO.Path.GetDirectoryName(p)!)))],
+                _lifetime.Token,
+                DesignTimeMode.IfAssetsChanged,
+                reloadFiles: imports).ConfigureAwait(false);
             ScheduleDesignTimeBuilds(netFrameworkChanged);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
@@ -1106,28 +1181,48 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         catch (OperationCanceledException)
         {
         }
+        finally
+        {
+            if (!taken)
+            {
+                _watcher?.ResumeRestoreOutputs(); // the watcher reports what the restore wrote before it failed
+            }
+        }
     }
 
-    /// <summary>Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output; its exit code.</summary>
-    private async Task<int> RunRestoreAsync(string target)
+    /// <summary>
+    /// Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output: its exit code, and
+    /// whether it said a package source couldn't be reached (NU1301).
+    /// </summary>
+    private async Task<(int Code, bool Unreachable)> RunRestoreAsync(string target, bool force = false)
     {
         // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
-        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal", .. (force ? ["--force"] : Array.Empty<string>())]);
         using var process = Packages.DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
-        var output = PumpAsync(process.StandardOutput);
-        var error = PumpAsync(process.StandardError);
+        var unreachable = 0;
+        void Read(string line)
+        {
+            if (line.Contains("NU1301", StringComparison.Ordinal))
+            {
+                Volatile.Write(ref unreachable, 1);
+            }
+        }
+
+        var output = PumpAsync(process.StandardOutput, Read);
+        var error = PumpAsync(process.StandardError, Read);
         await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
         await Task.WhenAll(output, error).ConfigureAwait(false);
-        return process.ExitCode;
+        return (process.ExitCode, Volatile.Read(ref unreachable) == 1);
     }
 
     /// <summary>Whether the restore just run wrote the project's assets file (it has one newer than its evaluation's).</summary>
     private bool AssetsWritten(string project) => AssetsStamp(project) != DateTime.MinValue && AssetsChangedSinceEvaluation(project);
 
-    private async Task PumpAsync(StreamReader reader)
+    private async Task PumpAsync(StreamReader reader, Action<string> read)
     {
         while (await reader.ReadLineAsync(_lifetime.Token).ConfigureAwait(false) is { } line)
         {
+            read(line);
             await _events.RestoreOutputAsync(line).ConfigureAwait(false);
         }
     }

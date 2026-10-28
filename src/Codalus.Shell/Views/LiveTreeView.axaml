@@ -38,7 +38,7 @@
         <Style Selector="TreeViewItem" x:DataType="vm:LiveNodeViewModel">
           <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
-          <Setter Property="MinHeight" Value="22" />
+          <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
         </Style>
       </TreeView.Styles>
       <TreeView.ItemTemplate>

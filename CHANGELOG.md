@@ -2,6 +2,26 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.9.0
+
+- **All of a solution's repositories in Git Changes** ([user guide](docs/user-guide/git.md#several-repositories)): a solution whose projects span several repositories opens Git Changes on **All Repositories**, as the classic IDE does: a tree per repository, **Commit All Repos** with one message, fetch, pull, push, sync and stash in each with every failure listed in one notification, and the branch drop-down's **Common** branches next to each repository's own. Repositories are added or left out with the solution.
+- **Large solutions open and analyze faster.** For a solution of 20 projects or more, the C# language service compiles and checks every project with .NET's server garbage collector, which keeps its many threads busy: the first analysis of a 94-project solution took about half as long, at the same peak memory. Smaller solutions keep the collector that uses less memory when idle. Loading the projects' references no longer holds up the language service's other messages.
+- **Fixed: no IntelliSense in projects of another repository restored with another .NET SDK** ([user guide](docs/user-guide/solutions.md#restore)): a solution that includes projects from another repository, whose `global.json` pins another SDK, couldn't read their packages (the design-time build failed in `ResolvePackageAssets`), so those projects had no IntelliSense and built again at every open. Codalus now restores once with the solution's SDK when a design-time build can't read the packages, then builds them again. The build host's output says why it restores on open.
+- **Fixed:** opening a large solution whose private package feed is unreachable (off its VPN) froze the window for minutes and kept the C# status switching between loading and analyzing: the Error List built its rows on the UI thread, hundreds of thousands of them. They're built in the background now and shown at once.
+- **Fixed:** Solution Explorer, Test Explorer and the other tree tool windows packed their rows tighter than the classic IDE: tree rows are 24 pixels now (`Shell.Size.TreeRow`).
+- **Fixed:** auto-hidden tool windows' tabs on the right side read bottom to top, as if they were on the left, and on the left side their bar was on the inner edge. They read top to bottom on both sides, as in the classic IDE, with the bar on the window's edge.
+- **Fixed:** links in the Output window, the Debug Console and C# Interactive were plain blue, hard to read in dark themes. They're the theme's link color now.
+- **Fixed:** **Stop** while an external agent waited for your approval could tell the agent you had rejected it, instead of that the turn was cancelled.
+- **Fixed:** the branch drop-down could show the branches as they were before an **Update** or a change made outside the IDE (a branch still current after a switch, a worktree without its chip) until it was opened again.
+- **Fixed:** in Locals, Autos, Watch and QuickWatch, keys (Delete, F2, the arrows) did nothing after the values were evaluated again (a step, an edit) until you clicked a row: the focused row lost the keyboard focus.
+- **Fixed:** completion and Quick Info could stop working for the rest of the session when they were asked while a project the file's project references was still waiting for its restore.
+- **Fixed:** Test Explorer could find no tests in a project, until it was built again, after VSTest started slowly on a busy machine; a test application slow to connect was reported as a cancelled run instead of its error.
+- **Fixed:** staging or committing could fail with git's "index.lock: File exists" while a diff was open: showing a diff took git's index lock.
+- **Fixed:** in the Properties window, **OK** in the invalid-value message could put the old value back in the cell instead of the text you typed, to correct it.
+- **Fixed:** **F5** or **Ctrl+F5** on an Aspire AppHost could fail on a busy machine with a `TimeoutRejectedException` right after "Starting DCP": the IDE now gives DCP's services 2 minutes to start instead of Aspire's 10 seconds, unless you set `ASPIRE_SERVICE_STARTUP_WATCH_TIMEOUT` yourself.
+- **Fixed:** a setting changed in Options or settings.json could go back to its old value right after the change, when the IDE was still reading the file for an earlier change.
+- **Fixed:** on Linux, a multi-targeted project could keep stale IntelliSense after its first restore when the file watcher missed its new `obj` folder (seen under WSL); and a `dotnet ef` the Entity Framework window started could outlive the IDE (for hours on macOS). The build host now evaluates such a project after the restore itself and ends its `dotnet` processes when it exits.
+
 ## 0.8.0
 
 - **External agents keep their place, and you choose their model** ([user guide](docs/user-guide/ai.md#what-you-see)): after connecting an agent and restarting, AI Chat showed the Connect buttons again, as if nothing were connected. It now opens with the agent you chose last (`ai.chat.agent`). When an agent offers choices for its session over the Agent Client Protocol (its model, its modes, its effort or thinking level, or choices of its own), each has a picker in AI Chat's toolbar; a pick goes to the agent at once and is kept for its next sessions.

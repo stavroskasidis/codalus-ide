@@ -16,12 +16,17 @@ public sealed class GitBranchRow : ObservableObject
         Key = key;
     }
 
-    /// <summary>A header row: "Local branches", or a remote's name.</summary>
-    public static GitBranchRow Header(string text) => new("h:" + text) { HeaderText = text, IsHeader = true };
+    /// <summary>A header row: "Local branches", or a remote's name; with all repositories shown, a repository's (indented under All branches).</summary>
+    public static GitBranchRow Header(string text, string? key = null, int depth = 0) => new(key ?? "h:" + text) { HeaderText = text, IsHeader = true, Depth = depth };
 
-    /// <summary>A branch row; <paramref name="name"/> is what it shows (a remote branch without its remote).</summary>
-    public static GitBranchRow ForBranch(GitBranchDetails branch, string name, bool isCurrent, IReadOnlyList<int>? highlights = null, string detail = "", string track = "", string trackName = "", string busy = "") =>
-        new((branch.IsRemote ? "r:" : "l:") + branch.Name)
+    /// <summary>
+    /// A branch row; <paramref name="name"/> is what it shows (a remote branch without its remote). With all repositories
+    /// shown (ADR 0085), a row of Common branches (<paramref name="isCommon"/>) or of one <paramref name="repository"/>.
+    /// </summary>
+    public static GitBranchRow ForBranch(
+        GitBranchDetails branch, string name, bool isCurrent, IReadOnlyList<int>? highlights = null, string detail = "", string track = "", string trackName = "", string busy = "",
+        GitService? repository = null, bool isCommon = false, int depth = 0) =>
+        new((isCommon ? "c:" : string.Empty) + (repository is { Root: { } root } ? root + ":" : string.Empty) + (branch.IsRemote ? "r:" : "l:") + branch.Name)
         {
             Branch = branch,
             Name = name,
@@ -31,7 +36,21 @@ public sealed class GitBranchRow : ObservableObject
             Track = track,
             TrackName = trackName,
             _busy = busy,
+            Repository = repository,
+            IsCommon = isCommon,
+            Depth = depth,
         };
+
+    /// <summary>The repository the branch is in, with all repositories shown (ADR 0085); null otherwise and on Common branches.</summary>
+    public GitService? Repository { get; private init; }
+
+    /// <summary>A branch every repository has (Common branches): its actions run in each.</summary>
+    public bool IsCommon { get; private init; }
+
+    /// <summary>How far it's indented: under All branches, a repository's header (1) and its branches (2).</summary>
+    public int Depth { get; private init; }
+
+    public Avalonia.Thickness Indent => new(Depth * 12, 0, 0, 0);
 
     /// <summary>Identifies the row across reloads: <c>l:main</c>, <c>r:origin/main</c>, <c>h:…</c>.</summary>
     public string Key { get; }
@@ -126,13 +145,48 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     private string _bannerActionIcon = "window-new";
     private Func<Task>? _bannerRun;
     private int _loadVersion;
+    private Task? _latestLoad;
     private string? _loadedFor;
     private readonly HashSet<string> _busy = new(StringComparer.Ordinal);
+    private IReadOnlyList<RepositoryBranches>? _repositories;
+
+    /// <summary>A repository's branches, with all repositories shown (ADR 0085).</summary>
+    private sealed record RepositoryBranches(GitService Git, IReadOnlyList<GitBranchDetails> Branches, bool HasRemote);
 
     public GitBranchPickerViewModel(GitService git)
     {
         _git = git;
     }
+
+    /// <summary>The repositories Git Changes shows when it shows them all (ADR 0085), else null; set by the shell.</summary>
+    public Func<IReadOnlyList<GitService>?>? AllRepositories { get; set; }
+
+    /// <summary>The list has Common branches and each repository's (ADR 0085).</summary>
+    public bool IsAllRepositories => _repositories is not null;
+
+    /// <summary>The row that shows <paramref name="branch"/> (the very object), or null.</summary>
+    public GitBranchRow? RowOf(GitBranchDetails branch) => Rows.FirstOrDefault(r => ReferenceEquals(r.Branch, branch));
+
+    /// <summary>The repository a branch of the list is in: its own row's, or the open one (one repository, and Common branches).</summary>
+    public GitService RepositoryOf(GitBranchDetails branch) =>
+        _repositories?.FirstOrDefault(r => r.Branches.Any(b => ReferenceEquals(b, branch)))?.Git ?? _git;
+
+    /// <summary>A Common branches row (its actions run in every repository).</summary>
+    public bool IsCommon(GitBranchDetails branch) => RowOf(branch) is { IsCommon: true };
+
+    /// <summary>Each repository's local branch named <paramref name="name"/>, in the repositories' order.</summary>
+    public IReadOnlyList<(GitService Git, GitBranchDetails Branch)> CommonBranchIn(string name) =>
+        [.. (_repositories ?? []).SelectMany(r => r.Branches.Where(b => !b.IsRemote && b.Name == name).Take(1).Select(b => (r.Git, b)))];
+
+    /// <summary>The branches of the repository <paramref name="branch"/> is in.</summary>
+    private IReadOnlyList<GitBranchDetails> BranchesBeside(GitBranchDetails branch) =>
+        _repositories?.FirstOrDefault(r => r.Branches.Any(b => ReferenceEquals(b, branch)))?.Branches ?? Branches;
+
+    /// <summary>Whether the repository <paramref name="branch"/> is in has a remote (any of them, for a Common branches row).</summary>
+    public bool HasRemoteFor(GitBranchDetails branch) =>
+        _repositories is { } all
+            ? all.FirstOrDefault(r => r.Branches.Any(b => ReferenceEquals(b, branch)))?.HasRemote ?? all.Any(r => r.HasRemote)
+            : _hasRemote;
 
     public ObservableCollection<GitBranchRow> Rows { get; } = [];
 
@@ -323,8 +377,25 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Reads the branches again (on each open, after Update and Try Again); the cached list stays shown meanwhile.</summary>
+    /// <summary>
+    /// Reads the branches again (on each open, after Update and Try Again); the cached list stays shown meanwhile. When a
+    /// newer load replaces this one's result (Update's reload, the repositories' refresh after git changed .git), it
+    /// returns once that one has landed: the list it leaves was read after the call, never the one before it (a load
+    /// returned with the rows still showing main as current after a switch, macOS runs 40538692111, 40547948961).
+    /// </summary>
     public async Task LoadAsync()
+    {
+        var load = LoadOnceAsync();
+        _latestLoad = load;
+        await load.ConfigureAwait(true);
+        while (_latestLoad is { } newer && newer != load)
+        {
+            load = newer;
+            await load.ConfigureAwait(true);
+        }
+    }
+
+    private async Task LoadOnceAsync()
     {
         var version = ++_loadVersion;
         if (_loadedFor != _git.Root)
@@ -338,16 +409,30 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         {
             var branches = await _git.BranchDetailsAsync().ConfigureAwait(true);
             var remotes = await _git.RemotesAsync().ConfigureAwait(true);
+            List<RepositoryBranches>? repositories = null;
+            if (AllRepositories?.Invoke() is { Count: > 1 } services)
+            {
+                repositories = [];
+                foreach (var git in services)
+                {
+                    repositories.Add(git == _git
+                        ? new RepositoryBranches(git, branches, remotes.Count > 0)
+                        : new RepositoryBranches(git, await git.BranchDetailsAsync().ConfigureAwait(true), (await git.RemotesAsync().ConfigureAwait(true)).Count > 0));
+                }
+            }
+
             if (version != _loadVersion)
             {
                 return;
             }
 
             _branches = branches;
+            _repositories = repositories;
             _hasRemote = remotes.Count > 0;
             _loadedFor = _git.Root;
             OnPropertyChanged(nameof(HasRemote));
             OnPropertyChanged(nameof(Branches));
+            OnPropertyChanged(nameof(IsAllRepositories));
         }
         catch (Exception ex) when (ex is GitException or InvalidOperationException or IOException)
         {
@@ -402,6 +487,13 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         }
 
         var rows = new List<GitBranchRow>();
+        if (_repositories is { } repositories)
+        {
+            RebuildAll(repositories, rows, Matches, Highlights);
+            Show(rows, rows.Count(r => r.IsBranch && !r.IsCommon), repositories.Sum(r => r.Branches.Count(b => !b.IsRemote || r.HasRemote)));
+            return;
+        }
+
         var shownLocals = locals.Where(b => Matches(b.Name))
             .OrderByDescending(b => b.IsCurrent && status?.Branch is not null)
             .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
@@ -427,20 +519,23 @@ public sealed class GitBranchPickerViewModel : ObservableObject
             }
         }
 
-        var total = locals.Count + remotes.Count;
-        var count = rows.Count(r => r.IsBranch);
-        CountText = Localizer.Format("msg.gitBranches.countOfTotal", "{0} of {1}", count, total);
-        IsEmpty = !_isLoading && _error is null && count == 0 && query.Length > 0;
-        Rows.Clear();
-        foreach (var row in rows)
-        {
-            Rows.Add(row);
-        }
+        Show(rows, rows.Count(r => r.IsBranch), locals.Count + remotes.Count);
 
-        _selected = Rows.FirstOrDefault(r => r.Key == selectedKey);
-        foreach (var property in new[] { nameof(Selected), nameof(CountText), nameof(IsEmpty), nameof(EmptyText), nameof(FooterText), nameof(FooterName) })
+        void Show(List<GitBranchRow> shown, int count, int total)
         {
-            OnPropertyChanged(property);
+            CountText = Localizer.Format("msg.gitBranches.countOfTotal", "{0} of {1}", count, total);
+            IsEmpty = !_isLoading && _error is null && count == 0 && query.Length > 0;
+            Rows.Clear();
+            foreach (var row in shown)
+            {
+                Rows.Add(row);
+            }
+
+            _selected = Rows.FirstOrDefault(r => r.Key == selectedKey);
+            foreach (var property in new[] { nameof(Selected), nameof(CountText), nameof(IsEmpty), nameof(EmptyText), nameof(FooterText), nameof(FooterName) })
+            {
+                OnPropertyChanged(property);
+            }
         }
 
         GitBranchRow LocalRow(GitBranchDetails b, bool isUnborn)
@@ -464,6 +559,48 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The rows with all repositories shown (ADR 0085): Common branches (the local branches every repository has, checked
+    /// when every repository is on it), then All branches: each repository's header with its current branch, its local
+    /// branches (current first) and, when it has a remote, its remote branches with their remote's name.
+    /// </summary>
+    private void RebuildAll(IReadOnlyList<RepositoryBranches> repositories, List<GitBranchRow> rows, Func<string, bool> matches, Func<string, IReadOnlyList<int>?> highlights)
+    {
+        var common = GitService.CommonBranches([.. repositories.Select(r => r.Branches)]).Where(matches).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+        if (common.Count > 0)
+        {
+            rows.Add(GitBranchRow.Header(Localizer.Get("msg.gitBranches.commonBranches", "Common branches")));
+            foreach (var name in common)
+            {
+                var each = CommonBranchIn(name);
+                var current = each.All(e => e.Branch.IsCurrent && e.Git.Status?.Branch is not null);
+
+                // A copy of the first repository's: a row's branch identifies the row (RowOf).
+                rows.Add(GitBranchRow.ForBranch(each[0].Branch with { }, name, current, highlights(name), isCommon: true));
+            }
+        }
+
+        rows.Add(GitBranchRow.Header(Localizer.Get("msg.gitBranches.allBranches", "All branches"), "h:all"));
+        foreach (var repository in repositories)
+        {
+            var git = repository.Git;
+            var status = git.Status;
+            var locals = repository.Branches.Where(b => !b.IsRemote && matches(b.Name))
+                .OrderByDescending(b => b.IsCurrent && status?.Branch is not null)
+                .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase);
+            var remotes = repository.HasRemote ? repository.Branches.Where(b => b.IsRemote && matches(b.Name)).OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase) : Enumerable.Empty<GitBranchDetails>();
+            var shown = locals.Concat(remotes).ToList();
+            if (shown.Count == 0)
+            {
+                continue;
+            }
+
+            var on = status?.Branch ?? Localizer.Get("msg.gitBranches.detached", "detached");
+            rows.Add(GitBranchRow.Header($"{git.Name} ({on})", "h:" + git.Root, depth: 1));
+            rows.AddRange(shown.Select(b => GitBranchRow.ForBranch(b, b.Name, !b.IsRemote && b.IsCurrent && status?.Branch is not null, highlights(b.Name), repository: git, depth: 2)));
+        }
+    }
+
     /// <summary>The selection moves down (+1) or up (-1) over the branch rows, skipping headers (the keyboard, B2).</summary>
     public void MoveSelection(int direction)
     {
@@ -479,5 +616,5 @@ public sealed class GitBranchPickerViewModel : ObservableObject
 
     /// <summary>The local branch with a remote branch's name, which Checkout on the remote row switches to (question 7).</summary>
     public GitBranchDetails? LocalTwin(GitBranchDetails remote) =>
-        remote.IsRemote ? Branches.FirstOrDefault(b => !b.IsRemote && b.Name == remote.ShortName) : null;
+        remote.IsRemote ? BranchesBeside(remote).FirstOrDefault(b => !b.IsRemote && b.Name == remote.ShortName) : null;
 }

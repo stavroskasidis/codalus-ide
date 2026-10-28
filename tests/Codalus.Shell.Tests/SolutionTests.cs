@@ -127,7 +127,7 @@ public class SolutionTests
         await ShellFixture.PumpUntil(() => File.Exists(Path.Combine(appDir, "settings.json")));
 
         // The file moves first; the project file is updated right after.
-        await ShellFixture.PumpUntil(() => File.ReadAllText(app).Contains("None Update=\"settings.json\"", StringComparison.Ordinal));
+        await ShellFixture.PumpUntil(() => ShellFixture.ReadText(app).Contains("None Update=\"settings.json\"", StringComparison.Ordinal));
 
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "settings.json"), seconds: 30);
         explorer.Reveal("f:" + Path.Combine(appDir, "settings.json"));

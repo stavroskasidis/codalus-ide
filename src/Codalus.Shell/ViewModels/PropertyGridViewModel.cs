@@ -517,6 +517,16 @@ public sealed class PropertyRowViewModel : ObservableObject
         SetField(ref _text, _isMixed ? string.Empty : _value, nameof(Text));
     }
 
+    /// <summary>
+    /// The invalid-value dialog's OK: the text box shows the rejected text again, to correct it, nothing committed. A
+    /// refresh while the dialog was open (the designer's, a selection's) put the value back in it.
+    /// </summary>
+    internal void ShowRejectedText(string text)
+    {
+        _committed = null;
+        SetField(ref _text, text, nameof(Text));
+    }
+
     public PropertyOption? SelectedOption
     {
         get => _isMixed ? null : _options.FirstOrDefault(o => string.Equals(o.Value, _value, StringComparison.OrdinalIgnoreCase));

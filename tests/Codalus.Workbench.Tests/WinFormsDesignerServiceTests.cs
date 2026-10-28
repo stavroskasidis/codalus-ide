@@ -290,13 +290,20 @@ public sealed class WinFormsDesignerServiceTests
 
     private static readonly WinFormsDesignerTimeouts s_short = new() { Start = TimeSpan.FromSeconds(2), Load = TimeSpan.FromSeconds(1), Request = TimeSpan.FromSeconds(1), Status = TimeSpan.FromSeconds(2) };
 
+    /// <summary>
+    /// For the requests a test expects answered: the fake answers at once, but on Windows every read of its pipe is a
+    /// work item on a thread pool the other tests keep busy. A designer/load the fake had already logged ran out of
+    /// s_short's second there, with "7 pool threads, 6 work items queued" (job 121852397108).
+    /// </summary>
+    private static readonly WinFormsDesignerTimeouts s_answered = new() { Start = TimeSpan.FromSeconds(30), Load = TimeSpan.FromSeconds(30), Request = TimeSpan.FromSeconds(30), Status = TimeSpan.FromSeconds(5) };
+
     [Fact]
     public async Task A_load_that_runs_out_of_time_says_what_the_host_is_doing_and_what_it_wrote()
     {
         // A host that's ready but whose UI thread never finishes the load: the failure carries designer/status (answered
         // off the UI thread) and the host's last standard error, not just "didn't answer".
         await using var fake = new FakeDesignerHost(ready: true);
-        var host = await WinFormsDesignerProcess.StartAsync(fake.Launch, s_short, TestContext.Current.CancellationToken);
+        var host = await WinFormsDesignerProcess.StartAsync(fake.Launch, s_short with { Start = s_answered.Start }, TestContext.Current.CancellationToken);
         await using var _ = host;
         Assert.Equal(1, fake.ReadyRequests);
         var model = new DesignerModel { ClassName = "Form1", Namespace = "Demo", BaseType = "System.Windows.Forms.Form" };
@@ -365,7 +372,7 @@ public sealed class WinFormsDesignerServiceTests
         try
         {
             await using var fake = new FakeDesignerHost(ready: true, answerLoad: true);
-            var host = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root);
+            var host = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target, s_answered, TestContext.Current.CancellationToken, launcher: fake, copyRoot: root);
             var copy = host.CopyFolder!;
             var copied = Path.Combine(copy, "0");
             Assert.Equal(root, Path.GetDirectoryName(copy));
@@ -391,7 +398,7 @@ public sealed class WinFormsDesignerServiceTests
             Directory.CreateDirectory(library);
             File.WriteAllText(Path.Combine(library, "Forms.dll"), "forms");
             await using var libraryFake = new FakeDesignerHost(ready: true, answerLoad: true);
-            var libraryHost = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target with { HostAssembly = null, ProjectAssembly = Path.Combine(library, "Forms.dll") }, s_short, TestContext.Current.CancellationToken, launcher: libraryFake, copyRoot: root);
+            var libraryHost = (WinFormsDesignerProcess)await WinFormsDesignerProcess.StartAsync(target with { HostAssembly = null, ProjectAssembly = Path.Combine(library, "Forms.dll") }, s_answered, TestContext.Current.CancellationToken, launcher: libraryFake, copyRoot: root);
             Assert.Equal([target.DesignerHost], libraryFake.Started!.Arguments);
             Assert.Equal(Path.Combine(libraryHost.CopyFolder!, "0"), libraryFake.Started.WorkingDirectory);
             await libraryHost.DisposeAsync();
@@ -496,7 +503,7 @@ public sealed class WinFormsDesignerServiceTests
         try
         {
             await using var fake = new FakeDesignerHost(ready: true);
-            var host = await WinFormsDesignerProcess.StartAsync(target, s_short, TestContext.Current.CancellationToken, launcher: fake, copyRoot: Path.Combine(folder, "copies"));
+            var host = await WinFormsDesignerProcess.StartAsync(target, s_answered, TestContext.Current.CancellationToken, launcher: fake, copyRoot: Path.Combine(folder, "copies"));
             await using var _ = host;
             var lines = new List<string>();
             host.Log += (_, line) => lines.Add(line);

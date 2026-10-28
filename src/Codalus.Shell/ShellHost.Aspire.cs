@@ -122,6 +122,15 @@ public sealed partial class ShellHost
         environment.Remove("ASPIRE_RESOURCE_SERVICE_ENDPOINT_URL");
         environment["ASPIRE_ALLOW_UNSECURED_TRANSPORT"] = "true";
         environment["ASPIRE_DASHBOARD_RESOURCESERVICE_APIKEY"] = apiKey;
+
+        // Aspire waits 10 seconds for DCP's services to start, then the AppHost fails to start (Polly's
+        // TimeoutRejectedException, unhandled, where F5 stops). The IDE starts the projects itself, under the debugger
+        // with F5, which a loaded machine can take longer than that for (Windows CI, run 40346124678): 2 minutes, unless
+        // the launch profile or the environment sets it.
+        if (Environment.GetEnvironmentVariable("ASPIRE_SERVICE_STARTUP_WATCH_TIMEOUT") is null)
+        {
+            environment.TryAdd("ASPIRE_SERVICE_STARTUP_WATCH_TIMEOUT", "00:02:00");
+        }
         plan = plan with { Environment = environment, BrowserUrl = null };
 
         var run = _aspire = new AspireRun(project, debug, server, new AspireResourceClient(new Uri($"http://localhost:{resourcePort}"), apiKey))

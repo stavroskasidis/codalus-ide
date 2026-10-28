@@ -96,6 +96,10 @@ internal static partial class BuiltIns
         const string Branch = MenuLocations.GitChangesBranch;
         const string Shown = "!gitBranchIsCurrent && !gitBranchInOtherWorktree && !gitOperation && !gitHeadUnborn";
 
+        // A Common branches row (all repositories shown, ADR 0085) offers Checkout, New Local Branch From, Merge, Rebase and
+        // Delete, each run in every repository; the rest are one repository's, on its own rows.
+        const string One = "!gitBranchIsCommon";
+
         // TODO(issue): Reset and Cherry-Pick Tip on a branch's menu, as the classic IDE's has them (D38, question 20).
         // TODO(issue): Create Pull Request for any branch on its menu; git.createPullRequest takes no branch (question 20).
         // TODO(issue): Take Current and Take Incoming on a folder of Merge Conflicts (D38's T12).
@@ -121,13 +125,13 @@ internal static partial class BuiltIns
             Item(Branch, "git.createBranch", "1-checkout", 2, "!gitHeadUnborn", Localizer.Get("msg.gitBranches.menuNewLocalBranchFrom", "New Local Branch From…")),
             Item(Branch, "git.merge", "2-integrate", 1, Shown.Replace(" && !gitBranchInOtherWorktree", string.Empty, StringComparison.Ordinal)),
             Item(Branch, "git.rebase", "2-integrate", 2, Shown.Replace(" && !gitBranchInOtherWorktree", string.Empty, StringComparison.Ordinal)),
-            Item(Branch, "git.updateBranch", "3-manage", 1, "gitBranchKind == local && gitBranchHasUpstream && !gitBranchUpdateBlocked"),
-            Item(Branch, "git.push", "3-manage", 2, "gitBranchKind == local && gitHasRemote && !gitHeadUnborn"),
-            Item(Branch, "git.renameBranch", "3-manage", 3, "gitBranchKind == local && !gitHeadUnborn", Localizer.Get("msg.gitBranches.menuRename", "Rename…"), "f2"),
+            Item(Branch, "git.updateBranch", "3-manage", 1, $"gitBranchKind == local && gitBranchHasUpstream && !gitBranchUpdateBlocked && {One}"),
+            Item(Branch, "git.push", "3-manage", 2, $"gitBranchKind == local && gitHasRemote && !gitHeadUnborn && {One}"),
+            Item(Branch, "git.renameBranch", "3-manage", 3, $"gitBranchKind == local && !gitHeadUnborn && {One}", Localizer.Get("msg.gitBranches.menuRename", "Rename…"), "f2"),
             Item(Branch, "git.deleteBranch", "3-manage", 4, Shown, Localizer.Get("msg.gitBranches.menuDelete", "Delete"), platform == Codalus.Platform.PlatformKind.MacOS ? "cmd+backspace" : "delete"),
-            Item(Branch, "git.compareBranch", "4-inspect", 1, "!gitBranchIsCurrent && !gitHeadUnborn", Localizer.Get("msg.gitBranches.menuCompareWithCurrentBranch", "Compare with Current Branch")),
-            Item(Branch, "git.history", "4-inspect", 2, "!gitHeadUnborn"),
-            Item(Branch, "git.copyBranchName", "4-inspect", 3),
+            Item(Branch, "git.compareBranch", "4-inspect", 1, $"!gitBranchIsCurrent && !gitHeadUnborn && {One}", Localizer.Get("msg.gitBranches.menuCompareWithCurrentBranch", "Compare with Current Branch")),
+            Item(Branch, "git.history", "4-inspect", 2, $"!gitHeadUnborn && {One}"),
+            Item(Branch, "git.copyBranchName", "4-inspect", 3, One),
         ]);
     }
 

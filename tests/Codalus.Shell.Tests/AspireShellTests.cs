@@ -41,9 +41,20 @@ public sealed class AspireShellTests
     /// <summary>What the Aspire window, the debugger and the AppHost's output show, for a failed wait.</summary>
     private static string Describe(ShellFixture f) =>
         $"resources [{string.Join(", ", f.Shell.AspireWindow.Resources.Select(r => $"{r.Name} ({r.Resource.Type}) {r.Resource.State}"))}]; "
-        + $"debugger {f.Shell.Debugger.State}, programs [{string.Join(", ", f.Shell.Debugger.Processes.Select(p => $"{p.Name} {p.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no id"}{(p.Ended ? " ended" : string.Empty)}"))}]; "
+        + $"debugger {f.Shell.Debugger.State}{Stop(f)}, programs [{string.Join(", ", f.Shell.Debugger.Processes.Select(p => $"{p.Name} {p.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no id"}{(p.Ended ? " ended" : string.Empty)}"))}]; "
         + $"last build {(f.Shell.Builds.LastBuild is { } build ? $"{build.Result.Errors} error(s){(build.Result.Canceled ? ", canceled" : string.Empty)}" : "none")}\n"
         + $"Aspire output:\n{Tail(f.Shell.AspireLog.GetText())}\nDebug Console:\n{Tail(f.Shell.DebugLog.GetText())}";
+
+    /// <summary>
+    /// Where the debugger stopped: F5 on Windows CI (run 40346124678) waited 5 minutes with the debugger stopped on a
+    /// TimeoutRejectedException ("didn't complete within the allowed timeout of '00:00:10'") thrown as the AppHost started
+    /// its orchestrator, and nothing said whether it was user-unhandled or where it was thrown.
+    /// </summary>
+    private static string Stop(ShellFixture f) =>
+        f.Shell.Debugger is { State: DebugState.Stopped, CurrentStop: { } stop } debugger
+            ? $" ({stop.Reason}{(stop.Exception is { } e ? $" {e.ExceptionId}, break mode {e.BreakMode ?? "none"}: {e.Details?.Message}" : string.Empty)}, at "
+                + $"{string.Join(" < ", debugger.Frames.Take(12).Select(frame => frame.Name))}{(stop.Exception?.Details?.StackTrace is { } trace ? "\n" + trace : string.Empty)})"
+            : string.Empty;
 
     private static string Tail(string text, int length = 3000) => text.Length <= length ? text : text[^length..];
 

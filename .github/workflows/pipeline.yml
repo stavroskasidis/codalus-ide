@@ -542,11 +542,17 @@ jobs:
           rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
           dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
       - name: Run benchmarks
-        # Bounded below the job's limit: a slow run still reports what it measured, and its log is kept.
+        # Bounded below the job's limit: a slow run still reports what it measured, and its log is kept. Cold start takes
+        # 6 launches (its p50 of 5 warm ones; with 3 it was the lower of 2), a few seconds each; the heavier scenarios 3
+        # (ADR 0002, amendment 2026-10-27).
         timeout-minutes: 70
-        run: >-
-          dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- run --results ci-results
-          --targets shell,vscode --scenarios cold-start,editor-100k,self-driven,binary-size --runs 3
+        shell: bash
+        run: |
+          bench() { dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- run --results ci-results --targets shell,vscode "$@"; }
+          status=0
+          bench --scenarios cold-start --runs 6 || status=$?
+          bench --scenarios editor-100k,self-driven,binary-size --runs 3 || status=$?
+          exit "$status"
       - name: Report
         if: always()
         run: dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release -- report --results ci-results --out ci-results/summary-${{ runner.os }}.md
@@ -647,6 +653,16 @@ jobs:
         with:
           pattern: packages-*
           path: downloaded
+      # "Re-run failed jobs" skips plan, and untag removed its tag when the first attempt failed: the release would find
+      # no tag (develop run 40495180740). Tag again here. The token may tag only a commit whose workflow files match the
+      # default branch's, so once the branch has moved on with workflow changes this fails: "Re-run all jobs" then.
+      - name: Tag the commit again (a re-run of failed jobs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ needs.plan.outputs.version }}"
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1 \
+            || gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" > /dev/null
       - name: Publish the release
         shell: bash
         env:

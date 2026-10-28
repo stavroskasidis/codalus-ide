@@ -254,6 +254,8 @@ public static class CommandIcons
         ["pull-request"] = Orange,
         ["stash"] = Orange,
         ["worktree"] = Orange,
+        ["repository"] = Orange,
+        ["repositories"] = Orange,
         ["publish"] = Orange,
         ["issue"] = Orange,
         ["debug"] = Orange,
