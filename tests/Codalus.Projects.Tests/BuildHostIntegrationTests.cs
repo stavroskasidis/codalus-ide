@@ -363,11 +363,33 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
               <Target Name="NeedsAWorkload" BeforeTargets="_GenerateRestoreProjectSpec"><Error Text="This project needs a workload." /></Target>
             </Project>
             """);
+        // A project that references it: its restore would take the failing one in again.
+        var user = Path.Combine(Fixture, "src", "BadUser", "BadUser.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(user)!);
+        File.WriteAllText(user, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup><ProjectReference Include="..\Bad\Bad.csproj" /></ItemGroup>
+            </Project>
+            """);
+
+        // A project of another repository, whose global.json pins another SDK (here one that isn't installed): restored in
+        // its own folder, it got that SDK, whose assets files the solution's can't read; it restores in the solution's.
+        var other = Path.Combine(Fixture, "other", "Lib", "Lib.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+        File.WriteAllText(other, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(Fixture, "other", "global.json"), """{ "sdk": { "version": "1.0.100", "rollForward": "disable" } }""");
         var broken = Path.Combine(Fixture, "Broken.slnx");
         File.WriteAllText(broken, """
             <Solution>
               <Project Path="src/App/App.csproj" />
               <Project Path="src/Bad/Bad.csproj" />
+              <Project Path="src/BadUser/BadUser.csproj" />
+              <Project Path="other/Lib/Lib.csproj" />
             </Solution>
             """);
         var states = new List<string>();
@@ -382,9 +404,49 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await _service.OpenAsync(broken, trusted: true, restore: true, Timeout());
 
         await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
-        Assert.Contains(states, s => s.Contains("1 project(s) restored on their own", StringComparison.Ordinal));
+        Assert.Contains(states, s => s.Contains("2 project(s) restored without the ones that failed", StringComparison.Ordinal));
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
+        await WaitForProjectAsync(other, p => p.Restored);
         Assert.False(Project(bad).Restored);
+        Assert.False(Project(user).Restored);
+
+        // Restored together, without the project whose errors failed the solution's restore and the one that references it.
+        using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "restore.slnf")));
+        Assert.Equal([@"other\Lib\Lib.csproj", @"src\App\App.csproj"],
+            filter.RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(p => p.GetString()).Order(StringComparer.Ordinal));
+
+        // Again, with nothing to change: two restores, the solution's and the filter's, though the filter's writes no
+        // assets file (each project was restored on its own again: 77 restores on the maintainer's solution).
+        var restores = 0;
+        _service.RestoreOutput += (_, line) =>
+        {
+            if (line.Contains("Determining projects to restore", StringComparison.Ordinal))
+            {
+                Interlocked.Increment(ref restores);
+            }
+        };
+        lock (states)
+        {
+            states.Clear();
+        }
+
+        await _service.RestoreAsync(null, Timeout());
+        await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
+        Assert.Contains(states, s => s.Contains("2 project(s) restored without the ones that failed", StringComparison.Ordinal));
+        Assert.Equal(2, Volatile.Read(ref restores));
+    }
+
+    [Fact]
+    public void A_restore_error_names_its_project()
+    {
+        var app = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "src", "App", "App.csproj"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"Microsoft.NET.Sdk.ImportWorkloads.targets(38,5): error NETSDK1147: To build this project, the following workloads must be installed: wasm-tools [{app}]"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app}(3,5): error : This project needs a workload. [{app}]"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app}(3,77): error : This project needs a workload."));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app} : error NU1105: Unable to read project information."));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject($"{app} : warning NU1510: PackageReference System.IO will not be pruned. [{app}]"));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject("error MSB1009: Project file does not exist. [App.slnx]"));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject("  Restored " + app + " (in 1,75 sec)."));
     }
 
     [Fact]
@@ -544,7 +606,8 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             lock (log)
             {
                 return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)
-                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)));
+                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)
+                                                                       || l.Contains("Restoring on open", StringComparison.Ordinal)));
             }
         }
 
@@ -594,6 +657,12 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => _service.RestoreState is "succeeded" or "failed" && Ok(AppProject) && _service.DesignTimeProgress is { Completed: true }, TimeSpan.FromMinutes(4));
         Assert.Contains("\"net10.0\": {", File.ReadAllText(assets), StringComparison.Ordinal);
         Assert.Contains("Packages of 3 project(s) are up to date", await OpenAsync(), StringComparison.Ordinal);
+
+        // An assets file deleted, its restore's marker still there: the design-time build doesn't say so (the SDK leaves
+        // NETSDK1004 out of design-time builds, so the project loads without its packages), and the open restores.
+        File.Delete(assets);
+        Assert.Contains("Restoring on open: App.csproj has no assets file", await OpenAsync(restores: true), StringComparison.Ordinal);
+        Assert.True(File.Exists(assets));
 
         // The watcher evaluates Core alone (a file added to its folder, as NuGet's outputs after a restore): the
         // projects that reference it build again with it, since their keys hold Core's fingerprint, and the next open

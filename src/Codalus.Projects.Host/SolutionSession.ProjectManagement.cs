@@ -439,6 +439,22 @@ internal sealed partial class SolutionSession
         return filter;
     }
 
+    /// <summary>
+    /// What a restore runs on after the solution's failed in some of its projects: <paramref name="projects"/> only, in a
+    /// generated filter (a folder's generated solution) in <c>.codalus/</c>.
+    /// </summary>
+    private string RestoreEntryPoint(IReadOnlyList<string> projects)
+    {
+        if (IsFolder)
+        {
+            return WriteFolderSolution(System.IO.Path.Combine(Path, ".codalus", "restore.slnx"), projects);
+        }
+
+        var filter = System.IO.Path.Combine(SolutionDirectory, ".codalus", "restore.slnf");
+        WriteFilter(filter, projects);
+        return filter;
+    }
+
     public void SaveFilter(SaveFilterParams parameters)
     {
         if (IsSingleProject || IsFolder)

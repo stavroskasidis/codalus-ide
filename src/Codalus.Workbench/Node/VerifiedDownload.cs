@@ -128,7 +128,7 @@ internal static class VerifiedDownload
             }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested && Retriable(ex))
             {
-                var reason = ex is OperationCanceledException ? $"no data for {stallTimeout.TotalSeconds:0.#} s" : ex.Message;
+                var reason = ex is OperationCanceledException ? $"no data for {stallTimeout.TotalSeconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s" : ex.Message;
                 if (attempt == Attempts)
                 {
                     throw new IOException($"The {what} download failed after {Attempts} attempts, at {Megabytes(file.Length)} MB: {reason}.", ex);

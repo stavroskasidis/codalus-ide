@@ -4,7 +4,11 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.10.0
 
+- **The plugin SDK is on nuget.org** ([plugins.md](docs/plugins.md#project-setup)): `dotnet new install Codalus.Templates` gives `dotnet new codalus-plugin`, and the plugin it makes restores `Codalus.Plugins.Abstractions` and `Codalus.Plugins.Testing` from nuget.org, with no clone or local feed. Each stable release pushes the packages whose version is new.
 - **Fixed:** a download of Node.js or vscode-js-debug that stopped coming (a stalled connection) waited for ever, and every feature that needs Node.js (the web language servers, npm, debugging in the browser) waited behind it. A download that gets no data for 30 seconds, or drops, is now asked for again from where it stopped, up to four times, and then fails with a message that says so.
+- **Fixed: projects of another repository, whose `global.json` pins another .NET SDK, still had no IntelliSense** after 0.9.0's repair ([user guide](docs/user-guide/solutions.md#restore)). When one project failed the solution's restore (a Blazor WebAssembly app without the `wasm-tools` workload, say), each of the others was restored in its own folder, so a project of the other repository got that repository's SDK, and the solution's SDK couldn't read what it wrote. Restores now run in the solution's folder, with its SDK. The projects the errors name are left out, and the others are restored together instead of one by one: two restores instead of 90 on a 94-project solution.
+- **Fixed:** a project whose `obj/project.assets.json` was deleted (by a clean, say) loaded without its packages and wasn't restored at the next open: the design-time build doesn't report a missing assets file, and the open-time check took the last restore's marker for it. A missing assets file now restores on open.
+- Benchmark runs (`CODALUS_BENCH_EVENTS`) record `dialog_shown` with its title when a dialog waits for an answer, so a `--exit-on` run stuck at the trust prompt says why.
 
 ## 0.9.0
 

@@ -158,7 +158,7 @@ internal sealed partial class SolutionSession
             }
 
             await ReevaluateAsync([project]).ConfigureAwait(false);
-            var (exitCode, text) = await RunCliAsync(System.IO.Path.GetDirectoryName(project)!, ["restore", project, "--nologo"], cancellationToken).ConfigureAwait(false);
+            var (exitCode, text) = await RunCliAsync(SolutionDirectory, ["restore", project, "--nologo"], cancellationToken).ConfigureAwait(false);
             await _events.ScaffoldOutputAsync(new ScaffoldOutputParams(exitCode == 0 ? "info" : "error", text.Trim())).ConfigureAwait(false);
         }
 
