@@ -3,6 +3,7 @@
 - **Status:** accepted as research (M14c, 2026-10-11); implementation deferred
 - **Date:** 2026-10-11
 - **Deciders:** maintainer
+- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28, not built yet: Apply Code Changes while debugging through our own adapter, its phase 2)
 
 ## Context
 

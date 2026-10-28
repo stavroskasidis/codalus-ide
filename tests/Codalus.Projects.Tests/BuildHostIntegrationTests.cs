@@ -383,6 +383,9 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             </Project>
             """);
         File.WriteAllText(Path.Combine(Fixture, "other", "global.json"), """{ "sdk": { "version": "1.0.100", "rollForward": "disable" } }""");
+        // A filter 0.9 left directly in .codalus/, where Git showed it.
+        Directory.CreateDirectory(Path.Combine(Fixture, ".codalus"));
+        File.WriteAllText(Path.Combine(Fixture, ".codalus", "restore.slnf"), "{}");
         var broken = Path.Combine(Fixture, "Broken.slnx");
         File.WriteAllText(broken, """
             <Solution>
@@ -411,7 +414,9 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Assert.False(Project(user).Restored);
 
         // Restored together, without the project whose errors failed the solution's restore and the one that references it.
-        using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "restore.slnf")));
+        // In the solution's state folder, which Git doesn't show (one directly in .codalus/ showed in the maintainer's repository).
+        Assert.False(File.Exists(Path.Combine(Fixture, ".codalus", "restore.slnf")));
+        using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "state", "Broken.slnx", "restore.slnf")));
         Assert.Equal([@"other\Lib\Lib.csproj", @"src\App\App.csproj"],
             filter.RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(p => p.GetString()).Order(StringComparer.Ordinal));
 

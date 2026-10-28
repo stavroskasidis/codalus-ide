@@ -256,8 +256,9 @@ public sealed partial class ShellHost
     /// <summary>
     /// Runs <paramref name="action"/> in each shown repository <paramref name="applies"/> to, past the ones that fail;
     /// then says how many it ran in (<paramref name="done"/>, with the count), or lists the failures in a notification.
+    /// Git Changes shows it running, and its Cancel stops it (<see cref="RemoteActionAsync"/>).
     /// </summary>
-    private Task ForEachRepositoryAsync(Func<GitService, bool> applies, Func<GitService, Task> action, string progress, Func<int, string> done, string none) => GitActionAsync(async () =>
+    private Task ForEachRepositoryAsync(Func<GitService, bool> applies, Func<GitService, CancellationToken, Task> action, string progress, Func<int, string> done, string none) => RemoteActionAsync(async token =>
     {
         var targets = ShownRepositories.Where(applies).ToList();
         if (targets.Count == 0)
@@ -266,7 +267,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var failures = await GitService.ForEachAsync(targets, action).ConfigureAwait(true);
+        var failures = await GitService.ForEachAsync(targets, git => action(git, token), token).ConfigureAwait(true);
         ReportRepositoryFailures(failures, targets.Count, done(targets.Count - failures.Count));
     }, progress);
 
@@ -301,31 +302,31 @@ public sealed partial class ShellHost
     private static bool CanPush(GitService git) => git.Status is { Branch: not null, Head: not null } status && (status.Upstream is null || status.Ahead > 0);
 
     private Task FetchAllAsync() => ForEachRepositoryAsync(
-        _ => true, git => git.FetchAsync(), Localizer.Get("msg.allRepositories.fetching", "Fetching all repositories…"),
+        _ => true, (git, token) => git.FetchAsync(token), Localizer.Get("msg.allRepositories.fetching", "Fetching all repositories…"),
         count => Localizer.Format("msg.allRepositories.fetched", "Fetched {0}.", Repositories(count)), string.Empty);
 
     private Task PullAllAsync() => ForEachRepositoryAsync(
-        CanPull, git => git.PullAsync(), Localizer.Get("msg.allRepositories.pulling", "Pulling all repositories…"),
+        CanPull, (git, token) => git.PullAsync(token), Localizer.Get("msg.allRepositories.pulling", "Pulling all repositories…"),
         count => Localizer.Format("msg.allRepositories.pulled", "Pulled {0}.", Repositories(count)),
         Localizer.Get("msg.allRepositories.nothingToPull", "No repository's branch has an upstream to pull from."));
 
     private Task PushAllAsync() => ForEachRepositoryAsync(
-        CanPush, git => git.PushAsync(), Localizer.Get("msg.allRepositories.pushing", "Pushing all repositories…"),
+        CanPush, (git, token) => git.PushAsync(token), Localizer.Get("msg.allRepositories.pushing", "Pushing all repositories…"),
         count => Localizer.Format("msg.allRepositories.pushed", "Pushed {0}.", Repositories(count)),
         Localizer.Get("msg.allRepositories.nothingToPush", "Nothing to push in any repository."));
 
     private Task SyncAllAsync() => ForEachRepositoryAsync(
         git => CanPull(git) || CanPush(git),
-        async git =>
+        async (git, token) =>
         {
             if (CanPull(git))
             {
-                await git.PullAsync().ConfigureAwait(true);
+                await git.PullAsync(token).ConfigureAwait(true);
             }
 
             if (CanPush(git))
             {
-                await git.PushAsync().ConfigureAwait(true);
+                await git.PushAsync(token).ConfigureAwait(true);
             }
         },
         Localizer.Get("msg.allRepositories.syncing", "Syncing all repositories…"),

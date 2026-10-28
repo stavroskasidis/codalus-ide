@@ -3,6 +3,7 @@
 - **Status:** accepted (M43b, 2026-10-17; the maintainer's standing go-ahead for the milestones, D31)
 - **Date:** 2026-10-17
 - **Deciders:** maintainer
+- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28, not built yet: ClrDebug on every OS, through dbgshim)
 - **Amends:** [ADR 0007](0007-debugging.md) (netcoredbg as the one .NET debugger), [ADR 0032](0032-debug-companion-host.md) (the debug companion's modes), [ADR 0075](0075-net-framework-projects-and-builds.md) (F5 offered Start Without Debugging)
 
 ## Context

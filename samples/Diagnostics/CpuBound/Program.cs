@@ -10,6 +10,9 @@ using CpuBound;
 
 var seconds = args.Length > 0 && double.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var given) ? given : 5;
 var until = seconds <= 0 ? DateTime.MaxValue : DateTime.UtcNow.AddSeconds(seconds);
+// The event source exists before "started": a trace that starts then gets its counter a second later, not after the
+// first batch (seconds on a starved machine: the Mac's full suite, whose 3 s trace had none of it).
+_ = WorkEvents.Log;
 Console.WriteLine($"CpuBound {Environment.ProcessId} started for {(seconds <= 0 ? "ever" : seconds + " s")}");
 
 using var meter = new Meter("Codalus.Samples.CpuBound");

@@ -530,6 +530,8 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         }
     }
 
+    private void OnCancelProgress(object? sender, RoutedEventArgs e) => (DataContext as GitChangesViewModel)?.CancelProgress();
+
     public void FocusPrimary() => Message.Focus();
 
     // ------------------------------------------------------------------ the repository picker (ADR 0085)

@@ -10,6 +10,9 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **Fixed:** a project whose `obj/project.assets.json` was deleted (by a clean, say) loaded without its packages and wasn't restored at the next open: the design-time build doesn't report a missing assets file, and the open-time check took the last restore's marker for it. A missing assets file now restores on open.
 - **Fixed:** clicking a CodeLens (the references or implementations above a declaration) could do nothing just after the lenses were refreshed (an option changed, the language service restarted, the file reloaded): a lens whose command hadn't arrived yet ignored the click. It now asks for the command and runs it.
 - Benchmark runs (`CODALUS_BENCH_EVENTS`) record `dialog_shown` with its title when a dialog waits for an answer, so a `--exit-on` run stuck at the trust prompt says why.
+- **Fixed:** the filters and solution Codalus generates for MSBuild (`build.slnf` with unloaded projects, `restore.slnf`, a folder's `folder.slnx`) showed in Git as new files in `.codalus/`. They're in the solution's `.codalus/state/` folder now, which Git never shows, and an old one in `.codalus/` is deleted.
+- **Faster:** Code Search's first index of a large solution, which it builds while the projects compile, parses the documents in parallel: about 7 s instead of 13–16 s for 10,000 files.
+- **Faster:** opening a large solution after a pull. A project whose own files didn't change, though a project it references did, stands in for itself with what it looked like in the last session, so the projects above it don't wait for it to compile again; those that used it are checked again from source right after, and nothing of the first check is kept ([ADR 0049](docs/adr/0049-language-state-between-sessions.md), #208). An error that a change below made stale can show for those seconds.
 
 ## 0.9.0
 

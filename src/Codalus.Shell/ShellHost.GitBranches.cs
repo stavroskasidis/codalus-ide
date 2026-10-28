@@ -287,7 +287,7 @@ public sealed partial class ShellHost
 
     /// <summary>Push (a branch's menu): that branch, checked out or not; with no ref the current one.</summary>
     public Task PushCommandAsync(IReadOnlyList<JsonElement> args) =>
-        RefArgument(args) is { } reference ? GitActionAsync(() => Repo.PushBranchAsync(reference), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
+        RefArgument(args) is { } reference ? RemoteActionAsync(token => Repo.PushBranchAsync(reference, token), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
 
     /// <summary>
     /// Rename… (P6, F2): the current name to edit, git's rules and the other branches' names as the error under the box;
