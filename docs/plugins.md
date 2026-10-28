@@ -20,7 +20,7 @@ dotnet new install Codalus.Templates
 dotnet new codalus-plugin -n Contoso.Greeter --publisher contoso
 ```
 
-It makes `Contoso.Greeter.slnx` with the plugin (`src/Contoso.Greeter`: the manifest, a command, a setting and a status bar item) and its unit tests (`tests/Contoso.Greeter.Tests`, on [`Codalus.Plugins.Testing`](#testing-plugins); `--skipTests` leaves them out). The plugin's id is `<publisher>.<name>` in lower case. Until the packages are on nuget.org (M22c), install the template from a clone (`dotnet new install src/Codalus.Templates/content/CodalusPlugin`) and pack the two API packages into a local feed (`dotnet pack src/Codalus.Plugins.Abstractions -o feed`, and `Codalus.Plugins.Testing`).
+It makes `Contoso.Greeter.slnx` with the plugin (`src/Contoso.Greeter`: the manifest, a command, a setting and a status bar item) and its unit tests (`tests/Contoso.Greeter.Tests`, on [`Codalus.Plugins.Testing`](#testing-plugins); `--skipTests` leaves them out). The plugin's id is `<publisher>.<name>` in lower case. `Codalus.Templates`, `Codalus.Plugins.Abstractions` and `Codalus.Plugins.Testing` are on nuget.org, pushed by each stable release whose version of them is new (from 0.10.0). To build against an API that isn't released yet, install the template from a clone (`dotnet new install src/Codalus.Templates/content/CodalusPlugin`), pack the two API packages into a local feed (`dotnet pack src/Codalus.Plugins.Abstractions -o feed`, and `Codalus.Plugins.Testing`) and pass their version as `--codalusVersion`.
 
 By hand, a plugin project is:
 
@@ -42,7 +42,7 @@ By hand, a plugin project is:
 </Project>
 ```
 
-The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with the marketplace, M22c). Until then, reference the project directly, as the samples do. Every type and member is in the [API reference](user-guide/plugin-api.md).
+`Codalus.Plugins.Abstractions` comes from nuget.org; the samples in this repository reference the project instead. Every type and member is in the [API reference](user-guide/plugin-api.md).
 
 ## The manifest
 

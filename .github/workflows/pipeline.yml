@@ -6,8 +6,8 @@ name: Pipeline
 #   previous nightly as its notes. The newest 14 are kept.
 # - master: a stable release, v<VERSION> (every merge of a release/X.Y.Z branch, and every hotfix; the run fails if that
 #   tag exists already), the latest release, with notes from the commits since the previous stable release. Afterwards the
-#   site with the apt and dnf repositories is deployed, the AUR package pushed, and develop takes in master (a release
-#   branch's fixes, a hotfix) and moves past the released version.
+#   site with the apt and dnf repositories is deployed, the AUR package and the plugin SDK's NuGet packages pushed, and
+#   develop takes in master (a release branch's fixes, a hotfix) and moves past the released version.
 # - pull requests and other branches: CI only.
 # A release is atomic (the maintainer's rule, 2026-10-14): every gate runs first on the release's own commit: CI (test,
 # smoke), the packages installed and smoke-tested on every platform (packages), and for a stable release also the
@@ -748,7 +748,7 @@ jobs:
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
 
   # After a stable release is published, in this order: the site with the repositories (the Pages artifact the site
-  # gate uploaded), the AUR package, and develop last.
+  # gate uploaded), the AUR package, and develop last. The plugin SDK's NuGet packages go beside the site and the AUR.
   pages:
     needs: [plan, publish]
     if: needs.plan.outputs.kind == 'stable'
@@ -799,6 +799,54 @@ jobs:
           git add PKGBUILD .SRCINFO
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
+  # The plugin SDK on nuget.org: Codalus.Plugins.Abstractions, Codalus.Plugins.Testing and Codalus.Templates. Each has a
+  # version of its own, not the IDE's, and a version already on nuget.org is skipped, so a release pushes only the
+  # packages whose version it changed. No API key is stored: nuget.org's trusted publishing trades the job's GitHub OIDC
+  # token for a key valid for an hour, under a policy for this repository, pipeline.yml and the environment nuget
+  # (docs/release/releasing.md, "nuget.org"). NUGET_USER is the nuget.org account the policy belongs to; without it
+  # the packages are packed and not pushed.
+  nuget:
+    needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'stable'
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write # the OIDC token nuget.org trades for an API key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Pack the plugin SDK
+        shell: bash
+        run: |
+          for project in Codalus.Plugins.Abstractions Codalus.Plugins.Testing Codalus.Templates; do
+            dotnet pack "src/$project/$project.csproj" -c Release -o artifacts/nuget
+          done
+      - id: account
+        name: The nuget.org account
+        shell: bash
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
+        run: |
+          if [ -z "$NUGET_USER" ]; then
+            echo "::notice::NUGET_USER isn't set: the plugin SDK's packages are packed, not pushed to nuget.org."
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Right before the push: the key lasts an hour.
+      - id: login
+        if: steps.account.outputs.push == 'true'
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - name: Push the plugin SDK to nuget.org
+        if: steps.account.outputs.push == 'true'
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/nuget/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
   # Last: develop takes in master (a release branch's fixes, a hotfix) and moves past the release, once everything is
   # out; develop keeps its VERSION, already moved on when the release branch was cut. The "protect" ruleset lets
   # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
@@ -807,7 +855,7 @@ jobs:
   # pull request never reports ci, so the job posts it on the branch's head itself, as GitHub Actions (the source the
   # ruleset requires): GitHub offers no Actions bypass for a repository owned by a user.
   finish:
-    needs: [plan, aur]
+    needs: [plan, aur, nuget]
     runs-on: ubuntu-latest
     permissions:
       contents: write
