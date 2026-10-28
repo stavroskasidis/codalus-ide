@@ -296,6 +296,87 @@ public sealed class GitShellTests
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.git.branch" && i.Text.Contains("feature/x", StringComparison.Ordinal)));
     }
 
+    /// <summary>
+    /// A fetch, pull, push or sync shows in Git Changes while it runs, as in the classic IDE: what it's doing under the
+    /// branch over a running bar, Cancel in place of Fetch, Pull, Push and Sync, and a cancellable task in the status bar.
+    /// Cancel kills git, says so, and puts the buttons back; a push that finishes puts them back too. The remote's ssh
+    /// command only sleeps, so the fetch runs until it is cancelled. On a plain folder, so no build or language host starts.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_running_fetch_shows_in_git_changes_until_cancel_stops_it()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "repository");
+        var bare = Path.Combine(f.UserData, "remote.git");
+        Directory.CreateDirectory(folder);
+        Git(f.UserData, "init", "-q", "--bare", "-b", "main", bare);
+        Git(folder, "init", "-q", "-b", "main");
+        Configure(folder);
+        CommitFile(folder, "README.md", "initial");
+        Git(folder, "remote", "add", "origin", bare);
+        Git(folder, "push", "-q", "-u", "origin", "main");
+        // Fetch and pull reach origin over an ssh that never answers; push goes to the bare repository.
+        Git(folder, "config", "remote.origin.pushurl", bare);
+        Git(folder, "config", "remote.origin.url", "ssh://git.invalid/remote.git");
+        Git(folder, "config", "ssh.variant", "simple");
+        Git(folder, "config", "core.sshCommand", "sleep 120 #");
+
+        f.Shell.Trust.Trust(folder);
+        await f.Shell.OpenFolderAsync(folder);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" } && f.Shell.Workbench.Commands.IsEnabled("git.fetch"));
+        var vm = f.Shell.GitChanges;
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<GitChangesView>().Single();
+        var buttons = view.GetVisualDescendants().OfType<Avalonia.Controls.Button>().ToList();
+        var remoteButtons = buttons.Where(b => b.Classes.Contains("toolbar") && b.Tag is "git.fetch" or "git.pull" or "git.push" or "git.sync").ToList();
+        Assert.Equal(4, remoteButtons.Count);
+        var cancel = buttons.Single(b => b.Name == "CancelProgressButton");
+        var progress = view.GetVisualDescendants().OfType<Avalonia.Controls.StackPanel>().Single(p => p.Name == "Progress");
+        Assert.True(vm.IsIdle);
+        Assert.All(remoteButtons, b => Assert.True(b.IsVisible));
+        Assert.False(cancel.IsVisible);
+        Assert.False(progress.IsVisible);
+
+        // Fetch: the window and the status bar show it while it runs.
+        await f.RunAsync("git.fetch");
+        await ShellFixture.PumpUntil(() => vm.IsBusy && cancel.IsVisible);
+        Assert.Equal("Fetching…", vm.ProgressText);
+        Assert.True(progress.IsVisible);
+        Assert.Contains(progress.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>(), t => t.Text == "Fetching…");
+        Assert.All(remoteButtons, b => Assert.False(b.IsVisible));
+        var task = Assert.Single(f.Shell.Workbench.Progress.Running, t => t.Source == "Git");
+        Assert.Equal("Fetching", task.Title);
+        Assert.True(task.Cancellable);
+
+        // Cancel kills git: the buttons come back, the status bar says so, and git's failure isn't reported as an error.
+        cancel.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => vm.IsIdle, describe: () => $"still {vm.ProgressText}; git log: {f.Shell.GitLog.GetText()}");
+        await ShellFixture.PumpUntil(() => remoteButtons.All(b => b.IsVisible) && !cancel.IsVisible && !progress.IsVisible);
+        Assert.DoesNotContain(f.Shell.Workbench.Progress.Running, t => t.Source == "Git");
+        Assert.Equal("Cancelled.", f.Shell.StatusBar.Message);
+        Assert.Contains("Fetching… Cancelled.", f.Shell.GitLog.GetText(), StringComparison.Ordinal);
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.StartsWith("Git:", StringComparison.Ordinal));
+
+        // A push that finishes shows Pushing… while it runs, then puts the buttons back.
+        CommitFile(folder, "notes.txt", "a commit to push");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Ahead: 1 });
+        var seen = new List<string?>();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.ProgressText))
+            {
+                seen.Add(vm.ProgressText);
+            }
+        };
+        await f.RunAsync("git.push");
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Ahead: 0 } && vm.IsIdle, describe: () => $"git log: {f.Shell.GitLog.GetText()}");
+        Assert.Equal(["Pushing…", null], seen);
+        Assert.Equal(Git(folder, "rev-parse", "HEAD"), Git(bare, "rev-parse", "main"));
+        await ShellFixture.PumpUntil(() => remoteButtons.All(b => b.IsVisible) && !cancel.IsVisible);
+    }
+
     [Fact]
     public void Related_items_are_the_issue_references_in_the_message()
     {

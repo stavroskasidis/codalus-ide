@@ -382,7 +382,8 @@ public sealed partial class GitService : IDisposable
         }
         finally
         {
-            await RefreshAsync(cancellationToken).ConfigureAwait(false);
+            // A command stopped by its token (Git Changes' Cancel) may have changed something before git was killed.
+            await RefreshAsync(cancellationToken.IsCancellationRequested ? CancellationToken.None : cancellationToken).ConfigureAwait(false);
         }
     }
 
