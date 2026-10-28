@@ -422,8 +422,8 @@ internal sealed partial class SolutionSession
         new(path, System.IO.Path.GetFileNameWithoutExtension(path), ProjectStates.Unloaded, null, [], null, [], [], [], false);
 
     /// <summary>
-    /// The solution (or filter) builds use: with unloaded projects, a generated filter of the loaded ones in
-    /// <c>.codalus/</c>, so MSBuild skips the others.
+    /// The solution (or filter) builds use: with unloaded projects, a generated filter of the loaded ones in the
+    /// solution's state folder, so MSBuild skips the others.
     /// </summary>
     private string BuildEntryPoint()
     {
@@ -434,23 +434,23 @@ internal sealed partial class SolutionSession
             return Path;
         }
 
-        var filter = System.IO.Path.Combine(SolutionDirectory, ".codalus", "build.slnf");
+        var filter = SolutionStateLayout.GeneratedFile(Path, IsFolder, "build.slnf");
         WriteFilter(filter, [.. ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p))]);
         return filter;
     }
 
     /// <summary>
     /// What a restore runs on after the solution's failed in some of its projects: <paramref name="projects"/> only, in a
-    /// generated filter (a folder's generated solution) in <c>.codalus/</c>.
+    /// generated filter (a folder's generated solution) in the solution's state folder.
     /// </summary>
     private string RestoreEntryPoint(IReadOnlyList<string> projects)
     {
         if (IsFolder)
         {
-            return WriteFolderSolution(System.IO.Path.Combine(Path, ".codalus", "restore.slnx"), projects);
+            return WriteFolderSolution(SolutionStateLayout.GeneratedFile(Path, IsFolder, "restore.slnx"), projects);
         }
 
-        var filter = System.IO.Path.Combine(SolutionDirectory, ".codalus", "restore.slnf");
+        var filter = SolutionStateLayout.GeneratedFile(Path, IsFolder, "restore.slnf");
         WriteFilter(filter, projects);
         return filter;
     }
