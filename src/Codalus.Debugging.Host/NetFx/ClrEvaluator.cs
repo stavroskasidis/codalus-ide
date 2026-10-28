@@ -166,7 +166,7 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
     /// <summary>An instance field (an auto-property by its name) or property of a value's type or its bases.</summary>
     private RemoteValue? TryInstanceMember(IClrValue value, string name)
     {
-        foreach (var (module, token, info) in types.Chain(value.Type))
+        foreach (var (module, token, info, typeArguments) in types.ChainWithArguments(value.Type))
         {
             if (info.Fields(token).FirstOrDefault(f => !f.IsStatic && (f.Name == name || ClrTypeSystem.DisplayFieldName(f.Name) == name)) is { } field)
             {
@@ -175,7 +175,7 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
 
             if (info.Properties(token).FirstOrDefault(p => p.Name == name && !p.IsStatic && p.IndexParameters == 0 && p.GetterToken != 0) is { } property)
             {
-                return new RemoteValue(Invoke(module, property.GetterToken, value.Type.TypeArguments, [value], name));
+                return new RemoteValue(Invoke(module, property.GetterToken, typeArguments, [value], name));
             }
         }
 
@@ -261,6 +261,97 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
     private static int CheckedIndex(long index, int length) =>
         index >= 0 && index < length ? (int)index : throw new ExpressionException($"The index {index.ToString(CultureInfo.InvariantCulture)} is outside the bounds (the length is {length.ToString(CultureInfo.InvariantCulture)}).");
 
+    // ------------------------------------------------------------------ assignment
+
+    /// <summary>
+    /// Assigns <paramref name="valueText"/>'s value to <paramref name="targetText"/> (DAP's <c>setExpression</c>, M54) and
+    /// returns the target read again: a property through its setter (func-eval, any type), an indexer through
+    /// <c>set_Item</c>, and a field, variable or array element of a primitive type in place.
+    /// </summary>
+    public EvalValue Assign(string targetText, string valueText)
+    {
+        var target = ExpressionParser.Parse(targetText);
+        var value = Evaluate(valueText);
+        switch (target)
+        {
+            case NameExpr { Name: var name } when context.Variables.Any(v => v.Name == name):
+                Store(Evaluate(target), value, name);
+                break;
+            case NameExpr { Name: var name } when context.This?.Invoke() is { Kind: ClrValueKind.Object } self:
+                AssignMember(new RemoteValue(self), name, value);
+                break;
+            case MemberExpr member:
+                AssignMember(Evaluate(member.Target), member.Name, value);
+                break;
+            case IndexExpr index when Evaluate(index.Target) is RemoteValue { Value: { Kind: ClrValueKind.Object } owner }:
+                CallMethod(owner, owner.Type, "set_Item", [.. index.Arguments.Select(Evaluate), value], "this[]");
+                break;
+            case IndexExpr:
+                Store(Evaluate(target), value, targetText.Trim());
+                break;
+            default:
+                throw new ExpressionException($"'{targetText.Trim()}' can't be assigned to.");
+        }
+
+        return Evaluate(target);
+    }
+
+    private void AssignMember(EvalValue owner, string name, EvalValue value)
+    {
+        if (owner is TypeValue type)
+        {
+            if (types.Info(type.Module)?.Properties(type.Token).FirstOrDefault(p => p.Name == name && p.IsStatic && p.SetterToken != 0) is { } staticProperty)
+            {
+                Invoke(type.Module, staticProperty.SetterToken, [], [ToRemote(value, name)], name);
+                return;
+            }
+
+            Store(TryStaticMember(type.Module, type.Token, name) ?? throw new ExpressionException($"'{name}' isn't a static member of {types.Name(ClrTypeSystem.TypeOf(type.Module, type.Token))}."), value, name);
+            return;
+        }
+
+        if (owner is not RemoteValue { Value: { Kind: ClrValueKind.Object } instance })
+        {
+            throw new ExpressionException(IsNull(owner) ? $"The value is null, so '{name}' can't be set." : $"'{name}' can't be set on this value.");
+        }
+
+        // A property's setter first: it takes any type, and keeps what the setter does.
+        foreach (var (module, token, info, typeArguments) in types.ChainWithArguments(instance.Type))
+        {
+            if (info.Properties(token).FirstOrDefault(p => p.Name == name && !p.IsStatic && p.IndexParameters == 0 && p.SetterToken != 0) is { } property)
+            {
+                Invoke(module, property.SetterToken, typeArguments, [instance, ToRemote(value, name)], name);
+                return;
+            }
+        }
+
+        Store(TryInstanceMember(instance, name) ?? throw new ExpressionException($"'{name}' isn't a member of {types.Name(instance.Type)}."), value, name);
+    }
+
+    /// <summary>Writes a primitive in place (a field, a variable, an array element), or points a reference at another object (or null).</summary>
+    private void Store(EvalValue target, EvalValue value, string display)
+    {
+        if (target is RemoteValue { Value: { Kind: ClrValueKind.Null or ClrValueKind.String or ClrValueKind.Array or ClrValueKind.Object, IsValueType: false } reference })
+        {
+            var pointee = IsNull(value) ? null : ToRemote(value, display);
+            if (pointee is { Kind: ClrValueKind.Primitive })
+            {
+                throw new ExpressionException($"A number, a bool or a character can't be stored in '{display}' here (it would need boxing).");
+            }
+
+            reference.SetReference(pointee);
+            return;
+        }
+
+        if (target is not RemoteValue { Value: { Kind: ClrValueKind.Primitive, Primitive: { } current } slot })
+        {
+            throw new ExpressionException($"'{display}' isn't a number, a bool or a character, and has no setter: it can't be changed here.");
+        }
+
+        var converted = ConvertTo(Primitive(value, "=") ?? throw new ExpressionException("null can't be assigned to a number, a bool or a character."), Keyword(current));
+        slot.SetPrimitive(converted);
+    }
+
     // ------------------------------------------------------------------ calls
 
     private EvalValue Call(CallExpr call)
@@ -314,25 +405,25 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
 
     private IClrValue CallMethod(IClrValue receiver, ClrType type, string name, IReadOnlyList<EvalValue> arguments, string display)
     {
-        var (module, method) = TryFindMethod(type, name, arguments, instance: true)
+        var (module, method, typeArguments) = TryFindMethod(type, name, arguments, instance: true)
             ?? throw new ExpressionException($"{types.Name(type)} has no method '{display}' that takes {Describe(arguments)}.");
-        return Invoke(module, method.Token, type.TypeArguments, [receiver, .. Arguments(method, arguments)], display);
+        return Invoke(module, method.Token, typeArguments, [receiver, .. Arguments(method, arguments)], display);
     }
 
     private IClrValue CallStatic(IClrModule module, int token, string name, IReadOnlyList<EvalValue> arguments)
     {
         var type = ClrTypeSystem.TypeOf(module, token);
-        var (found, method) = TryFindMethod(type, name, arguments, instance: false)
+        var (found, method, _) = TryFindMethod(type, name, arguments, instance: false)
             ?? throw new ExpressionException($"{types.Name(type)} has no static method '{name}' that takes {Describe(arguments)}.");
         return Invoke(found, method.Token, [], Arguments(method, arguments), name);
     }
 
     /// <summary>The best overload named <paramref name="name"/> in a type or its bases for the arguments; null when none fits.</summary>
-    private (IClrModule Module, ClrMethodInfo Method)? TryFindMethod(ClrType type, string name, IReadOnlyList<EvalValue> arguments, bool instance)
+    private (IClrModule Module, ClrMethodInfo Method, IReadOnlyList<ClrType> TypeArguments)? TryFindMethod(ClrType type, string name, IReadOnlyList<EvalValue> arguments, bool instance)
     {
-        (IClrModule Module, ClrMethodInfo Method)? best = null;
+        (IClrModule Module, ClrMethodInfo Method, IReadOnlyList<ClrType> TypeArguments)? best = null;
         var bestScore = -1;
-        foreach (var (module, token, info) in types.Chain(type))
+        foreach (var (module, token, info, typeArguments) in types.ChainWithArguments(type))
         {
             foreach (var method in info.Methods(token).Where(m => m.Name == name && m.IsStatic != instance && m.ParameterTypes.Count == arguments.Count && m.GenericParameters == 0))
             {
@@ -345,7 +436,7 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
 
                 if (score > bestScore)
                 {
-                    (best, bestScore) = ((module, method), score);
+                    (best, bestScore) = ((module, method, typeArguments), score);
                 }
             }
 

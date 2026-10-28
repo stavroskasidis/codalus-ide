@@ -723,7 +723,7 @@ internal sealed class CorDebugTarget : IClrProcess
     // ------------------------------------------------------------------ func-eval
 
     public IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
-        Evaluate(thread, timeout, eval =>
+        (IClrValue?)Evaluate(thread, timeout, eval =>
         {
             var function = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken));
             var types = typeArguments.Select(t => t.Native as CorDebugType).ToList();
@@ -736,10 +736,10 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 eval.CallFunction(function.Raw, values.Length, values);
             }
-        });
+        }) ?? ClrVoidValue.Instance;
 
     public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout) =>
-        Evaluate(thread, timeout, eval => eval.NewString(text));
+        Evaluate(thread, timeout, eval => eval.NewString(text)) ?? throw new ClrException("The string wasn't created.");
 
     public IClrValue NewPrimitive(IClrThread thread, object value) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, CreatePrimitive(((CorThread)thread).Raw, value)));
@@ -784,7 +784,8 @@ internal sealed class CorDebugTarget : IClrProcess
     }
 
     /// <summary>Runs a func-eval on <paramref name="thread"/>, the other threads suspended, and waits for it (aborting it after <paramref name="timeout"/>).</summary>
-    private CorValue Evaluate(IClrThread thread, TimeSpan timeout, Action<CorDebugEval> start)
+    /// <summary>A func-eval's result; null when the method returns nothing.</summary>
+    private CorValue? Evaluate(IClrThread thread, TimeSpan timeout, Action<CorDebugEval> start)
     {
         var corThread = ((CorThread)thread).Raw;
         CorDebugEval eval;
@@ -825,7 +826,12 @@ internal sealed class CorDebugTarget : IClrProcess
                 throw new ClrException("The process ended during the evaluation.");
             }
 
-            var result = Translate(() => CorValue.Result(this, corThread, eval.Result));
+            if (eval.TryGetResult(out var raw) == HRESULT.CORDBG_S_FUNC_EVAL_HAS_NO_RESULT && completed)
+            {
+                return null; // a method that returns nothing (a property's setter)
+            }
+
+            var result = Translate(() => CorValue.Result(this, corThread, raw ?? eval.Result));
             return completed ? result : throw new ClrEvalException(result, "The evaluation threw an exception.");
         }
         finally
@@ -1230,6 +1236,22 @@ internal sealed class CorValue : IClrValue
         Write(new CorDebugGenericValue((ICorDebugGenericValue)Value.Raw), value);
     });
 
+    public void SetReference(IClrValue? value) => CorDebugTarget.Translate(() =>
+    {
+        if (_snapshot is not null || Original.Raw is not ICorDebugReferenceValue reference || Original is CorDebugHandleValue)
+        {
+            throw new ClrException("Only a field, an element or a variable of a class type can point elsewhere.");
+        }
+
+        if (value is not null && value.Kind != ClrValueKind.Null && value.IsValueType)
+        {
+            throw new ClrException("A value type's value can't be stored in a reference.");
+        }
+
+        new CorDebugReferenceValue(reference).Value = value?.Address ?? 0;
+        _generation = -1; // read again
+    });
+
     /// <summary>Wraps a value as ICorDebug gives it: null references, strings, arrays, primitives and objects (boxes opened).</summary>
     public static CorValue Wrap(CorDebugTarget target, CorDebugValue value) => new(target, value);
 
@@ -1317,13 +1339,25 @@ internal sealed class CorValue : IClrValue
         {
             case CorElementType.Class or CorElementType.ValueType:
                 var cls = type.Class;
-                return new ClrType(target.Module(cls.Module), (int)cls.Token.Value, null, [.. type.TypeParameters.Select(t => TypeOf(target, t))]) { Native = type };
+                return new ClrType(target.Module(cls.Module), (int)cls.Token.Value, null, [.. type.TypeParameters.Select(t => TypeOf(target, t))]) { Native = type, BaseOf = () => BaseOf(target, type) };
             case CorElementType.SZArray:
                 return ClrType.ArrayOf(TypeOf(target, type.FirstTypeParameter)) with { Native = type };
             case CorElementType.Array:
                 return ClrType.ArrayOf(TypeOf(target, type.FirstTypeParameter), type.Rank) with { Native = type };
             default:
                 return Named(type.Type) with { Native = type };
+        }
+    }
+
+    private static ClrType? BaseOf(CorDebugTarget target, CorDebugType type)
+    {
+        try
+        {
+            return type.Base is { } baseType ? TypeOf(target, baseType) : null;
+        }
+        catch (COMException)
+        {
+            return null;
         }
     }
 

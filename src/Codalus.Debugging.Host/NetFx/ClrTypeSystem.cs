@@ -143,6 +143,21 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         }
     }
 
+    /// <summary>
+    /// <see cref="Chain"/> with each type's type arguments, as the runtime instantiated the bases (a method of
+    /// <c>Collection&lt;string&gt;</c> called on a class deriving from it needs <c>string</c>); a base the runtime didn't
+    /// describe gets none.
+    /// </summary>
+    public IEnumerable<(IClrModule Module, int Token, ClrModuleInfo Info, IReadOnlyList<ClrType> TypeArguments)> ChainWithArguments(ClrType type)
+    {
+        var current = (ClrType?)type;
+        foreach (var (module, token, info) in Chain(type))
+        {
+            yield return (module, token, info, current?.TypeArguments ?? []);
+            current = current?.BaseOf?.Invoke();
+        }
+    }
+
     /// <summary>A type's metadata full name (<c>System.Collections.Generic.List`1</c>), or its primitive name.</summary>
     public string FullName(ClrType type) =>
         type.IsArray ? FullName(type.Element!) + "[]" : Definition(type) is { } d && Info(d.Module) is { } info ? info.TypeFullName(d.Token) : type.Name ?? "?";
@@ -247,7 +262,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         {
             case "System.Decimal" when ReadDecimal(value) is { } d:
                 return d.ToString(CultureInfo.InvariantCulture);
-            case "System.DateTime" when Field(value, "dateData") is { Primitive: ulong data }:
+            case "System.DateTime" when (Field(value, "dateData") ?? Field(value, "_dateData")) is { Primitive: ulong data }:
                 return "{" + new DateTime((long)(data & 0x3FFFFFFFFFFFFFFF)).ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture).TrimEnd('.') + "}";
             case "System.TimeSpan" when Field(value, "_ticks") is { Primitive: long ticks }:
                 return "{" + TimeSpan.FromTicks(ticks).ToString("c", CultureInfo.InvariantCulture) + "}";
@@ -291,15 +306,26 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         return number.ToString(CultureInfo.InvariantCulture);
     }
 
+    /// <summary>A decimal's value: <c>flags</c>, <c>hi</c>, <c>mid</c> and <c>lo</c> on the desktop CLR; <c>_flags</c>, <c>_hi32</c> and <c>_lo64</c> on CoreCLR.</summary>
     private decimal? ReadDecimal(IClrValue value)
     {
         if (Field(value, "flags") is { Primitive: int flags } && Field(value, "hi") is { Primitive: int hi } && Field(value, "lo") is { Primitive: int lo } && Field(value, "mid") is { Primitive: int mid })
         {
-            var scale = (byte)((flags >> 16) & 0xFF);
-            return scale > 28 ? null : new decimal(lo, mid, hi, flags < 0, scale);
+            return Decimal(flags, hi, mid, lo);
+        }
+
+        if (Field(value, "_flags") is { Primitive: int coreFlags } && Field(value, "_hi32") is { Primitive: uint hi32 } && Field(value, "_lo64") is { Primitive: ulong lo64 })
+        {
+            return Decimal(coreFlags, unchecked((int)hi32), unchecked((int)(lo64 >> 32)), unchecked((int)lo64));
         }
 
         return null;
+    }
+
+    private static decimal? Decimal(int flags, int hi, int mid, int lo)
+    {
+        var scale = (byte)((flags >> 16) & 0xFF);
+        return scale > 28 ? null : new decimal(lo, mid, hi, flags < 0, scale);
     }
 
     /// <summary>An instance field of a value by name, in its type or a base type; null when there's none.</summary>

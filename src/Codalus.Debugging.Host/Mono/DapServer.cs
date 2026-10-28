@@ -18,6 +18,9 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
     private readonly SemaphoreSlim _write = new(1, 1);
     private int _seq;
 
+    /// <summary>Where every message read and written goes too, when set (CoreCLR's adapter's log, M54).</summary>
+    public TextWriter? Trace { get; init; }
+
     /// <summary>Answers a request: its command and arguments → the response body (null for none).</summary>
     public Func<string, JsonElement, CancellationToken, Task<JsonElement?>>? Handler { get; set; }
 
@@ -28,6 +31,7 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
         {
             using var document = message;
             var root = document.RootElement;
+            Trace?.WriteLine("<- " + root.GetRawText());
             if (!root.TryGetProperty("type", out var type) || type.GetString() != "request")
             {
                 continue;
@@ -95,6 +99,7 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
             writer.WriteEndObject();
         }
 
+        Trace?.WriteLine("-> " + Encoding.UTF8.GetString(buffer.GetBuffer(), 0, (int)buffer.Length));
         var header = Encoding.ASCII.GetBytes("Content-Length: " + buffer.Length.ToString(CultureInfo.InvariantCulture) + "\r\n\r\n");
         await _write.WaitAsync().ConfigureAwait(false);
         try

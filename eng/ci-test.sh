@@ -3,10 +3,11 @@
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
 #   others   every other test project
+#   debug-codalus  the debugger classes in eng/ci-debug-codalus.txt, under Codalus IDE's own CoreCLR adapter (M54)
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
-shard="${1:?shard: shell-1, shell-2 or others}"
+shard="${1:?shard: shell-1, shell-2, others or debug-codalus}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -156,6 +157,21 @@ case "$shard" in
     for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
     # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
     dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
+    ;;
+  debug-codalus)
+    # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
+    # folder (uploaded when the shard fails), as netcoredbg's is above: ADR 0086's one silent attach failure on Linux is
+    # watched for here.
+    export CODALUS_DEBUG_ADAPTER=codalus
+    export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
+    export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
+    filters=()
+    while IFS= read -r line; do
+      line="${line%%#*}"
+      line="$(echo "$line" | tr -d '[:space:]')"
+      [[ -n "$line" ]] && filters+=(--filter-class "Codalus.Debugging.Tests.$line")
+    done < eng/ci-debug-codalus.txt
+    dotnet test --project tests/Codalus.Debugging.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The

@@ -163,6 +163,40 @@ internal interface IClrValue
 
     /// <summary>Changes a primitive in place (a local, an argument, a field, an element).</summary>
     void SetPrimitive(object value);
+
+    /// <summary>
+    /// Points a reference in place (a field, an element, a local of a class type) at <paramref name="value"/>'s object,
+    /// or at null (DAP's <c>setExpression</c>, M54).
+    /// </summary>
+    void SetReference(IClrValue? value) => throw new ClrException("This value can't be changed here.");
+}
+
+/// <summary>A func-eval's result when the method returns nothing (a property's setter, M54).</summary>
+internal sealed class ClrVoidValue : IClrValue
+{
+    public static readonly ClrVoidValue Instance = new();
+
+    public ClrValueKind Kind => ClrValueKind.Null;
+
+    public object? Primitive => null;
+
+    public string? Text => null;
+
+    public ClrType Type { get; } = ClrType.Named("void");
+
+    public bool IsValueType => false;
+
+    public int Length => 0;
+
+    public IReadOnlyList<int> Dimensions => [];
+
+    public ulong Address => 0;
+
+    public IClrValue Element(int index) => throw new ClrException("The method returns nothing.");
+
+    public IClrValue Field(IClrModule module, int typeToken, int fieldToken) => throw new ClrException("The method returns nothing.");
+
+    public void SetPrimitive(object value) => throw new ClrException("The method returns nothing.");
 }
 
 /// <summary>
@@ -236,6 +270,8 @@ internal sealed class ClrLiveValue : IClrValue
         new ClrLiveValue(_process, Current.Field(module, typeToken, fieldToken), () => Current.Field(module, typeToken, fieldToken));
 
     public void SetPrimitive(object value) => Current.SetPrimitive(value);
+
+    public void SetReference(IClrValue? value) => Current.SetReference(value);
 }
 
 /// <summary>
@@ -249,6 +285,12 @@ internal sealed record ClrType(IClrModule? Module, int Token, string? Name = nul
 
     /// <summary>The runtime's own type object (ICorDebugType), to pass back to it; not part of the type's identity.</summary>
     public object? Native { get; init; }
+
+    /// <summary>
+    /// The base type as the runtime instantiated it (<c>Collection&lt;string&gt;</c> under a class deriving from it), for
+    /// calls to a base's methods; null when unknown, and not part of the type's identity.
+    /// </summary>
+    public Func<ClrType?>? BaseOf { get; init; }
 
     public bool Equals(ClrType? other) =>
         other is not null && ReferenceEquals(Module, other.Module) && Token == other.Token && Name == other.Name && Rank == other.Rank

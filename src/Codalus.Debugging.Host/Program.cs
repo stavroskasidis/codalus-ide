@@ -29,7 +29,8 @@ if (args.Contains("--mono-dap"))
 
 if (args.Contains(Codalus.Debugging.CoreClrAdapter.AdapterArgument))
 {
-    return await Codalus.Debugging.Host.NetFx.NetFxAdapter.RunAsync(stdin, stdout, Console.Error, new Codalus.Debugging.Host.CoreClr.DbgShimDebugger()).ConfigureAwait(false);
+    await using var trace = Codalus.Debugging.Host.CoreClr.TeeWriter.OpenLog();
+    return await Codalus.Debugging.Host.NetFx.NetFxAdapter.RunAsync(stdin, stdout, Console.Error, new Codalus.Debugging.Host.CoreClr.DbgShimDebugger(), trace).ConfigureAwait(false);
 }
 
 if (args.Contains(Codalus.Debugging.DesktopClr.AdapterArgument))
