@@ -54,6 +54,7 @@ public sealed class EditorInsights : IDisposable
     private static readonly TimeSpan s_blameInterval = TimeSpan.FromSeconds(3);
     private CancellationTokenSource? _hintCts;
     private CancellationTokenSource? _lensCts;
+    private CancellationTokenSource? _runLensCts;
     private bool _disposed;
 
     public EditorInsights(TextEditor editor, Func<CodeDocument> model, Func<LanguageHostClient?> client, IEditorServices services)
@@ -300,6 +301,9 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>The CodeLens row shown above a one-based line, or null (none, or at the line's end when the line before is folded away) (tests).</summary>
     internal string? LensRowAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Text.Trim();
+
+    /// <summary>Whether the first CodeLens of the row above a one-based line has its command yet, or null without one (tests).</summary>
+    internal bool? LensResolvedAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Lens?.Resolved;
 
     /// <summary>
     /// A visual line's height without the CodeLens row that may end it (the next line's): what a line background covers.
@@ -700,8 +704,41 @@ public sealed class EditorInsights : IDisposable
 
     // ------------------------------------------------------------------ actions
 
-    private void RunLens(LensSegment lens)
+    private void RunLens(LensSegment lens) => _ = RunLensAsync(lens);
+
+    private async Task RunLensAsync(LensSegment lens)
     {
+        // A refresh's lenses keep their titles but get their commands one request at a time, near the viewport: one
+        // clicked before its turn is resolved now, or the click did nothing (Linux CI, run 40706281162).
+        if (!lens.Resolved)
+        {
+            if (_client() is not { } client)
+            {
+                return;
+            }
+
+            var version = Model.Version;
+            var token = Restart(ref _runLensCts).Token;
+            try
+            {
+                var resolved = await client.ResolveCodeLensAsync(lens.Lens, token).ConfigureAwait(true);
+                if (token.IsCancellationRequested || _disposed || Model.Version != version || resolved.Command is not { } resolvedCommand)
+                {
+                    return;
+                }
+
+                lens.Resolve(resolvedCommand);
+                if (_lenses.Contains(lens))
+                {
+                    _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(lens.StartOffset));
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
+            {
+                return;
+            }
+        }
+
         if (lens.Command is not { Arguments: [_, var at, ..] } command || string.IsNullOrEmpty(command.CommandId))
         {
             return;
@@ -766,7 +803,7 @@ public sealed class EditorInsights : IDisposable
         _hintTimer.Stop();
         _lensTimer.Stop();
         _symbolTimer.Stop();
-        foreach (var cts in new[] { _hintCts, _lensCts, _symbolCts, _blameCts })
+        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts })
         {
             cts?.Cancel();
             cts?.Dispose();
