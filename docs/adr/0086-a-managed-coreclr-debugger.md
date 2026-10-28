@@ -1,6 +1,6 @@
 # 0086. A managed CoreCLR debugger adapter, and Hot Reload while debugging
 
-- **Status:** accepted (2026-10-28, D48 in the [roadmap](../roadmap.md#decision-register)), after three spikes on Linux (x64, arm64), macOS (arm64, x64) and Windows x64; nothing is built or scheduled yet.
+- **Status:** accepted (2026-10-28, D48 in the [roadmap](../roadmap.md#decision-register)), after three spikes on Linux (x64, arm64), macOS (arm64, x64) and Windows x64. Phase 1 is planned as [M54](../roadmap.md#m54--a-managed-coreclr-debugger-phase-1) (2026-10-28); nothing is built yet.
 - **Date:** 2026-10-28
 - **Deciders:** maintainer (D48: accepted as proposed)
 - **Amends, as each phase lands:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
