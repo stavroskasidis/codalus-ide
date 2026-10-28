@@ -174,7 +174,7 @@ public class FixesAfter06Tests
         await ShellFixture.PumpUntil(() => document?.Controller is not null);
         var controller = document!.Controller!;
         bool Shown(CodeEditorController c) => TopLevel.GetTopLevel(c.Editor) == f.Window && c.Editor.IsEffectivelyVisible
-            && c.Editor.Bounds.Width > 100 && c.Editor.TextArea.TextView.VisualLines.Count > 0;
+            && c.Editor.Bounds.Width > 100 && c.Editor.TextArea.TextView is { VisualLinesValid: true, VisualLines.Count: > 0 }; // VisualLines throws while they're rebuilt (macOS CI, run 40685424058)
         await ShellFixture.PumpUntil(() => Shown(controller));
 
         static IDockable? Find(IDockable d, string id) => d.Id == id ? d : (d as IDock)?.VisibleDockables?.Select(c => Find(c, id)).FirstOrDefault(x => x is not null);
