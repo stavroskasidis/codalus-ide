@@ -479,13 +479,23 @@ public sealed class EditorInsights : IDisposable
     private (int First, int Last) VisibleLines()
     {
         var view = _editor.TextArea.TextView;
-        if (!view.VisualLinesValid || view.VisualLines.Count == 0)
+        if (view.VisualLinesValid && view.VisualLines.Count > 0)
         {
-            var lines = _editor.Document.LineCount;
+            return (view.VisualLines[0].FirstDocumentLine.LineNumber, view.VisualLines[^1].LastDocumentLine.LineNumber);
+        }
+
+        // The visual lines are built again at the next layout (a redraw invalidates them: a lens refresh's own, right
+        // before it resolves). The lines in view are still known from the scroll position and the height: the first 60
+        // lines were the lines above the view, scrolled down, and nothing in view got its counts until the next scroll.
+        var lines = _editor.Document.LineCount;
+        if (view.Bounds.Height <= 0)
+        {
             return (1, Math.Min(lines, 60));
         }
 
-        return (view.VisualLines[0].FirstDocumentLine.LineNumber, view.VisualLines[^1].LastDocumentLine.LineNumber);
+        var first = view.GetDocumentLineByVisualTop(view.VerticalOffset)?.LineNumber ?? 1;
+        var last = view.GetDocumentLineByVisualTop(view.VerticalOffset + view.Bounds.Height)?.LineNumber ?? lines;
+        return (first, last);
     }
 
     // ------------------------------------------------------------------ requests
@@ -589,8 +599,9 @@ public sealed class EditorInsights : IDisposable
                     return;
                 }
 
-                // Keep the previous titles until the new counts arrive, so lenses don't flicker while typing.
-                var previous = _lenses.Where(l => l.Resolved).GroupBy(l => (_editor.Document.GetLineByOffset(l.StartOffset).LineNumber, l.Lens.Data?.GetRawText()?.Split(',')[^1]))
+                // Keep the previous titles until the new counts arrive, so lenses don't flicker while typing: those still
+                // waiting for their counts too (out of view, a refresh before), or the next refresh dropped their rows.
+                var previous = _lenses.Where(l => l.Title is not null).GroupBy(l => (_editor.Document.GetLineByOffset(l.StartOffset).LineNumber, l.Lens.Data?.GetRawText()?.Split(',')[^1]))
                     .ToDictionary(g => g.Key, g => g.First().Title);
                 var collection = new TextSegmentCollection<LensSegment>(_editor.Document);
                 foreach (var lens in lenses)
