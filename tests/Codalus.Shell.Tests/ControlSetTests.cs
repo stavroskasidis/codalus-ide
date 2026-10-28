@@ -511,7 +511,7 @@ public class ControlSetTests
         // else ties the copy to Avalonia's version, so this does: when Avalonia moves, re-diff the theme against the
         // new Fluent's TabControl.xaml, carry over what changed (a new part, a scroll host for the strip…), then update
         // this.
-        const string copied = "12.1.3";
+        const string copied = "12.1.4";
         var fluent = typeof(Avalonia.Themes.Fluent.FluentTheme).Assembly;
         var version = fluent.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
             .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion.Split('+')[0];

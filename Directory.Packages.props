@@ -6,7 +6,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
-    <AvaloniaVersion>12.1.3</AvaloniaVersion>
+    <AvaloniaVersion>12.1.4</AvaloniaVersion>
     <RoslynVersion>5.12.0-1.26522.148</RoslynVersion>
     <!-- Coverlet is bundled with the .NET test plugin (ADR 0011), not referenced: see its project file. -->
     <CoverletVersion>10.1.0</CoverletVersion>
@@ -24,9 +24,9 @@
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
-    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.7" />
-    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.7" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.7" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.12" />
+    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.12" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.12" />
   </ItemGroup>
   <ItemGroup Label="Language services and build host">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(RoslynVersion)" />
@@ -34,14 +34,14 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.VisualBasic.Features" Version="$(RoslynVersion)" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="$(RoslynVersion)" />
-    <PackageVersion Include="ICSharpCode.Decompiler" Version="11.1.0.9782" />
+    <PackageVersion Include="ICSharpCode.Decompiler" Version="11.2.0.10050" />
     <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
     <PackageVersion Include="Microsoft.Build" Version="17.11.48" />
     <PackageVersion Include="Microsoft.VisualStudio.SolutionPersistence" Version="1.0.52" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
     <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="17.11.48" />
     <!-- The binary log viewer (M26b, ADR 0034), read in the build host. -->
-    <PackageVersion Include="MSBuild.StructuredLogger" Version="2.3.246" />
+    <PackageVersion Include="MSBuild.StructuredLogger" Version="2.3.269" />
     <PackageVersion Include="Microsoft.NET.StringTools" Version="18.4.0" />
     <!-- Compile-time only: at run time the build host uses the NuGet that ships in the user's SDK (ADR 0012). -->
     <PackageVersion Include="NuGet.Credentials" Version="6.11.2" />
@@ -55,8 +55,8 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0-rc.3.26522.148" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.117.0" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
   </ItemGroup>
   <ItemGroup Label="Installers and self-update (M31, M32; keep in step with the vpk version in eng/package.sh)">
     <PackageVersion Include="Velopack" Version="1.2.161" />
@@ -64,7 +64,7 @@
   <ItemGroup Label="Debug companion host (M14b, ADR 0032)">
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.2.751201" />
     <PackageVersion Include="ClrDebug" Version="0.4.2" />
-    <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.745401" />
+    <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.750501" />
   </ItemGroup>
   <ItemGroup Label="Diagnostics host (M18, ADR 0044)">
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="3.2.8" />
@@ -80,16 +80,16 @@
     <PackageVersion Include="System.Drawing.Common" Version="11.0.0-rc.3.26522.148" />
   </ItemGroup>
   <ItemGroup Label="Website (website/, the Blazor app GitHub Pages serves an export of; not shipped)">
-    <PackageVersion Include="Markdig" Version="1.4.0" />
+    <PackageVersion Include="Markdig" Version="1.5.0" />
   </ItemGroup>
   <ItemGroup Label="Testing (the .NET test plugin, ADR 0010 and 0011)">
-    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.10.1" />
+    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.11.0" />
   </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
     <!-- CI's hang dumps: they name the tests still running when a test process hangs. 2.1.0 or later: before it the
          extension turned itself off under dotnet test (the SDK starts the test app with server mode, testfx#6968), so
-         a hang printed nothing. It brings Microsoft.Testing.Platform 2.4.1 over xunit's 2.0.2. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.4.1" />
+         a hang printed nothing. It brings Microsoft.Testing.Platform 2.5.2 over xunit's 2.0.2. -->
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.2" />
   </ItemGroup>
 </Project>

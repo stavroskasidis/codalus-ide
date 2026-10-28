@@ -786,11 +786,11 @@
   <!--
     Tabs inside a view (TabControl; their items are styled in ShellStyles.axaml): a hairline in Shell.ViewTabs.Rule
     (the mockups' soft border) under the strip, which the selected tab's 2 px accent underline covers (controls.css's
-    .tabs and .tab.sel::after). Fluent's template has nothing that could draw it, so this is Fluent 12.1.3's template
+    .tabs and .tab.sel::after). Fluent's template has nothing that could draw it, so this is Fluent 12.1.4's template
     (Avalonia.Themes.Fluent, Controls/TabControl.xaml) with one change: the ItemsPresenter sits in Border#PART_TabStrip,
     which draws the line, and reaches 1 px over it so the tabs are drawn on it. Both content hosts are kept
     (PART_SelectedContentHost2 is the page transition's). At the bottom, left or right the line is on the content's side,
-    and ShellStyles.axaml puts the selected tab's underline there. Copied from 12.1.3: ControlSetTests fails when
+    and ShellStyles.axaml puts the selected tab's underline there. Copied from 12.1.4 (unchanged from 12.1.3): ControlSetTests fails when
     Avalonia's version moves (The_TabControl_theme_is_Fluents_template_of_the_Avalonia_in_use), so an upgrade re-diffs
     this against the new Fluent's TabControl.xaml, carries over what changed, and then updates the version there.
   -->
