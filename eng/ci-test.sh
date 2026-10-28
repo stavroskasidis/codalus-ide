@@ -27,6 +27,11 @@ dump=Mini
 hang=(--hangdump --hangdump-timeout 15m --hangdump-type "$dump" --results-directory "$results")
 common=(-c "$configuration" --no-build -- "${hang[@]}")
 mkdir -p "$results"
+# netcoredbg's DAP log of every debug session (--engineLogging, a few KB each), in the results folder that CI uploads
+# when the shard fails: a func-eval netcoredbg refused once on Windows (0x80131313, CORDBG_E_FUNC_EVAL_BAD_START_POINT,
+# which the runtime returns while an aborted func-eval is pending; netcoredbg aborts one after 5 s) left no trace of
+# the evaluation before it (DataTipDebuggerTests, run 40375629247).
+export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;

@@ -100,6 +100,11 @@ test_app() {
   local jsdebug="$results/js-debug"
   rm -rf "$jsdebug"
   [[ -n "${CODALUS_JSDEBUG_TRACE:-}" ]] || cmd=(env "CODALUS_JSDEBUG_TRACE=$jsdebug" "${cmd[@]}")
+  # netcoredbg's DAP logs, kept only when the smoke test fails: a Run to Cursor that never stopped (Linux arm64, run
+  # 40241261003) left nothing to say whether a request went unanswered or a stop was lost.
+  local netcoredbg="$results/netcoredbg"
+  rm -rf "$netcoredbg"
+  [[ -n "${CODALUS_NETCOREDBG_LOG:-}" ]] || cmd=(env "CODALUS_NETCOREDBG_LOG=$netcoredbg" "${cmd[@]}")
 
   if [[ "$(uname -s)" == Linux && ( -z "${DISPLAY:-}" || ( "$DISPLAY" == :* && "$x_server" == false ) ) ]]; then
     if ! command -v xvfb-run > /dev/null; then
@@ -126,7 +131,7 @@ test_app() {
   fi
 
   if [[ "$status" -eq 0 ]]; then
-    rm -rf "$jsdebug"
+    rm -rf "$jsdebug" "$netcoredbg"
   fi
 
   cp "$userdata"/logs/smoke-test* "$userdata"/logs/command-sweep.json "$userdata"/logs/command-sweep-progress.log "$results/" 2> /dev/null || true
