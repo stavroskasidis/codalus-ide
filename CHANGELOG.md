@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.10.0
+
+- **Fixed:** a download of Node.js or vscode-js-debug that stopped coming (a stalled connection) waited for ever, and every feature that needs Node.js (the web language servers, npm, debugging in the browser) waited behind it. A download that gets no data for 30 seconds, or drops, is now asked for again from where it stopped, up to four times, and then fails with a message that says so.
+
 ## 0.9.0
 
 - **All of a solution's repositories in Git Changes** ([user guide](docs/user-guide/git.md#several-repositories)): a solution whose projects span several repositories opens Git Changes on **All Repositories**, as the classic IDE does: a tree per repository, **Commit All Repos** with one message, fetch, pull, push, sync and stash in each with every failure listed in one notification, and the branch drop-down's **Common** branches next to each repository's own. Repositories are added or left out with the solution.
