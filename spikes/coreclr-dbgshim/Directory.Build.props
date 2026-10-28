@@ -1,0 +1,3 @@
+<Project>
+  <!-- Throwaway spikes for ADR 0086: standalone, they deliberately do not inherit the repo's build settings. -->
+</Project>

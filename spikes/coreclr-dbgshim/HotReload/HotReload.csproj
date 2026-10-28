@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClrDebug" Version="0.4.2" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-x64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-arm64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-x64" Version="10.0.750501" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+  </ItemGroup>
+
+</Project>
