@@ -8,7 +8,11 @@
     <IsPackable>true</IsPackable>
     <PackageId>Codalus.Plugins.Testing</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Plugins.Abstractions\Codalus.Plugins.Abstractions.csproj" />
   </ItemGroup>
