@@ -153,8 +153,16 @@ if (holdMode)
     registration = shim.RegisterForRuntimeStartup(pid, startup, IntPtr.Zero);
     // SPIKE_RESUME_DELAY_MS: an adapter slow to resume (the runtime prints its notice after 5 s held).
     if (int.TryParse(Environment.GetEnvironmentVariable("SPIKE_RESUME_DELAY_MS"), out var delay)) await Task.Delay(delay);
-    Log($"resume: {DiagnosticIpc.ResumeRuntime(pid)} after {clock.ElapsedMilliseconds} ms");
-    process = await attached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    try
+    {
+        Log($"resume: {DiagnosticIpc.ResumeRuntime(pid)} after {clock.ElapsedMilliseconds} ms");
+        process = await attached.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+    catch
+    {
+        running!.Kill(); // a program never resumed stays held forever
+        throw;
+    }
     Log($"attached after {clock.ElapsedMilliseconds} ms");
 }
 else if (attachMode)
