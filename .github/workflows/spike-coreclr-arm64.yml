@@ -1,0 +1,50 @@
+# ADR 0086's spikes on Linux arm64, on GitHub's hosted runner (no arm64 machine for a Remote Control session).
+# On the spike branch only: never merged, and nothing else runs it.
+name: Spike CoreCLR (Linux arm64)
+
+on:
+  push:
+    branches: [spike/coreclr-dbgshim]
+    paths:
+      - "spikes/coreclr-dbgshim/**"
+      - ".github/workflows/spike-coreclr-arm64.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spike:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      # .NET 9, 10 and 11 RC3 for the debuggee, as on the other platforms; 11 RC3 is the repository's pin.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+            11.0.100-rc.3.26522.148
+      - name: Machine
+        shell: bash
+        run: |
+          uname -a
+          grep -m1 -E "PRETTY_NAME" /etc/os-release
+          nproc
+          lscpu | grep -E "Model name|Architecture" || true
+          echo "ptrace_scope $(cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null)"
+          dotnet --list-sdks
+          dotnet --list-runtimes
+      - name: Spikes
+        shell: bash
+        working-directory: spikes/coreclr-dbgshim
+        run: |
+          start=$(date +%s)
+          bash run.sh linux-arm64 2>&1 | tee "$GITHUB_WORKSPACE/linux-arm64.log"
+          echo "run.sh took $(( $(date +%s) - start )) s" | tee -a "$GITHUB_WORKSPACE/linux-arm64.log"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-arm64-log
+          path: linux-arm64.log
