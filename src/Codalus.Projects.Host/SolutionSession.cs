@@ -1122,10 +1122,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             {
                 // One project that can't restore (a MAUI app without its workload, an error in its file) fails the
                 // whole solution's restore before any assets file is written. The others are restored together without
-                // the projects its errors named, then any still without an assets file on its own, so they still build
-                // and get their packages' completions. Not when a package source couldn't be reached: each project
+                // the projects its errors named and those that reference them (whose restore takes them in again: a hosted
+                // Blazor server, its WebAssembly client), then any still without an assets file on its own, so they still
+                // build and get their packages' completions. Not when a package source couldn't be reached: each project
                 // would wait for it in turn (minutes each off a VPN) and fail the same way.
-                var others = ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p) && !failing.Contains(p)).ToList();
+                var leftOut = WithDependents([.. failing]);
+                var others = ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p) && !leftOut.Contains(p)).ToList();
                 if (failing.Count > 0 && others.Count > 1)
                 {
                     await RunRestoreAsync(RestoreEntryPoint(others), force).ConfigureAwait(false);

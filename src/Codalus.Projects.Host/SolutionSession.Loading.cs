@@ -52,15 +52,23 @@ internal sealed partial class SolutionSession
                 continue; // nothing NuGet restores
             }
 
+            if (!File.Exists(assets))
+            {
+                // Its restore's marker can be newer, and a design-time build doesn't fail without it (the SDK leaves
+                // NETSDK1004 out of design-time builds): the project would load without its packages.
+                reason = $"{System.IO.Path.GetFileName(path)} has no assets file";
+                return null;
+            }
+
             var obj = System.IO.Path.GetDirectoryName(assets)!;
-            var restored = File.Exists(assets) ? File.GetLastWriteTimeUtc(assets) : DateTime.MinValue;
+            var restored = File.GetLastWriteTimeUtc(assets);
             var marker = System.IO.Path.Combine(obj, RestoreStampFile);
             if (File.Exists(marker))
             {
                 restored = new DateTime(Math.Max(restored.Ticks, File.GetLastWriteTimeUtc(marker).Ticks), DateTimeKind.Utc);
             }
 
-            if (restored == DateTime.MinValue || Stamp(path) > restored
+            if (Stamp(path) > restored
                 || project.Imports.Any(i => !ProjectFileEditor.IsSameOrUnder(i, obj) && Stamp(i) > restored)
                 || !NuGetCacheSucceeded(System.IO.Path.Combine(obj, "project.nuget.cache"), packageFiles))
             {

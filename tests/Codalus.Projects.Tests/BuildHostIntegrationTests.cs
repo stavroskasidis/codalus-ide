@@ -363,6 +363,16 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
               <Target Name="NeedsAWorkload" BeforeTargets="_GenerateRestoreProjectSpec"><Error Text="This project needs a workload." /></Target>
             </Project>
             """);
+        // A project that references it: its restore would take the failing one in again.
+        var user = Path.Combine(Fixture, "src", "BadUser", "BadUser.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(user)!);
+        File.WriteAllText(user, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+              <ItemGroup><ProjectReference Include="..\Bad\Bad.csproj" /></ItemGroup>
+            </Project>
+            """);
+
         // A project of another repository, whose global.json pins another SDK (here one that isn't installed): restored in
         // its own folder, it got that SDK, whose assets files the solution's can't read; it restores in the solution's.
         var other = Path.Combine(Fixture, "other", "Lib", "Lib.csproj");
@@ -378,6 +388,7 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             <Solution>
               <Project Path="src/App/App.csproj" />
               <Project Path="src/Bad/Bad.csproj" />
+              <Project Path="src/BadUser/BadUser.csproj" />
               <Project Path="other/Lib/Lib.csproj" />
             </Solution>
             """);
@@ -397,8 +408,9 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
         await WaitForProjectAsync(other, p => p.Restored);
         Assert.False(Project(bad).Restored);
+        Assert.False(Project(user).Restored);
 
-        // Restored together, without the project whose errors failed the solution's restore.
+        // Restored together, without the project whose errors failed the solution's restore and the one that references it.
         using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "restore.slnf")));
         Assert.Equal([@"other\Lib\Lib.csproj", @"src\App\App.csproj"],
             filter.RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(p => p.GetString()).Order(StringComparer.Ordinal));
@@ -574,7 +586,8 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             lock (log)
             {
                 return string.Join(Environment.NewLine, log.Where(l => l.Contains("Design-time build of", StringComparison.Ordinal)
-                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)));
+                                                                       || l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("Packages of", StringComparison.Ordinal) || l.Contains("build cache:", StringComparison.Ordinal)
+                                                                       || l.Contains("Restoring on open", StringComparison.Ordinal)));
             }
         }
 
@@ -624,6 +637,12 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => _service.RestoreState is "succeeded" or "failed" && Ok(AppProject) && _service.DesignTimeProgress is { Completed: true }, TimeSpan.FromMinutes(4));
         Assert.Contains("\"net10.0\": {", File.ReadAllText(assets), StringComparison.Ordinal);
         Assert.Contains("Packages of 3 project(s) are up to date", await OpenAsync(), StringComparison.Ordinal);
+
+        // An assets file deleted, its restore's marker still there: the design-time build doesn't say so (the SDK leaves
+        // NETSDK1004 out of design-time builds, so the project loads without its packages), and the open restores.
+        File.Delete(assets);
+        Assert.Contains("Restoring on open: App.csproj has no assets file", await OpenAsync(restores: true), StringComparison.Ordinal);
+        Assert.True(File.Exists(assets));
 
         // The watcher evaluates Core alone (a file added to its folder, as NuGet's outputs after a restore): the
         // projects that reference it build again with it, since their keys hold Core's fingerprint, and the next open
