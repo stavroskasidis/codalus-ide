@@ -14,7 +14,8 @@ design_runs=${3:-25}
 sections=${4:-spike design attach hotreload}
 for p in Spike HotReload Hook; do dotnet build $p -nologo -v q >/dev/null || { echo "build of $p failed"; dotnet build $p -nologo -v q | grep -E "error" | head; exit 1; }; done
 DebuggeeTfms=${DEBUGGEE_TFMS:-} dotnet build Debuggee -nologo -v q 2>&1 | grep -E " error " | sort -u | head -3
-tfms=$(for t in Debuggee/bin/Debug/*/; do t=${t%/}; t=${t##*/}; ls Debuggee/bin/Debug/$t/Debuggee.dll >/dev/null 2>&1 && echo $t; done)
+# The frameworks asked for (an earlier build for another architecture may have left others in bin/), else every one built.
+tfms=$(for t in Debuggee/bin/Debug/*/; do t=${t%/}; t=${t##*/}; [[ -z "${DEBUGGEE_TFMS:-}" || ";$DEBUGGEE_TFMS;" == *";$t;"* ]] && ls Debuggee/bin/Debug/$t/Debuggee.dll >/dev/null 2>&1 && echo $t; done)
 shim=$(find ~/.nuget/packages/microsoft.diagnostics.dbgshim.$rid \( -name 'libdbgshim.*' -o -name 'dbgshim.dll' \) | head -1)
 echo "rid $rid, shim $shim, debuggee tfms: $(echo $tfms), $(uname -s 2>/dev/null) $(uname -m 2>/dev/null)"
 spike() { timeout 90 dotnet Spike/bin/Debug/net10.0/Spike.dll "$shim" "$@" 2>&1; }
