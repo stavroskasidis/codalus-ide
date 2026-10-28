@@ -1,9 +1,9 @@
 # 0086. A managed CoreCLR debugger adapter, and Hot Reload while debugging
 
-- **Status:** proposed (2026-10-28), after three spikes; nothing is built. The maintainer decides it as D48 in the [roadmap](../roadmap.md#decision-register).
+- **Status:** accepted (2026-10-28, D48 in the [roadmap](../roadmap.md#decision-register)), after three spikes; nothing is built or scheduled yet. Phase 1 starts after the Linux arm64 run (Consequences).
 - **Date:** 2026-10-28
-- **Deciders:** maintainer
-- **Would amend:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
+- **Deciders:** maintainer (D48: accepted as proposed)
+- **Amends, as each phase lands:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
 
 ## Context
 
@@ -88,7 +88,7 @@ What it found:
 | Shipping | a downloaded, pinned native binary per platform (`eng/get-netcoredbg.sh`, `RemoteDebuggers`) | the same | ClrDebug back into the Linux and macOS packages (8 MB, left out since 0.3.0) and dbgshim from NuGet per platform |
 | Risk | none new | slow; not ours to schedule | parity with what netcoredbg does today, on three OSes, remote targets included |
 
-## Decision (proposed)
+## Decision
 
 **(c), in phases, with netcoredbg the default until the new adapter matches it.**
 
@@ -101,7 +101,7 @@ What it found:
 
 ## Consequences
 
-- If accepted: Hot Reload while debugging becomes possible for launched programs, the terminal, and the Blazor Web App's server; macOS exit codes become correct; x64 programs on Apple silicon can leave netcoredbg 3.1.3 for a maintained dbgshim; the gaps netcoredbg can't close (per-type exception settings, Set Next Statement through `ICorDebugILFrame::SetIP`, type proxies through func-eval of `new`, hit counts and logpoints without a stop per hit) become work we can schedule.
+- Once built: Hot Reload while debugging becomes possible for launched programs, the terminal, and the Blazor Web App's server; macOS exit codes become correct; x64 programs on Apple silicon can leave netcoredbg 3.1.3 for a maintained dbgshim; the gaps netcoredbg can't close (per-type exception settings, Set Next Statement through `ICorDebugILFrame::SetIP`, type proxies through func-eval of `new`, hit counts and logpoints without a stop per hit) become work we can schedule.
 - Every fix to the debugger becomes ours, on three OSes. ICorDebug's behavior off Windows is known only from these spikes until phase 1's suites run on CI.
 - The Linux and macOS packages grow by ClrDebug (about 8 MB) and dbgshim (0.3 to 0.4 MB per platform) during phases 1 and 2, while netcoredbg still ships; the size gate counts both.
 - `TODO(issue)`: run the spikes (`run.sh`) on Linux arm64, through a Remote Control session on such a machine, before phase 1 starts. Windows ran on 2026-10-28; Linux arm64 was skipped that day.
