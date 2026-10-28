@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.10.0
 
+- **The plugin SDK is on nuget.org** ([plugins.md](docs/plugins.md#project-setup)): `dotnet new install Codalus.Templates` gives `dotnet new codalus-plugin`, and the plugin it makes restores `Codalus.Plugins.Abstractions` and `Codalus.Plugins.Testing` from nuget.org, with no clone or local feed. Each stable release pushes the packages whose version is new.
 - **Fixed:** a download of Node.js or vscode-js-debug that stopped coming (a stalled connection) waited for ever, and every feature that needs Node.js (the web language servers, npm, debugging in the browser) waited behind it. A download that gets no data for 30 seconds, or drops, is now asked for again from where it stopped, up to four times, and then fails with a message that says so.
 
 ## 0.9.0

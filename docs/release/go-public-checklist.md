@@ -58,7 +58,7 @@ The workflows build, test and publish (ADR 0028); a dispatch without the dry run
 
 ## 5a. NuGet package prefix
 
-See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: reserve `Codalus.*` (nuget.org has no `Codalus` package); the plugin SDK ships as `Codalus.Plugins.Abstractions`.
+See [nuget-prefix-reservation.md](nuget-prefix-reservation.md). Summary: reserve `Codalus.*` (nuget.org has no `Codalus` package); the plugin SDK ships as `Codalus.Plugins.Abstractions`. Every stable release pushes it, with `Codalus.Plugins.Testing` and `Codalus.Templates`, through nuget.org's trusted publishing; its one-time setup is in [releasing.md](releasing.md#nugetorg).
 
 ## 6. History audit (done at M7)
 
