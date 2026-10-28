@@ -45,3 +45,5 @@ Three errors remained in the Error List that `dotnet build` doesn't report: CS40
 - the next pass, scheduled at once and without reuse, compiles them again from source and writes their state. Its log line says so.
 
 `LanguageStateCacheTests.A_change_below_a_project_reuses_its_reference_assembly_then_checks_again_from_source` is the trade-off itself: a constant of a project below, changed, is wrong in the first pass and right after the second, and the next session takes the right one.
+
+Measured on the maintainer's 94-project solution, each a single headless open (a file touched at the bottom of a chain; numbers from a developer's machine, which decide nothing CI gates): with `wPylon.Client.Framework` touched (29 projects above it), ready at 66 s against 88 (the first pass 56 s against 78, 27 reference assemblies reused), then 43 s of checking again in the background; with `wStandard.Core` touched (37 above it), ready at 36.5 s against 43, then 14 s. The chain no longer sets the time: the slowest projects' own compiles do (one Blazor project's generators and binding, 15–40 s), with the processors 39% busy on average.
