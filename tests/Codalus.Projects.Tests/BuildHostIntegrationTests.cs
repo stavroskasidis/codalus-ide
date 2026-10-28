@@ -568,6 +568,33 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
             Assert.Equal(["succeeded"], restoreStates);
         }
 
+        // Packages the design-time build can't read, though nothing is newer than their restore (0.9: projects of another
+        // repository whose global.json pins another SDK, restored by it): the host restores once, and they build again.
+        var assets = Path.Combine(Fixture, "src", "App", "obj", "project.assets.json");
+        var written = File.GetLastWriteTimeUtc(assets);
+        var text = File.ReadAllText(assets);
+        Assert.Contains("\"net10.0\": {", text, StringComparison.Ordinal);
+        File.WriteAllText(assets, System.Text.RegularExpressions.Regex.Replace(text, @"(""targets"": \{\s*"")net10\.0""", "${1}net8.0\""));
+        Assert.NotEqual(text, File.ReadAllText(assets));
+        File.SetLastWriteTimeUtc(assets, written);
+
+        // ResolvePackageAssets reads the file again (another SDK finds its cache of the file stale, its settings differ).
+        foreach (var cache in Directory.EnumerateFiles(Path.Combine(Fixture, "src", "App", "obj"), "*.assets.cache", SearchOption.AllDirectories))
+        {
+            File.Delete(cache);
+        }
+        lock (log)
+        {
+            log.Clear();
+        }
+
+        await _service.OpenAsync(Slnx, trusted: true, restore: true, Timeout());
+        await WaitUntilAsync(() => { lock (log) { return log.Any(l => l.Contains("couldn't read their packages (App.csproj): restoring.", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(2));
+        // (NuGet reports this test's broken file, which it rewrites anyway; another SDK's file it reads.)
+        await WaitUntilAsync(() => _service.RestoreState is "succeeded" or "failed" && Ok(AppProject) && _service.DesignTimeProgress is { Completed: true }, TimeSpan.FromMinutes(4));
+        Assert.Contains("\"net10.0\": {", File.ReadAllText(assets), StringComparison.Ordinal);
+        Assert.Contains("Packages of 3 project(s) are up to date", await OpenAsync(), StringComparison.Ordinal);
+
         // The watcher evaluates Core alone (a file added to its folder, as NuGet's outputs after a restore): the
         // projects that reference it build again with it, since their keys hold Core's fingerprint, and the next open
         // finds all three in the cache.

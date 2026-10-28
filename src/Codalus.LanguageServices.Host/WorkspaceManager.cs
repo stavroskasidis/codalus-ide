@@ -436,6 +436,20 @@ internal sealed class WorkspaceManager : IDisposable
         // Projects reference hundreds of the same files: each file's timestamp is read once per call, not once per project
         // (M34b: a 96-project solution, updated a project at a time, spent a minute here).
         var files = new Dictionary<string, MetadataReference?>(Paths.Comparer);
+
+        // Each file's reference is created in parallel first (0.9): reading hundreds of assemblies one at a time took 1.5 s
+        // of a 94-project solution's load, the host's messages waiting behind it.
+        var distinct = _projects.Values.Where(e => e.Parsed is not null).SelectMany(e => e.Parsed!.References)
+            .Where(r => r.Properties == MetadataReferenceProperties.Assembly && !outputs.ContainsKey(r.Path))
+            .Select(r => r.Path).Distinct(Paths.Comparer).ToList();
+        var created = new System.Collections.Concurrent.ConcurrentDictionary<string, MetadataReference?>(Paths.Comparer);
+        Parallel.ForEach(distinct, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2) },
+            path => created[path] = _loader.Metadata(path, MetadataReferenceProperties.Assembly));
+        foreach (var (path, reference) in created)
+        {
+            files[path] = reference;
+        }
+
         foreach (var entry in _projects.Values.Where(e => e.Parsed is not null))
         {
             var metadata = new List<MetadataReference>();

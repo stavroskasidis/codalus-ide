@@ -70,6 +70,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M36 | F# | done (at checkpoints [m36a](checkpoints/m36a.md) and [m36b](checkpoints/m36b.md), ADR 0067 and 0068), 2026-10-15. M36a: FsAutoComplete (D10) and Fantomas installed with the user's `dotnet tool install` on the first F# file, trusted folders only; completion, Quick Info, diagnostics with FSharpLint, navigation, rename, fixes, inlay hints, CodeLens and formatting through the LSP bridge; the compile order in Solution Explorer (`items/move`, Move Up/Down, Add Above/Below, `.fsi` nesting), F# item templates and property pages. M36b: F# Interactive as `dotnet fsi` in a terminal (send a selection, line, file or project references; reset; run script), scripts with `#load` and `#r "nuget:"`, type providers, F# analyzers, Expecto in the Test Explorer, debugging F# tested. Gaps: F# tests from source, F# expressions in Watch, F# → C# references before a build, remote windows |
 | M50 | 0.7: fixes and polish from the 0.6 release | built, 2026-10-25 ([m50](checkpoints/m50.md)), with .NET 11 RC3; the 0.6 release's platform-only items moved to M51 (the maintainer's decision); 0.7.1, 2026-10-26, fixed what 0.7.0's validation found from Linux, the rest in M51. Planned 2026-10-24: the maintainer's list after the 0.6.0 release, decided that day (the release's open items, no name of the classic IDE in the current files, dock drop width, CPU, header icons, SEO, Back and Forward, Blazor parameters, sync with the active document, Output text, the Help menu) |
 | M51 | 0.8: AI, feedback and OS integration | built, 2026-10-26 ([m51](checkpoints/m51.md)), validated on Windows, Linux (WSL) and macOS. Planned 2026-10-24: external agents across a restart and their model, more AI (inline completions, debugging help, code actions, commit text), Report a Problem through a prefilled GitHub issue, opt-in OS integration on all three OSes |
+| M52 | 0.9: All Repositories, large solutions and UI fixes | built, 2026-10-27 ([m52](checkpoints/m52.md)), validated on Windows, Linux (WSL) and macOS. All Repositories in Git Changes (ADR 0085), the freeze with an unreachable feed, a large solution's first analysis about twice as fast (server GC for 20 projects or more), packages another SDK restored repaired by a restore, tree row spacing, auto-hidden tabs and Output's links |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -2350,6 +2351,25 @@ Every user-visible item updates the user guide and the website in the same chang
 
 **Status.** Built 2026-10-26 for 0.8.0 ([m51](checkpoints/m51.md)). Items 1–4 are built (ADR 0079's and 0062's amendments, ADR 0084). Of item 5: the Windows command sweep's stalls are gone in the 0.7 release runs; the popup-overlap flake, the Watch-edit wait and linux-arm64's `debug.compound` stop didn't recur in the last 40–60 CI runs and keep their reports (the isolation line now names the test before it); macOS was profiled against 0.5.0 on the same machine (+8 MB, +19 ms, all in the shell), and Connect's objects and the tab strip edge's repaints were deferred; a solution's first open no longer runs every tool's version check, and `open-solution-50` notes each process's CPU (its CPU budgets wait for CI to run it: numbers from developers' machines don't set budgets, the maintainer's rule of 2026-10-27). Item 6: git 2.51's Update Branch, WSL's font and layout failures (the editor's monospace fallback, menu rows, and saves that dropped a file's Unix mode), the older-SDK message, `eng/get-runtimes.sh` under Git Bash and Output's bold colors are fixed, and SDK 2.1's design-time builds on MSBuild 15.9 with them; signature help in the Windows smoke test and the runs that passed on a second try didn't reproduce. Deferred, each a TODO(issue) in the checkpoint: OS integration on a real Mac and on real Linux desktops, Windows 11's top-level menu, and the Flatpak.
 
+### M52 — 0.9: All Repositories, large solutions and UI fixes
+
+**Why.** The maintainer's list of 2026-10-27 for 0.9, with All Repositories (ADR 0085, decided 2026-10-26) and the fixes merged into `develop` after the 0.8.0 release.
+
+**Depends on.** M38 (git), M34b and M34c (opening faster), M45 (theme families).
+
+**Scope.**
+
+1. Tree tool windows (Solution Explorer, Test Explorer and the others) get a little more room per row, as the classic IDE (its 24 px rows against Codalus's 20–22).
+2. Auto-hidden tool windows' tabs on the right read as if they were on the left (Dock turns vertical tabs 270°).
+3. Links in the Output window are hard to read in dark themes.
+4. `develop` builds and a nightly is published.
+5. Opening a large solution (the maintainer's 94-project `Epsilon.Web.Pylon.slnx`) takes too long to analyze: find as many gains as possible.
+6. Release 0.9.0.
+
+**Exit criteria.** As M50's, for 0.9.0.
+
+**Status.** Built 2026-10-27 for 0.9.0 ([m52](checkpoints/m52.md)).
+
 ---
 
 ## Phase 12: Visual Basic and F#
@@ -3252,3 +3272,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-25: M50 built ([m50](checkpoints/m50.md)), with .NET 11 RC3 added by the maintainer. The 0.6 release's items that need Windows and macOS machines moved to M51 item 5, by the maintainer's decision of that day.
 - 2026-10-26: M51 built ([m51](checkpoints/m51.md)) for 0.8.0: external agents across a restart with their model, mode and effort; AI in quick actions, the Error List and the debugger's values; Report a Problem and Suggest a Feature; opt-in OS integration on the three OSes (ADR 0084); M50's platform items profiled and closed or kept with their reports, with the codalus-mac session.
 - 2026-10-26: All Repositories for 0.9 ([ADR 0085](adr/0085-all-repositories.md)), from the maintainer's request and decisions of that day. A solution in several repositories shows all of them in Git Changes by default: a tree per repository, Commit All Repos, fetch, pull, push, sync and stash in each with the failures listed, Common branches and each repository's in the branch drop-down, and repositories added or left out with the solution. Deferred, each a TODO(issue) in the ADR: ahead/behind chips on the per-repository branch rows, and LFS badges, hosting and the commit template for the other repositories.
+- 2026-10-27: M52 built ([m52](checkpoints/m52.md)) for 0.9.0: tree rows of 24 px (`Shell.Size.TreeRow`), auto-hidden tabs that read top to bottom on both sides, Output's links in `Shell.Link`; a large solution's C# host on the server garbage collector (20 projects or more) and its references loaded in parallel; a restore when design-time builds can't read the packages (projects of another repository restored with another SDK); the pipeline tags again when only failed jobs are re-run.

@@ -262,13 +262,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             {
                 // Opening restores only when a project's packages may have changed since its last restore (M34b): a
                 // no-op restore of a large solution costs seconds of processor time next to the design-time builds.
-                if (PackagesUpToDate() is { } upToDate)
+                if (PackagesUpToDate(out var reason) is { } upToDate)
                 {
                     await _events.LogAsync("info", $"Packages of {upToDate} project(s) are up to date: no restore on open.").ConfigureAwait(false);
                     await _events.RestoreStateAsync("succeeded", null).ConfigureAwait(false);
                 }
                 else
                 {
+                    await _events.LogAsync("info", $"Restoring on open: {reason ?? "a project needs it"}.").ConfigureAwait(false);
                     StartRestore(null);
                 }
             }
@@ -676,6 +677,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(built, total, false)).ConfigureAwait(false);
         }
 
+        var unreadable = new System.Collections.Concurrent.ConcurrentBag<string>();
         await _designTime.BuildAsync(requests, properties, async inputs =>
         {
             if (keys.TryGetValue(inputs.Path, out var key))
@@ -683,9 +685,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 DesignTimeCache.Write(key.Directory, key.Entry, key.Key, inputs);
             }
 
+            if (inputs.State == CompilerInputStates.Failed && NeedsRestore(inputs.Error))
+            {
+                unreadable.Add(inputs.Path);
+            }
+
             await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
+
+        RepairRestore([.. unreadable]);
 
         // A project evaluated again while this batch ran (the restore's assets files can arrive one evaluation at a time)
         // may have changed what a result here was built from: those build again, or their cache entry would keep a key
@@ -731,6 +740,39 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             await _events.LogAsync("info", $"Design-time build cache: {cached.Count} hit(s), {misses.Count} miss(es)"
                                            + (misses.Count > 0 ? ": " + string.Join("; ", misses.Take(20)) + (misses.Count > 20 ? $"; and {misses.Count - 20} more" : string.Empty) : ".")).ConfigureAwait(false);
         }
+    }
+
+    private bool _repairRestoreStarted;
+
+    /// <summary>
+    /// Whether a failed design-time build's error is one a restore fixes: the SDK couldn't read the assets file
+    /// (<c>ResolvePackageAssets</c> failing, as 10.0.204's did with a NullReferenceException on a file 10.0.303 wrote), or
+    /// it has none, none for the framework, or one it can't read (NETSDK1004, NETSDK1005, NETSDK1060).
+    /// </summary>
+    internal static bool NeedsRestore(string? error) =>
+        error is not null && (error.Contains("\"ResolvePackageAssets\" task failed", StringComparison.Ordinal)
+                              || error.Contains("NETSDK1004", StringComparison.Ordinal) || error.Contains("NETSDK1005", StringComparison.Ordinal)
+                              || error.Contains("NETSDK1060", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Restores once per session when design-time builds failed for want of a restore (0.9): projects of another repository
+    /// whose <c>global.json</c> pins another SDK carry assets files that SDK wrote, which this one may not read, though
+    /// nothing changed since (41 of a 94-project solution had no IntelliSense, and built again at every open). The restore
+    /// runs in the solution's folder, with its SDK, forced (NuGet would find the inputs unchanged and keep the file), and the
+    /// projects whose assets files it rewrites build again.
+    /// </summary>
+    private void RepairRestore(string[] unreadable)
+    {
+        if (unreadable.Length == 0 || !_restoreOnOpen || _repairRestoreStarted || _lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _repairRestoreStarted = true;
+        _ = _events.LogAsync("info", $"Design-time builds of {unreadable.Length} project(s) couldn't read their packages ("
+                                     + string.Join(", ", unreadable.Take(3).Select(System.IO.Path.GetFileName)) + (unreadable.Length > 3 ? ", …" : string.Empty)
+                                     + "): restoring.");
+        StartRestore(null, force: true);
     }
 
     // ------------------------------------------------------------------ builds
@@ -1038,7 +1080,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
     // ------------------------------------------------------------------ restore
 
-    public void StartRestore(string? path)
+    /// <param name="force">Re-resolve every package even when NuGet finds the restore inputs unchanged (<c>--force</c>): an assets file another SDK wrote, or one that can't be read, is rewritten.</param>
+    public void StartRestore(string? path, bool force = false)
     {
         if (!Trusted)
         {
@@ -1061,10 +1104,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
         var building = _building;
         _restore = Task.WhenAll(_restore.ContinueWith(_ => { }, TaskScheduler.Default), building)
-            .ContinueWith(_ => RestoreAsync(path ?? Path), TaskScheduler.Default).Unwrap();
+            .ContinueWith(_ => RestoreAsync(path ?? Path, force), TaskScheduler.Default).Unwrap();
     }
 
-    private async Task RestoreAsync(string target)
+    private async Task RestoreAsync(string target, bool force = false)
     {
         await _events.RestoreStateAsync("running", null).ConfigureAwait(false);
 
@@ -1073,7 +1116,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var taken = false;
         try
         {
-            var (code, unreachable) = await RunRestoreAsync(target).ConfigureAwait(false);
+            var (code, unreachable) = await RunRestoreAsync(target, force).ConfigureAwait(false);
             var restoredAlone = 0;
             if (code != 0 && !unreachable && !ProjectPaths.Contains(target, s_pathComparer))
             {
@@ -1083,7 +1126,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 // reached: each project would wait for it in turn (minutes each off a VPN) and fail the same way.
                 foreach (var project in ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !AssetsWritten(p)).ToList())
                 {
-                    if ((await RunRestoreAsync(project).ConfigureAwait(false)).Code == 0)
+                    if ((await RunRestoreAsync(project, force).ConfigureAwait(false)).Code == 0)
                     {
                         restoredAlone++;
                     }
@@ -1151,10 +1194,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     /// Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output: its exit code, and
     /// whether it said a package source couldn't be reached (NU1301).
     /// </summary>
-    private async Task<(int Code, bool Unreachable)> RunRestoreAsync(string target)
+    private async Task<(int Code, bool Unreachable)> RunRestoreAsync(string target, bool force = false)
     {
         // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
-        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal"]);
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal", .. (force ? ["--force"] : Array.Empty<string>())]);
         using var process = Packages.DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
         var unreachable = 0;
         void Read(string line)
