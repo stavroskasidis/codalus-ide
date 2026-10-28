@@ -126,7 +126,7 @@ internal enum ClrValueKind
     String,
     Array,
 
-    /// <summary>An object or a value type's value (a struct, an enum, a boxed primitive whose type is a struct of mscorlib).</summary>
+    /// <summary>An object or a value type's value (a struct, an enum, a boxed primitive whose type is a struct of the core library).</summary>
     Object,
 }
 
@@ -241,7 +241,7 @@ internal sealed class ClrLiveValue : IClrValue
 /// <summary>
 /// A runtime type: a class or value type of a module (<see cref="Module"/> and <see cref="Token"/>, with its type
 /// arguments); an array of <see cref="Element"/>; or a primitive, <c>string</c> or <c>object</c> by
-/// <see cref="Name"/> (<c>System.Int32</c>), which the session finds in mscorlib.
+/// <see cref="Name"/> (<c>System.Int32</c>), which the session finds in the core library.
 /// </summary>
 internal sealed record ClrType(IClrModule? Module, int Token, string? Name = null, IReadOnlyList<ClrType>? Arguments = null, ClrType? Element = null, int Rank = 0)
 {

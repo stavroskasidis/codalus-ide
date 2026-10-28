@@ -5,7 +5,14 @@ using Codalus.Rpc;
 // Usage: codalus-debughost. The debug companion (M14b, ADR 0032): JSON-RPC on stdio, the requests in CompanionMethods.
 // codalus-debughost --mono-dap: the Mono debugger adapter (M20b, ADR 0065), DAP on stdio.
 // codalus-debughost --netfx-dap: the desktop-CLR (.NET Framework) debugger adapter (M43b, ADR 0076), DAP on stdio; Windows only.
+// codalus-debughost --clr-dap: CoreCLR's debugger adapter (M54, ADR 0086), DAP on stdio.
+// codalus-debughost --launch <pipe> <program> [args]: starts a program for --clr-dap (ADR 0086); its standard handles are the program's.
 // codalus-debughost --activate-app <AUMID>: starts a registered packaged Windows app, printing its process id (M44, ADR 0074).
+if (args is [Codalus.Debugging.CoreClrAdapter.LaunchArgument, ..])
+{
+    return Codalus.Debugging.Host.CoreClr.Launcher.Run(args[1..]);
+}
+
 if (args.Contains("--activate-app"))
 {
     return AppActivation.Run(args, Console.Out, Console.Error);
@@ -18,6 +25,11 @@ Console.SetOut(Console.Error);
 if (args.Contains("--mono-dap"))
 {
     return await Codalus.Debugging.Host.Mono.MonoAdapter.RunAsync(stdin, stdout, Console.Error).ConfigureAwait(false);
+}
+
+if (args.Contains(Codalus.Debugging.CoreClrAdapter.AdapterArgument))
+{
+    return await Codalus.Debugging.Host.NetFx.NetFxAdapter.RunAsync(stdin, stdout, Console.Error, new Codalus.Debugging.Host.CoreClr.DbgShimDebugger()).ConfigureAwait(false);
 }
 
 if (args.Contains(Codalus.Debugging.DesktopClr.AdapterArgument))

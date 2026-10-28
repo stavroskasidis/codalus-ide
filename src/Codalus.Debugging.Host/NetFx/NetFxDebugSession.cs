@@ -12,11 +12,14 @@ internal interface IClrDebugger
     IClrProcess Launch(NetFxDebugArguments arguments, Action<string, string> output);
 
     IClrProcess Attach(int processId);
+
+    /// <summary>The runtime it debugs, for messages: ".NET Framework" (the desktop CLR) or ".NET" (CoreCLR, ADR 0086).</summary>
+    string Runtime => ".NET Framework";
 }
 
 /// <summary>
-/// The desktop-CLR debugger adapter (M43b, ADR 0076): DAP on one side, a debugged .NET Framework process on the other
-/// (<see cref="IClrProcess"/>). Breakpoints (with conditions) bound in modules as they load through their portable
+/// The desktop-CLR debugger adapter (M43b, ADR 0076), and CoreCLR's (ADR 0086): DAP on one side, a debugged .NET
+/// Framework or .NET process on the other (<see cref="IClrProcess"/>, through <see cref="IClrDebugger"/>). Breakpoints (with conditions) bound in modules as they load through their portable
 /// PDBs, function breakpoints, stepping by source line with Just My Code and step filtering, threads and stacks,
 /// locals and arguments (async state machines' hoisted variables too), members through fields and property getters,
 /// evaluation of C# expressions (<see cref="ClrEvaluator"/>), exceptions (all with a type filter, or unhandled), and
@@ -152,7 +155,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "setVariable":
                 return JsonSerializer.SerializeToElement(SetVariable(Read(arguments, json.SetVariableArguments)!), json.SetVariableResponse);
             case "setExpression":
-                throw new DapRequestException("Assigning to expressions isn't supported for .NET Framework programs: change a variable in the Locals window.");
+                throw new DapRequestException($"Assigning to expressions isn't supported for {debugger.Runtime} programs here: change a variable in the Locals window.");
             case "continue":
                 Resume();
                 return JsonSerializer.SerializeToElement(new ContinueResponse(AllThreadsContinued: true), json.ContinueResponse);
@@ -196,7 +199,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         if (attach)
         {
             var id = arguments.ProcessId ?? throw new DapRequestException("Attach needs a process id.");
-            log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} on the desktop CLR…");
+            log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime})…");
             _process = debugger.Attach(id);
         }
         else
@@ -206,11 +209,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 throw new DapRequestException("Launch needs a program.");
             }
 
-            log.WriteLine($"Starting {arguments.Program} on the desktop CLR…");
+            log.WriteLine($"Starting {arguments.Program} ({debugger.Runtime})…");
             _process = debugger.Launch(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
         }
 
-        log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} (.NET Framework, CLR {_process.RuntimeVersion}).");
+        log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
         _ = dap.SendEventAsync(DapEvents.Process, new ProcessEvent(Path.GetFileName(arguments.Program ?? "process"), _process.Id, IsLocalProcess: true, StartMethod: attach ? "attach" : "launch"), DapJsonContext.Default.ProcessEvent);
         _ = Task.Factory.StartNew(EventLoopAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
     }
