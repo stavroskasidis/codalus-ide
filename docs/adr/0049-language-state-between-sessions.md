@@ -33,3 +33,17 @@ Three errors remained in the Error List that `dotnet build` doesn't report: CS40
 - Quick Info and signature help on a symbol of a project that stands as a build's assembly show no documentation unless that build wrote a documentation file, until the workspace catches up. The cache's assemblies carry theirs.
 - The state files are about the size of a reference assembly per referenced project, in `obj/`, which source control already ignores; deleting `obj/` starts over.
 - Not done: Roslyn's frozen partial semantics (internal, and its semantic-model reuse kept the frozen model after the compilation completed: completion returned nothing for the rest of the session), and caching source generator outputs themselves (Roslyn has no public way to seed a generator driver's state across processes).
+
+## Amendment, 2026-10-28: reference assemblies across a change below them (#208)
+
+**Context.** A project's key holds the keys of the projects it references, so one changed file low in a chain (after a pull) changed the key of every project above it: none of their reference assemblies stood for them, and the next open compiled the whole chain again. On the maintainer's 94-project solution that chain is 11 Blazor projects referencing each other in turn, and the pass took 70 s (M53).
+
+**Decision** (the maintainer's, 2026-10-28, accepting the trade-off below). A project's reference assembly from the last session also stands for it while its *own* key is unchanged (`ProjectKeys.OwnKey`: the key without the keys of the projects it references, kept in the state file as `ownKey`), whatever changed below it, on the first background pass of a set of projects. The build's reference assemblies already worked this way (their check is the project's own inputs).
+
+**The trade-off and how it is bounded.** A project compiled against such an assembly may be wrong where the change below altered the assembly's public surface (a constant baked into it, an inherited member, a type moved), until it is checked again:
+- the pass that used one names the projects that compiled against it, directly or through a project that did, and keeps nothing of theirs for the next session;
+- the next pass, scheduled at once and without reuse, compiles them again from source and writes their state. Its log line says so.
+
+`LanguageStateCacheTests.A_change_below_a_project_reuses_its_reference_assembly_then_checks_again_from_source` is the trade-off itself: a constant of a project below, changed, is wrong in the first pass and right after the second, and the next session takes the right one.
+
+Measured on the maintainer's 94-project solution, each a single headless open (a file touched at the bottom of a chain; numbers from a developer's machine, which decide nothing CI gates): with `wPylon.Client.Framework` touched (29 projects above it), ready at 66 s against 88 (the first pass 56 s against 78, 27 reference assemblies reused), then 43 s of checking again in the background; with `wStandard.Core` touched (37 above it), ready at 36.5 s against 43, then 14 s. The chain no longer sets the time: the slowest projects' own compiles do (one Blazor project's generators and binding, 15–40 s), with the processors 39% busy on average.

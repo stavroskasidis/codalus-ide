@@ -354,9 +354,18 @@ internal sealed class DiagnosticsService : IDisposable
             usePersisted = LanguageStateCache.Enabled && _persistedGeneration != generation;
         }
 
-        // Keys only on the first pass of a set of projects: later passes follow edits, and the next session finds a
-        // project edited since then changed anyway.
-        var keys = usePersisted ? _workspace.Keys() : null;
+        // Keys only on the first pass of a set of projects, and on the pass that checks again what compiled against
+        // reference assemblies reused across a change (#208): later passes follow edits, and the next session finds a
+        // project edited since then changed anyway. Reuse across a change only on the first pass.
+        bool correcting;
+        lock (_gate)
+        {
+            correcting = _checkAgain.Count > 0;
+            _checkAgain.Clear();
+        }
+
+        _analysis.ReuseAcrossChanges = usePersisted;
+        var keys = usePersisted || correcting ? _workspace.Keys() : null;
         var hasDependents = solution.Projects.SelectMany(p => p.ProjectReferences).Select(r => r.ProjectId).ToHashSet();
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken };
         var results = new System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>();
@@ -373,7 +382,7 @@ internal sealed class DiagnosticsService : IDisposable
                 return;
             }
 
-            if (keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder
+            if (usePersisted && keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder
                 && LanguageStateCache.Read(folder) is { } entry && entry.Key == key && entry.Scope == scope)
             {
                 // Unchanged since the last session (M34c): its diagnostics without compiling it.
@@ -393,6 +402,17 @@ internal sealed class DiagnosticsService : IDisposable
 
         var timings = new System.Collections.Concurrent.ConcurrentBag<(string Project, double Milliseconds)>();
         var toCompile = compile.Select(analysis.GetProject).OfType<Project>().ToList();
+
+        // What compiles against a reference assembly reused across a change below it (#208), directly or through a
+        // project that does, may be wrong where that change altered its public surface: shown now, kept for nothing,
+        // and checked again from source by the next pass.
+        var reusedImages = ReferenceEquals(analysis, solution) ? [] : _analysis.Images.Where(i => i.Value.Origin == AnalysisSolution.ReusedOrigin).Select(i => i.Key).ToHashSet();
+        var provisional = new HashSet<ProjectId>();
+        if (reusedImages.Count > 0)
+        {
+            var graph = solution.GetProjectDependencyGraph();
+            provisional.UnionWith(toCompile.Select(p => p.Id).Where(id => graph.GetProjectsThatThisProjectTransitivelyDependsOn(id).Overlaps(reusedImages)));
+        }
         await Parallel.ForEachAsync(toCompile, parallel, async (project, token) =>
         {
             var compiling = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -439,12 +459,12 @@ internal sealed class DiagnosticsService : IDisposable
             }
 
             results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found);
-            if (keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
+            if (!provisional.Contains(project.Id) && keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
             {
                 // For the next session (M34c): the diagnostics and, for a project others reference, its reference assembly.
                 var reference = hasDependents.Contains(project.Id) && LanguageStateCache.WriteReference(folder, compilation, token);
                 LanguageStateCache.Write(folder, new LanguageStateCache.Entry(LanguageStateCache.Schema, key, scope, project.DocumentIds.Count,
-                    [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]) { ReferenceKey = reference ? key : null });
+                    [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]) { ReferenceKey = reference ? key : null, OwnKey = reference ? keys.OwnKey(project.Id) : null });
             }
         }).ConfigureAwait(false);
 
@@ -457,7 +477,7 @@ internal sealed class DiagnosticsService : IDisposable
 
         var documents = results.Values.Sum(r => r.Documents);
         var compiled = results.Count;
-        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 5 } || usePersisted)
+        if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is { TotalSeconds: > 5 } || usePersisted || correcting)
         {
             _log($"Solution diagnostics: {compiled} project(s) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({reused} unchanged since the last pass, "
                  + $"{persisted} since the last session, {toCompile.Count} compiled{(ReferenceEquals(analysis, solution) ? string.Empty : $", {_analysis.Images.Count} as reference assemblies")})."
@@ -466,11 +486,17 @@ internal sealed class DiagnosticsService : IDisposable
 
         lock (_gate)
         {
-            _passes = new Dictionary<ProjectId, ProjectPass>(results);
+            _passes = new Dictionary<ProjectId, ProjectPass>(results.Where(r => !provisional.Contains(r.Key)));
+            _checkAgain.UnionWith(provisional);
             if (usePersisted)
             {
                 _persistedGeneration = generation;
             }
+        }
+
+        if (provisional.Count > 0)
+        {
+            _log($"{provisional.Count} project(s) compiled against reference assemblies reused across a change below them: checked again from source.");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -500,9 +526,16 @@ internal sealed class DiagnosticsService : IDisposable
         }
 
         WarmUp(generation);
+        if (provisional.Count > 0)
+        {
+            ScheduleBackground(TimeSpan.Zero);
+        }
     }
 
     private int _persistedGeneration = -1;
+
+    /// <summary>The projects the next pass checks again from source (#208), and writes for the next session.</summary>
+    private readonly HashSet<ProjectId> _checkAgain = [];
     private int _documentPassesRunning;
     private int _warmUpGeneration = -1;
 

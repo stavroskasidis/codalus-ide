@@ -14,6 +14,9 @@ namespace Codalus.Workbench.Tests;
 public sealed class LspBridgeTests : IAsyncLifetime
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-lsp-" + Guid.NewGuid().ToString("N"));
+
+    /// <summary>While this file is missing, the server doesn't answer <c>initialize</c> (<c>--initialize-after</c>).</summary>
+    private string Gate => Path.Combine(_root, "initialize.gate");
     private readonly LanguageRegistry _languages = new();
     private readonly LanguageServiceRegistry _servers = new();
     private readonly SolutionService _solutions = new(() => null);
@@ -32,7 +35,8 @@ public sealed class LspBridgeTests : IAsyncLifetime
         Assert.True(File.Exists(ServerPath), $"Conformance server not built: {ServerPath}");
         Directory.CreateDirectory(_root);
         _languages.Register(new LanguageDefinition("conf", "Conformance") { Extensions = [".conf"] });
-        _servers.Register(new LanguageServiceDescriptor("conformance", "Conformance", [], null, () => ProcessLaunchInfo.FromPath(ServerPath))
+        File.WriteAllText(Gate, ""); // the server answers initialize at once, unless a test takes the gate away
+        _servers.Register(new LanguageServiceDescriptor("conformance", "Conformance", [], null, () => ProcessLaunchInfo.FromPath(ServerPath, "--initialize-after", Gate))
         {
             Languages = ["conf"],
             SettingsSection = "conformance",
@@ -241,10 +245,12 @@ public sealed class LspBridgeTests : IAsyncLifetime
         var ct = Timeout();
         var closed = Path.Combine(_root, "closed.conf");
         var released = false;
+        File.Delete(Gate); // the server stays in its start until the document is closed (WSL, 2026-10-28: it started first)
         var opening = _service.OpenAsync(new LanguageDocument(closed, "conf", () => released ? ("gone", 2) : ("alpha = 1", 1)));
         Assert.False(opening.IsCompleted); // the server is starting
         await _service.CloseAsync(closed);
         released = true;
+        File.WriteAllText(Gate, "");
         Assert.True(await opening);
 
         // The server handles notifications in order: once the next document's diagnostics are back, those of an open of

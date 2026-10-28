@@ -33,6 +33,12 @@ internal static class LanguageStateCache
     {
         /// <summary>The key the reference assembly next to it was emitted under (null: none).</summary>
         public string? ReferenceKey { get; init; }
+
+        /// <summary>
+        /// The project's own key when its reference assembly was emitted (<see cref="ProjectKeys.OwnKey"/>): the assembly
+        /// stands for it while its own inputs are unchanged, whatever changed in the projects it references (#208).
+        /// </summary>
+        public string? OwnKey { get; init; }
     }
 
     internal sealed record FileDiagnostics(string Path, Diagnostic[] Items);
@@ -169,6 +175,7 @@ internal sealed class ProjectKeys
     private readonly IReadOnlyDictionary<string, SourceText> _open;
     private readonly HashSet<string> _outputs;
     private readonly Dictionary<ProjectId, string?> _keys = [];
+    private readonly Dictionary<ProjectId, string?> _ownKeys = [];
     private readonly Dictionary<string, string> _files = new(Paths.Comparer);
     private readonly Lock _gate = new();
 
@@ -212,9 +219,57 @@ internal sealed class ProjectKeys
             return null; // not loaded, or a cycle (never valid in MSBuild)
         }
 
-        var parsed = project.Parsed;
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         void Append(string value) => hash.AppendData(Encoding.UTF8.GetBytes(value + "\n"));
+        AppendOwn(project, Append);
+        foreach (var reference in project.References.OrderBy(r => _projects.GetValueOrDefault(r)?.Parsed.Data.Path, Paths.Comparer))
+        {
+            if (KeyLocked(reference, visiting) is not { } key)
+            {
+                _keys[id] = null; // a referenced project that isn't loaded: no key
+                return null;
+            }
+
+            Append("project " + key);
+        }
+
+        visiting.Remove(id);
+        var result = Convert.ToHexString(hash.GetHashAndReset());
+        _keys[id] = result;
+        return result;
+    }
+
+    /// <summary>
+    /// The project's own key (#208): its key without the keys of the projects it references. While it is unchanged, the
+    /// project's reference assembly from the last session stands for it, even after a change in a project below it.
+    /// </summary>
+    public string? OwnKey(ProjectId id)
+    {
+        lock (_gate)
+        {
+            if (_ownKeys.TryGetValue(id, out var known))
+            {
+                return known;
+            }
+
+            if (!_projects.TryGetValue(id, out var project))
+            {
+                return null;
+            }
+
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            AppendOwn(project, value => hash.AppendData(Encoding.UTF8.GetBytes(value + "\n")));
+            var result = "own " + Convert.ToHexString(hash.GetHashAndReset());
+            _ownKeys[id] = result;
+            return result;
+        }
+    }
+
+    /// <summary>What a project's key holds of its own: the compiler, its command line and every input but the projects it references.</summary>
+    private void AppendOwn(WorkspaceManager.ProjectSnapshot project, Action<string> append)
+    {
+        void Append(string value) => append(value);
+        var parsed = project.Parsed;
         Append($"schema {LanguageStateCache.Schema} roslyn {s_compiler}");
         Append(parsed.Data.Path);
         Append(parsed.Data.TargetFramework);
@@ -250,22 +305,6 @@ internal sealed class ProjectKeys
         {
             Append(analyzer.FullPath is { } path ? File(path) : analyzer.Display);
         }
-
-        foreach (var reference in project.References.OrderBy(r => _projects.GetValueOrDefault(r)?.Parsed.Data.Path, Paths.Comparer))
-        {
-            if (KeyLocked(reference, visiting) is not { } key)
-            {
-                _keys[id] = null; // a referenced project that isn't loaded: no key
-                return null;
-            }
-
-            Append("project " + key);
-        }
-
-        visiting.Remove(id);
-        var result = Convert.ToHexString(hash.GetHashAndReset());
-        _keys[id] = result;
-        return result;
     }
 
     /// <summary>Whether a file is open in the editor with text other than the file's.</summary>

@@ -71,7 +71,20 @@ async Task PublishAsync(string uri)
     await connection.NotifyAsync("textDocument/publishDiagnostics", ToElement(parameters), ConformanceJson.Default.JsonElement, CancellationToken.None).ConfigureAwait(false);
 }
 
-connection.OnRequest("initialize", (_, _) => Task.FromResult<JsonElement?>(Json("""
+// With --initialize-after <file>, initialize is answered only once that file exists: a server still starting, for as
+// long as a test needs one.
+var lspInitializeAfter = Array.IndexOf(args, "--initialize-after") is var gate and >= 0 && gate + 1 < args.Length ? args[gate + 1] : null;
+connection.OnRequest("initialize", async (_, cancellationToken) =>
+{
+    while (lspInitializeAfter is not null && !File.Exists(lspInitializeAfter))
+    {
+        await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+    }
+
+    return (JsonElement?)InitializeResult();
+});
+
+JsonElement InitializeResult() => Json("""
     {
       "capabilities": {
         "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } },
@@ -89,7 +102,7 @@ connection.OnRequest("initialize", (_, _) => Task.FromResult<JsonElement?>(Json(
       },
       "serverInfo": { "name": "conformance", "version": "1.0" }
     }
-    """)));
+    """);
 connection.OnNotification("initialized", ConformanceJson.Default.JsonElement, initialized =>
 {
     // Ask the client for settings, as many servers do right after initialization.

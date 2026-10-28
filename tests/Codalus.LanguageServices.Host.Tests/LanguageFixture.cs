@@ -97,12 +97,12 @@ public class LanguageFixture : IAsyncLifetime
         }
     }
 
-    public static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
+    public static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null, Func<string>? describe = null)
     {
         var started = System.Diagnostics.Stopwatch.StartNew(); // monotonic: immune to the machine sleeping
         while (!condition())
         {
-            Assert.True(started.Elapsed < (timeout ?? Timeout), "Timed out.");
+            Assert.True(started.Elapsed < (timeout ?? Timeout), describe is null ? "Timed out." : "Timed out: " + describe());
             await Task.Delay(50);
         }
     }
