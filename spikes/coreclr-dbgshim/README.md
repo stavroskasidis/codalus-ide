@@ -28,10 +28,10 @@ Compiles a small app with Roslyn, debugs it, applies two Roslyn deltas (`EmitDif
 
 | | Linux x64 | macOS arm64 | macOS x64 (Rosetta) | Windows x64 | Linux arm64 |
 |---|---|---|---|---|---|
-| Spike, .NET 9 | pass | pass | not run | pass | not run |
-| Spike, .NET 10 | pass | pass | pass | pass | not run |
-| Spike, .NET 11 | pass | pass (RC3) | not run | pass (RC3) | not run |
-| Launch candidates (a) and (b) | 25/25 each on .NET 9 and 10 | 25/25 each on .NET 9, 10 and 11 (after the socket fix) | 25/25 each on .NET 10 | 25/25 each on .NET 9, 10 and 11 | not run |
-| HotReload | as expected | as expected | as expected | as expected | not run |
+| Spike, .NET 9 | pass | pass | not run | pass | pass |
+| Spike, .NET 10 | pass | pass | pass | pass | pass |
+| Spike, .NET 11 | pass | pass (RC3) | not run | pass (RC3) | pass (RC3) |
+| Launch candidates (a) and (b) | 25/25 each on .NET 9 and 10 | 25/25 each on .NET 9, 10 and 11 (after the socket fix) | 25/25 each on .NET 10 | 25/25 each on .NET 9, 10 and 11 | 25/25 each on .NET 9, 10 and 11 (hosted runner) |
+| HotReload | as expected | as expected | as expected | as expected | as expected |
 
 "Pass" is 5/5 sessions in each mode, exit code 7 with `--attach` and `--hold`, and with launch lost (-1) off Windows and 7 on Windows. A launch candidate's run passes with a full session, exit code 7, both children `exit 3`, no "configured to pause" line, and a stop on `Main`'s first line in a second session. "As expected" is `ApplyChanges` S_OK and "every call ran the latest edit" for the first three variants, `CORDBG_E_ENC_MODULE_NOT_ENC_ENABLED` for the last two. Linux x64 is WSL's Ubuntu 24.04 (.NET 9.0.14, 10.0.13) in this round; macOS is 27.0.1. Before the diagnostic-socket fix (8304b6be), `--hook` lost 3 of about 160 held launches on the Mac to stale sockets in `$TMPDIR`. Details and the conclusions in ADR 0086.
