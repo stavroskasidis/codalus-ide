@@ -56,6 +56,26 @@ public static class SolutionStateLayout
         return directory;
     }
 
+    /// <summary>
+    /// A file the build host generates for MSBuild (a filter of the projects to build or restore, a folder's solution):
+    /// in the solution's state folder, so it never shows in Git. One left from before 0.10, directly in <c>.codalus/</c>
+    /// where Git showed it, is deleted.
+    /// </summary>
+    public static string GeneratedFile(string solutionPath, bool isFolder, string name)
+    {
+        var folder = isFolder ? Path.TrimEndingDirectorySeparator(solutionPath) : Path.GetDirectoryName(solutionPath)!;
+        try
+        {
+            File.Delete(Path.Combine(folder, ".codalus", name));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Left as it was: only Git shows it.
+        }
+
+        return Path.Combine(EnsureDirectory(solutionPath, isFolder), name);
+    }
+
     /// <summary>Writes through a temporary file and a rename, so a crash or a full disk never leaves half a file.</summary>
     public static void WriteAllTextAtomic(string path, string text)
     {

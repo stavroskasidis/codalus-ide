@@ -18,26 +18,20 @@ internal static class SymbolIndexFeature
     public static async Task<SymbolIndexResult> IndexAsync(Solution solution, ProjectId miscellaneous, string[]? uris, CancellationToken cancellationToken)
     {
         var wanted = uris?.Select(DocumentUris.ToPath).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var documents = new List<IndexedDocument>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var project in solution.Projects.Where(p => p.Id != miscellaneous && p.SupportsCompilation))
-        {
-            foreach (var document in project.Documents)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (document.FilePath is not { } path || wanted is not null && !wanted.Contains(path) || !seen.Add(path))
-                {
-                    continue; // a multi-targeted project's document is indexed once
-                }
+        var candidates = solution.Projects.Where(p => p.Id != miscellaneous && p.SupportsCompilation)
+            .SelectMany(p => p.Documents)
+            .Where(d => d.FilePath is { } path && (wanted is null || wanted.Contains(path)) && seen.Add(path)) // a multi-targeted project's document once
+            .ToList();
 
-                if (await IndexDocumentAsync(document, cancellationToken).ConfigureAwait(false) is { } indexed)
-                {
-                    documents.Add(indexed);
-                }
-            }
-        }
-
-        return new SymbolIndexResult([.. documents]);
+        // In parallel, in the solution's order: the first index, while the background pass compiles, parses most of the
+        // documents (12 to 16 s for 10,000 of them one at a time, the processors two thirds idle).
+        var indexed = new IndexedDocument?[candidates.Count];
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, candidates.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2), CancellationToken = cancellationToken },
+            async (i, token) => indexed[i] = await IndexDocumentAsync(candidates[i], token).ConfigureAwait(false)).ConfigureAwait(false);
+        return new SymbolIndexResult([.. indexed.OfType<IndexedDocument>()]);
     }
 
     private static async Task<IndexedDocument?> IndexDocumentAsync(Document document, CancellationToken cancellationToken)
