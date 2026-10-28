@@ -70,10 +70,15 @@ public sealed class Net11Tests
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 240);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == stop);
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "circle"));
+
+        // The runtime and the library, asked of the stopped program. Not its last line of output: netcoredbg loses what a
+        // program writes just before it exits now and then, and the Debug Console never got "runtime=11
+        // library=net11.0" (Linux CI, run 40598985805; about 1 session in 10 under load, docs/ci-flakes.md).
+        Assert.Equal("11", (await f.Shell.Debugger.EvaluateAsync("System.Environment.Version.Major", "watch", TestContext.Current.CancellationToken)).Result);
+        Assert.Equal("\"net11.0\"", (await f.Shell.Debugger.EvaluateAsync("Shapes.Circle.Framework", "watch", TestContext.Current.CancellationToken)).Result);
         f.Shell.Debugger.Breakpoints.Clear();
         await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
-        Assert.Contains("runtime=11 library=net11.0", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
     }
 
     [AvaloniaFact]
