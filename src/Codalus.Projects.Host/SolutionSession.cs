@@ -1116,21 +1116,27 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var taken = false;
         try
         {
-            var (code, unreachable) = await RunRestoreAsync(target, force).ConfigureAwait(false);
-            var restoredAlone = 0;
+            var (code, unreachable, failing) = await RunRestoreAsync(target, force).ConfigureAwait(false);
+            var restoredWithout = 0;
             if (code != 0 && !unreachable && !ProjectPaths.Contains(target, s_pathComparer))
             {
                 // One project that can't restore (a MAUI app without its workload, an error in its file) fails the
-                // whole solution's restore before any assets file is written: the others are restored on their own,
-                // so they still build and get their packages' completions. Not when a package source couldn't be
-                // reached: each project would wait for it in turn (minutes each off a VPN) and fail the same way.
-                foreach (var project in ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !AssetsWritten(p)).ToList())
+                // whole solution's restore before any assets file is written. The others are restored together without
+                // the projects its errors named, then any still without an assets file on its own, so they still build
+                // and get their packages' completions. Not when a package source couldn't be reached: each project
+                // would wait for it in turn (minutes each off a VPN) and fail the same way.
+                var others = ProjectPaths.Where(p => !IsUnloaded(p) && !ComposeProject.Is(p) && !CannotBuild(p) && !failing.Contains(p)).ToList();
+                if (failing.Count > 0 && others.Count > 1)
                 {
-                    if ((await RunRestoreAsync(project, force).ConfigureAwait(false)).Code == 0)
-                    {
-                        restoredAlone++;
-                    }
+                    await RunRestoreAsync(RestoreEntryPoint(others), force).ConfigureAwait(false);
                 }
+
+                foreach (var project in others.Where(p => !AssetsWritten(p)).ToList())
+                {
+                    await RunRestoreAsync(project, force).ConfigureAwait(false);
+                }
+
+                restoredWithout = others.Count(AssetsWritten);
             }
 
             // Non-SDK-style projects (M43a): their packages.config packages and reference assemblies, which dotnet restore skips.
@@ -1147,7 +1153,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
 
             await _events.RestoreStateAsync(ok ? "succeeded" : "failed", ok ? null
                 : unreachable ? $"dotnet restore exited with code {code}: a package source couldn't be reached (NU1301). Check the network connection or VPN, then restore again."
-                : code != 0 ? $"dotnet restore exited with code {code}." + (restoredAlone > 0 ? $" {restoredAlone} project(s) restored on their own." : "")
+                : code != 0 ? $"dotnet restore exited with code {code}." + (restoredWithout > 0 ? $" {restoredWithout} project(s) restored without the ones that failed." : "")
                 : $"{netFrameworkFailed} package(s) of non-SDK-style projects couldn't be restored.").ConfigureAwait(false);
 
             // Only projects whose assets file the restore wrote, or whose NuGet-generated imports it rewrote, are
@@ -1191,20 +1197,34 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     }
 
     /// <summary>
-    /// Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output: its exit code, and
-    /// whether it said a package source couldn't be reached (NU1301).
+    /// Runs <c>dotnet restore</c> on a solution or project, its output going to the restore's output: its exit code,
+    /// whether it said a package source couldn't be reached (NU1301), and the solution's projects its errors named.
     /// </summary>
-    private async Task<(int Code, bool Unreachable)> RunRestoreAsync(string target, bool force = false)
+    /// <remarks>
+    /// It runs in the solution's folder, as the build host does, so the solution's <c>global.json</c> picks the SDK: a
+    /// project of another repository restored in its own folder got that repository's SDK, whose assets files the
+    /// solution's SDK can't read (a NullReferenceException in <c>ResolvePackageAssets</c>, 10.0.303's read by 10.0.204).
+    /// </remarks>
+    private async Task<(int Code, bool Unreachable, HashSet<string> Failing)> RunRestoreAsync(string target, bool force = false)
     {
         // No --nologo: SDKs before 5.0 hand it to MSBuild, which rejects it (MSB1001). DOTNET_NOLOGO does the same.
-        var psi = Packages.DotnetProcess.StartInfo(_dotnet, System.IO.Path.GetDirectoryName(target)!, ["restore", target, "--verbosity", "minimal", .. (force ? ["--force"] : Array.Empty<string>())]);
+        var psi = Packages.DotnetProcess.StartInfo(_dotnet, SolutionDirectory, ["restore", target, "--verbosity", "minimal", .. (force ? ["--force"] : Array.Empty<string>())]);
         using var process = Packages.DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet restore did not start.");
         var unreachable = 0;
+        var failing = new HashSet<string>(s_pathComparer);
         void Read(string line)
         {
             if (line.Contains("NU1301", StringComparison.Ordinal))
             {
                 Volatile.Write(ref unreachable, 1);
+            }
+
+            if (RestoreOutput.FailingProject(line) is { } project && ProjectPaths.Contains(project, s_pathComparer))
+            {
+                lock (failing)
+                {
+                    failing.Add(project);
+                }
             }
         }
 
@@ -1212,7 +1232,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var error = PumpAsync(process.StandardError, Read);
         await Packages.DotnetProcess.WaitOrKillAsync(process, _lifetime.Token).ConfigureAwait(false);
         await Task.WhenAll(output, error).ConfigureAwait(false);
-        return (process.ExitCode, Volatile.Read(ref unreachable) == 1);
+        return (process.ExitCode, Volatile.Read(ref unreachable) == 1, failing);
     }
 
     /// <summary>Whether the restore just run wrote the project's assets file (it has one newer than its evaluation's).</summary>

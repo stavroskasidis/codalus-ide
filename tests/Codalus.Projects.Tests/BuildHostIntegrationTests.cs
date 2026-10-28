@@ -363,11 +363,22 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
               <Target Name="NeedsAWorkload" BeforeTargets="_GenerateRestoreProjectSpec"><Error Text="This project needs a workload." /></Target>
             </Project>
             """);
+        // A project of another repository, whose global.json pins another SDK (here one that isn't installed): restored in
+        // its own folder, it got that SDK, whose assets files the solution's can't read; it restores in the solution's.
+        var other = Path.Combine(Fixture, "other", "Lib", "Lib.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(other)!);
+        File.WriteAllText(other, """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        File.WriteAllText(Path.Combine(Fixture, "other", "global.json"), """{ "sdk": { "version": "1.0.100", "rollForward": "disable" } }""");
         var broken = Path.Combine(Fixture, "Broken.slnx");
         File.WriteAllText(broken, """
             <Solution>
               <Project Path="src/App/App.csproj" />
               <Project Path="src/Bad/Bad.csproj" />
+              <Project Path="other/Lib/Lib.csproj" />
             </Solution>
             """);
         var states = new List<string>();
@@ -382,9 +393,28 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await _service.OpenAsync(broken, trusted: true, restore: true, Timeout());
 
         await WaitUntilAsync(() => { lock (states) { return states.Any(s => s.StartsWith("failed", StringComparison.Ordinal)); } }, TimeSpan.FromMinutes(4));
-        Assert.Contains(states, s => s.Contains("1 project(s) restored on their own", StringComparison.Ordinal));
+        Assert.Contains(states, s => s.Contains("2 project(s) restored without the ones that failed", StringComparison.Ordinal));
         await WaitForProjectAsync(AppProject, p => p.Restored && p.References.Any(r => r is { Name: "Microsoft.Build.Locator", Resolved: true }));
+        await WaitForProjectAsync(other, p => p.Restored);
         Assert.False(Project(bad).Restored);
+
+        // Restored together, without the project whose errors failed the solution's restore.
+        using var filter = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(Fixture, ".codalus", "restore.slnf")));
+        Assert.Equal([@"other\Lib\Lib.csproj", @"src\App\App.csproj"],
+            filter.RootElement.GetProperty("solution").GetProperty("projects").EnumerateArray().Select(p => p.GetString()).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void A_restore_error_names_its_project()
+    {
+        var app = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "src", "App", "App.csproj"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"Microsoft.NET.Sdk.ImportWorkloads.targets(38,5): error NETSDK1147: To build this project, the following workloads must be installed: wasm-tools [{app}]"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app}(3,5): error : This project needs a workload. [{app}]"));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app}(3,77): error : This project needs a workload."));
+        Assert.Equal(app, Codalus.Projects.Host.RestoreOutput.FailingProject($"{app} : error NU1105: Unable to read project information."));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject($"{app} : warning NU1510: PackageReference System.IO will not be pruned. [{app}]"));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject("error MSB1009: Project file does not exist. [App.slnx]"));
+        Assert.Null(Codalus.Projects.Host.RestoreOutput.FailingProject("  Restored " + app + " (in 1,75 sec)."));
     }
 
     [Fact]
