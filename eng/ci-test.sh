@@ -22,6 +22,8 @@ results="$PWD/artifacts/test-results/$shard"
 # shard's usual 30 put HangDump dumping the Shell tests' tree (the test process, its hosts and their build nodes) on a
 # 7 GB runner; a lost runner keeps neither its log nor its artifacts, so nothing said which test. The watchdog's stacks
 # (dotnet-stack, at 10 minutes) are in the log instead, and HangDump still names the tests still running and ends them.
+# The runner was lost a third time without the dump (run 40675641432), so the dump wasn't the cause: pipeline.yml now
+# stops macOS shell-2's step at 40 minutes, which keeps the log and the results folder.
 dump=Mini
 [[ "${RUNNER_OS:-}" == "macOS" && "$shard" == shell-* ]] && dump=None
 hang=(--hangdump --hangdump-timeout 15m --hangdump-type "$dump" --results-directory "$results")
