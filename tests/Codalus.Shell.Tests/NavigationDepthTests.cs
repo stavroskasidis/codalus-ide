@@ -198,6 +198,65 @@ public class NavigationDepthTests
     }
 
     [AvaloniaFact]
+    public async Task Lenses_in_view_get_their_counts_after_an_edit_far_above_them()
+    {
+        // A lens refresh redraws, and the redraw invalidates the visual lines it then read for the lines in view: it
+        // resolved the first 60 lines instead. Scrolled further down, an edit left the lenses in view without counts
+        // (rows gone) until the next scroll.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 600;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 60);
+
+        // 80 lines above the code, then scrolled to it before the edit's refresh (700 ms later).
+        var view = shapes.Editor.TextArea.TextView;
+        shapes.Editor.Document.Insert(0, new string('\n', 80));
+        var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => view.DocumentHeight > areaDeclaration * view.DefaultLineHeight);
+        shapes.Editor.ScrollTo(areaDeclaration, 1);
+        await ShellFixture.PumpUntil(() => view.VisualLinesValid && view.VisualLines[0].FirstDocumentLine.LineNumber > 60);
+
+        // Both of the row's lenses, each resolved on its own.
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 references  |  1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
+    }
+
+    [AvaloniaFact]
+    public async Task Lens_titles_out_of_view_stay_through_refreshes()
+    {
+        // A refresh keeps the titles of the lenses it replaces until their new counts arrive, so rows don't come and
+        // go (and move the code) while typing; it kept only those of resolved lenses, so a second refresh before a
+        // lens out of view was resolved again dropped its row.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 360;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
+        var scaleLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Scale(IShape", StringComparison.Ordinal)).LineNumber;
+        var view = shapes.Editor.TextArea.TextView;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 60);
+        shapes.Editor.ScrollTo(scaleLine, 1);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(scaleLine) == true, seconds: 30);
+        var title = shapes.Insights.LensRowAbove(scaleLine);
+        Assert.NotNull(title);
+        shapes.Editor.ScrollToHome();
+        await ShellFixture.PumpUntil(() => view.VerticalOffset == 0 && view.VisualLinesValid && view.VisualLines[^1].LastDocumentLine.LineNumber < scaleLine - 10);
+
+        // Two refreshes: the first keeps Scale's title on a lens it doesn't resolve (out of view), the second keeps it again.
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(scaleLine) == false, seconds: 30);
+        Assert.Equal(title, shapes.Insights.LensRowAbove(scaleLine));
+        var rebuilt = false;
+        shapes.Insights.Updated += (_, _) => rebuilt |= shapes.Insights.LensResolvedAbove(interfaceLine) == false; // replaced, not resolved yet
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => rebuilt && shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 30);
+        Assert.Equal(title, shapes.Insights.LensRowAbove(scaleLine));
+    }
+
+    [AvaloniaFact]
     public async Task Ctrl_hover_shows_a_symbol_as_a_link_to_its_definition()
     {
         await using var f = ShellFixture.Create();
