@@ -11,7 +11,7 @@ namespace Codalus.Shell.Views;
 /// <summary>
 /// The Git Repository document: a double-click or Enter on a branch checks it out (a pull request opens, a message's
 /// action runs); right-click, Shift+F10 or the Menu key opens a node's menu; F2 and Delete rename and delete a branch;
-/// the links over the history fetch, pull, update, push and sync the selected branch.
+/// the history beside the tree is the selected ref's (<see cref="GitHistoryView"/>).
 /// </summary>
 public sealed partial class GitRepositoryView : UserControl, IPaneView
 {
@@ -96,13 +96,5 @@ public sealed partial class GitRepositoryView : UserControl, IPaneView
         }
 
         menu.Open(anchor);
-    }
-
-    private void OnLink(object? sender, RoutedEventArgs e)
-    {
-        if (sender is Button { Tag: string command } && ViewModel is { } vm)
-        {
-            _ = vm.RunAsync(command);
-        }
     }
 }

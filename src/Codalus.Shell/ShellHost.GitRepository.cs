@@ -24,8 +24,12 @@ public sealed partial class ShellHost
 {
     private DispatcherTimer? _gitRepositoryTimer;
 
-    /// <summary>Opens (or brings back) the Git Repository document and reads the repositories.</summary>
-    public async Task<GitRepositoryDocument?> ShowGitRepositoryAsync()
+    /// <summary>
+    /// Opens (or brings back) the Git Repository document, reads the repositories, and selects
+    /// <paramref name="reference"/> (a branch's or tag's full ref) in <paramref name="repository"/>, or that repository's
+    /// current branch (the open one's by default): View History, View all commits, a branch's View History.
+    /// </summary>
+    public async Task<GitRepositoryDocument?> ShowGitRepositoryAsync(GitService? repository = null, string? reference = null)
     {
         if (Git.Root is null)
         {
@@ -33,41 +37,70 @@ public sealed partial class ShellHost
             return null;
         }
 
-        if (Layout.FindDocument<GitRepositoryDocument>(GitRepositoryViewModel.DocumentId) is { } open)
+        var document = Layout.FindDocument<GitRepositoryDocument>(GitRepositoryViewModel.DocumentId);
+        if (document is null)
         {
-            Layout.OpenDocument(open, focus: true);
-            await open.ViewModel.LoadAsync().ConfigureAwait(true);
-            return open;
+            var viewModel = new GitRepositoryViewModel(new GitRepositoryActions
+            {
+                Repositories = () => GitChanges.Services.Where(s => s.Root is not null).ToList(),
+                PullRequests = RepositoryPullRequestsAsync,
+                CreateHistory = (git, query, title, canShowAllBranches) => NewHistory(git, query, title, canShowAllBranches),
+                Run = RunInRepositoryAsync,
+                MenuFor = GitRepositoryMenu,
+                Activate = ActivateRepositoryNodeAsync,
+            });
+            var created = document = new GitRepositoryDocument(viewModel);
+            void OnClosed(object? sender, Docking.ShellDocument closed)
+            {
+                if (closed == created)
+                {
+                    Layout.DocumentClosed -= OnClosed;
+                    viewModel.Dispose();
+                }
+            }
+
+            Layout.DocumentClosed += OnClosed;
         }
 
-        var viewModel = new GitRepositoryViewModel(new GitRepositoryActions
+        Layout.OpenDocument(document, focus: true);
+        await document.ViewModel.LoadAsync().ConfigureAwait(true);
+        var git = repository ?? Git;
+        if (reference is not null || repository is not null || document.ViewModel.Selected is null)
         {
-            Repositories = () => GitChanges.Services.Where(s => s.Root is not null).ToList(),
-            PullRequests = RepositoryPullRequestsAsync,
-            CreateHistory = (git, query, title) => new GitHistoryViewModel(
-                git,
-                query,
-                title,
-                (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)),
-                (commit, file) => InRepositoryAsync(git, () => OpenCommitFileAsync(commit, file))),
-            Run = RunInRepositoryAsync,
-            MenuFor = GitRepositoryMenu,
-            Activate = ActivateRepositoryNodeAsync,
-        });
-        var document = new GitRepositoryDocument(viewModel);
-        void OnClosed(object? sender, Docking.ShellDocument closed)
-        {
-            if (closed == document)
+            var target = reference ?? (git.Status?.Branch is { } branch ? "refs/heads/" + branch : null);
+            if (target is not null)
             {
-                Layout.DocumentClosed -= OnClosed;
-                viewModel.Dispose();
+                document.ViewModel.Select(target, git);
             }
         }
 
-        Layout.DocumentClosed += OnClosed;
-        Layout.OpenDocument(document, focus: true);
-        await viewModel.LoadAsync().ConfigureAwait(true);
         return document;
+    }
+
+    /// <summary>
+    /// A history for the Git Repository document or a File History tab: its commit menu and details run in
+    /// <paramref name="git"/>, and its toolbar's toggles are the user's settings (Show All Branches only where offered).
+    /// </summary>
+    private GitHistoryViewModel NewHistory(GitService git, GitLogQuery query, string title, bool canShowAllBranches, (string Path, int Start, int End)? lines = null)
+    {
+        var history = new GitHistoryViewModel(git, query, title, (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)), lines)
+        {
+            CanShowAllBranches = canShowAllBranches,
+        };
+        var settings = Workbench.Settings;
+        history.InitializeToggles(
+            canShowAllBranches && settings.GetBoolean(BuiltIns.HistoryAllBranchesSetting, false),
+            settings.GetBoolean(BuiltIns.HistoryRemoteBranchesSetting, true),
+            settings.GetBoolean(BuiltIns.HistoryTagsSetting, true));
+        history.SaveToggle = (toggle, value) => _ = SaveDiffSettingAsync(
+            toggle switch
+            {
+                "allBranches" => BuiltIns.HistoryAllBranchesSetting,
+                "remoteBranches" => BuiltIns.HistoryRemoteBranchesSetting,
+                _ => BuiltIns.HistoryTagsSetting,
+            },
+            value);
+        return history;
     }
 
     /// <summary>After git changed a repository (its status): the open document reads the refs again, once things settle.</summary>

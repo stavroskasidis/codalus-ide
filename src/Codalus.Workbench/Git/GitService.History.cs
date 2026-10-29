@@ -18,7 +18,7 @@ public sealed partial class GitService
 
         var arguments = new List<string>
         {
-            "log", "-z", "--topo-order", "--format=" + LogFormat,
+            "log", "-z", "--topo-order", "--decorate=full", "--format=" + LogFormat,
             "--skip=" + skip.ToString(CultureInfo.InvariantCulture), "--max-count=" + count.ToString(CultureInfo.InvariantCulture),
         };
         if (query.Author is { Length: > 0 } author)
@@ -103,8 +103,76 @@ public sealed partial class GitService
         }
 
         var (_, message, _) = await GitAsync(["show", "-s", "--format=%B", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
+        var (_, committer, _) = await GitAsync(["show", "-s", "--format=%cn%x1f%ce%x1f%ct", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
         var (_, names, _) = await GitAsync(["show", "-z", "--format=", "--name-status", "-M", "--first-parent", "-m", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
-        return new GitCommitDetails(commit, message.TrimEnd(), ParseNameStatus(Root!, names));
+        var fields = committer.Trim().Split(FieldSeparator);
+        return new GitCommitDetails(commit, message.TrimEnd(), ParseNameStatus(Root!, names))
+        {
+            Committer = fields.Length == 3 ? fields[0] : commit.Author,
+            CommitterEmail = fields.Length == 3 ? fields[1] : commit.AuthorEmail,
+            CommitDate = fields.Length == 3 && long.TryParse(fields[2], CultureInfo.InvariantCulture, out var seconds) ? DateTimeOffset.FromUnixTimeSeconds(seconds) : commit.Date,
+        };
+    }
+
+    /// <summary>A commit's patch against its first parent (what Explain gives AI Chat).</summary>
+    public async Task<string> CommitPatchAsync(string hash, CancellationToken cancellationToken = default)
+    {
+        var (_, patch, _) = await GitAsync(["show", "--format=", "--patch", "-M", "--first-parent", "-m", "--no-color", hash], cancellationToken, readOnly: true).ConfigureAwait(false);
+        return patch;
+    }
+
+    /// <summary>
+    /// The commits of <paramref name="query"/>'s revisions (or every branch) whose message or author contains
+    /// <paramref name="text"/> (case-insensitive), and the commit it names when it's a commit id or a prefix of one, even
+    /// one the revisions don't reach; newest first, at most <paramref name="count"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<GitCommit>> SearchLogAsync(GitLogQuery query, string text, int count, CancellationToken cancellationToken = default)
+    {
+        if (Status?.Head is null || text.Trim() is not { Length: > 0 } term)
+        {
+            return [];
+        }
+
+        var found = new Dictionary<string, GitCommit>(StringComparer.Ordinal);
+        foreach (var filter in new[] { "--grep=" + term, "--author=" + term })
+        {
+            var arguments = new List<string>
+            {
+                "log", "-z", "--decorate=full", "--format=" + LogFormat, "--regexp-ignore-case", "--fixed-strings", filter,
+                "--max-count=" + count.ToString(CultureInfo.InvariantCulture),
+            };
+            if (query.AllBranches)
+            {
+                arguments.Add("--all");
+            }
+            else if (query.Revision is { Length: > 0 } revision)
+            {
+                arguments.Add(revision);
+            }
+
+            if (query.Path is { } path)
+            {
+                arguments.Add("--");
+                arguments.Add(Relative(path));
+            }
+
+            var (_, output, _) = await GitAsync(arguments, cancellationToken, readOnly: true).ConfigureAwait(false);
+            foreach (var commit in ParseLog(output))
+            {
+                found.TryAdd(commit.Hash, commit);
+            }
+        }
+
+        if (term.Length is >= 4 and <= 40 && term.All(Uri.IsHexDigit) && await ResolveAsync(term, cancellationToken).ConfigureAwait(false) is { } hash && !found.ContainsKey(hash))
+        {
+            var (_, output, _) = await GitAsync(["log", "-z", "-1", "--decorate=full", "--format=" + LogFormat, hash], cancellationToken, readOnly: true).ConfigureAwait(false);
+            foreach (var commit in ParseLog(output))
+            {
+                found.TryAdd(commit.Hash, commit);
+            }
+        }
+
+        return [.. found.Values.OrderByDescending(c => c.Date).Take(count)];
     }
 
     /// <summary>The commits that changed lines <paramref name="startLine"/>–<paramref name="endLine"/> of a file (1-based).</summary>

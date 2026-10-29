@@ -161,8 +161,8 @@ public sealed class GitRepositoryActions
     /// <summary>A repository's open pull requests (nothing reaches a host the user isn't signed in to).</summary>
     public required Func<GitService, CancellationToken, Task<GitRepositoryPullRequests>> PullRequests { get; init; }
 
-    /// <summary>The history of a ref (its commit menu runs in its repository).</summary>
-    public required Func<GitService, GitLogQuery, string, GitHistoryViewModel> CreateHistory { get; init; }
+    /// <summary>The history of a ref (its commit menu runs in its repository), and whether it offers Show All Branches.</summary>
+    public required Func<GitService, GitLogQuery, string, bool, GitHistoryViewModel> CreateHistory { get; init; }
 
     /// <summary>A command run in a repository with a ref (or none): Fetch, Pull, Update, Push, Sync, Checkout…</summary>
     public required Func<string, GitService, string?, Task> Run { get; init; }
@@ -185,9 +185,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
 {
     public const string DocumentId = "git-repository";
 
-    /// <summary>The incoming commits listed above the history, at most.</summary>
-    public const int IncomingLimit = 100;
-
     private readonly GitRepositoryActions _actions;
     private readonly Dictionary<string, bool> _expanded = new(StringComparer.Ordinal);
     private readonly Dictionary<GitService, RepositoryData> _data = [];
@@ -202,7 +199,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
     private string? _historyFor;
     private string _header = string.Empty;
     private string? _message;
-    private bool _isIncomingExpanded;
     private int _version;
     private bool _rebuilding;
 
@@ -222,8 +218,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
     public string Title => Localizer.Get("msg.gitRepository.title", "Git Repository");
 
     public ObservableCollection<GitRepositoryNode> Roots { get; } = [];
-
-    public ObservableCollection<GitCommitRow> Incoming { get; } = [];
 
     /// <summary>Text in a branch's, tag's, pull request's or submodule's name (case-insensitive).</summary>
     public string Filter
@@ -315,28 +309,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
     }
 
     public bool HasMessage => _message is not null;
-
-    /// <summary>A local branch with an upstream: the Incoming section and the outgoing count.</summary>
-    public bool HasUpstream { get; private set; }
-
-    public string IncomingHeader { get; private set; } = string.Empty;
-
-    public string HistoryHeader { get; private set; } = string.Empty;
-
-    public bool IsIncomingExpanded
-    {
-        get => _isIncomingExpanded;
-        set => SetField(ref _isIncomingExpanded, value);
-    }
-
-    /// <summary>The selected branch is checked out: Pull and Sync; otherwise Update and no Sync.</summary>
-    public bool IsCurrentBranch { get; private set; }
-
-    public bool CanUpdate => HasUpstream && !IsCurrentBranch;
-
-    public bool CanPush { get; private set; }
-
-    public bool CanSync => HasUpstream && IsCurrentBranch;
 
     /// <summary>Reads every repository's branches, tags, remotes, submodules and pull requests, then the tree.</summary>
     public Task LoadAsync() => LoadAsync(pullRequests: true);
@@ -687,10 +659,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
         _selectionCts?.Cancel();
         var cts = _selectionCts = new CancellationTokenSource();
         _historyFor = HistoryKey(node);
-        Incoming.Clear();
-        HasUpstream = false;
-        IsCurrentBranch = node?.IsCurrent == true;
-        CanPush = node is { Branch: { IsRemote: false } } && node.Repository is { } repo && _data.TryGetValue(repo, out var d) && d.Remotes.Count > 0;
         var submoduleService = _submoduleService;
         _submoduleService = null;
         try
@@ -699,33 +667,14 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
             {
                 case { Kind: GitRepositoryNodeKind.Branch or GitRepositoryNodeKind.Tag, Repository: { } git, Reference: { } reference }:
                     Header = Localizer.Format("msg.gitRepository.branchTagHeader", "Branch / Tag: {0}", node.Branch?.Name ?? node.Tag!.Name);
-                    HasUpstream = node.Branch is { IsRemote: false, Upstream: not null, UpstreamGone: false, UpstreamRef: not null };
-                    IncomingHeader = Localizer.Format("msg.gitRepository.incoming", "Incoming ({0})", node.Branch?.Behind ?? 0);
-                    HistoryHeader = HasUpstream
-                        ? Localizer.Format("msg.gitRepository.localHistoryOutgoing", "Local History ({0} Outgoing)", node.Branch?.Ahead ?? 0)
-                        : Localizer.Get("msg.gitRepository.history", "History");
-                    ShowHistory(git, new GitLogQuery { Revision = reference }, node.Text);
-                    if (HasUpstream && node.Branch is { UpstreamRef: { } upstream, Behind: > 0 })
-                    {
-                        var incoming = await git.LogAsync(new GitLogQuery { Revision = $"{reference}..{upstream}" }, 0, IncomingLimit, cts.Token).ConfigureAwait(true);
-                        if (!cts.IsCancellationRequested)
-                        {
-                            foreach (var commit in incoming)
-                            {
-                                Incoming.Add(new GitCommitRow(commit));
-                            }
-                        }
-                    }
-
+                    ShowHistory(git, new GitLogQuery { Revision = reference }, node.Text, reference, SectionsFor(node, git, reference));
                     break;
                 case { Kind: GitRepositoryNodeKind.PullRequest, Repository: { } git, PullRequest: { } pullRequest }:
-                    Header = Localizer.Format("msg.gitRepository.pullRequestHeader", "Pull Request: {0} {1}", pullRequest.Reference, pullRequest.Title);
-                    HistoryHeader = Localizer.Format("msg.gitRepository.pullRequestCommits", "{0} → {1}", pullRequest.SourceBranch, pullRequest.TargetBranch);
+                    Header = Localizer.Format("msg.gitRepository.pullRequestHeader", "Pull Request: {0} {1} ({2} → {3})", pullRequest.Reference, pullRequest.Title, pullRequest.SourceBranch, pullRequest.TargetBranch);
                     ShowPullRequest(git, pullRequest);
                     break;
                 case { Kind: GitRepositoryNodeKind.Submodule, Submodule: { } submodule }:
                     Header = Localizer.Format("msg.gitRepository.submoduleHeader", "Submodule: {0}", node.Text);
-                    HistoryHeader = Localizer.Get("msg.gitRepository.history", "History");
                     if (!submodule.IsInitialized)
                     {
                         History = null;
@@ -742,7 +691,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
                     }
 
                     _submoduleService = service;
-                    ShowHistory(service, new GitLogQuery(), node.Text);
+                    ShowHistory(service, new GitLogQuery(), node.Text, null, null, canShowAllBranches: false);
                     break;
                 default:
                     Header = string.Empty;
@@ -761,18 +710,44 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
         finally
         {
             submoduleService?.Dispose();
-            foreach (var property in new[] { nameof(HasUpstream), nameof(IncomingHeader), nameof(HistoryHeader), nameof(IsCurrentBranch), nameof(CanUpdate), nameof(CanPush), nameof(CanSync) })
-            {
-                OnPropertyChanged(property);
-            }
         }
     }
 
-    private void ShowHistory(GitService git, GitLogQuery query, string title)
+    /// <summary>
+    /// A local branch with an upstream: Incoming (its upstream's commits it doesn't have) with Fetch and Pull (Update when
+    /// it isn't checked out), and Local History with its outgoing count, Push (with a remote) and Sync (checked out).
+    /// </summary>
+    private GitHistorySections? SectionsFor(GitRepositoryNode node, GitService git, string reference)
+    {
+        if (node.Branch is not { IsRemote: false, Upstream: not null, UpstreamGone: false, UpstreamRef: { } upstream } branch)
+        {
+            return null;
+        }
+
+        var fetch = new GitHistoryLink(Localizer.Get("msg.gitRepository.fetch", "Fetch"), "git.fetch");
+        var pull = node.IsCurrent
+            ? new GitHistoryLink(Localizer.Get("msg.gitRepository.pull", "Pull"), "git.pull")
+            : new GitHistoryLink(Localizer.Get("msg.gitRepository.update", "Update"), "git.updateBranch");
+        var local = new List<GitHistoryLink>();
+        if (_data.TryGetValue(git, out var data) && data.Remotes.Count > 0)
+        {
+            local.Add(new GitHistoryLink(Localizer.Get("msg.gitRepository.push", "Push"), "git.push"));
+        }
+
+        if (node.IsCurrent)
+        {
+            local.Add(new GitHistoryLink(Localizer.Get("msg.gitRepository.sync", "Sync"), "git.sync"));
+        }
+
+        return new GitHistorySections($"{reference}..{upstream}", branch.Behind, branch.Ahead, [fetch, pull], local);
+    }
+
+    private void ShowHistory(GitService git, GitLogQuery query, string title, string? reference, GitHistorySections? sections, bool canShowAllBranches = true)
     {
         Message = null;
-        var history = _actions.CreateHistory(git, query, title);
-        history.ShowBranchFilter = false;
+        var history = _actions.CreateHistory(git, query, title, canShowAllBranches);
+        history.Sections = sections;
+        history.RunLink = command => _actions.Run(command, git, reference);
         History = history;
         _ = history.LoadAsync();
     }
@@ -793,12 +768,8 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
         }
 
         var target = branches.FirstOrDefault(b => b.IsRemote && b.Remote == source.Remote && b.ShortName == pullRequest.TargetBranch);
-        ShowHistory(git, new GitLogQuery { Revision = target is null ? source.FullRef : $"{target.FullRef}..{source.FullRef}" }, pullRequest.Reference);
+        ShowHistory(git, new GitLogQuery { Revision = target is null ? source.FullRef : $"{target.FullRef}..{source.FullRef}" }, pullRequest.Reference, null, null, canShowAllBranches: false);
     }
-
-    /// <summary>Fetch, Pull, Update, Push or Sync from the right side's links, for the selected branch.</summary>
-    public Task RunAsync(string command) =>
-        _selected is { Repository: { } git } node ? _actions.Run(command, git, node.Reference) : Task.CompletedTask;
 
     /// <summary>A command on a node with its ref (F2, Delete): run in its repository, only where its menu has it.</summary>
     public Task RunOnNodeAsync(string command, GitRepositoryNode node) =>
@@ -808,6 +779,43 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
     public Task ActivateAsync(GitRepositoryNode node) => node.Action is { } action ? action() : _actions.Activate?.Invoke(node) ?? Task.CompletedTask;
 
     public Avalonia.Controls.ContextMenu? MenuFor(GitRepositoryNode node) => _actions.MenuFor?.Invoke(node);
+
+    /// <summary>Selects a ref's node in a repository (all of them: null), its folders expanded; false when there's none.</summary>
+    public bool Select(string reference, GitService? git = null)
+    {
+        if (Find(reference, git) is not { } node)
+        {
+            return false;
+        }
+
+        foreach (var ancestor in PathTo(node, Roots) ?? [])
+        {
+            ancestor.IsExpanded = true;
+        }
+
+        node.IsSelected = true;
+        Selected = node;
+        return true;
+    }
+
+    private static List<GitRepositoryNode>? PathTo(GitRepositoryNode target, IEnumerable<GitRepositoryNode> nodes)
+    {
+        foreach (var node in nodes)
+        {
+            if (node.Children.Contains(target))
+            {
+                return [node];
+            }
+
+            if (PathTo(target, node.Children) is { } path)
+            {
+                path.Insert(0, node);
+                return path;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>Selects the node of a ref (<c>refs/heads/main</c>) in a repository (the smoke test, tests).</summary>
     public GitRepositoryNode? Find(string reference, GitService? git = null) =>

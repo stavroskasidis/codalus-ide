@@ -187,41 +187,46 @@ public sealed class GitRepositoryShellTests
         await using var fixture = f;
         var vm = await OpenDocumentAsync(f);
 
-        // main: one incoming commit, none outgoing; Pull and Sync as it's checked out.
-        await ShellFixture.PumpUntil(() => vm.History is { Rows.Count: > 0 } && vm.Incoming.Count == 1);
+        // main: Incoming (1) with Fetch and Pull, then Local History (0 Outgoing) with Push and Sync, as it's checked out.
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0, IncomingRows.Count: 1 });
+        var history = vm.History!;
         Assert.Equal("Branch / Tag: main", vm.Header);
-        Assert.True(vm.HasUpstream);
-        Assert.Equal("Incoming (1)", vm.IncomingHeader);
-        Assert.Equal("Local History (0 Outgoing)", vm.HistoryHeader);
-        Assert.Equal("Add notes upstream", vm.Incoming[0].Subject);
-        Assert.Equal(["initial"], vm.History!.Rows.Select(r => r.Subject));
-        Assert.False(vm.History.ShowBranchFilter);
-        Assert.True(vm.IsCurrentBranch);
-        Assert.True(vm.CanSync);
-        Assert.False(vm.CanUpdate);
+        Assert.Equal(["Incoming (1)", "Local History (0 Outgoing)"], history.SectionHeaders.Select(h => h.Title));
+        Assert.Equal(["Fetch", "Pull"], history.SectionHeaders[0].Links.Select(l => l.Text));
+        Assert.Equal(["Push", "Sync"], history.SectionHeaders[1].Links.Select(l => l.Text));
+        Assert.Equal("Add notes upstream", history.IncomingRows[0].Subject);
+        Assert.NotNull(history.IncomingRows[0].Graph);
+        Assert.Equal(["initial"], history.Rows.Select(r => r.Subject));
 
-        // The view, with the incoming commits listed (CODALUS_UI_SNAPSHOTS keeps a picture of it).
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any());
-        vm.IsIncomingExpanded = true;
+        // The list: each header, then its commits; a header collapses its commits.
+        Assert.Equal(4, history.Items.Count);
+        history.Toggle(history.SectionHeaders[0]);
+        Assert.Equal(3, history.Items.Count);
+        Assert.False(history.SectionHeaders[0].IsExpanded);
+        history.Toggle(history.SectionHeaders[0]);
+
+        // The view (CODALUS_UI_SNAPSHOTS keeps a picture of it).
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().Any(v => v.IsEffectivelyVisible));
         Snapshots(f.Window, "git-repository");
 
-        // feature/sign-in: its own history, no upstream.
+        // An incoming commit's details, in its own tab (a picture of it too).
+        history.Selected = history.IncomingRows[0];
+        await history.OpenSelectedAsync();
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("notes", StringComparison.Ordinal)));
+        Assert.Equal(["NOTES.md"], ((GitCommitDocument)f.Shell.Layout.ActiveDocument!).ViewModel.Files.Select(file => file.RelativePath));
+        Snapshots(f.Window, "git-commit");
+
+        // feature/sign-in: its own history, no upstream, so no sections.
         vm.Selected = vm.Find("refs/heads/feature/sign-in");
-        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: 2 });
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: 2 } && vm.History != history);
         Assert.Equal("Branch / Tag: feature/sign-in", vm.Header);
-        Assert.False(vm.HasUpstream);
-        Assert.Equal("History", vm.HistoryHeader);
-        Assert.Equal(["Sign in", "initial"], vm.History!.Rows.Select(r => r.Subject));
-        Assert.Empty(vm.Incoming);
-        Assert.True(vm.CanPush);
-        Assert.False(vm.CanSync);
+        Assert.Empty(vm.History!.SectionHeaders);
+        Assert.Equal(["Sign in", "initial"], vm.History.Rows.Select(r => r.Subject));
 
         // The remote branch: what origin has.
         vm.Selected = vm.Find("refs/remotes/origin/main");
-        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: 2 });
-        Assert.Equal(["Add notes upstream", "initial"], vm.History!.Rows.Select(r => r.Subject));
-        Assert.False(vm.CanPush);
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: 2 } && vm.History.Rows[0].Subject == "Add notes upstream");
+        Assert.Contains(vm.History!.Rows[0].RefChips, r => r is { Name: "origin/main", Kind: GitRefKind.Remote });
 
         // A tag.
         vm.Selected = vm.Find("refs/tags/v1.0");

@@ -5,63 +5,148 @@
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.GitHistoryView"
              x:DataType="vm:GitHistoryViewModel">
-  <Grid RowDefinitions="Auto,*,4,220">
-    <!-- Filters (not for line history). -->
-    <WrapPanel Margin="6,4" IsVisible="{Binding CanFilter}">
-      <ComboBox ItemsSource="{Binding Branches}" SelectedItem="{Binding Branch}" MinWidth="160" Margin="0,0,6,0" IsVisible="{Binding ShowBranchFilter}"
-                ToolTip.Tip="{l:T gitHistory.branch}" AutomationProperties.Name="{l:T gitHistory.branch}" />
-      <TextBox x:Name="AuthorBox" Text="{Binding Author}" Width="160" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.author}" AutomationProperties.Name="{l:T gitHistory.filterByAuthor}" />
-      <TextBox x:Name="MessageBox" Text="{Binding MessageFilter}" Width="220" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.message}" AutomationProperties.Name="{l:T gitHistory.filterByMessage}" />
-      <Button Classes="iconText compact" controls:ButtonIcon.Kind="filter" Content="{l:T gitHistory.filter}" Click="OnFilter" />
-    </WrapPanel>
+  <UserControl.Styles>
+    <Style Selector="Border.ref">
+      <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="3" />
+      <Setter Property="Padding" Value="3,0,5,0" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+    </Style>
+    <!-- The current branch, as the classic IDE marks it. -->
+    <Style Selector="Border.ref.current">
+      <Setter Property="Background" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <Style Selector="Border.ref.current TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.AccentForeground}" />
+    </Style>
+    <Style Selector="TextBlock.columnHeader">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="4,0" />
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,*">
+    <!-- The toolbar: Refresh, Show All Branches (the Git Repository document), remote branches and tags in the Branch / Tag column; Filter History. -->
+    <DockPanel Margin="4,2">
+      <TextBox x:Name="FilterBox" DockPanel.Dock="Right" Width="240" Text="{Binding Filter}" PlaceholderText="{l:T gitHistory.filterHistory}"
+               AutomationProperties.Name="{l:T gitHistory.filterHistoryByMessageAuthorOrId}" ToolTip.Tip="{l:T gitHistory.filterHistoryByMessageAuthorOrId}">
+        <TextBox.InnerLeftContent>
+          <controls:Icon Kind="search" Margin="6,0,0,0" VerticalAlignment="Center" />
+        </TextBox.InnerLeftContent>
+      </TextBox>
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Click="OnRefresh" ToolTip.Tip="{l:T gitHistory.refresh}" AutomationProperties.Name="{l:T gitHistory.refresh}" />
+        <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="fork" IsChecked="{Binding AllBranches}" IsVisible="{Binding CanShowAllBranches}"
+                      ToolTip.Tip="{l:T gitHistory.showAllBranches}" AutomationProperties.Name="{l:T gitHistory.showAllBranches}" />
+        <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="cloud" IsChecked="{Binding ShowRemoteRefs}"
+                      ToolTip.Tip="{l:T gitHistory.showRemoteBranches}" AutomationProperties.Name="{l:T gitHistory.showRemoteBranches}" />
+        <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="tag" IsChecked="{Binding ShowTags}"
+                      ToolTip.Tip="{l:T gitHistory.showTags}" AutomationProperties.Name="{l:T gitHistory.showTags}" />
+      </StackPanel>
+    </DockPanel>
 
-    <Grid Grid.Row="1">
-      <TextBlock Classes="emptyState" Text="{l:T gitHistory.noCommits}" IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.commits}">
+    <!-- The columns, as the classic IDE's: Branch / Tag, Graph, Message, Author, Date, ID. -->
+    <Border Grid.Row="1" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1" Padding="4,2">
+      <Grid ClipToBounds="True">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="130" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" MinWidth="180" />
+          <ColumnDefinition Width="130" />
+          <ColumnDefinition Width="120" />
+          <ColumnDefinition Width="72" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Classes="columnHeader" Text="{l:T gitHistory.branchTag}" />
+        <Border Grid.Column="1" Width="{Binding GraphWidth}" MinWidth="44">
+          <TextBlock Classes="columnHeader" Text="{l:T gitHistory.graph}" />
+        </Border>
+        <TextBlock Grid.Column="2" Classes="columnHeader" Text="{l:T gitHistory.message}" />
+        <TextBlock Grid.Column="3" Classes="columnHeader" Text="{l:T gitHistory.author}" />
+        <TextBlock Grid.Column="4" Classes="columnHeader" Text="{l:T gitHistory.date}" />
+        <TextBlock Grid.Column="5" Classes="columnHeader" Text="{l:T gitHistory.id}" />
+      </Grid>
+    </Border>
+
+    <Grid Grid.Row="2">
+      <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
+      <ListBox x:Name="List" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.commits}">
         <ListBox.Styles>
-          <Style Selector="ListBoxItem" x:DataType="vm:GitCommitRow">
+          <Style Selector="ListBoxItem">
             <Setter Property="Padding" Value="4,0" />
             <Setter Property="MinHeight" Value="0" />
-            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
-          </Style>
-          <Style Selector="Border.ref">
-            <Setter Property="Background" Value="{DynamicResource Shell.Hover}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="3" />
-            <Setter Property="Padding" Value="4,0" />
-            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
           </Style>
         </ListBox.Styles>
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:GitCommitRow">
-            <Grid ColumnDefinitions="Auto,*,160,130,70" Height="22" Background="Transparent">
-              <controls:GitGraphCell Row="{Binding Graph}" IsHead="{Binding IsHead}" Lanes="{Binding $parent[ListBox].((vm:GitHistoryViewModel)DataContext).Lanes}" VerticalAlignment="Stretch" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0" ClipToBounds="True">
-                <ItemsControl ItemsSource="{Binding Refs}" IsVisible="{Binding HasRefs}">
-                  <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                      <StackPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
-                  </ItemsControl.ItemsPanel>
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                      <Border Classes="ref">
-                        <TextBlock Text="{Binding}" FontSize="{DynamicResource Shell.FontSize.Small}" />
-                      </Border>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-                <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-              </StackPanel>
-              <TextBlock Grid.Column="2" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="3" Text="{Binding Date}" Classes="muted" VerticalAlignment="Center" />
-              <TextBlock Grid.Column="4" Text="{Binding ShortHash}" Classes="muted" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" VerticalAlignment="Center" />
+        <ListBox.DataTemplates>
+          <!-- A section's header: its chevron, its title and its links (Incoming: Fetch, Pull; Local History: Push, Sync). -->
+          <DataTemplate DataType="vm:GitHistorySection" x:DataType="vm:GitHistorySection">
+            <StackPanel Orientation="Horizontal" Height="26" Spacing="6" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
+              <Button Classes="toolbar" Width="20" Height="20" MinWidth="20" Padding="0" Click="OnToggleSection" AutomationProperties.Name="{Binding AccessibleName}">
+                <Path Data="M 0.75 0.75 L 4.75 4.75 L 0.75 8.75" Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.5" Width="6" Height="10" Stretch="None"
+                      HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <Path.RenderTransform>
+                    <RotateTransform Angle="{Binding ChevronAngle}" />
+                  </Path.RenderTransform>
+                </Path>
+              </Button>
+              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <ItemsControl ItemsSource="{Binding Links}" IsVisible="{Binding HasLinks}" VerticalAlignment="Center" Margin="6,0,0,0">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="8" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:GitHistoryLink">
+                    <Button Classes="link" Content="{Binding Text}" Click="OnLink" AutomationProperties.Name="{Binding Text}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+          <!-- A commit. -->
+          <DataTemplate DataType="vm:GitCommitRow" x:DataType="vm:GitCommitRow">
+            <Grid Height="22" Background="Transparent" ClipToBounds="True" AutomationProperties.Name="{Binding AccessibleName}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="180" />
+                <ColumnDefinition Width="130" />
+                <ColumnDefinition Width="120" />
+                <ColumnDefinition Width="72" />
+              </Grid.ColumnDefinitions>
+              <ItemsControl ItemsSource="{Binding ShownRefs}" IsVisible="{Binding HasRefs}" ClipToBounds="True" VerticalAlignment="Center" ToolTip.Tip="{Binding RefsTip}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:GitRefChip">
+                    <Border Classes="ref" Classes.current="{Binding IsCurrent}">
+                      <StackPanel Orientation="Horizontal" Spacing="3">
+                        <controls:Icon Kind="{Binding Icon}" Width="12" Height="12" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <controls:GitGraphCell Grid.Column="1" Row="{Binding Graph}" IsHead="{Binding IsHead}" Lanes="{Binding $parent[ListBox].((vm:GitHistoryViewModel)DataContext).Lanes}" VerticalAlignment="Stretch" MinWidth="44" />
+              <TextBlock Grid.Column="2" Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" ToolTip.Tip="{Binding Subject}" />
+              <TextBlock Grid.Column="3" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" />
+              <TextBlock Grid.Column="4" Text="{Binding Date}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" />
+              <TextBlock Grid.Column="5" Text="{Binding ShortHash}" Classes="muted" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" VerticalAlignment="Center" Margin="4,0" />
             </Grid>
           </DataTemplate>
-        </ListBox.ItemTemplate>
+        </ListBox.DataTemplates>
         <ListBox.ContextMenu>
-          <ContextMenu>
+          <ContextMenu x:Name="CommitMenu">
+            <MenuItem controls:MenuEntry.Icon="document-text" Header="{l:T gitHistory.viewCommitDetails}" Tag="details" Click="OnCommitAction" FontWeight="SemiBold" />
+            <Separator />
             <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" />
             <MenuItem controls:MenuEntry.Icon="branch" Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" />
             <MenuItem controls:MenuEntry.Icon="tag" Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" />
@@ -78,24 +163,6 @@
             <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" />
           </ContextMenu>
         </ListBox.ContextMenu>
-      </ListBox>
-    </Grid>
-
-    <GridSplitter Grid.Row="2" ResizeDirection="Rows" Background="{DynamicResource Shell.Border}" />
-
-    <Grid Grid.Row="3" ColumnDefinitions="*,4,*" IsVisible="{Binding HasDetails}">
-      <SelectableTextBlock Margin="8,6" Text="{Binding DetailsText}" TextWrapping="Wrap" AutomationProperties.Name="{l:T gitHistory.commitDetails}" />
-      <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />
-      <ListBox x:Name="FileList" Grid.Column="2" ItemsSource="{Binding Files}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.changedFiles}">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:GitCommitFileRow">
-            <StackPanel Orientation="Horizontal" Spacing="6" ToolTip.Tip="{Binding RelativePath}">
-              <TextBlock Text="{Binding Status}" FontWeight="SemiBold" Width="12" />
-              <TextBlock Text="{Binding Name}" />
-              <TextBlock Classes="muted" Text="{Binding RelativePath}" TextTrimming="CharacterEllipsis" />
-            </StackPanel>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
       </ListBox>
     </Grid>
   </Grid>

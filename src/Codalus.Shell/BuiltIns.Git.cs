@@ -36,6 +36,15 @@ internal static partial class BuiltIns
     /// <summary>Whether the diff document shows its staging column (D45 question 5, off by default).</summary>
     public const string DiffStagingControlsSetting = "git.diff.showStagingControls";
 
+    /// <summary>Whether the Git Repository document's history shows every branch's commits (its toolbar's Show All Branches).</summary>
+    public const string HistoryAllBranchesSetting = "git.history.showAllBranches";
+
+    /// <summary>Whether a history's Branch / Tag column shows remote branches.</summary>
+    public const string HistoryRemoteBranchesSetting = "git.history.showRemoteBranches";
+
+    /// <summary>Whether a history's Branch / Tag column shows tags.</summary>
+    public const string HistoryTagsSetting = "git.history.showTags";
+
     public static IReadOnlyList<SettingDescriptor> GitSettings()
     {
         var shell = ContributionSource.Shell;
@@ -76,6 +85,30 @@ internal static partial class BuiltIns
                 Description = "Show each change's Stage and Discard (or Unstage) buttons in a column of the diff, between the line numbers and the signs. Hidden, the commands are still on the code's context menu.",
                 Scope = SettingScope.User,
                 Order = 23,
+            },
+            SettingDescriptor.Create(HistoryAllBranchesSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "History: Show All Branches",
+                Category = "Source Control",
+                Description = "In the Git Repository window, show the commits of every branch in one graph instead of the selected branch's. Its toolbar toggles it.",
+                Scope = SettingScope.User,
+                Order = 24,
+            },
+            SettingDescriptor.Create(HistoryRemoteBranchesSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "History: Show Remote Branches",
+                Category = "Source Control",
+                Description = "Show remote branches in the history's Branch / Tag column. The history's toolbar toggles it.",
+                Scope = SettingScope.User,
+                Order = 25,
+            },
+            SettingDescriptor.Create(HistoryTagsSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "History: Show Tags",
+                Category = "Source Control",
+                Description = "Show tags in the history's Branch / Tag column. The history's toolbar toggles it.",
+                Scope = SettingScope.User,
+                Order = 26,
             },
         ];
     }

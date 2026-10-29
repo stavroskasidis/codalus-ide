@@ -622,9 +622,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.depth", "M13", "History with its graph, stash, tags, and a conflict resolved in the merge editor", async () =>
         {
-            // History: the commits of every branch, with the graph laid out.
-            var history = await shell.ShowHistoryAsync().ConfigureAwait(true) ?? throw new SmokeFailure("The history didn't open.");
-            await WaitAsync(() => history.ViewModel.Rows.Any(r => r.Subject == "Smoke test") && history.ViewModel.Rows.All(r => r.Graph is not null), "the history lists the smoke commit with its graph", 60).ConfigureAwait(true);
+            // History: the Git Repository window on the current branch, with the graph laid out.
+            var repository = await shell.ShowGitRepositoryAsync(shell.Git).ConfigureAwait(true) ?? throw new SmokeFailure("The history didn't open.");
+            await WaitAsync(() => repository.ViewModel.History is { } h && h.Rows.Any(r => r.Subject == "Smoke test") && h.Rows.All(r => r.Graph is not null), "the history lists the smoke commit with its graph", 60).ConfigureAwait(true);
 
             // Stash and pop an edit.
             var original = await File.ReadAllTextAsync(Greeter).ConfigureAwait(true);

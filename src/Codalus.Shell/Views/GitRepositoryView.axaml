@@ -46,39 +46,9 @@
 
     <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />
 
-    <!-- The selected branch's or tag's history: Incoming (a local branch with an upstream), then its history. -->
+    <!-- The selected branch's or tag's history: Incoming and Local History (a local branch with an upstream), the toolbar and the columns. -->
     <DockPanel Grid.Column="2">
       <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="8,6,8,2" Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
-      <Grid DockPanel.Dock="Top" IsVisible="{Binding HasUpstream}" Margin="4,0">
-        <Expander x:Name="IncomingSection" Header="{Binding IncomingHeader}" IsExpanded="{Binding IsIncomingExpanded}" HorizontalAlignment="Stretch" Padding="0">
-          <ListBox ItemsSource="{Binding Incoming}" MaxHeight="180" Background="Transparent" AutomationProperties.Name="{l:T gitRepository.incomingCommits}">
-            <ListBox.ItemTemplate>
-              <DataTemplate x:DataType="vm:GitCommitRow">
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Height="22" AutomationProperties.Name="{Binding AccessibleName}">
-                  <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" MinWidth="120" />
-                  <TextBlock Grid.Column="1" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" MaxWidth="140" Margin="12,0,0,0" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="2" Text="{Binding Date}" Classes="muted" Margin="12,0,0,0" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="3" Text="{Binding ShortHash}" Classes="muted" Margin="12,0,0,0" VerticalAlignment="Center" />
-                </Grid>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
-        </Expander>
-        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,40,0">
-          <Button Classes="link" Content="{l:T gitRepository.fetch}" Tag="git.fetch" Click="OnLink" />
-          <Border Width="1" Margin="2,5" Background="{DynamicResource Shell.Border}" />
-          <Button Classes="link" Content="{l:T gitRepository.pull}" Tag="git.pull" Click="OnLink" IsVisible="{Binding IsCurrentBranch}" />
-          <Button Classes="link" Content="{l:T gitRepository.update}" Tag="git.updateBranch" Click="OnLink" IsVisible="{Binding CanUpdate}" />
-        </StackPanel>
-      </Grid>
-      <DockPanel DockPanel.Dock="Top" Margin="8,4,8,2" IsVisible="{Binding HasHistory}">
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" IsVisible="{Binding CanPush}">
-          <Button Classes="link" Content="{l:T gitRepository.push}" Tag="git.push" Click="OnLink" />
-          <Border Width="1" Margin="2,5" Background="{DynamicResource Shell.Border}" IsVisible="{Binding CanSync}" />
-          <Button Classes="link" Content="{l:T gitRepository.sync}" Tag="git.sync" Click="OnLink" IsVisible="{Binding CanSync}" />
-        </StackPanel>
-        <TextBlock Text="{Binding HistoryHeader}" FontWeight="SemiBold" VerticalAlignment="Center" />
-      </DockPanel>
       <Panel>
         <TextBlock Classes="emptyState" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
         <Panel IsVisible="{Binding HasHistory}">
