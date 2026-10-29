@@ -80,7 +80,7 @@ jobs:
           fi
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
       - if: steps.kind.outputs.kind != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - if: steps.kind.outputs.kind != ''
@@ -201,7 +201,7 @@ jobs:
     # one (0.6.0's release run; develop's run 40241261003, M50), so macOS gets 20 minutes more.
     timeout-minutes: ${{ matrix.os == 'macos-latest' && 70 || 50 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
       - id: setup
         uses: ./.github/actions/setup
@@ -218,7 +218,7 @@ jobs:
       - name: Save the NuGet cache (develop, one job per OS)
         # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.nuget/packages
           key: ${{ steps.setup.outputs.nuget-cache-key }}
@@ -242,7 +242,7 @@ jobs:
         # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
         # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
         if: always() && steps.downloaded.outputs.any == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/codalus-downloads
           key: ${{ steps.setup.outputs.downloads-key }}
@@ -267,7 +267,7 @@ jobs:
             cat "$dump.stacks.txt"
             echo "::endgroup::"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.shard }}
@@ -304,7 +304,7 @@ jobs:
     # of time in the middle of a passing smoke test (#111, run 39668401109).
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: setup
         uses: ./.github/actions/setup
         with:
@@ -339,12 +339,12 @@ jobs:
         # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
         # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
         if: always() && steps.downloaded.outputs.any == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/codalus-downloads
           key: ${{ steps.setup.outputs.downloads-key }}
       # Always: the screenshots are the website's (CLAUDE.md, Website), and a failure's report.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: smoke-test-${{ runner.os }}
@@ -402,7 +402,7 @@ jobs:
     # The version and kind go into each command, never the job's environment: MSBuild reads environment variables as
     # properties, so a VERSION there would stamp every project the smoke test builds (Plain.1.0.0.nupkg wasn't).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the release notes read the history and the tags
       # The smoke test has a .NET 11 step (M30); dumps and attaching need the developer tools (debug.companion,
@@ -462,17 +462,17 @@ jobs:
         # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
         # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
         if: always() && steps.downloaded.outputs.any == 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ${{ runner.temp }}/codalus-downloads
           key: ${{ steps.setup.outputs.downloads-key }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: smoke-test-${{ matrix.rid }}
           path: artifacts/smoke-test/
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.rid }}
           path: artifacts/packages/
@@ -508,7 +508,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages)
         if: runner.os == 'Linux'
@@ -551,7 +551,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with:
           display: true
@@ -636,7 +636,7 @@ jobs:
             --out "ci-results/regression-${RUNNER_OS}.md" || status=$?
           cat "ci-results/regression-${RUNNER_OS}.md" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bench-results-${{ runner.os }}
@@ -682,11 +682,11 @@ jobs:
       contents: write
       pages: read # the site's address, to keep the nightly it serves
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: packages-*
           path: downloaded
@@ -754,7 +754,7 @@ jobs:
       url: ${{ steps.address.outputs.url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
       # Pages reports http:// for a project site under its owner's custom domain, though the site is served over HTTPS.
       - id: address
         shell: bash
@@ -807,7 +807,7 @@ jobs:
       contents: read
       id-token: write # the OIDC token nuget.org trades for an API key
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Pack the plugin SDK
         shell: bash
@@ -855,7 +855,7 @@ jobs:
       pull-requests: write
       checks: write # the branch's ci check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
