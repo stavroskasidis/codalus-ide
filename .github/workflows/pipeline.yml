@@ -179,7 +179,9 @@ jobs:
 
   # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
   # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
-  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows).
+  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows). A fourth,
+  # debug-codalus, runs the debugger classes under Codalus IDE's own CoreCLR adapter (M54, ADR 0086), on Linux arm64
+  # too, where it is the only shard (the M54 plan: the other shards' coverage there is the packages' smoke test).
   test:
     name: test (${{ matrix.os }}, ${{ matrix.shard }})
     needs: gate
@@ -191,7 +193,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        shard: [shell-1, shell-2, others]
+        shard: [shell-1, shell-2, others, debug-codalus]
+        include:
+          - { os: ubuntu-24.04-arm, shard: debug-codalus }
     runs-on: ${{ matrix.os }}
     # macOS runners are the slowest and vary most: a Shell shard that takes 16 to 24 minutes on one ran past 40 on a slow
     # one (0.6.0's release run; develop's run 40241261003, M50), so macOS gets 20 minutes more.
@@ -208,8 +212,9 @@ jobs:
           devtools: true
           display: true
           downloads: true
-      - run: dotnet restore Codalus.slnx
-      - run: dotnet build Codalus.slnx -c Release --no-restore
+      # debug-codalus builds only its test project (with the debug companion host it references).
+      - run: dotnet restore ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }}
+      - run: dotnet build ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }} -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
         # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'

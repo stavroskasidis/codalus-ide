@@ -1,6 +1,6 @@
 # Debugging
 
-Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
+Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)). Codalus IDE also has a .NET debugger of its own, a preview you can turn on: [the Codalus debugger](#the-codalus-debugger-preview).
 
 On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
 
@@ -184,8 +184,25 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 - Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them. It comes from a .NET installation with the dump's runtime version (`dotnet --list-runtimes`): on Linux and macOS, a dump of a runtime that isn't installed (a self-contained app's) doesn't open.
 - On macOS, the first dump may make the system ask for your password (access to developer tools). The dump waits until you approve it, and is abandoned with a message after 3 minutes.
 
+## The Codalus debugger (preview)
+
+Codalus IDE has a .NET debugger of its own, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). netcoredbg stays the default while it matures: to try it, set **`debug.adapter`** to `codalus` (Options › Debugging › **Debugger for .NET programs**). It applies from the next session, to Start Debugging, Attach to Process, debugging tests and several startup projects, and the first line in the Debug Console says which debugger a session uses.
+
+What it does that netcoredbg doesn't:
+- the program's own exit code on macOS (netcoredbg reports 0 there)
+- casts and C#'s operators in Watch, QuickWatch and conditions
+- exception module conditions on .NET 11 programs
+
+What it doesn't do yet, so netcoredbg debugs these and the Debug Console says why:
+- programs in the integrated terminal or a console window (they come next)
+- x64 programs on Apple silicon (.NET 5 and earlier under Rosetta 2)
+- remote targets: SSH, containers and WSL
+
+Its expressions are the .NET Framework debugger's C# subset: names, members, indexers, method calls, operators, `?:`, `??` and casts, but no `new`, lambdas or generic methods. Hot Reload while debugging is planned for it next ([ADR 0086](../adr/0086-a-managed-coreclr-debugger.md)). If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its log there, to attach to a report.
+
 ## Settings
 
+- `debug.adapter`: the debugger for .NET programs, `netcoredbg` (the default) or `codalus` ([the Codalus debugger](#the-codalus-debugger-preview), a preview).
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.

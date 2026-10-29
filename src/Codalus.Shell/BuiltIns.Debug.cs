@@ -116,6 +116,15 @@ internal static partial class BuiltIns
             EnumDescriptions = ["Debug Console", "Integrated terminal", "Console window (Windows)"],
             Order = 5,
         },
+        SettingDescriptor.Create(ShellHost.DebugAdapterSetting, $"\"{Workbench.Debugging.DebugService.NetcoredbgAdapter}\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Debugger for .NET programs",
+            Category = "Debugging",
+            Description = "The debugger that debugs .NET programs from the next session: netcoredbg, or the Codalus debugger, Codalus IDE's own (a preview). The Codalus debugger reports exit codes on macOS and evaluates casts and C#'s operators; it doesn't yet debug programs in the integrated terminal or a console window, on remote targets, or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
+            Enum = [Workbench.Debugging.DebugService.NetcoredbgAdapter, Workbench.Debugging.DebugService.CodalusAdapter],
+            EnumDescriptions = ["netcoredbg", "Codalus debugger (preview)"],
+            Order = 8,
+        },
         SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Container tool",

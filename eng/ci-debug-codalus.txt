@@ -1,0 +1,18 @@
+# The debugger test classes CI runs under Codalus IDE's own CoreCLR adapter (`codalus-debughost --clr-dap`, M54, ADR
+# 0086) in the debug-codalus shard (eng/ci-test.sh), with CODALUS_DEBUG_ADAPTER=codalus; the other shards run them
+# under netcoredbg, the default. They are the parity set: every test here passes under both adapters, with no skip for
+# either (the M54 plan). Tests of netcoredbg itself aren't here: NetcoredbgTests, DebugServiceStartTests (a missing
+# netcoredbg, the x64 one), LateRuntimeTests (its 5-second wait), RemoteTests (remote targets keep netcoredbg).
+# TODO(issue): M54b adds the terminal and console window classes (PR 3) and the Shell's and Plugins' debugger classes (PR 4).
+ClrDebuggerTests
+DebugServiceTests
+DataTipDebuggerTests
+DebuggerDepthTests
+DebuggerDisplayTests
+BreakpointFilterSessionTests
+CollectionVisualizerTests
+FSharpDebuggingTests
+PinnedDataTipSessionTests
+PluginVisualizerTests
+SessionsTests
+VisualBasicDebuggingTests

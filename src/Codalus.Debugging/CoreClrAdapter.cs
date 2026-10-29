@@ -15,4 +15,10 @@ public static class CoreClrAdapter
     /// starts the program for the adapter listening on the named pipe.
     /// </summary>
     public const string LaunchArgument = "--launch";
+
+    /// <summary>
+    /// A folder for the adapter's logs: each session writes its DAP traffic and its own messages to
+    /// <c>clr-dap-&lt;time&gt;-&lt;id&gt;.log</c> there, to diagnose it (as <c>CODALUS_NETCOREDBG_LOG</c> does for netcoredbg).
+    /// </summary>
+    public const string LogVariable = "CODALUS_CLR_DEBUGGER_LOG";
 }
