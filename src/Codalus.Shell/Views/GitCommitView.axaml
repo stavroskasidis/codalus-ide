@@ -23,9 +23,9 @@
           <Button Classes="link" Content="{l:T gitCommit.reset}" IsEnabled="{Binding HasDetails}">
             <Button.Flyout>
               <MenuFlyout Placement="BottomEdgeAlignedLeft">
-                <MenuItem Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnMenuAction" />
-                <MenuItem Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnMenuAction" />
-                <MenuItem Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="stash" Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnMenuAction" />
               </MenuFlyout>
             </Button.Flyout>
           </Button>
