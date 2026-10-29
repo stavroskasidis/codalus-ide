@@ -1,6 +1,6 @@
 # 0086. A managed CoreCLR debugger adapter, and Hot Reload while debugging
 
-- **Status:** accepted (2026-10-28, D48 in the [roadmap](../roadmap.md#decision-register)), after three spikes on Linux (x64, arm64), macOS (arm64, x64) and Windows x64. Phase 1 is planned as [M54](../roadmap.md#m54--a-managed-coreclr-debugger-phase-1) (2026-10-28); nothing is built yet.
+- **Status:** accepted (2026-10-28, D48 in the [roadmap](../roadmap.md#decision-register)), after three spikes on Linux (x64, arm64), macOS (arm64, x64) and Windows x64. Phase 1 is built as [M54](../roadmap.md#m54--a-managed-coreclr-debugger-phase-1) (2026-10-29, [m54a](../checkpoints/m54a.md), [m54b](../checkpoints/m54b.md)); phases 2 and 3 aren't scheduled.
 - **Date:** 2026-10-28
 - **Deciders:** maintainer (D48: accepted as proposed)
 - **Amends, as each phase lands:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
@@ -105,6 +105,6 @@ What it found:
 - Every fix to the debugger becomes ours, on three OSes. ICorDebug's behavior off Windows is known only from these spikes until phase 1's suites run on CI.
 - The Linux and macOS packages grow by ClrDebug (about 8 MB) and dbgshim (0.3 to 0.4 MB per platform) during phases 1 and 2, while netcoredbg still ships; the size gate counts both.
 - The Linux arm64 run that was a `TODO(issue)` here ran on 2026-10-28, on GitHub's hosted runner (no arm64 machine for a Remote Control session), and passed every check. Phase 1's suites can run on that runner too; today only the smoke test and the packages do.
-- `TODO(issue)`: the one silent attach failure on Linux, if it comes back under the phase 1 suites (not seen again in 200 more Linux x64 attach runs, nor in 165 on Linux arm64).
+- `TODO(issue)`: the one silent attach failure on Linux, if it comes back under the phase 1 suites (not seen again in 200 more Linux x64 attach runs, nor in 165 on Linux arm64). *Update 2026-10-29 (M54):* not seen under the `debug-codalus` shard's suites so far, which keep the adapter's log of every session (`CODALUS_CLR_DEBUGGER_LOG`) for it. The suites found another attach race instead: a stop answered before the attach's module loads had reached the session ([m54a](../checkpoints/m54a.md), `docs/ci-flakes.md`).
 - The launch spike that was a `TODO(issue)` here ran on 2026-10-28 (spike 3); the launcher process is the decision above.
 - Worth revisiting if netcoredbg gains a DAP request for Hot Reload before phase 1 is built, which would leave (a) or (b) the cheaper way to most of this.
