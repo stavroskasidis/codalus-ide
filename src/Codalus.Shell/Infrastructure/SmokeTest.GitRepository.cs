@@ -14,14 +14,18 @@ internal sealed partial class SmokeTest
 {
     private async Task GitRepositoryStepAsync()
     {
-        shell.Run("git.manageBranches");
-        await WaitAsync(() => shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { IsLoading: false } vm } && vm.Find("refs/heads/smoke/branch") is not null, "Manage Branches opens the Git Repository document with the branches").ConfigureAwait(true);
+        // git.depth opened the document already, with the refs of then: Manage Branches brings it back and reads them
+        // again (awaited), and the branch and the tag git.depth made after it arrive (Linux CI, run 40902428637).
+        await shell.RunAsync("git.manageBranches", []).ConfigureAwait(true);
+        await WaitAsync(
+            () => shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { IsLoading: false } vm }
+                && vm.Find("refs/heads/smoke/branch") is not null && vm.Find("refs/heads/smoke/theirs") is not null && vm.Find("refs/tags/smoke-tag") is not null,
+            "Manage Branches opens the Git Repository document with the branches and the tag").ConfigureAwait(true);
         var vm = ((GitRepositoryDocument)shell.Layout.ActiveDocument!).ViewModel;
         await WaitAsync(() => window.GetVisualDescendants().OfType<GitRepositoryView>().Any(), "the Git Repository view renders").ConfigureAwait(true);
 
         var current = vm.Find("refs/heads/smoke/branch")!;
         Check(current.IsCurrent && current.Text == "branch", "the current branch is in the smoke folder, in bold");
-        Check(vm.Find("refs/heads/smoke/theirs") is not null && vm.Find("refs/tags/smoke-tag") is not null, "the other branch and the tag are in the tree");
         Check(vm.Roots.Select(r => r.Text).SequenceEqual(["Branches / Tags", "Pull Requests", "Submodules"]), "the tree's groups are the classic IDE's");
 
         vm.Selected = vm.Find("refs/heads/smoke/theirs");
