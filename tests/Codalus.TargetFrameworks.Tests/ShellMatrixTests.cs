@@ -25,7 +25,11 @@ public sealed class ShellMatrixTests
         Assert.Equal("succeeded", f.Shell.Solutions.RestoreState);
 
         // The design-time builds after the restore: .NET Core 2.x and 3.0 get their framework from packages.
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600);
+        // The projects still without references, and what the design-time build gave each (timed out once in the full
+        // suite of eng/validate.sh on Linux, 2026-10-29, and passed alone).
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600, describe: () =>
+            "no references yet: " + string.Join(", ", f.Shell.Solutions.Projects.Keys.Where(p => !MatrixFixture.HasReferences(f.Shell.Solutions, p)).Select(p =>
+                $"{Path.GetFileNameWithoutExtension(p)} ({(f.Shell.Solutions.CompilerInputs.TryGetValue(p, out var inputs) ? inputs.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase)) + " references" : "no compiler inputs")})")));
         return folder;
     }
 
