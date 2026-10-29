@@ -73,11 +73,12 @@ public sealed class DapConnectionTests
                 raised.Add(e.Name);
             }
         };
-        _ = connection.Closed.ContinueWith(_ =>
+        // What was raised when Closed completed (its continuations run later, so awaiting Closed alone can't tell).
+        var raisedWhenClosed = connection.Closed.ContinueWith(_ =>
         {
             lock (raised)
             {
-                raised.Add("closed");
+                return raised.ToArray();
             }
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         connection.Start();
@@ -95,11 +96,7 @@ public sealed class DapConnectionTests
         await Task.WhenAny(connection.Closed, Task.Delay(500, ct));
         Assert.False(connection.Closed.IsCompleted, "Closed completed with events still to raise");
         held.SetResult();
-        await connection.Closed.WaitAsync(TimeSpan.FromSeconds(10), ct);
-        lock (raised)
-        {
-            Assert.Equal(["output", "exited", "terminated", "closed"], raised);
-        }
+        Assert.Equal(["output", "exited", "terminated"], await raisedWhenClosed.WaitAsync(TimeSpan.FromSeconds(10), ct));
     }
 
     private static async Task WaitAsync(Func<bool> condition, CancellationToken cancellationToken)
