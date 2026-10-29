@@ -90,6 +90,8 @@ public sealed partial class ShellHost
                 var restart = Localizer.Get("action.debugHotReload.restart", "Restart");
                 var keepGoing = Localizer.Get("action.debugHotReload.continue", "Continue with the Old Code");
                 var first = outcome.Diagnostics is [var rude, ..] ? rude.Message : string.Empty;
+                DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}",
+                    string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}"))));
                 var choice = await Workbench.Notifications.Warning(
                     Localizer.Format("msg.debugHotReload.rude", "An edit can't be applied while the program runs: {0} Restart to run it, or go on with the code it started with.", first),
                     restart, keepGoing).Result.ConfigureAwait(true);

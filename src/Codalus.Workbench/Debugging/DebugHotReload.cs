@@ -45,6 +45,7 @@ public sealed class DebugHotReload : IAsyncDisposable
     private readonly SemaphoreSlim _applying = new(1, 1);
     private readonly Lock _gate = new();
     private Task<string?>? _starting;
+    private CancellationTokenSource? _startCancel;
     private string? _session;
 
     public DebugHotReload(DebugService debugger, Func<LanguageHostClient?> client)
@@ -83,15 +84,20 @@ public sealed class DebugHotReload : IAsyncDisposable
         // Off the debugger's event loop, which handles the adapter's events one at a time.
         lock (_gate)
         {
-            _starting ??= Task.Run(StartAsync);
+            if (_starting is null)
+            {
+                _startCancel = new CancellationTokenSource();
+                var cancel = _startCancel.Token;
+                _starting = Task.Run(() => StartAsync(cancel));
+            }
         }
     }
 
     /// <summary>
     /// Starts the language host's session as soon as the debug session runs: its baseline is the files as built, so
-    /// an edit saved before it started couldn't be applied.
+    /// an edit saved before it started couldn't be applied. The language host waits for the solution to load first.
     /// </summary>
-    private async Task<string?> StartAsync()
+    private async Task<string?> StartAsync(CancellationToken cancellationToken)
     {
         try
         {
@@ -100,14 +106,14 @@ public sealed class DebugHotReload : IAsyncDisposable
                 return null;
             }
 
-            var capabilities = await adapter.Connection.RequestAsync("codalus/hotReloadCapabilities", JsonElement.Parse("{}"), s_json.JsonElement, s_json.HotReloadCapabilitiesResponse).ConfigureAwait(false);
+            var capabilities = await adapter.Connection.RequestAsync("codalus/hotReloadCapabilities", JsonElement.Parse("{}"), s_json.JsonElement, s_json.HotReloadCapabilitiesResponse, cancellationToken).ConfigureAwait(false);
             if (capabilities.Capabilities.Length == 0)
             {
                 return null;
             }
 
             var session = "debug-" + Guid.NewGuid().ToString("N");
-            if (!await client.HotReloadStartAsync(session, [], capabilities.Capabilities, CancellationToken.None).ConfigureAwait(false))
+            if (!await client.HotReloadStartAsync(session, [], capabilities.Capabilities, cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
@@ -135,7 +141,9 @@ public sealed class DebugHotReload : IAsyncDisposable
             starting = _starting;
         }
 
-        if (starting is null || await starting.ConfigureAwait(false) is not { } session || _client() is not { } client)
+        // A session still starting (the language host waits for the solution to load) has nothing to apply yet, and
+        // Continue doesn't wait for it.
+        if (starting is not { IsCompleted: true } || await starting.ConfigureAwait(false) is not { } session || _client() is not { } client)
         {
             return HotReloadOutcome.Of(HotReloadOutcome.Unavailable);
         }
@@ -203,11 +211,20 @@ public sealed class DebugHotReload : IAsyncDisposable
     private async Task EndAsync()
     {
         Task<string?>? starting;
+        CancellationTokenSource? cancel;
         lock (_gate)
         {
             starting = _starting;
+            cancel = _startCancel;
             _starting = null;
+            _startCancel = null;
             _session = null;
+        }
+
+        if (cancel is not null)
+        {
+            await cancel.CancelAsync().ConfigureAwait(false);
+            cancel.Dispose();
         }
 
         if (starting is not null && await starting.ConfigureAwait(false) is { } session && _client() is { } client)

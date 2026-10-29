@@ -2311,6 +2311,7 @@
   "msg.debugHotReload.failed": "The code changes couldn't be applied to the program: {0}",
   "msg.debugHotReload.language": "Hot Reload while debugging applies C#, Visual Basic and Razor edits; F# and XAML edits run after a restart.",
   "msg.debugHotReload.rude": "An edit can't be applied while the program runs: {0} Restart to run it, or go on with the code it started with.",
+  "msg.debugHotReload.rudeLog": "Hot Reload: the code changes need a restart: {0}",
   "msg.debugSessions.aDebugSessionIsAlreadyRunning": "A debug session is already running.",
   "msg.debugSessions.attachOverSsh": "Attach over SSH",
   "msg.debugSessions.copy": "Copy",
