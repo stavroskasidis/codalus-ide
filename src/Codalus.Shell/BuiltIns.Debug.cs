@@ -120,7 +120,7 @@ internal static partial class BuiltIns
         {
             Title = "Debugger for .NET programs",
             Category = "Debugging",
-            Description = "The debugger that debugs .NET programs from the next session: netcoredbg, or the Codalus debugger, Codalus IDE's own (a preview). The Codalus debugger reports exit codes on macOS and evaluates casts and C#'s operators; it doesn't yet debug programs in the integrated terminal or a console window, on remote targets, or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
+            Description = "The debugger that debugs .NET programs from the next session: netcoredbg, or the Codalus debugger, Codalus IDE's own (a preview). The Codalus debugger reports exit codes on macOS, evaluates casts and C#'s operators, and starts programs in the integrated terminal on every OS, stopping on Main's first line; it doesn't yet debug remote targets or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
             Enum = [Workbench.Debugging.DebugService.NetcoredbgAdapter, Workbench.Debugging.DebugService.CodalusAdapter],
             EnumDescriptions = ["netcoredbg", "Codalus debugger (preview)"],
             Order = 8,

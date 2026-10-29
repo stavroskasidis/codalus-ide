@@ -20,11 +20,17 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
     public string Runtime => ".NET";
 
+    /// <summary>
+    /// The client's <c>runInTerminal</c> (when it has one): starts a command in its integrated terminal or a console
+    /// window and returns the process id it started, for a launch whose <see cref="NetFxDebugArguments.Console"/> asks.
+    /// </summary>
+    public Func<RunInTerminalRequestArguments, int?>? RunInTerminal { get; set; }
+
     public IClrProcess Launch(NetFxDebugArguments arguments, Action<string, string> output)
     {
         var shim = DbgShimLibrary.Shim;
         var program = arguments.Program!;
-        var launched = LaunchedProgram.Start(arguments, output);
+        var launched = LaunchedProgram.Start(arguments, output, RunInTerminal);
         var pid = launched.ProcessId;
         var attached = new TaskCompletionSource<CorDebugTarget>(TaskCreationOptions.RunContinuationsAsynchronously);
 

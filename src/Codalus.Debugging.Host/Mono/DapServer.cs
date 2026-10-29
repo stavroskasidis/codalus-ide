@@ -11,11 +11,14 @@ internal sealed class DapRequestException(string message) : Exception(message);
 /// <summary>
 /// The server side of the Debug Adapter Protocol over a pair of streams (<c>Content-Length</c> framing, M20b): requests
 /// are handed to <see cref="Handler"/> one at a time, in order, and answered with its body or its error; events can be
-/// sent from any thread. Source-generated JSON throughout.
+/// sent from any thread. A handler can send the client a request of its own (<see cref="RequestAsync"/>, the
+/// <c>runInTerminal</c> reverse request, M54): the requests run on a chain of their own while the input is read, so the
+/// answer is read while the handler waits for it. Source-generated JSON throughout.
 /// </summary>
 internal sealed class DapServer(Stream input, Stream output) : IDisposable
 {
     private readonly SemaphoreSlim _write = new(1, 1);
+    private readonly Dictionary<int, TaskCompletionSource<JsonElement?>> _pending = [];
     private int _seq;
 
     /// <summary>Where every message read and written goes too, when set (CoreCLR's adapter's log, M54).</summary>
@@ -27,28 +30,126 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
     /// <summary>Reads and answers requests until the input ends or <paramref name="cancellationToken"/> fires.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested && await ReadAsync(cancellationToken).ConfigureAwait(false) is { } message)
+        var requests = Task.CompletedTask;
+        try
         {
-            using var document = message;
-            var root = document.RootElement;
-            Trace?.WriteLine("<- " + root.GetRawText());
-            if (!root.TryGetProperty("type", out var type) || type.GetString() != "request")
+            while (!cancellationToken.IsCancellationRequested && await ReadAsync(cancellationToken).ConfigureAwait(false) is { } message)
             {
-                continue;
-            }
+                using var document = message;
+                var root = document.RootElement;
+                Trace?.WriteLine("<- " + root.GetRawText());
+                var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+                if (type == "response")
+                {
+                    Answered(root);
+                    continue;
+                }
 
-            var seq = root.TryGetProperty("seq", out var s) ? s.GetInt32() : 0;
-            var command = root.TryGetProperty("command", out var c) ? c.GetString() ?? string.Empty : string.Empty;
-            var arguments = root.TryGetProperty("arguments", out var a) ? a.Clone() : default;
-            try
-            {
-                var body = Handler is null ? null : await Handler(command, arguments, cancellationToken).ConfigureAwait(false);
-                await RespondAsync(seq, command, success: true, body, null).ConfigureAwait(false);
+                if (type != "request")
+                {
+                    continue;
+                }
+
+                var seq = root.TryGetProperty("seq", out var s) ? s.GetInt32() : 0;
+                var command = root.TryGetProperty("command", out var c) ? c.GetString() ?? string.Empty : string.Empty;
+                var arguments = root.TryGetProperty("arguments", out var a) ? a.Clone() : default;
+                var previous = requests;
+                requests = AnswerAsync(previous, seq, command, arguments, cancellationToken);
             }
-            catch (Exception ex) when (ex is DapRequestException or InvalidOperationException or ArgumentException or IOException or global::Mono.Debugger.Soft.VMDisconnectedException or global::Mono.Debugger.Soft.InvalidStackFrameException or global::Mono.Debugger.Soft.AbsentInformationException or global::Mono.Debugger.Soft.CommandException or global::Mono.Debugger.Soft.ObjectCollectedException or NotSupportedException or TimeoutException or System.Runtime.InteropServices.COMException)
+        }
+        finally
+        {
+            lock (_pending)
             {
-                await RespondAsync(seq, command, success: false, null, ex.Message).ConfigureAwait(false);
+                foreach (var pending in _pending.Values)
+                {
+                    pending.TrySetException(new IOException("The client went away."));
+                }
+
+                _pending.Clear();
             }
+        }
+
+        await requests.ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends the client a request (a reverse request: <c>runInTerminal</c>) and returns its response's body; throws
+    /// <see cref="DapRequestException"/> when the client refused it.
+    /// </summary>
+    public async Task<JsonElement?> RequestAsync<T>(string command, T arguments, JsonTypeInfo<T> info, CancellationToken cancellationToken)
+    {
+        var answer = new TaskCompletionSource<JsonElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var seq = Interlocked.Increment(ref _seq);
+        lock (_pending)
+        {
+            _pending[seq] = answer;
+        }
+
+        try
+        {
+            var body = JsonSerializer.SerializeToElement(arguments, info);
+            await WriteAsync(w =>
+            {
+                w.WriteNumber("seq", seq);
+                w.WriteString("type", "request");
+                w.WriteString("command", command);
+                w.WritePropertyName("arguments");
+                body.WriteTo(w);
+            }).ConfigureAwait(false);
+            return await answer.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            lock (_pending)
+            {
+                _pending.Remove(seq);
+            }
+        }
+    }
+
+    private void Answered(JsonElement response)
+    {
+        var seq = response.TryGetProperty("request_seq", out var s) ? s.GetInt32() : 0;
+        TaskCompletionSource<JsonElement?>? answer;
+        lock (_pending)
+        {
+            _pending.TryGetValue(seq, out answer);
+        }
+
+        if (answer is null)
+        {
+            return;
+        }
+
+        if (response.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
+        {
+            answer.TrySetException(new DapRequestException(response.TryGetProperty("message", out var m) ? m.GetString() ?? "The client refused." : "The client refused."));
+            return;
+        }
+
+        answer.TrySetResult(response.TryGetProperty("body", out var body) ? body.Clone() : null);
+    }
+
+    /// <summary>Answers one request once the ones before it are answered: they run in order, as they arrived.</summary>
+    private async Task AnswerAsync(Task previous, int seq, string command, JsonElement arguments, CancellationToken cancellationToken)
+    {
+        // Off the read loop's thread even when the request before has been answered (an await of a finished task goes on
+        // synchronously): a handler that waits for the client's answer to a request of its own would block the loop
+        // that reads that answer.
+        await Task.Yield();
+        await previous.ConfigureAwait(false);
+        try
+        {
+            var body = Handler is null ? null : await Handler(command, arguments, cancellationToken).ConfigureAwait(false);
+            await RespondAsync(seq, command, success: true, body, null).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapRequestException or InvalidOperationException or ArgumentException or IOException or global::Mono.Debugger.Soft.VMDisconnectedException or global::Mono.Debugger.Soft.InvalidStackFrameException or global::Mono.Debugger.Soft.AbsentInformationException or global::Mono.Debugger.Soft.CommandException or global::Mono.Debugger.Soft.ObjectCollectedException or NotSupportedException or TimeoutException or System.Runtime.InteropServices.COMException)
+        {
+            await RespondAsync(seq, command, success: false, null, ex.Message).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 

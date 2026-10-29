@@ -138,8 +138,8 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Whether a process runs as x64 on an Arm64 Mac (under Rosetta 2), which keeps netcoredbg 3.1.3 (ADR 0030).</summary>
     public Func<int, bool> IsX64ProcessOnArm64Mac { get; set; } = DefaultIsX64ProcessOnArm64Mac;
 
-    /// <summary>Whether this session uses Codalus IDE's adapter: the setting, or the variable over it.</summary>
-    private bool UsesCodalusAdapter =>
+    /// <summary>Whether sessions use Codalus IDE's adapter: the setting, or the variable over it.</summary>
+    public bool UsesCodalusAdapter =>
         string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), CodalusAdapter, StringComparison.OrdinalIgnoreCase);
 
     private static DebugAdapterStartInfo? DefaultCoreClrAdapter() =>
@@ -163,11 +163,15 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
-    /// <summary>Starts Codalus IDE's CoreCLR adapter, or says it isn't installed.</summary>
-    private Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken) =>
+    /// <summary>
+    /// Starts Codalus IDE's CoreCLR adapter, or says it isn't installed; with <paramref name="terminal"/>, it can start
+    /// programs there (its launcher, through <c>runInTerminal</c>, M54b).
+    /// </summary>
+    private Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken, ITerminalLauncher? terminal = null) =>
         DebugAdapter.StartAsync(
             CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
-            cancellationToken);
+            cancellationToken,
+            terminal);
 
     /// <summary>Codalus IDE's CoreCLR adapter's launch arguments for a plan (M54): the desktop-CLR adapter's, as a launch of .NET.</summary>
     public NetFxDebugArguments CoreClrArguments(LaunchPlan plan) =>
@@ -177,24 +181,14 @@ public sealed class DebugService : IAsyncDisposable
     /// Whether a local launch of <paramref name="plan"/> uses Codalus IDE's adapter; when the setting asks for it but the
     /// program can't, the Debug Console says why it is netcoredbg's.
     /// </summary>
-    private bool UseCodalusAdapter(LaunchPlan plan, DebugConsoleKind console)
+    private bool UseCodalusAdapter(LaunchPlan plan)
     {
         if (!UsesCodalusAdapter)
         {
             return false;
         }
 
-        string? reason = null;
-        if (plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName))
-        {
-            reason = "it runs as x64 on Apple silicon";
-        }
-        else if (console is DebugConsoleKind.Terminal or DebugConsoleKind.Window)
-        {
-            // TODO(issue): M54b's PR 3, the integrated terminal and the console window through the launcher.
-            reason = console == DebugConsoleKind.Terminal ? "it runs in the integrated terminal" : "it runs in a console window";
-        }
-
+        var reason = plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName) ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
@@ -580,21 +574,42 @@ public sealed class DebugService : IAsyncDisposable
                 adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
-        if (UseCodalusAdapter(launch.Plan, launch.Console))
+        if (UseCodalusAdapter(launch.Plan))
         {
-            // Codalus IDE's CoreCLR adapter (M54, ADR 0086): its launcher starts the program, the Debug Console its console.
+            // Codalus IDE's CoreCLR adapter (M54, ADR 0086): its launcher starts the program, with the Debug Console, or in
+            // the integrated terminal or a console window (M54b), which the adapter asks this side to start it in. The
+            // program stops on Main's first line there as anywhere, and needs no startup hook (ADR 0039's attach).
+            var inWindow = launch.Console == DebugConsoleKind.Window;
+            ITerminalLauncher? console = launch.Console switch
+            {
+                DebugConsoleKind.Terminal => Terminal,
+                DebugConsoleKind.Window => ConsoleWindows,
+                _ => null,
+            };
+            if (launch.Console is DebugConsoleKind.Terminal or DebugConsoleKind.Window && console is null)
+            {
+                Output?.Invoke(this, new DebugOutput("console", (inWindow ? "A console window" : "The integrated terminal") + " isn't available here: the program's console is the Debug Console.\n"));
+            }
+
             return new LaunchPart(
                 launch.Name,
                 index,
-                new DebugProcess(launch.Name, null, DebugProcess.Launched, null),
-                async ct => await StartCoreClrAdapterAsync(ct).ConfigureAwait(false),
-                adapter => ((DebugAdapter)adapter).LaunchAsync(CoreClrArguments(launch.Plan), DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
+                new DebugProcess(launch.Name, null, console is null ? DebugProcess.Launched : inWindow ? DebugProcess.ConsoleWindow : DebugProcess.Terminal, null),
+                async ct => await StartCoreClrAdapterAsync(ct, console).ConfigureAwait(false),
+                adapter => ((DebugAdapter)adapter).LaunchAsync(
+                    CoreClrArguments(launch.Plan) with { Console = console is null ? null : inWindow ? "externalTerminal" : "integratedTerminal" },
+                    DapJsonContext.Default.NetFxDebugArguments,
+                    cancellationToken));
         }
 
         if (launch.Console is DebugConsoleKind.Terminal or DebugConsoleKind.Window)
         {
             var window = launch.Console == DebugConsoleKind.Window;
-            if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook)
+
+            // netcoredbg can't attach to a program held at startup on macOS (ADR 0039), where the shell gives it the Debug
+            // Console: under the Codalus debugger, which starts programs in the terminal there, an x64 program it leaves
+            // to netcoredbg uses the Debug Console too.
+            if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook && !(OperatingSystem.IsMacOS() && !window && UsesCodalusAdapter))
             {
                 HeldLaunch? held = null;
                 return new LaunchPart(
@@ -709,7 +724,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public Task LaunchCompoundAsync(LaunchPlan plan, CancellationToken cancellationToken)
     {
-        var codalus = UseCodalusAdapter(plan, DebugConsoleKind.Internal);
+        var codalus = UseCodalusAdapter(plan);
         return StartAsync(
             async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
@@ -728,7 +743,7 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public async Task AttachOwnedCompoundAsync(int processId, string name, LaunchPlan plan, CancellationToken cancellationToken)
     {
-        var codalus = UseCodalusAdapter(plan, DebugConsoleKind.Internal);
+        var codalus = UseCodalusAdapter(plan);
         await StartAsync(
             async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
@@ -833,7 +848,7 @@ public sealed class DebugService : IAsyncDisposable
         {
             // Codalus IDE's CoreCLR adapter (M54, ADR 0086).
             await StartAsync(
-                StartCoreClrAdapterAsync,
+                ct => StartCoreClrAdapterAsync(ct),
                 adapter => adapter.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],

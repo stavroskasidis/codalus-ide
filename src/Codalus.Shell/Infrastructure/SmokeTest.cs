@@ -56,6 +56,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private string Program => Path.Combine(_folder, "src", "Hello", "Program.cs");
 
+    /// <summary>Appended to the screenshots' names: <c>-codalus</c> while a step runs again under the Codalus debugger (M54).</summary>
+    private string _screenshotSuffix = string.Empty;
+
     public async Task RunAsync()
     {
         DispatcherTimer.RunOnce(() =>
@@ -575,219 +578,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("build.depth", "M26", "The fast up-to-date check, a binary log in the viewer, Build Timings, Batch Build, and the ResX and T4 custom tools", BuildDepthStepAsync, "build.solution").ConfigureAwait(true);
 
         // M5: debugging (netcoredbg).
-        await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", async () =>
-        {
-            var adapter = DebugAdapterLocator.Resolve();
-            Check(adapter is not null, $"netcoredbg is installed (debugger/ next to the shell, or {DebugAdapterLocator.EnvironmentVariable})");
-            Console.Out.WriteLine($"  netcoredbg: {adapter}");
-            var line = Array.FindIndex(File.ReadAllLines(Program), l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
-            shell.Debugger.Breakpoints.Toggle(Program, line);
-            Check(shell.Debugger.Breakpoints.At(Program, line) is not null, "the breakpoint is set");
-            shell.Run("debug.start");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the breakpoint", 300).ConfigureAwait(true);
-            await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, $"the editor shows the current line {line}").ConfigureAwait(true);
-            await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
-            await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the Call Stack has frames").ConfigureAwait(true);
+        await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", DebugSessionStepAsync, "build.solution").ConfigureAwait(true);
 
-            // netcoredbg does not evaluate an array's Length; indexing works.
-            shell.DebugConsole.Input = "args[1]";
-            await shell.DebugConsole.SubmitAsync().ConfigureAwait(true);
-            Check(shell.DebugLog.GetText().Contains("> args[1]\n\"two words\"", StringComparison.Ordinal), "the Debug Console evaluates args[1] to \"two words\":\n" + Tail(shell.DebugLog.GetText(), 1000));
+        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", DebugDepthStepAsync, "debug.session").ConfigureAwait(true);
 
-            shell.Debugger.Breakpoints.Clear();
-            shell.Run("debug.continue");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
-            Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
-        }, "build.solution").ConfigureAwait(true);
+        await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", DebugCompanionStepAsync, "debug.session").ConfigureAwait(true);
 
-        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", async () =>
-        {
-            var lines = File.ReadAllLines(Program);
-            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
-            var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", DebugDataTipStepAsync, "debug.session").ConfigureAwait(true);
 
-            // Run to Cursor with no session starts debugging with a temporary breakpoint.
-            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the cursor's line", 300).ConfigureAwait(true);
-            await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
-            Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
-
-            await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
-            Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
-
-            // Run to Cursor while paused, with a PerfTip at the new line.
-            await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
-            Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
-
-            // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
-            shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
-            await shell.ThreadList.RefreshAsync().ConfigureAwait(true);
-            await WaitAsync(() => shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread", 30).ConfigureAwait(true);
-            shell.Layout.ShowToolWindow(ModulesViewModel.ToolWindowId);
-            await WaitAsync(() => shell.ModuleList.Rows.Any(r => r.Name == "Hello.dll"), "the Modules window lists Hello.dll").ConfigureAwait(true);
-            shell.Run("debug.exceptionSettings");
-            await WaitAsync(() => window.GetVisualDescendants().OfType<ExceptionSettingsView>().Any(), "the Exception Settings window renders").ConfigureAwait(true);
-            Check(shell.ExceptionSettingsWindow.Rows.Any(r => r.Type == "System.NullReferenceException"), "it lists the common exception types");
-            Screenshot("smoke-test-debug-depth.png");
-
-            shell.Run("debug.stop");
-            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
-        }, "debug.session").ConfigureAwait(true);
-
-        await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", async () =>
-        {
-            var lines = File.ReadAllLines(Program);
-            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
-            var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
-            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
-
-            // Parallel Stacks: the main thread's frames, marked as the active thread's.
-            shell.Layout.ShowToolWindow(ParallelStacksViewModel.ToolWindowId);
-            await shell.ParallelStacksWindow.RefreshAsync().ConfigureAwait(true);
-            Check(Flatten(shell.ParallelStacksWindow.Roots).Any(n => n.HasCurrentThread && n.Frames.Any(f => f.Contains("Main", StringComparison.Ordinal))), "Parallel Stacks shows the active thread in Main");
-
-            // The grid visualizer on args.
-            await shell.Locals.RefreshAsync().ConfigureAwait(true);
-            var args = shell.Locals.Roots.SingleOrDefault(r => r.Name == "args") ?? throw new SmokeFailure("Locals has no args.");
-            await shell.VisualizeAsync(args, VisualizerKind.Grid).ConfigureAwait(true);
-            await WaitAsync(() => shell.ActiveEditor?.Model is { ReadOnlyLabel: "Grid Visualizer" } model && model.Text.Text.Contains("two words", StringComparison.Ordinal), "the Grid Visualizer lists args").ConfigureAwait(true);
-
-            // A pinned data tip, evaluated at the next pause.
-            var pin = shell.Debugger.PinnedTips.Pin(Program, cwdLine, "args[1]");
-            shell.Debugger.PinnedTips.SetComment(pin, "the second argument");
-            await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && pin.Value == "\"two words\"", "the pinned data tip shows args[1] at the next pause", 60).ConfigureAwait(true);
-            var editor = await OpenAsync(Program).ConfigureAwait(true);
-            await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
-            Screenshot("smoke-test-debug-companion.png");
-
-            // A full dump of the paused program, opened in the dump view.
-            var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
-            var dump = Path.Combine(Path.GetTempPath(), $"codalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
-            Codalus.Debugging.Companion.CreateDumpResult created;
-            try
-            {
-                created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
-            }
-            finally
-            {
-                // Ended even when the dump fails, so the steps after this one start without a session.
-                shell.Debugger.PinnedTips.Clear();
-                shell.Run("debug.stop");
-                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
-            }
-
-            Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
-            try
-            {
-                var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
-                await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
-                var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
-                Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
-                Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
-
-                await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
-                Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
-                Screenshot("smoke-test-dump.png");
-                shell.Layout.CloseDocument(document);
-                await document.ViewModel.CloseAsync().ConfigureAwait(true);
-            }
-            finally
-            {
-                // Best effort: a failure above may leave the dump open, and must not be hidden by this.
-                try
-                {
-                    File.Delete(created.Path);
-                }
-                catch (IOException ex)
-                {
-                    shell.Workbench.Log.AppendLine($"[smoke] Could not delete the dump: {ex.Message}");
-                }
-            }
-        }, "debug.session").ConfigureAwait(true);
-
-        await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", async () =>
-        {
-            var lines = File.ReadAllLines(Program);
-            var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
-            await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
-            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
-            try
-            {
-                var editor = await OpenAsync(Program).ConfigureAwait(true);
-                var document = editor.Editor.Document;
-                var line = document.GetLineByNumber(argsLine);
-                var column = document.GetText(line).IndexOf(", args)", StringComparison.Ordinal);
-                Check(column >= 0, $"line {argsLine} reads args");
-                await editor.ShowDataTipAsync(line.Offset + column + 3).ConfigureAwait(true);
-                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 }, "the data tip opens over args").ConfigureAwait(true);
-                var tip = editor.DataTip!;
-                Check(tip.Header.NameBlock.Text == "args" && tip.Header.ValueBlock.Text is { Length: > 0 }, $"the header shows args and its value: {tip.Header.NameBlock.Text} = {tip.Header.ValueBlock.Text}");
-                var view = editor.Editor.TextArea.TextView;
-
-                // Where the header is, in the real window: its name over the code's (A1), unless the header would end
-                // past the text view's right edge, where it moves left just enough to stay in view (D44, decision 10).
-                // The smoke window is 1280 px wide, so line 4's args, far right in the text view, is that case.
-                (Rect Header, Point Name, Point Code) Where(DataTipCascade shown, int offset) =>
-                    (new Rect(view.PointToClient(shown.Header.PointToScreen(default)), shown.Header.Bounds.Size),
-                     view.PointToClient(shown.Header.NameBlock.PointToScreen(default)),
-                     view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(offset)), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset);
-                await RenderedAsync().ConfigureAwait(true); // a popup's window moves a frame after its offsets change
-                var (header, name, code) = Where(tip, line.Offset + column + 2);
-                var where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
-                Check(header.Left >= -0.5 && header.Right <= view.Bounds.Width + 0.5, $"the header stays in the text view ({where})");
-                var lineBottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(line.Offset + column + 2)), AvaloniaEdit.Rendering.VisualYPosition.LineBottom).Y - view.ScrollOffset.Y;
-                Check(header.Center.Y >= code.Y && header.Center.Y <= lineBottom, $"the header sits on the hovered line ({where}, the line from y {code.Y:0.#} to {lineBottom:0.#})");
-                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width
-                    ? Math.Abs(name.X - code.X) <= 2
-                    : Math.Abs(header.Right - view.Bounds.Width) <= 2,
-                    $"the header's name lies over the code's, or the header ends at the text view's right edge where there's no room ({where})");
-
-                // In windows of their own, the tips' text is the shell's UI size, as the pinned tips' in the editor.
-                Check(Math.Abs(tip.Header.NameBlock.FontSize - window.FontSize) < 0.01 && Math.Abs(tip.Header.ValueBlock.FontSize - window.FontSize) < 0.01,
-                    $"the header's text is {tip.Header.NameBlock.FontSize:0.#} and {tip.Header.ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
-                tip.SetOpen(null, tip.Header, tip.Root, true);
-                await WaitAsync(() => tip.Panels is [{ Rows: [{ Node.IsPlaceholder: false }, ..] }], "args' elements open in a child tip").ConfigureAwait(true);
-                var rows = tip.Panels[0].Rows;
-                Check(Math.Abs(rows[0].ValueBlock.FontSize - window.FontSize) < 0.01, $"the child tip's text is {rows[0].ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
-                Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
-                Screenshot("smoke-test-data-tip.png", tip.Popups);
-                editor.HoverPopup.IsOpen = false;
-
-                // With room to its right (line 9's args, near the text's left edge), the header's name lies over the code's.
-                var exitLine = document.GetLineByNumber(Array.FindIndex(lines, l => l.Contains("Array.IndexOf(args", StringComparison.Ordinal)) + 1);
-                var argsAt = exitLine.Offset + document.GetText(exitLine).IndexOf("(args", StringComparison.Ordinal) + 1;
-                await editor.ShowDataTipAsync(argsAt + 1).ConfigureAwait(true);
-                await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 } shown && !ReferenceEquals(shown, tip), $"the data tip opens over line {exitLine.LineNumber}'s args").ConfigureAwait(true);
-                await RenderedAsync().ConfigureAwait(true);
-                (header, name, code) = Where(editor.DataTip!, argsAt);
-                where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
-                Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width && Math.Abs(name.X - code.X) <= 2,
-                    $"with room to its right, the header's name lies over the code's ({where})");
-                editor.HoverPopup.IsOpen = false;
-
-                // Locals: the same rows in one flat list, args expanded, its elements' values in the Value column.
-                shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
-                await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
-                shell.Locals.Roots.First(r => r.Name == "args").IsExpanded = true;
-                Views.DataTips.VariableRowList? locals = null;
-                await WaitAsync(() => (locals = window.GetVisualDescendants().OfType<Views.VariablesView>().FirstOrDefault(v => ReferenceEquals(v.DataContext, shell.Locals))?.GetVisualDescendants().OfType<Views.DataTips.VariableRowList>().FirstOrDefault()) is { } list
-                    && list.Rows.Any(r => r.Depth == 1 && r.Node.Value == "\"two words\""), "Locals shows args' elements one level in").ConfigureAwait(true);
-                var argsRow = locals!.RowOf(locals.Rows.First(r => r.Node.Name == "args").Node);
-                var elementRow = locals.RowOf(locals.Rows.First(r => r.Depth == 1).Node);
-                Check(argsRow is not null && elementRow is not null
-                    && Math.Abs(argsRow.ValueBlock.TranslatePoint(default, locals)!.Value.X - elementRow.ValueBlock.TranslatePoint(default, locals)!.Value.X) <= 1,
-                    "Locals keeps the Value column aligned across levels");
-                Screenshot("smoke-test-locals.png");
-            }
-            finally
-            {
-                shell.Run("debug.stop");
-                await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
-            }
-        }, "debug.session").ConfigureAwait(true);
+        // M54 (ADR 0086): the same steps under the Codalus debugger (debug.adapter), whose screenshots end in -codalus.
+        await StepAsync("debug.session.codalus", "M54", "Under the Codalus debugger: F5 stops at a breakpoint; locals, evaluation and continue to exit", () => UnderCodalusDebuggerAsync(DebugSessionStepAsync), "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.depth.codalus", "M54", "Under the Codalus debugger: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", () => UnderCodalusDebuggerAsync(DebugDepthStepAsync), "debug.session.codalus").ConfigureAwait(true);
+        await StepAsync("debug.companion.codalus", "M54", "Under the Codalus debugger: Parallel Stacks, the grid visualizer, a pinned data tip, and a dump", () => UnderCodalusDebuggerAsync(DebugCompanionStepAsync), "debug.session.codalus").ConfigureAwait(true);
+        await StepAsync("debug.dataTip.codalus", "M54", "Under the Codalus debugger: the data tip, its elements in a child tip, and the same rows in Locals", () => UnderCodalusDebuggerAsync(DebugDataTipStepAsync), "debug.session.codalus").ConfigureAwait(true);
 
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
@@ -1227,6 +1030,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         {
             Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
+
+        // M54 (ADR 0086): under the Codalus debugger too, the integrated terminal on macOS as well (its launcher starts the
+        // program there); remote targets keep netcoredbg.
+        await StepAsync("debug.compound.codalus", "M54", "Under the Codalus debugger: two startup projects in one session, each stopping at its breakpoint", () => UnderCodalusDebuggerAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
+        await StepAsync("debug.terminal.codalus", "M54", "Under the Codalus debugger: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderCodalusDebuggerAsync(DebugTerminalStepAsync), "debug.compound.codalus").ConfigureAwait(true);
+        await StepAsync("debug.roslyn.codalus", "M54", "Under the Codalus debugger: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderCodalusDebuggerAsync(DebugRoslynStepAsync), "debug.compound.codalus").ConfigureAwait(true);
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
         {
@@ -1456,6 +1265,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
+
+            // M54: the server under the Codalus debugger (the page's debugger is the browser's either way).
+            await StepAsync("blazor.compoundDebug.codalus", "M54", "Under the Codalus debugger: " + compoundTitle, () => UnderCodalusDebuggerAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload.codalus", "M54", "Under the Codalus debugger: " + compoundHotReloadTitle, () => UnderCodalusDebuggerAsync(CompoundHotReloadStepAsync), "blazor.compoundDebug.codalus").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -1638,12 +1451,237 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     private static int MarkerLine(string file, string marker) =>
         Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
 
+    /// <summary>The M5 debug session: F5 to a breakpoint, locals, evaluation, to the exit.</summary>
+    private async Task DebugSessionStepAsync()
+    {
+        if (!shell.Debugger.UsesCodalusAdapter)
+        {
+            var adapter = DebugAdapterLocator.Resolve();
+            Check(adapter is not null, $"netcoredbg is installed (debugger/ next to the shell, or {DebugAdapterLocator.EnvironmentVariable})");
+            Console.Out.WriteLine($"  netcoredbg: {adapter}");
+        }
+        var line = Array.FindIndex(File.ReadAllLines(Program), l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Toggle(Program, line);
+        Check(shell.Debugger.Breakpoints.At(Program, line) is not null, "the breakpoint is set");
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the breakpoint", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, $"the editor shows the current line {line}").ConfigureAwait(true);
+        await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
+        await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the Call Stack has frames").ConfigureAwait(true);
+
+        // netcoredbg does not evaluate an array's Length; indexing works.
+        shell.DebugConsole.Input = "args[1]";
+        await shell.DebugConsole.SubmitAsync().ConfigureAwait(true);
+        Check(shell.DebugLog.GetText().Contains("> args[1]\n\"two words\"", StringComparison.Ordinal), "the Debug Console evaluates args[1] to \"two words\":\n" + Tail(shell.DebugLog.GetText(), 1000));
+
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.continue");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
+        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
+    }
+
+    /// <summary>M14: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows.</summary>
+    private async Task DebugDepthStepAsync()
+    {
+        var lines = File.ReadAllLines(Program);
+        var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+        var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+
+        // Run to Cursor with no session starts debugging with a temporary breakpoint.
+        await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the cursor's line", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
+        Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
+
+        await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
+        Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
+
+        // Run to Cursor while paused, with a PerfTip at the new line.
+        await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
+        Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
+
+        // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
+        shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
+        await shell.ThreadList.RefreshAsync().ConfigureAwait(true);
+        await WaitAsync(() => shell.ThreadList.Rows.Any(r => r.IsCurrent), "the Threads window marks the current thread", 30).ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(ModulesViewModel.ToolWindowId);
+        await WaitAsync(() => shell.ModuleList.Rows.Any(r => r.Name == "Hello.dll"), "the Modules window lists Hello.dll").ConfigureAwait(true);
+        shell.Run("debug.exceptionSettings");
+        await WaitAsync(() => window.GetVisualDescendants().OfType<ExceptionSettingsView>().Any(), "the Exception Settings window renders").ConfigureAwait(true);
+        Check(shell.ExceptionSettingsWindow.Rows.Any(r => r.Type == "System.NullReferenceException"), "it lists the common exception types");
+        Screenshot("smoke-test-debug-depth.png");
+
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+    }
+
+    /// <summary>M14: Parallel Stacks, the grid visualizer, a pinned data tip, a dump.</summary>
+    private async Task DebugCompanionStepAsync()
+    {
+        var lines = File.ReadAllLines(Program);
+        var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+        var cwdLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"cwd", StringComparison.Ordinal)) + 1;
+        await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+
+        // Parallel Stacks: the main thread's frames, marked as the active thread's.
+        shell.Layout.ShowToolWindow(ParallelStacksViewModel.ToolWindowId);
+        await shell.ParallelStacksWindow.RefreshAsync().ConfigureAwait(true);
+        Check(Flatten(shell.ParallelStacksWindow.Roots).Any(n => n.HasCurrentThread && n.Frames.Any(f => f.Contains("Main", StringComparison.Ordinal))), "Parallel Stacks shows the active thread in Main");
+
+        // The grid visualizer on args.
+        await shell.Locals.RefreshAsync().ConfigureAwait(true);
+        var args = shell.Locals.Roots.SingleOrDefault(r => r.Name == "args") ?? throw new SmokeFailure("Locals has no args.");
+        await shell.VisualizeAsync(args, VisualizerKind.Grid).ConfigureAwait(true);
+        await WaitAsync(() => shell.ActiveEditor?.Model is { ReadOnlyLabel: "Grid Visualizer" } model && model.Text.Text.Contains("two words", StringComparison.Ordinal), "the Grid Visualizer lists args").ConfigureAwait(true);
+
+        // A pinned data tip, evaluated at the next pause.
+        var pin = shell.Debugger.PinnedTips.Pin(Program, cwdLine, "args[1]");
+        shell.Debugger.PinnedTips.SetComment(pin, "the second argument");
+        await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && pin.Value == "\"two words\"", "the pinned data tip shows args[1] at the next pause", 60).ConfigureAwait(true);
+        var editor = await OpenAsync(Program).ConfigureAwait(true);
+        await WaitAsync(() => editor.PinLayer.Pins.TryGetValue(cwdLine, out var control) && control.IsVisible, "the pinned data tip floats over its line").ConfigureAwait(true);
+        Screenshot("smoke-test-debug-companion.png");
+
+        // A full dump of the paused program, opened in the dump view.
+        var pid = shell.Debugger.ProcessId ?? throw new SmokeFailure("The session has no process id.");
+        var dump = Path.Combine(Path.GetTempPath(), $"codalus-smoke-{pid.ToString(CultureInfo.InvariantCulture)}.dmp");
+        Codalus.Debugging.Companion.CreateDumpResult created;
+        try
+        {
+            created = await shell.Companion.CreateDumpAsync(pid, dump, "full", CancellationToken.None).ConfigureAwait(true);
+        }
+        finally
+        {
+            // Ended even when the dump fails, so the steps after this one start without a session.
+            shell.Debugger.PinnedTips.Clear();
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }
+
+        Check(File.Exists(created.Path) && created.Size > 0, $"the companion writes a dump ({created.Size} bytes)");
+        try
+        {
+            var document = await shell.OpenDumpAsync(created.Path).ConfigureAwait(true) ?? throw new SmokeFailure("The dump didn't open (the notification says why).");
+            await WaitAsync(() => window.GetVisualDescendants().OfType<DumpView>().Any(), "the dump view renders").ConfigureAwait(true);
+            var main = document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).FirstOrDefault(f => f.Method.Contains("Main", StringComparison.Ordinal));
+            Check(main is not null, "the dump's threads include Main: " + string.Join(", ", document.ViewModel.Summary.Threads.SelectMany(t => t.Frames).Take(8).Select(f => f.Method)));
+            Check(main!.File is { } file && file.EndsWith("Program.cs", StringComparison.OrdinalIgnoreCase) && main.Line == cwdLine, $"Main's frame maps to Program.cs line {cwdLine} (got {main.File}:{main.Line})");
+
+            await document.ViewModel.LoadHeapAsync().ConfigureAwait(true);
+            Check(document.ViewModel.Heap.Any(r => r.Name == "System.String"), "the heap lists System.String");
+            Screenshot("smoke-test-dump.png");
+            shell.Layout.CloseDocument(document);
+            await document.ViewModel.CloseAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            // Best effort: a failure above may leave the dump open, and must not be hidden by this.
+            try
+            {
+                File.Delete(created.Path);
+            }
+            catch (IOException ex)
+            {
+                shell.Workbench.Log.AppendLine($"[smoke] Could not delete the dump: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>0.6.0: the data tip and the same rows in Locals.</summary>
+    private async Task DebugDataTipStepAsync()
+    {
+        var lines = File.ReadAllLines(Program);
+        var argsLine = Array.FindIndex(lines, l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
+        await shell.RunToLineAsync(Program, argsLine).ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == argsLine, $"the debugger stops at line {argsLine}", 300).ConfigureAwait(true);
+        try
+        {
+            var editor = await OpenAsync(Program).ConfigureAwait(true);
+            var document = editor.Editor.Document;
+            var line = document.GetLineByNumber(argsLine);
+            var column = document.GetText(line).IndexOf(", args)", StringComparison.Ordinal);
+            Check(column >= 0, $"line {argsLine} reads args");
+            await editor.ShowDataTipAsync(line.Offset + column + 3).ConfigureAwait(true);
+            await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 }, "the data tip opens over args").ConfigureAwait(true);
+            var tip = editor.DataTip!;
+            Check(tip.Header.NameBlock.Text == "args" && tip.Header.ValueBlock.Text is { Length: > 0 }, $"the header shows args and its value: {tip.Header.NameBlock.Text} = {tip.Header.ValueBlock.Text}");
+            var view = editor.Editor.TextArea.TextView;
+
+            // Where the header is, in the real window: its name over the code's (A1), unless the header would end
+            // past the text view's right edge, where it moves left just enough to stay in view (D44, decision 10).
+            // The smoke window is 1280 px wide, so line 4's args, far right in the text view, is that case.
+            (Rect Header, Point Name, Point Code) Where(DataTipCascade shown, int offset) =>
+                (new Rect(view.PointToClient(shown.Header.PointToScreen(default)), shown.Header.Bounds.Size),
+                 view.PointToClient(shown.Header.NameBlock.PointToScreen(default)),
+                 view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(offset)), AvaloniaEdit.Rendering.VisualYPosition.LineTop) - view.ScrollOffset);
+            await RenderedAsync().ConfigureAwait(true); // a popup's window moves a frame after its offsets change
+            var (header, name, code) = Where(tip, line.Offset + column + 2);
+            var where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+            Check(header.Left >= -0.5 && header.Right <= view.Bounds.Width + 0.5, $"the header stays in the text view ({where})");
+            var lineBottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(document.GetLocation(line.Offset + column + 2)), AvaloniaEdit.Rendering.VisualYPosition.LineBottom).Y - view.ScrollOffset.Y;
+            Check(header.Center.Y >= code.Y && header.Center.Y <= lineBottom, $"the header sits on the hovered line ({where}, the line from y {code.Y:0.#} to {lineBottom:0.#})");
+            Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width
+                ? Math.Abs(name.X - code.X) <= 2
+                : Math.Abs(header.Right - view.Bounds.Width) <= 2,
+                $"the header's name lies over the code's, or the header ends at the text view's right edge where there's no room ({where})");
+
+            // In windows of their own, the tips' text is the shell's UI size, as the pinned tips' in the editor.
+            Check(Math.Abs(tip.Header.NameBlock.FontSize - window.FontSize) < 0.01 && Math.Abs(tip.Header.ValueBlock.FontSize - window.FontSize) < 0.01,
+                $"the header's text is {tip.Header.NameBlock.FontSize:0.#} and {tip.Header.ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+            tip.SetOpen(null, tip.Header, tip.Root, true);
+            await WaitAsync(() => tip.Panels is [{ Rows: [{ Node.IsPlaceholder: false }, ..] }], "args' elements open in a child tip").ConfigureAwait(true);
+            var rows = tip.Panels[0].Rows;
+            Check(Math.Abs(rows[0].ValueBlock.FontSize - window.FontSize) < 0.01, $"the child tip's text is {rows[0].ValueBlock.FontSize:0.#} px, the window's {window.FontSize:0.#}");
+            Check(rows.Any(r => r.Node.Value == "\"two words\""), "the child tip lists \"two words\": " + string.Join(", ", rows.Select(r => $"{r.Node.Name} = {r.Node.Value}")));
+            Screenshot("smoke-test-data-tip.png", tip.Popups);
+            editor.HoverPopup.IsOpen = false;
+
+            // With room to its right (line 9's args, near the text's left edge), the header's name lies over the code's.
+            var exitLine = document.GetLineByNumber(Array.FindIndex(lines, l => l.Contains("Array.IndexOf(args", StringComparison.Ordinal)) + 1);
+            var argsAt = exitLine.Offset + document.GetText(exitLine).IndexOf("(args", StringComparison.Ordinal) + 1;
+            await editor.ShowDataTipAsync(argsAt + 1).ConfigureAwait(true);
+            await WaitAsync(() => editor.DataTip is { Header.Bounds.Width: > 0 } shown && !ReferenceEquals(shown, tip), $"the data tip opens over line {exitLine.LineNumber}'s args").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            (header, name, code) = Where(editor.DataTip!, argsAt);
+            where = $"the header at {header}, its name at x {name.X:0.#}, the code's at {code.X:0.#}, the text view {view.Bounds.Width:0.#} wide";
+            Check(code.X - Views.DataTips.DataTipMetrics.NameX + header.Width <= view.Bounds.Width && Math.Abs(name.X - code.X) <= 2,
+                $"with room to its right, the header's name lies over the code's ({where})");
+            editor.HoverPopup.IsOpen = false;
+
+            // Locals: the same rows in one flat list, args expanded, its elements' values in the Value column.
+            shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
+            shell.Locals.Roots.First(r => r.Name == "args").IsExpanded = true;
+            Views.DataTips.VariableRowList? locals = null;
+            await WaitAsync(() => (locals = window.GetVisualDescendants().OfType<Views.VariablesView>().FirstOrDefault(v => ReferenceEquals(v.DataContext, shell.Locals))?.GetVisualDescendants().OfType<Views.DataTips.VariableRowList>().FirstOrDefault()) is { } list
+                && list.Rows.Any(r => r.Depth == 1 && r.Node.Value == "\"two words\""), "Locals shows args' elements one level in").ConfigureAwait(true);
+            var argsRow = locals!.RowOf(locals.Rows.First(r => r.Node.Name == "args").Node);
+            var elementRow = locals.RowOf(locals.Rows.First(r => r.Depth == 1).Node);
+            Check(argsRow is not null && elementRow is not null
+                && Math.Abs(argsRow.ValueBlock.TranslatePoint(default, locals)!.Value.X - elementRow.ValueBlock.TranslatePoint(default, locals)!.Value.X) <= 1,
+                "Locals keeps the Value column aligned across levels");
+            Screenshot("smoke-test-locals.png");
+        }
+        finally
+        {
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }
+    }
+
     /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>
     private async Task DebugCompoundStepAsync()
     {
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "Debugging", "Sessions.slnx")), $"the samples folder {samples} has Debugging/Sessions.slnx");
-        Copy(Path.Combine(samples, "Debugging"), Sessions);
+        if (!Directory.Exists(Sessions))
+        {
+            Copy(Path.Combine(samples, "Debugging"), Sessions); // once: the step runs again under the Codalus debugger
+        }
+
         await shell.OpenSolutionAsync(Path.Combine(Sessions, "Sessions.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 4 && shell.Solutions.Progress is { Completed: true }, "the Sessions solution is open", 300).ConfigureAwait(true);
 
@@ -3573,9 +3611,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
         Check(File.Exists(Path.Combine(samples, "BlazorHosted", "BlazorHosted.slnx")), $"the samples folder {samples} has BlazorHosted");
         var target = Path.Combine(Work, "BlazorHosted");
-        Copy(Path.Combine(samples, "BlazorHosted"), target);
-        using (var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0))
+        if (!Directory.Exists(target)) // once: the step runs again under the Codalus debugger, on the same copy and port
         {
+            Copy(Path.Combine(samples, "BlazorHosted"), target);
+            using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
             socket.Start();
             var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
             socket.Stop();
@@ -4490,8 +4529,34 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
     /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
     /// </summary>
+    /// <summary>
+    /// A debug step again under the Codalus debugger (M54, ADR 0086: <c>debug.adapter</c> <c>codalus</c>), its screenshots
+    /// named <c>-codalus</c> (the first pass's are the website's); the Debug Console has to say which debugger it was.
+    /// </summary>
+    private async Task UnderCodalusDebuggerAsync(Func<Task> step)
+    {
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        _screenshotSuffix = "-codalus";
+        try
+        {
+            await step().ConfigureAwait(true);
+            var text = shell.DebugLog.GetText();
+            Check(text.Contains("Debugging with the Codalus debugger (preview).", StringComparison.Ordinal), "the Debug Console says the Codalus debugger debugged it:\n" + Tail(text, 1500));
+        }
+        finally
+        {
+            _screenshotSuffix = string.Empty;
+            await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+    }
+
     private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
+        if (_screenshotSuffix.Length > 0)
+        {
+            name = Path.GetFileNameWithoutExtension(name) + _screenshotSuffix + Path.GetExtension(name);
+        }
+
         if (!keepToasts)
         {
             HideToasts(name);

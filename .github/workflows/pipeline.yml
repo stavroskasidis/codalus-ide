@@ -212,9 +212,9 @@ jobs:
           devtools: true
           display: true
           downloads: true
-      # debug-codalus builds only its test project (with the debug companion host it references).
-      - run: dotnet restore ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }}
-      - run: dotnet build ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }} -c Release --no-restore
+          browser: true
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
         # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'
@@ -406,13 +406,14 @@ jobs:
         with:
           fetch-depth: 0 # the release notes read the history and the tags
       # The smoke test has a .NET 11 step (M30); dumps and attaching need the developer tools (debug.companion,
-      # debug.roslyn, debug.remote).
+      # debug.roslyn, debug.remote); browser debugging (blazor.wasmDebug, blazor.compoundDebug) a browser on Linux arm64.
       - id: setup
         uses: ./.github/actions/setup
         with:
           extra-sdks: true
           devtools: true
           downloads: true
+          browser: true
       - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
@@ -445,21 +446,6 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
-      - name: A Chromium browser (Linux arm64)
-        # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
-        # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
-        # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package
-        # brings one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it:
-        # allow them on this throwaway runner rather than run the browser without its sandbox.
-        if: matrix.rid == 'linux-arm64'
-        shell: bash
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npx -y playwright@1.56.1 install --with-deps chromium
-          chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
-          [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
-          sudo ln -sf "$chrome" /usr/local/bin/chromium
-          chromium --version
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true

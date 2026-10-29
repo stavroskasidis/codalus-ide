@@ -25,6 +25,10 @@ public sealed class DebuggeeFixture : IAsyncLifetime
     /// <summary>netcoredbg, or null (tests are skipped locally; CI fetches it with eng/get-netcoredbg.sh and fails without it).</summary>
     public static string? Adapter => DebugAdapterLocator.Resolve() ?? (Environment.GetEnvironmentVariable("CI") == "true" ? throw new InvalidOperationException("netcoredbg was not found (run eng/get-netcoredbg.sh).") : null);
 
+    /// <summary>Codalus IDE's CoreCLR adapter (<c>codalus-debughost --clr-dap</c>, M54), the one built with the tests.</summary>
+    public static DebugAdapterStartInfo CodalusAdapter() =>
+        new(DotnetHost, [Path.Combine(AppContext.BaseDirectory, "codalus-debughost.dll"), CoreClrAdapter.AdapterArgument], AppContext.BaseDirectory);
+
     /// <summary>The <c>dotnet</c> that runs the tests, by its full path (a bare name is looked up by netcoredbg's process).</summary>
     public static string DotnetHost =>
         Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } host

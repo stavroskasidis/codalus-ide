@@ -74,8 +74,9 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// The console of a debugged program: the terminal for console apps when <c>debug.console</c> says so. Not on macOS:
-    /// netcoredbg can't attach to a program held at startup there, so the Debug Console it is. `TODO(issue)`.
+    /// The console of a debugged program: the terminal for console apps when <c>debug.console</c> says so. On macOS only
+    /// under the Codalus debugger (<c>debug.adapter</c>, M54b), whose launcher starts the program there: netcoredbg can't
+    /// attach to a program held at startup on macOS, so with it the Debug Console it is. `TODO(issue)`.
     /// </summary>
     private DebugConsoleKind ConsoleFor(RunInfo info)
     {
@@ -96,9 +97,9 @@ public sealed partial class ShellHost
             return DebugConsoleKind.Internal;
         }
 
-        if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS() && !Debugger.UsesCodalusAdapter)
         {
-            DebugLog.AppendLine("The integrated terminal isn't available for debugging on macOS yet: the program uses the Debug Console.");
+            DebugLog.AppendLine("The integrated terminal isn't available for debugging with netcoredbg on macOS: the program uses the Debug Console (the Codalus debugger, debug.adapter, starts it there).");
             return DebugConsoleKind.Internal;
         }
 

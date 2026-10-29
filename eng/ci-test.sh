@@ -165,13 +165,29 @@ case "$shard" in
     export CODALUS_DEBUG_ADAPTER=codalus
     export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
     export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
-    filters=()
+    # One test project at a time (each line's namespace names it), every one run whatever the one before did.
+    projects=()
     while IFS= read -r line; do
       line="${line%%#*}"
       line="$(echo "$line" | tr -d '[:space:]')"
-      [[ -n "$line" ]] && filters+=(--filter-class "Codalus.Debugging.Tests.$line")
+      [[ -z "$line" ]] && continue
+      name="${line%()}"
+      [[ "$name" != "$line" ]] && name="${name%.*}" # a method: its class
+      project="${name%.*}"
+      [[ " ${projects[*]-} " == *" $project "* ]] || projects+=("$project")
     done < eng/ci-debug-codalus.txt
-    dotnet test --project tests/Codalus.Debugging.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
+    status=0
+    for project in "${projects[@]}"; do
+      filters=()
+      while IFS= read -r line; do
+        line="${line%%#*}"
+        line="$(echo "$line" | tr -d '[:space:]')"
+        [[ "$line" == "$project".* ]] || continue
+        if [[ "$line" == *"()" ]]; then filters+=(--filter-method "${line%()}"); else filters+=(--filter-class "$line"); fi
+      done < eng/ci-debug-codalus.txt
+      dotnet test --project "tests/$project" --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1 || status=$?
+    done
+    exit "$status"
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The

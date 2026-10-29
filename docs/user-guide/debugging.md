@@ -23,7 +23,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-On Windows a debugged console or web app gets a **console window** of its own, as in the classic IDE: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Codalus IDE starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
+On Windows a debugged console or web app gets a **console window** of its own, as in the classic IDE: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Codalus IDE starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS, netcoredbg can't attach to a program held in the terminal, so programs use the Debug Console there, unless [the Codalus debugger](#the-codalus-debugger-preview) debugs them: it starts the program in the terminal itself, on every OS, and stops on `Main`'s first line when a breakpoint is there.
 
 ### Several startup projects
 
@@ -190,11 +190,11 @@ Codalus IDE has a .NET debugger of its own, on .NET's own debugging API (the one
 
 What it does that netcoredbg doesn't:
 - the program's own exit code on macOS (netcoredbg reports 0 there)
+- programs in the integrated terminal or a console window start under the debugger, so a breakpoint on `Main`'s first line stops there; the integrated terminal works on macOS too, and no startup hook is needed
 - casts and C#'s operators in Watch, QuickWatch and conditions
 - exception module conditions on .NET 11 programs
 
 What it doesn't do yet, so netcoredbg debugs these and the Debug Console says why:
-- programs in the integrated terminal or a console window (they come next)
 - x64 programs on Apple silicon (.NET 5 and earlier under Rosetta 2)
 - remote targets: SSH, containers and WSL
 

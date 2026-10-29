@@ -7,8 +7,7 @@ namespace Codalus.Debugging.Tests;
 /// <summary>
 /// M54 (ADR 0086): which adapter debugs a .NET program. <c>debug.adapter</c> <c>codalus</c> sends launches and attaches
 /// to Codalus IDE's own (<c>codalus-debughost --clr-dap</c>), and the Debug Console's first line says so; programs it
-/// doesn't debug yet (x64 ones on Apple silicon, the integrated terminal) go to netcoredbg, and the line says why; left
-/// alone, nothing changes. Not in the debug-codalus shard (eng/ci-debug-codalus.txt): its CODALUS_DEBUG_ADAPTER would
+/// doesn't debug yet (x64 ones on Apple silicon) go to netcoredbg, and the line says why; left alone, nothing changes. Not in the debug-codalus shard (eng/ci-debug-codalus.txt): its CODALUS_DEBUG_ADAPTER would
 /// override the setting these tests choose.
 /// </summary>
 public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>, IAsyncLifetime
@@ -28,7 +27,7 @@ public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFi
         _debug = new DebugService(() => null, () => null)
         {
             AdapterSetting = () => _setting,
-            CoreClrAdapter = () => new DebugAdapterStartInfo(DebuggeeFixture.DotnetHost, [Path.Combine(AppContext.BaseDirectory, "codalus-debughost.dll"), CoreClrAdapter.AdapterArgument], AppContext.BaseDirectory),
+            CoreClrAdapter = DebuggeeFixture.CodalusAdapter,
         };
         _debug.Stopped += (_, stop) => _stops.Writer.TryWrite(stop);
         _debug.Output += (_, o) =>
@@ -81,11 +80,18 @@ public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFi
         var x64 = await Assert.ThrowsAnyAsync<Exception>(() => _debug.LaunchAsync(Plan() with { RunsAsX64 = true }, Ct));
         Assert.Contains("netcoredbg", x64.Message, StringComparison.Ordinal);
         Assert.Contains("Debugging with netcoredbg: it runs as x64 on Apple silicon", Output, StringComparison.Ordinal);
+    }
 
-        // The integrated terminal: M54b's next step.
-        var terminal = await Assert.ThrowsAnyAsync<Exception>(() => _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal }], Ct));
-        Assert.Contains("netcoredbg", terminal.Message, StringComparison.Ordinal);
-        Assert.Contains("Debugging with netcoredbg: it runs in the integrated terminal", Output, StringComparison.Ordinal);
+    [Fact]
+    public async Task Without_a_terminal_here_a_terminal_launch_uses_the_debug_console()
+    {
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal }], Ct);
+        await _stops.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        Assert.Contains("Debugging with the Codalus debugger (preview).", Output, StringComparison.Ordinal);
+        Assert.Contains("The integrated terminal isn't available here", Output, StringComparison.Ordinal);
+        Assert.Equal(DebugProcess.Launched, Assert.Single(_debug.Processes).Kind);
+        await _debug.StopAsync();
     }
 
     [Fact]

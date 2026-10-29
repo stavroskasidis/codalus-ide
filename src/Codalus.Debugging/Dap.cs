@@ -79,7 +79,9 @@ public sealed record MonoDebugArguments(
 /// The desktop-CLR (.NET Framework) debugger adapter's <c>launch</c> and <c>attach</c> arguments (M43b, ADR 0076,
 /// <c>codalus-debughost --netfx-dap</c>): <see cref="Program"/> (a managed <c>.exe</c>) with its arguments, working
 /// directory and environment, or <see cref="ProcessId"/> to attach to. <see cref="NewConsole"/> gives the program a
-/// console window of its own (with input); otherwise its output comes through the Debug Console.
+/// console window of its own (with input); otherwise its output comes through the Debug Console. CoreCLR's adapter
+/// (<c>--clr-dap</c>, M54, ADR 0086) takes the same arguments, and <see cref="Console"/> (DAP's own: <c>integratedTerminal</c>
+/// or <c>externalTerminal</c>) starts its launcher there through the client's <c>runInTerminal</c>.
 /// </summary>
 public sealed record NetFxDebugArguments(
     string? Program = null,
@@ -92,7 +94,8 @@ public sealed record NetFxDebugArguments(
     bool NewConsole = false,
     string Name = ".NET Framework",
     string Type = "clr",
-    string Request = "launch");
+    string Request = "launch",
+    string? Console = null);
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
