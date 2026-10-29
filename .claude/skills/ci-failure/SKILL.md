@@ -1,11 +1,15 @@
 ---
 name: ci-failure
-description: What to do when a CI run fails (a pull request's checks, a nightly or a release run of pipeline.yml), before anything is re-run. Use whenever a pipeline job is red or cancelled by another job's failure, when asked to "re-run CI", "retry the job", babysit or fix a PR whose CI failed, or when a test is suspected to be flaky.
+description: What to do when a CI run fails (a pull request's checks, a nightly or a release run of pipeline.yml), or a test fails in a local, WSL or Mac validation run, before anything is re-run. Use whenever a pipeline job is red or cancelled by another job's failure, when asked to "re-run CI", "retry the job", babysit or fix a PR whose CI failed, when a test fails once and passes alone or on a retry, or when a test is suspected to be flaky.
 ---
 
 A failed run is a bug report. Re-running it until it passes hides the bug, costs a 40 to 70 minute cycle, and the
 same flake fails the next pull request, the nightly and the release. So a failure is investigated first, and a re-run
 is the exception, not the fix.
+
+The same goes for a local, WSL or Mac validation run: a test that fails there and passes alone or on a retry has a
+cause, and "passes alone" is where the investigation starts, not its result. Steps 2 to 5 apply as they are; the run's
+own log and artifacts stand in for step 1.
 
 ## 1. What failed, in every attempt
 
