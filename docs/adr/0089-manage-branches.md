@@ -43,5 +43,5 @@ The branch menu's context (`GitBranchScope`) and titles (`GitBranchTitle`) now t
 ## Consequences
 
 - No plugin API change: the document reuses `gitChanges/branch`; tags, pull requests and submodules have no menu location yet. `TODO(issue)`: a `gitRepository/*` menu location per node kind, if plugins need one.
-- `TODO(issue)`: the website's screenshot of the document (`smoke-test-git-repository.png`, the `git.repository` smoke step) once a CI run has it.
+- The website's Features page shows the document and a commit's tab (`git-repository.png`, `git-commit.png`), from the `git.repository` smoke step of CI run 40931330284.
 - `TODO(issue)`: the pull request filters of the Pull Requests window (Mine, Review requested) in the tree; it lists all open ones.
