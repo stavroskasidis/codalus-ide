@@ -190,6 +190,11 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         Assert.Equal(-33000, coded.Code);
         Assert.Null(coded.Details);
 
+        // Each names its request: the exception is set, not thrown, so a failure nobody awaited has only that.
+        Assert.Equal("nope", missing.Method);
+        Assert.Equal("fail", failed.Method);
+        Assert.Equal("coded", coded.Method);
+
         // The error's data (a string): the full exception behind a bug, shown with the remote exception.
         var detailed = await Assert.ThrowsAsync<JsonRpcRemoteException>(() => _a.InvokeAsync("detailed", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout()));
         Assert.Equal("Handle is not initialized.", detailed.Message);
