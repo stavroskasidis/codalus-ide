@@ -185,6 +185,22 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_detach_after_the_server_ended_the_session_leaves_it_alone()
+    {
+        // The server exited while the detach was prepared (macOS CI, run 40873591881): its end ended the session, and
+        // the late detach must not disconnect or dispose the primary a second time.
+        var (compound, server, browser, _) = await CreateAsync();
+        await server.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        await compound.Closed.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        var browserRequests = browser.Requests.Count;
+
+        await compound.DetachPrimaryAsync(Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        Assert.DoesNotContain(server.Requests, r => r.StartsWith("disconnect", StringComparison.Ordinal));
+        Assert.False(server.Disposed);
+        Assert.Equal(browserRequests, browser.Requests.Count);
+    }
+
+    [Fact]
     public async Task A_stop_waits_while_another_one_shows_and_shows_when_it_resumes()
     {
         var (compound, server, browser, events) = await CreateAsync();

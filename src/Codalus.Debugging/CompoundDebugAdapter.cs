@@ -1010,7 +1010,11 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// </summary>
     public async Task DetachPrimaryAsync(CancellationToken cancellationToken)
     {
-        Interlocked.Exchange(ref _ending, 1);
+        if (Interlocked.Exchange(ref _ending, 1) == 1)
+        {
+            return; // the session ends already (the server exited, or Stop): nothing is left to detach from
+        }
+
         Volatile.Write(ref _detaching, 1); // the session ends once the others did, not with the primary
         try
         {
