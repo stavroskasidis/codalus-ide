@@ -21,8 +21,8 @@
         },
         "github.oauthClientId": {
           "type": "string",
-          "default": "",
-          "description": "The client id of the OAuth app used to sign in with a device code. Empty: sign in with a personal access token.",
+          "default": "Ov23lieq6uB5CAp48llO",
+          "description": "The client id of the OAuth app used to sign in with a device code. The default is Codalus IDE's app on github.com; a GitHub Enterprise Server needs its own. Empty: sign in with a personal access token.",
           "scope": "user"
         }
       }

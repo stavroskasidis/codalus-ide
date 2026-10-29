@@ -27,6 +27,15 @@ internal sealed class GitHubProvider : HostingProviderBase
 
     private bool IsDotCom => ServerHost == "github.com";
 
+    /// <summary>Codalus IDE's OAuth app on github.com: <c>github.oauthClientId</c>'s default in the manifest (ADR 0088).</summary>
+    internal const string DotComClientId = "Ov23lieq6uB5CAp48llO";
+
+    /// <summary>The OAuth app's client id: github.com's app is no use on a GitHub Enterprise Server, which needs its own.</summary>
+    private string ClientId =>
+        Settings.GetValue("github.oauthClientId", string.Empty).Trim() is var id && id == DotComClientId && !IsDotCom
+            ? throw new InvalidOperationException($"{ServerUrl} needs its own OAuth app for device sign-in: set github.oauthClientId to its client id, or sign in with a personal access token.")
+            : id;
+
     /// <summary>The REST API: api.github.com, or <c>/api/v3</c> on a GitHub Enterprise Server.</summary>
     private string Api => IsDotCom ? "https://api.github.com" : ServerUrl + "/api/v3";
 
@@ -50,7 +59,7 @@ internal sealed class GitHubProvider : HostingProviderBase
     {
         var token = await DeviceFlow.SignInAsync(
             Http,
-            new DeviceFlowEndpoints(ServerUrl + "/login/device/code", ServerUrl + "/login/oauth/access_token", Settings.GetValue("github.oauthClientId", string.Empty), Scopes),
+            new DeviceFlowEndpoints(ServerUrl + "/login/device/code", ServerUrl + "/login/oauth/access_token", ClientId, Scopes),
             prompt,
             cancellationToken).ConfigureAwait(false);
         return await StoreAsync(token.AccessToken, cancellationToken).ConfigureAwait(false);

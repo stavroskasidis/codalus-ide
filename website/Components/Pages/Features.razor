@@ -84,7 +84,7 @@
                 <ul>
                     <li>Go to Definition and Implementation, into decompiled code</li>
                     <li>Navigate Backward and Forward through the documents and places you were, from the toolbar, the keyboard or the mouse's back and forward buttons</li>
-                    <li>Find All References with read/write classification</li>
+                    <li>Find All References as the classic IDE shows it: grouped by project and definition, the classic IDE's columns with resizable widths and per-column filters, a scope box, and Keep Results opening another window</li>
                     <li>Code Search: files, types, members and text in one window, with filter chips, a live, editable preview, and an index kept with the solution so it finds everything right after a restart</li>
                     <li>Feature Search for commands, settings and Options pages, from the search box</li>
                     <li>Peek Definition, Call and Type Hierarchy, Class View and the Object Browser</li>
@@ -144,15 +144,17 @@
                     <li>Diffs and the merge editor in the editor's colors</li>
                     <li>A branch drop-down in Git Changes: search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
                     <li>Update a branch from its remote without checking it out</li>
+                    <li>Manage Branches, the classic IDE's Git Repository window: every branch in folders, the remotes, tags, open pull requests and submodules in a tree, and the selected branch's history with its incoming and outgoing commits</li>
                     <li>Fetch, pull, push and sync show in Git Changes while they run, with Cancel, as in the classic IDE</li>
                     <li>Solutions in several repositories, all in Git Changes at once: a tree per repository, Commit All Repos, fetch, pull and push in each, and the branches every repository has</li>
                     <li>A folder's menu in Git Changes, as in the classic IDE: stage, discard, stash, ignore, history, reveal, terminal, copy path</li>
-                    <li>A history graph and interactive rebase</li>
+                    <li>A history graph in the classic IDE's columns, filtered by message, author or commit ID, with incoming and outgoing commits, and each commit's details in a tab of its own (its diff, Revert, Reset, Explain with AI)</li>
+                    <li>Interactive rebase</li>
                     <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions scrolling with it</li>
                     <li>Stash, tags, remotes, worktrees and Git LFS</li>
                     <li>Pull requests, with review comments in the editor</li>
                     <li>GitHub, Azure DevOps and GitLab, and their own servers: Azure DevOps Server found from the remote, signed in to with your Windows account</li>
-                    <li>Create a pull request from Git Changes, signing in first when you need to</li>
+                    <li>Git Changes knows the repository's host and signs you in to it in place, with a link to create the token it needs; then create a pull request from it</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="web">
@@ -362,7 +364,7 @@
     private static readonly Shot[] s_shots =
     [
         new("editor", "Editor", "editor-dark.png",
-            "The editor with inlay hints, Find Results for references to Greet, and the Solution Explorer",
+            "The editor with inlay hints, the References window with the references to Greet, and the Solution Explorer",
             "Roslyn-powered C# with inlay hints, the minimap, Find All References and the Solution Explorer."),
         new("intellisense", "IntelliSense", "intellisense.png",
             "Typing a call in the editor: the completion list below the line with an icon per kind, the selected method's description beside it and the kind filters under it, and parameter info above the line",
@@ -370,6 +372,9 @@
         new("find", "Find in Files", "find-in-files.png",
             "The Find and Replace window floating over the editor, with Find Results below",
             "Find and Replace in Files from a floating window: scopes, file types and regular expressions, with every match listed in Find Results in the editor's colors, which filters, groups by folder and file as a tree or a list, and keeps earlier results on their own pages."),
+        new("references", "Find All References", "references.png",
+            "The References window: the references to Greet grouped by project, then by definition, with the classic IDE's columns: code, file, line, column, project, containing member, containing type and kind",
+            "Find All References as the classic IDE shows it: grouped by project and definition, the symbol highlighted in each line, resizable columns with a filter on each, a scope box, and Keep Results opening another window."),
         new("code-search", "Code Search", "code-search.png",
             "The Code Search window over the editor: filter chips, two-line results for Greet with Greeter selected, and Greeter.cs in the preview below",
             "Go To All is Code Search: files, types, members and text with filter chips, results that say where each one is, and the selected one in a live preview you can edit and save."),

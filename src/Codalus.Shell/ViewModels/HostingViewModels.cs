@@ -47,6 +47,156 @@ public interface IHostingActions
 
 // ------------------------------------------------------------------ accounts
 
+/// <summary>
+/// Git Changes' sign-in panel (ADR 0088): the repository's host, when the user isn't signed in to it, with that host's
+/// sign-in inline (<see cref="Row"/>, the same row as on the Accounts page). Suggested until dismissed for the
+/// repository; opened (<see cref="IsExpanded"/>) by Sign In, Create a pull request and the hosting windows' Sign in.
+/// </summary>
+public sealed class HostingSignInViewModel : ObservableObject
+{
+    private readonly Action _dismiss;
+    private readonly Action<string> _openUrl;
+    private AccountProviderRow? _row;
+    private string _server = string.Empty;
+    private string? _tokenUrl;
+    private bool _isSuggested;
+    private bool _isExpanded;
+
+    public HostingSignInViewModel(Action dismiss, Action<string> openUrl)
+    {
+        _dismiss = dismiss;
+        _openUrl = openUrl;
+        ExpandCommand = new RelayCommand(() => IsExpanded = true);
+        DismissCommand = new RelayCommand(Dismiss);
+        CreateTokenCommand = new RelayCommand(() =>
+        {
+            if (_tokenUrl is { } url)
+            {
+                _openUrl(url);
+            }
+        });
+    }
+
+    /// <summary>The provider's row: its sign-in state, token, device code and errors. Null when there is nothing to sign in to.</summary>
+    public AccountProviderRow? Row
+    {
+        get => _row;
+        set
+        {
+            if (ReferenceEquals(_row, value))
+            {
+                return;
+            }
+
+            if (_row is not null)
+            {
+                _row.PropertyChanged -= OnRowChanged;
+            }
+
+            _row = value;
+            if (_row is not null)
+            {
+                _row.PropertyChanged += OnRowChanged;
+            }
+
+            NotifyAll();
+        }
+    }
+
+    /// <summary>The host the repository is on: <c>github.com</c>, <c>tfs.contoso.com/tfs</c>.</summary>
+    public string Server
+    {
+        get => _server;
+        set
+        {
+            if (SetField(ref _server, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    /// <summary>The host's page that creates a personal access token, if known.</summary>
+    public string? TokenUrl
+    {
+        get => _tokenUrl;
+        set
+        {
+            if (SetField(ref _tokenUrl, value))
+            {
+                OnPropertyChanged(nameof(HasTokenUrl));
+            }
+        }
+    }
+
+    public bool HasTokenUrl => _tokenUrl is not null;
+
+    /// <summary>Suggested without being asked: the repository's host, and not dismissed for this repository.</summary>
+    public bool IsSuggested
+    {
+        get => _isSuggested;
+        set
+        {
+            if (SetField(ref _isSuggested, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    /// <summary>The ways to sign in are shown (Sign In, Create a pull request, a hosting window's Sign in).</summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (SetField(ref _isExpanded, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    public bool IsVisible => _row is not null && (_isSuggested || _isExpanded);
+
+    public bool IsCollapsed => !_isExpanded;
+
+    public string Label => _row?.Label ?? string.Empty;
+
+    /// <summary>"This repository is on GitHub (github.com). Sign in to create pull requests and see CI status and work items."</summary>
+    public string Text => Localizer.Format("gitChanges.signInSuggestion", "This repository is on {0} ({1}). Sign in to create pull requests and see CI status and work items.", Label, _server);
+
+    public System.Windows.Input.ICommand ExpandCommand { get; }
+
+    public System.Windows.Input.ICommand DismissCommand { get; }
+
+    public System.Windows.Input.ICommand CreateTokenCommand { get; }
+
+    /// <summary>Hides the panel and never suggests signing in for this repository again.</summary>
+    public void Dismiss()
+    {
+        _dismiss();
+        _isSuggested = false;
+        _isExpanded = false;
+        NotifyAll();
+    }
+
+    /// <summary>"Or sign in with a personal access token:" under another way to sign in; without one, the token is the way.</summary>
+    public string TokenPrompt => _row is { CanSignInIntegrated: true } or { CanSignInWithCode: true }
+        ? Localizer.Get("accounts.orSignInWithAPersonal", "Or sign in with a personal access token:")
+        : Localizer.Get("gitChanges.signInWithAPersonalAccessToken", "Sign in with a personal access token:");
+
+    private void OnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => OnPropertyChanged(nameof(TokenPrompt));
+
+    private void NotifyAll()
+    {
+        foreach (var name in new[] { nameof(Row), nameof(IsVisible), nameof(IsCollapsed), nameof(Label), nameof(Text), nameof(TokenPrompt) })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+}
+
 /// <summary>A provider on the Accounts page: signed in or not, and the sign-in in progress (its device code).</summary>
 public sealed class AccountProviderRow : ObservableObject
 {
@@ -60,6 +210,7 @@ public sealed class AccountProviderRow : ObservableObject
     private string? _serverHint;
     private string? _pendingServer;
     private bool _integratedSignIn;
+    private bool _deviceSignIn = true;
 
     public AccountProviderRow(
         string id,
@@ -97,6 +248,11 @@ public sealed class AccountProviderRow : ObservableObject
     }
 
     public bool HasServerHint => ServerHint is { Length: > 0 };
+
+    /// <summary>What a personal access token needs on this host ("A token needs the repo, read:org and workflow scopes.").</summary>
+    public string? TokenHint { get; set; }
+
+    public bool HasTokenHint => TokenHint is { Length: > 0 };
 
     /// <summary>The setting with the provider's server (<c>azureDevOps.serverUrl</c>).</summary>
     public string? ServerSetting { get; set; }
@@ -137,8 +293,24 @@ public sealed class AccountProviderRow : ObservableObject
 
     public bool CanSignInIntegrated => CanSignIn && _integratedSignIn;
 
-    /// <summary>The device code sign-in, which a server signed in to with the system's account doesn't have.</summary>
-    public bool CanSignInWithCode => CanSignIn && !_integratedSignIn;
+    /// <summary>
+    /// The provider's device code sign-in is set up: its OAuth app's client id (<c>github.oauthClientId</c>…) is set.
+    /// Without one, Sign In could only fail, so a token is the way in (ADR 0088).
+    /// </summary>
+    public bool DeviceSignIn
+    {
+        get => _deviceSignIn;
+        set
+        {
+            if (SetField(ref _deviceSignIn, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    /// <summary>The device code sign-in: set up, and not a server signed in to with the system's account.</summary>
+    public bool CanSignInWithCode => CanSignIn && _deviceSignIn && !_integratedSignIn;
 
     /// <summary>Windows authentication on Windows; a Kerberos ticket (<c>kinit</c>) elsewhere.</summary>
     public static string IntegratedSignInLabel => OperatingSystem.IsWindows()

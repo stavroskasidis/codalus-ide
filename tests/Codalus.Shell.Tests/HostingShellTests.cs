@@ -402,9 +402,9 @@ public sealed class HostingShellTests
 
     /// <summary>
     /// Git Changes' Create a pull request button on a repository whose remote is on an Azure DevOps Server the IDE isn't
-    /// set up for (ADR 0087): it opens the Accounts page on that server, signing in as the operating system's user sets
-    /// <c>azureDevOps.serverUrl</c>, and the button then opens the form. A mock server stands in, and a request with no
-    /// Authorization header stands for Negotiate.
+    /// set up for (ADR 0087, 0088): it opens Git Changes' sign-in panel on that server (not the Accounts page), signing in
+    /// there as the operating system's user sets <c>azureDevOps.serverUrl</c>, and then the form opens. A mock server stands
+    /// in, and a request with no Authorization header stands for Negotiate.
     /// </summary>
     [AvaloniaFact]
     public async Task Create_pull_request_on_an_azure_devops_server_signs_in_there_first()
@@ -429,25 +429,86 @@ public sealed class HostingShellTests
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "feature/login" } && f.Shell.Suggested is { Id: "azure-devops" }, seconds: 60);
 
-        // Not signed in anywhere: the button opens the Accounts page on the remote's server, and starts nothing.
+        // Not signed in anywhere: Git Changes suggests the remote's server, and the button opens its sign-in there.
+        var panel = f.Shell.GitChanges.HostingSignIn!;
+        Assert.Equal((true, true, false), (panel.IsVisible, panel.IsSuggested, panel.IsExpanded));
+        Assert.Equal(new Uri(server.BaseUrl).Authority + "/tfs", panel.Server);
+        Assert.Equal(server.BaseUrl + "/tfs/DefaultCollection/_usersSettings/tokens", panel.TokenUrl);
         Assert.True(f.Shell.Workbench.Commands.IsEnabled("git.createPullRequest"));
         await f.Shell.GitChanges.RunAsync("git.createPullRequest");
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId) is not null);
-        var row = f.Shell.Accounts.Row("azure-devops")!;
+        await ShellFixture.PumpUntil(() => panel.IsExpanded);
+        Assert.Null(f.Shell.Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId));
+        var row = panel.Row!;
+        Assert.Equal("azure-devops", row.Id);
         Assert.Equal(server.BaseUrl + "/tfs", row.PendingServer);
-        Assert.Contains(server.BaseUrl + "/tfs", row.ServerHint, StringComparison.Ordinal);
         Assert.Equal((true, false, false), (row.CanSignInIntegrated, row.CanSignInWithCode, row.IsSigningIn));
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AccountsView>().Any());
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Any(b => b.Name == "HostingSignInPanel" && b.IsEffectivelyVisible));
+        NavigationDepthTests.Screenshot(f, "hosting-sign-in-azure-devops-server");
 
+        // Signing in there sets the server, and the pull request form opens on its own.
         row.SignInIntegratedCommand.Execute(null);
         await ShellFixture.PumpUntil(() => row.IsSignedIn && f.Shell.Match is not null, seconds: 60);
         Assert.Equal(server.BaseUrl + "/tfs", f.Shell.Workbench.Settings.GetString("azureDevOps.serverUrl", string.Empty));
         Assert.Equal(@"Signed in as CONTOSO\ada on " + new Uri(server.BaseUrl).Authority, row.StatusText);
         Assert.Null(row.PendingServer);
         Assert.Equal("DefaultCollection/Apps/BuildAndRun", f.Shell.Match!.Repository.Id);
-
-        await f.Shell.GitChanges.RunAsync("git.createPullRequest");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<CreatePullRequestDocument>(CreatePullRequestDocument.DocumentId) is not null, seconds: 60);
+        Assert.False(panel.IsVisible);
         Assert.Equal("feature/login", f.Shell.Layout.FindDocument<CreatePullRequestDocument>(CreatePullRequestDocument.DocumentId)!.ViewModel.SourceBranch);
+    }
+
+    /// <summary>
+    /// Git Changes suggests signing in to the repository's host until it is dismissed for the repository (ADR 0088), and
+    /// the hosting windows' Sign in open that panel, not the Accounts page. Without an OAuth app's client id there is no
+    /// Sign In with Your Browser (it could only fail): the token is the way, with a link to the host's token page.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_changes_suggests_signing_in_until_dismissed_and_signs_in_in_place()
+    {
+        var (f, github, _, _) = await OpenHostedRepositoryAsync(signIn: false);
+        await using var _f = f;
+        await using var _g = github;
+        var panel = f.Shell.GitChanges.HostingSignIn!;
+        await ShellFixture.PumpUntil(() => panel.IsVisible);
+        Assert.Equal((true, false, "github"), (panel.IsSuggested, panel.IsExpanded, panel.Row?.Id));
+        Assert.Contains("GitHub", panel.Text, StringComparison.Ordinal);
+        Assert.Equal(github.ServerUrl + "/settings/tokens/new?scopes=repo,read:org,workflow&description=Codalus%20IDE", panel.TokenUrl);
+        Assert.True(panel.Row!.CanSignInWithCode); // the mock's OAuth app is set
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<Avalonia.Controls.Border>().Any(b => b.Name == "HostingSignInPanel" && b.IsEffectivelyVisible));
+        NavigationDepthTests.Screenshot(f, "hosting-sign-in-suggested");
+
+        // Dismissed: gone for this repository, and still gone after the host is worked out again.
+        panel.DismissCommand.Execute(null);
+        Assert.False(panel.IsVisible);
+        Assert.True(f.Shell.Hosting.IsSignInSuggestionDismissed(f.Shell.Git.Root!));
+        await f.Shell.RefreshHostingAsync();
+        Assert.False(panel.IsVisible);
+
+        // The Pull Requests window's Sign in opens the panel all the same, in Git Changes.
+        f.Shell.Layout.ShowToolWindow(PullRequestsViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Shell.PullRequests.CanSignIn);
+        f.Shell.PullRequests.SignInCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => panel is { IsVisible: true, IsExpanded: true });
+        Assert.Null(f.Shell.Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId));
+        Assert.False(panel.Row.IsSigningIn); // no device sign-in started by itself
+
+        // github.com's own app (the default) is no use on another server, here the mock: no browser sign-in.
+        Assert.Equal("Ov23lieq6uB5CAp48llO", f.Shell.Workbench.Settings.Find("github.oauthClientId")?.Default.GetString());
+        await f.Shell.Workbench.Settings.SetAsync("github.oauthClientId", "Ov23lieq6uB5CAp48llO", SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => !panel.Row.CanSignInWithCode);
+
+        // No OAuth app: no browser sign-in, here or on the Accounts page, and opening the page starts nothing.
+        await f.Shell.Workbench.Settings.SetAsync("github.oauthClientId", string.Empty, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => !panel.Row.CanSignInWithCode);
+        Assert.Equal("Sign in with a personal access token:", panel.TokenPrompt);
+        NavigationDepthTests.Screenshot(f, "hosting-sign-in-token");
+        var accounts = f.Shell.ShowAccounts("github");
+        Assert.False(accounts.ViewModel.Row("github")!.IsSigningIn);
+
+        // A token pasted in the panel signs in, and the panel goes.
+        panel.Row.Token = MockGitHub.Token;
+        panel.Row.SignInWithTokenCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Match is not null && !panel.IsVisible, seconds: 60);
     }
 }

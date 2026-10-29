@@ -43,7 +43,10 @@ internal sealed partial class AzureDevOpsProvider : HostingProviderBase
 
     private string ProfileUrl => Setting("azureDevOps.profileUrl", DefaultProfileUrl);
 
-    private string ClientId => Settings.GetValue("azureDevOps.oauthClientId", string.Empty);
+    /// <summary>Codalus IDE's Microsoft Entra ID app for Azure DevOps Services: <c>azureDevOps.oauthClientId</c>'s default (ADR 0088).</summary>
+    internal const string ServicesClientId = "743f360d-cef1-4e57-86fe-27c15c10eae0";
+
+    private string ClientId => Settings.GetValue("azureDevOps.oauthClientId", string.Empty).Trim();
 
     protected override string ServerHost => RemoteUrl.HostOf(ServerUrl);
 
@@ -154,6 +157,12 @@ internal sealed partial class AzureDevOpsProvider : HostingProviderBase
 
     public override async Task<HostingAccount> SignInAsync(IDeviceCodePrompt prompt, CancellationToken cancellationToken)
     {
+        if (ClientId == ServicesClientId && !IsServicesHost(ServerHost))
+        {
+            // Codalus IDE's Entra app is for Azure DevOps Services; a server signs in with its own app, the system's account or a token.
+            throw new InvalidOperationException($"{ServerUrl} isn't Azure DevOps Services: sign in with your Windows account or a personal access token, or set azureDevOps.oauthClientId to an Entra app of your own.");
+        }
+
         var token = await DeviceFlow.SignInAsync(
             Http,
             new DeviceFlowEndpoints(AuthorityUrl + "/oauth2/v2.0/devicecode", AuthorityUrl + "/oauth2/v2.0/token", ClientId, Scope),

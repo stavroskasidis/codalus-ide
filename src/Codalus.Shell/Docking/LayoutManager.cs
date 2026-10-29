@@ -132,6 +132,46 @@ public sealed class LayoutManager : ObservableObject
 
     public bool IsVisible(string toolWindowId) => OpenToolWindows.Any(t => t.Id == toolWindowId);
 
+    /// <summary>A tool window <see cref="ShowExtraToolWindow"/> opened was closed: it is gone for good.</summary>
+    public event EventHandler<ToolWindowDockable>? ExtraToolWindowClosed;
+
+    /// <summary>
+    /// Opens another instance of a tool window (a References window Keep Results left, 0.6): <paramref name="descriptor"/>
+    /// isn't registered, so the View menu doesn't list it and a restart doesn't restore it. It opens as a tab beside
+    /// <paramref name="besideId"/>'s window when that is open, else where the descriptor's location says.
+    /// </summary>
+    public ToolWindowDockable ShowExtraToolWindow(ToolWindowDescriptor descriptor, object content, string besideId, bool focus = false)
+    {
+        if (!_tools.TryGetValue(descriptor.Id, out var tool))
+        {
+            tool = new ToolWindowDockable(descriptor, content);
+            _tools[descriptor.Id] = tool;
+        }
+
+        var focused = focus ? null : _root.FocusedDockable;
+        if (!AllDockables().Contains(tool))
+        {
+            var beside = OpenToolWindows.FirstOrDefault(t => t.Id == besideId && !IsPinned(t));
+            Factory.AddDockable(beside?.Owner is IToolDock group && AllDockables().Contains(group) ? group : GroupFor(tool), tool);
+        }
+
+        Factory.SetActiveDockable(tool);
+        if (focus && tool.Owner is IDock owner)
+        {
+            Factory.SetFocusedDockable(owner, tool);
+            FocusRequested?.Invoke(this, tool);
+        }
+        else if (focused is { Owner: IDock focusedOwner } && !ReferenceEquals(focused, tool) && !ReferenceEquals(_root.FocusedDockable, focused))
+        {
+            Factory.SetFocusedDockable(focusedOwner, focused);
+        }
+
+        return tool;
+    }
+
+    /// <summary>The tool window <paramref name="id"/>'s tab, open or not (registered or extra), or null.</summary>
+    public ToolWindowDockable? ToolWindow(string id) => _tools.GetValueOrDefault(id);
+
     public void CloseToolWindow(string id)
     {
         if (OpenToolWindows.FirstOrDefault(t => t.Id == id) is { } tool)
@@ -407,6 +447,10 @@ public sealed class LayoutManager : ObservableObject
         if (e.Dockable is ShellDocument document)
         {
             DocumentClosed?.Invoke(this, document);
+        }
+        else if (e.Dockable is ToolWindowDockable tool && _registry.Find(tool.Id) is null && _tools.Remove(tool.Id))
+        {
+            ExtraToolWindowClosed?.Invoke(this, tool);
         }
 
         UpdateActiveDocument();

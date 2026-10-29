@@ -9,19 +9,11 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>
-/// A row of the Find Results: a group header (folder, file or project), or a match (line number and the line's text).
-/// For references (M12a), <see cref="Kind"/> is read, write, declaration or reference and <see cref="Container"/> the
-/// member containing it.
+/// A row of the Find Results: a group header (folder or file), or a match (line number and the line's text). Find All
+/// References has its own window (<see cref="ReferencesViewModel"/>).
 /// </summary>
 public sealed record FindResultRow(string Path, int Line, int Column, int Length, string Text, bool IsHeader)
 {
-    public string? Kind { get; init; }
-
-    public string? Container { get; init; }
-
-    /// <summary>References: the project the reference is in.</summary>
-    public string? Project { get; init; }
-
     /// <summary>The positions in <see cref="Code"/> that matched (Find in Files), drawn emphasized.</summary>
     public IReadOnlyList<int>? Highlights { get; init; }
 
@@ -50,7 +42,7 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// <summary>A header: a folder's (its path shown below the search's root), not a file's or a project's.</summary>
     public bool IsFolder { get; init; }
 
-    /// <summary>A header of a file, a project or a reference group: drawn semibold (a folder's is regular, M34h).</summary>
+    /// <summary>A header of a file: drawn semibold (a folder's is regular, M34h).</summary>
     public bool IsFileHeader => IsHeader && !IsFolder;
 
     /// <summary>A header's text as shown: a folder below the search's root, a file's name or path.</summary>
@@ -59,7 +51,6 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// <summary>A header's icon: the folder (open or closed) or the file's type.</summary>
     public string? HeaderIcon => !IsHeader ? null
         : IsFolder ? Controls.FileIcons.ForFolder(System.IO.Path.GetFileName(Path.TrimEnd('/', '\\')), IsExpanded)
-        : GroupKey?.StartsWith("p:", StringComparison.Ordinal) == true ? "project"
         : GroupKey is null ? null : Controls.FileIcons.ForFile(System.IO.Path.GetFileName(Path));
 
     /// <summary>The columns a row's first cell takes: a header the whole row, a match the Code column.</summary>
@@ -71,10 +62,8 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// </summary>
     public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * 18) : Depth == 0 ? 8 : 40 + ((Depth - 1) * 18), 0, 0, 0);
 
-    /// <summary>The Code column: the line's text, with the kind of reference after it; a header's text with its count.</summary>
-    public string Code => IsHeader ? Count > 0 ? $"{Text} ({Count})" : Text
-        : Kind is null ? Text
-        : $"{Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
+    /// <summary>The Code column: the line's text; a header's text with its count.</summary>
+    public string Code => IsHeader && Count > 0 ? $"{Text} ({Count})" : Text;
 
     public string FileName => IsHeader ? string.Empty : FullPath ? Path : System.IO.Path.GetFileName(Path);
 
@@ -87,26 +76,10 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// <summary>A collapsible header's chevron: right when collapsed, down when expanded.</summary>
     public string? Chevron => GroupKey is null ? null : IsExpanded ? "chevron-down" : "chevron-right";
 
-    public string Display => IsHeader ? Code
-        : Kind is null ? $"{Line,6}:  {Text}"
-        : $"{Line,6}:  {Text}    [{KindTitle(Kind)}{(Container is null ? string.Empty : " in " + Container)}]";
+    public string Display => IsHeader ? Code : $"{Line,6}:  {Text}";
 
     public string AccessibleName => IsHeader ? (GroupKey is null ? Code : $"{Code}, {(IsExpanded ? "expanded" : "collapsed")}")
-        : Kind is null ? $"Line {Line}: {Text}" : $"Line {Line}, {KindTitle(Kind)}: {Text}";
-
-    public static string KindTitle(string kind) => kind switch
-    {
-        ReferenceItemKinds.Declaration => "declaration",
-        ReferenceItemKinds.Write => "write",
-        ReferenceItemKinds.Read => "read",
-        _ => "reference",
-    };
-}
-
-/// <summary>One Find All References result, kept so earlier searches can be shown again.</summary>
-public sealed record ReferenceSet(string Title, IReadOnlyList<ReferenceItem> Items)
-{
-    public override string ToString() => Title;
+        : $"Line {Line}: {Text}";
 }
 
 /// <summary>How Find in Files results are grouped (the Group by drop-down).</summary>
@@ -125,14 +98,12 @@ public static class FindResultsGrouping
 }
 
 /// <summary>
-/// Find Results: what Find and Replace (<see cref="FindReplaceViewModel"/>) found and the results of Find All
-/// References, in numbered pages (Find Results 1, 2…). A page with Keep Results on keeps its results: the next search
+/// Find Results: what Find and Replace (<see cref="FindReplaceViewModel"/>) found, in numbered pages (Find Results 1, 2…). A page with Keep Results on keeps its results: the next search
 /// goes to a page without it, or a new one. The members below the pages act on the current page.
 /// </summary>
 public sealed class FindResultsViewModel : ObservableObject, IDisposable
 {
     public const string ToolWindowId = "findResults";
-    private const int MaxReferenceSets = 10;
 
     private readonly Func<FindInFilesOptions, Task<IReadOnlyList<string>>> _files;
     private readonly Func<string, string?> _openText;
@@ -167,7 +138,6 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(Title));
                 OnPropertyChanged(nameof(Summary));
                 OnPropertyChanged(nameof(SelectedRow));
-                OnPropertyChanged(nameof(IsReferences));
                 OnPropertyChanged(nameof(IsSearching));
             }
         }
@@ -179,14 +149,7 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
     /// <summary>The folder headers' paths are shown below (the solution's folder) when a search looked in a scope, not a folder.</summary>
     public Func<string?>? RootFolder { get; set; }
 
-    /// <summary>Earlier Find All References results, newest first (every page's Earlier results drop-down).</summary>
-    public ObservableCollection<ReferenceSet> ReferenceSets { get; } = [];
-
-    public static IReadOnlyList<string> GroupByOptions { get; } = ["File", "Project", "None"];
-
     public static IReadOnlyList<string> FilesGroupByOptions => FindResultsGrouping.All;
-
-    public static IReadOnlyList<string> KindFilterOptions { get; } = ["All", "Read", "Write", "Declaration"];
 
     /// <summary>Modify Find: Find and Replace should show again with this page's search.</summary>
     public event EventHandler<FindResultsPage>? ModifyFindRequested;
@@ -204,32 +167,12 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 
     public FindInFilesOptions? LastSearch => _currentPage.LastSearch;
 
-    public bool IsReferences => _currentPage.IsReferences;
-
     public bool IsSearching => _currentPage.IsSearching;
 
     public FindResultRow? SelectedRow
     {
         get => _currentPage.SelectedRow;
         set => _currentPage.SelectedRow = value;
-    }
-
-    public ReferenceSet? CurrentSet
-    {
-        get => _currentPage.CurrentSet;
-        set => _currentPage.CurrentSet = value;
-    }
-
-    public string GroupBy
-    {
-        get => _currentPage.GroupBy;
-        set => _currentPage.GroupBy = value;
-    }
-
-    public string KindFilter
-    {
-        get => _currentPage.KindFilter;
-        set => _currentPage.KindFilter = value;
     }
 
     public RelayCommand ModifyFindCommand => _currentPage.ModifyFindCommand;
@@ -263,23 +206,6 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
     /// <summary>Replace All's results: the lines that changed (with their new text), under the replace's title.</summary>
     public void ShowReplaced(FindInFilesOptions options, string replaceWith, IReadOnlyList<FindResultRow> rows, int occurrences, int files) =>
         TakePage().ShowReplaced(options, replaceWith, rows, occurrences, files);
-
-    /// <summary>Shows classified references (<c>codalus/references</c>) and keeps them in <see cref="ReferenceSets"/>.</summary>
-    public Task ShowReferencesAsync(string title, IReadOnlyList<ReferenceItem> items)
-    {
-        var set = new ReferenceSet(title, items);
-        ReferenceSets.Insert(0, set);
-        while (ReferenceSets.Count > MaxReferenceSets)
-        {
-            ReferenceSets.RemoveAt(ReferenceSets.Count - 1);
-        }
-
-        TakePage().CurrentSet = set;
-        return Task.CompletedTask;
-    }
-
-    /// <summary>Shows <paramref name="locations"/> (files on disk) under <paramref name="title"/>.</summary>
-    public Task ShowLocationsAsync(string title, IReadOnlyList<Location> locations) => TakePage().ShowLocationsAsync(title, locations);
 
     /// <summary>The page new results go to: the current one, unless it keeps its results; then one that doesn't, or a new one.</summary>
     private FindResultsPage TakePage()
@@ -358,7 +284,7 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
     /// <summary>A page's state changed: the forwarding members follow the current page.</summary>
     internal void PageChanged(FindResultsPage page, string? property)
     {
-        if (page == _currentPage && property is nameof(Title) or nameof(Summary) or nameof(SelectedRow) or nameof(IsSearching) or nameof(IsReferences))
+        if (page == _currentPage && property is nameof(Title) or nameof(Summary) or nameof(SelectedRow) or nameof(IsSearching))
         {
             OnPropertyChanged(property);
         }
@@ -366,7 +292,7 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 }
 
 /// <summary>
-/// One page of the Find Results (Find Results 1, 2…): a search's results, a Replace All's or references. Searching
+/// One page of the Find Results (Find Results 1, 2…): a search's results or a Replace All's. Searching
 /// runs on the thread pool and streams results in batches; a new search cancels the page's previous one. The rows
 /// shown are the results through the Search Find Results filter, grouped by Group by (a tree whose headers collapse)
 /// or listed flat (List View). Double-click or Enter opens a match; Next and Previous (and Find and Replace's Find Next)
@@ -385,16 +311,12 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     private readonly HashSet<string> _collapsed = new(StringComparer.OrdinalIgnoreCase);
 
     private CancellationTokenSource? _search;
-    private ReferenceSet? _currentSet;
-    private bool _showsReferences;
     private string _title = string.Empty;
     private string _summary = string.Empty;
     private int _shownMatches;
     private bool _isSearching;
     private FindResultRow? _selectedRow;
     private string _filter = string.Empty;
-    private string _groupBy = "File";
-    private string _kindFilter = "All";
     private string _filesGroupBy = FindResultsGrouping.File;
     private bool _isListView;
     private bool _keepResults;
@@ -404,7 +326,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         _owner = owner;
         Number = number;
         CancelCommand = new RelayCommand(Cancel);
-        ModifyFindCommand = new RelayCommand(() => _owner.RequestModifyFind(this), () => CanModifyFind);
+        ModifyFindCommand = new RelayCommand(() => _owner.RequestModifyFind(this));
         NextCommand = new RelayCommand(() => _ = GoToAsync(1));
         PreviousCommand = new RelayCommand(() => _ = GoToAsync(-1));
         ClearCommand = new RelayCommand(Clear);
@@ -418,9 +340,6 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
     public ObservableCollection<FindResultRow> Rows { get; } = [];
 
-    /// <summary>Earlier Find All References results (the window's).</summary>
-    public ObservableCollection<ReferenceSet> ReferenceSets => _owner.ReferenceSets;
-
     public RelayCommand CancelCommand { get; }
 
     public RelayCommand ModifyFindCommand { get; }
@@ -433,7 +352,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
     public RelayCommand CloseCommand { get; }
 
-    /// <summary>The last Find in Files search (null after references or a Replace All were shown).</summary>
+    /// <summary>The last Find in Files search (null after a Replace All was shown).</summary>
     public FindInFilesOptions? LastSearch { get; private set; }
 
     /// <summary>The search behind the results (a Find All's or a Replace All's), for Modify Find.</summary>
@@ -441,9 +360,6 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
     /// <summary>A Replace All's results: what it replaced with.</summary>
     public string? ReplaceWith { get; private set; }
-
-    /// <summary>Modify Find applies to Find in Files results, not to references.</summary>
-    public bool CanModifyFind => !_showsReferences;
 
     /// <summary>Keep Results: the next search goes to another page and these stay until the page is closed.</summary>
     public bool KeepResults
@@ -583,108 +499,13 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         set => IsListView = value == 1;
     }
 
-    /// <summary>The Group by drop-down for Find in Files results shows (references have their own) and is enabled.</summary>
-    public bool ShowsFiles => !IsReferences;
-
     public bool CanGroupFiles => !_isListView;
-
-    // ------------------------------------------------------------------ references: grouping, filters (M12a)
-
-    /// <summary>True while classified references are shown: their grouping and kind filter apply.</summary>
-    public bool IsReferences => _currentSet is not null;
-
-    public ReferenceSet? CurrentSet
-    {
-        get => _currentSet;
-        set
-        {
-            if (value is not null && value != _currentSet)
-            {
-                ShowSet(value); // sets it
-            }
-        }
-    }
-
-    /// <summary>References: File, Project or None.</summary>
-    public string GroupBy
-    {
-        get => _groupBy;
-        set
-        {
-            if (SetField(ref _groupBy, value ?? "File") && _currentSet is not null)
-            {
-                Refresh();
-            }
-        }
-    }
-
-    public string KindFilter
-    {
-        get => _kindFilter;
-        set
-        {
-            if (SetField(ref _kindFilter, value ?? "All") && _currentSet is { } set)
-            {
-                ShowSet(set);
-            }
-        }
-    }
-
-    private void ShowSet(ReferenceSet set)
-    {
-        _search?.Cancel();
-        Begin(references: true, set);
-        foreach (var item in set.Items)
-        {
-            var path = DocumentUris.ToPath(item.Location.Uri) ?? DocumentUris.GeneratedPath(item.Location.Uri) ?? item.Location.Uri;
-            var start = item.Location.Range.Start;
-            _matches.Add(new FindResultRow(path, start.Line + 1, start.Character, 0, item.LineText, false) { Kind = item.Kind, Container = item.ContainingMember, Project = item.Project });
-        }
-
-        _owner.RequestShow();
-        Refresh();
-        var shown = _matches.Count(PassesKind);
-        var counts = string.Join(", ", set.Items.GroupBy(i => i.Kind).OrderBy(g => g.Key, StringComparer.Ordinal).Select(g => $"{g.Count()} {FindResultRow.KindTitle(g.Key)}"));
-        BaseSummary = $"{set.Title}: {set.Items.Count} result(s) ({counts}){(shown < set.Items.Count ? $", {shown} shown" : string.Empty)}.";
-    }
-
-    private bool PassesKind(FindResultRow row) => _currentSet is null || _kindFilter switch
-    {
-        "Read" => row.Kind == ReferenceItemKinds.Read,
-        "Write" => row.Kind == ReferenceItemKinds.Write,
-        "Declaration" => row.Kind == ReferenceItemKinds.Declaration,
-        _ => true,
-    };
 
     // ------------------------------------------------------------------ the rows shown
 
     /// <summary>Starts new results: the earlier ones go, along with what they showed.</summary>
-    private void Begin(bool references, ReferenceSet? set = null)
+    private void Begin()
     {
-        if (_currentSet != set)
-        {
-            _currentSet = set;
-            OnPropertyChanged(nameof(CurrentSet));
-            OnPropertyChanged(nameof(IsReferences));
-            OnPropertyChanged(nameof(ShowsFiles));
-            _owner.PageChanged(this, nameof(IsReferences));
-        }
-
-        if (_showsReferences != references)
-        {
-            _showsReferences = references;
-            OnPropertyChanged(nameof(CanModifyFind));
-            ModifyFindCommand.RaiseCanExecuteChanged();
-        }
-
-        if (references)
-        {
-            LastSearch = null;
-            Options = null;
-            ReplaceWith = null;
-            Title = string.Empty;
-        }
-
         _matches.Clear();
         _collapsed.Clear();
         Rows.Clear();
@@ -774,7 +595,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         for (var i = 0; i < _matches.Count; i++)
         {
             var match = _matches[i];
-            if (PassesKind(match) && PassesFilter(match))
+            if (PassesFilter(match))
             {
                 shown.Add(match with { Source = i });
             }
@@ -782,11 +603,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
         _shownMatches = shown.Count;
         var rows = new List<FindResultRow>(shown.Count + 16);
-        if (_currentSet is not null)
-        {
-            ArrangeReferences(shown, rows);
-        }
-        else if (_isListView)
+        if (_isListView)
         {
             rows.AddRange(shown.Select(m => m with { FullPath = true }));
         }
@@ -851,37 +668,6 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             : relative;
     }
 
-    /// <summary>References group by file (collapsible), by project, or not at all, as M12a showed them.</summary>
-    private void ArrangeReferences(List<FindResultRow> shown, List<FindResultRow> rows)
-    {
-        IEnumerable<IGrouping<string, FindResultRow>> groups = _groupBy switch
-        {
-            "Project" => shown.GroupBy(r => r.Project ?? "(no project)", StringComparer.Ordinal),
-            "None" => shown.GroupBy(_ => string.Empty, StringComparer.Ordinal),
-            _ => shown.GroupBy(r => r.Path, SolutionService.PathComparer),
-        };
-        foreach (var group in groups)
-        {
-            var expanded = true;
-            if (_groupBy != "None")
-            {
-                var header = Group((_groupBy == "Project" ? "p:" : "f:") + group.Key, group.First().Path, group.Key, group.Count(), 0);
-                rows.Add(header);
-                expanded = header.IsExpanded;
-            }
-
-            if (expanded)
-            {
-                foreach (var row in group.OrderBy(r => r.Path, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Line))
-                {
-                    rows.Add(_groupBy == "File"
-                        ? row with { Depth = 1 }
-                        : row with { Depth = _groupBy == "None" ? 0 : 1, Text = $"{System.IO.Path.GetFileName(row.Path)}: {row.Text}" });
-                }
-            }
-        }
-    }
-
     private bool PassesFilter(FindResultRow row) => _filter.Length == 0
         || row.Code.Contains(_filter, StringComparison.OrdinalIgnoreCase)
         || System.IO.Path.GetFileName(row.Path).Contains(_filter, StringComparison.OrdinalIgnoreCase);
@@ -896,7 +682,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     public void Clear()
     {
         _search?.Cancel();
-        Begin(references: false);
+        Begin();
         LastSearch = null;
         Options = null;
         ReplaceWith = null;
@@ -995,9 +781,9 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
         _search?.Cancel();
         _search?.Dispose();
         var cts = _search = new CancellationTokenSource();
-        if (!append || _currentSet is not null || _showsReferences)
+        if (!append)
         {
-            Begin(references: false);
+            Begin();
         }
 
         LastSearch = options;
@@ -1132,7 +918,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     public void ShowReplaced(FindInFilesOptions options, string replaceWith, IReadOnlyList<FindResultRow> rows, int occurrences, int files)
     {
         _search?.Cancel();
-        Begin(references: false);
+        Begin();
         LastSearch = null;
         Options = options;
         ReplaceWith = replaceWith;
@@ -1194,47 +980,6 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
                 }
             }
         });
-    }
-
-    // ------------------------------------------------------------------ Find All References (unclassified)
-
-    /// <summary>Shows <paramref name="locations"/> (files on disk) under <paramref name="title"/>.</summary>
-    public async Task ShowLocationsAsync(string title, IReadOnlyList<Location> locations)
-    {
-        _search?.Cancel();
-        Begin(references: true);
-        var byFile = locations
-            .Select(l => (Path: DocumentUris.ToPath(l.Uri), Location: l))
-            .Where(x => x.Path is not null)
-            .GroupBy(x => x.Path!, SolutionService.PathComparer)
-            .ToList();
-        _owner.RequestShow();
-        foreach (var file in byFile)
-        {
-            var text = _owner.OpenText(file.Key) ?? await ReadAsync(file.Key).ConfigureAwait(true);
-            var lines = text.Split('\n');
-            foreach (var (_, location) in file.OrderBy(x => x.Location.Range.Start.Line))
-            {
-                var line = location.Range.Start.Line;
-                var preview = line < lines.Length ? lines[line].TrimEnd('\r').Trim() : string.Empty;
-                _matches.Add(new FindResultRow(file.Key, line + 1, location.Range.Start.Character, 0, preview, false));
-            }
-        }
-
-        Refresh();
-        BaseSummary = $"{title}: {locations.Count} result(s) in {byFile.Count} file(s).";
-    }
-
-    private static async Task<string> ReadAsync(string path)
-    {
-        try
-        {
-            return await File.ReadAllTextAsync(path).ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return string.Empty;
-        }
     }
 }
 
