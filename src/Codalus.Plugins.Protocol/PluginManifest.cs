@@ -136,6 +136,12 @@ public sealed record ManifestHostingProvider(string Id, string Label)
 
     /// <summary>A built-in icon name.</summary>
     public string? Icon { get; init; }
+
+    /// <summary>
+    /// The provider signs in as the operating system's user (<c>HostingProvider.SignInIntegratedAsync</c>) on a self-hosted
+    /// server: the server in <see cref="ServerSetting"/>, when its host isn't one of <see cref="Hosts"/>. Since API 1.2.0.
+    /// </summary>
+    public bool IntegratedSignIn { get; init; }
 }
 
 /// <summary>

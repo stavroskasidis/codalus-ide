@@ -20,9 +20,10 @@ namespace Codalus.LanguageServices.Host.Features;
 /// wrapper, <c>HotReloadService</c>, whose calls this mirrors); the host compiles against it publicized.
 /// </para>
 /// </summary>
-internal sealed class HotReloadFeature(Func<Solution> currentSolution)
+internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool> loading)
 {
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
+    private TaskCompletionSource _projectsChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private sealed record Session(DebuggingSessionId Id, IEditAndContinueService Service, ImmutableDictionary<ProjectId, RunningProjectOptions> Running);
 
@@ -68,9 +69,28 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution)
         }
     }
 
+    /// <summary>The workspace's projects changed, or whether the solution is loading: a start waiting for the load looks again.</summary>
+    public void ProjectsChanged() =>
+        Interlocked.Exchange(ref _projectsChanged, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
+
     public async Task<bool> StartAsync(HotReloadStartParams parameters, CancellationToken cancellationToken)
     {
         End(parameters.Session);
+
+        // The baseline is the whole solution: started while projects were still arriving (one referencing another's
+        // output file, the other not loaded yet), the session took their arrival for changed references, a restart, and
+        // Continue waited on that question (arm64 CI, run 40896721482). The debugger cancels the wait when it ends.
+        while (true)
+        {
+            var changed = Volatile.Read(ref _projectsChanged).Task;
+            if (!loading())
+            {
+                break;
+            }
+
+            await changed.WaitAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         var solution = currentSolution();
         // No projects named (an attach): every project of the solution counts as running.
         var running = solution.Projects

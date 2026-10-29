@@ -82,7 +82,7 @@ internal static partial class BuiltIns
             return Task.CompletedTask;
         }, string.Empty);
         Show("git.pullRequests", "Pull Requests", PullRequestsViewModel.ToolWindowId);
-        Add("git.createPullRequest", "Create Pull Request…", shell.CreatePullRequestAsync, "gitRepository && hostingRepository");
+        Add("git.createPullRequest", "Create Pull Request…", shell.CreatePullRequestAsync, "gitRepository");
         Show("git.workItems", "Work Items", WorkItemsViewModel.ToolWindowId);
         Add("git.publish", "Publish to a Git Host…", shell.PublishAndReadRemotesAsync, "solutionOpen");
         Add("hosting.showChecks", "Show Checks", shell.ShowChecksAsync, "hostingRepository");

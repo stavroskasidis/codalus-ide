@@ -46,7 +46,9 @@ internal sealed class HostHostingRegistry(PluginHostServer server)
         connection.OnRequest(HostingMethods.SignIn, json.HostingSignInParams, json.HostingAccountDto, (p, ct) => Call(p.ProviderId, async provider =>
             ToDto(p.Token is { Length: > 0 } token
                 ? await provider.SignInWithTokenAsync(token, ct).ConfigureAwait(false)
-                : await provider.SignInAsync(new DeviceCodePrompt(server, provider.Id), ct).ConfigureAwait(false))));
+                : p.Integrated
+                    ? await provider.SignInIntegratedAsync(ct).ConfigureAwait(false)
+                    : await provider.SignInAsync(new DeviceCodePrompt(server, provider.Id), ct).ConfigureAwait(false))));
         connection.OnRequest(HostingMethods.SignOut, json.HostingIdParams, json.EmptyResult, (p, ct) => Call(p.ProviderId, async provider =>
         {
             await provider.SignOutAsync(ct).ConfigureAwait(false);
