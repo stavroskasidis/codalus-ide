@@ -208,6 +208,12 @@ public sealed class HostingShellTests
         Assert.Equal(["#1 Add the greeter", "#2 Tidy the docs"], folders[2].Children.Select(c => c.Text).Order());
         Assert.All(folders.SelectMany(c => c.Children), c => Assert.NotNull(c.Match));
 
+        // The view, with the pull request that asks for a review selected (CODALUS_UI_SNAPSHOTS keeps a picture of it).
+        vm.Selected = folders[1].Children[0];
+        folders[1].Children[0].IsSelected = true;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any() && vm.HasMessage || vm.HasHistory);
+        GitRepositoryShellTests.Snapshots(f.Window, "git-repository-pull-requests");
+
         // The tree's filter keeps the folders with a match.
         vm.Filter = "docs";
         Assert.Equal(["Mine (1)", "All open (2)"], vm.Roots[1].Children.Select(c => c.Text));
