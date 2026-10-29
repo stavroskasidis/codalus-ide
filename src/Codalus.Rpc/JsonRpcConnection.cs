@@ -535,7 +535,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 var message = error.TryGetProperty("message", out var m) ? m.GetString() : "Unknown error";
                 var code = error.TryGetProperty("code", out var c) ? c.GetInt32() : 0;
                 var details = error.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
-                completion.TrySetException(new JsonRpcRemoteException(code, message ?? string.Empty) { Details = details });
+                var method = _outgoing.TryGetValue(idElement.GetInt64(), out var outgoing) ? outgoing.Method : null;
+                completion.TrySetException(new JsonRpcRemoteException(code, message ?? string.Empty) { Details = details, Method = method });
             }
             else
             {
@@ -792,6 +793,12 @@ public sealed class JsonRpcRemoteException(int code, string message) : Exception
 
     /// <summary>The error's <c>data</c> when it is a string: a host sends the full exception there for a bug.</summary>
     public string? Details { get; init; }
+
+    /// <summary>
+    /// The request's method: the exception is set, not thrown, so it has no stack, and a failure nobody awaited is named
+    /// only by it (the command sweep's unobserved "Request cancelled", Linux CI run 40819420873).
+    /// </summary>
+    public string? Method { get; init; }
 
     public override string ToString() => Details is null ? base.ToString() : base.ToString() + Environment.NewLine + "--- Remote exception ---" + Environment.NewLine + Details;
 }

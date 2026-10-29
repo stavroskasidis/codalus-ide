@@ -23,7 +23,7 @@
     -->
     <!--
       The document well as one card holding its tab strip (rounded corners, D46 question 7): Dock's DocumentDockControl
-      template (Dock.Avalonia.Themes.Fluent 12.1.0.12, MIT) inside a Border with the card's radius, outline and fill, the
+      template (Dock.Avalonia.Themes.Fluent 12.1.0.13, MIT) inside a Border with the card's radius, outline and fill, the
       tab strip's (transparent in Classic, so the card's corners round it). It doesn't clip: DocumentControl's frame
       paints over its sides and bottom, and the frame clips the document to the card's bottom corners. In the families
       the card has no radius, outline or fill (Shell.Card.*), so the well looks as before.

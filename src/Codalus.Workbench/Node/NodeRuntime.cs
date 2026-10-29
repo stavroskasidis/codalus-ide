@@ -13,17 +13,17 @@ namespace Codalus.Workbench.Node;
 /// </summary>
 public sealed class NodeRuntime(string cacheFolder, HttpClient? http = null) : IDisposable
 {
-    public const string Version = "24.22.1";
+    public const string Version = "24.22.2";
 
-    /// <summary>The SHA-256 of each archive, from https://nodejs.org/dist/v24.22.1/SHASUMS256.txt.</summary>
+    /// <summary>The SHA-256 of each archive, from https://nodejs.org/dist/v24.22.2/SHASUMS256.txt.</summary>
     private static readonly Dictionary<string, string> s_checksums = new(StringComparer.Ordinal)
     {
-        ["win-x64.zip"] = "d2046d28c2c3dcd211ac5145c0bf30e2047ef9dfb306693c8c6e2eccd8b95fa5",
-        ["win-arm64.zip"] = "a0c807319fede24c4a0d8f84564c82a619bd313b16b10c007c383c2609e99171",
-        ["linux-x64.tar.gz"] = "eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c",
-        ["linux-arm64.tar.gz"] = "33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3",
-        ["darwin-x64.tar.gz"] = "d132557e7ee2b85af08b0c8c34338e65c6430f2238d01f727728ef42dc83b035",
-        ["darwin-arm64.tar.gz"] = "89c682593d76cd44233fa53b1563264e7de9cbb189cad169135c5b4fadfbc0a7",
+        ["win-x64.zip"] = "ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2",
+        ["win-arm64.zip"] = "f47968c213105077f64c6510f007632c0ca2574802a0b5067c327c49abe1c468",
+        ["linux-x64.tar.gz"] = "361718c444e49af2ca5a110c83ba6a8901143f23ab285ebbef0341f391f482a9",
+        ["linux-arm64.tar.gz"] = "95c264150aceb7f3437a29fd6984924f5f8d1511ea3cbd6c508b83f6c555dae2",
+        ["darwin-x64.tar.gz"] = "d5e336d588c45be0c37dbd52cc29895593009ca4997a77a1fd02815131ed0e52",
+        ["darwin-arm64.tar.gz"] = "aa9549349e47dffaa42dcf95d6e06ade8c4bdafc980979883b88767670df385a",
     };
 
     private readonly SemaphoreSlim _install = new(1, 1);

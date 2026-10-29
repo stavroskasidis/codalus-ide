@@ -24,9 +24,9 @@
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
-    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.12" />
-    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.12" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.12" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.13" />
+    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.13" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.13" />
   </ItemGroup>
   <ItemGroup Label="Language services and build host">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(RoslynVersion)" />
@@ -85,7 +85,7 @@
     <PackageVersion Include="System.Drawing.Common" Version="11.0.0-rc.3.26522.148" />
   </ItemGroup>
   <ItemGroup Label="Website (website/, the Blazor app GitHub Pages serves an export of; not shipped)">
-    <PackageVersion Include="Markdig" Version="1.5.0" />
+    <PackageVersion Include="Markdig" Version="1.5.1" />
   </ItemGroup>
   <ItemGroup Label="Testing (the .NET test plugin, ADR 0010 and 0011)">
     <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.11.0" />

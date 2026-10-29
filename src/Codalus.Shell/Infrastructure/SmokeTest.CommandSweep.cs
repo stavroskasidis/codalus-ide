@@ -1633,7 +1633,8 @@ internal sealed partial class SmokeTest
             // Found when the task is collected: it may be an earlier command's.
             var inner = e.Exception.InnerException ?? e.Exception;
             var frame = inner.StackTrace?.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Contains("Codalus.", StringComparison.Ordinal));
-            _sweepUnhandled.Add($"unobserved (from this or an earlier command) {inner.GetType().Name}: {inner.Message}{(frame is null ? string.Empty : " " + frame)}");
+            var request = inner is Codalus.Rpc.JsonRpcRemoteException { Method: { } method } ? $" (request {method})" : string.Empty;
+            _sweepUnhandled.Add($"unobserved (from this or an earlier command) {inner.GetType().Name}: {inner.Message}{request}{(frame is null ? string.Empty : " " + frame)}");
         }
     }
 
