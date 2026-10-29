@@ -93,6 +93,41 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
     }
 
     [Fact]
+    public async Task An_edit_to_a_library_the_program_hasnt_loaded_yet_applies_as_it_loads()
+    {
+        // The library loads on its first call, after the edit: the module it loads is the build's, so the adapter keeps
+        // the edit and applies it in the load (as dotnet watch's agent does for assemblies that load later).
+        var later = Path.Combine(Path.GetDirectoryName(CSharp.Dll)!, "later");
+        File.Delete(later);
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        var events = new EventLog(adapter);
+        var session = "later-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await LaunchAsync(adapter, CSharp, [new SourceBreakpoint(CSharp.Line("call"))]);
+            var stopped = await events.StoppedAsync();
+            await StartAsync(adapter, session, CSharp);
+            Assert.DoesNotContain(events.All, e => e.Name == DapEvents.Module && e.Body.ToString().Contains("HotReloadLib.dll", StringComparison.Ordinal));
+
+            await fixture.Library.EditAsync("=> \"later\";", "=> \"later, edited before it loaded\";");
+            var update = await fixture.Client.HotReloadUpdateAsync(session, Ct);
+            Assert.True(update.Updates.Length == 1, $"{update.Status}, {update.Updates.Length} update(s); rude edits: {string.Join("; ", update.RudeEdits.Select(d => d.Id + " " + d.Message))}; errors: {string.Join("; ", update.Errors.Select(d => d.Id + " " + d.Message))}");
+            Assert.Equal(ModuleDeltaResult.Pending, Assert.Single((await ApplyChangesAsync(adapter, update)).Results).Status);
+            await fixture.Client.HotReloadCommitAsync(session, Ct);
+
+            File.WriteAllText(later, string.Empty);
+            await adapter.SetBreakpointsAsync(CSharp.Path, [], Ct);
+            await adapter.ContinueAsync(stopped.ThreadId!.Value, Ct);
+            await WaitUntilAsync(() => events.Output.Contains("later, edited before it loaded", StringComparison.Ordinal), "the library's edited output", events);
+        }
+        finally
+        {
+            File.Delete(later);
+            await EndAsync(adapter, session);
+        }
+    }
+
+    [Fact]
     public async Task A_frame_already_in_the_changed_method_finishes_in_its_old_version()
     {
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);

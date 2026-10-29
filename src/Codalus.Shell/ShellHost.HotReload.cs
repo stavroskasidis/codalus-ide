@@ -151,6 +151,12 @@ public sealed partial class ShellHost
         var debugged = ReferenceEquals(program, Volatile.Read(ref _watchedProgram));
         var text = session.State switch
         {
+            // Under the Codalus debugger (M55) the server takes the edits from the debugger, and refuses dotnet watch's
+            // copy, which dotnet watch reports as not applied: the server's outcome is the debugger's.
+            not (HotReloadState.Starting or HotReloadState.Restarting or HotReloadState.Errors or HotReloadState.Exited) when debugged && debugEdits =>
+                _debugEditsApplied is { } at
+                    ? Localizer.Format("status.debugHotReload.serverAndBrowser", "Hot Reload: applied to the server at {0}, sent to the browser", at)
+                    : "Hot Reload: sent to the browser",
             HotReloadState.Applying when debugged => "Hot Reload: sent to the browser",
             HotReloadState.Watching when debugged && (session.LastApplied is not null || session.UpdatesRefused) => "Hot Reload: sent to the browser",
             HotReloadState.NotApplied => "Hot Reload: not applied (see the output)",

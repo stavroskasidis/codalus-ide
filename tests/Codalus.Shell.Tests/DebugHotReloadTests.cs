@@ -23,7 +23,7 @@ public sealed class DebugHotReloadTests
         var folder = f.CopySample("Debugging");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "HotReload.slnx"));
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 3 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
         f.Shell.Runs.SetStartupProject(Path.Combine(folder, "HotReload", "HotReload.csproj"));
         return Path.Combine(folder, "HotReload", "Program.cs");
     }
@@ -107,6 +107,31 @@ public sealed class DebugHotReloadTests
     }
 
     [AvaloniaFact]
+    public async Task A_process_attached_to_without_modifiable_assemblies_says_why_edits_dont_apply()
+    {
+        await using var f = ShellFixture.Create();
+        var program = await OpenAsync(f, DebugService.CodalusAdapter);
+        await f.Shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, null);
+        var dll = Path.Combine(Path.GetDirectoryName(program)!, "bin", "Debug", "net11.0", "HotReload.dll");
+        var go = Path.Combine(Path.GetDirectoryName(program)!, "go-" + Guid.NewGuid().ToString("N"));
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", ["exec", dll, go]) { UseShellExecute = false, RedirectStandardOutput = true })!;
+        try
+        {
+            Assert.Equal("waiting", await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken));
+            await f.Shell.Debugger.AttachAsync(process.Id, TestContext.Current.CancellationToken);
+            await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive && f.Shell.Debugger.Modules.Any(m => m.Name == "HotReload.dll"), seconds: 60, describe: () => Diagnostics(f));
+            await EditAsync(f, program, "        return text;", "        return text + \" attached\";");
+            await f.RunAsync("run.applyCodeChanges");
+            await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Message.Contains("DOTNET_MODIFIABLE_ASSEMBLIES=debug", StringComparison.Ordinal)), seconds: 60, describe: () => Diagnostics(f));
+            await f.Shell.Debugger.DetachAsync();
+        }
+        finally
+        {
+            Codalus.Platform.ProcessTree.Kill(process);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Under_netcoredbg_nothing_takes_edits()
     {
         Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
@@ -118,6 +143,17 @@ public sealed class DebugHotReloadTests
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180, describe: () => Diagnostics(f));
         Assert.False(f.Shell.DebugEdits.IsActive);
         Assert.NotEqual(true, f.Shell.Workbench.Context.GetValue("hotReloadRunning"));
+
+        // A saved edit offers the Codalus debugger, once; Use It is for the next start.
+        await EditAsync(f, program, "        return text;", "        return text + \" offered\";");
+        await f.RunAsync("file.save");
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Notifications.Items.Any(n => n.Actions.Contains("Use It")), seconds: 30);
+        f.Shell.Workbench.Notifications.Choose(f.Shell.Workbench.Notifications.Items.Single(n => n.Actions.Contains("Use It")), "Use It");
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetString(ShellHost.DebugAdapterSetting, "") == DebugService.CodalusAdapter);
+        await EditAsync(f, program, "\" offered\"", "\" again\"");
+        await f.RunAsync("file.save");
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Actions.Contains("Use It"));
         await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
     }

@@ -58,7 +58,25 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     private static string Diagnostics(ShellFixture f) =>
-        "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
+        $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}.\n"
+        + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
+
+    /// <summary>
+    /// A failure's diagnostics on the standard error at once: on macOS CI the session never followed dotnet watch's
+    /// restart, the fixture's disposal then hung, and the hang dump came without the failure (run 40920415026).
+    /// </summary>
+    private static async Task ReportingAsync(ShellFixture f, Func<Task> test)
+    {
+        try
+        {
+            await test();
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"[BlazorWebAppHotReloadDebugTests] failed: {ex.Message}\n{Diagnostics(f)}");
+            throw;
+        }
+    }
 
     private static async Task<StopInfo> NextStopAsync(ShellFixture f, StopInfo? previous, int seconds)
     {
@@ -124,8 +142,10 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
                 Assert.Equal(server, f.Shell.Debugger.ProcessId);
-                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("keeps the code it started with", StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
-                Assert.Contains("Hot Reload: sent to the browser", f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text, StringComparison.Ordinal);
+                // Under the Codalus debugger (M55) the server takes the edit itself; netcoredbg's keeps its code.
+                var said = f.Shell.Debugger.UsesCodalusAdapter ? "through the Codalus debugger" : "keeps the code it started with";
+                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains(said, StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
+                Assert.Contains("sent to the browser", f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text, StringComparison.Ordinal);
 
                 // The browser applies the update on its own, and dotnet watch doesn't report it (SDK 11 says "applied" only
                 // when every client applied it): the tick is looked at until it runs the edit.
@@ -166,6 +186,54 @@ public sealed class BlazorWebAppHotReloadDebugTests
         }
     }
 
+    /// <summary>
+    /// M55: under the Codalus debugger the server dotnet watch runs takes an edit in place, through the debugger: its
+    /// answer changes, without a restart, in the same process (dotnet watch's own copy of the update is refused).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Under_the_Codalus_debugger_an_edit_applies_to_the_server_in_place()
+    {
+        SkipWithoutPrerequisites();
+        var (f, folder, _) = await OpenAsync();
+        await using (f)
+        {
+            try
+            {
+                await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
+                var settings = await File.ReadAllTextAsync(Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json"), TestContext.Current.CancellationToken);
+                var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
+                await f.RunAsync("debug.start");
+                await ShellFixture.PumpUntil(() => f.Shell.WatchedServerDebugSession?.ProcessId is not null && f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running, seconds: 600, describe: () => Diagnostics(f));
+                var watch = f.Shell.HotReloadProgram!;
+                var server = f.Shell.Debugger.ProcessId!.Value;
+                using var http = new HttpClient();
+                Assert.Equal("hello from the server", await http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken));
+
+                var greeting = Path.Combine(folder, "BlazorHosted", "Greeting.cs");
+                var editor = await f.Shell.OpenFileAsync(greeting, preview: false, null);
+                await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+                var offset = editor!.Model.Text.Text.IndexOf("hello from the server", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "hello from the server".Length, "edited on the server");
+                await f.RunAsync("run.applyCodeChanges");
+                var answer = string.Empty;
+                await ShellFixture.PumpUntil(() =>
+                {
+                    answer = http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+                    return answer == "edited on the server";
+                }, seconds: 120, describe: () => $"The server answered '{answer}'. " + Diagnostics(f));
+                Assert.Equal(0, watch.HotReload!.Restarts);
+                Assert.Equal(server, f.Shell.Debugger.ProcessId);
+                Assert.True(IsRunning(server));
+
+                await StopAndCheckAsync(f, server);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
+            }
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_rude_edit_while_stopped_on_the_server_restarts_the_app_and_debugging_follows_it()
     {
@@ -177,41 +245,52 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
-                var initialized = Line(counter, "initialized");
-                f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
-                await f.RunAsync("debug.start");
-                var first = await NextStopAsync(f, null, 600);
-                Assert.DoesNotContain("Browser:", ThreadName(f, first), StringComparison.Ordinal);
-                var watch = f.Shell.HotReloadProgram!;
-                var server = f.Shell.Debugger.ProcessId!.Value;
-
-                // A field's type changes: a rude edit, which dotnet watch restarts the app for (--non-interactive).
-                var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
-                await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-                var offset = editor!.Model.Text.Text.IndexOf("private int ticks;", StringComparison.Ordinal);
-                editor.Model.Text.Replace(offset, "private int ticks;".Length, "private long ticks;");
-                await f.RunAsync("run.applyCodeChanges");
-
-                await ShellFixture.PumpUntil(() => watch.HotReload!.Restarts >= 1, seconds: 180, describe: () => Diagnostics(f));
-                await ShellFixture.PumpUntil(() => !IsRunning(server), seconds: 60, describe: () => $"The old server (process {server}) still runs. " + Diagnostics(f));
-
-                // The new server serves on the same port, and the session attached to it: the breakpoint stops it again
-                // as it prerenders the page the session opened again.
-                var again = await NextStopAsync(f, first, 300);
-                var restarted = f.Shell.Debugger.ProcessId!.Value;
-                Assert.NotEqual(server, restarted);
-                Assert.Equal(restarted, f.Shell.WatchedServerDebugSession?.ProcessId);
-                Assert.True(f.Shell.Debugger.IsCompound);
-                Assert.DoesNotContain("Browser:", ThreadName(f, again), StringComparison.Ordinal);
-                Assert.Contains("Counter.OnInitialized", f.Shell.Debugger.Frames[0].Name, StringComparison.Ordinal);
-                Assert.Same(watch, f.Shell.HotReloadProgram); // the same dotnet watch
-
-                await StopAndCheckAsync(f, restarted);
+                await ReportingAsync(f, () => RudeEditAsync(f, counter));
             }
             finally
             {
                 Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
             }
         }
+    }
+
+    private static async Task RudeEditAsync(ShellFixture f, string counter)
+    {
+        var initialized = Line(counter, "initialized");
+        f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
+        await f.RunAsync("debug.start");
+        var first = await NextStopAsync(f, null, 600);
+        Assert.DoesNotContain("Browser:", ThreadName(f, first), StringComparison.Ordinal);
+        var watch = f.Shell.HotReloadProgram!;
+        var server = f.Shell.Debugger.ProcessId!.Value;
+
+        // A field's type changes: a rude edit, which dotnet watch restarts the app for (--non-interactive).
+        var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
+        await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+        var offset = editor!.Model.Text.Text.IndexOf("private int ticks;", StringComparison.Ordinal);
+        editor.Model.Text.Replace(offset, "private int ticks;".Length, "private long ticks;");
+        await f.RunAsync("run.applyCodeChanges");
+
+        await ShellFixture.PumpUntil(() => watch.HotReload!.Restarts >= 1, seconds: 180, describe: () => Diagnostics(f));
+        await ShellFixture.PumpUntil(() => !IsRunning(server), seconds: 60, describe: () => $"The old server (process {server}) still runs. " + Diagnostics(f));
+
+        // The new server serves on the same port, and the session attached to it: the breakpoint stops it again
+        // as it prerenders the page the session opened again.
+        var again = await NextStopAsync(f, first, 300);
+
+        // How long the follow waited, on the detach branch (7 to 8 s on macOS): its timings, when it says them.
+        foreach (var line in f.Shell.DebugLog.GetText().Split('\n').Where(l => l.Contains(" took ", StringComparison.Ordinal)))
+        {
+            await Console.Error.WriteLineAsync("[BlazorWebAppHotReloadDebugTests] " + line);
+        }
+        var restarted = f.Shell.Debugger.ProcessId!.Value;
+        Assert.NotEqual(server, restarted);
+        Assert.Equal(restarted, f.Shell.WatchedServerDebugSession?.ProcessId);
+        Assert.True(f.Shell.Debugger.IsCompound);
+        Assert.DoesNotContain("Browser:", ThreadName(f, again), StringComparison.Ordinal);
+        Assert.Contains("Counter.OnInitialized", f.Shell.Debugger.Frames[0].Name, StringComparison.Ordinal);
+        Assert.Same(watch, f.Shell.HotReloadProgram); // the same dotnet watch
+
+        await StopAndCheckAsync(f, restarted);
     }
 }

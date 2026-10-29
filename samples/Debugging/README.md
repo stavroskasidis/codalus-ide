@@ -11,7 +11,7 @@ A console app for the debugger tests (ADR 0007): a loop, a method call, a record
 - `Partner`, a second console program for multiple startup projects (it returns its arguments' length);
 - `Generator`, a source generator with a `DebugRoslynComponent` launch profile, and `GeneratorTarget`, the project it runs on.
 
-`HotReload` (M55, ADR 0086), in `HotReload.slnx`, prints `Greeter.Message(i)` every 50 ms for the Hot Reload while debugging tests, which edit `Message` while it runs or is stopped. With an argument it waits for that file first (attach tests). Its markers are `[call]` and `[message]`; `HotReloadVb`, beside it in the solution, is the same program in Visual Basic (`[vb-call]`, `[vb-message]`).
+`HotReload` (M55, ADR 0086), in `HotReload.slnx`, prints `Greeter.Message(i)` every 50 ms for the Hot Reload while debugging tests, which edit `Message` while it runs or is stopped. With an argument it waits for that file first (attach tests). Its markers are `[call]` and `[message]`; `HotReloadVb`, beside it in the solution, is the same program in Visual Basic (`[vb-call]`, `[vb-message]`). `HotReloadLib` is a library HotReload loads late: it calls it only once a file named `later` is next to it.
 
 `MonoDebuggee` (M20b, ADR 0065) is a console app on the Mono runtime: .NET 8's desktop Mono runtime pack, self-contained for this machine, started with the soft debugger's agent in `MONO_ENV_OPTIONS`. It tests the Mono debugger adapter without a device. Its markers are `[mono-…]`: a loop, a method call, auto-properties, a list, and a caught exception.
 

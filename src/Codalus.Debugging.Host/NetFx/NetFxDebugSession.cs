@@ -38,6 +38,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly List<BreakpointState> _functionBreakpoints = [];
     private readonly Dictionary<IClrBreakpoint, BreakpointState> _byBreakpoint = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, IClrFrame> _frames = [];
+    private readonly Dictionary<Guid, List<ModuleDelta>> _pendingDeltas = [];
     private readonly Dictionary<int, Func<IReadOnlyList<Variable>>> _children = [];
     private readonly Dictionary<int, Lazy<Dictionary<string, IClrValue>>> _childValues = [];
     private readonly Dictionary<int, IClrValue> _exceptions = [];
@@ -262,7 +263,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 {
                     if (_modules.FirstOrDefault(m => m.Info.Mvid == update.ModuleId) is not ({ } module, { } info))
                     {
-                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.NotLoaded));
+                        // Not loaded yet (a library the program hasn't called): the module it loads is the one built, so
+                        // the edits apply as it loads, in order.
+                        if (!_pendingDeltas.TryGetValue(update.ModuleId, out var pending))
+                        {
+                            _pendingDeltas[update.ModuleId] = pending = [];
+                        }
+
+                        pending.Add(update);
+                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Pending));
                         continue;
                     }
 
@@ -506,6 +515,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             catch (InvalidOperationException ex)
             {
                 log.WriteLine($"Just My Code for {info.AssemblyName}: {ex.Message}");
+            }
+
+            // Edits made before the module loaded (M55): the program is stopped in its load, as ApplyChanges wants.
+            if (_pendingDeltas.Remove(info.Mvid, out var deltas))
+            {
+                foreach (var delta in deltas)
+                {
+                    try
+                    {
+                        _process!.ApplyChanges(module, delta.MetadataDelta, delta.IlDelta);
+                        info.ApplyDelta(delta.MetadataDelta, delta.PdbDelta);
+                    }
+                    catch (ClrException ex)
+                    {
+                        log.WriteLine($"Applying an earlier edit to {info.AssemblyName} as it loaded: {ex.Message}");
+                        break;
+                    }
+                }
             }
 
             foreach (var (path, states) in _breakpoints)

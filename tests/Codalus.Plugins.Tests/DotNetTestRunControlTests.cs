@@ -67,6 +67,68 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
         }
     }
 
+    /// <summary>
+    /// M55: under the Codalus debugger a test being debugged takes an edit, as a launched program does (the test host
+    /// starts under the debugger, VSTest's and the testing platform's alike). Stopped before <c>Arithmetic.Add</c> runs,
+    /// an edit to it applies, and the test then fails.
+    /// </summary>
+    [Theory]
+    [InlineData("XunitV2Tests")]
+    [InlineData("XunitV3Tests")]
+    public async Task A_test_being_debugged_under_the_Codalus_debugger_takes_an_edit(string project)
+    {
+        var file = fixture.File("tests", project, "CalculatorTests.cs");
+        var line = Line(file, "breakpoint");
+        var calculator = fixture.File("src", "Calculator", "Calculator.cs");
+        var original = await File.ReadAllTextAsync(calculator, TestContext.Current.CancellationToken);
+        var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnStopped(object? sender, StopInfo stop) => stopped.TrySetResult(stop);
+        var adapter = fixture.Debug.AdapterSetting;
+        fixture.Debug.AdapterSetting = () => DebugService.CodalusAdapter;
+        await using var edits = new DebugHotReload(fixture.Debug, () => fixture.Languages.RunningClient("csharp"));
+        var text = original;
+        var version = 1;
+        await fixture.Languages.OpenAsync(new Workbench.Languages.LanguageDocument(calculator, "csharp", () => (text, version)));
+        fixture.Debug.Breakpoints.Toggle(file, line);
+        fixture.Debug.Stopped += OnStopped;
+        try
+        {
+            var run = fixture.Tests.RunAsync(TestRunKind.Debug, [fixture.Node(project, project, "CalculatorTests", "Adds").Key], Timeout());
+            await stopped.Task.WaitAsync(TimeSpan.FromSeconds(90), Timeout());
+            await fixture.WaitUntilAsync(() => edits.IsActive, Timeout());
+
+            var lines = text.Split('\n');
+            var end = new LanguageServices.Protocol.Position(lines.Length - 1, lines[^1].Length);
+            text = original.Replace("a + b;", "a + b + 1;", StringComparison.Ordinal);
+            version++;
+            await fixture.Languages.ChangeAsync(calculator, version, [new LanguageServices.Protocol.TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new LanguageServices.Protocol.Position(0, 0), end), text)]);
+            var outcome = await edits.ApplyAsync(Timeout());
+            Assert.True(outcome.Kind == HotReloadOutcome.Applied, $"{outcome.Kind}: {outcome.Message} {string.Join("; ", outcome.Diagnostics.Select(d => d.Id + " " + d.Message))}");
+
+            fixture.Debug.Breakpoints.Toggle(file, line);
+            await fixture.Debug.ContinueAsync();
+            await run.WaitAsync(TimeSpan.FromMinutes(2), Timeout());
+            Assert.Equal(TestOutcome.Failed, fixture.Node(project, project, "CalculatorTests", "Adds").AggregateOutcome());
+            await fixture.WaitUntilAsync(() => !fixture.Debug.IsActive, Timeout());
+        }
+        finally
+        {
+            fixture.Debug.Stopped -= OnStopped;
+            if (fixture.Debug.Breakpoints.At(file, line) is not null)
+            {
+                fixture.Debug.Breakpoints.Toggle(file, line);
+            }
+
+            if (fixture.Debug.IsActive)
+            {
+                await fixture.Debug.StopAsync();
+            }
+
+            fixture.Debug.AdapterSetting = adapter;
+            await fixture.Languages.CloseAsync(calculator);
+        }
+    }
+
     [Theory]
     [InlineData("XunitV2Tests")]
     [InlineData("XunitV3Tests")]
