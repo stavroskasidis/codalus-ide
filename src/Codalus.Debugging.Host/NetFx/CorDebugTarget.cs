@@ -184,7 +184,7 @@ internal sealed class CorDebugTarget : IClrProcess
     private readonly Lock _gate = new();
     private readonly Dictionary<(ulong, string), CorModule> _modules = [];
     private readonly Dictionary<int, CorThread> _threads = [];
-    private readonly Dictionary<(ulong, int, int), CorBreakpoint> _breakpoints = [];
+    private readonly Dictionary<(ulong Module, int Method, int Offset, int Version), CorBreakpoint> _breakpoints = [];
     private readonly List<CorDebugHandleValue> _handles = [];
     private readonly List<Task> _pumps = [];
     private CorDebugProcess? _process;
@@ -615,16 +615,45 @@ internal sealed class CorDebugTarget : IClrProcess
         Translate(() =>
         {
             var corModule = (CorModule)module;
+            // The method's current version: an edit (M55) makes a new one, which later calls run.
             var function = corModule.Raw.GetFunctionFromToken(new mdMethodDef(methodToken));
             var breakpoint = new CorBreakpoint(function.ILCode.CreateBreakpoint(ilOffset));
             breakpoint.Activate(true);
             lock (_gate)
             {
-                _breakpoints[(corModule.Raw.BaseAddress.Value, methodToken, ilOffset)] = breakpoint;
+                _breakpoints[(corModule.Raw.BaseAddress.Value, methodToken, ilOffset, function.VersionNumber)] = breakpoint;
             }
 
             return (IClrBreakpoint)breakpoint;
         });
+
+    public bool EnableEditAndContinue(IClrModule module) =>
+        ((CorModule)module).Raw.TrySetJITCompilerFlags(CorDebugJITCompilerFlags.CORDEBUG_JIT_ENABLE_ENC) == HRESULT.S_OK;
+
+    /// <summary><c>IMetaDataImport</c>'s interface id.</summary>
+    private static readonly Guid s_metadataImport = new("7DAC8207-D3AE-4C75-9B67-92801A497D44");
+
+    public unsafe void ApplyChanges(IClrModule module, byte[] metadataDelta, byte[] ilDelta)
+    {
+        // mscordbi reads the module's metadata for the edit through an importer it creates when it first needs one (a
+        // stop's stack walk does); applied before that (a program that hasn't stopped yet), ApplyChanges crashed the
+        // adapter in mscordbi (Windows, .NET 11 RC3). Asking for the importer first creates it.
+        ((CorModule)module).Raw.TryGetMetaDataInterface(s_metadataImport, out _);
+        HRESULT result;
+        fixed (byte* metadata = metadataDelta)
+        fixed (byte* il = ilDelta)
+        {
+            result = ((CorModule)module).Raw.TryApplyChanges(metadataDelta.Length, (IntPtr)metadata, ilDelta.Length, (IntPtr)il);
+        }
+
+        if (result != HRESULT.S_OK)
+        {
+            throw new ClrException(Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture));
+        }
+    }
+
+    public int CodeVersion(IClrModule module, int methodToken) =>
+        Translate(() => ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).VersionNumber);
 
     private CorBreakpoint? Breakpoint(CorDebugBreakpoint breakpoint)
     {
@@ -634,7 +663,7 @@ internal sealed class CorDebugTarget : IClrProcess
         }
 
         var function = new CorDebugFunctionBreakpoint(raw);
-        var key = (function.Function.Module.BaseAddress.Value, (int)function.Function.Token.Value, function.Offset);
+        var key = (function.Function.Module.BaseAddress.Value, (int)function.Function.Token.Value, function.Offset, function.Function.VersionNumber);
         lock (_gate)
         {
             return _breakpoints.GetValueOrDefault(key);
@@ -1048,6 +1077,13 @@ internal sealed class CorFrame : IClrFrame
             IlOffset = frame.IP.pnOffset;
             try
             {
+                CodeVersion = function.VersionNumber;
+            }
+            catch (COMException)
+            {
+            }
+            try
+            {
                 StackStart = frame.StackRange.pStart.Value;
             }
             catch (COMException)
@@ -1072,6 +1108,8 @@ internal sealed class CorFrame : IClrFrame
     public int IlOffset { get; }
 
     public string? Description { get; }
+
+    public int CodeVersion { get; } = 1;
 
     /// <summary>The frame as ICorDebug has it now: the cached one until the process ran (a func-eval), then read again.</summary>
     private CorDebugILFrame Il

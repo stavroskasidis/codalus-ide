@@ -14,6 +14,7 @@ Last verified: 2026-10-29 (Dependency updates: Dock 12.1.0.12 to 12.1.0.13 and M
 | Microsoft.CodeAnalysis.CSharp.Scripting, .Scripting.Common, .CSharp, .Common (Roslyn) | 5.12.0-1.26522.148 | MIT | C# Interactive host (`codalus-replhost`, ADR 0015) |
 | Microsoft.CodeAnalysis.Elfie, Microsoft.DiaSymReader, Humanizer.Core (transitive via Roslyn Features) | 1.0.0 / 2.2.10 / 2.14.1 | MIT | language service host |
 | System.Composition (and .AttributedModel, .Convention, .Hosting, .Runtime, .TypedParts), System.Configuration.ConfigurationManager, System.Diagnostics.EventLog, System.Security.Cryptography.ProtectedData (transitive via Roslyn) | 10.0.10 | MIT | language service host |
+| Krafs.Publicizer (build-time only; nothing of it ships) | 2.3.2 | MIT | language service host: compiles against Roslyn Features' internal Edit and Continue service for Hot Reload while debugging (M55) |
 | ICSharpCode.Decompiler | 11.2.0.10050 | MIT | language service host (Go to Definition into referenced assemblies) |
 | Microsoft.Build.Locator | 1.11.2 | MIT | build host |
 | Microsoft.TestPlatform.TranslationLayer, Microsoft.TestPlatform.ObjectModel (transitive) | 18.11.0 | MIT | .NET test plugin (VSTest through the SDK's vstest.console) |

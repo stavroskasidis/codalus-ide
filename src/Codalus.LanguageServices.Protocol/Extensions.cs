@@ -644,3 +644,30 @@ public sealed record WinFormsToolboxItem(string Type, string Name, string Projec
 }
 
 public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);
+
+/// <summary>
+/// Starts a Hot Reload session (M55) named <see cref="Session"/> for the debugged program built from
+/// <see cref="Projects"/> (project file paths), with the runtime's <see cref="Capabilities"/> (Roslyn's names).
+/// </summary>
+public sealed record HotReloadStartParams(string Session, string[] Projects, string[] Capabilities);
+
+/// <summary>Names a Hot Reload session (update, commit, discard, end).</summary>
+public sealed record HotReloadSessionParams(string Session);
+
+/// <summary>
+/// The edits since the session's start or its last commit. <see cref="Status"/>: <c>none</c> (nothing to apply),
+/// <c>ready</c> (<see cref="Updates"/> to apply, or rude edits that need <see cref="ProjectsToRestart"/> restarted), or
+/// <c>blocked</c> (<see cref="Errors"/>: the code doesn't compile).
+/// </summary>
+public sealed record HotReloadUpdateResult(string Status, HotReloadModuleUpdate[] Updates, HotReloadDiagnostic[] RudeEdits, HotReloadDiagnostic[] Errors, string[] ProjectsToRestart)
+{
+    public const string None = "none";
+    public const string Ready = "ready";
+    public const string Blocked = "blocked";
+}
+
+/// <summary>One module's deltas (its MVID; base64 in JSON), from <see cref="Project"/>.</summary>
+public sealed record HotReloadModuleUpdate(Guid ModuleId, string Project, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta, int[] UpdatedTypes);
+
+/// <summary>A rude edit or an error: Roslyn's id (<c>ENC0004</c>, <c>CS1002</c>), its message, and where.</summary>
+public sealed record HotReloadDiagnostic(string Id, string Message, Location? Location);

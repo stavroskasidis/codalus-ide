@@ -8,7 +8,8 @@ namespace Codalus.Plugins.Hosting;
 
 /// <summary>
 /// A signed-in session, kept with <see cref="ISecrets"/> (the OS credential store) as JSON. <see cref="Scheme"/> is
-/// <c>bearer</c> (OAuth tokens, most personal access tokens) or <c>basic</c> (Azure DevOps personal access tokens).
+/// <c>bearer</c> (OAuth tokens, most personal access tokens), <c>basic</c> (Azure DevOps personal access tokens) or
+/// <c>negotiate</c> (the operating system's account, with no token: <see cref="HostingProviderBase.IntegratedScheme"/>).
 /// </summary>
 public sealed record HostingSession
 {
@@ -42,6 +43,9 @@ internal sealed partial class HostingSessionJsonContext : JsonSerializerContext;
 /// </summary>
 public abstract class HostingProviderBase : HostingProvider, IDisposable
 {
+    /// <summary>The scheme of a session that signs in as the operating system's user (no token is stored).</summary>
+    public const string IntegratedScheme = "negotiate";
+
     private const string SessionKey = "session";
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HostingSession? _session;
@@ -170,12 +174,18 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
 
     private async Task AuthorizeAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        if (request.Headers.Authorization is not null)
+        if (request.Headers.Authorization is not null || request.Options.TryGetValue(HostingHttp.IntegratedHost, out _))
         {
-            return; // set by the caller (checking a token before it is stored)
+            return; // set by the caller (checking a token, or the system's account, before it is stored)
         }
 
         var session = await RequireSessionAsync(cancellationToken).ConfigureAwait(false);
+        if (session.Scheme == IntegratedScheme)
+        {
+            request.Options.Set(HostingHttp.IntegratedHost, session.Host);
+            return;
+        }
+
         request.Headers.Authorization = Authorization(session.Scheme, session.AccessToken);
     }
 
@@ -188,6 +198,10 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
     /// <summary>An API call made with a given token (before it is stored as the session).</summary>
     protected Task<JsonElement> GetWithTokenAsync(string url, string scheme, string token, CancellationToken cancellationToken) =>
         Http.SendAsync(HttpMethod.Get, url, null, cancellationToken, new Dictionary<string, string> { ["Authorization"] = Authorization(scheme, token).ToString() });
+
+    /// <summary>An API call made as the operating system's user, to the configured server only (before it is stored as the session).</summary>
+    protected Task<JsonElement> GetIntegratedAsync(string url, CancellationToken cancellationToken) =>
+        Http.SendAsync(HttpMethod.Get, url, null, cancellationToken, integratedHost: ServerHost);
 
     /// <summary>A setting's text, trimmed of a trailing slash; the fallback when empty.</summary>
     protected string Setting(string key, string fallback) =>

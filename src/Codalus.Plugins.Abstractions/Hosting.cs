@@ -58,6 +58,14 @@ public abstract class HostingProvider
     public virtual Task<HostingAccount> SignInWithTokenAsync(string token, CancellationToken cancellationToken) =>
         throw new NotSupportedException($"{Id} doesn't take personal access tokens.");
 
+    /// <summary>
+    /// Signs in as the operating system's user, with no token: integrated authentication (Negotiate: Kerberos, or NTLM on
+    /// Windows) against a self-hosted server that takes it. The shell offers it when the manifest's provider sets
+    /// <c>integratedSignIn</c> and its server isn't one of its default hosts. Check it, then store the session. Since API 1.2.0.
+    /// </summary>
+    public virtual Task<HostingAccount> SignInIntegratedAsync(CancellationToken cancellationToken) =>
+        throw new NotSupportedException($"{Id} doesn't take the operating system's account.");
+
     /// <summary>Forgets the session (deletes the stored secrets).</summary>
     public abstract Task SignOutAsync(CancellationToken cancellationToken);
 

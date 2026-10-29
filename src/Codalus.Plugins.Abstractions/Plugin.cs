@@ -10,7 +10,7 @@ public static class PluginApi
     /// only add to the API and a member goes away only after a major version, deprecated first with the
     /// <see cref="DeprecationDiagnostic"/> warning (ADR 0003, docs/plugins.md#changelog).
     /// </summary>
-    public const string Version = "1.1.0";
+    public const string Version = "1.2.0";
 
     /// <summary>The diagnostic id of deprecated API members (<c>[Obsolete(..., DiagnosticId = "CODALUS0001")]</c>).</summary>
     public const string DeprecationDiagnostic = "CODALUS0001";

@@ -25,6 +25,8 @@ internal sealed record ClrMethodInfo(int Token, string Name, bool IsStatic, bool
 /// A module's metadata and portable PDB, read from its file with System.Reflection.Metadata (M43b): type, method,
 /// field and property names; sequence points (lines to IL offsets and back); local variables' names by slot. Windows
 /// PDBs aren't read (<see cref="SymbolStatus"/> says so): Codalus builds .NET Framework projects with portable PDBs.
+/// Edits applied while debugging (M55) add generations (<see cref="ApplyDelta"/>): each edited method's symbols by the
+/// generation that last changed it, so a frame in an older version reads its own lines and locals.
 /// </summary>
 internal sealed class ClrModuleInfo : IDisposable
 {
@@ -32,9 +34,17 @@ internal sealed class ClrModuleInfo : IDisposable
 
     private readonly PEReader _pe;
     private readonly MetadataReaderProvider? _pdbProvider;
-    private readonly Lazy<Dictionary<string, List<int>>> _methodsByDocument;
     private readonly Lazy<Dictionary<string, int>> _typesByName;
-    private readonly Dictionary<int, IReadOnlyList<ClrSequencePoint>> _sequencePoints = [];
+    private readonly Dictionary<(int Method, int Version), IReadOnlyList<ClrSequencePoint>> _sequencePoints = [];
+    private readonly List<MetadataReaderProvider> _deltaProviders = [];
+    private readonly List<MetadataReader> _metadataDeltas = [];
+    private readonly Dictionary<int, List<(int Generation, MetadataReader Pdb, int Row)>> _editedSymbols = [];
+    private readonly Dictionary<int, (MetadataReader Reader, MethodDefinitionHandle Handle, int TypeToken)> _addedMethods = [];
+    private Lazy<Dictionary<string, List<int>>> _methodsByDocument;
+    private MetadataAggregator? _aggregator;
+
+    /// <summary>A method's version for the symbol lookups: its newest (new calls run it, breakpoints bind in it).</summary>
+    public const int LatestVersion = int.MaxValue;
 
     private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus)
     {
@@ -139,7 +149,126 @@ internal sealed class ClrModuleInfo : IDisposable
     public void Dispose()
     {
         _pdbProvider?.Dispose();
+        foreach (var provider in _deltaProviders)
+        {
+            provider.Dispose();
+        }
+
         _pe.Dispose();
+    }
+
+    // ------------------------------------------------------------------ edits (M55)
+
+    /// <summary>The edits applied so far: the module's Edit and Continue generations after its own.</summary>
+    public int Generations
+    {
+        get
+        {
+            lock (_sequencePoints)
+            {
+                return _metadataDeltas.Count;
+            }
+        }
+    }
+
+    /// <summary>The module's version id (its MVID): Roslyn's deltas say which module they're for by it.</summary>
+    public Guid Mvid => Metadata.GetGuid(Metadata.GetModuleDefinition().Mvid);
+
+    /// <summary>
+    /// Takes an applied edit's metadata and PDB deltas (Roslyn's, the runtime's next generation): the methods it
+    /// changed get its sequence points and locals for their new version, and the methods it added their names.
+    /// </summary>
+    public void ApplyDelta(byte[] metadataDelta, byte[] pdbDelta)
+    {
+        var metadataProvider = MetadataReaderProvider.FromMetadataImage(ImmutableArray.Create(metadataDelta));
+        var metadata = metadataProvider.GetMetadataReader();
+        var pdbProvider = pdbDelta.Length > 0 ? MetadataReaderProvider.FromPortablePdbImage(ImmutableArray.Create(pdbDelta)) : null;
+        var pdb = pdbProvider?.GetMetadataReader();
+        lock (_sequencePoints)
+        {
+            _deltaProviders.Add(metadataProvider);
+            if (pdbProvider is not null)
+            {
+                _deltaProviders.Add(pdbProvider);
+            }
+
+            _metadataDeltas.Add(metadata);
+            var generation = _metadataDeltas.Count;
+            _aggregator = new MetadataAggregator(Metadata, _metadataDeltas);
+
+            // The delta's method rows are its own; its EncMap lists the module's rows they stand for, in order. An
+            // added method follows an AddMethod entry for its type in the EncLog.
+            var methodRows = metadata.GetEditAndContinueMapEntries().Where(h => h.Kind == HandleKind.MethodDefinition).Select(MetadataTokens.GetRowNumber).ToList();
+            EntityHandle? addingTo = null;
+            foreach (var entry in metadata.GetEditAndContinueLogEntries())
+            {
+                if (entry.Operation == EditAndContinueOperation.AddMethod)
+                {
+                    addingTo = entry.Handle;
+                }
+                else if (entry.Handle.Kind == HandleKind.MethodDefinition && addingTo is { } type)
+                {
+                    var row = MetadataTokens.GetRowNumber(entry.Handle);
+                    var local = methodRows.IndexOf(row) + 1;
+                    if (local > 0)
+                    {
+                        _addedMethods[MetadataTokens.GetToken(entry.Handle)] = (metadata, MetadataTokens.MethodDefinitionHandle(local), MetadataTokens.GetToken(type));
+                    }
+
+                    addingTo = null;
+                }
+            }
+
+            // The PDB delta's method rows likewise stand for the module's rows its EncMap lists.
+            if (pdb is not null)
+            {
+                var rows = pdb.GetEditAndContinueMapEntries().Where(h => h.Kind == HandleKind.MethodDebugInformation).Select(MetadataTokens.GetRowNumber).ToList();
+                for (var i = 0; i < rows.Count; i++)
+                {
+                    var token = MetadataTokens.GetToken(MetadataTokens.MethodDefinitionHandle(rows[i]));
+                    if (!_editedSymbols.TryGetValue(token, out var versions))
+                    {
+                        _editedSymbols[token] = versions = [];
+                    }
+
+                    versions.Add((generation, pdb, i + 1));
+                }
+            }
+
+            _sequencePoints.Clear();
+            _methodsByDocument = new(IndexDocuments);
+        }
+    }
+
+    /// <summary>
+    /// Where a method's symbols are for a version: ICorDebug numbers a method's version by the module's generation
+    /// that last changed it, plus one (1: the module as built). Null without symbols for it.
+    /// </summary>
+    private (MetadataReader Pdb, int Row)? Symbols(int methodToken, int version)
+    {
+        lock (_sequencePoints)
+        {
+            if (_editedSymbols.TryGetValue(methodToken, out var versions)
+                && versions.Where(v => v.Generation <= version - 1).OrderBy(v => v.Generation).LastOrDefault() is { Pdb: not null } edited)
+            {
+                return (edited.Pdb, edited.Row);
+            }
+
+            var rid = MetadataTokens.GetRowNumber(MethodHandle(methodToken));
+            return Pdb is { } pdb && rid <= pdb.MethodDebugInformation.Count && !_addedMethods.ContainsKey(methodToken) ? (pdb, rid) : null;
+        }
+    }
+
+    /// <summary>A string of the module's metadata, the edits' included.</summary>
+    private string String(StringHandle handle)
+    {
+        if (_aggregator is not { } aggregator)
+        {
+            return Metadata.GetString(handle);
+        }
+
+        var local = (StringHandle)aggregator.GetGenerationHandle(handle, out var generation);
+        return (generation == 0 ? Metadata : _metadataDeltas[generation - 1]).GetString(local);
     }
 
     private bool ReadIsOptimized()
@@ -358,6 +487,13 @@ internal sealed class ClrModuleInfo : IDisposable
 
     public ClrMethodInfo Method(int methodToken)
     {
+        if (Added(methodToken) is { } added)
+        {
+            // A method an edit added (M55): its name; its signature's types are in the edit's tables.
+            var addedAttributes = added.Method.Attributes;
+            return new ClrMethodInfo(methodToken, String(added.Method.Name), (addedAttributes & MethodAttributes.Static) != 0, (addedAttributes & MethodAttributes.Virtual) != 0, [], [], 0, "?", (addedAttributes & MethodAttributes.SpecialName) != 0);
+        }
+
         var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
         IReadOnlyList<string> parameterTypes;
         string returnType;
@@ -395,13 +531,28 @@ internal sealed class ClrModuleInfo : IDisposable
         return new ClrMethodInfo(methodToken, Metadata.GetString(method.Name), (attributes & MethodAttributes.Static) != 0, (attributes & MethodAttributes.Virtual) != 0, parameterTypes, names, generic, returnType, (attributes & MethodAttributes.SpecialName) != 0);
     }
 
-    public int DeclaringType(int methodToken) => MetadataTokens.GetToken(Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetDeclaringType());
+    public int DeclaringType(int methodToken) =>
+        Added(methodToken) is { } added ? added.TypeToken : MetadataTokens.GetToken(Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetDeclaringType());
 
     /// <summary>A method as a stack frame shows it: <c>Ns.Type.Method</c>.</summary>
     public string MethodDisplayName(int methodToken)
     {
+        if (Added(methodToken) is { } added)
+        {
+            return TypeDisplayName(added.TypeToken) + "." + String(added.Method.Name);
+        }
+
         var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
         return TypeDisplayName(MetadataTokens.GetToken(method.GetDeclaringType())) + "." + Metadata.GetString(method.Name);
+    }
+
+    /// <summary>A method an edit added (M55), with its type: the module's own tables don't have it.</summary>
+    private (MethodDefinition Method, int TypeToken)? Added(int methodToken)
+    {
+        lock (_sequencePoints)
+        {
+            return _addedMethods.TryGetValue(methodToken, out var added) ? (added.Reader.GetMethodDefinition(added.Handle), added.TypeToken) : null;
+        }
     }
 
     /// <summary>Methods whose name is <paramref name="name"/>, or whose type's display name and name end with it (<c>Program.Main</c>).</summary>
@@ -429,7 +580,7 @@ internal sealed class ClrModuleInfo : IDisposable
     // ------------------------------------------------------------------ attributes
 
     public bool MethodHasAttribute(int methodToken, string attribute) =>
-        Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);
+        Added(methodToken) is null && Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);
 
     public bool TypeHasAttribute(int typeToken, string attribute) =>
         Metadata.GetTypeDefinition(TypeHandle(typeToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);
@@ -443,7 +594,7 @@ internal sealed class ClrModuleInfo : IDisposable
             return true;
         }
 
-        for (var type = MetadataTokens.TypeDefinitionHandle(MetadataTokens.GetRowNumber(Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetDeclaringType())); !type.IsNil; type = Metadata.GetTypeDefinition(type).GetDeclaringType())
+        for (var type = MetadataTokens.TypeDefinitionHandle(MetadataTokens.GetRowNumber(MetadataTokens.EntityHandle(DeclaringType(methodToken)))); !type.IsNil; type = Metadata.GetTypeDefinition(type).GetDeclaringType())
         {
             var token = MetadataTokens.GetToken(type);
             if (TypeHasAttribute(token, "System.Diagnostics.DebuggerStepThroughAttribute") || TypeHasAttribute(token, "System.Diagnostics.DebuggerNonUserCodeAttribute"))
@@ -475,49 +626,46 @@ internal sealed class ClrModuleInfo : IDisposable
 
     // ------------------------------------------------------------------ symbols
 
-    public IReadOnlyList<ClrSequencePoint> SequencePoints(int methodToken)
+    /// <summary>A method's sequence points in a version (<see cref="LatestVersion"/>: the one new calls run, M55).</summary>
+    public IReadOnlyList<ClrSequencePoint> SequencePoints(int methodToken, int version = LatestVersion)
     {
         lock (_sequencePoints)
         {
-            if (_sequencePoints.TryGetValue(methodToken, out var cached))
+            if (_sequencePoints.TryGetValue((methodToken, version), out var cached))
             {
                 return cached;
             }
         }
 
         var result = new List<ClrSequencePoint>();
-        if (Pdb is { } pdb)
+        if (Symbols(methodToken, version) is var (pdb, row))
         {
-            var rid = MetadataTokens.GetRowNumber(MethodHandle(methodToken));
-            if (rid <= pdb.MethodDebugInformation.Count)
+            try
             {
-                try
+                var information = pdb.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(row));
+                foreach (var point in information.GetSequencePoints())
                 {
-                    var information = pdb.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(rid));
-                    foreach (var point in information.GetSequencePoints())
-                    {
-                        result.Add(new ClrSequencePoint(point.Offset, point.StartLine, point.StartColumn, point.EndLine, point.EndColumn, point.Document.IsNil ? string.Empty : pdb.GetString(pdb.GetDocument(point.Document).Name)));
-                    }
+                    result.Add(new ClrSequencePoint(point.Offset, point.StartLine, point.StartColumn, point.EndLine, point.EndColumn, point.Document.IsNil ? string.Empty : pdb.GetString(pdb.GetDocument(point.Document).Name)));
                 }
-                catch (BadImageFormatException)
-                {
-                }
+            }
+            catch (BadImageFormatException)
+            {
             }
         }
 
         lock (_sequencePoints)
         {
-            _sequencePoints[methodToken] = result;
+            _sequencePoints[(methodToken, version)] = result;
         }
 
         return result;
     }
 
     /// <summary>The sequence point an IL offset is in (the last one at or before it); hidden ones included.</summary>
-    public ClrSequencePoint? SequencePointAt(int methodToken, int ilOffset)
+    public ClrSequencePoint? SequencePointAt(int methodToken, int ilOffset, int version = LatestVersion)
     {
         ClrSequencePoint? found = null;
-        foreach (var point in SequencePoints(methodToken).OrderBy(p => p.Offset))
+        foreach (var point in SequencePoints(methodToken, version).OrderBy(p => p.Offset))
         {
             if (point.Offset > ilOffset)
             {
@@ -531,13 +679,13 @@ internal sealed class ClrModuleInfo : IDisposable
     }
 
     /// <summary>The source line an IL offset is on: the last visible sequence point at or before it.</summary>
-    public ClrSequencePoint? LineAt(int methodToken, int ilOffset) =>
-        SequencePoints(methodToken).Where(p => !p.IsHidden && p.Offset <= ilOffset).OrderBy(p => p.Offset).Cast<ClrSequencePoint?>().LastOrDefault();
+    public ClrSequencePoint? LineAt(int methodToken, int ilOffset, int version = LatestVersion) =>
+        SequencePoints(methodToken, version).Where(p => !p.IsHidden && p.Offset <= ilOffset).OrderBy(p => p.Offset).Cast<ClrSequencePoint?>().LastOrDefault();
 
     /// <summary>The IL range of the sequence point an offset is in: from it to the next one (or the method's end).</summary>
-    public (int Start, int End)? RangeAt(int methodToken, int ilOffset)
+    public (int Start, int End)? RangeAt(int methodToken, int ilOffset, int version = LatestVersion)
     {
-        var points = SequencePoints(methodToken).Select(p => p.Offset).Distinct().Order().ToList();
+        var points = SequencePoints(methodToken, version).Select(p => p.Offset).Distinct().Order().ToList();
         if (points.Count == 0)
         {
             return null;
@@ -556,7 +704,7 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>Whether this module's PDB has <paramref name="path"/> (the same path, or the only document with its file name).</summary>
     public string? MatchDocument(string path)
     {
-        var documents = _methodsByDocument.Value.Keys;
+        var documents = Documents.Keys;
         if (documents.FirstOrDefault(d => SamePath(d, path)) is { } exact)
         {
             return exact;
@@ -570,7 +718,7 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>Where a breakpoint on <paramref name="line"/> of <paramref name="document"/> binds: each method's first offset on the line, or on the next line with code in a method that spans it.</summary>
     public IReadOnlyList<(int Method, int Offset, int Line)> Locations(string document, int line)
     {
-        if (!_methodsByDocument.Value.TryGetValue(document, out var methods))
+        if (!Documents.TryGetValue(document, out var methods))
         {
             return [];
         }
@@ -593,23 +741,48 @@ internal sealed class ClrModuleInfo : IDisposable
         return [.. exact.GroupBy(p => p.Method).Select(g => g.OrderBy(p => p.Point.Offset).First()).Select(p => (p.Method, p.Point.Offset, p.Point.StartLine))];
     }
 
+    private Dictionary<string, List<int>> Documents
+    {
+        get
+        {
+            Lazy<Dictionary<string, List<int>>> index;
+            lock (_sequencePoints)
+            {
+                index = _methodsByDocument;
+            }
+
+            return index.Value;
+        }
+    }
+
+    /// <summary>The methods with code in each document, in their newest versions (an edit can move a method's lines).</summary>
     private Dictionary<string, List<int>> IndexDocuments()
     {
         var result = new Dictionary<string, List<int>>(s_paths);
-        if (Pdb is not { } pdb)
+        var tokens = new List<int>();
+        if (Pdb is { } baseline)
         {
-            return result;
+            tokens.AddRange(baseline.MethodDebugInformation.Select(h => MetadataTokens.GetToken(MetadataTokens.MethodDefinitionHandle(MetadataTokens.GetRowNumber(h)))));
         }
 
-        foreach (var handle in pdb.MethodDebugInformation)
+        lock (_sequencePoints)
         {
-            var information = pdb.GetMethodDebugInformation(handle);
+            tokens.AddRange(_editedSymbols.Keys.Except(tokens).ToList());
+        }
+
+        foreach (var token in tokens)
+        {
+            if (Symbols(token, LatestVersion) is not var (pdb, row))
+            {
+                continue;
+            }
+
+            var information = pdb.GetMethodDebugInformation(MetadataTokens.MethodDebugInformationHandle(row));
             if (information.SequencePointsBlob.IsNil)
             {
                 continue;
             }
 
-            var token = MetadataTokens.GetToken(MetadataTokens.MethodDefinitionHandle(MetadataTokens.GetRowNumber(handle)));
             var documents = new HashSet<string>(s_paths);
             try
             {
@@ -641,9 +814,9 @@ internal sealed class ClrModuleInfo : IDisposable
     }
 
     /// <summary>The local variables in scope at an IL offset, by slot (compiler-hidden ones left out); empty without symbols.</summary>
-    public IReadOnlyList<(int Slot, string Name)> Locals(int methodToken, int ilOffset)
+    public IReadOnlyList<(int Slot, string Name)> Locals(int methodToken, int ilOffset, int version = LatestVersion)
     {
-        if (Pdb is not { } pdb)
+        if (Symbols(methodToken, version) is not var (pdb, row))
         {
             return [];
         }
@@ -652,8 +825,9 @@ internal sealed class ClrModuleInfo : IDisposable
         var seen = new HashSet<string>(StringComparer.Ordinal);
         try
         {
-            // Innermost scopes first, so a name shadowed in a nested block shows its inner variable.
-            var scopes = pdb.GetLocalScopes(MethodHandle(methodToken)).Select(pdb.GetLocalScope)
+            // Innermost scopes first, so a name shadowed in a nested block shows its inner variable. An edit's PDB
+            // delta numbers its scopes' methods by its own rows.
+            var scopes = pdb.GetLocalScopes(MetadataTokens.MethodDefinitionHandle(row)).Select(pdb.GetLocalScope)
                 .Where(s => s.StartOffset <= ilOffset && ilOffset < s.EndOffset).OrderBy(s => s.Length).ToList();
             foreach (var scope in scopes)
             {

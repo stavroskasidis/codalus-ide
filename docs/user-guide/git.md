@@ -8,7 +8,7 @@ Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
 - **At the top**: the [branch drop-down](#the-branch-drop-down), then **Fetch**, **Pull**, **Push**, **Sync** (pull, then push) and **⋯** (new branch, merge, rebase, update a branch, stash, history, [manage branches](#managing-branches), remotes, tags, refresh).
 - **While Fetch, Pull, Push or Sync runs** (from the window, the Git menu or the palette): the window says what it's doing under the branch ("Pulling…") over a running bar, and **Cancel** takes the place of the four buttons; the status bar shows it too, with its own cancel button. Cancel stops git, and the status bar says it was cancelled.
-- **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**; a repository with no remote offers **Publish to a Git Host…** instead (its tooltip says where to add a remote), and neither shows with a detached HEAD or before the first commit. The pull request button creates a pull request on GitHub, Azure DevOps or GitLab.
+- **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**; a repository with no remote offers **Publish to a Git Host…** instead (its tooltip says where to add a remote), and neither shows with a detached HEAD or before the first commit. The pull request button creates a pull request on GitHub, Azure DevOps (or an Azure DevOps Server) or GitLab; before you're signed in to the repository's host, it opens [the sign-in](#github-azure-devops-and-gitlab) first.
 - **Commit**: a message is required. The button commits the staged changes when there are some (**Commit Staged**), otherwise every change, new files included (**Commit All**); its menu also commits **and Push** or **and Sync**. `Ctrl+Enter` in the message box commits. **Amend** fills in the last commit's message and rewrites that commit. The **#** button (or typing `#`) mentions an issue or work item.
 - **Related Items**: the issues and work items the message mentions.
 - **Staged Changes** and **Changes**: a tree of the repository, its folders (a folder holding a single folder is shown with it, as `src\Data`) and files, each with its status letter. Hover a file or folder for the buttons that stage (`+`), unstage (`−`) and discard it. **Stage All** (`+`) and **Unstage All** (`−`) act on the whole section. Double-click a file to see its diff.
@@ -127,7 +127,7 @@ Codalus IDE reads which files Git LFS tracks from `.gitattributes`, so it works 
 
 ## GitHub, Azure DevOps and GitLab
 
-Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps and GitLab (and self-managed GitLab). **Nothing is sent to a host until you sign in to it**: before that, the plugins don't even load.
+Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps (and [Azure DevOps Server](#azure-devops-server)) and GitLab (and self-managed GitLab). **Nothing is sent to a host until you sign in to it**: before that, the plugins don't even load.
 
 **Signing in** (Git → Git Hosting Accounts):
 - **Sign In** shows a code: **Copy Code and Open Browser**, enter it on the host's page and approve. The page shows *Waiting for approval…* until you do; **Cancel** stops.
@@ -136,10 +136,20 @@ Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps 
 - **Servers**: `github.serverUrl`, `gitlab.serverUrl`, and `azureDevOps.serverUrl` (with `azureDevOps.authorityUrl` and `azureDevOps.profileUrl`) point at an enterprise or self-managed server. Device sign-in needs the server's OAuth app: its client id goes in `github.oauthClientId`, `gitlab.oauthClientId` or `azureDevOps.oauthClientId`. Without one, sign in with a token.
 - **Sign Out** deletes the token. A session that expires or is revoked asks you to sign in again.
 
+### Azure DevOps Server
+
+Codalus IDE recognizes a remote on an Azure DevOps Server (or Team Foundation Server) by its path, `https://tfs.contoso.com/tfs/DefaultCollection/Project/_git/Repository`, so you don't need to set anything first:
+- **Create a pull request** in Git Changes (or **Sign in** in the Pull Requests or Work Items window) opens Git Hosting Accounts with the server under Azure DevOps (*Server: https://tfs.contoso.com/tfs, where this repository's remote is*).
+- **Sign in with your Windows account** signs in as you, with no token: Windows authentication, as the browser does. On macOS and Linux the button is **Sign in with Kerberos** and needs a ticket for your domain account (`kinit ada@CONTOSO.COM`).
+- **Or paste a personal access token** created on the server (your profile → Personal access tokens), with Code (read and write), Build (read) and Work Items (read).
+- Signing in sets `azureDevOps.serverUrl` to the server. You can also set it yourself: the server's address without the collection (`https://tfs.contoso.com/tfs`, or `https://ado.contoso.com` on a server installed without the `/tfs` path).
+- Codalus IDE is signed in to one Azure DevOps server at a time. Signed in to another (dev.azure.com, say), the row says *This repository is on … Sign out, then sign in there.*
+- Azure DevOps Server 2019 and later work. An older server's REST API version is used when the server says it doesn't take the latest.
+
 The repository's host is found from its remotes (`origin` first). Then:
 - **Pull Requests** (Git → Pull Requests): the open pull requests (merge requests on GitLab), all of them, yours, or those that ask for your review. Select one for its description, its review comments (with the file and line; click to open it) and its conversation. **Check Out** fetches its branch (a fork's pull request too) and switches to it. **Open in Browser** opens it on the host.
 - **Review comments in the editor**: when the current branch has an open pull request, its unresolved review comments show at the end of their lines (◆ who: what). Click one for the whole thread. Settings: `hosting.reviewComments`, `hosting.showResolvedComments`.
-- **Create Pull Request** (Git menu, or the Pull Requests window's toolbar): a title (from the branch name), a description in Markdown, the branch to merge into (the default branch first), draft. The branch is pushed first if it needs to be.
+- **Create Pull Request** (Git Changes' pull request button, the Git menu, or the Pull Requests window's toolbar): a title (from the branch name), a description in Markdown, the branch to merge into (the default branch first), draft. The branch is pushed first if it needs to be.
 - **CI status**: the current branch's checks (GitHub check runs and statuses, Azure Pipelines builds, GitLab's latest pipeline) in the status bar and Git Changes; click for the list, and pick one to open it. It's read again when you switch branches, push, and every `hosting.statusRefreshSeconds` (120). `hosting.ciStatus` turns it off.
 - **Work Items** (Git → Work Items): the issues or work items assigned to you, or found by number or words. **Mention in Commit Message** adds its reference to the commit message.
 - **`#` in the commit message** completes issues and work items: type `#` and a number or words, then pick one (Up, Down, Enter).

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HotReload/HotReload.csproj" />
+  <Project Path="HotReloadVb/HotReloadVb.vbproj" />
+</Solution>

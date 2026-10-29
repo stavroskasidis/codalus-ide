@@ -6,6 +6,7 @@
 # (a missing netcoredbg, the x64 one), LateRuntimeTests (its 5-second wait), RemoteTests and the Shell's
 # RemoteShellTests (remote targets keep netcoredbg), nor DebugAdapterChoiceTests (the variable overrides its setting).
 Codalus.Debugging.Tests.ClrDebuggerTests
+Codalus.Debugging.Tests.HotReloadDebuggingTests
 Codalus.Debugging.Tests.DebugServiceTests
 Codalus.Debugging.Tests.DataTipDebuggerTests
 Codalus.Debugging.Tests.DebuggerDepthTests

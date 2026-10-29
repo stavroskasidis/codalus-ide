@@ -97,8 +97,11 @@ public sealed class DebugSessionsTests
         Assert.Equal(["Debuggee", "Partner"], stops.Order());
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
         Assert.Equal(2, Volatile.Read(ref stopped)); // each program stopped once
-        Assert.Contains("[Partner] The program has exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
-        Assert.Contains("[Debuggee] The program has exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+        // The whole Debug Console when a line is missing: under the Codalus debugger on Linux both adapters sent their
+        // "exited" event and Debuggee's line wasn't there (CI, run 40879387674), and the message cut the text short.
+        var log = f.Shell.DebugLog.GetText();
+        Assert.True(log.Contains("[Partner] The program has exited with code", StringComparison.Ordinal) && log.Contains("[Debuggee] The program has exited with code", StringComparison.Ordinal),
+            "Each program's exit is in the Debug Console:\n" + log);
 
         // Saved with the solution: reopening it brings the startup projects back.
         f.Shell.SaveEditorSession();
