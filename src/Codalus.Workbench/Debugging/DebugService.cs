@@ -606,9 +606,10 @@ public sealed class DebugService : IAsyncDisposable
         {
             var window = launch.Console == DebugConsoleKind.Window;
 
-            // netcoredbg can't attach to a program held at startup on macOS (ADR 0039): an x64 program there that the
-            // Codalus debugger left to it uses the Debug Console.
-            if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook && !(OperatingSystem.IsMacOS() && !window))
+            // netcoredbg can't attach to a program held at startup on macOS (ADR 0039), where the shell gives it the Debug
+            // Console: under the Codalus debugger, which starts programs in the terminal there, an x64 program it leaves
+            // to netcoredbg uses the Debug Console too.
+            if ((window ? ConsoleWindows : Terminal) is { } terminal && StartupHook is { } hook && !(OperatingSystem.IsMacOS() && !window && UsesCodalusAdapter))
             {
                 HeldLaunch? held = null;
                 return new LaunchPart(
