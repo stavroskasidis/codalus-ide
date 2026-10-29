@@ -23,6 +23,12 @@ inputs:
   display:
     description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps), a 1920x1080 screen on Windows
     default: "false"
+  browser:
+    description: >-
+      A Chromium browser on Linux arm64, for browser debugging (Blazor WebAssembly, a Blazor Web App's page): the x64
+      runners have Chrome; there's no Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so
+      Playwright's build (pinned), as /usr/local/bin/chromium. Elsewhere nothing
+    default: "false"
   downloads:
     description: >-
       Node.js and vscode-js-debug from the cache (CODALUS_DOWNLOAD_CACHE, set for the job's later steps), so the tests
@@ -101,6 +107,20 @@ runs:
       continue-on-error: true
       shell: bash
       run: eng/get-downloads.sh "$RUNNER_TEMP/codalus-downloads"
+    - name: A Chromium browser (Linux arm64)
+      # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package brings
+      # one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it: allow them on
+      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests
+      # waited out their limits without one (run 40804553432).
+      if: inputs.browser == 'true' && runner.os == 'Linux' && runner.arch == 'ARM64'
+      shell: bash
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        npx -y playwright@1.56.1 install --with-deps chromium
+        chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
+        [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
+        sudo ln -sf "$chrome" /usr/local/bin/chromium
+        chromium --version
     - name: Developer tools access (macOS)
       # Otherwise the system asks for a password that nobody answers on a runner, and dumps and attaching time out (as
       # a person would approve once). The windowed app runs in the runner's GUI session, where the task port right
