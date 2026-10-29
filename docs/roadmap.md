@@ -73,6 +73,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M52 | 0.9: All Repositories, large solutions and UI fixes | built, 2026-10-27 ([m52](checkpoints/m52.md)), validated on Windows, Linux (WSL) and macOS. All Repositories in Git Changes (ADR 0085), the freeze with an unreachable feed, a large solution's first analysis about twice as fast (server GC for 20 projects or more), packages another SDK restored repaired by a restore, tree row spacing, auto-hidden tabs and Output's links |
 | M53 | 0.10: M52's deferred work | built, 2026-10-28 ([m53](checkpoints/m53.md)). Restores in the solution's folder, without the projects that fail them (the other repository's 41 projects of the maintainer's solution load), a missing assets file restored on open, `dialog_shown` bench events; the build host's server GC and more parallel first passes measured and declined |
 | M54 | A managed CoreCLR debugger, phase 1 | done (M54a and M54b at checkpoint), 2026-10-29 ([m54a](checkpoints/m54a.md), [m54b](checkpoints/m54b.md)): the Codalus debugger behind `debug.adapter` (a preview), netcoredbg the default; launches through its launcher, the integrated terminal's on every OS; the parity set and the smoke test's debug steps pass under it on Windows, Linux x64, macOS and Linux arm64. Planned 2026-10-28 (D48, [ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): `codalus-debughost --clr-dap` on dbgshim, opt-in behind `debug.adapter` with netcoredbg the default; launches through `codalus-debughost --launch`, the integrated terminal's too; every debugger suite passes under it on Windows, Linux x64, macOS and Linux arm64. M54a, the adapter; M54b, parity |
+| M55 | A managed CoreCLR debugger, phase 2: Apply Code Changes while debugging | planned 2026-10-29 (D48's phase 2, [ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): under the Codalus debugger, edits apply to the program being debugged (Apply Code Changes, Continue, a save), launched, in the terminal, as a test, attached to, and a Blazor Web App's server in place; rude edits ask to restart; a one-time offer under netcoredbg. A spike, then M55a (the core) and M55b (the other programs, the Blazor server) |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -143,7 +144,7 @@ All seven are settled:
 |---|---|---|
 | 1. Daily driver | M8, M9, M10 | What a C# developer misses most on day one after the MVP: tests, packages, a terminal. |
 | 2. Language platform | M11 | Pluggable languages (LSP bridge, grammars) and editing for the non-C# files every .NET repository has. |
-| 3. Depth | M12, M29, M13, M14, M26, M54 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
+| 3. Depth | M12, M29, M13, M14, M26, M54, M55 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
 | 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
 | 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
 | 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
@@ -212,6 +213,7 @@ graph LR
   M45 & M37 & M38 --> M46
   M12 & M29 --> M47
   M14 & M43 --> M54
+  M54 & M15 & M16 --> M55
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -900,6 +902,63 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 **Risks.** ICorDebug off Windows is known only from the spikes; ADR 0086's one silent attach failure on Linux (`TODO(issue)`) is watched for in the shard with the adapter's log. netcoredbg's features the suites test and the spikes didn't try (exceptions, threads, async methods, Just My Code on CoreCLR) are built in M54b, which makes M54b the larger part.
 
 **Status.** Done 2026-10-29: M54a ([m54a](checkpoints/m54a.md), #220 and #221) and M54b ([m54b](checkpoints/m54b.md), one pull request for the plan's PRs 3 to 5). On develop after the merge, CI [run 40819398319](https://github.com/stavroskasidis/codalus-ide/actions/runs/40819398319) passed every job: the packages' smoke tests with the `.codalus` steps on each package platform, and its sizes `ok` under the size gate's comparison on every OS (the gate's own verdict, on `master`, is the next stable release's). Planned 2026-10-28.
+
+### M55 — A managed CoreCLR debugger, phase 2: Apply Code Changes while debugging
+
+**Why.** D48's phase 2 ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)): Hot Reload while a program is debugged. The runtime refuses Hot Reload's updates while a debugger is attached (ADR 0040), so Start with Hot Reload and Start Debugging are separate runs today; the debugger has to apply them itself, which netcoredbg does only through its MI interpreter. ADR 0086's spike 2 applied Roslyn's deltas through `ICorDebugModule2::ApplyChanges` on every OS, launched or attached to (with `DOTNET_MODIFIABLE_ASSEMBLIES=debug`). This milestone builds that under the Codalus debugger (M54); netcoredbg stays the default, and phase 3 is a later milestone.
+
+**Depends on.** M54 (the Codalus debugger, its launcher and the `debug-codalus` shard), M15 and ADR 0022 (Hot Reload: Apply Code Changes, the status bar item, `dotnet watch`), M16 and ADR 0040's updates (a Blazor Web App's server under `dotnet watch`, `WatchedServerSession`), M11 and the language host (the workspace, source generators, Razor).
+
+**Decisions** (the maintainer, 2026-10-29, before planning):
+1. **Hot Reload's semantics, not Edit and Continue's remap.** An edit applies to every later call; frames already running a changed method finish in the old version, and the current line doesn't move into the new code. Remapping active frames (the classic IDE's Edit and Continue) is out of scope.
+2. **Three triggers.** Apply Code Changes (`Alt+F10`, the toolbar's Hot Reload button) applies at any time. While stopped, Continue and the steps apply pending edits first. While running, saving applies them when `debug.hotReload` ("Hot Reload while debugging", on by default) is on: the existing setting, no new one.
+3. **Every program the Codalus debugger runs:** programs it launches (the Debug Console, the integrated terminal, a console window), test debugging, programs the IDE starts in order to attach to them later, and a Blazor Web App's server, which takes its edits in place beside `dotnet watch` (ADR 0086's open question, settled by this milestone's spike). A process attached to with Attach to Process takes edits only when it runs with `DOTNET_MODIFIABLE_ASSEMBLIES=debug`; otherwise Apply Code Changes says why.
+4. **Rude edits ask.** An edit the runtime can't apply (Roslyn's rude edits) opens a prompt naming it, with Restart (stop, build, debug again) and Continue with the old code (later edits apply once the rude one is undone); the rude edits are errors in the Error List at their lines. A Blazor Web App's server keeps `dotnet watch`'s own restart (ADR 0040).
+5. **A one-time offer under netcoredbg.** The first edit saved while debugging under netcoredbg shows an info bar: edits apply while debugging under the Codalus debugger (a preview), with Use It (sets `debug.adapter`; the next start takes it) and Don't Show Again. Apply Code Changes under netcoredbg says the same.
+6. **C#, Visual Basic and Razor.** Razor's edits come through its source generator, which the language host already runs. F# and XAML have no Roslyn deltas: their edits get a Debug Console line and the status bar's "not applied".
+7. **A spike, then two parts:** the spike on all three OSes; M55a (the core, about two pull requests) and M55b (the other programs, the Blazor server and the rest, about two), each with its checkpoint.
+
+**Scope.**
+
+*Spike* (a branch, not merged; its findings go in M55a's checkpoint and ADR 0086).
+- **Roslyn's Hot Reload service in the language host:** `Microsoft.CodeAnalysis.ExternalAccess.HotReload` (MIT, from the `dotnet-tools` feed `nuget.config` already has, at `$(RoslynVersion)`), whose `HotReloadService` is what `dotnet watch` uses. Its session started from the language host's solution against the build the debugger runs, an edit's deltas (metadata, IL, PDB, updated types) and its rude edits, for C#, Visual Basic and a Razor component. The package depends on `Microsoft.CodeAnalysis.Workspaces.MSBuild`: MSBuild must stay out of the language host (ADR 0004), so the spike finds whether `HotReloadService` needs it at run time and what the language host's size gains (`lshost_mb`).
+- **A Blazor Web App's server** under `dotnet watch` with the Codalus debugger attached: `dotnet watch` sends the server its update, which the runtime refuses, and the browser its own; the debugger applies the server's deltas from the IDE. What `dotnet watch` then does (it stops sending that process updates, ADR 0040), whether its rude-edit restart and the IDE's agree on which edits are rude, and an edit to a component the server prerenders. SDK 10.0.401 and 11 RC3, Linux, Windows and macOS.
+
+*M55a, the core.*
+
+1. **PR 1: deltas and `codalus/applyChanges`.**
+   - **The language host:** the package through central package management, its row in `THIRD-PARTY-NOTICES.md`; an LSP extension (`docs/protocol.md`) that starts a Hot Reload session for the projects a debug session runs, returns the pending edits' deltas or their rude edits, and ends the session. The baseline is the build the debug session started from; edits made before the build don't count.
+   - **The adapter:** a DAP request of ours, `codalus/applyChanges` (in `docs/protocol.md` beside the other `codalus/` requests): per module (its MVID) the metadata, IL and PDB deltas and the updated types. `ICorDebugModule2::ApplyChanges` applies them; `ClrModuleInfo` takes the PDB delta, so the sequence points, locals and source lines of updated methods are the new version's, and breakpoints in them bind again in the new version (its EncMap gives the method). Every module of a launched program gets `CORDEBUG_JIT_ENABLE_ENC` as it loads; a refused update (`CORDBG_E_ENC_*`) answers with the runtime's reason.
+   - **Tests** (`Codalus.Debugging.Tests`, the `debug-codalus` shard, every OS): a launched program stopped before a call, an edit applied, a breakpoint on a line only the new version has stops with a new local's value; a second edit on the first; a frame on the stack finishes in the old version; a module without EnC (attached without the variable) refuses with the reason; Visual Basic.
+2. **PR 2: the triggers and rude edits in the IDE.**
+   - **DebugService:** a session under the Codalus debugger starts the language host's Hot Reload session when its program starts, and ends it with the session. Apply Code Changes, Continue and the steps (while stopped, with pending edits) and a save (with `debug.hotReload` on) ask the language host for deltas and send them to every Codalus debug session running the changed projects; Continue waits for the answer.
+   - **The UI:** Apply Code Changes and the Hot Reload button enabled during a Codalus debug session; the status bar's Hot Reload item ("applied", "not applied", the edit's time); a rude edit's prompt (Restart, Continue with the old code) and its errors in the Error List; F# and XAML's line. UI text localized.
+   - **Tests:** the Shell's debugger tests for each trigger, the prompt's two answers, Restart, and the Error List; under netcoredbg nothing changes (`debug.adapter` left alone).
+
+*M55b, the other programs and the rest.*
+
+3. **PR 3: the terminal, the console window, test debugging and attached programs.** The launcher's programs (the integrated terminal, Windows' console window) get `CORDEBUG_JIT_ENABLE_ENC` as their modules load; test debugging's test host and programs the IDE starts in order to attach later get `DOTNET_MODIFIABLE_ASSEMBLIES=debug`; Attach to Process says why a process without it can't take edits. Tests for each, in the shard.
+4. **PR 4: the Blazor server, the offer and the docs.**
+   - **A Blazor Web App's server:** under the Codalus debugger, its edits apply in place through the debugger as the spike found; the browser keeps getting `dotnet watch`'s updates; the status bar says "applied" for the server and "sent to the browser" for the page; rude edits keep `dotnet watch`'s restart, followed by the debugger as today; under netcoredbg nothing changes. `BlazorWebAppHotReloadDebugTests` cover both adapters.
+   - **The offer under netcoredbg** (decision 5), its "don't show again" kept in user settings.
+   - **The smoke test:** `debug.applyChanges.codalus` (an edit while stopped applied on Continue, and one while running applied by Apply Code Changes) and the server's edit in `blazor.compoundHotReload.codalus`, on every package platform.
+   - **Docs:** ADR 0040's and ADR 0086's updates (phase 2 built, its limits), the user guide's debugging and Hot Reload pages, the Features page and its screenshot, `docs/protocol.md`, the checkpoints, the parity matrix's Hot Reload row.
+
+**Tests.** Each PR's tests are above; they run in the `debug-codalus` shard on four OSes, and the default shards prove nothing changed under netcoredbg. Platform-sensitive: each PR is validated on Windows, on Linux through WSL (`eng/wsl-test.sh`) and on the Mac through the `codalus-mac` Remote Control session, each reported on its own; Linux arm64 runs only on CI.
+
+**Exit criteria.**
+- Under the Codalus debugger, an edit applies to a program launched (the Debug Console, the integrated terminal, a console window), debugged as a test, started for an attach, and to a Blazor Web App's server, on Windows, Linux x64, macOS and Linux arm64 on CI.
+- A breakpoint on a line only the new version has stops there, with the new version's locals.
+- A rude edit asks, and both answers do what they say.
+- The smoke test's Apply Code Changes steps pass in the packages of every platform.
+- Under netcoredbg nothing changes but the one-time offer; the default shards pass as before.
+- The size gate accepts the language host with Roslyn's Hot Reload service, from CI.
+
+**Out of scope.** Remapping active frames into the new version (the classic IDE's Edit and Continue) `TODO(issue)`; F# and XAML edits; Hot Reload for remote targets and x64 programs on Apple silicon, which keep netcoredbg (phase 3); the Codalus debugger as the default (phase 3).
+
+**Risks.** `HotReloadService`'s dependencies (MSBuild workspaces) in a host that mustn't run MSBuild, and the language host's size: the spike decides. The baseline must match the binaries the debugger runs: a build the language host didn't see (an edit between the build and the start, a `dotnet watch` rebuild) gives deltas the runtime refuses, which the IDE reports instead of applying. `dotnet watch` and the debugger both updating a Blazor Web App's server is unproven until the spike.
+
+**Status.** Planned 2026-10-29.
 
 ---
 
@@ -2844,7 +2903,7 @@ The "Codalus" column uses these terms:
 | The classic IDE's remote debugger (msvsmon) | Trap (SSH attach replaces it) |
 | Dump files (open and create) | M14 (done) |
 | Just-In-Time debugger | M14c (done, opt-in: crash dumps opened in the dump view; a live system debugger needs administrator rights and is a gap) |
-| Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14c (ADR 0040): the runtime refuses updates under a debugger, and netcoredbg applies them only through its MI interpreter, so it is a gap for programs netcoredbg runs. While debugging, Hot Reload applies to Blazor WebAssembly components: standalone (0.5) and in a Blazor Web App (0.6, the server under `dotnet watch` with the debugger attached). Full Edit and Continue is a gap. |
+| Hot Reload, Edit and Continue | Hot Reload M15; Hot Reload while debugging researched in M14c (ADR 0040): the runtime refuses updates under a debugger, and netcoredbg applies them only through its MI interpreter, so it is a gap for programs netcoredbg runs. While debugging, Hot Reload applies to Blazor WebAssembly components: standalone (0.5) and in a Blazor Web App (0.6, the server under `dotnet watch` with the debugger attached). M55 plans Hot Reload while debugging under the Codalus debugger (D48's phase 2), the server's edits included. Full Edit and Continue (remapping active frames) is a gap. |
 | IntelliTrace, time-travel debugging, Snapshot Debugger | Gap / Trap |
 | Debugging tests | M8 (done) |
 | Blazor WebAssembly and JavaScript debugging | M16 |
@@ -3123,7 +3182,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D45 | The Git diff document (#86), drawn in [`DiffDocument.dc.html`](design/controls/DiffDocument.dc.html) with 16 questions in [controls.md](design/controls.md#the-git-diff-document-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended |
 | D46 | Rounded corners for the Classic family (#84), drawn in [`RoundedCorners.dc.html`](design/controls/RoundedCorners.dc.html) with 18 questions in [controls.md](design/controls.md#rounded-corners-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended; supersedes D33's 2 px Classic radius |
 | D47 | Classic's editor colors (#83): after the document view's 0.85 opacity (Dock's reveal fade) is fixed, should Classic match the classic IDE's measured palette? | 0.6 | match the classic IDE | decided 2026-10-22: match it (control keywords, comments, strings, gray line numbers with the current line's number, bracket colors off by default in Classic, the current line and CodeLens; Light and Blue from the classic IDE's Light scheme) |
-| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Phase 1 built as [M54](#m54--a-managed-coreclr-debugger-phase-1), 2026-10-29; phases 2 and 3 not scheduled |
+| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Phase 1 built as [M54](#m54--a-managed-coreclr-debugger-phase-1), 2026-10-29; phase 2 planned as [M55](#m55--a-managed-coreclr-debugger-phase-2-apply-code-changes-while-debugging), 2026-10-29; phase 3 not scheduled |
 
 ## Change log
 
@@ -3361,3 +3420,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-10-29: M54a at checkpoint ([m54a](checkpoints/m54a.md)): `codalus-debughost --clr-dap` on dbgshim with its launcher (merged), then `debug.adapter` (`codalus` a preview, `CODALUS_DEBUG_ADAPTER` over it), DebugService's routing (x64 on Apple silicon and the terminal stay on netcoredbg, saying why) and the `debug-codalus` shard on Linux x64, Windows, macOS and Linux arm64. The parity set's 79 tests found what the shared session lacked on CoreCLR, and the .NET Framework debugger gets it too: thread names, `decimal` and `DateTime`, `setExpression`, a generic base's members with its type arguments, static members, a getter's exception, and the .NET 9+ exception dispatcher's frames above a throw.
 - 2026-10-29: M54 done, D48's phase 1 ([m54b](checkpoints/m54b.md)): under the Codalus debugger a program in the integrated terminal or a console window starts there through the adapter's launcher (DAP's `runInTerminal`), stopping on `Main`'s first line and on macOS too; the `debug-codalus` shard runs the Shell's debugger tests and test debugging as well; the smoke test runs its debug steps a second time under the Codalus debugger. The plan's PRs 3 to 5 went in as one. netcoredbg stays the default (phase 3).
 - 2026-10-29: M54's last two exit criteria on CI ([run 40819398319](https://github.com/stavroskasidis/codalus-ide/actions/runs/40819398319), a benchmarks dry run on develop): the packages' smoke tests pass with the `.codalus` steps on each package platform, Linux arm64 included, and its sizes are `ok` under the size gate's comparison on every OS (`shell_mb` about 2% over the baseline's median on Linux and macOS, under 5%), run over the run's artifacts; the gate's own verdict, on `master`, is the next stable release's.
+- 2026-10-29: M55 planned, D48's phase 2 (Apply Code Changes while debugging under the Codalus debugger), after the maintainer's decisions: Hot Reload's semantics (no remap of active frames); Apply Code Changes, Continue and a save with `debug.hotReload` as the triggers; every program the Codalus debugger runs, a Blazor Web App's server in place included; rude edits ask to restart; a one-time offer under netcoredbg; C#, Visual Basic and Razor; a spike, then M55a and M55b. Roslyn's deltas from `Microsoft.CodeAnalysis.ExternalAccess.HotReload` (MIT, the `dotnet-tools` feed, at the language host's Roslyn version).
