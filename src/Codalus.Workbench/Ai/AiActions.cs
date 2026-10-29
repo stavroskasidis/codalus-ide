@@ -41,6 +41,9 @@ public static partial class AiActions
     /// <summary>Asked in AI Chat about a diagnostic (Quick Info's Add to Chat), with the diagnostic and the code around it.</summary>
     public const string ExplainDiagnosticQuestion = "What does this error mean, and how do I fix it?";
 
+    /// <summary>Asked in AI Chat about a commit (its details tab's Explain), with its message and diff.</summary>
+    public const string ExplainCommitQuestion = "Explain what this commit changes and why, file by file, and point out anything risky.";
+
     /// <summary>Asked in AI Chat about a failing test.</summary>
     public const string ExplainTestQuestion = "Why does this test fail, and what should change: the test or the code?";
 
