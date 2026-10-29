@@ -476,7 +476,7 @@ public sealed class RemoteServerTests
         }
 
         var script = Path.Combine(folder, "fake-ssh");
-        File.WriteAllText(script, """
+        Codalus.Tests.StandInScript.Write(script, """
             #!/bin/sh
             # A stand-in for ssh: skip the options and the destination, run the command here.
             while [ $# -gt 0 ]; do
@@ -490,7 +490,6 @@ public sealed class RemoteServerTests
             exec env HOME="{HOME}" sh -c "$*"
             """.Replace("{HOME}", Path.Combine(folder, "home"), StringComparison.Ordinal).Replace("\r\n", "\n", StringComparison.Ordinal));
         Directory.CreateDirectory(Path.Combine(folder, "home")); // never the real home (found on the Mac)
-        File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return new SshTarget("stand-in", Program: script) { Options = ["BatchMode=yes"] };
     }
 

@@ -161,11 +161,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         Directory.CreateDirectory(installer);
         var node = Path.Combine(_connector.SearchPath!, OperatingSystem.IsWindows() ? "node.cmd" : "node");
         var script = Path.Combine(installer, OperatingSystem.IsWindows() ? "install.cmd" : "install");
-        File.WriteAllText(script, OperatingSystem.IsWindows() ? $"@echo off\r\n(echo @echo off& echo echo v22.1.0) > \"{node}\"\r\n" : $"#!/bin/sh\nprintf '#!/bin/sh\\necho v22.1.0\\n' > '{node}'\nchmod +x '{node}'\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        StandInScript.Write(script, OperatingSystem.IsWindows() ? $"@echo off\r\n(echo @echo off& echo echo v22.1.0) > \"{node}\"\r\n" : $"#!/bin/sh\nprintf '#!/bin/sh\\necho v22.1.0\\n' > '{node}'\nchmod +x '{node}'\n");
 
         var option = new AcpInstallOption("snap", "Snap", "", Setup.InstallKind.Terminal, "sudo snap install node") { Program = script };
         Assert.Equal(0, await _connector.InstallAsync("stand-in", option, _host, null, Ct));
@@ -265,7 +261,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         // Silence is "not confirmed", never "connected".
         StandIns(modes: "ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=silent");
         var (silent, _) = await TestAsync(new AcpConnectRequest(template, Already));
-        Outcome(AcpTestOutcome.NotConfirmed, silent); // Failed once on Linux (WSL, 2026-10-28) without saying why: the message says now
+        Outcome(AcpTestOutcome.NotConfirmed, silent); // Failed once on Linux (WSL, 2026-10-28): its stand-in node was "Text file busy" (#209)
         Assert.StartsWith("Stand-in started, but it didn't say whether you're signed in within 3 seconds", silent.Message, StringComparison.Ordinal);
     }
 

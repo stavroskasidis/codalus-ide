@@ -60,13 +60,13 @@ public static class StandInNode
 
         if (nodeVersion is not null)
         {
-            Write(Path.Combine(folder, "node"), $"#!/bin/sh\necho {nodeVersion}\n");
+            StandInScript.Write(Path.Combine(folder, "node"), $"#!/bin/sh\necho {nodeVersion}\n");
         }
 
         if (npx)
         {
             var output = string.Concat(lines.Out.Select(l => $"  echo '{l}' >&2\n")) + string.Concat(lines.Error.Select(l => $"  echo '{l}' >&2\n"));
-            Write(Path.Combine(folder, "npx"),
+            StandInScript.Write(Path.Combine(folder, "npx"),
                 "#!/bin/sh\n"
                 + $"if [ \"$1\" = \"--version\" ]; then echo {npxVersion}; exit 0; fi\n"
                 + "case \" $* \" in\n"
@@ -92,15 +92,6 @@ public static class StandInNode
             return;
         }
 
-        Write(Path.Combine(folder, name), "#!/bin/sh\n" + string.Concat(output.Split('\n').Select(l => $"echo '{l}'\n")) + $"exit {exit}\n");
-    }
-
-    private static void Write(string file, string text)
-    {
-        File.WriteAllText(file, text);
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        StandInScript.Write(Path.Combine(folder, name), "#!/bin/sh\n" + string.Concat(output.Split('\n').Select(l => $"echo '{l}'\n")) + $"exit {exit}\n");
     }
 }

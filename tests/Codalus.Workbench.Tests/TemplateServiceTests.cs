@@ -24,8 +24,7 @@ public sealed class TemplateServiceTests : IDisposable
         else
         {
             StandIn = Path.Combine(_root, "dotnet");
-            File.WriteAllText(StandIn, "#!/bin/sh\necho \"cwd=$(pwd)\"\nfor a in \"$@\"; do echo \"arg=$a\"; done\n");
-            File.SetUnixFileMode(StandIn, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            Codalus.Tests.StandInScript.Write(StandIn, "#!/bin/sh\necho \"cwd=$(pwd)\"\nfor a in \"$@\"; do echo \"arg=$a\"; done\n");
         }
     }
 
