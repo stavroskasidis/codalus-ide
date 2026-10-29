@@ -27,7 +27,7 @@ public static class LensDetails
         var latest = committed.MaxBy(r => r.Date)!;
         var authors = committed.Select(r => r.Author).Distinct(StringComparer.Ordinal).Count();
         var changes = committed.Select(r => r.Commit).Distinct(StringComparer.Ordinal).Count();
-        return $"{latest.Author}, {Ago(now - latest.Date)}  |  {Count(authors, "author")}, {Count(changes, "change")}";
+        return $"{latest.Author}, {Ago(now - latest.Date)} | {Count(authors, "author")}, {Count(changes, "change")}";
     }
 
     /// <summary>A test's last outcome (<c>✓ Passed</c>), or a class's (<c>3/4 passing</c>); null for other nodes.</summary>
