@@ -8,7 +8,7 @@ Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
 - **At the top**: the [branch drop-down](#the-branch-drop-down), then **Fetch**, **Pull**, **Push**, **Sync** (pull, then push) and **⋯** (new branch, merge, rebase, update a branch, stash, history, [manage branches](#managing-branches), remotes, tags, refresh).
 - **While Fetch, Pull, Push or Sync runs** (from the window, the Git menu or the palette): the window says what it's doing under the branch ("Pulling…") over a running bar, and **Cancel** takes the place of the four buttons; the status bar shows it too, with its own cancel button. Cancel stops git, and the status bar says it was cancelled.
-- **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**; a repository with no remote offers **Publish to a Git Host…** instead (its tooltip says where to add a remote), and neither shows with a detached HEAD or before the first commit. The pull request button creates a pull request on GitHub, Azure DevOps (or an Azure DevOps Server) or GitLab; before you're signed in to the repository's host, it opens [the sign-in](#github-azure-devops-and-gitlab) first.
+- **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**; a repository with no remote offers **Publish to a Git Host…** instead (its tooltip says where to add a remote), and neither shows with a detached HEAD or before the first commit. The pull request button creates a pull request on GitHub, Azure DevOps (or an Azure DevOps Server) or GitLab; before you're signed in to the repository's host, it opens [the sign-in in Git Changes](#signing-in-from-git-changes) first, and then the form.
 - **Commit**: a message is required. The button commits the staged changes when there are some (**Commit Staged**), otherwise every change, new files included (**Commit All**); its menu also commits **and Push** or **and Sync**. `Ctrl+Enter` in the message box commits. **Amend** fills in the last commit's message and rewrites that commit. The **#** button (or typing `#`) mentions an issue or work item.
 - **Related Items**: the issues and work items the message mentions.
 - **Staged Changes** and **Changes**: a tree of the repository, its folders (a folder holding a single folder is shown with it, as `src\Data`) and files, each with its status letter. Hover a file or folder for the buttons that stage (`+`), unstage (`−`) and discard it. **Stage All** (`+`) and **Unstage All** (`−`) act on the whole section. Double-click a file to see its diff.
@@ -129,21 +129,31 @@ Codalus IDE reads which files Git LFS tracks from `.gitattributes`, so it works 
 
 Built-in plugins connect to GitHub (and GitHub Enterprise Server), Azure DevOps (and [Azure DevOps Server](#azure-devops-server)) and GitLab (and self-managed GitLab). **Nothing is sent to a host until you sign in to it**: before that, the plugins don't even load.
 
-**Signing in** (Git → Git Hosting Accounts):
+### Signing in from Git Changes
+
+When the repository's remote is on GitHub, Azure DevOps or GitLab (or a server of theirs) and you aren't signed in there, Git Changes says so under the outgoing and incoming commits: *This repository is on GitHub (github.com). Sign in to create pull requests and see CI status and work items.*
+- **Sign In** opens that host's ways in, right there: **Sign in with your Windows account** on an [Azure DevOps Server](#azure-devops-server), **Sign In with Your Browser** where the host's OAuth app is set up, and a personal access token. **Create a token** opens the host's page for a new token (on GitHub, with the scopes Codalus IDE needs already ticked); paste it and **Sign In with Token**.
+- **Create a pull request**, and **Sign in** in the Pull Requests and Work Items windows, open the same panel. Once you're signed in from the pull request button, the pull request form opens.
+- **×** hides the suggestion and never shows it again for this repository. The pull request button still offers to sign in.
+- A remote on a host Codalus IDE doesn't know (no provider for it) opens Git Hosting Accounts instead, where `github.serverUrl`, `gitlab.serverUrl` and `azureDevOps.serverUrl` name your servers.
+
+### Git Hosting Accounts
+
+**Signing in** (Git → Git Hosting Accounts, every host at once):
 - **Sign In** shows a code: **Copy Code and Open Browser**, enter it on the host's page and approve. The page shows *Waiting for approval…* until you do; **Cancel** stops.
 - **Or paste a personal access token**: GitHub needs the `repo`, `read:org` and `workflow` scopes; GitLab the `api` scope; Azure DevOps Code (read and write), Build (read) and Work Items (read).
 - Tokens are kept in the operating system's credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service (GNOME Keyring, KWallet…) through libsecret on Linux. Codalus IDE never writes them to a file. Where no credential store is available, a sign-in lasts until Codalus IDE closes; the environment variable `CODALUS_CREDENTIAL_STORE=memory` does that on purpose (tests). A `--user-data-dir` profile keeps its sign-ins apart from the default profile's.
-- **Servers**: `github.serverUrl`, `gitlab.serverUrl`, and `azureDevOps.serverUrl` (with `azureDevOps.authorityUrl` and `azureDevOps.profileUrl`) point at an enterprise or self-managed server. Device sign-in needs the server's OAuth app: its client id goes in `github.oauthClientId`, `gitlab.oauthClientId` or `azureDevOps.oauthClientId`. Without one, sign in with a token.
+- **Servers**: `github.serverUrl`, `gitlab.serverUrl`, and `azureDevOps.serverUrl` (with `azureDevOps.authorityUrl` and `azureDevOps.profileUrl`) point at an enterprise or self-managed server. Device sign-in needs the server's OAuth app. On github.com, gitlab.com and Azure DevOps Services (dev.azure.com) it's Codalus IDE's own (the defaults of `github.oauthClientId`, `gitlab.oauthClientId` and `azureDevOps.oauthClientId`), so **Sign In** works there out of the box. Azure DevOps' asks Microsoft for your work or school account; an organization that only lets its users approve apps from verified publishers asks its admin to approve Codalus IDE once. A GitHub Enterprise Server or a self-managed GitLab (17.2 or later) needs its own app's client id in `github.oauthClientId` or `gitlab.oauthClientId`; an Azure DevOps Server signs in with your Windows account or a token. Without one, there's no **Sign In** button: sign in with a token.
 - **Sign Out** deletes the token. A session that expires or is revoked asks you to sign in again.
 
 ### Azure DevOps Server
 
 Codalus IDE recognizes a remote on an Azure DevOps Server (or Team Foundation Server) by its path, `https://tfs.contoso.com/tfs/DefaultCollection/Project/_git/Repository`, so you don't need to set anything first:
-- **Create a pull request** in Git Changes (or **Sign in** in the Pull Requests or Work Items window) opens Git Hosting Accounts with the server under Azure DevOps (*Server: https://tfs.contoso.com/tfs, where this repository's remote is*).
+- Git Changes [suggests signing in](#signing-in-from-git-changes) there: *This repository is on Azure DevOps (tfs.contoso.com/tfs)*. **Create a pull request**, and **Sign in** in the Pull Requests or Work Items window, open the same sign-in.
 - **Sign in with your Windows account** signs in as you, with no token: Windows authentication, as the browser does. On macOS and Linux the button is **Sign in with Kerberos** and needs a ticket for your domain account (`kinit ada@CONTOSO.COM`).
-- **Or paste a personal access token** created on the server (your profile → Personal access tokens), with Code (read and write), Build (read) and Work Items (read).
+- **Or paste a personal access token**: **Create a token** opens the server's page for one (your profile → Personal access tokens, in the repository's collection), with Code (read and write), Build (read) and Work Items (read).
 - Signing in sets `azureDevOps.serverUrl` to the server. You can also set it yourself: the server's address without the collection (`https://tfs.contoso.com/tfs`, or `https://ado.contoso.com` on a server installed without the `/tfs` path).
-- Codalus IDE is signed in to one Azure DevOps server at a time. Signed in to another (dev.azure.com, say), the row says *This repository is on … Sign out, then sign in there.*
+- Codalus IDE is signed in to one Azure DevOps server at a time. Signed in to another (dev.azure.com, say), the sign-in says *This repository is on … Sign out, then sign in there.*
 - Azure DevOps Server 2019 and later work. An older server's REST API version is used when the server says it doesn't take the latest.
 
 The repository's host is found from its remotes (`origin` first). Then:

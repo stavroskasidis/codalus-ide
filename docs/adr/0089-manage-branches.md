@@ -1,4 +1,4 @@
-# 0088. Manage Branches: the Git Repository document
+# 0089. Manage Branches: the Git Repository document
 
 - **Status:** accepted (2026-10-29)
 - **Date:** 2026-10-29

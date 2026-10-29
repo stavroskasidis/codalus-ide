@@ -128,6 +128,7 @@ public sealed class ViewLocator : IDataTemplate
         CoverageResultsViewModel vm => new CoverageResultsView { DataContext = vm },
         ErrorListViewModel vm => new ErrorListView { DataContext = vm },
         FindResultsViewModel vm => new FindResultsView { DataContext = vm },
+        ReferencesViewModel vm => new ReferencesView { DataContext = vm },
         DocumentOutlineViewModel vm => new DocumentOutlineView { DataContext = vm },
         HierarchyViewModel vm => new HierarchyView { DataContext = vm },
         SymbolBrowserViewModel vm => new SymbolBrowserView { DataContext = vm },

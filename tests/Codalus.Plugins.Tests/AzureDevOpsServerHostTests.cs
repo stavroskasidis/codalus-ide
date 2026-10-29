@@ -101,4 +101,16 @@ public sealed class AzureDevOpsServerHostTests : IAsyncLifetime
     [InlineData("/home/ada/remote.git", null)]
     public void An_azure_devops_servers_remote_says_where_the_server_is(string remote, string? server) =>
         Assert.Equal(server, HostingService.AzureDevOpsServerOf(remote));
+
+    [Theory]
+    [InlineData("github", "https://github.com", "https://github.com/contoso/site.git", "https://github.com/settings/tokens/new?scopes=repo,read:org,workflow&description=Codalus%20IDE")]
+    [InlineData("gitlab", "https://gitlab.contoso.com/", null, "https://gitlab.contoso.com/-/user_settings/personal_access_tokens?name=Codalus%20IDE&scopes=api")]
+    [InlineData("azure-devops", "https://dev.azure.com", "https://contoso@dev.azure.com/contoso/Web%20Apps/_git/portal", "https://dev.azure.com/contoso/_usersSettings/tokens")]
+    [InlineData("azure-devops", "https://dev.azure.com", "git@ssh.dev.azure.com:v3/contoso/Web%20Apps/portal", "https://dev.azure.com/contoso/_usersSettings/tokens")]
+    [InlineData("azure-devops", "https://dev.azure.com", "https://contoso.visualstudio.com/DefaultCollection/Tools/_git/cli", "https://contoso.visualstudio.com/_usersSettings/tokens")]
+    [InlineData("azure-devops", "https://tfs.contoso.com/tfs", "https://tfs.contoso.com/tfs/DefaultCollection/Apps/_git/site", "https://tfs.contoso.com/tfs/DefaultCollection/_usersSettings/tokens")]
+    [InlineData("azure-devops", "https://dev.azure.com", null, null)]
+    [InlineData("other", "https://example.com", null, null)]
+    public void The_token_page_is_the_hosts_own(string provider, string server, string? remote, string? page) =>
+        Assert.Equal(page, HostingService.TokenPageUrl(provider, server, remote));
 }

@@ -33,8 +33,8 @@
         },
         "azureDevOps.oauthClientId": {
           "type": "string",
-          "default": "",
-          "description": "The client id of the Microsoft Entra ID app used to sign in with a device code. Empty: sign in with a personal access token.",
+          "default": "743f360d-cef1-4e57-86fe-27c15c10eae0",
+          "description": "The client id of the Microsoft Entra ID app used to sign in with a device code. The default is Codalus IDE's app, for Azure DevOps Services (dev.azure.com). An Azure DevOps Server signs in with your Windows account or a token instead. Empty: sign in with a personal access token.",
           "scope": "user"
         }
       }

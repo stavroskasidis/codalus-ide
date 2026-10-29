@@ -220,6 +220,20 @@ internal static partial class BuiltIns
                 Enum = ["none", "project", "file", "severity", "code", "source"],
                 EnumDescriptions = ["No grouping", "Project", "File", "Severity", "Code", "Source (build or IntelliSense)"],
             },
+            SettingDescriptor.Create(ViewModels.ReferencesViewModel.GroupBySetting, "\"projectThenDefinition\"", SettingType.String, shell) with
+            {
+                Title = "Group By",
+                Category = "Find All References",
+                Description = "How the References window groups the references. Its Group by box changes it too; List View shows them without groups.",
+                Enum = [.. ViewModels.ReferencesGrouping.Ids],
+                EnumDescriptions = [.. ViewModels.ReferencesGrouping.All],
+            },
+            SettingDescriptor.Create(ViewModels.ReferencesViewModel.ColumnWidthsSetting, "\"\"", SettingType.String, shell) with
+            {
+                Title = "Column Widths",
+                Category = "Find All References",
+                Description = "The widths of the References window's columns in pixels, from File to Kind (Code takes the rest), as its column splitters leave them. Empty: the default widths.",
+            },
         ];
     }
 

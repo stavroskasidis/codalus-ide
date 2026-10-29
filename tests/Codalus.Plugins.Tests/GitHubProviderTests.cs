@@ -87,6 +87,12 @@ public sealed class GitHubProviderTests : IAsyncLifetime
         _context.Set("github.oauthClientId", string.Empty);
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _provider.SignInAsync(_context, Ct));
         Assert.Contains("personal access token", error.Message, StringComparison.Ordinal);
+
+        // github.com's own app, on another server (the mock stands for a GitHub Enterprise Server): it says so, and asks nothing.
+        _context.Set("github.oauthClientId", GitHubProvider.DotComClientId);
+        error = await Assert.ThrowsAsync<InvalidOperationException>(() => _provider.SignInAsync(_context, Ct));
+        Assert.Contains("needs its own OAuth app", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(_github.Requests, r => r.Path == "/login/device/code");
         await Assert.ThrowsAsync<HostingAuthenticationException>(() => _provider.SignInWithTokenAsync("not-a-token", Ct));
         Assert.Empty(_context.StoredSecrets);
         await Assert.ThrowsAsync<HostingAuthenticationException>(() => _provider.GetPullRequestsAsync(Repository, PullRequestFilter.All, Ct));
