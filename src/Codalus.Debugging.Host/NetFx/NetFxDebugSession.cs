@@ -208,25 +208,29 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>
     /// The runtime's Hot Reload capabilities, by its version (CoreCLR's <c>MetadataUpdater.GetCapabilities</c>, read on
-    /// .NET 8 to 11: the generic ones from .NET 7, <c>AddFieldRva</c> from .NET 10). None for the .NET Framework, whose
-    /// debugger doesn't apply edits here, nor before the core library has loaded.
+    /// .NET 8 to 11: the generic ones from .NET 7, <c>AddFieldRva</c> from .NET 10). The version is the one dbgshim
+    /// reported for the attach (<c>11.0.0-rc.3…</c>, the runtime's folder), known before any module loads; a
+    /// self-contained program's folder isn't one, and then the core library's version says it. None for the .NET
+    /// Framework, whose debugger doesn't apply edits here, nor before the program has started.
     /// </summary>
     private string[] HotReloadCapabilities()
     {
-        if (debugger is not CoreClr.DbgShimDebugger)
+        if (debugger is not CoreClr.DbgShimDebugger || _process is not { } process)
         {
             return [];
         }
 
-        int major;
-        lock (_gate)
+        if (!int.TryParse(process.RuntimeVersion.Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major))
         {
-            if (_modules.FirstOrDefault(m => m.Info.AssemblyName == "System.Private.CoreLib").Info is not { Metadata.IsAssembly: true } coreLibrary)
+            lock (_gate)
             {
-                return [];
-            }
+                if (_modules.FirstOrDefault(m => m.Info.AssemblyName == "System.Private.CoreLib").Info is not { Metadata.IsAssembly: true } coreLibrary)
+                {
+                    return [];
+                }
 
-            major = coreLibrary.Metadata.GetAssemblyDefinition().Version.Major;
+                major = coreLibrary.Metadata.GetAssemblyDefinition().Version.Major;
+            }
         }
 
         if (major < 6)
