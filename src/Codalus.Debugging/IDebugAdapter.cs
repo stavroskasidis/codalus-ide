@@ -12,7 +12,7 @@ public interface IDebugAdapter : IAsyncDisposable
     /// <summary>Completes on the adapter's <c>initialized</c> event: breakpoints can be sent, then <c>configurationDone</c>.</summary>
     Task Initialized { get; }
 
-    /// <summary>Completes when the adapter exits or closes its connection, once every event it sent was raised.</summary>
+    /// <summary>Completes when the adapter exits or closes its connection.</summary>
     Task Closed { get; }
 
     /// <summary>Adapter events, in order.</summary>
@@ -23,6 +23,9 @@ public interface IDebugAdapter : IAsyncDisposable
 
     /// <summary>What the adapter and its program are doing, for a session that stopped making progress (empty when it can't say).</summary>
     string Describe() => string.Empty;
+
+    /// <summary>The adapters the session talks to: itself, or a compound session's live parts (M55: each Codalus debugger takes an edit).</summary>
+    IReadOnlyList<IDebugAdapter> Adapters => [this];
 
     Task ConfigurationDoneAsync(CancellationToken cancellationToken);
 

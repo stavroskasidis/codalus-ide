@@ -65,6 +65,13 @@ public sealed partial class ShellHost
     /// <summary>A diff document for a view model: the shell's services, the layout from the settings, shortcuts and opening files.</summary>
     private DiffDocument NewDiffDocument(DiffViewModel viewModel)
     {
+        ConfigureDiff(viewModel);
+        return new DiffDocument(viewModel, EditorFont, DiffServices);
+    }
+
+    /// <summary>A diff's saved layout and staging controls, its shortcuts, and where Open File and the staged side go.</summary>
+    private void ConfigureDiff(DiffViewModel viewModel)
+    {
         viewModel.LoadLayout(Workbench.Settings.GetString(BuiltIns.DiffLayoutSetting, DiffViewModel.LayoutSideBySide));
         viewModel.SaveLayout = vm => _ = SaveDiffLayoutAsync(vm);
         viewModel.ShortcutFor = command => Workbench.Keybindings.GetBinding(command)?.ToLabel(Workbench.Platform);
@@ -72,7 +79,7 @@ public sealed partial class ShellHost
         viewModel.OpenStaged = path => OpenDiffAsync(path, staged: true);
         viewModel.LoadStagingControls(Workbench.Settings.GetBoolean(BuiltIns.DiffStagingControlsSetting, false));
         viewModel.SaveStagingControls = vm => _ = SaveDiffSettingAsync(BuiltIns.DiffStagingControlsSetting, vm.ShowStagingControls);
-        return new DiffDocument(viewModel, EditorFont, DiffServices);
+        viewModel.Services ??= DiffServices;
     }
 
     private Task SaveDiffLayoutAsync(DiffViewModel viewModel) =>

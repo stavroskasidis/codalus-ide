@@ -32,6 +32,8 @@ public sealed partial class ShellHost
         Git.SiblingStatusChanged += (_, _) => Ui.Post(UpdateGitStatus);
         Git.StatusChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
+        Git.StatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
+        Git.SiblingStatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChanges.RunWithArguments = RunOnGitChangeAsync;
@@ -48,6 +50,11 @@ public sealed partial class ShellHost
                 : InRepositoryAsync(GitBranches.RepositoryOf(branch), () => CheckoutBranchAsync(branch.FullRef)),
             NewBranch = name => GitBranches.IsAllRepositories ? NewBranchInAllRepositoriesAsync(name) : NewBranchFromAsync(null, name),
             MenuFor = GitBranchMenu,
+            ManageBranches = () =>
+            {
+                GitBranches.IsOpen = false;
+                return ShowGitRepositoryAsync();
+            },
             RunOnBranch = (command, branch) => GitBranchMenuItems(branch).Any(i => i.Command == command)
                 ? GitBranches.IsCommon(branch)
                     ? RunOnCommonBranchAsync(command, branch)

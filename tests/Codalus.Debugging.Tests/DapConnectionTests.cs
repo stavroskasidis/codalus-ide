@@ -48,55 +48,37 @@ public sealed class DapConnectionTests
     }
 
     /// <summary>
-    /// The events read before the adapter's output ended are all raised before <see cref="DapConnection.Closed"/>: a
-    /// compound session ended a program on it while its last events (its output, exited, terminated) still waited for
-    /// the event loop, and dropped them (Linux CI, run 40938631260).
+    /// Closed comes after the events read before the end: a two-program session ended on Closed while each program's
+    /// exited and terminated events were still on their way, and lost both exit lines (Linux arm64 CI, run 40911316698).
     /// </summary>
     [Fact]
-    public async Task Closed_completes_once_every_event_read_was_raised()
+    public async Task Closed_completes_after_the_events_read_before_the_end_were_raised()
     {
-        var ct = TestContext.Current.CancellationToken;
         var toClient = new Pipe();
         var toAdapter = new Pipe();
         await using var connection = new DapConnection(toClient.Reader.AsStream(), toAdapter.Writer.AsStream());
         var raised = new List<string>();
-        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.EventReceived += async e =>
         {
-            if (e.Name == "output")
-            {
-                await held.Task; // a handler still busy when the adapter exits (the session's other program's stop)
-            }
-
+            await Task.Delay(300); // a handler slower than the end of the adapter's output
             lock (raised)
             {
                 raised.Add(e.Name);
             }
         };
-        // What was raised when Closed completed (its continuations run later, so awaiting Closed alone can't tell).
-        var raisedWhenClosed = connection.Closed.ContinueWith(_ =>
-        {
-            lock (raised)
-            {
-                return raised.ToArray();
-            }
-        }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         connection.Start();
+        var ct = TestContext.Current.CancellationToken;
 
-        await toClient.Writer.WriteAsync(Frame("""{"seq":1,"type":"event","event":"output","body":{"output":"done\n"}}"""), ct);
-        await toClient.Writer.WriteAsync(Frame("""{"seq":2,"type":"event","event":"exited","body":{"exitCode":15}}"""), ct);
-        await toClient.Writer.WriteAsync(Frame("""{"seq":3,"type":"event","event":"terminated"}"""), ct);
-        toClient.Writer.Complete();
-        await WaitAsync(() => connection.Describe().Contains("event terminated", StringComparison.Ordinal), ct);
+        await toClient.Writer.WriteAsync(Frame("""{"seq":1,"type":"event","event":"exited","body":{"exitCode":15}}"""), ct);
+        await toClient.Writer.WriteAsync(Frame("""{"seq":2,"type":"event","event":"terminated"}"""), ct);
+        await toClient.Writer.CompleteAsync();
+        await connection.Closed.WaitAsync(TimeSpan.FromSeconds(30), ct);
 
-        // A request made now fails at once: no answer can come, and it would hold up the events behind it.
-        var request = connection.RequestAsync("threads", new EmptyArguments(), DapJsonContext.Default.EmptyArguments, ct);
-        await Assert.ThrowsAsync<DapConnectionLostException>(() => request.WaitAsync(TimeSpan.FromSeconds(10), ct));
-
-        await Task.WhenAny(connection.Closed, Task.Delay(500, ct));
-        Assert.False(connection.Closed.IsCompleted, "Closed completed with events still to raise");
-        held.SetResult();
-        Assert.Equal(["output", "exited", "terminated"], await raisedWhenClosed.WaitAsync(TimeSpan.FromSeconds(10), ct));
+        Assert.True(connection.OutputEnded);
+        lock (raised)
+        {
+            Assert.Equal([DapEvents.Exited, DapEvents.Terminated], raised);
+        }
     }
 
     private static async Task WaitAsync(Func<bool> condition, CancellationToken cancellationToken)

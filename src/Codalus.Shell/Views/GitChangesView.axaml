@@ -215,6 +215,7 @@
                   <Separator />
                   <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.history" Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.manageBranches" Header="{l:T gitChanges.manageBranches}" Tag="git.manageBranches" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.Icon="cloud" Header="{l:T gitChanges.manageRemotes}" Tag="git.remotes" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.tags" Header="{l:T gitChanges.manageTags}" Tag="git.tags" Click="OnMenuCommand" />
                   <Separator />
