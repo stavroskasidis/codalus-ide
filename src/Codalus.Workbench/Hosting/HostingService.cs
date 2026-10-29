@@ -14,7 +14,19 @@ public sealed record HostingProviderInfo(string Id, string Label, string PluginI
 {
     /// <summary>Its plugin is active and registered it.</summary>
     public bool IsRegistered { get; init; }
+
+    /// <summary>The setting with its server's URL (<c>serverSetting</c>), if it has one.</summary>
+    public string? ServerSetting { get; init; }
+
+    /// <summary>The server in <see cref="ServerSetting"/> is self-hosted: its host isn't one of the provider's own.</summary>
+    public bool IsSelfHosted { get; init; }
+
+    /// <summary>It signs in as the operating system's user on a self-hosted server (<c>integratedSignIn</c>, API 1.2.0).</summary>
+    public bool IntegratedSignIn { get; init; }
 }
+
+/// <summary>A self-hosted server a remote is on, for a provider not yet set up for it: sign in there (ADR 0087).</summary>
+public sealed record HostingServerSuggestion(HostingProviderInfo Provider, string ServerUrl);
 
 /// <summary>A signed-in account (not a secret: the token is in the OS credential store, kept by the plugin).</summary>
 public sealed record HostingAccountRecord(string ProviderId, string Name, string Host)
@@ -86,6 +98,9 @@ public sealed class HostingService : IHostingSink
             .Select(d => new HostingProviderInfo(d.Provider.Id, d.Provider.Label, d.Plugin.Id, [.. d.Provider.Hosts ?? [], .. ServerHost(d.Provider.ServerSetting)], d.Provider.Icon)
             {
                 IsRegistered = _connections.ContainsKey(d.Provider.Id),
+                ServerSetting = d.Provider.ServerSetting,
+                IsSelfHosted = ServerHost(d.Provider.ServerSetting).Any(host => !(d.Provider.Hosts ?? []).Any(pattern => HostMatches(host, pattern))),
+                IntegratedSignIn = d.Provider.IntegratedSignIn,
             })];
 
     /// <summary>Reads a setting's text (the provider's server URL); set by the shell.</summary>
@@ -182,6 +197,75 @@ public sealed class HostingService : IHostingSink
     }
 
     /// <summary>
+    /// A self-hosted server one of the remotes is on, when no provider serves its host yet: an Azure DevOps Server, whose
+    /// remotes say what they are (<see cref="AzureDevOpsServerOf"/>), for the provider <c>azure-devops</c> if it is installed.
+    /// </summary>
+    public HostingServerSuggestion? SuggestServerFor(IReadOnlyList<GitRemote> remotes)
+    {
+        var providers = Providers;
+        foreach (var remote in Ordered(remotes))
+        {
+            if (HostOf(remote.FetchUrl) is not { } host || providers.Any(p => Serves(p, host)))
+            {
+                continue;
+            }
+
+            if (AzureDevOpsServerOf(remote.FetchUrl) is { } server && providers.FirstOrDefault(p => p.Id == "azure-devops" && p.ServerSetting is not null) is { } provider)
+            {
+                return new HostingServerSuggestion(provider, server);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The Azure DevOps Server a remote URL is on, from its path: <c>…/{collection}/{project}/_git/{repository}</c> or
+    /// <c>…/{collection}/_git/{repository}</c>, the server being what comes before the collection
+    /// (<c>https://tfs.contoso.com/tfs</c>; with two segments before <c>_git</c>, a first <c>tfs</c> is the server's path).
+    /// An SSH remote's server is HTTPS on the same host. Null for any other remote.
+    /// </summary>
+    public static string? AzureDevOpsServerOf(string remoteUrl)
+    {
+        var url = remoteUrl.Trim();
+        string origin, path;
+        if (url.Contains("://", StringComparison.Ordinal))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Host.Length == 0)
+            {
+                return null;
+            }
+
+            origin = uri.Scheme is "http" or "https" ? $"{uri.Scheme}://{uri.Authority}" : $"https://{uri.Host}";
+            path = uri.AbsolutePath;
+        }
+        else if (HostOf(url) is { } host)
+        {
+            origin = "https://" + host;
+            path = url[(url.IndexOf(':', StringComparison.Ordinal) + 1)..];
+        }
+        else
+        {
+            return null;
+        }
+
+        var segments = Uri.UnescapeDataString(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var git = Array.IndexOf(segments, "_git");
+        if (git < 1 || git != segments.Length - 2)
+        {
+            return null;
+        }
+
+        var prefix = git switch
+        {
+            >= 3 => git - 2,
+            2 when string.Equals(segments[0], "tfs", StringComparison.OrdinalIgnoreCase) => 1,
+            _ => 0,
+        };
+        return origin + string.Concat(segments[..prefix].Select(s => "/" + Uri.EscapeDataString(s)));
+    }
+
+    /// <summary>
     /// The provider and repository of the remotes: the first provider the user is signed in to whose host one of them is
     /// on, asked to resolve them (activating its plugin). Null when there is none, or hosting is turned off.
     /// </summary>
@@ -214,10 +298,13 @@ public sealed class HostingService : IHostingSink
 
     // ------------------------------------------------------------------ accounts
 
-    /// <summary>Signs in: the device flow (the provider sends a code, see <see cref="DeviceCodeReceived"/>), or a token.</summary>
-    public async Task<HostingAccountRecord> SignInAsync(string providerId, string? token, CancellationToken cancellationToken)
+    /// <summary>
+    /// Signs in: the device flow (the provider sends a code, see <see cref="DeviceCodeReceived"/>), a token, or with
+    /// <paramref name="integrated"/> the operating system's account (<see cref="HostingProviderInfo.IntegratedSignIn"/>).
+    /// </summary>
+    public async Task<HostingAccountRecord> SignInAsync(string providerId, string? token, CancellationToken cancellationToken, bool integrated = false)
     {
-        var account = await InvokeAsync(providerId, HostingMethods.SignIn, new HostingSignInParams(providerId, token), PluginJsonContext.Default.HostingSignInParams, PluginJsonContext.Default.HostingAccountDto, cancellationToken).ConfigureAwait(false);
+        var account = await InvokeAsync(providerId, HostingMethods.SignIn, new HostingSignInParams(providerId, token) { Integrated = integrated }, PluginJsonContext.Default.HostingSignInParams, PluginJsonContext.Default.HostingAccountDto, cancellationToken).ConfigureAwait(false);
         var record = new HostingAccountRecord(providerId, account.Name, account.Host) { DisplayName = account.DisplayName, Url = account.Url };
         UpdateAccounts(list =>
         {

@@ -44,6 +44,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private int _nextId;
     private int _ending;
     private int _reserved;
+    private int _detaching;
 
     public CompoundDebugAdapter(IDebugAdapter primary, string name, bool independent = false)
     {
@@ -53,7 +54,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         Attach(part);
         _ = independent
             ? primary.Closed.ContinueWith(_ => EndAsync(part), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap()
-            : primary.Closed.ContinueWith(_ => _closed.TrySetResult(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            : primary.Closed.ContinueWith(_ => Volatile.Read(ref _detaching) == 0 && _closed.TrySetResult(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
     }
 
     /// <summary>
@@ -1003,27 +1004,48 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>
     /// Detaches the primary, leaving its program running, and ends the others (the browser closes): a Blazor Web App's
     /// server that <c>dotnet watch</c> runs is about to be restarted by it (#75). The session then ends.
+    /// The primary goes first, and its adapter ends at once: netcoredbg keeps the server's PDBs open until its process
+    /// ends, and on Windows <c>dotnet watch</c>'s rebuild can't replace a locked one. Ended after the browser (whose end
+    /// can take its 15 seconds), it outlived the rebuild's ten retries of the copy (Windows CI, run 40863024322).
     /// </summary>
     public async Task DetachPrimaryAsync(CancellationToken cancellationToken)
     {
-        Interlocked.Exchange(ref _ending, 1);
-        foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
+        if (Interlocked.Exchange(ref _ending, 1) == 1)
+        {
+            return; // the session ends already (the server exited, or Stop): nothing is left to detach from
+        }
+
+        Volatile.Write(ref _detaching, 1); // the session ends once the others did, not with the primary
+        try
         {
             try
             {
-                await part.Adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+                await Primary.DisconnectAsync(terminateDebuggee: false, cancellationToken).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+            catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
             {
             }
-        }
 
-        try
-        {
-            await Primary.DisconnectAsync(terminateDebuggee: false, cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+            {
+                _parts[0].Ended = true; // disposed here, not again with the session
+            }
+
+            await Primary.DisposeAsync().ConfigureAwait(false);
+            foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
+            {
+                try
+                {
+                    await part.Adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+                {
+                }
+            }
         }
-        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
+        finally
         {
+            _closed.TrySetResult();
         }
     }
 

@@ -941,7 +941,7 @@ public sealed class EditorInsights : IDisposable
                 }
             }
 
-            return new LensRow(indent.ToString(), string.Join("  |  ", titles), lenses.FirstOrDefault());
+            return new LensRow(indent.ToString(), string.Join(" | ", titles), lenses.FirstOrDefault());
         }
 
         /// <summary>A line's CodeLens shows above it when the line before is there to end with it (not folded away).</summary>
@@ -995,8 +995,9 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>
     /// The end of a line's text and the next line's CodeLens row: the line's own end-of-line text (if any), a line break,
-    /// the next line's indentation and its CodeLens, smaller and muted. None of it is part of the document or takes the
-    /// caret; the next line itself keeps its height (no taller caret or selection), and the row clicks run its first lens.
+    /// the next line's indentation and its CodeLens, smaller, muted and in the UI's proportional font (compact, as in the
+    /// classic IDE). None of it is part of the document or takes the caret; the next line itself keeps its height (no
+    /// taller caret or selection), and the row clicks run its first lens.
     /// </summary>
     private sealed class LensRowElement : VisualLineElement
     {
@@ -1023,7 +1024,7 @@ public sealed class EditorInsights : IDisposable
             var at = startVisualColumn - VisualColumn;
             if (at < _text.Length)
             {
-                return Run(_text[at..], _color, small: true);
+                return Run(_text[at..], _color, small: true, ui: false);
             }
 
             if (at == _text.Length)
@@ -1033,14 +1034,19 @@ public sealed class EditorInsights : IDisposable
 
             at -= _text.Length + 1;
             return at < _row.Indent.Length
-                ? Run(_row.Indent[at..], _color, small: false)
-                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true);
+                ? Run(_row.Indent[at..], _color, small: false, ui: false)
+                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true, ui: true);
         }
 
-        private TextCharacters Run(string text, IBrush foreground, bool small)
+        private TextCharacters Run(string text, IBrush foreground, bool small, bool ui)
         {
             var properties = new VisualLineElementTextRunProperties(TextRunProperties);
             properties.SetForegroundBrush(foreground);
+            if (ui)
+            {
+                properties.SetTypeface(new Typeface(FontFamily.Default));
+            }
+
             if (small)
             {
                 properties.SetFontRenderingEmSize(TextRunProperties.FontRenderingEmSize * 0.9);

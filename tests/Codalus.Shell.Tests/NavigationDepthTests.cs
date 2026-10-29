@@ -220,7 +220,7 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => view.VisualLinesValid && view.VisualLines[0].FirstDocumentLine.LineNumber > 60);
 
         // Both of the row's lenses, each resolved on its own.
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 references  |  1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 references | 1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
     }
 
     [AvaloniaFact]

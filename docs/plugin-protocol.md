@@ -105,7 +105,7 @@ Since API 0.2.6 (protocol 0.2), [ADR 0031](adr/0031-git-hosting-and-repository-f
 | `secrets/delete` | host → shell | request | `{pluginId, key}` → `{}` |
 | `hosting/resolve` | shell → host | request | `{providerId, remotes: [{remote, url}]}` → `{repository?}`: the first remote (in order) on the provider's host |
 | `hosting/account` | shell → host | request | `{providerId}` → `{account?: {name, host, displayName?, url?}}` from the stored session |
-| `hosting/signIn` | shell → host | request | `{providerId, token?}` → `{name, host, displayName?, url?}`: the device flow, or a personal access token |
+| `hosting/signIn` | shell → host | request | `{providerId, token?, integrated?}` → `{name, host, displayName?, url?}`: the device flow, a personal access token, or with `integrated` (since API 1.2.0) the operating system's account |
 | `hosting/signOut` | shell → host | request | `{providerId}` → `{}` |
 | `hosting/repositoryInfo` | shell → host | request | `{providerId, repository}` → `{defaultBranch, webUrl, isPrivate}` |
 | `hosting/pullRequests` | shell → host | request | `{providerId, repository, filter: all\|mine\|reviewRequested}` → `{pullRequests: [pullRequest]}` |

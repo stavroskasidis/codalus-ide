@@ -12,7 +12,7 @@ dotnet new codalus-plugin -n Contoso.Greeter --publisher contoso
 By hand, reference the package without its runtime assets (the IDE provides them) and put a `codalus-plugin.json` manifest beside the project:
 
 ```xml
-<PackageReference Include="Codalus.Plugins.Abstractions" Version="1.1.0" ExcludeAssets="runtime" />
+<PackageReference Include="Codalus.Plugins.Abstractions" Version="1.2.0" ExcludeAssets="runtime" />
 ```
 
 ```csharp
