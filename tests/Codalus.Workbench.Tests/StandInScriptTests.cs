@@ -25,7 +25,7 @@ public sealed class StandInScriptTests : IDisposable
         {
             while (!stop.IsCancellationRequested)
             {
-                using var process = Process.Start(new ProcessStartInfo("/bin/true") { UseShellExecute = false })!;
+                using var process = Process.Start(new ProcessStartInfo("true") { UseShellExecute = false })!;
                 process.WaitForExit();
             }
         })).ToArray();
