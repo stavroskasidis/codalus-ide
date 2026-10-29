@@ -67,6 +67,7 @@ public sealed class HostingService : IHostingSink
     private readonly ConcurrentDictionary<string, IHostingConnection> _connections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<IHostingConnection>> _waiting = new(StringComparer.Ordinal);
     private List<HostingAccountRecord>? _accounts;
+    private List<string>? _dismissed;
 
     /// <param name="accountsFile">Where the non-secret account list is kept (the state folder's <c>hosting-accounts.json</c>).</param>
     /// <param name="enabled">The <c>hosting.enabled</c> setting.</param>
@@ -339,6 +340,85 @@ public sealed class HostingService : IHostingSink
         return result.Account;
     }
 
+    // ------------------------------------------------------------------ the sign-in suggestion (ADR 0088)
+
+    private string DismissedFile => Path.Combine(Path.GetDirectoryName(_accountsFile) ?? ".", "hosting-sign-in-dismissed.json");
+
+    private static StringComparer PathComparer => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    private List<string> LoadDismissed() =>
+        _dismissed ??= [.. StateFile.Read(DismissedFile, HostingJsonContext.Default.HostingSignInState)?.Dismissed ?? []];
+
+    /// <summary>Whether the user dismissed Git Changes' suggestion to sign in, for the repository at <paramref name="repositoryRoot"/>.</summary>
+    public bool IsSignInSuggestionDismissed(string repositoryRoot)
+    {
+        lock (_gate)
+        {
+            return LoadDismissed().Contains(Path.GetFullPath(repositoryRoot), PathComparer);
+        }
+    }
+
+    /// <summary>Never suggests signing in for this repository again (kept in the state folder's <c>hosting-sign-in-dismissed.json</c>).</summary>
+    public void DismissSignInSuggestion(string repositoryRoot)
+    {
+        lock (_gate)
+        {
+            var list = LoadDismissed();
+            var root = Path.GetFullPath(repositoryRoot);
+            if (!list.Contains(root, PathComparer))
+            {
+                list.Add(root);
+                StateFile.Write(DismissedFile, new HostingSignInState { Dismissed = [.. list] }, HostingJsonContext.Default.HostingSignInState);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The host's page that creates a personal access token, with the scopes the provider needs when the host takes them
+    /// in the URL: GitHub's and GitLab's under the server, Azure DevOps' under the organization or collection of the remote.
+    /// Null for another provider, or when the remote doesn't say which organization.
+    /// </summary>
+    public static string? TokenPageUrl(string providerId, string serverUrl, string? remoteUrl)
+    {
+        var server = serverUrl.Trim().TrimEnd('/');
+        return providerId switch
+        {
+            "github" => server + "/settings/tokens/new?scopes=repo,read:org,workflow&description=Codalus%20IDE",
+            "gitlab" => server + "/-/user_settings/personal_access_tokens?name=Codalus%20IDE&scopes=api",
+            "azure-devops" when remoteUrl is not null && AzureDevOpsOrganization(server, remoteUrl) is { } organization => organization + "/_usersSettings/tokens",
+            _ => null,
+        };
+    }
+
+    /// <summary>The organization's (or an Azure DevOps Server collection's) address a remote is in, from its path.</summary>
+    private static string? AzureDevOpsOrganization(string server, string remoteUrl)
+    {
+        var host = HostOf(remoteUrl);
+        var url = remoteUrl.Trim();
+        var path = url.Contains("://", StringComparison.Ordinal) && Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.AbsolutePath
+            : url[(url.IndexOf(':', StringComparison.Ordinal) + 1)..];
+        var segments = Uri.UnescapeDataString(path).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (host is null)
+        {
+            return null;
+        }
+
+        if (host.EndsWith(".visualstudio.com", StringComparison.Ordinal) && !host.StartsWith("vs-ssh.", StringComparison.Ordinal))
+        {
+            return "https://" + host; // {organization}.visualstudio.com
+        }
+
+        if (host is "ssh.dev.azure.com" or "vs-ssh.visualstudio.com")
+        {
+            return segments is ["v3", var organization, ..] ? "https://dev.azure.com/" + Uri.EscapeDataString(organization) : null;
+        }
+
+        // The server's own path, then the organization or collection.
+        var prefix = Uri.TryCreate(server, UriKind.Absolute, out var serverUri) ? serverUri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Length : 0;
+        return segments.Length > prefix ? server + "/" + Uri.EscapeDataString(segments[prefix]) : null;
+    }
+
     private List<HostingAccountRecord> LoadAccounts() =>
         _accounts ??= [.. StateFile.Read(_accountsFile, HostingJsonContext.Default.HostingAccountsState)?.Accounts ?? []];
 
@@ -468,6 +548,13 @@ internal sealed record HostingAccountsState
     public IReadOnlyList<HostingAccountRecord>? Accounts { get; init; }
 }
 
+/// <summary>The repositories whose sign-in suggestion the user dismissed (their roots).</summary>
+internal sealed record HostingSignInState
+{
+    public IReadOnlyList<string>? Dismissed { get; init; }
+}
+
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(HostingAccountsState))]
+[JsonSerializable(typeof(HostingSignInState))]
 internal sealed partial class HostingJsonContext : JsonSerializerContext;

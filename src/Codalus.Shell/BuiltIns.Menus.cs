@@ -205,6 +205,7 @@ internal static partial class BuiltIns
             Item(Git, "git.commit", "1-commit"),
             Item(Git, ViewCommandPrefix + ViewModels.GitChangesViewModel.ToolWindowId, "1-commit", "Git Changes"),
             Item(Git, "git.history", "1-commit"),
+            Item(Git, "git.manageBranches", "1-commit"),
             Item(Git, "git.fetch", "2-remote"),
             Item(Git, "git.pull", "2-remote"),
             Item(Git, "git.push", "2-remote"),
@@ -218,6 +219,7 @@ internal static partial class BuiltIns
             Item(Git, "git.clone", "4-repository"),
             Item(Git, "git.init", "4-repository"),
 
+            Item(GitBranchesMenu, "git.manageBranches", "1-branch"),
             Item(GitBranchesMenu, "git.switchBranch", "1-branch"),
             Item(GitBranchesMenu, "git.createBranch", "1-branch"),
             Item(GitBranchesMenu, "git.updateBranch", "1-branch"),

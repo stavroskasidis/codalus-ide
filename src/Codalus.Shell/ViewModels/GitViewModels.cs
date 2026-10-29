@@ -655,6 +655,9 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public bool IsNotPublished => HasRepository && !IsPublished;
 
+    /// <summary>The panel that suggests signing in to the repository's host, and signs in (ADR 0088); set by the shell.</summary>
+    public HostingSignInViewModel? HostingSignIn { get; set; }
+
     private bool _hasRemote = true;
 
     /// <summary>The repository has a remote (set by the shell from <c>git remote</c>): without one, the link publishes to a Git host (B18).</summary>

@@ -281,7 +281,7 @@ public class FindInFilesTests
             Assert.Equal(1, page.Number);
             Assert.Equal("Find Results 1", page.Header);
             Assert.False(results.HasManyPages);
-            Assert.True(page.CanModifyFind);
+            Assert.True(results.ModifyFindCommand.CanExecute(null));
             Assert.Equal(FindResultsGrouping.File, page.FilesGroupBy);
             Assert.Equal(7, page.Rows.Count); // three file headers, four matches
 
@@ -366,21 +366,6 @@ public class FindInFilesTests
             second.CloseCommand.Execute(null);
             Assert.Single(results.Pages);
             Assert.Empty(second.Rows);
-
-            // References aren't a Find in Files search: Modify Find is disabled, and Group by and List View hide.
-            var location = new Location(DocumentUris.FromPath(one), new LanguageServices.Protocol.Range(new Position(0, 16), new Position(0, 21)));
-            await results.ShowLocationsAsync("References to 'value'", [location]);
-            Assert.False(second.CanModifyFind);
-            Assert.False(results.ModifyFindCommand.CanExecute(null));
-            Assert.Equal(2, second.Rows.Count);
-            await results.ShowReferencesAsync("References to 'value'", [new ReferenceItem(location, ReferenceItemKinds.Declaration, "One", "App", "class One { int value; }")]);
-            Assert.False(second.CanModifyFind);
-            Assert.False(second.ShowsFiles);
-            find.Query = "value";
-            await find.FindAllAsync();
-            Assert.True(second.CanModifyFind);
-            Assert.True(results.ModifyFindCommand.CanExecute(null));
-            Assert.True(second.ShowsFiles);
         }
         finally
         {

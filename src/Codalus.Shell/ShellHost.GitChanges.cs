@@ -302,26 +302,26 @@ public sealed partial class ShellHost
             : ShowActiveFileDiffAsync();
 
     /// <summary>
-    /// View History: of a file or folder (a path), of a branch (its full ref: the branch's menu), or of the repository. The
-    /// menus' entries pass one, so neither shows git.history's own keys (question 13).
+    /// View History: of the repository (none, or its folder: the Git Repository document on its current branch), of a
+    /// branch or tag (its full ref: the Git Repository document with it selected), or of a file or folder (a File History
+    /// tab). The menus' entries pass one, so neither shows git.history's own keys (question 13).
     /// </summary>
     public Task HistoryCommandAsync(IReadOnlyList<JsonElement> args)
     {
         var target = args.Count > 0 && args[0].ValueKind == JsonValueKind.String ? args[0].GetString() : null;
         if (target is null)
         {
-            return ShowHistoryAsync();
+            return ShowGitRepositoryAsync(Repo);
         }
 
         if (target.StartsWith("refs/", StringComparison.Ordinal))
         {
-            var name = ShortRefName(target);
-            return ShowHistoryAsync(new GitLogQuery { Revision = target }, Localizer.Format("msg.gitChanges.historyOf", "History: {0}", name));
+            return ShowGitRepositoryAsync(Repo, target);
         }
 
         var git = Git.ServiceFor(target);
         return git.Root is { } root && Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(Path.TrimEndingDirectorySeparator(root), Path.TrimEndingDirectorySeparator(target))
-            ? ShowHistoryAsync(repository: git)
+            ? ShowGitRepositoryAsync(git)
             : ShowHistoryAsync(new GitLogQuery { Path = target }, Localizer.Format("msg.gitChanges.historyOf", "History: {0}", Path.GetFileName(Path.TrimEndingDirectorySeparator(target))));
     }
 

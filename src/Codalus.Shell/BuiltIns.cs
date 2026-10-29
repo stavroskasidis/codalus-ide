@@ -201,6 +201,7 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(ViewModels.PropertiesWindowViewModel.ToolWindowId, "Properties", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "properties" };
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.FindResultsViewModel.ToolWindowId, "Find Results", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
+        yield return new ToolWindowDescriptor(ViewModels.ReferencesViewModel.ToolWindowId, "References", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "references" };
         yield return new ToolWindowDescriptor(ViewModels.DocumentOutlineViewModel.ToolWindowId, "Document Outline", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "document-text" };
         yield return new ToolWindowDescriptor(ViewModels.SymbolBrowserViewModel.ClassViewId, "Class View", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "class" };
         yield return new ToolWindowDescriptor(ViewModels.HierarchyViewModel.ToolWindowId, "Hierarchy", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "method" };

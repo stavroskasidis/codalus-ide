@@ -365,7 +365,14 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(greeter.Model.Text.GetText(greeter.Model.Text.GetLineByOffset(greeter.Editor.CaretOffset)).Contains("Greet(", StringComparison.Ordinal), "the caret is on the declaration");
 
             await shell.FindReferencesAsync().ConfigureAwait(true);
-            await WaitAsync(() => shell.FindResults.Rows.Any(r => r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
+            var references = shell.References;
+            await WaitAsync(() => references.Rows.Any(r => !r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
+            Check(references.Title == "'Greet' references" && shell.Layout.ToolWindow(ViewModels.ReferencesViewModel.ToolWindowId)?.Title == references.Title, "the References window's tab is 'Greet' references");
+            Check(references.Rows.FirstOrDefault() is { IsHeader: true, HeaderIcon: "project" } && references.Rows.Skip(1).FirstOrDefault() is { IsHeader: true, IsDefinition: true },
+                "the references are grouped by project, then by definition");
+            Check(references.Rows.Any(r => !r.IsHeader && r.Highlights is { Count: > 0 } && r.ContainingType is not null && r.Kind is not null), "a reference shows its highlight, containing type and kind");
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-references.png");
         }, "language.ready").ConfigureAwait(true);
 
         await StepAsync("editor.findInFiles", "M3", "Find and Replace: Find in Files from the floating window into Find Results", async () =>
@@ -385,10 +392,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await Task.Delay(300).ConfigureAwait(true);
             Screenshot("smoke-test-find-results.png");
             shell.ActiveEditor?.Controller?.Editor.TextArea.ClearSelection(); // the next steps start from a caret, not the match
-            if (shell.FindResults.ReferenceSets.FirstOrDefault() is { } references)
-            {
-                shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
-            }
+            shell.Layout.ShowToolWindow(ViewModels.ReferencesViewModel.ToolWindowId, focus: false); // back to the references, as the theme screenshots (the website's) show them
         }, "language.ready").ConfigureAwait(true);
 
         await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);
@@ -622,9 +626,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.depth", "M13", "History with its graph, stash, tags, and a conflict resolved in the merge editor", async () =>
         {
-            // History: the commits of every branch, with the graph laid out.
-            var history = await shell.ShowHistoryAsync().ConfigureAwait(true) ?? throw new SmokeFailure("The history didn't open.");
-            await WaitAsync(() => history.ViewModel.Rows.Any(r => r.Subject == "Smoke test") && history.ViewModel.Rows.All(r => r.Graph is not null), "the history lists the smoke commit with its graph", 60).ConfigureAwait(true);
+            // History: the Git Repository window on the current branch, with the graph laid out.
+            var repository = await shell.ShowGitRepositoryAsync(shell.Git).ConfigureAwait(true) ?? throw new SmokeFailure("The history didn't open.");
+            await WaitAsync(() => repository.ViewModel.History is { } h && h.Rows.Any(r => r.Subject == "Smoke test") && h.Rows.All(r => r.Graph is not null), "the history lists the smoke commit with its graph", 60).ConfigureAwait(true);
 
             // Stash and pop an edit.
             var original = await File.ReadAllTextAsync(Greeter).ConfigureAwait(true);
@@ -687,6 +691,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // #23, D38: the Git Changes window's menus from their registered locations, and the branch drop-down.
         await StepAsync("git.changesMenus", "D38", "Git Changes: a folder's menu from gitChanges/context, the branch drop-down and a branch's menu over it", GitChangesMenusStepAsync, "projects.open").ConfigureAwait(true);
+
+        // Git → Manage Branches: the Git Repository document, its tree and a branch's history beside it.
+        await StepAsync("git.repository", "Manage Branches", "Git Repository: the branches in folders, the tags, and a branch's history beside the tree", GitRepositoryStepAsync, "git.depth").ConfigureAwait(true);
 
         // ADR 0085: the solution's repository and another, shown together.
         await StepAsync("git.allRepositories", "ADR 0085", "All Repositories: a second repository joins, Git Changes shows both, Common branches, Commit All Repos", AllRepositoriesStepAsync, "projects.open").ConfigureAwait(true);

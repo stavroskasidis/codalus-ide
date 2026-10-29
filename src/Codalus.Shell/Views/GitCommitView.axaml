@@ -1,0 +1,87 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.GitCommitView"
+             x:DataType="vm:GitCommitViewModel">
+  <Grid ColumnDefinitions="*,4,320">
+    <!-- The selected file's diff against the commit's first parent. -->
+    <Panel>
+      <TextBlock Classes="emptyState" Text="{l:T gitCommit.selectAFileToSeeItsChanges}" IsVisible="{Binding !HasDiff}" />
+      <ContentControl x:Name="DiffHost" />
+    </Panel>
+
+    <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />
+
+    <!-- The details: the id with Revert, Reset and Explain; the message; the author and committer; the changes. -->
+    <DockPanel Grid.Column="2" Margin="8,6,6,6">
+      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+        <SelectableTextBlock Text="{Binding IdText}" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip.Tip="{Binding Hash}" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+          <Button Classes="link" Content="{l:T gitCommit.revert}" Tag="revert" Click="OnAction" IsEnabled="{Binding HasDetails}" />
+          <Button Classes="link" Content="{l:T gitCommit.reset}" IsEnabled="{Binding HasDetails}">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                <MenuItem controls:MenuEntry.Icon="stash" Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="discard" Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnMenuAction" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+          <Button Classes="iconText compact" controls:ButtonIcon.Kind="sparkle" Content="{l:T gitCommit.explain}" Click="OnExplain" IsVisible="{Binding CanExplain}" IsEnabled="{Binding HasDetails}"
+                  ToolTip.Tip="{l:T gitCommit.explainThisCommitWithAi}" />
+          <Button Classes="toolbar icon" controls:ButtonIcon.Kind="more" IsEnabled="{Binding HasDetails}" ToolTip.Tip="{l:T gitCommit.moreActions}" AutomationProperties.Name="{l:T gitCommit.moreActions}">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem controls:MenuEntry.Icon="fork" Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="branch" Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnMenuAction" />
+                <MenuItem controls:MenuEntry.Icon="tag" Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnMenuAction" />
+                <Separator />
+                <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnMenuAction" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+      <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TextBlock DockPanel.Dock="Top" Classes="muted" Text="{l:T gitCommit.message}" Margin="0,0,0,2" />
+      <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" Padding="6,4" MaxHeight="200">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" AutomationProperties.Name="{l:T gitCommit.message}" />
+        </ScrollViewer>
+      </Border>
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,8,0,8">
+        <controls:Icon Kind="account" VerticalAlignment="Center" Margin="0,0,6,0" />
+        <TextBlock Grid.Column="1" Text="{Binding Author}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="2" Classes="muted" Text="{Binding AuthorDate}" VerticalAlignment="Center" Margin="8,0,0,0" />
+        <controls:Icon Grid.Row="1" Kind="account" VerticalAlignment="Center" Margin="0,4,6,0" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Committer}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,4,0,0" />
+        <TextBlock Grid.Row="1" Grid.Column="2" Classes="muted" Text="{Binding CommitDate}" VerticalAlignment="Center" Margin="8,4,0,0" />
+      </Grid>
+      <TextBlock DockPanel.Dock="Top" Text="{Binding ChangesHeader}" FontWeight="SemiBold" Margin="0,0,0,4" />
+      <TreeView x:Name="Changes" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent" AutomationProperties.Name="{l:T gitCommit.changedFiles}">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:GitCommitTreeNode">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+            <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+          </Style>
+        </TreeView.Styles>
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate x:DataType="vm:GitCommitTreeNode" ItemsSource="{Binding Children}">
+            <DockPanel Background="Transparent" ToolTip.Tip="{Binding Tip}">
+              <TextBlock DockPanel.Dock="Right" Text="{Binding Status}" FontWeight="SemiBold" Margin="8,0,4,0" VerticalAlignment="Center" />
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              </StackPanel>
+            </DockPanel>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+    </DockPanel>
+  </Grid>
+</UserControl>
