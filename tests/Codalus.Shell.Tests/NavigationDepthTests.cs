@@ -457,25 +457,36 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => help is not null, seconds: 30);
         Assert.Equal("https://learn.microsoft.com/dotnet/api/system.console", help!.ToString());
 
-        // Find All References: classified, grouped by file or project, filtered, kept.
+        // Find All References: the References window, grouped by project then definition, filtered by a column, kept.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("circle =", StringComparison.Ordinal) + 1;
         await f.Shell.FindReferencesAsync();
-        var results = f.Shell.FindResults;
-        Assert.Contains("References to 'circle'", results.Summary, StringComparison.Ordinal);
+        var results = f.Shell.References;
+        Assert.Equal("'circle' references", results.Title);
+        Assert.Equal("'circle' references", f.Shell.Layout.ToolWindow(ViewModels.ReferencesViewModel.ToolWindowId)!.Title);
         Assert.Equal([ReferenceItemKinds.Declaration, ReferenceItemKinds.Read, ReferenceItemKinds.Read], results.Rows.Where(r => !r.IsHeader).Select(r => r.Kind));
-        results.GroupBy = "Project";
-        // M34h: a group's header is its label with its count as a badge (the count stays in its Code and screen readers' name).
-        Assert.Equal(("App", 3), (results.Rows[0].Label, results.Rows[0].Count));
-        Assert.Equal("App (3)", results.Rows[0].Code);
-        results.KindFilter = "Read";
-        Assert.Equal(2, results.Rows.Count(r => !r.IsHeader));
-        results.KindFilter = "All";
+        Assert.Equal(("App (3)", "project"), (results.Rows[0].Label, results.Rows[0].HeaderIcon));
+        Assert.Equal(("circle (3)", true), (results.Rows[1].Label, results.Rows[1].IsDefinition));
+        Assert.All(results.Rows.Where(r => !r.IsHeader), r => Assert.Equal("Program", r.ContainingType));
+        Assert.Equal("circle", string.Concat(results.Rows[3].Highlights!.Select(i => results.Rows[3].Text[i])));
+        var read = results.KindFilter.Values.Single(v => v.Value == "Read");
+        read.IsChecked = false;
+        Assert.Single(results.Rows, r => !r.IsHeader);
+        Assert.True(results.HasFilters);
+        results.ClearFiltersCommand.Execute(null);
+        Assert.Equal(3, results.Rows.Count(r => !r.IsHeader));
+
+        // Keep Results: the next search opens another References window beside it; this one stays.
+        results.KeepResults = true;
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Circle(2)", StringComparison.Ordinal) + 1;
         await f.Shell.FindReferencesAsync();
-        Assert.Equal(["References to 'Circle'", "References to 'circle'"], results.ReferenceSets.Select(s => s.Title));
-        results.CurrentSet = results.ReferenceSets[1];
-        await ShellFixture.PumpUntil(() => results.Rows.Count(r => !r.IsHeader) == 3);
-        results.GroupBy = "File";
+        Assert.Equal(2, f.Shell.ReferenceWindows.Count);
+        var kept = f.Shell.ReferenceWindows[1];
+        Assert.Equal("'Circle' references", kept.Title);
+        Assert.Equal("'circle' references", results.Title);
+        Assert.True(f.Shell.Layout.IsVisible(kept.Id));
+        f.Shell.Layout.CloseToolWindow(kept.Id);
+        Assert.Single(f.Shell.ReferenceWindows);
+        results.KeepResults = false;
 
         // Go to Last Edit Location returns to the edit after moving elsewhere.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Reporter.Run();", StringComparison.Ordinal);

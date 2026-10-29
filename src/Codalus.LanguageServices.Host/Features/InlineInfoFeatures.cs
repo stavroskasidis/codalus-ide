@@ -268,11 +268,13 @@ internal static class ReferenceItemsFeature
         var items = new List<ReferenceItem>();
         foreach (var referenced in await SymbolFinder.FindReferencesAsync(symbol, solution, cancellationToken).ConfigureAwait(false))
         {
+            // The References window's Definition groups: the symbol searched for and those the search cascaded to.
+            var (definitionName, definitionKind) = (referenced.Definition.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat), WorkspaceSymbolsFeature.Kind(referenced.Definition));
             foreach (var definition in referenced.Definition.Locations.Where(l => l.IsInSource && l.SourceTree is not null))
             {
                 if (solution.GetDocument(definition.SourceTree!) is { } definitionDocument)
                 {
-                    items.Add(await ItemAsync(definitionDocument, definition.SourceSpan, ReferenceItemKinds.Declaration, cancellationToken).ConfigureAwait(false));
+                    items.Add(await ItemAsync(definitionDocument, definition.SourceSpan, ReferenceItemKinds.Declaration, cancellationToken).ConfigureAwait(false) with { Definition = definitionName, DefinitionKind = definitionKind });
                 }
             }
 
@@ -282,7 +284,7 @@ internal static class ReferenceItemsFeature
                 var kind = symbol is INamespaceOrTypeSymbol || IsNameOnly(root, reference.Location.SourceSpan) ? ReferenceItemKinds.Reference
                     : IsWrite(root, reference.Location.SourceSpan) ? ReferenceItemKinds.Write
                     : ReferenceItemKinds.Read;
-                items.Add(await ItemAsync(reference.Document, reference.Location.SourceSpan, kind, cancellationToken).ConfigureAwait(false));
+                items.Add(await ItemAsync(reference.Document, reference.Location.SourceSpan, kind, cancellationToken).ConfigureAwait(false) with { Definition = definitionName, DefinitionKind = definitionKind });
             }
         }
 
@@ -329,11 +331,16 @@ internal static class ReferenceItemsFeature
             IMethodSymbol { MethodKind: MethodKind.AnonymousFunction or MethodKind.LocalFunction } local => local.ContainingSymbol,
             var enclosing => enclosing,
         };
+        var line = text.Lines.GetLineFromPosition(span.Start).ToString();
         return new ReferenceItem(
             new Location(WorkspaceManager.UriOf(document), Positions.ToRange(text, span)),
             kind,
             container?.ToDisplayString(SymbolDisplayFormat.CSharpShortErrorMessageFormat),
             document.Project.Name,
-            text.Lines.GetLineFromPosition(span.Start).ToString().Trim());
+            line.Trim())
+        {
+            ContainingType = (container as INamedTypeSymbol ?? container?.ContainingType)?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat),
+            TextStart = span.Start - text.Lines.GetLineFromPosition(span.Start).Start - (line.Length - line.TrimStart().Length),
+        };
     }
 }
