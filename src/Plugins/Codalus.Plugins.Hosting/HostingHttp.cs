@@ -20,15 +20,29 @@ public sealed class HostingHttpException(int status, string message) : Exception
 /// </summary>
 public sealed class HostingHttp : IDisposable
 {
+    /// <summary>
+    /// A request's option: send it as the operating system's user (Negotiate: Kerberos, or NTLM on Windows), and only to
+    /// this host (<see cref="RemoteUrl.HostOf"/>'s form). The default client never answers such a challenge.
+    /// </summary>
+    public static readonly HttpRequestOptionsKey<string> IntegratedHost = new("codalus.integratedHost");
+
     private readonly HttpClient _client;
+    private readonly Lazy<HttpClient> _integrated;
 
     public HostingHttp(string userAgent, TimeSpan? timeout = null)
     {
-        _client = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), AutomaticDecompression = DecompressionMethods.All })
+        _client = CreateClient(userAgent, timeout, null);
+        _integrated = new Lazy<HttpClient>(() => CreateClient(userAgent, timeout, CredentialCache.DefaultCredentials));
+    }
+
+    private static HttpClient CreateClient(string userAgent, TimeSpan? timeout, ICredentials? credentials)
+    {
+        var client = new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5), AutomaticDecompression = DecompressionMethods.All, Credentials = credentials })
         {
             Timeout = timeout ?? TimeSpan.FromSeconds(30),
         };
-        _client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        return client;
     }
 
     /// <summary>Adds the session's Authorization header to a request (throws <see cref="HostingAuthenticationException"/> without one).</summary>
@@ -41,10 +55,18 @@ public sealed class HostingHttp : IDisposable
 
     public Task<JsonElement> PostAsync(string url, string json, CancellationToken cancellationToken) => SendAsync(HttpMethod.Post, url, json, cancellationToken);
 
-    /// <summary>An authorized API call with an optional JSON body; the JSON answer (null for an empty one).</summary>
-    public async Task<JsonElement> SendAsync(HttpMethod method, string url, string? json, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? headers = null)
+    /// <summary>
+    /// An authorized API call with an optional JSON body; the JSON answer (null for an empty one). With
+    /// <paramref name="integratedHost"/>, it is sent as the operating system's user instead (see <see cref="IntegratedHost"/>).
+    /// </summary>
+    public async Task<JsonElement> SendAsync(HttpMethod method, string url, string? json, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? headers = null, string? integratedHost = null)
     {
         using var request = new HttpRequestMessage(method, url);
+        if (integratedHost is not null)
+        {
+            request.Options.Set(IntegratedHost, integratedHost);
+        }
+
         foreach (var (name, value) in Headers.Concat(headers ?? new Dictionary<string, string>()))
         {
             request.Headers.TryAddWithoutValidation(name, value);
@@ -60,7 +82,18 @@ public sealed class HostingHttp : IDisposable
             await authorize(request, cancellationToken).ConfigureAwait(false);
         }
 
-        using var response = await _client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        var client = _client;
+        if (request.Options.TryGetValue(IntegratedHost, out var host))
+        {
+            if (!string.Equals(RemoteUrl.HostOf(url), host, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new HostingAuthenticationException($"The operating system's account is only sent to {host}, not to {RemoteUrl.HostOf(url)}.");
+            }
+
+            client = _integrated.Value;
+        }
+
+        using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
         var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
@@ -119,5 +152,12 @@ public sealed class HostingHttp : IDisposable
     /// <summary>An integer for a URL.</summary>
     public static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
 
-    public void Dispose() => _client.Dispose();
+    public void Dispose()
+    {
+        _client.Dispose();
+        if (_integrated.IsValueCreated)
+        {
+            _integrated.Value.Dispose();
+        }
+    }
 }

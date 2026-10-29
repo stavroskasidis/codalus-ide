@@ -76,8 +76,14 @@ public sealed record HostingAccountDto(string Name, string Host, string? Display
 
 public sealed record HostingAccountResult(HostingAccountDto? Account);
 
-/// <summary><c>hosting/signIn</c>: the device flow, or a personal access token when <see cref="Token"/> is set.</summary>
-public sealed record HostingSignInParams(string ProviderId, string? Token);
+/// <summary>
+/// <c>hosting/signIn</c>: the device flow, a personal access token when <see cref="Token"/> is set, or the operating
+/// system's account when <see cref="Integrated"/> is (since API 1.2.0).
+/// </summary>
+public sealed record HostingSignInParams(string ProviderId, string? Token)
+{
+    public bool Integrated { get; init; }
+}
 
 /// <summary><c>hosting/repositoryInfo</c>.</summary>
 public sealed record HostingRepositoryParams(string ProviderId, HostingRepositoryDto Repository);

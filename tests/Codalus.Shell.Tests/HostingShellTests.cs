@@ -399,4 +399,55 @@ public sealed class HostingShellTests
 
         Assert.DoesNotContain("s3cret", f.Shell.GitLog.GetText(), StringComparison.Ordinal);
     }
+
+    /// <summary>
+    /// Git Changes' Create a pull request button on a repository whose remote is on an Azure DevOps Server the IDE isn't
+    /// set up for (ADR 0087): it opens the Accounts page on that server, signing in as the operating system's user sets
+    /// <c>azureDevOps.serverUrl</c>, and the button then opens the form. A mock server stands in, and a request with no
+    /// Authorization header stands for Negotiate.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Create_pull_request_on_an_azure_devops_server_signs_in_there_first()
+    {
+        await using var server = new MockHttpServer(request => (request.Method, request.Path) switch
+        {
+            _ when request.Header("Authorization") is not null => MockHttpResponse.Json("""{ "message": "TF400813: not authorized." }""", 401),
+            ("GET", "/tfs/_apis/connectionData") => MockHttpResponse.Json("""{ "authenticatedUser": { "id": "33", "providerDisplayName": "Ada Tester", "properties": { "Account": { "$value": "CONTOSO\\ada" } } } }"""),
+            ("GET", "/tfs/DefaultCollection/Apps/_apis/git/repositories/BuildAndRun") => MockHttpResponse.Json("""{ "defaultBranch": "refs/heads/main" }"""),
+            ("GET", "/tfs/DefaultCollection/Apps/_apis/git/repositories/BuildAndRun/pullrequests") or ("GET", "/tfs/DefaultCollection/Apps/_apis/build/builds") => MockHttpResponse.Json("""{ "value": [] }"""),
+            _ => MockHttpResponse.NotFound(),
+        });
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.AzureDevOps"));
+        var folder = f.CopySample("BuildAndRun");
+        Git(folder, "init", "-q", "-b", "main");
+        Configure(folder);
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "initial");
+        Git(folder, "remote", "add", "origin", server.BaseUrl + "/tfs/DefaultCollection/Apps/_git/BuildAndRun");
+        Git(folder, "switch", "-q", "-c", "feature/login");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "feature/login" } && f.Shell.Suggested is { Id: "azure-devops" }, seconds: 60);
+
+        // Not signed in anywhere: the button opens the Accounts page on the remote's server, and starts nothing.
+        Assert.True(f.Shell.Workbench.Commands.IsEnabled("git.createPullRequest"));
+        await f.Shell.GitChanges.RunAsync("git.createPullRequest");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId) is not null);
+        var row = f.Shell.Accounts.Row("azure-devops")!;
+        Assert.Equal(server.BaseUrl + "/tfs", row.PendingServer);
+        Assert.Contains(server.BaseUrl + "/tfs", row.ServerHint, StringComparison.Ordinal);
+        Assert.Equal((true, false, false), (row.CanSignInIntegrated, row.CanSignInWithCode, row.IsSigningIn));
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AccountsView>().Any());
+
+        row.SignInIntegratedCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => row.IsSignedIn && f.Shell.Match is not null, seconds: 60);
+        Assert.Equal(server.BaseUrl + "/tfs", f.Shell.Workbench.Settings.GetString("azureDevOps.serverUrl", string.Empty));
+        Assert.Equal(@"Signed in as CONTOSO\ada on " + new Uri(server.BaseUrl).Authority, row.StatusText);
+        Assert.Null(row.PendingServer);
+        Assert.Equal("DefaultCollection/Apps/BuildAndRun", f.Shell.Match!.Repository.Id);
+
+        await f.Shell.GitChanges.RunAsync("git.createPullRequest");
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.FindDocument<CreatePullRequestDocument>(CreatePullRequestDocument.DocumentId) is not null, seconds: 60);
+        Assert.Equal("feature/login", f.Shell.Layout.FindDocument<CreatePullRequestDocument>(CreatePullRequestDocument.DocumentId)!.ViewModel.SourceBranch);
+    }
 }

@@ -57,13 +57,24 @@ public sealed class AccountProviderRow : ObservableObject
     private string? _verificationUri;
     private string _token = string.Empty;
     private string? _error;
+    private string? _serverHint;
+    private string? _pendingServer;
+    private bool _integratedSignIn;
 
-    public AccountProviderRow(string id, string label, Func<AccountProviderRow, string?, Task> signIn, Func<AccountProviderRow, Task> signOut, Action<AccountProviderRow> cancel, Action<AccountProviderRow> copyAndOpen)
+    public AccountProviderRow(
+        string id,
+        string label,
+        Func<AccountProviderRow, string?, Task> signIn,
+        Func<AccountProviderRow, Task> signOut,
+        Action<AccountProviderRow> cancel,
+        Action<AccountProviderRow> copyAndOpen,
+        Func<AccountProviderRow, Task>? signInIntegrated = null)
     {
         Id = id;
         Label = label;
         SignInCommand = new RelayCommand(() => _ = signIn(this, null));
         SignInWithTokenCommand = new RelayCommand(() => _ = signIn(this, Token));
+        SignInIntegratedCommand = new RelayCommand(() => _ = signInIntegrated?.Invoke(this));
         SignOutCommand = new RelayCommand(() => _ = signOut(this));
         CancelCommand = new RelayCommand(() => cancel(this));
         CopyAndOpenCommand = new RelayCommand(() => copyAndOpen(this));
@@ -73,9 +84,66 @@ public sealed class AccountProviderRow : ObservableObject
 
     public string Label { get; }
 
-    public string? ServerHint { get; set; }
+    public string? ServerHint
+    {
+        get => _serverHint;
+        set
+        {
+            if (SetField(ref _serverHint, value))
+            {
+                OnPropertyChanged(nameof(HasServerHint));
+            }
+        }
+    }
 
     public bool HasServerHint => ServerHint is { Length: > 0 };
+
+    /// <summary>The setting with the provider's server (<c>azureDevOps.serverUrl</c>).</summary>
+    public string? ServerSetting { get; set; }
+
+    /// <summary>
+    /// A self-hosted server the repository's remote is on, which the provider isn't set up for: signing in writes it to
+    /// <see cref="ServerSetting"/> first (ADR 0087). Null otherwise.
+    /// </summary>
+    public string? PendingServer
+    {
+        get => _pendingServer;
+        set
+        {
+            if (SetField(ref _pendingServer, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    /// <summary>Signed in elsewhere while the repository is on <see cref="PendingServer"/>: sign out to sign in there.</summary>
+    public bool ShowsOtherServer => IsSignedIn && _pendingServer is not null;
+
+    public string OtherServerText => Localizer.Format("accounts.signOutToSignInTo", "This repository is on {0}. Sign out, then sign in there.", _pendingServer ?? string.Empty);
+
+    /// <summary>The provider signs in as the operating system's user on its self-hosted server (or the pending one).</summary>
+    public bool IntegratedSignIn
+    {
+        get => _integratedSignIn;
+        set
+        {
+            if (SetField(ref _integratedSignIn, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    public bool CanSignInIntegrated => CanSignIn && _integratedSignIn;
+
+    /// <summary>The device code sign-in, which a server signed in to with the system's account doesn't have.</summary>
+    public bool CanSignInWithCode => CanSignIn && !_integratedSignIn;
+
+    /// <summary>Windows authentication on Windows; a Kerberos ticket (<c>kinit</c>) elsewhere.</summary>
+    public static string IntegratedSignInLabel => OperatingSystem.IsWindows()
+        ? Localizer.Get("accounts.signInWithYourWindowsAccount", "Sign in with your Windows account")
+        : Localizer.Get("accounts.signInWithKerberos", "Sign in with Kerberos");
 
     public bool IsSignedIn => _account is not null;
 
@@ -150,6 +218,8 @@ public sealed class AccountProviderRow : ObservableObject
 
     public ICommand SignInWithTokenCommand { get; }
 
+    public ICommand SignInIntegratedCommand { get; }
+
     public ICommand SignOutCommand { get; }
 
     public ICommand CancelCommand { get; }
@@ -161,7 +231,7 @@ public sealed class AccountProviderRow : ObservableObject
 
     private void Notify()
     {
-        foreach (var name in new[] { nameof(IsSignedIn), nameof(CanSignIn), nameof(StatusText), nameof(Account), nameof(UserCode), nameof(VerificationUri), nameof(HasCode), nameof(AccessibleName) })
+        foreach (var name in new[] { nameof(IsSignedIn), nameof(CanSignIn), nameof(CanSignInIntegrated), nameof(CanSignInWithCode), nameof(ShowsOtherServer), nameof(OtherServerText), nameof(StatusText), nameof(Account), nameof(UserCode), nameof(VerificationUri), nameof(HasCode), nameof(AccessibleName) })
         {
             OnPropertyChanged(name);
         }
