@@ -1,0 +1,197 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             x:Class="Codalus.Shell.Views.ReferencesView"
+             x:DataType="vm:ReferencesViewModel">
+  <!-- Find All References, as the classic IDE's window shows them: the scope, Copy, Expand All and Collapse All, Clear All
+       Filters, Group by, Keep Results, List View and the search on the toolbar; the column headers with their splitters
+       and filter buttons; the references in a tree (Project then Definition by default) or a list. -->
+  <UserControl.Styles>
+    <Style Selector="Border.refColumns">
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Grid.Header}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
+      <Setter Property="BorderThickness" Value="0,1" />
+    </Style>
+    <Style Selector="Border.refColumns TextBlock.columnTitle">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="8,0,4,0" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <!-- A column's splitter: a rule at its right edge, wider to grab. -->
+    <Style Selector="Thumb.columnSplitter">
+      <Setter Property="Width" Value="6" />
+      <Setter Property="Margin" Value="0,0,-3,0" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Cursor" Value="SizeWestEast" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="Transparent">
+            <Border Width="1" HorizontalAlignment="Center" Margin="0,4" Background="{DynamicResource Shell.Grid.Rule}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <!-- A column's filter button: a funnel, in the accent color while the filter hides something. -->
+    <Style Selector="Button.columnFilter">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="MinWidth" Value="18" />
+      <Setter Property="MinHeight" Value="18" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,4,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.columnFilter controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="Button.columnFilter.active controls|Icon">
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Accent}" />
+    </Style>
+    <Style Selector="ListBox#List">
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.Editor.Foreground}" />
+    </Style>
+    <Style Selector="ListBox#List ListBoxItem:selected TextBlock.codeLine">
+      <Setter Property="controls:CodeLine.IsPlain" Value="True" />
+    </Style>
+    <Style Selector="TextBlock.refNumber">
+      <Setter Property="TextAlignment" Value="Right" />
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+    </Style>
+    <Style Selector="TextBlock.refCell">
+      <Setter Property="Margin" Value="8,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <ComboBox MinWidth="140" ItemsSource="{x:Static vm:ReferencesViewModel.ScopeOptions}" SelectedItem="{Binding Scope}"
+                AutomationProperties.Name="{l:T references.scope}" ToolTip.Tip="{l:T references.scopeTip}" />
+      <Button x:Name="CopyButton" Classes="toolbar icon" controls:ButtonIcon.Kind="copy" ToolTip.Tip="{l:T references.copy}" AutomationProperties.Name="{l:T references.copy}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="unfold-all" Command="{Binding ExpandAllCommand}" IsEnabled="{Binding CanGroup}" ToolTip.Tip="{l:T references.expandAll}" AutomationProperties.Name="{l:T references.expandAll}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="fold-all" Command="{Binding CollapseAllCommand}" IsEnabled="{Binding CanGroup}" ToolTip.Tip="{l:T references.collapseAll}" AutomationProperties.Name="{l:T references.collapseAll}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="clear-all" Command="{Binding ClearFiltersCommand}" ToolTip.Tip="{l:T references.clearAllFilters}" AutomationProperties.Name="{l:T references.clearAllFilters}" />
+      <Border Classes="toolbarSeparator" />
+      <TextBlock Classes="muted" Text="{l:T references.groupBy}" VerticalAlignment="Center" Margin="4,0,2,0" />
+      <ComboBox MinWidth="180" ItemsSource="{x:Static vm:ReferencesViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" IsEnabled="{Binding CanGroup}"
+                AutomationProperties.Name="{l:T references.groupByName}" ToolTip.Tip="{l:T references.groupByName}" />
+      <Border Classes="toolbarSeparator" />
+      <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="pin" Content="{l:T references.keepResults}" IsChecked="{Binding KeepResults}"
+                    ToolTip.Tip="{l:T references.keepResultsTip}" AutomationProperties.Name="{l:T references.keepResults}" />
+      <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="list" Content="{l:T references.listView}" IsChecked="{Binding IsListView}"
+                    ToolTip.Tip="{l:T references.listViewTip}" AutomationProperties.Name="{l:T references.listView}" />
+      <TextBox x:Name="FilterBox" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T references.search}" AutomationProperties.Name="{l:T references.search}" />
+    </controls:ToolbarPanel>
+
+    <!-- The column headers: each with its splitter (Code's resizes File, the others their own column) and, for File,
+         Project, Containing member, Containing type and Kind, a filter button with the column's values. -->
+    <Border DockPanel.Dock="Top" Classes="refColumns">
+      <controls:ColumnsPanel x:Name="Header" controls:ColumnsPanel.Widths="{Binding Widths}">
+        <Panel controls:ColumnsPanel.Column="0">
+          <TextBlock Classes="columnTitle muted" Text="{l:T references.code}" />
+          <Thumb Classes="columnSplitter" Tag="0" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="1">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="subtle columnFilter" Classes.active="{Binding FileFilter.IsActive}" Tag="File"
+                    ToolTip.Tip="{l:T references.filterFile}" AutomationProperties.Name="{l:T references.filterFile}">
+              <controls:Icon Kind="filter" Width="12" Height="12" />
+            </Button>
+            <TextBlock Classes="columnTitle muted" Text="{l:T references.file}" />
+          </DockPanel>
+          <Thumb Classes="columnSplitter" Tag="1" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="2">
+          <TextBlock Classes="columnTitle muted" Text="{l:T references.line}" />
+          <Thumb Classes="columnSplitter" Tag="2" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="3">
+          <TextBlock Classes="columnTitle muted" Text="{l:T references.col}" />
+          <Thumb Classes="columnSplitter" Tag="3" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="4">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="subtle columnFilter" Classes.active="{Binding ProjectFilter.IsActive}" Tag="Project"
+                    ToolTip.Tip="{l:T references.filterProject}" AutomationProperties.Name="{l:T references.filterProject}">
+              <controls:Icon Kind="filter" Width="12" Height="12" />
+            </Button>
+            <TextBlock Classes="columnTitle muted" Text="{l:T references.project}" />
+          </DockPanel>
+          <Thumb Classes="columnSplitter" Tag="4" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="5">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="subtle columnFilter" Classes.active="{Binding MemberFilter.IsActive}" Tag="ContainingMember"
+                    ToolTip.Tip="{l:T references.filterContainingMember}" AutomationProperties.Name="{l:T references.filterContainingMember}">
+              <controls:Icon Kind="filter" Width="12" Height="12" />
+            </Button>
+            <TextBlock Classes="columnTitle muted" Text="{l:T references.containingMember}" />
+          </DockPanel>
+          <Thumb Classes="columnSplitter" Tag="5" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="6">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="subtle columnFilter" Classes.active="{Binding TypeFilter.IsActive}" Tag="ContainingType"
+                    ToolTip.Tip="{l:T references.filterContainingType}" AutomationProperties.Name="{l:T references.filterContainingType}">
+              <controls:Icon Kind="filter" Width="12" Height="12" />
+            </Button>
+            <TextBlock Classes="columnTitle muted" Text="{l:T references.containingType}" />
+          </DockPanel>
+          <Thumb Classes="columnSplitter" Tag="6" />
+        </Panel>
+        <Panel controls:ColumnsPanel.Column="7">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="subtle columnFilter" Classes.active="{Binding KindFilter.IsActive}" Tag="Kind"
+                    ToolTip.Tip="{l:T references.filterKind}" AutomationProperties.Name="{l:T references.filterKind}">
+              <controls:Icon Kind="filter" Width="12" Height="12" />
+            </Button>
+            <TextBlock Classes="columnTitle muted" Text="{l:T references.kind}" />
+          </DockPanel>
+          <Thumb Classes="columnSplitter" Tag="7" />
+        </Panel>
+      </controls:ColumnsPanel>
+    </Border>
+
+    <ListBox x:Name="List" Classes="rows" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" controls:ColumnsPanel.Widths="{Binding Widths}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T references.results}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:ReferenceRow">
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:ReferenceRow">
+          <controls:ColumnsPanel Height="22">
+            <DockPanel controls:ColumnsPanel.ColumnSpan="{Binding Span}" Margin="{Binding Indent}">
+              <!-- A group's chevron: clicking it (or Left and Right, or a double-click on the header) collapses and expands it. -->
+              <Border DockPanel.Dock="Left" Classes="groupToggle" IsVisible="{Binding IsCollapsible}" Background="Transparent" Cursor="Hand" Width="16" Height="22">
+                <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" Foreground="{DynamicResource Shell.MutedForeground}" />
+              </Border>
+              <controls:Icon DockPanel.Dock="Left" Kind="{Binding HeaderIcon}" IsVisible="{Binding IsHeader}" Margin="2,0,6,0" VerticalAlignment="Center" />
+              <!-- A header: its project, definition or file with the count after it, as the classic IDE writes it. -->
+              <TextBlock Text="{Binding Label}" IsVisible="{Binding IsHeader}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" FontWeight="SemiBold" />
+              <!-- A reference: its line in the editor's colors, the symbol highlighted. -->
+              <controls:CodeLine Source="{Binding Text}" Highlights="{Binding Highlights}" Path="{Binding Path}" IsVisible="{Binding !IsHeader}"
+                                 FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
+            </DockPanel>
+            <TextBlock controls:ColumnsPanel.Column="1" Classes="muted refCell" Text="{Binding FileName}" IsVisible="{Binding !IsHeader}" ToolTip.Tip="{Binding Path}" />
+            <TextBlock controls:ColumnsPanel.Column="2" Classes="muted refNumber" Text="{Binding LineLabel}" IsVisible="{Binding !IsHeader}" VerticalAlignment="Center" />
+            <TextBlock controls:ColumnsPanel.Column="3" Classes="muted refNumber" Text="{Binding ColumnLabel}" IsVisible="{Binding !IsHeader}" VerticalAlignment="Center" />
+            <TextBlock controls:ColumnsPanel.Column="4" Classes="muted refCell" Text="{Binding Project}" IsVisible="{Binding !IsHeader}" ToolTip.Tip="{Binding Project}" />
+            <TextBlock controls:ColumnsPanel.Column="5" Classes="muted refCell" Text="{Binding ContainingMember}" IsVisible="{Binding !IsHeader}" ToolTip.Tip="{Binding ContainingMember}" />
+            <TextBlock controls:ColumnsPanel.Column="6" Classes="muted refCell" Text="{Binding ContainingType}" IsVisible="{Binding !IsHeader}" ToolTip.Tip="{Binding ContainingType}" />
+            <TextBlock controls:ColumnsPanel.Column="7" Classes="muted refCell" Text="{Binding KindLabel}" IsVisible="{Binding !IsHeader}" />
+          </controls:ColumnsPanel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

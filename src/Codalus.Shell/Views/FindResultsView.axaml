@@ -91,15 +91,12 @@
         <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Command="{Binding CancelCommand}" IsEnabled="{Binding IsSearching}" ToolTip.Tip="{l:T findResults.stopSearching}" AutomationProperties.Name="{l:T findResults.stopSearching}" />
         <Border Classes="toolbarSeparator" />
         <ToggleButton Classes="toolbar icon" controls:ButtonIcon.Kind="pin" IsChecked="{Binding KeepResults}" ToolTip.Tip="{l:T findResults.keepResultsTip}" AutomationProperties.Name="{l:T findResults.keepResults}" />
-        <controls:SegmentedControl x:Name="ViewSwitch" SelectedIndex="{Binding ViewIndex}" IsVisible="{Binding ShowsFiles}" Margin="2,0" AutomationProperties.Name="{l:T findResults.view}">
+        <controls:SegmentedControl x:Name="ViewSwitch" SelectedIndex="{Binding ViewIndex}" Margin="2,0" AutomationProperties.Name="{l:T findResults.view}">
           <controls:SegmentedControlItem Icon="type-hierarchy" Content="{l:T findResults.tree}" ToolTip.Tip="{l:T findResults.treeGroupedByGroupBy}" />
           <controls:SegmentedControlItem Icon="list" Content="{l:T findResults.list}" ToolTip.Tip="{l:T findResults.listViewTip}" />
         </controls:SegmentedControl>
-        <ComboBox MinWidth="130" ItemsSource="{x:Static vm:FindResultsViewModel.FilesGroupByOptions}" SelectedItem="{Binding FilesGroupBy}" IsVisible="{Binding ShowsFiles}" IsEnabled="{Binding CanGroupFiles}"
+        <ComboBox MinWidth="130" ItemsSource="{x:Static vm:FindResultsViewModel.FilesGroupByOptions}" SelectedItem="{Binding FilesGroupBy}" IsEnabled="{Binding CanGroupFiles}"
                   AutomationProperties.Name="{l:T findResults.groupBy}" ToolTip.Tip="{l:T findResults.groupBy}" />
-        <ComboBox MinWidth="200" ItemsSource="{Binding ReferenceSets}" SelectedItem="{Binding CurrentSet}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.earlierResults}" ToolTip.Tip="{l:T findResults.earlierResults}" />
-        <ComboBox MinWidth="90" ItemsSource="{x:Static vm:FindResultsViewModel.GroupByOptions}" SelectedItem="{Binding GroupBy}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.groupBy}" ToolTip.Tip="{l:T findResults.groupBy}" />
-        <ComboBox MinWidth="110" ItemsSource="{x:Static vm:FindResultsViewModel.KindFilterOptions}" SelectedItem="{Binding KindFilter}" IsVisible="{Binding IsReferences}" AutomationProperties.Name="{l:T findResults.referenceKind}" ToolTip.Tip="{l:T findResults.show}" />
         <Border Classes="toolbarSeparator" />
         <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="edit" Content="{l:T findResults.modifyFind}" Command="{Binding ModifyFindCommand}" ToolTip.Tip="{l:T findResults.modifyFindTip}" />
         <TextBox x:Name="FilterBox" Classes="search" Text="{Binding Filter}" PlaceholderText="{l:T findResults.searchFindResults}" AutomationProperties.Name="{l:T findResults.searchFindResults}" />

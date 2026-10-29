@@ -365,7 +365,14 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(greeter.Model.Text.GetText(greeter.Model.Text.GetLineByOffset(greeter.Editor.CaretOffset)).Contains("Greet(", StringComparison.Ordinal), "the caret is on the declaration");
 
             await shell.FindReferencesAsync().ConfigureAwait(true);
-            await WaitAsync(() => shell.FindResults.Rows.Any(r => r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
+            var references = shell.References;
+            await WaitAsync(() => references.Rows.Any(r => !r.IsHeader && r.Path == Program), "the references include Program.cs", 60).ConfigureAwait(true);
+            Check(references.Title == "'Greet' references" && shell.Layout.ToolWindow(ViewModels.ReferencesViewModel.ToolWindowId)?.Title == references.Title, "the References window's tab is 'Greet' references");
+            Check(references.Rows.FirstOrDefault() is { IsHeader: true, HeaderIcon: "project" } && references.Rows.Skip(1).FirstOrDefault() is { IsHeader: true, IsDefinition: true },
+                "the references are grouped by project, then by definition");
+            Check(references.Rows.Any(r => !r.IsHeader && r.Highlights is { Count: > 0 } && r.ContainingType is not null && r.Kind is not null), "a reference shows its highlight, containing type and kind");
+            await Task.Delay(300).ConfigureAwait(true);
+            Screenshot("smoke-test-references.png");
         }, "language.ready").ConfigureAwait(true);
 
         await StepAsync("editor.findInFiles", "M3", "Find and Replace: Find in Files from the floating window into Find Results", async () =>
@@ -385,10 +392,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await Task.Delay(300).ConfigureAwait(true);
             Screenshot("smoke-test-find-results.png");
             shell.ActiveEditor?.Controller?.Editor.TextArea.ClearSelection(); // the next steps start from a caret, not the match
-            if (shell.FindResults.ReferenceSets.FirstOrDefault() is { } references)
-            {
-                shell.FindResults.CurrentSet = references; // back to the references, as the theme screenshots (the website's) show them
-            }
+            shell.Layout.ShowToolWindow(ViewModels.ReferencesViewModel.ToolWindowId, focus: false); // back to the references, as the theme screenshots (the website's) show them
         }, "language.ready").ConfigureAwait(true);
 
         await StepAsync("navigation.codeSearch", "M47", "Code Search: the index saved next to the solution, a type found with its container and project, the editable preview on its file, prefixes, Enter, and Feature Search", CodeSearchStepAsync, "language.ready").ConfigureAwait(true);

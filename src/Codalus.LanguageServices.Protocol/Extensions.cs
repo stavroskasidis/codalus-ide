@@ -224,7 +224,27 @@ public static class ReferenceItemKinds
 /// A reference with what Find All References shows besides its location (<c>codalus/references</c>): how the symbol is
 /// used (<see cref="ReferenceItemKinds"/>), the member and project containing it, and its line's text.
 /// </summary>
-public sealed record ReferenceItem(Location Location, string Kind, string? ContainingMember, string? Project, string LineText);
+public sealed record ReferenceItem(Location Location, string Kind, string? ContainingMember, string? Project, string LineText)
+{
+    /// <summary>
+    /// The definition the reference is to, as the References window's Definition groups show it
+    /// (<c>Shape.Shape(double)</c>): the symbol searched for, or one Find All References cascaded to (an override, a
+    /// constructor, an accessor).
+    /// </summary>
+    public string? Definition { get; init; }
+
+    /// <summary>The definition's LSP symbol kind (its icon).</summary>
+    public int? DefinitionKind { get; init; }
+
+    /// <summary>The type containing the reference (<c>App.Program</c>); null at the top level of a namespace.</summary>
+    public string? ContainingType { get; init; }
+
+    /// <summary>
+    /// Where the reference's name starts in <see cref="LineText"/> (the line trimmed), for its highlight; null when the
+    /// server doesn't say.
+    /// </summary>
+    public int? TextStart { get; init; }
+}
 
 public sealed record ReferenceItemsResult(string SymbolName, ReferenceItem[] Items);
 
