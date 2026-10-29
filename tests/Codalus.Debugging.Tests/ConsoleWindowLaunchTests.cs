@@ -25,6 +25,7 @@ public sealed class ConsoleWindowLaunchTests(DebuggeeFixture debuggee) : IClassF
         Assert.SkipWhen(DebuggeeFixture.Adapter is null, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         _debug = new DebugService(() => DebuggeeFixture.Adapter)
         {
+            CoreClrAdapter = DebuggeeFixture.CodalusAdapter,
             ConsoleWindows = _windows,
             StartupHook = HeldLaunch.ResolveHook() ?? throw new InvalidOperationException("The startup hook isn't next to the tests."),
         };

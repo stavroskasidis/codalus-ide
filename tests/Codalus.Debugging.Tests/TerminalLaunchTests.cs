@@ -10,7 +10,8 @@ namespace Codalus.Debugging.Tests;
 /// <summary>
 /// Debugging in the integrated terminal (M14c, ADR 0039) on the real netcoredbg and a real pseudo-terminal: the program
 /// starts there held by the startup hook, the debugger attaches, the console takes input, and Detach All leaves it
-/// running (the M14b gap).
+/// running (the M14b gap). Under the Codalus debugger (M54b, the debug-codalus shard) the adapter's launcher starts it
+/// there instead: the same tests, on macOS too, and it stops on Main's first line.
 /// </summary>
 public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>, IAsyncLifetime
 {
@@ -26,6 +27,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
         _launcher = new TerminalLauncher(_terminals);
         _debug = new DebugService(() => DebuggeeFixture.Adapter)
         {
+            CoreClrAdapter = DebuggeeFixture.CodalusAdapter,
             Terminal = _launcher,
             StartupHook = HeldLaunch.ResolveHook() ?? throw new InvalidOperationException("The startup hook isn't next to the tests."),
         };
@@ -97,7 +99,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task A_program_in_the_terminal_reads_input_stops_at_a_breakpoint_and_runs_on_after_Detach_All()
     {
-        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
+        Assert.SkipWhen(OperatingSystem.IsMacOS() && !_debug.UsesCodalusAdapter, "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
         await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan("--read")) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
 
@@ -126,7 +128,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task Detach_All_from_an_apphost_stopped_at_a_breakpoint_leaves_it_running()
     {
-        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
+        Assert.SkipWhen(OperatingSystem.IsMacOS() && !_debug.UsesCodalusAdapter, "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         // The apphost, as launch profiles run it: netcoredbg used to end it when detaching while it was stopped.
         var apphost = Path.Combine(Path.GetDirectoryName(debuggee.Dll)!, OperatingSystem.IsWindows() ? "Debuggee.exe" : "Debuggee");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
@@ -144,7 +146,7 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
     [Fact]
     public async Task Stop_ends_a_program_launched_in_the_terminal()
     {
-        Assert.SkipWhen(OperatingSystem.IsMacOS(), "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
+        Assert.SkipWhen(OperatingSystem.IsMacOS() && !_debug.UsesCodalusAdapter, "netcoredbg can't attach to a program held at startup on macOS (0x80004005, found on the Mac); the shell uses the Debug Console there.");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "print")));
         await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
         await NextStopAsync();
@@ -163,6 +165,29 @@ public sealed class TerminalLaunchTests(DebuggeeFixture debuggee) : IClassFixtur
                 return true;
             }
         }, "Stop ends the program", 30);
+    }
+
+    [Fact]
+    public async Task Under_the_codalus_debugger_a_program_in_the_terminal_stops_on_its_first_line_on_every_os()
+    {
+        // The launcher (ADR 0086) starts it in the terminal: no startup hook, no attach, and macOS too.
+        _debug.AdapterSetting = () => DebugService.CodalusAdapter;
+        Assert.SkipWhen(!_debug.UsesCodalusAdapter, "CODALUS_DEBUG_ADAPTER chooses netcoredbg over the setting.");
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "first")));
+        await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan("--read")) { Console = DebugConsoleKind.Terminal }], TestContext.Current.CancellationToken);
+        var session = _launcher.Last ?? throw new InvalidOperationException("No terminal started.");
+        Assert.Equal(DebugProcess.Terminal, Assert.Single(_debug.Processes).Kind);
+
+        var first = await NextStopAsync();
+        Assert.Equal("breakpoint", first.Reason);
+        Assert.Equal(DebuggeeFixture.Line(debuggee.Program, "first"), _debug.SelectedFrame?.Line);
+
+        // Then input, and its own exit code in the terminal.
+        await _debug.ContinueAsync();
+        session.Write("typed\r");
+        await UntilAsync(() => session.ExitCode is not null, "the program exits:\n" + Screen(), 90);
+        Assert.Equal(15, session.ExitCode);
+        Assert.Contains("echo: typed", Screen(), StringComparison.Ordinal);
     }
 
     [Fact]

@@ -106,6 +106,14 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         switch (command)
         {
             case "initialize":
+                if (debugger is CoreClr.DbgShimDebugger shim && Read(arguments, json.InitializeArguments)?.SupportsRunInTerminalRequest == true)
+                {
+                    // The client starts programs in its terminal for us (M54): the launcher runs there.
+                    shim.RunInTerminal = request => dap.RequestAsync("runInTerminal", request, json.RunInTerminalRequestArguments, CancellationToken.None).GetAwaiter().GetResult() is { } body
+                        ? body.Deserialize(json.RunInTerminalResponse)?.ProcessId
+                        : null;
+                }
+
                 return JsonSerializer.SerializeToElement(new Capabilities
                 {
                     SupportsConfigurationDoneRequest = true,

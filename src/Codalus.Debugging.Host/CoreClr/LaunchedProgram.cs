@@ -8,8 +8,10 @@ namespace Codalus.Debugging.Host.CoreClr;
 
 /// <summary>
 /// The adapter's side of a program started by the launcher (<see cref="Launcher"/>, ADR 0086): the launcher process,
-/// started with the launch's environment, working directory and either pipes for the Debug Console or a console window
-/// of its own, and the pipe it reports on.
+/// started with the launch's environment and working directory, and the pipe it reports on. The adapter starts it with
+/// pipes for the Debug Console or a console window of its own; for the integrated terminal (or the client's console
+/// window), the client starts it there through <c>runInTerminal</c> (M54b), so the program gets that terminal's
+/// handles and stops on <c>Main</c>'s first line like any launch.
 /// </summary>
 internal sealed class LaunchedProgram : IDisposable
 {
@@ -17,13 +19,13 @@ internal sealed class LaunchedProgram : IDisposable
     public static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
 
     private readonly NamedPipeServerStream _pipe;
-    private readonly Process _launcher;
+    private readonly Process? _launcher;
     private readonly List<Task> _pumps = [];
     private readonly TaskCompletionSource<int?> _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Lock _gate = new();
     private StreamWriter? _writer;
 
-    private LaunchedProgram(NamedPipeServerStream pipe, Process launcher)
+    private LaunchedProgram(NamedPipeServerStream pipe, Process? launcher)
     {
         _pipe = pipe;
         _launcher = launcher;
@@ -33,22 +35,37 @@ internal sealed class LaunchedProgram : IDisposable
     public int ProcessId { get; private set; }
 
     /// <summary>Starts the launcher, which starts the program suspended; returns once it has reported the program's id.</summary>
-    public static LaunchedProgram Start(NetFxDebugArguments arguments, Action<string, string> output)
+    /// <param name="runInTerminal">The client's <c>runInTerminal</c>, for <see cref="NetFxDebugArguments.Console"/>'s terminals.</param>
+    public static LaunchedProgram Start(NetFxDebugArguments arguments, Action<string, string> output, Func<RunInTerminalRequestArguments, int?>? runInTerminal = null)
     {
         var program = arguments.Program!;
         var name = "codalus-" + Guid.NewGuid().ToString("N")[..12];
         var pipe = new NamedPipeServerStream(name, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         var (host, hostArguments) = HostCommand();
+        var workingDirectory = string.IsNullOrEmpty(arguments.Cwd) ? Path.GetDirectoryName(Path.GetFullPath(program))! : arguments.Cwd;
+        string[] command = [host, .. hostArguments, CoreClrAdapter.LaunchArgument, name, program, .. arguments.Args ?? []];
+        if (arguments.Console is "integratedTerminal" or "externalTerminal")
+        {
+            if (runInTerminal is null)
+            {
+                output("console", "The client has no terminal to start the program in: its console is the Debug Console.\n");
+            }
+            else
+            {
+                return InTerminal(pipe, command, workingDirectory, arguments, runInTerminal, Path.GetFileName(program));
+            }
+        }
+
         var info = new ProcessStartInfo(host)
         {
             UseShellExecute = false,
-            WorkingDirectory = string.IsNullOrEmpty(arguments.Cwd) ? Path.GetDirectoryName(Path.GetFullPath(program)) : arguments.Cwd,
+            WorkingDirectory = workingDirectory,
             CreateNoWindow = !arguments.NewConsole,
             RedirectStandardInput = !arguments.NewConsole,
             RedirectStandardOutput = !arguments.NewConsole,
             RedirectStandardError = !arguments.NewConsole,
         };
-        foreach (var argument in (string[])[.. hostArguments, CoreClrAdapter.LaunchArgument, name, program, .. arguments.Args ?? []])
+        foreach (var argument in command[1..])
         {
             info.ArgumentList.Add(argument);
         }
@@ -81,6 +98,44 @@ internal sealed class LaunchedProgram : IDisposable
             }
 
             launched.Connect(Path.GetFileName(program));
+            return launched;
+        }
+        catch
+        {
+            launched.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>The launcher in the client's terminal (<c>runInTerminal</c>): the program gets the terminal's console.</summary>
+    private static LaunchedProgram InTerminal(NamedPipeServerStream pipe, string[] command, string workingDirectory, NetFxDebugArguments arguments, Func<RunInTerminalRequestArguments, int?> runInTerminal, string program)
+    {
+        int? started;
+        try
+        {
+            var environment = (arguments.Env ?? []).ToDictionary(e => e.Key, e => (string?)e.Value, StringComparer.Ordinal);
+            started = runInTerminal(new RunInTerminalRequestArguments(command, workingDirectory, arguments.Console == "externalTerminal" ? "external" : "integrated", Path.GetFileNameWithoutExtension(program), environment));
+        }
+        catch (Exception ex) when (ex is Mono.DapRequestException or IOException or InvalidOperationException)
+        {
+            pipe.Dispose();
+            throw new ClrException($"The terminal didn't start {program}: {ex.Message}", ex);
+        }
+
+        Process? launcher = null;
+        try
+        {
+            launcher = started is { } id ? Process.GetProcessById(id) : null;
+        }
+        catch (ArgumentException)
+        {
+            // It ended already: the pipe's connection says how far it got.
+        }
+
+        var launched = new LaunchedProgram(pipe, launcher);
+        try
+        {
+            launched.Connect(program);
             return launched;
         }
         catch
@@ -133,7 +188,7 @@ internal sealed class LaunchedProgram : IDisposable
             _pipe.Dispose();
         }
 
-        _launcher.Dispose();
+        _launcher?.Dispose();
     }
 
     /// <summary>The launcher is this host again: its apphost, or <c>dotnet</c> with its assembly.</summary>
@@ -151,10 +206,13 @@ internal sealed class LaunchedProgram : IDisposable
         try
         {
             var connected = _pipe.WaitForConnectionAsync(timeout.Token);
-            var exited = _launcher.WaitForExitAsync(timeout.Token);
-            if (Task.WaitAny(connected, exited) == 1 || !connected.IsCompletedSuccessfully)
+            var exited = _launcher?.WaitForExitAsync(timeout.Token) ?? Task.Delay(Timeout.Infinite, timeout.Token);
+            Task.WaitAny(connected, exited);
+            if (!connected.IsCompletedSuccessfully)
             {
-                throw new ClrException($"The debugger's launcher ended before starting {program} (exit code {ExitCodeOf(_launcher)}).");
+                throw new ClrException(_launcher is { HasExited: true } ended
+                    ? $"The debugger's launcher ended before starting {program} (exit code {ExitCodeOf(ended)})."
+                    : $"The debugger's launcher didn't start {program} in {StartTimeout.TotalSeconds:0} seconds.");
             }
         }
         catch (AggregateException ex) when (ex.InnerException is OperationCanceledException)
