@@ -771,7 +771,7 @@ public sealed class DebugService : IAsyncDisposable
 
         await PrepareDetachAsync(compound).ConfigureAwait(false);
         await compound.DetachPrimaryAsync(CancellationToken.None).ConfigureAwait(false);
-        await EndAsync().ConfigureAwait(false);
+        await EndAsync(compound).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -1350,11 +1350,24 @@ public sealed class DebugService : IAsyncDisposable
         await EndAsync().ConfigureAwait(false);
     }
 
-    private async Task EndAsync()
+    private Task EndAsync() => EndAsync(null);
+
+    /// <summary>
+    /// Ends the session; with <paramref name="only"/>, only while that adapter's session runs. A release can outlast its
+    /// session: when the server exits as the detach is prepared (the evaluate unanswered for its 10 seconds), its end
+    /// ends the session, and the session that follows the next server can start before the release is done. Ending the
+    /// current session then ended that one (macOS CI, run 40873591881).
+    /// </summary>
+    private async Task EndAsync(IDebugAdapter? only)
     {
         IDebugAdapter? adapter;
         lock (_gate)
         {
+            if (only is not null && !ReferenceEquals(_adapter, only))
+            {
+                return; // that session ended already
+            }
+
             adapter = _adapter;
             _adapter = null;
         }

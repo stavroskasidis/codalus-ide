@@ -68,7 +68,7 @@ Plugins can add color themes, which are listed with these; a plugin's theme goes
 
 **Fonts and Colors** (Tools → Fonts and Colors): change any color over the theme's:
 - **Syntax**: comments, strings, keywords, numbers, types, functions and variables, or one semantic token type.
-- **The editor**: selection, current line, highlighted references, matching braces, find matches, and the error, warning, info and hint squiggles.
+- **The editor**: selection, current line, highlighted references, matching braces, find matches, the error and warning squiggles, and the info and hint dots.
 - **The window**: its background, text, borders, accents and the other main colors. The setting below takes any of the theme's `Shell.*` resource keys.
 
 Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme** applies it to every theme instead of the current one, and Reset goes back to the theme's color. The colors are saved in VS Code's shape, so they can also be edited as JSON:

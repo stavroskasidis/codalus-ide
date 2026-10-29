@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Codalus.Plugins.Testing</RootNamespace>
     <Description>Headless tests for Codalus IDE plugins (M22b): an in-memory IPluginContext that records what a plugin registers and shows, and drives its commands, views, trees and providers.</Description>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <IsPackable>true</IsPackable>
     <PackageId>Codalus.Plugins.Testing</PackageId>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
