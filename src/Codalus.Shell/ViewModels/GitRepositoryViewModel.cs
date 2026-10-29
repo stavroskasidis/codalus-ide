@@ -149,8 +149,16 @@ public sealed class GitRepositoryNode : ObservableObject
     public IEnumerable<GitRepositoryNode> Descendants() => Children.SelectMany(c => c.Descendants().Prepend(c));
 }
 
-/// <summary>A repository's pull requests for the tree, or why there are none to show.</summary>
-public sealed record GitRepositoryPullRequests(IReadOnlyList<PullRequestDto> PullRequests, string? Message, HostingMatch? Match = null, Func<Task>? SignIn = null);
+/// <summary>
+/// A repository's open pull requests for the tree (all of them), or why there are none to show; with the Pull Requests
+/// window's other filters, the user's own and those that ask for the user's review (null: the host couldn't say).
+/// </summary>
+public sealed record GitRepositoryPullRequests(IReadOnlyList<PullRequestDto> PullRequests, string? Message, HostingMatch? Match = null, Func<Task>? SignIn = null)
+{
+    public IReadOnlyList<PullRequestDto>? Mine { get; init; }
+
+    public IReadOnlyList<PullRequestDto>? ReviewRequested { get; init; }
+}
 
 /// <summary>What the Git Repository document asks of the shell.</summary>
 public sealed class GitRepositoryActions
@@ -470,7 +478,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
 
     private static bool ExpandedByDefault(GitRepositoryNode node) =>
         node.Kind is GitRepositoryNodeKind.Repository || node.Kind == GitRepositoryNodeKind.Group && !node.Key.EndsWith(":remote", StringComparison.Ordinal) && !node.Key.EndsWith(":tags", StringComparison.Ordinal)
-        || node.Kind == GitRepositoryNodeKind.Folder && !node.Key.Contains(":remote:", StringComparison.Ordinal);
+        || node.Kind == GitRepositoryNodeKind.Folder && !node.Key.Contains(":remote:", StringComparison.Ordinal) && !node.Key.EndsWith("pullRequests:all", StringComparison.Ordinal);
 
     private static GitRepositoryNode Group(string key, string text, GitService? git) => new(key, GitRepositoryNodeKind.Group, text, git);
 
@@ -580,6 +588,10 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
         node.Children.Add(leaf(parts[^1]));
     }
 
+    /// <summary>
+    /// Pull Requests: the Pull Requests window's filters as folders, Mine, Review requested and All open, each with its
+    /// count; or the one line that says why there are none (signing in, not on a host, git or the host failing).
+    /// </summary>
     private GitRepositoryNode PullRequestsNode(GitService git, string key, string query)
     {
         var node = Group(key, Localizer.Get("msg.gitRepository.pullRequests", "Pull Requests"), git);
@@ -591,27 +603,46 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
             case { Message: { } message } result:
                 node.Children.Add(MessageNode(key, message, git, result.SignIn));
                 break;
-            case { PullRequests: var pullRequests, Match: var match }:
-                var shown = pullRequests.Where(p => query.Length == 0 || p.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || p.Reference.Contains(query, StringComparison.OrdinalIgnoreCase) || p.SourceBranch.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (pullRequests.Count == 0)
-                {
-                    node.Children.Add(MessageNode(key, Localizer.Get("msg.gitRepository.noPullRequests", "No open pull requests"), git));
-                }
-
-                foreach (var pullRequest in shown)
-                {
-                    node.Children.Add(new GitRepositoryNode(key + ":" + pullRequest.Number, GitRepositoryNodeKind.PullRequest, $"{pullRequest.Reference} {pullRequest.Title}", git)
-                    {
-                        PullRequest = pullRequest,
-                        Match = match,
-                        Detail = $"{pullRequest.SourceBranch} → {pullRequest.TargetBranch} · {pullRequest.Author}{(pullRequest.IsDraft ? " · " + Localizer.Get("msg.gitRepository.draft", "draft") : string.Empty)}",
-                    });
-                }
-
+            case { } result:
+                Folder("mine", Localizer.Get("msg.gitRepository.pullRequestsMine", "Mine"), result.Mine);
+                Folder("reviewRequested", Localizer.Get("msg.gitRepository.pullRequestsReviewRequested", "Review requested"), result.ReviewRequested);
+                Folder("all", Localizer.Get("msg.gitRepository.pullRequestsAll", "All open"), result.PullRequests);
                 break;
         }
 
         return node;
+
+        void Folder(string filter, string title, IReadOnlyList<PullRequestDto>? pullRequests)
+        {
+            var folderKey = key + ":" + filter;
+            var shown = (pullRequests ?? []).Where(p => query.Length == 0 || p.Title.Contains(query, StringComparison.OrdinalIgnoreCase) || p.Reference.Contains(query, StringComparison.OrdinalIgnoreCase) || p.SourceBranch.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (query.Length > 0 && shown.Count == 0)
+            {
+                return; // filtering: only the folders with a match
+            }
+
+            var folder = new GitRepositoryNode(folderKey, GitRepositoryNodeKind.Folder, pullRequests is null ? title : $"{title} ({pullRequests.Count.ToString(CultureInfo.CurrentCulture)})", git);
+            if (pullRequests is null)
+            {
+                folder.Children.Add(MessageNode(folderKey, Localizer.Get("msg.gitRepository.pullRequestsUnavailable", "The host didn't say"), git));
+            }
+            else if (pullRequests.Count == 0)
+            {
+                folder.Children.Add(MessageNode(folderKey, Localizer.Get("msg.gitRepository.noPullRequests", "No open pull requests"), git));
+            }
+
+            foreach (var pullRequest in shown)
+            {
+                folder.Children.Add(new GitRepositoryNode(folderKey + ":" + pullRequest.Number, GitRepositoryNodeKind.PullRequest, $"{pullRequest.Reference} {pullRequest.Title}", git)
+                {
+                    PullRequest = pullRequest,
+                    Match = _data[git].PullRequests?.Match,
+                    Detail = $"{pullRequest.SourceBranch} → {pullRequest.TargetBranch} · {pullRequest.Author}{(pullRequest.IsDraft ? " · " + Localizer.Get("msg.gitRepository.draft", "draft") : string.Empty)}",
+                });
+            }
+
+            node.Children.Add(folder);
+        }
     }
 
     private GitRepositoryNode SubmodulesNode(GitService git, string key, string query)
