@@ -210,6 +210,40 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     private static int Getter(ClrModuleInfo info, int type, string name) => info.Properties(type).Single(p => p.Name == name).GetterToken;
 
     [Fact]
+    public async Task A_pause_before_an_attachs_module_load_shows_the_programs_frames_with_source()
+    {
+        // An attach's module loads arrive after DebugActiveProcess returns; a Break All right after the attach can come
+        // first, and showed the program's frames without source (CI, run 40792217459, Linux, the Codalus debugger, M54).
+        fixture.RequireExe();
+        using var info = ClrModuleInfo.Open(fixture.Exe!);
+        var module = new FakeModule(fixture.Exe!);
+        var process = new FakeProcess();
+        await using var dap = new Harness(process);
+        await dap.RequestAsync("initialize", new InitializeArguments("codalus", "Codalus IDE", "clr"), s_json.InitializeArguments, s_json.Capabilities);
+        await dap.RequestAsync("attach", new NetFxDebugArguments(ProcessId: 4242, Request: "attach"), s_json.NetFxDebugArguments);
+        await dap.RequestAsync("configurationDone", new EmptyArguments(), s_json.EmptyArguments);
+        var sum = DebuggeeFixture.Line(fixture.Program, "netfx-sum");
+        var (total, offset, _) = info.Locations(info.MatchDocument(fixture.Program)!, sum).Single();
+        var thread = new FakeThread(7, process);
+        thread.FrameList.Add(new FakeFrame(thread, module, total, offset));
+        process.ThreadList.Add(thread);
+
+        await dap.RequestAsync("pause", new ThreadArguments(7), s_json.ThreadArguments);
+        Assert.Equal(7, (await dap.NextAsync(DapEvents.Stopped)).GetProperty("threadId").GetInt32());
+        var top = (await dap.RequestAsync("stackTrace", new StackTraceArguments(7, 0, 20), s_json.StackTraceArguments, s_json.StackTraceResponse)).StackFrames[0];
+        Assert.Equal("NetFxDebuggee.Cart.Total", top.Name);
+        Assert.Equal(sum, top.Line);
+        Assert.Contains(process.UserCode, u => ReferenceEquals(u.Module, module) && u.UserCode);
+
+        // Its load event, when it comes, finds it registered: no second module event.
+        process.Send(new ClrModuleLoaded(module));
+        await dap.RequestAsync("continue", new ThreadArguments(7), s_json.ThreadArguments, s_json.ContinueResponse);
+        process.Send(new ClrExited(0));
+        await dap.NextAsync(DapEvents.Terminated);
+        Assert.Single(process.UserCode, u => ReferenceEquals(u.Module, module));
+    }
+
+    [Fact]
     public async Task Breakpoints_stacks_variables_evaluation_steps_exceptions_and_the_end_through_dap()
     {
         fixture.RequireExe();
