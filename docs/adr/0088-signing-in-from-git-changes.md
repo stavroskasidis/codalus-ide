@@ -43,5 +43,6 @@ That page also offered **Sign In** (the OAuth device flow) for every provider. N
 
 - One click in Git Changes leads to the right host's sign-in, and a token's page opens with the scopes set.
 - **github.com has Codalus IDE's own OAuth app** (registered by the maintainer, 2026-10-29, with device flow on): `github.oauthClientId`'s default is its client id, which isn't a secret (a device flow has none). On a GitHub Enterprise Server that default doesn't count; the provider refuses it there with a message, and the shell hides the button.
-- Without an OAuth app, a token is the only way in on gitlab.com and dev.azure.com; the panel leads with it. Their apps (a non-confidential GitLab application with `api`; a public-client Entra app with Azure DevOps' `user_impersonation`) are still `TODO(issue)` from ADR 0031.
+- **gitlab.com has Codalus IDE's own OAuth application** too (registered by the maintainer, 2026-10-29: non-confidential, the `api` scope): `gitlab.oauthClientId`'s default. A self-managed GitLab doesn't count it, as for GitHub.
+- Without an OAuth app, a token is the only way in on dev.azure.com; the panel leads with it. Its app (a public-client Entra app with Azure DevOps' `user_impersonation`) is still `TODO(issue)` from ADR 0031.
 - A dismissed repository keeps no suggestion even after a sign-out. The pull request button still leads to signing in.
