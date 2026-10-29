@@ -157,6 +157,17 @@ public sealed class AzureDevOpsServerProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Codalus_ides_entra_app_isnt_used_on_a_server()
+    {
+        // The default client id is for Azure DevOps Services: on a server it is refused before Entra ID is asked.
+        _context.Set("azureDevOps.oauthClientId", AzureDevOpsProvider.ServicesClientId);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _provider.SignInAsync(_context, Ct));
+        Assert.Contains("isn't Azure DevOps Services", error.Message, StringComparison.Ordinal);
+        Assert.Empty(_context.Codes);
+        Assert.Empty(_server.Requests);
+    }
+
+    [Fact]
     public async Task Azure_DevOps_Services_doesnt_take_the_operating_systems_account()
     {
         using var cloud = new AzureDevOpsProvider(new HostingTestContext());

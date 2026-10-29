@@ -129,6 +129,24 @@ public sealed partial class LanguageServiceTests
         Assert.Equal([ReferenceItemKinds.Declaration, ReferenceItemKinds.Read, ReferenceItemKinds.Read], result.Items.Select(i => i.Kind));
         Assert.All(result.Items, i => Assert.Equal("App", i.Project));
         Assert.Equal("Console.WriteLine(circle.Describe(2));", result.Items[1].LineText);
+
+        // What the References window groups by and shows in its columns: the definition, the containing type, the highlight.
+        Assert.All(result.Items, i => Assert.Equal(("circle", SymbolKind.Variable), (i.Definition, i.DefinitionKind)));
+        Assert.All(result.Items, i => Assert.Equal("Program", i.ContainingType));
+        Assert.Equal("Console.WriteLine(".Length, result.Items[1].TextStart);
+        Assert.Equal("var ".Length, result.Items[0].TextStart);
+    }
+
+    [Fact]
+    public async Task Reference_items_name_the_definitions_a_type_search_cascades_to()
+    {
+        var shapes = fixture.File("src", "Lib", "Shapes.cs");
+        await fixture.OpenAsync(shapes);
+        var result = await fixture.Client.ReferenceItemsAsync(Uri(shapes), fixture.At(shapes, "class Circle", "class ".Length + 1), Ct);
+
+        Assert.NotNull(result);
+        Assert.Contains(result!.Items, i => i is { Definition: "Circle", DefinitionKind: SymbolKind.Class, Kind: ReferenceItemKinds.Declaration });
+        Assert.Contains(result.Items, i => i.Definition?.StartsWith("Circle", StringComparison.Ordinal) == true && i.LineText.Contains("new Circle(2)", StringComparison.Ordinal));
     }
 
     [Fact]

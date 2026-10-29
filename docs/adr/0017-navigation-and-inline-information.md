@@ -85,3 +85,13 @@ This ADR covers M12a. The decisions to make:
   - **Symbols:** symbol servers.
   - **Other:** Go To All's persistent index.
   - **CodeLens:** Git authors (M6 data) and test status (M8 data).
+
+## Amendment (2026-10-29): the References window, after the classic IDE's
+
+Find All References moves out of Find Results into a window of its own, laid out as the classic IDE's (the maintainer's request, with its screenshot):
+- **Its own tool window**, `references`, its tab `'Circle' references`. Find Results keeps Find in Files and Replace only; its reference mode (Group by File/Project/None, the kind filter, the Earlier results drop-down) is gone.
+- **A tree grouped by the classic IDE's choices:** Project then Definition (the default), Definition only, Definition then Project, Definition then Path, and Project, Definition then Path; List View flattens it. Each header shows its icon and count. Group by is the `references.groupBy` setting.
+- **The definition comes from the host.** `codalus/references` items gain `definition` (as Roslyn displays the `ReferencedSymbol`'s definition, so a search that cascades to constructors or overrides shows each as its own group) and `definitionKind`, `containingType` for the column, and `textStart` for the highlight in the trimmed line. Other languages' plain locations group under the symbol's name.
+- **The classic IDE's eight columns:** Code, File, Line, Col, Project, Containing member, Containing type, Kind. Code takes what the others leave; the others resize from the header's splitters (`references.columnWidths`). A row's cells are a `ColumnsPanel` that inherits the widths, and the header lines up with the rows whatever inset the theme gives them.
+- **Filters as the classic IDE has them:** a filter button on File, Project, Containing member, Containing type and Kind with a check box per value; the scope box (Entire solution, Current project, Current document, Open documents) filters too, without searching again; Clear All Filters resets the columns and the search box.
+- **Keep Results opens another window,** as in the classic IDE: an unregistered tool window (`references:2`…) beside the first, which a restart doesn't restore (`LayoutManager.ShowExtraToolWindow`). The next search goes to the first window that doesn't keep its results.

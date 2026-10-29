@@ -294,7 +294,16 @@ public sealed record GitLogQuery
 }
 
 /// <summary>A commit's full message and changed files (status letter and path, the old path of a rename).</summary>
-public sealed record GitCommitDetails(GitCommit Commit, string Message, IReadOnlyList<(char Status, string Path, string? OldPath)> Files);
+public sealed record GitCommitDetails(GitCommit Commit, string Message, IReadOnlyList<(char Status, string Path, string? OldPath)> Files)
+{
+    /// <summary>Who committed it (the author when git didn't say).</summary>
+    public string Committer { get; init; } = string.Empty;
+
+    public string CommitterEmail { get; init; } = string.Empty;
+
+    /// <summary>When it was committed (rebased, amended or cherry-picked commits differ from the author's date).</summary>
+    public DateTimeOffset CommitDate { get; init; }
+}
 
 public sealed record GitStash(int Index, string Name, string Message)
 {

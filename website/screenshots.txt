@@ -18,6 +18,7 @@ maui.png                  Linux     maui-devices.png
 netfx.png                 Windows   netfx-debugging.png
 new-project.png           Linux     new-project.png
 profiler.png              Linux     smoke-test-profiler.png
+references.png            Linux     smoke-test-references.png
 setup.png                 Linux     setup-appearance.png
 theme-classic.png         Linux     smoke-test-theme-light.png
 theme-daylight.png        Linux     smoke-test-theme-daylight.light.png

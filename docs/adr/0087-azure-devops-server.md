@@ -1,6 +1,6 @@
 # 0087. Azure DevOps Server, and Create Pull Request before signing in
 
-- **Status:** accepted (0.10.0, 2026-10-29)
+- **Status:** accepted (0.10.0, 2026-10-29); where the button signs in is [ADR 0088](0088-signing-in-from-git-changes.md)'s
 - **Date:** 2026-10-29
 - **Deciders:** maintainer (the decisions of 2026-10-29: the server comes from the remote and is saved when you sign in; a personal access token and the operating system's account; one Azure DevOps server at a time)
 

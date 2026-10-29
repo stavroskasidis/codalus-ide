@@ -140,6 +140,16 @@ public sealed class GitLabProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Gitlab_coms_application_isnt_used_on_a_self_managed_server()
+    {
+        // The mock stands for a self-managed GitLab: gitlab.com's application id (the default) is refused, and nothing is asked.
+        _context.Set("gitlab.oauthClientId", GitLabProvider.DotComClientId);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _provider.SignInAsync(_context, Ct));
+        Assert.Contains("needs its own OAuth application", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(_server.Requests, r => r.Path == "/oauth/authorize_device");
+    }
+
+    [Fact]
     public async Task The_device_flow_signs_in_and_the_two_hour_token_is_refreshed()
     {
         _expiresIn = 10;

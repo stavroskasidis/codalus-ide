@@ -54,9 +54,13 @@
                   IsVisible="{Binding HasBannerAction}" HorizontalAlignment="Left" Margin="22,0,0,2" />
         </StackPanel>
       </Border>
-      <!-- New Branch…, or New Branch 'zzz'… when nothing matches (B3); none in an empty repository (B16). -->
-      <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4" IsVisible="{Binding HasFooter}">
-        <Button x:Name="Footer" Classes="subtle iconText compact" controls:ButtonIcon.Kind="branch" Content="{Binding FooterText}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" />
+      <!-- New Branch…, or New Branch 'zzz'… when nothing matches (B3); none in an empty repository (B16). Manage Branches opens the Git Repository document. -->
+      <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,1,0,0" Padding="4">
+        <DockPanel>
+          <Button x:Name="ManageBranches" DockPanel.Dock="Right" Classes="link" Content="{l:T gitBranches.manageBranches}" VerticalAlignment="Center" Margin="6,0,4,0"
+                  AutomationProperties.Name="{l:T gitBranches.manageBranches}" />
+          <Button x:Name="Footer" Classes="subtle iconText compact" controls:ButtonIcon.Kind="branch" Content="{Binding FooterText}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" IsVisible="{Binding HasFooter}" />
+        </DockPanel>
       </Border>
       <Panel>
         <TextBlock Classes="muted" Margin="12,8" Text="{Binding LoadingText}" IsVisible="{Binding IsLoading}" />
