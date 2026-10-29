@@ -161,6 +161,30 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task Detaching_the_primary_ends_its_adapter_before_the_page_closes()
+    {
+        // netcoredbg holds the server's PDBs until it ends; dotnet watch's rebuild on Windows can't replace them, so a
+        // slow browser end must not keep it (Windows CI, run 40863024322).
+        var page = new TaskCompletionSource();
+        var server = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var browser = new FakeAdapter([new DapThread(1, "localhost:5000/counter")]) { DisconnectGate = page.Task };
+        var compound = new CompoundDebugAdapter(server, "Server");
+        await compound.AddAsync(browser, "Browser", _ => Task.CompletedTask, Ct);
+
+        var detach = compound.DetachPrimaryAsync(Ct);
+        await WaitAsync(() => browser.Requests.Contains("disconnect True"));
+        Assert.Contains("disconnect False", server.Requests);
+        Assert.True(server.Disposed);
+        Assert.False(compound.Closed.IsCompleted); // the session ends once the page closed
+
+        page.SetResult();
+        await detach.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        await compound.Closed.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        await compound.DisposeAsync();
+        Assert.True(browser.Disposed);
+    }
+
+    [Fact]
     public async Task A_stop_waits_while_another_one_shows_and_shows_when_it_resumes()
     {
         var (compound, server, browser, events) = await CreateAsync();
@@ -634,6 +658,8 @@ public sealed class CompoundDebugAdapterTests
 
         public bool Disposed { get; private set; }
 
+        public Task DisconnectGate { get; init; } = Task.CompletedTask;
+
         public Capabilities Capabilities { get; } = new();
 
         public Task Initialized => Task.CompletedTask;
@@ -742,6 +768,7 @@ public sealed class CompoundDebugAdapterTests
         public async Task DisconnectAsync(bool terminateDebuggee, CancellationToken cancellationToken)
         {
             await Record($"disconnect {terminateDebuggee}");
+            await DisconnectGate.WaitAsync(cancellationToken);
             _closed.TrySetResult();
         }
 
