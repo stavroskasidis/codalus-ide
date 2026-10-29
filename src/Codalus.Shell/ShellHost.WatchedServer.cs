@@ -98,7 +98,8 @@ public sealed partial class ShellHost
         hotReload.Refused += () => Ui.Post(() => OnServerRefusedUpdates(session, project, name));
         hotReload.FilesUpdated += files =>
         {
-            if (session.State == WatchedServerState.Attached)
+            // Under the Codalus debugger the server takes the edits in place (M55): its breakpoints bind in the new code.
+            if (session.State == WatchedServerState.Attached && !DebugEdits.IsActive)
             {
                 _ = Debugger.ExcludeFromServerAsync(files, StaleServerBreakpoint);
             }
@@ -198,6 +199,14 @@ public sealed partial class ShellHost
     {
         if (!session.IsActive)
         {
+            return;
+        }
+
+        if (DebugEdits.IsActive)
+        {
+            // The Codalus debugger applies the server's edits itself (M55); dotnet watch's own copy is the one refused.
+            DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.serverTakesEdits",
+                "Edits apply to {0}'s server through the Codalus debugger, and to its WebAssembly components in the browser, as you save. Edits that need a restart restart the app.", name));
             return;
         }
 

@@ -16,10 +16,19 @@ namespace Codalus.Shell;
 /// </summary>
 public sealed partial class ShellHost
 {
+    /// <summary>Whether a save while netcoredbg debugs offers the Codalus debugger (M55); "Don't Show Again" turns it off.</summary>
+    public const string DebugEditsOfferSetting = "debug.codalusOffer";
+
+    /// <summary>The offer is made once a session at most.</summary>
+    private bool _debugEditsOffered;
+
     /// <summary>The debug session's Hot Reload (M55): it takes edits while a Codalus debugger runs the program.</summary>
     public DebugHotReload DebugEdits { get; private set; } = null!;
 
     private string? _debugEditsStatus;
+
+    /// <summary>When the last edits applied (a Blazor Web App's status says it beside the browser's).</summary>
+    private string? _debugEditsApplied;
     private bool _debugEditsLanguageSaid;
 
     private void InitializeDebugHotReload()
@@ -30,6 +39,8 @@ public sealed partial class ShellHost
             if (!DebugEdits.IsActive)
             {
                 _debugEditsStatus = null;
+                _debugEditsApplied = null;
+                _debugEditsOffered = false;
                 _debugEditsLanguageSaid = false;
                 ErrorList.SetHotReload([]);
             }
@@ -72,6 +83,7 @@ public sealed partial class ShellHost
             case HotReloadOutcome.Applied:
                 ErrorList.SetHotReload([]);
                 _debugEditsStatus = Localizer.Format("status.debugHotReload.applied", "Hot Reload: applied at {0}", time);
+                _debugEditsApplied = time;
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.applied", "Hot Reload: the code changes were applied ({0}).", time));
                 break;
             case HotReloadOutcome.None:
@@ -82,6 +94,10 @@ public sealed partial class ShellHost
                 ErrorList.SetHotReload(Rows(outcome.Diagnostics));
                 _debugEditsStatus = Localizer.Get("status.debugHotReload.errors", "Hot Reload: not applied (compile errors)");
                 DebugLog.AppendLine(Localizer.Get("msg.debugHotReload.errors", "Hot Reload: the code changes weren't applied: they don't compile (see the Error List)."));
+                break;
+            case HotReloadOutcome.Rude when WatchedServerDebugSession is { IsActive: true }:
+                // A Blazor Web App under dotnet watch: dotnet watch restarts it for the edit, and debugging follows (ADR 0040).
+                _debugEditsStatus = Localizer.Get("status.debugHotReload.watchRestarts", "Hot Reload: dotnet watch restarts the app");
                 break;
             case HotReloadOutcome.Rude:
                 ErrorList.SetHotReload(Rows(outcome.Diagnostics));
@@ -104,7 +120,10 @@ public sealed partial class ShellHost
                 break;
             case HotReloadOutcome.Failed:
                 _debugEditsStatus = Localizer.Get("status.debugHotReload.failed", "Hot Reload: not applied");
-                Workbench.Notifications.Error(Localizer.Format("msg.debugHotReload.failed", "The code changes couldn't be applied to the program: {0}", outcome.Message ?? string.Empty));
+                Workbench.Notifications.Error(outcome.Message?.Contains("CORDBG_E_ENC_MODULE_NOT_ENC_ENABLED", StringComparison.Ordinal) == true
+                    // A process attached to, which loaded its code before the debugger came without the variable.
+                    ? Localizer.Get("msg.debugHotReload.notEnabled", "The code changes can't be applied to this program: it wasn't started to take them. Start it with DOTNET_MODIFIABLE_ASSEMBLIES=debug before attaching, or start it from Codalus IDE.")
+                    : Localizer.Format("msg.debugHotReload.failed", "The code changes couldn't be applied to the program: {0}", outcome.Message ?? string.Empty));
                 break;
         }
 
@@ -117,6 +136,7 @@ public sealed partial class ShellHost
     {
         if (!DebugEdits.IsActive)
         {
+            OfferCodalusDebugger(path);
             return;
         }
 
@@ -136,6 +156,38 @@ public sealed partial class ShellHost
         {
             _ = ApplyDebugEditsAsync();
         }
+    }
+
+    /// <summary>
+    /// A C#, Visual Basic or Razor edit saved while netcoredbg debugs a .NET program: once, an offer to debug with the
+    /// Codalus debugger (a preview), which would apply it. Use It sets <c>debug.adapter</c> (the next start takes it).
+    /// </summary>
+    private void OfferCodalusDebugger(string path)
+    {
+        if (_debugEditsOffered || !Debugger.IsActive || Debugger.UsesCodalusAdapter || Debugger.CodalusAdapters.Count > 0
+            || Path.GetExtension(path).ToLowerInvariant() is not (".cs" or ".vb" or ".razor" or ".cshtml")
+            || !Workbench.Settings.GetBoolean(DebugEditsOfferSetting, true)
+            || Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter) != DebugService.NetcoredbgAdapter)
+        {
+            return;
+        }
+
+        _debugEditsOffered = true;
+        var use = Localizer.Get("action.debugHotReload.useCodalus", "Use It");
+        var never = Localizer.Get("action.debugHotReload.dontShowAgain", "Don't Show Again");
+        _ = Workbench.Notifications.Info(
+            Localizer.Get("msg.debugHotReload.offer", "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger (a preview) applies them as you save, continue or press Alt+F10. Debug with it from the next start?"),
+            use, never).Result.ContinueWith(t =>
+        {
+            if (t.Result == use)
+            {
+                _ = Workbench.Settings.SetAsync(DebugAdapterSetting, DebugService.CodalusAdapter, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+            }
+            else if (t.Result == never)
+            {
+                _ = Workbench.Settings.SetAsync(DebugEditsOfferSetting, false, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+            }
+        }, TaskScheduler.Default);
     }
 
     private static List<ErrorListRow> Rows(IReadOnlyList<HotReloadDiagnostic> diagnostics) =>
