@@ -97,4 +97,19 @@ public static class Methods
 
     /// <summary>A project's own components and controls, for the Toolbox (M41a, ADR 0073).</summary>
     public const string WinFormsToolbox = "codalus/winforms/toolbox";
+
+    /// <summary>
+    /// Hot Reload while debugging (M55, ADR 0086): a session of Roslyn's Edit and Continue service for a debugged
+    /// program, from the build it runs. <see cref="HotReloadUpdate"/> gives the edits since as deltas (or rude edits);
+    /// <see cref="HotReloadCommit"/> after the debugger applied them, <see cref="HotReloadDiscard"/> when it didn't.
+    /// </summary>
+    public const string HotReloadStart = "codalus/hotReload/start";
+
+    public const string HotReloadUpdate = "codalus/hotReload/update";
+
+    public const string HotReloadCommit = "codalus/hotReload/commit";
+
+    public const string HotReloadDiscard = "codalus/hotReload/discard";
+
+    public const string HotReloadEnd = "codalus/hotReload/end";
 }
