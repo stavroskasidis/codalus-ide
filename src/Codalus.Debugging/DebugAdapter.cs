@@ -140,8 +140,9 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
     private async Task AbandonUnlessClosedAsync()
     {
-        await _connection.Closed.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-        if (!_connection.Closed.IsCompleted)
+        // The output's end, not Closed: Closed waits for the events read to be raised as well.
+        await _connection.OutputEnded.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (!_connection.OutputEnded.IsCompleted)
         {
             Log?.Invoke(this, $"The debug adapter exited (code {ExitCode()}), and a process it started still holds its output.");
             _connection.Abandon();
