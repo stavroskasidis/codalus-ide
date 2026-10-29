@@ -143,11 +143,29 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
         }
 
         using var program = Process.Start(start)!;
+
+        // Read in the background: Peek() on a redirected pipe waits for more output instead of saying there's none,
+        // so a loop of it read until the program ended its loop, two minutes on (macOS, the codalus-mac session).
+        var output = new System.Text.StringBuilder();
+        var waiting = new TaskCompletionSource();
+        program.OutputDataReceived += (_, e) =>
+        {
+            lock (output)
+            {
+                output.AppendLine(e.Data);
+            }
+
+            if (e.Data == "waiting")
+            {
+                waiting.TrySetResult();
+            }
+        };
+        program.BeginOutputReadLine();
         var session = "attach-" + Guid.NewGuid().ToString("N");
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
         try
         {
-            Assert.Equal("waiting", await program.StandardOutput.ReadLineAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct));
+            await waiting.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
             var events = new EventLog(adapter);
             await adapter.AttachAsync(new NetFxDebugArguments(ProcessId: program.Id, Type: "coreclr", Request: "attach"), s_json.NetFxDebugArguments, Ct);
             await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
@@ -164,15 +182,12 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
                 Assert.Equal(ModuleDeltaResult.Applied, result.Status);
                 await fixture.Client.HotReloadCommitAsync(session, Ct);
                 File.WriteAllText(go, string.Empty);
-                var output = new System.Text.StringBuilder();
                 await WaitUntilAsync(() =>
                 {
-                    while (program.StandardOutput.Peek() >= 0 && program.StandardOutput.ReadLine() is { } line)
+                    lock (output)
                     {
-                        output.AppendLine(line);
+                        return output.ToString().Contains("hello 0 attached", StringComparison.Ordinal);
                     }
-
-                    return output.ToString().Contains("hello 0 attached", StringComparison.Ordinal);
                 }, "the attached program's new output", events);
             }
             else
