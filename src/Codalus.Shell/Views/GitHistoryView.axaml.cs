@@ -6,23 +6,33 @@ using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>The history window: Enter or double-click on a changed file opens its diff; scrolling near the end loads more.</summary>
+/// <summary>
+/// A history: a double-click or Enter on a commit opens its details (a tab), as View Commit Details on its menu does;
+/// a section's chevron collapses and expands it; scrolling near the end loads more;
+/// Enter in Filter History filters at once.
+/// </summary>
 public sealed partial class GitHistoryView : UserControl, IPaneView
 {
     public GitHistoryView()
     {
         InitializeComponent();
-        FileList.DoubleTapped += (_, _) => OpenFile();
-        FileList.AddHandler(KeyDownEvent, (_, e) =>
+        List.DoubleTapped += (_, e) =>
         {
-            if (e.Key == Key.Enter)
+            if (e.Source is Avalonia.Visual visual && Avalonia.VisualTree.VisualExtensions.FindAncestorOfType<Button>(visual, includeSelf: true) is null && ViewModel is { Selected: not null } vm)
             {
-                OpenFile();
+                _ = vm.OpenSelectedAsync();
                 e.Handled = true;
             }
-        }, RoutingStrategies.Bubble);
-        AuthorBox.AddHandler(KeyDownEvent, OnFilterKey, RoutingStrategies.Tunnel);
-        MessageBox.AddHandler(KeyDownEvent, OnFilterKey, RoutingStrategies.Tunnel);
+        };
+        List.AddHandler(KeyDownEvent, OnListKeyDown, RoutingStrategies.Tunnel);
+        FilterBox.AddHandler(KeyDownEvent, (_, e) =>
+        {
+            if (e.Key == Key.Enter && ViewModel is { } vm)
+            {
+                _ = vm.ReloadAsync();
+                e.Handled = true;
+            }
+        }, RoutingStrategies.Tunnel);
         List.AddHandler(ScrollViewer.ScrollChangedEvent, (_, e) =>
         {
             if (e.Source is ScrollViewer viewer && viewer.Offset.Y + viewer.Viewport.Height >= viewer.Extent.Height - 400 && ViewModel is { } vm)
@@ -30,36 +40,54 @@ public sealed partial class GitHistoryView : UserControl, IPaneView
                 _ = vm.LoadMoreAsync();
             }
         });
+        CommitMenu.Opening += (_, e) => e.Cancel = ViewModel?.Selected is null;
     }
 
     private GitHistoryViewModel? ViewModel => DataContext as GitHistoryViewModel;
 
     public void FocusPrimary() => List.Focus();
 
-    private void OnFilterKey(object? sender, KeyEventArgs e)
+    private void OnListKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && ViewModel is { } vm)
+        if (ViewModel is not { } vm || e.KeyModifiers != KeyModifiers.None)
         {
-            _ = vm.ReloadAsync();
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Enter when vm.Selected is not null:
+                _ = vm.OpenSelectedAsync();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void OnRefresh(object? sender, RoutedEventArgs e) => _ = ViewModel?.ReloadAsync();
+
+    private void OnToggleSection(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: GitHistorySection section } && ViewModel is { } vm)
+        {
+            vm.Toggle(section);
             e.Handled = true;
         }
     }
 
-    private void OnFilter(object? sender, RoutedEventArgs e) => _ = ViewModel?.ReloadAsync();
+    private void OnLink(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: GitHistoryLink link } && ViewModel is { } vm)
+        {
+            _ = vm.RunLinkAsync(link);
+            e.Handled = true;
+        }
+    }
 
     private void OnCommitAction(object? sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { Tag: string action } && ViewModel is { } vm)
         {
             _ = vm.RunAsync(action);
-        }
-    }
-
-    private void OpenFile()
-    {
-        if (FileList.SelectedItem is GitCommitFileRow file && ViewModel is { } vm)
-        {
-            _ = vm.OpenFileAsync(file);
         }
     }
 }

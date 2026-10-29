@@ -44,15 +44,14 @@ public sealed partial class ShellHost
         var name = WordAt(editor.Model.Text.Text, offset);
         if (editor.Model.LanguageId == CSharpLanguageId)
         {
-            // Our host classifies references (read, write, declaration) for grouping and filtering (M12a).
+            // Our host classifies references (read, write, declaration) and names their definitions for the References window's groups and columns.
             if (await client.ReferenceItemsAsync(editor.Model.Uri, editor.Model.PositionAt(offset), CancellationToken.None).ConfigureAwait(true) is not { Items.Length: > 0 } classified)
             {
                 ShowMessage("No references found.");
                 return;
             }
 
-            Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
-            await FindResults.ShowReferencesAsync($"References to '{classified.SymbolName}'", classified.Items).ConfigureAwait(true);
+            ShowReferences(classified.SymbolName, classified.Items);
             return;
         }
 
@@ -63,8 +62,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
-        await FindResults.ShowLocationsAsync($"References to '{name}'", locations).ConfigureAwait(true);
+        await ShowReferenceLocationsAsync(name, locations).ConfigureAwait(true);
     }
 
     // ------------------------------------------------------------------ Rename

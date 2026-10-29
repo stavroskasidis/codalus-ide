@@ -92,13 +92,7 @@ public sealed partial class ShellHost
             title = $"{title} ({git.Name})";
         }
 
-        var viewModel = new GitHistoryViewModel(
-            git,
-            query,
-            title,
-            (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)),
-            (commit, file) => InRepositoryAsync(git, () => OpenCommitFileAsync(commit, file)),
-            lines);
+        var viewModel = NewHistory(git, query, title, canShowAllBranches: false, lines);
         var document = new GitHistoryDocument(viewModel, id);
         Layout.OpenDocument(document, focus: true);
         await GitActionAsync(viewModel.LoadAsync).ConfigureAwait(true);
@@ -156,7 +150,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await ShowHistoryAsync(new GitLogQuery { Revision = range.Commit }, "Commit " + range.Commit[..Math.Min(8, range.Commit.Length)]).ConfigureAwait(true);
+        await ShowCommitAsync(range.Commit, Git.ServiceFor(model.Path)).ConfigureAwait(true);
     });
 
     /// <summary>Compares the active file with its version on a branch, tag or commit.</summary>
@@ -202,26 +196,14 @@ public sealed partial class ShellHost
         Layout.OpenDocument(document, focus: true);
     }
 
-    /// <summary>A file of a commit against the commit's first parent.</summary>
-    private Task OpenCommitFileAsync(GitCommit commit, GitCommitFileRow file) => GitActionAsync(() =>
-    {
-        var git = Repo;
-        var parent = commit.Parents.Count > 0 ? commit.Parents[0] : null;
-        var oldPath = file.OldPath ?? file.Path;
-        return OpenRevisionDiffAsync(
-            file.Path,
-            $"{commit.Hash}:{file.Path}",
-            parent is null ? "(none)" : parent[..Math.Min(8, parent.Length)],
-            async () => parent is null || file.Status == 'A' ? string.Empty : await git.ShowAsync(oldPath, parent).ConfigureAwait(true) ?? string.Empty,
-            commit.ShortHash,
-            async () => file.Status == 'D' ? string.Empty : await git.ShowAsync(file.Path, commit.Hash).ConfigureAwait(true) ?? string.Empty);
-    });
-
     /// <summary>A command on a commit of the history.</summary>
     private Task CommitActionAsync(string action, GitCommit commit) => GitActionAsync(async () =>
     {
         switch (action)
         {
+            case "details":
+                await ShowCommitAsync(commit.Hash, Repo).ConfigureAwait(true);
+                return;
             case "checkout":
                 await Repo.CheckoutAsync(commit.Hash).ConfigureAwait(true);
                 break;

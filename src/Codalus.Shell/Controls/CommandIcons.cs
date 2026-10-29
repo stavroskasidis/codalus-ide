@@ -447,6 +447,7 @@ public static class CommandIcons
         // Git.
         ["git.commit"] = new("check", Git),
         ["git.history"] = new("history", Git),
+        ["git.manageBranches"] = new("branch", Git),
         ["git.fetch"] = new("arrow-down", Git),
         ["git.pull"] = new("download", Git),
         ["git.push"] = new("upload", Git),

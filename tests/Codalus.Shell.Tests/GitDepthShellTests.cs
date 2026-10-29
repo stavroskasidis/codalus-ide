@@ -55,42 +55,81 @@ public sealed class GitDepthShellTests
         return (f, folder, greeter);
     }
 
+    /// <summary>The history beside the Git Repository document's tree, once it has <paramref name="rows"/> commits or more.</summary>
+    private static async Task<GitHistoryViewModel> RepositoryHistoryAsync(ShellFixture f, int rows)
+    {
+        try
+        {
+            await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitRepositoryDocument>().Any(d => d.ViewModel.History is { IsLoading: false } h && h.Rows.Count >= rows));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            var documents = string.Join(", ", f.Shell.Layout.Documents.Select(d => $"{d.GetType().Name}:{(d as GitRepositoryDocument)?.ViewModel.History?.Rows.Count}"));
+            throw new InvalidOperationException($"Documents: {documents}; active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}; git log: {f.Shell.GitLog.GetText()}", ex);
+        }
+
+        return f.Shell.Layout.Documents.OfType<GitRepositoryDocument>().Single().ViewModel.History!;
+    }
+
     [AvaloniaFact]
-    public async Task The_history_window_shows_the_graph_details_and_a_commit_file_diff()
+    public async Task View_history_opens_the_git_repository_window_and_a_commit_opens_in_its_own_tab()
     {
         var (f, _, greeter) = await OpenRepositoryAsync();
         await using var fixture = f;
 
+        // View History: the Git Repository document, on the current branch.
         await f.RunAsync("git.history");
-        try
-        {
-            await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count == 3));
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            var documents = string.Join(", ", f.Shell.Layout.Documents.Select(d => $"{d.GetType().Name}:{(d as GitHistoryDocument)?.ViewModel.Rows.Count}"));
-            throw new InvalidOperationException($"Documents: {documents}; active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}; git log: {f.Shell.GitLog.GetText()}", ex);
-        }
+        var history = await RepositoryHistoryAsync(f, 2);
+        Assert.Equal(["Say greetings", "initial"], history.Rows.Select(r => r.Subject));
+        Assert.Equal("Branch / Tag: main", f.Shell.Layout.Documents.OfType<GitRepositoryDocument>().Single().ViewModel.Header);
+        Assert.Contains(history.Rows[0].RefChips, r => r is { Name: "main", Kind: GitRefKind.Local, IsCurrent: true });
+        Assert.Empty(f.Shell.Layout.Documents.OfType<GitHistoryDocument>());
 
-        var history = f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single().ViewModel;
-        Assert.Equal(2, history.Lanes); // main and feature side by side
-        Assert.Contains(history.Rows, r => r.Refs.Contains("main"));
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().Any());
+        // Show All Branches: main and feature side by side, and remembered.
+        Assert.True(history.CanShowAllBranches);
+        history.AllBranches = true;
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 3 });
+        Assert.Equal(2, history.Lanes);
+        Assert.Contains(history.Rows, r => r.Refs.Contains("feature"));
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetBoolean(BuiltIns.HistoryAllBranchesSetting, false));
 
-        // Selecting a commit shows its message and files; a file opens as a diff against the parent.
-        history.Selected = history.Rows.Single(r => r.Subject == "Say howdy");
-        await ShellFixture.PumpUntil(() => history.Files.Any(file => file.Name == "Greeter.cs"));
-        Assert.Contains("Say howdy", history.DetailsText, StringComparison.Ordinal);
-        await history.OpenFileAsync(history.Files.Single());
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any(v => v.RightText.Contains("Howdy from", StringComparison.Ordinal)));
-        var diff = f.Window.GetVisualDescendants().OfType<DiffView>().First(v => v.RightText.Contains("Howdy from", StringComparison.Ordinal));
+        // Tags and remote branches can leave the Branch / Tag column.
+        history.ShowTags = false;
+        Assert.All(history.Rows, r => Assert.DoesNotContain(r.ShownRefs, c => c.Kind == GitRefKind.Tag));
+
+        // Filter History: by message, by author, by a commit id (a prefix of one).
+        history.Filter = "greetings";
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false } && history.Rows.Select(r => r.Subject).SequenceEqual(["Say greetings"]));
+        var howdy = Git(f.Shell.Git.Root!, "rev-parse", "feature").Trim();
+        history.AllBranches = false;
+        history.Filter = howdy[..7];
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false } && history.Rows.Select(r => r.Subject).SequenceEqual(["Say howdy"]));
+        history.Filter = "nothing like this";
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, IsEmpty: true });
+        Assert.Equal("No commits match “nothing like this”.", history.EmptyText);
+
+        // Double-click (View Commit Details): the commit's tab, its first file's diff against the parent.
+        history.Filter = howdy[..7];
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 1 });
+        history.Selected = history.Rows.Single();
+        await history.OpenSelectedAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is GitCommitDocument { ViewModel.HasDetails: true }, describe: () => GitRepositoryShellTests.CommitTabState(f));
+        var commit = (GitCommitDocument)f.Shell.Layout.ActiveDocument!;
+        Assert.Equal($"Commit {howdy[..8]}", commit.Title);
+        Assert.Equal("Say howdy", commit.ViewModel.Message);
+        Assert.Equal("Ada Tester (Author)", commit.ViewModel.Author);
+        Assert.Equal("Ada Tester (Committer)", commit.ViewModel.Committer);
+        Assert.Equal("Changes (1)", commit.ViewModel.ChangesHeader);
+        Assert.Equal(["src/Greetings/Greeter.cs"], commit.ViewModel.Files.Select(file => file.RelativePath));
+        Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Tree.Single().Name);
+        Assert.False(commit.ViewModel.CanExplain); // AI is off
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("Howdy from", StringComparison.Ordinal)), describe: () => GitRepositoryShellTests.CommitTabState(f));
+        var diff = f.Window.GetVisualDescendants().OfType<GitCommitView>().Single().DiffView!;
         Assert.Contains("Hello from", diff.LeftText, StringComparison.Ordinal);
 
-        // Filters: by message.
-        f.Shell.Layout.OpenDocument(f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single());
-        history.MessageFilter = "greetings";
-        await history.ReloadAsync();
-        Assert.Equal(["Say greetings"], history.Rows.Select(r => r.Subject));
+        // The same commit again brings its tab back.
+        await history.OpenSelectedAsync();
+        Assert.Single(f.Shell.Layout.Documents.OfType<GitCommitDocument>());
 
         // File history and line history.
         await f.Shell.OpenFileAsync(greeter);
@@ -187,8 +226,7 @@ public sealed class GitDepthShellTests
         await f.Shell.Git.RefreshAsync();
 
         await f.RunAsync("git.history");
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Any(d => d.ViewModel.Rows.Count > 3));
-        var history = f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Single().ViewModel;
+        var history = await RepositoryHistoryAsync(f, 4);
         history.Selected = history.Rows.Single(r => r.Subject == "Say greetings");
         await history.RunAsync("rebaseInteractive");
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<InteractiveRebaseDocument>().Any());

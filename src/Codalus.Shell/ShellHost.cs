@@ -162,6 +162,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         Layout = new LayoutManager(Workbench.ToolWindows, CreateToolContent);
+        InitializeReferences();
         InitializeCustomEditors();
         WireEditorToLayout();
         WireWinFormsDesigner();
@@ -519,6 +520,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             CoverageResultsViewModel.ToolWindowId => CoverageResults,
             ErrorListViewModel.ToolWindowId => ErrorList,
             FindResultsViewModel.ToolWindowId => FindResults,
+            ReferencesViewModel.ToolWindowId => References,
             DocumentOutlineViewModel.ToolWindowId => DocumentOutline,
             CodeSearchToolWindowId => CodeSearch,
             HierarchyViewModel.ToolWindowId => Hierarchy,
