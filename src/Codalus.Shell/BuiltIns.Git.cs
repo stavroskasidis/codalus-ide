@@ -16,6 +16,7 @@ internal static partial class BuiltIns
           { "key": "primary+0 primary+g", "command": "workbench.view.git.changes" },
           { "key": "ctrl+shift+alt+b", "mac": "cmd+alt+b", "command": "git.toggleBlame", "when": "editorTextFocus && gitRepository" },
           { "key": "primary+0 primary+h", "command": "git.history", "when": "gitRepository" },
+          { "key": "primary+0 primary+r", "command": "git.manageBranches", "when": "gitRepository" },
           { "key": "f8", "command": "git.mergeEditor.nextConflict", "when": "focusedView == mergeEditor" },
           { "key": "shift+f8", "command": "git.mergeEditor.previousConflict", "when": "focusedView == mergeEditor" },
           { "key": "f8", "command": "git.diff.nextChange", "when": "focusedView == diff" },
@@ -206,6 +207,7 @@ internal static partial class BuiltIns
         // M13: history, operations in progress, stash, rebase, tags, remotes, repositories.
         const string Editor = "gitRepository && activeDocumentKind == textFile";
         AddWithArguments("git.history", "View History", shell.HistoryCommandAsync);
+        Add("git.manageBranches", "Manage Branches", () => shell.ShowGitRepositoryAsync());
         Add("git.fileHistory", "View File History", shell.ShowFileHistoryAsync);
         Add("git.lineHistory", "View Line History", shell.ShowLineHistoryAsync, Editor);
         Add("git.showCommit", "Show Commit for Line", shell.ShowCommitAtCaretAsync, Editor);

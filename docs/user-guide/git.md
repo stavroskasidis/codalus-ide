@@ -6,7 +6,7 @@ When the open solution is in a git repository, Codalus IDE shows its state and l
 
 Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
-- **At the top**: the [branch drop-down](#the-branch-drop-down), then **Fetch**, **Pull**, **Push**, **Sync** (pull, then push) and **⋯** (new branch, merge, rebase, update a branch, stash, history, remotes, tags, refresh).
+- **At the top**: the [branch drop-down](#the-branch-drop-down), then **Fetch**, **Pull**, **Push**, **Sync** (pull, then push) and **⋯** (new branch, merge, rebase, update a branch, stash, history, [manage branches](#managing-branches), remotes, tags, refresh).
 - **While Fetch, Pull, Push or Sync runs** (from the window, the Git menu or the palette): the window says what it's doing under the branch ("Pulling…") over a running bar, and **Cancel** takes the place of the four buttons; the status bar shows it too, with its own cancel button. Cancel stops git, and the status bar says it was cancelled.
 - **Outgoing / incoming**: the commits to push and to pull (⇅ 2 / 1); click it, or **View all commits**, for the history. A branch with no upstream offers **Publish branch**; a repository with no remote offers **Publish to a Git Host…** instead (its tooltip says where to add a remote), and neither shows with a detached HEAD or before the first commit. The pull request button creates a pull request on GitHub, Azure DevOps or GitLab.
 - **Commit**: a message is required. The button commits the staged changes when there are some (**Commit Staged**), otherwise every change, new files included (**Commit All**); its menu also commits **and Push** or **and Sync**. `Ctrl+Enter` in the message box commits. **Amend** fills in the last commit's message and rewrites that commit. The **#** button (or typing `#`) mentions an issue or work item.
@@ -20,7 +20,7 @@ Git → Git Changes (`Ctrl+0 Ctrl+G`).
 
 ## The branch drop-down
 
-The branch button at the top of the Git Changes window opens a list of the branches: **Local branches**, the current one first (with a check), then each remote's branches, without the remote's name. A chip on a local branch says how many commits it has to push and to pull (↑2 ↓1, as of the last fetch), and a **worktree** chip that it's checked out in another worktree. Type to filter; `Down` moves into the list.
+The branch button at the top of the Git Changes window opens a list of the branches (**Manage Branches** at its bottom opens [the Git Repository document](#managing-branches)): **Local branches**, the current one first (with a check), then each remote's branches, without the remote's name. A chip on a local branch says how many commits it has to push and to pull (↑2 ↓1, as of the last fetch), and a **worktree** chip that it's checked out in another worktree. Type to filter; `Down` moves into the list.
 
 - **Click a branch, or press `Enter`, to check it out**, as in the classic IDE. Checking out a remote branch switches to your local branch of that name if you have one (the entry says how far behind it is), or makes one that tracks it. A branch checked out in another worktree says where instead, with **Open in New Window**.
 - **Right-click a branch, or click its ⋯** (or `Shift+F10`, the Menu key), for its menu, over the list: **Checkout**, **New Local Branch From…**, **Merge 'feature' into 'main'**, **Rebase 'main' onto 'feature'**, **Update from 'origin/feature'**, **Push**, **Rename…** (`F2`), **Delete** (`Delete`; **Delete from origin…** on a remote branch), **Compare with Current Branch**, **View History** and **Copy Branch Name**. Entries that don't apply aren't shown, and the list says why: during a merge or rebase it says which are hidden (a new branch is still made, without being checked out), and with a detached HEAD the titles name HEAD.
@@ -33,6 +33,16 @@ The branch button at the top of the Git Changes window opens a list of the branc
 With all of a solution's repositories shown, the list has **Common branches** and each repository's branches instead ([Several repositories](#several-repositories)).
 
 Plugins can add to a branch's menu (`gitChanges/branch`).
+
+## Managing branches
+
+Git → Manage Branches (`Ctrl+0 Ctrl+R`; also Git → Branches, the Git Changes window's **⋯** and the bottom of the branch drop-down) opens the **Git Repository** document, as the classic IDE's Git Repository window:
+- **The tree, on the left**: **Branches / Tags** with the repository, "Codalus (main)", under it: the local branches, the current one in bold with how many commits it has to push and to pull (↑2 ↓1); a branch named with `/` sits in folders (`feature/sign-in` under **feature**); then each remote's branches (**remotes/origin**) and the **tags**, collapsed at first. **Pull Requests** lists the open pull requests of the host the remotes are on once you're signed in to it (until then it offers to sign in, and nothing is sent); **Submodules** the repository's submodules and their state. Type in **Filter** to show only the branches, tags, pull requests and submodules whose names contain the text.
+- **Select a branch or a tag** for its history on the right, with the History window's graph, commit details and commit menu. A local branch with an upstream shows **Incoming (n)** above it, the commits it doesn't have yet (expand it to list them), with **Fetch** and **Pull** (**Update** for a branch that isn't checked out), and **Local History (n Outgoing)** with **Push** and **Sync**. A pull request shows the commits of its branch that its target branch doesn't have, once its branch is fetched; a submodule shows its own history.
+- **Double-click a branch, or press `Enter`, to check it out.** A remote branch switches to your local branch of its name, or makes one that tracks it. Double-clicking a pull request opens it in the browser.
+- **Right-click a branch** (or `Shift+F10`, the Menu key) for the same menu as in the [branch drop-down](#the-branch-drop-down): checkout, new branch, merge, rebase, update, push, rename (`F2`), delete (`Delete`), compare, history, copy the name. A **tag** has Checkout (Detached), New Local Branch From…, Push, Delete (`Delete`), Delete from Remote…, View History and Copy Tag Name; deleting asks first. A **pull request** has Check Out, Open in Browser, Show in Pull Requests and Copy Link; a **submodule** Update Submodules, Open in New Window, reveal it, Open in Terminal and Copy Path; the **repository** New Branch…, New Tag…, Fetch, Manage Remotes… and Refresh.
+
+The tree follows git: a branch you make, switch to, pull or delete anywhere (here, in Git Changes or in a terminal) shows at once. With [several repositories](#several-repositories) shown, each repository is a root of its own, with its Branches / Tags, Pull Requests and Submodules, and everything runs in that repository: Fetch, Pull, Push and Sync here act on that repository alone.
 
 ## Resolving conflicts
 

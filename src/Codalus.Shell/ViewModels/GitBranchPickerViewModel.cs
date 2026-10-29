@@ -196,6 +196,9 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     /// <summary>New Branch… (the footer), with the name to fill in, set by the shell.</summary>
     public Func<string?, Task>? NewBranch { get; set; }
 
+    /// <summary>Manage Branches (the footer's link): the Git Repository document, set by the shell.</summary>
+    public Func<Task>? ManageBranches { get; set; }
+
     /// <summary>A branch's menu (B7), set by the shell.</summary>
     public Func<GitBranchDetails, Avalonia.Controls.ContextMenu?>? MenuFor { get; set; }
 

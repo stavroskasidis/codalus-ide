@@ -8,7 +8,7 @@
   <Grid RowDefinitions="Auto,*,4,220">
     <!-- Filters (not for line history). -->
     <WrapPanel Margin="6,4" IsVisible="{Binding CanFilter}">
-      <ComboBox ItemsSource="{Binding Branches}" SelectedItem="{Binding Branch}" MinWidth="160" Margin="0,0,6,0"
+      <ComboBox ItemsSource="{Binding Branches}" SelectedItem="{Binding Branch}" MinWidth="160" Margin="0,0,6,0" IsVisible="{Binding ShowBranchFilter}"
                 ToolTip.Tip="{l:T gitHistory.branch}" AutomationProperties.Name="{l:T gitHistory.branch}" />
       <TextBox x:Name="AuthorBox" Text="{Binding Author}" Width="160" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.author}" AutomationProperties.Name="{l:T gitHistory.filterByAuthor}" />
       <TextBox x:Name="MessageBox" Text="{Binding MessageFilter}" Width="220" Margin="0,0,6,0" PlaceholderText="{l:T gitHistory.message}" AutomationProperties.Name="{l:T gitHistory.filterByMessage}" />

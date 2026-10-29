@@ -93,6 +93,9 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
 
     public bool CanFilter => Lines is null;
 
+    /// <summary>The branch box among the filters; the Git Repository document's tree picks the branch instead.</summary>
+    public bool ShowBranchFilter { get; set; } = true;
+
     public ObservableCollection<GitCommitRow> Rows { get; } = [];
 
     public ObservableCollection<string> Branches { get; } = [AllBranches, "HEAD"];
