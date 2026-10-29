@@ -134,13 +134,13 @@ public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlD
 public sealed record ApplyChangesResponse(ModuleDeltaResult[] Results);
 
 /// <summary>
-/// <see cref="Status"/>: <c>applied</c>; <c>notLoaded</c> (the program doesn't have the module); <c>failed</c>, with the
-/// runtime's reason in <see cref="Message"/>.
+/// <see cref="Status"/>: <c>applied</c>; <c>pending</c> (the program hasn't loaded the module yet: the edits apply when
+/// it does); <c>failed</c>, with the runtime's reason in <see cref="Message"/>.
 /// </summary>
 public sealed record ModuleDeltaResult(Guid ModuleId, string Status, string? Message = null)
 {
     public const string Applied = "applied";
-    public const string NotLoaded = "notLoaded";
+    public const string Pending = "pending";
     public const string Failed = "failed";
 }
 

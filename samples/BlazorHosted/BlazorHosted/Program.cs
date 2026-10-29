@@ -25,6 +25,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapStaticAssets();
+app.MapGet("/api/greeting", () => BlazorHosted.Greeting.Text());
 app.MapRazorComponents<App>()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(BlazorHosted.Client._Imports).Assembly);

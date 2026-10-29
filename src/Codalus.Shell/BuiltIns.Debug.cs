@@ -97,7 +97,7 @@ internal static partial class BuiltIns
         {
             Title = "Hot Reload while debugging",
             Category = "Debugging",
-            Description = "Start Debugging runs a Blazor WebAssembly app's dev server, and a Blazor Web App's server, under dotnet watch, so saving a file (or Apply Code Changes, Alt+F10) applies an edit to WebAssembly components in the browser while you debug them. In a Blazor Web App the debugger attaches to the server once it starts (breakpoints in its Program.cs debug it from the start, without Hot Reload); the server keeps the code it started with until you restart, and edits that need a restart restart the app. The .NET runtime doesn't apply edits to a program the debugger runs, so other apps don't take edits while debugged: use Start with Hot Reload for them.",
+            Description = "Saving a file applies the edit to the program being debugged. Under the Codalus debugger (Debugger for .NET programs) every program takes C#, Visual Basic and Razor edits while debugged: Apply Code Changes (Alt+F10) applies them any time, and Continue applies the ones made while stopped. Start Debugging also runs a Blazor WebAssembly app's dev server, and a Blazor Web App's server, under dotnet watch, so WebAssembly components take edits in the browser; in a Blazor Web App the debugger attaches to the server once it starts (breakpoints in its Program.cs debug it from the start, without Hot Reload), and edits that need a restart restart the app. Under netcoredbg the .NET runtime doesn't apply edits to a program the debugger runs: the server keeps the code it started with until you restart, and other apps need Start with Hot Reload.",
             Order = 5,
         },
         SettingDescriptor.Create(Codalus.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
@@ -124,6 +124,13 @@ internal static partial class BuiltIns
             Enum = [Workbench.Debugging.DebugService.NetcoredbgAdapter, Workbench.Debugging.DebugService.CodalusAdapter],
             EnumDescriptions = ["netcoredbg", "Codalus debugger (preview)"],
             Order = 8,
+        },
+        SettingDescriptor.Create(ShellHost.DebugEditsOfferSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Offer the Codalus debugger for edits",
+            Category = "Debugging",
+            Description = "When you save an edit while netcoredbg debugs a program, offer once to debug with the Codalus debugger, which applies edits to the program while it's debugged.",
+            Order = 9,
         },
         SettingDescriptor.Create(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
         {

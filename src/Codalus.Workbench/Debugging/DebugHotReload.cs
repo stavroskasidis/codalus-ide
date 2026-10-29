@@ -169,9 +169,13 @@ public sealed class DebugHotReload : IAsyncDisposable
             else
             {
                 outcome = await ApplyToAdaptersAsync(update, cancellationToken).ConfigureAwait(false);
-                await (outcome.Kind == HotReloadOutcome.Applied
+                await (outcome.Kind is HotReloadOutcome.Applied or HotReloadOutcome.None
                     ? client.HotReloadCommitAsync(session, cancellationToken)
                     : client.HotReloadDiscardAsync(session, cancellationToken)).ConfigureAwait(false);
+                if (outcome.Kind == HotReloadOutcome.None)
+                {
+                    return outcome;
+                }
             }
 
             Applied?.Invoke(this, outcome);
@@ -202,10 +206,11 @@ public sealed class DebugHotReload : IAsyncDisposable
                 return HotReloadOutcome.Of(HotReloadOutcome.Failed, failed.Message);
             }
 
-            applied |= response.Results.Any(r => r.Status == ModuleDeltaResult.Applied);
+            applied |= response.Results.Any(r => r.Status is ModuleDeltaResult.Applied or ModuleDeltaResult.Pending);
         }
 
-        return applied ? HotReloadOutcome.Of(HotReloadOutcome.Applied) : HotReloadOutcome.Of(HotReloadOutcome.Failed, "The program doesn't have the edited code's module loaded.");
+        // No Codalus debugger in the session took them: the next update is made from this one all the same.
+        return applied ? HotReloadOutcome.Of(HotReloadOutcome.Applied) : HotReloadOutcome.Of(HotReloadOutcome.None);
     }
 
     private async Task EndAsync()

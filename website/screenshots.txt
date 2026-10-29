@@ -13,6 +13,8 @@ debugging.png             Linux     smoke-test-debug-depth.png
 editor-dark.png           Linux     smoke-test-theme-dark.png
 ef-core.png               Linux     smoke-test-ef-model.png
 find-in-files.png         Linux     smoke-test-find-results.png
+git-commit.png            Linux     smoke-test-git-commit.png
+git-repository.png        Linux     smoke-test-git-repository.png
 intellisense.png          Linux     smoke-test-intellisense.png
 maui.png                  Linux     maui-devices.png
 netfx.png                 Windows   netfx-debugging.png

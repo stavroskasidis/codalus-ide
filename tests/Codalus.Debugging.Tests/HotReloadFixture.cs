@@ -26,11 +26,15 @@ public sealed class HotReloadFixture : IAsyncLifetime
     {
         CSharp = new Source(this, Path.Combine(_root, "Debugging", "HotReload"), "HotReload", ".csproj", "Program.cs", "csharp");
         VisualBasic = new Source(this, Path.Combine(_root, "Debugging", "HotReloadVb"), "HotReloadVb", ".vbproj", "Program.vb", "vb");
+        Library = new Source(this, Path.Combine(_root, "Debugging", "HotReloadLib"), "HotReloadLib", ".csproj", "Later.cs", "csharp");
     }
 
     public Source CSharp { get; }
 
     public Source VisualBasic { get; }
+
+    /// <summary>The library the C# program loads late (its first call comes after a file appears).</summary>
+    public Source Library { get; }
 
     public SolutionService Solutions { get; private set; } = null!;
 
@@ -118,7 +122,7 @@ public sealed class HotReloadFixture : IAsyncLifetime
         using var cts = new CancellationTokenSource(s_timeout);
         await Solutions.OpenAsync(solution, true, restore: true, cts.Token);
         var started = Stopwatch.StartNew();
-        while (!(Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == 2 && Languages.Status("csharp") is { State: WorkspaceStates.Ready, Projects: 2 }))
+        while (!(Solutions.CompilerInputs.Count(i => i.Value.State == CompilerInputStates.Ok) == 3 && Languages.Status("csharp") is { State: WorkspaceStates.Ready, Projects: 3 }))
         {
             Assert.True(started.Elapsed < s_timeout, "HotReload.slnx didn't load: " + string.Join('\n', Log().TakeLast(40)));
             await Task.Delay(50);
@@ -126,6 +130,7 @@ public sealed class HotReloadFixture : IAsyncLifetime
 
         await CSharp.OpenAsync();
         await VisualBasic.OpenAsync();
+        await Library.OpenAsync();
     }
 
     /// <summary>Both programs' sources as they were built.</summary>
@@ -133,6 +138,7 @@ public sealed class HotReloadFixture : IAsyncLifetime
     {
         await CSharp.RestoreAsync();
         await VisualBasic.RestoreAsync();
+        await Library.RestoreAsync();
     }
 
     private static Position Position(string text, int offset)

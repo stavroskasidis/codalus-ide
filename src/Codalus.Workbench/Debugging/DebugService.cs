@@ -769,9 +769,18 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         await PrepareDetachAsync(compound).ConfigureAwait(false);
+        var prepared = watch.Elapsed;
         await compound.DetachPrimaryAsync(CancellationToken.None).ConfigureAwait(false);
+        var detached = watch.Elapsed;
         await EndAsync(compound).ConfigureAwait(false);
+        if (watch.Elapsed > TimeSpan.FromSeconds(2))
+        {
+            // Where a release that waited went (dotnet watch's restart followed late, or never: CI run 40920415026).
+            Output?.Invoke(this, new DebugOutput("console", string.Create(CultureInfo.InvariantCulture,
+                $"Releasing the server took {watch.Elapsed.TotalSeconds:0.0} s: preparing {prepared.TotalSeconds:0.0} s, detaching {(detached - prepared).TotalSeconds:0.0} s, ending the session {(watch.Elapsed - detached).TotalSeconds:0.0} s.\n")));
+        }
     }
 
     /// <summary>
