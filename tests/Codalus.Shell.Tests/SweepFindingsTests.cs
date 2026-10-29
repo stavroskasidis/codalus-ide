@@ -85,11 +85,7 @@ public sealed class SweepFindingsTests
 
         async Task<Notification> AttachAsync(string windows, string unix)
         {
-            await File.WriteAllTextAsync(docker, OperatingSystem.IsWindows() ? "@echo off\r\n" + windows.ReplaceLineEndings("\r\n") + "\r\n" : "#!/bin/sh\n" + unix + "\n", CancellationToken.None);
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(docker, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            }
+            Codalus.Tests.StandInScript.Write(docker, OperatingSystem.IsWindows() ? "@echo off\r\n" + windows.ReplaceLineEndings("\r\n") + "\r\n" : "#!/bin/sh\n" + unix + "\n");
 
             notifications.DismissAll();
             await f.Shell.AttachToRemoteProcessAsync("container");
@@ -130,16 +126,12 @@ public sealed class SweepFindingsTests
         Assert.Equal(string.Empty, settings.GetString(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting));
         Assert.Equal(f.Shell.ContainerEngine.Tool, f.Shell.AttachContainerTool);
 
-        async Task<string> StandInAsync(string name, string container)
+        string StandIn(string name, string container)
         {
             var path = Path.Combine(f.UserData, OperatingSystem.IsWindows() ? name + ".cmd" : name);
-            await File.WriteAllTextAsync(path, OperatingSystem.IsWindows()
+            Codalus.Tests.StandInScript.Write(path, OperatingSystem.IsWindows()
                 ? $"@echo off\r\necho {name}1\t{container}\tdemo:1\r\n"
-                : $"#!/bin/sh\nprintf '{name}1\\t{container}\\tdemo:1\\n'\n", CancellationToken.None);
-            if (!OperatingSystem.IsWindows())
-            {
-                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-            }
+                : $"#!/bin/sh\nprintf '{name}1\\t{container}\\tdemo:1\\n'\n");
 
             return $"\"{path}\"";
         }
@@ -157,11 +149,11 @@ public sealed class SweepFindingsTests
         }
 
         // The Containers window's engine: a machine with only Podman (containers.tool names it here, as detection would).
-        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, await StandInAsync("podman", "web-on-podman"), SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(Workbench.Containers.ContainerEngine.ToolSetting, StandIn("podman", "web-on-podman"), SettingScope.User, CancellationToken.None);
         Assert.Equal(["web-on-podman"], await ListedAsync());
 
         // debug.containerTool, when set, is the user's choice for attaching.
-        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, await StandInAsync("docker", "web-on-docker"), SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(Workbench.Debugging.Remote.RemoteTargets.ContainerToolSetting, StandIn("docker", "web-on-docker"), SettingScope.User, CancellationToken.None);
         Assert.Equal(["web-on-docker"], await ListedAsync());
 
         // Without it, no engine names the setting in effect.

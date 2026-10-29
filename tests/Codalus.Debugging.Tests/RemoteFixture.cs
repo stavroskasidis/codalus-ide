@@ -109,7 +109,7 @@ public static class RemoteFixture
         if (!OperatingSystem.IsWindows())
         {
             var script = Path.Combine(folder, "fake-ssh");
-            File.WriteAllText(script, """
+            Codalus.Tests.StandInScript.Write(script, """
                 #!/bin/sh
                 # A stand-in for ssh: skip the options and the destination, run the command here.
                 while [ $# -gt 0 ]; do
@@ -122,7 +122,6 @@ public static class RemoteFixture
                 shift
                 exec sh -c "$*"
                 """.Replace("\r\n", "\n", StringComparison.Ordinal));
-            File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             return script;
         }
 
