@@ -252,11 +252,11 @@ public class EditorTests
         Assert.Contains("public double Size { get; }", shapes.Model.Text.Text, StringComparison.Ordinal);
         Assert.True(shapes.Model.IsModified);
 
-        // Find All References into the Find Results.
+        // Find All References into the References window.
         MoveCaret(shapes, "class Circle", "class C".Length);
         await f.Shell.FindReferencesAsync();
-        Assert.Contains(f.Shell.FindResults.Rows, r => r.IsHeader && r.Path == programPath);
-        Assert.Contains("References to 'Circle'", f.Shell.FindResults.Summary, StringComparison.Ordinal);
+        Assert.Contains(f.Shell.References.Rows, r => !r.IsHeader && r.Path == programPath);
+        Assert.Equal("'Circle' references", f.Shell.References.Title);
 
         // Find in Files.
         f.Shell.FindInFiles();

@@ -244,7 +244,7 @@ public sealed class SweepFindingsTests
         ShellFixture.Pump();
 
         await f.ExecuteAsync("editor.action.showReferences");
-        await ShellFixture.PumpUntil(() => f.Shell.FindResults.Summary?.Contains("References to 'Circle'", StringComparison.Ordinal) == true, seconds: 60);
+        await ShellFixture.PumpUntil(() => f.Shell.References.Title == "'Circle' references" && f.Shell.References.HasResults, seconds: 60);
         Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Severity == NotificationSeverity.Error);
     }
 
