@@ -1018,6 +1018,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
 
         Volatile.Write(ref _detaching, 1); // the session ends once the others did, not with the primary
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        TimeSpan disconnected = default, disposed = default;
         try
         {
             try
@@ -1028,12 +1030,14 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
             }
 
+            disconnected = watch.Elapsed;
             lock (_gate)
             {
                 _parts[0].Ended = true; // disposed here, not again with the session
             }
 
             await Primary.DisposeAsync().ConfigureAwait(false);
+            disposed = watch.Elapsed;
             foreach (var part in Parts().Where(p => p.Index != 0).Reverse())
             {
                 try
@@ -1047,9 +1051,18 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
         finally
         {
+            // A detach that waited (a server dotnet watch restarts, 7 to 8 s on macOS, never ending on its CI runner,
+            // run 40920415026): which step it waited in.
+            if (watch.Elapsed > TimeSpan.FromSeconds(2))
+            {
+                Log?.Invoke(this, $"Detaching from the server took {Seconds(watch.Elapsed)} s: the disconnect {Seconds(disconnected)} s, the adapter's end {Seconds(disposed - disconnected)} s, the other programs' {Seconds(watch.Elapsed - disposed)} s.");
+            }
+
             _closed.TrySetResult();
         }
     }
+
+    private static string Seconds(TimeSpan time) => time.TotalSeconds.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Breakpoint exclusions by adapter and file (paths compared as the session's breakpoints are).</summary>
     private sealed class ExclusionComparer : IEqualityComparer<(int Part, string Path)>
