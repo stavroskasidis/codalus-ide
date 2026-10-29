@@ -12,7 +12,7 @@ public interface IDebugAdapter : IAsyncDisposable
     /// <summary>Completes on the adapter's <c>initialized</c> event: breakpoints can be sent, then <c>configurationDone</c>.</summary>
     Task Initialized { get; }
 
-    /// <summary>Completes when the adapter exits or closes its connection.</summary>
+    /// <summary>Completes when the adapter exits or closes its connection, once every event it sent was raised.</summary>
     Task Closed { get; }
 
     /// <summary>Adapter events, in order.</summary>

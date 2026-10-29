@@ -45,7 +45,9 @@ public sealed class DapConnection : IAsyncDisposable
     private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<JsonElement>>> _handlers = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource _shutdown = new();
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _outputEnded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _seq;
+    private int _reading = 1;
     private Task _readLoop = Task.CompletedTask;
     private Task _eventLoop = Task.CompletedTask;
 
@@ -61,8 +63,15 @@ public sealed class DapConnection : IAsyncDisposable
     /// <summary>Raised for each accepted reverse request, on the event loop, in order with the events.</summary>
     public event Func<DapReverseRequest, Task>? ReverseRequestReceived;
 
-    /// <summary>Completes when the adapter's output ends (it exited or closed the stream).</summary>
+    /// <summary>
+    /// Completes when the adapter's output ended (it exited or closed the stream) and every event read before was raised:
+    /// a compound session ends a program on it, and dropped the events still waiting for the event loop (its last
+    /// output, exited, terminated; Linux CI, run 40938631260).
+    /// </summary>
     public Task Closed => _closed.Task;
+
+    /// <summary>Completes when the adapter's output ended, or the connection was abandoned: no more messages are read.</summary>
+    internal Task OutputEnded => _outputEnded.Task;
 
     /// <summary>
     /// Accepts the reverse request <paramref name="command"/> (<c>startDebugging</c>): it is answered with success at
@@ -99,6 +108,13 @@ public sealed class DapConnection : IAsyncDisposable
         _unanswered[seq] = (command, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
+            if (Volatile.Read(ref _reading) == 0)
+            {
+                // No answer can be read any more: an event handler that asked while the last events were raised would
+                // wait forever, and Closed with it.
+                throw new DapConnectionLostException("The debug adapter exited.");
+            }
+
             await WriteAsync(writer =>
             {
                 writer.WriteNumber("seq", seq);
@@ -286,12 +302,27 @@ public sealed class DapConnection : IAsyncDisposable
             failure = ex;
         }
 
+        EndReading(failure);
+        await CloseAfterEventsAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>No more messages are read: the events end, and the requests waiting for an answer fail.</summary>
+    private void EndReading(Exception? failure)
+    {
+        Interlocked.Exchange(ref _reading, 0);
         _events.Writer.TryComplete();
         foreach (var pending in _pending.Values)
         {
             pending.TrySetException(new DapConnectionLostException("The debug adapter exited.", failure));
         }
 
+        _outputEnded.TrySetResult();
+    }
+
+    /// <summary>Completes <see cref="Closed"/> once the event loop raised every event read.</summary>
+    private async Task CloseAfterEventsAsync()
+    {
+        await _eventLoop.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         _closed.TrySetResult();
     }
 
@@ -367,17 +398,12 @@ public sealed class DapConnection : IAsyncDisposable
     /// <summary>
     /// Ends the connection without waiting for the end of the adapter's output: for an adapter that exited while a
     /// process it started still holds that output open (on Unix a debuggee inherits netcoredbg's pipes, M33). Pending
-    /// requests fail, the events end, and <see cref="Closed"/> completes.
+    /// requests fail, the events end, and <see cref="Closed"/> completes once those read were raised.
     /// </summary>
     public void Abandon()
     {
-        _events.Writer.TryComplete();
-        foreach (var pending in _pending.Values)
-        {
-            pending.TrySetException(new DapConnectionLostException("The debug adapter exited."));
-        }
-
-        _closed.TrySetResult();
+        EndReading(null);
+        _ = CloseAfterEventsAsync();
     }
 
     public async ValueTask DisposeAsync()
@@ -408,6 +434,7 @@ public sealed class DapConnection : IAsyncDisposable
         catch (TimeoutException)
         {
             ended = false;
+            _closed.TrySetResult(); // an event handler that never returns doesn't keep the session open
         }
 
         if (ended)
