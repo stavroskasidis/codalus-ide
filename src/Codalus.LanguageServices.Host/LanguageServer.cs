@@ -35,7 +35,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
-        _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution);
+        _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
@@ -340,6 +340,7 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private void ProjectsChanged()
     {
+        _hotReload.ProjectsChanged();
         _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(WorkspaceStates.Loading, _workspace.ProjectCount, 0), ProtocolJsonContext.Default.WorkspaceStatusParams);
 
         // Open documents may have moved between projects, or their references changed.

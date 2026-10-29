@@ -1437,6 +1437,11 @@ public sealed class DebugService : IAsyncDisposable
             return;
         }
 
+        if (BeforeResume is { } before && (!await before(_session.Token).ConfigureAwait(false) || !ReferenceEquals(_adapter, adapter) || State != DebugState.Stopped))
+        {
+            return;
+        }
+
         _runTo = new RunTarget(new BreakpointLocation(path, line), force);
         try
         {
@@ -1472,11 +1477,30 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Runs before Continue, a step or Run to Cursor lets a stopped program go on: Hot Reload while debugging (M55)
+    /// applies the edits made while stopped first. False keeps the program stopped (the user chose to restart).
+    /// </summary>
+    public Func<CancellationToken, Task<bool>>? BeforeResume { get; set; }
+
+    /// <summary>The session's Codalus debuggers (M54), which take edits while debugging (M55): a compound session can have several.</summary>
+    public IReadOnlyList<DebugAdapter> CodalusAdapters => _adapter is { } adapter ? [.. adapter.Adapters.OfType<DebugAdapter>().Where(a => a.IsCodalus)] : [];
+
     private async Task ResumeAsync(Func<IDebugAdapter, Task> resume)
     {
         if (_adapter is not { } adapter || State != DebugState.Stopped)
         {
             return;
+        }
+
+        if (BeforeResume is { } before && !await before(_session.Token).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_adapter, adapter) || State != DebugState.Stopped)
+        {
+            return; // the session ended or moved on while the edits were applied
         }
 
         MarkRunning();

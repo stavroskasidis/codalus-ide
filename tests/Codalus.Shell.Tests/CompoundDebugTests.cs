@@ -72,7 +72,17 @@ public sealed class CompoundDebugTests
             f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
             f.Shell.Debugger.Breakpoints.Toggle(script, scriptLine);
 
-            string Diagnostics() => "Debug Console:\n" + f.Shell.DebugLog.GetText();
+            string Diagnostics() => "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nNotifications:\n"
+                + string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => $"{n.Severity}: {n.Message} [{string.Join(", ", n.Actions)}]"));
+
+            // Continue applies the edits made while stopped first (M55): a question it asked, or an answer that never
+            // came, held the session at its first stop until the 15-minute hang dump (arm64 CI, run 40896721482).
+            async Task ContinueAsync()
+            {
+                var resume = f.Shell.Debugger.ContinueAsync();
+                await ShellFixture.PumpUntil(() => resume.IsCompleted, 120, () => "Continue didn't return. Hot Reload active: " + f.Shell.DebugEdits.IsActive + ". " + Diagnostics());
+                await resume;
+            }
             async Task<StopInfo> NextStopAsync(StopInfo? previous, int seconds)
             {
                 try
@@ -105,7 +115,7 @@ public sealed class CompoundDebugTests
             var previous = first;
             for (var i = 0; i < 2; i++)
             {
-                await f.Shell.Debugger.ContinueAsync();
+                await ContinueAsync();
                 var stop = await NextStopAsync(previous, 180);
                 previous = stop;
                 Assert.StartsWith("Browser:", ThreadName(stop), StringComparison.Ordinal);

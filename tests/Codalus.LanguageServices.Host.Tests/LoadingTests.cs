@@ -70,4 +70,33 @@ public sealed class LoadingTests : IAsyncLifetime
         await LanguageFixture.WaitUntilAsync(() => _diagnostics[uri].Any(d => d.Code == "CS0246"), TimeSpan.FromSeconds(60), () => Seen(uri));
         await LanguageFixture.WaitUntilAsync(() => _status.Any(s => s.State == WorkspaceStates.Ready), TimeSpan.FromSeconds(60), () => Seen(uri));
     }
+
+    [Fact]
+    public async Task A_Hot_Reload_session_starts_once_the_solution_has_loaded()
+    {
+        // M55: a baseline taken while projects were still arriving took their arrival for changed references, a
+        // restart, and Continue waited on that question (arm64 CI, run 40896721482).
+        await _client.UpdateProjectsAsync([], Ct, loading: true);
+        var start = _client.HotReloadStartAsync("loading", [], ["Baseline"], Ct);
+        await Task.Delay(1000, Ct);
+        Assert.False(start.IsCompleted, "The session started while the solution was loading.");
+
+        await _client.UpdateProjectsAsync([], Ct, loading: false);
+        Assert.False(await start.WaitAsync(TimeSpan.FromSeconds(60), Ct)); // no projects to follow
+    }
+
+    [Fact]
+    public async Task A_Hot_Reload_start_waiting_for_the_solution_ends_with_the_debug_session()
+    {
+        await _client.UpdateProjectsAsync([], Ct, loading: true);
+        using var cancel = new CancellationTokenSource();
+        var start = _client.HotReloadStartAsync("ended", [], ["Baseline"], cancel.Token);
+        await Task.Delay(500, Ct);
+        await cancel.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start.WaitAsync(TimeSpan.FromSeconds(60), Ct));
+
+        // The host dropped the wait: a later start is answered.
+        await _client.UpdateProjectsAsync([], Ct, loading: false);
+        Assert.False(await _client.HotReloadStartAsync("after", [], ["Baseline"], Ct).WaitAsync(TimeSpan.FromSeconds(60), Ct));
+    }
 }
