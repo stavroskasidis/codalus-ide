@@ -81,6 +81,20 @@ public sealed class TemplateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_command_stopped_at_its_limit_keeps_what_it_printed_while_a_process_it_started_holds_the_pipe()
+    {
+        // A detached child that keeps the command's output open after the command is stopped (ProcessTree.Kill doesn't
+        // reach it): what was printed before the limit used to be lost waiting for the pipe to close (macOS, M55's
+        // validation, the test below, where "started" was missing).
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A detached child holding the pipe is the sh stand-in's.");
+        File.WriteAllText(StandIn, "#!/bin/sh\necho started\n(sleep 12 &)\nsleep 12\n");
+        var service = new TemplateService(null, Neutral, () => StandIn) { CommandTimeout = TimeSpan.FromSeconds(1) };
+        var result = await ((ITemplateCli)service).RunAsync(["new", "install", "Slow.Templates"], TestContext.Current.CancellationToken);
+        Assert.False(result.Succeeded);
+        Assert.Contains("started", result.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_command_that_runs_past_its_limit_fails_with_what_it_printed()
     {
         if (OperatingSystem.IsWindows())

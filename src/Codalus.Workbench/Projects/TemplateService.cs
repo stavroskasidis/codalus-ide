@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -442,8 +443,13 @@ public sealed partial class TemplateService : ITemplateCli
         try
         {
             using var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet did not start.");
-            var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+
+            // Read as it comes: on the limit, what was printed so far is the command's, even if a process it started
+            // still holds the pipe (the stand-in's sleep on a loaded Mac did, and "started" was lost to ReadToEnd).
+            var output = new StringBuilder();
+            var errors = new StringBuilder();
+            var stdout = CopyAsync(process.StandardOutput, output, cancellationToken);
+            var stderr = CopyAsync(process.StandardError, errors, cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(CommandTimeout);
             try
@@ -459,25 +465,56 @@ public sealed partial class TemplateService : ITemplateCli
                 }
 
                 // The limit, not the caller's cancel: a failure, with what the command printed before it was stopped.
-                var printed = string.Empty;
                 try
                 {
-                    printed = string.Concat(await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false));
+                    await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is TimeoutException or IOException or OperationCanceledException or ObjectDisposedException)
                 {
-                    // Nothing more to show than the line below.
+                    // What came before the pipes closed (or didn't) is in the builder.
                 }
+
+                var printed = Printed(output, errors);
 
                 var stopped = Localizer.Format("msg.templates.commandTimedOut", "Stopped dotnet {0}: it didn't finish within {1} minutes.", string.Join(' ', args), Math.Round(CommandTimeout.TotalMinutes, 1));
                 return (-1, (printed.Length > 0 ? printed.TrimEnd() + Environment.NewLine : string.Empty) + stopped + Environment.NewLine);
             }
 
-            return (process.ExitCode, (await stdout.ConfigureAwait(false)) + (await stderr.ConfigureAwait(false)));
+            await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
+            return (process.ExitCode, Printed(output, errors));
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
             return (-1, ex.Message);
+        }
+    }
+
+    /// <summary>Copies a process's stream into <paramref name="into"/> as it comes, so it can be read at any moment.</summary>
+    private static async Task CopyAsync(StreamReader reader, StringBuilder into, CancellationToken cancellationToken)
+    {
+        var buffer = new char[4096];
+        int read;
+        while ((read = await reader.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+        {
+            lock (into)
+            {
+                into.Append(buffer, 0, read);
+            }
+        }
+    }
+
+    /// <summary>The command's output, then its errors, as far as they have come.</summary>
+    private static string Printed(StringBuilder output, StringBuilder errors)
+    {
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        lock (errors)
+        {
+            return text + errors.ToString();
         }
     }
 }
