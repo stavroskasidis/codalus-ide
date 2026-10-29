@@ -212,9 +212,8 @@ jobs:
           devtools: true
           display: true
           downloads: true
-      # debug-codalus builds only its test project (with the debug companion host it references).
-      - run: dotnet restore ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }}
-      - run: dotnet build ${{ matrix.shard == 'debug-codalus' && 'tests/Codalus.Debugging.Tests' || 'Codalus.slnx' }} -c Release --no-restore
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
         # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'

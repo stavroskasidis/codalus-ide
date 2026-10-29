@@ -33,6 +33,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private readonly Lock _gate = new();
     private readonly List<(IClrModule Module, ClrModuleInfo Info)> _modules = [];
+    private readonly HashSet<IClrModule> _loaded = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, List<BreakpointState>> _breakpoints = new(s_paths);
     private readonly List<BreakpointState> _functionBreakpoints = [];
     private readonly Dictionary<IClrBreakpoint, BreakpointState> _byBreakpoint = new(ReferenceEqualityComparer.Instance);
@@ -355,8 +356,27 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     // ------------------------------------------------------------------ modules
 
+    /// <summary>
+    /// Registers a module a stop's frames are in that its load event hasn't brought yet: an attach's module loads arrive
+    /// after <c>DebugActiveProcess</c> returns, in order, and a Break All right after the attach (or a stop in between)
+    /// can come first, which showed the program's own frames without source (CI, run 40792217459, Linux). Its load event
+    /// then finds it registered.
+    /// </summary>
+    private void EnsureModule(IClrModule module)
+    {
+        if (!_loaded.Contains(module))
+        {
+            LoadModule(module);
+        }
+    }
+
     private void LoadModule(IClrModule module)
     {
+        if (!_loaded.Add(module))
+        {
+            return; // registered at a stop that came first (EnsureModule)
+        }
+
         ClrModuleInfo? info = null;
         string? problem = null;
         if (!module.IsDynamic && module.Path.Length > 0)
@@ -414,6 +434,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private void UnloadModule(IClrModule module)
     {
+        _loaded.Remove(module);
         var index = _modules.FindIndex(m => ReferenceEquals(m.Module, module));
         if (index >= 0)
         {
@@ -820,6 +841,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _step = null;
             ClearHandles();
             var threads = Process.Threads();
+            foreach (var module in threads.SelectMany(t => t.Frames()).Select(f => f.Module).OfType<IClrModule>().Distinct())
+            {
+                EnsureModule(module);
+            }
+
             thread = threads.FirstOrDefault(t => t.Frames().Any(f => f.Module is { } m && Types.Info(m) is { HasSymbols: true })) ?? (threads.Count > 0 ? threads[0] : null);
         }
 
@@ -922,6 +948,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             RequireStopped();
             var frames = VisibleFrames(Thread(threadId));
+            foreach (var module in frames.Select(f => f.Module).OfType<IClrModule>().Distinct())
+            {
+                EnsureModule(module);
+            }
+
             var result = new List<StackFrame>();
             foreach (var frame in frames.Skip(start).Take(levels > 0 ? levels : int.MaxValue))
             {
