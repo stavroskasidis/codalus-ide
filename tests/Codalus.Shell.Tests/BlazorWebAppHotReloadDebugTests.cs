@@ -277,6 +277,12 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // The new server serves on the same port, and the session attached to it: the breakpoint stops it again
         // as it prerenders the page the session opened again.
         var again = await NextStopAsync(f, first, 300);
+
+        // How long the follow waited, on the detach branch (7 to 8 s on macOS): its timings, when it says them.
+        foreach (var line in f.Shell.DebugLog.GetText().Split('\n').Where(l => l.Contains(" took ", StringComparison.Ordinal)))
+        {
+            await Console.Error.WriteLineAsync("[BlazorWebAppHotReloadDebugTests] " + line);
+        }
         var restarted = f.Shell.Debugger.ProcessId!.Value;
         Assert.NotEqual(server, restarted);
         Assert.Equal(restarted, f.Shell.WatchedServerDebugSession?.ProcessId);
