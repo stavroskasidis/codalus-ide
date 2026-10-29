@@ -121,6 +121,26 @@ public sealed class GitRepositoryShellTests
         ShellFixture.Pump();
     }
 
+    /// <summary>
+    /// What a wait on a commit's tab saw, for its failure message: the active document, each commit tab's state and its
+    /// diff's, the views in the window, the notifications and git's log (Windows CI, run 40911293019, where the tab's
+    /// diff of an incoming commit's new file never showed and the wait said only that it timed out).
+    /// </summary>
+    internal static string CommitTabState(ShellFixture f)
+    {
+        var tabs = f.Shell.Layout.Documents.OfType<GitCommitDocument>().Select(d => d.ViewModel).Select(vm =>
+            $"{vm.Title}: loading {vm.IsLoading}, details {vm.HasDetails}, error '{vm.Error}', files [{string.Join(", ", vm.Files.Select(file => $"{file.Status} {file.RelativePath}"))}], "
+            + $"diff {(vm.Diff is { } diff ? $"loading {diff.IsLoading}, '{diff.Summary}'" : "none")}");
+        var views = f.Window.GetVisualDescendants().OfType<GitCommitView>().Select(v => v.DiffView is { } d
+            ? $"view: left '{Short(d.LeftText)}', right '{Short(d.RightText)}'"
+            : "view: no diff");
+        var log = f.Shell.GitLog.GetText();
+        return $"active {f.Shell.Layout.ActiveDocument?.GetType().Name} '{f.Shell.Layout.ActiveDocument?.Title}'; tabs: {string.Join(" | ", tabs)}; {string.Join(" | ", views)}; "
+            + $"notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}; git log: {(log.Length > 3000 ? log[^3000..] : log)}";
+
+        static string Short(string text) => text.Length > 80 ? text[..80] + "…" : text;
+    }
+
     private static IEnumerable<string> Texts(IEnumerable<GitRepositoryNode> nodes) => nodes.Select(n => n.Text);
 
     [AvaloniaFact]
@@ -212,7 +232,7 @@ public sealed class GitRepositoryShellTests
         // An incoming commit's details, in its own tab (a picture of it too).
         history.Selected = history.IncomingRows[0];
         await history.OpenSelectedAsync();
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("notes", StringComparison.Ordinal)));
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("notes", StringComparison.Ordinal)), describe: () => CommitTabState(f));
         Assert.Equal(["NOTES.md"], ((GitCommitDocument)f.Shell.Layout.ActiveDocument!).ViewModel.Files.Select(file => file.RelativePath));
         Snapshots(f.Window, "git-commit");
 

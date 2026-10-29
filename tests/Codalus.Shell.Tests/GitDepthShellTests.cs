@@ -113,7 +113,7 @@ public sealed class GitDepthShellTests
         await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 1 });
         history.Selected = history.Rows.Single();
         await history.OpenSelectedAsync();
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is GitCommitDocument { ViewModel.HasDetails: true });
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is GitCommitDocument { ViewModel.HasDetails: true }, describe: () => GitRepositoryShellTests.CommitTabState(f));
         var commit = (GitCommitDocument)f.Shell.Layout.ActiveDocument!;
         Assert.Equal($"Commit {howdy[..8]}", commit.Title);
         Assert.Equal("Say howdy", commit.ViewModel.Message);
@@ -123,7 +123,7 @@ public sealed class GitDepthShellTests
         Assert.Equal(["src/Greetings/Greeter.cs"], commit.ViewModel.Files.Select(file => file.RelativePath));
         Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Tree.Single().Name);
         Assert.False(commit.ViewModel.CanExplain); // AI is off
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("Howdy from", StringComparison.Ordinal)));
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("Howdy from", StringComparison.Ordinal)), describe: () => GitRepositoryShellTests.CommitTabState(f));
         var diff = f.Window.GetVisualDescendants().OfType<GitCommitView>().Single().DiffView!;
         Assert.Contains("Hello from", diff.LeftText, StringComparison.Ordinal);
 
