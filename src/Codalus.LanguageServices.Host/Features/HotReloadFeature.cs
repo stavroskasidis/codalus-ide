@@ -3,6 +3,7 @@ using Codalus.LanguageServices.Protocol;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Contracts.EditAndContinue;
 using Microsoft.CodeAnalysis.EditAndContinue;
+using Microsoft.CodeAnalysis.Text;
 using Diagnostic = Microsoft.CodeAnalysis.Diagnostic;
 using Location = Codalus.LanguageServices.Protocol.Location;
 
@@ -39,12 +40,41 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution)
         public ValueTask PrepareModuleForUpdateAsync(Guid module, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// The text the build compiled, when Roslyn asks for it (a document's text doesn't match the PDB, or it checks a file
+    /// it hadn't read): the session's start had it, before any edit. Without this Roslyn reads the file, and a file
+    /// saved with an edit before the first apply no longer matches the build, so its edits were ignored as out of sync.
+    /// </summary>
+    private sealed class StartTexts(Solution start) : IPdbMatchingSourceTextProvider
+    {
+        public async ValueTask<string?> TryGetMatchingSourceTextAsync(string filePath, ImmutableArray<byte> requiredChecksum, SourceHashAlgorithm checksumAlgorithm, CancellationToken cancellationToken)
+        {
+            foreach (var id in start.GetDocumentIdsWithFilePath(filePath))
+            {
+                if (start.GetDocument(id) is not { } document)
+                {
+                    continue;
+                }
+
+                var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+                var content = text.ToString();
+                if (SourceText.From(content, text.Encoding ?? new System.Text.UTF8Encoding(false), checksumAlgorithm).GetChecksum().SequenceEqual(requiredChecksum))
+                {
+                    return content;
+                }
+            }
+
+            return null;
+        }
+    }
+
     public async Task<bool> StartAsync(HotReloadStartParams parameters, CancellationToken cancellationToken)
     {
         End(parameters.Session);
         var solution = currentSolution();
+        // No projects named (an attach): every project of the solution counts as running.
         var running = solution.Projects
-            .Where(p => p.FilePath is { } path && parameters.Projects.Any(r => Paths.Comparer.Equals(Path.GetFullPath(r), Path.GetFullPath(path))))
+            .Where(p => p.FilePath is { } path && (parameters.Projects.Length == 0 || parameters.Projects.Any(r => Paths.Comparer.Equals(Path.GetFullPath(r), Path.GetFullPath(path)))))
             .ToImmutableDictionary(p => p.Id, _ => new RunningProjectOptions { RestartWhenChangesHaveNoEffect = false });
         if (running.IsEmpty)
         {
@@ -55,7 +85,7 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution)
 
         // What the build compiled: a document edited since (open and unsaved) is read from disk for the baseline.
         await EditAndContinueService.HydrateDocumentsAsync(solution, cancellationToken).ConfigureAwait(false);
-        var id = service.StartDebuggingSession(solution, new Debugger([.. parameters.Capabilities]), NullPdbMatchingSourceTextProvider.Instance, reportDiagnostics: false);
+        var id = service.StartDebuggingSession(solution, new Debugger([.. parameters.Capabilities]), new StartTexts(solution), reportDiagnostics: false);
         lock (_sessions)
         {
             _sessions[parameters.Session] = new Session(id, service, running);

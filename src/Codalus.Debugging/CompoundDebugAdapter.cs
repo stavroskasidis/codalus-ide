@@ -144,6 +144,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>The adapters in the session.</summary>
     public int PartCount => Parts().Count;
 
+    public IReadOnlyList<IDebugAdapter> Adapters => [.. Parts().SelectMany(p => p.Adapter.Adapters)];
+
     /// <summary>Each part's adapter (<see cref="IDebugAdapter.Describe"/>).</summary>
     public string Describe() => string.Join(" | ", Parts().Select(p => $"{p.Name}{(p.Starting ? " (starting)" : string.Empty)}: {p.Adapter.Describe()}"));
 

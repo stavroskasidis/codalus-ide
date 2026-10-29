@@ -647,7 +647,7 @@ public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);
 
 /// <summary>
 /// Starts a Hot Reload session (M55) named <see cref="Session"/> for the debugged program built from
-/// <see cref="Projects"/> (project file paths), with the runtime's <see cref="Capabilities"/> (Roslyn's names).
+/// <see cref="Projects"/> (project file paths; empty: every project), with the runtime's <see cref="Capabilities"/> (Roslyn's names).
 /// </summary>
 public sealed record HotReloadStartParams(string Session, string[] Projects, string[] Capabilities);
 
