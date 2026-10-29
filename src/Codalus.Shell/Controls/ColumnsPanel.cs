@@ -48,10 +48,20 @@ public sealed class ColumnsPanel : Panel
         var columns = new (double Left, double Width)[widths.Count];
         var others = widths.Skip(1).Sum();
         var first = double.IsInfinity(width) ? Math.Max(MinFirstWidth, widths.Count > 0 ? widths[0] : 0) : Math.Max(MinFirstWidth, width - others);
+
+        // Too narrow for every column: the first keeps its minimum (or 40% of a row narrower still) and the others share
+        // the rest in proportion, as the classic IDE squeezes its columns, so none runs past the row's edge.
+        var scale = 1.0;
+        if (!double.IsInfinity(width) && first + others > width)
+        {
+            first = Math.Min(MinFirstWidth, width * 0.4);
+            scale = others > 0 ? Math.Max(0, width - first) / others : 0;
+        }
+
         var left = 0.0;
         for (var i = 0; i < widths.Count; i++)
         {
-            columns[i] = (left, i == 0 ? first : widths[i]);
+            columns[i] = (left, i == 0 ? first : widths[i] * scale);
             left += columns[i].Width;
         }
 

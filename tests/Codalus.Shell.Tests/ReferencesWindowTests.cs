@@ -245,7 +245,12 @@ public sealed class ReferencesWindowTests
         var columns = ColumnsPanel.Layout(window.Widths, 1000);
         Assert.Equal(1000 - window.Widths.Skip(1).Sum(), columns[0].Width);
         Assert.Equal((columns[0].Width, 110.0), (columns[1].Left, columns[1].Width));
-        Assert.Equal(ColumnsPanel.MinFirstWidth, ColumnsPanel.Layout(window.Widths, 300)[0].Width);
+        // Too narrow for them all: Code keeps its minimum and the others shrink in proportion, so none runs past the edge.
+        var narrow = ColumnsPanel.Layout(window.Widths, 300);
+        Assert.Equal(ColumnsPanel.MinFirstWidth, narrow[0].Width);
+        Assert.Equal(300, narrow[^1].Left + narrow[^1].Width, 3);
+        Assert.Equal(window.Widths[4] / window.Widths[1], narrow[4].Width / narrow[1].Width, 3);
+        Assert.Equal(80, ColumnsPanel.Layout(window.Widths, 200)[0].Width, 3);
     }
 
     [AvaloniaFact]
