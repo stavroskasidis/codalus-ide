@@ -98,9 +98,9 @@ public sealed class GitShellTests
         await f.Shell.OpenFolderAsync(folder);
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" } && f.Shell.Workbench.Commands.IsEnabled("git.updateBranch"));
 
-        // Where it is for now: Git → Branches, after Switch and Create, and the Git Changes window's ⋯ menu.
+        // Where it is for now: Git → Branches, after Manage Branches, Switch and Create, and the Git Changes window's ⋯ menu.
         Assert.Equal(
-            ["git.switchBranch", "git.createBranch", "git.updateBranch"],
+            ["git.manageBranches", "git.switchBranch", "git.createBranch", "git.updateBranch"],
             f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Where(i => i.Group == "1-branch").Select(i => i.Command));
         Assert.Equal("Update Branch…", f.Shell.Workbench.Menus.GetItems(BuiltIns.GitBranchesMenu).Single(i => i.Command == "git.updateBranch").Title);
         f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);

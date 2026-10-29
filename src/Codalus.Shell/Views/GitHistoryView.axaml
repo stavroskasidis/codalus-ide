@@ -37,7 +37,7 @@
           <DataTemplate x:DataType="vm:GitCommitRow">
             <Grid ColumnDefinitions="Auto,*,160,130,70" Height="22" Background="Transparent">
               <controls:GitGraphCell Row="{Binding Graph}" IsHead="{Binding IsHead}" Lanes="{Binding $parent[ListBox].((vm:GitHistoryViewModel)DataContext).Lanes}" VerticalAlignment="Stretch" />
-              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0" ClipToBounds="True">
                 <ItemsControl ItemsSource="{Binding Refs}" IsVisible="{Binding HasRefs}">
                   <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>

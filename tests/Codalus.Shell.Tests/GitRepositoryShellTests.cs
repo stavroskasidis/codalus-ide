@@ -95,6 +95,32 @@ public sealed class GitRepositoryShellTests
         return ((GitRepositoryDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
     }
 
+    /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>, the window in Harbor Light, Classic Dark and Harbor High contrast, saved there.</summary>
+    private static void Snapshots(Window window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is not { Length: > 0 } folder)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(folder);
+        var before = window.RequestedThemeVariant;
+        foreach (var variant in new[] { Theming.ThemeService.HarborLight, Avalonia.Styling.ThemeVariant.Dark, Theming.ThemeService.HarborHighContrast })
+        {
+            window.RequestedThemeVariant = variant;
+            for (var i = 0; i < 3; i++)
+            {
+                ShellFixture.Pump();
+            }
+
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
+            frame?.Save(Path.Combine(folder, $"{name}-{variant.Key}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        window.RequestedThemeVariant = before;
+        ShellFixture.Pump();
+    }
+
     private static IEnumerable<string> Texts(IEnumerable<GitRepositoryNode> nodes) => nodes.Select(n => n.Text);
 
     [AvaloniaFact]
@@ -173,6 +199,12 @@ public sealed class GitRepositoryShellTests
         Assert.True(vm.IsCurrentBranch);
         Assert.True(vm.CanSync);
         Assert.False(vm.CanUpdate);
+
+        // The view, with the incoming commits listed (CODALUS_UI_SNAPSHOTS keeps a picture of it).
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any());
+        vm.IsIncomingExpanded = true;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().Any(v => v.IsEffectivelyVisible));
+        Snapshots(f.Window, "git-repository");
 
         // feature/sign-in: its own history, no upstream.
         vm.Selected = vm.Find("refs/heads/feature/sign-in");

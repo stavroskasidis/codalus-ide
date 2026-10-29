@@ -6,7 +6,7 @@
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.GitRepositoryView"
              x:DataType="vm:GitRepositoryViewModel">
-  <Grid ColumnDefinitions="320,4,*">
+  <Grid ColumnDefinitions="280,4,*">
     <!-- The tree: Branches / Tags (each repository's local branches in folders, remotes, tags), Pull Requests, Submodules. -->
     <DockPanel>
       <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Margin="6,6,6,4" Text="{Binding Filter}" PlaceholderText="{l:T gitRepository.filter}"
@@ -54,17 +54,17 @@
           <ListBox ItemsSource="{Binding Incoming}" MaxHeight="180" Background="Transparent" AutomationProperties.Name="{l:T gitRepository.incomingCommits}">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="vm:GitCommitRow">
-                <Grid ColumnDefinitions="*,160,130,70" Height="22" AutomationProperties.Name="{Binding AccessibleName}">
-                  <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="1" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="2" Text="{Binding Date}" Classes="muted" VerticalAlignment="Center" />
-                  <TextBlock Grid.Column="3" Text="{Binding ShortHash}" Classes="muted" VerticalAlignment="Center" />
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Height="22" AutomationProperties.Name="{Binding AccessibleName}">
+                  <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" MinWidth="120" />
+                  <TextBlock Grid.Column="1" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" MaxWidth="140" Margin="12,0,0,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding Date}" Classes="muted" Margin="12,0,0,0" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="3" Text="{Binding ShortHash}" Classes="muted" Margin="12,0,0,0" VerticalAlignment="Center" />
                 </Grid>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
         </Expander>
-        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,8,0">
+        <StackPanel Orientation="Horizontal" Spacing="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,6,40,0">
           <Button Classes="link" Content="{l:T gitRepository.fetch}" Tag="git.fetch" Click="OnLink" />
           <Border Width="1" Margin="2,5" Background="{DynamicResource Shell.Border}" />
           <Button Classes="link" Content="{l:T gitRepository.pull}" Tag="git.pull" Click="OnLink" IsVisible="{Binding IsCurrentBranch}" />
