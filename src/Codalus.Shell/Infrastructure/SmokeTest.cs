@@ -1036,6 +1036,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("debug.compound.codalus", "M54", "Under the Codalus debugger: two startup projects in one session, each stopping at its breakpoint", () => UnderCodalusDebuggerAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.terminal.codalus", "M54", "Under the Codalus debugger: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderCodalusDebuggerAsync(DebugTerminalStepAsync), "debug.compound.codalus").ConfigureAwait(true);
         await StepAsync("debug.roslyn.codalus", "M54", "Under the Codalus debugger: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderCodalusDebuggerAsync(DebugRoslynStepAsync), "debug.compound.codalus").ConfigureAwait(true);
+        await StepAsync("debug.applyChanges.codalus", "M55", "Under the Codalus debugger: an edit made while stopped applies on Continue, and one made while running with Apply Code Changes", () => UnderCodalusDebuggerAsync(DebugApplyChangesStepAsync), "debug.compound.codalus").ConfigureAwait(true);
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
         {
@@ -1670,6 +1671,45 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Run("debug.stop");
             await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// Hot Reload while debugging (M55, ADR 0086): samples/Debugging's HotReload.slnx under the Codalus debugger. Stopped
+    /// before Greeter.Message runs, an edit applies on Continue; while the program runs, another applies with Apply Code
+    /// Changes; the program prints each.
+    /// </summary>
+    private async Task DebugApplyChangesStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        await shell.OpenSolutionAsync(Path.Combine(Sessions, "HotReload.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the HotReload solution is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(SessionSource("HotReload", "HotReload.csproj"));
+        var program = SessionSource("HotReload", "Program.cs");
+        var call = Array.FindIndex(File.ReadAllLines(program), l => l.Contains("// [call]", StringComparison.Ordinal)) + 1;
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(program, call);
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops before Greeter.Message runs", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.DebugEdits.IsActive, "the session takes edits", 60).ConfigureAwait(true);
+
+        var editor = await shell.OpenFileAsync(program, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Program.cs did not open.");
+        await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
+        var offset = editor.Model.Text.Text.IndexOf("        return text;", StringComparison.Ordinal);
+        editor.Model.Text.Replace(offset, "        return text;".Length, "        return text + \" from the smoke test\";");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.continue");
+        await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 from the smoke test", StringComparison.Ordinal), "Continue applied the edit: the first call prints it", 60).ConfigureAwait(true);
+
+        offset = editor.Model.Text.Text.IndexOf(" from the smoke test", StringComparison.Ordinal);
+        editor.Model.Text.Replace(offset, " from the smoke test".Length, " applied while running");
+        shell.Run("run.applyCodeChanges");
+        await WaitAsync(() => shell.DebugLog.GetText().Contains(" applied while running", StringComparison.Ordinal), "Apply Code Changes applied the edit while the program runs", 60).ConfigureAwait(true);
+        await WaitAsync(() => shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Any(i => i.Id == "codalus.hotReload" && i.Text.Contains("applied at", StringComparison.Ordinal)), "the status bar says the edits applied").ConfigureAwait(true);
+        Screenshot("smoke-test-debug-apply-changes.png");
+
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
     }
 
     /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>

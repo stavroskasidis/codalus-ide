@@ -124,8 +124,10 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
                 Assert.Equal(server, f.Shell.Debugger.ProcessId);
-                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("keeps the code it started with", StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
-                Assert.Contains("Hot Reload: sent to the browser", f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text, StringComparison.Ordinal);
+                // Under the Codalus debugger (M55) the server takes the edit itself; netcoredbg's keeps its code.
+                var said = f.Shell.Debugger.UsesCodalusAdapter ? "through the Codalus debugger" : "keeps the code it started with";
+                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains(said, StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
+                Assert.Contains("sent to the browser", f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text, StringComparison.Ordinal);
 
                 // The browser applies the update on its own, and dotnet watch doesn't report it (SDK 11 says "applied" only
                 // when every client applied it): the tick is looked at until it runs the edit.
@@ -157,6 +159,54 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 Assert.True(state is { Verified: true } || state?.Message == ShellHost.StaleServerBreakpoint, $"The breakpoint's state: {state}");
 
                 // 5. Stop ends the browser, dotnet watch and the server.
+                await StopAndCheckAsync(f, server);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
+            }
+        }
+    }
+
+    /// <summary>
+    /// M55: under the Codalus debugger the server dotnet watch runs takes an edit in place, through the debugger: its
+    /// answer changes, without a restart, in the same process (dotnet watch's own copy of the update is refused).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Under_the_Codalus_debugger_an_edit_applies_to_the_server_in_place()
+    {
+        SkipWithoutPrerequisites();
+        var (f, folder, _) = await OpenAsync();
+        await using (f)
+        {
+            try
+            {
+                await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
+                var settings = await File.ReadAllTextAsync(Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json"), TestContext.Current.CancellationToken);
+                var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
+                await f.RunAsync("debug.start");
+                await ShellFixture.PumpUntil(() => f.Shell.WatchedServerDebugSession?.ProcessId is not null && f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running, seconds: 600, describe: () => Diagnostics(f));
+                var watch = f.Shell.HotReloadProgram!;
+                var server = f.Shell.Debugger.ProcessId!.Value;
+                using var http = new HttpClient();
+                Assert.Equal("hello from the server", await http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken));
+
+                var greeting = Path.Combine(folder, "BlazorHosted", "Greeting.cs");
+                var editor = await f.Shell.OpenFileAsync(greeting, preview: false, null);
+                await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+                var offset = editor!.Model.Text.Text.IndexOf("hello from the server", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "hello from the server".Length, "edited on the server");
+                await f.RunAsync("run.applyCodeChanges");
+                var answer = string.Empty;
+                await ShellFixture.PumpUntil(() =>
+                {
+                    answer = http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+                    return answer == "edited on the server";
+                }, seconds: 120, describe: () => $"The server answered '{answer}'. " + Diagnostics(f));
+                Assert.Equal(0, watch.HotReload!.Restarts);
+                Assert.Equal(server, f.Shell.Debugger.ProcessId);
+                Assert.True(IsRunning(server));
+
                 await StopAndCheckAsync(f, server);
             }
             finally

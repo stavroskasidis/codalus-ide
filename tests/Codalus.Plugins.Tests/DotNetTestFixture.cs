@@ -51,6 +51,14 @@ public sealed class DotNetTestFixture : IAsyncLifetime
 
     public static string? Netcoredbg => DebugAdapterLocator.Resolve();
 
+    /// <summary>The Codalus debugger built with the tests (M54): the shell finds it next to itself, the tests in its own bin.</summary>
+    private static DebugAdapterStartInfo? CodalusAdapter()
+    {
+        var host = Bin("Codalus.Debugging.Host", "codalus-debughost.dll");
+        var dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } path ? path : "dotnet";
+        return System.IO.File.Exists(host) ? new DebugAdapterStartInfo(dotnet, [host, Codalus.Debugging.CoreClrAdapter.AdapterArgument], Path.GetDirectoryName(host)) : null;
+    }
+
     public string Log
     {
         get
@@ -90,7 +98,7 @@ public sealed class DotNetTestFixture : IAsyncLifetime
         registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(Bin("Codalus.LanguageServices.Host", "codalus-lshost.dll"))));
         Languages = new LanguageService(registry, Solutions, policy);
         Builds = new BuildService(Solutions, Workbench.Output);
-        Debug = new DebugService(() => Netcoredbg);
+        Debug = new DebugService(() => Netcoredbg) { CoreClrAdapter = CodalusAdapter };
         Tests = new TestService();
         _proposed = new WorkbenchProposedApi(Solutions, Builds, Debug, Languages);
         Plugins = new PluginManager(Workbench, _ => ProcessLaunchInfo.FromPath(Bin("Codalus.Plugins.Host", "codalus-pluginhost.dll")), "test", policy)
