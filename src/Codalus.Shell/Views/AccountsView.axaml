@@ -25,7 +25,8 @@
               <StackPanel Spacing="8">
                 <DockPanel>
                   <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                    <Button Classes="accent" Content="{l:T accounts.signIn}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignIn}" AutomationProperties.Name="{Binding Label, StringFormat='Sign in to {0}'}" />
+                    <Button Classes="accent" Content="{l:T accounts.signIn}" Command="{Binding SignInCommand}" IsVisible="{Binding CanSignInWithCode}" AutomationProperties.Name="{Binding Label, StringFormat='Sign in to {0}'}" />
+                    <Button Classes="accent" Content="{x:Static vm:AccountProviderRow.IntegratedSignInLabel}" Command="{Binding SignInIntegratedCommand}" IsVisible="{Binding CanSignInIntegrated}" />
                     <Button Content="{l:T accounts.signOut}" Command="{Binding SignOutCommand}" IsVisible="{Binding IsSignedIn}" AutomationProperties.Name="{Binding Label, StringFormat='Sign out of {0}'}" />
                     <Button Content="{l:T accounts.cancel}" Command="{Binding CancelCommand}" IsVisible="{Binding IsSigningIn}" />
                   </StackPanel>
@@ -56,6 +57,7 @@
                   </StackPanel>
                   <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding ServerHint}" IsVisible="{Binding HasServerHint}" TextWrapping="Wrap" />
                 </StackPanel>
+                <TextBlock Text="{Binding OtherServerText}" IsVisible="{Binding ShowsOtherServer}" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding Error}" IsVisible="{Binding HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
               </StackPanel>
             </Border>

@@ -1,6 +1,6 @@
 # Plugin API reference
 
-The plugin API, version 1.1.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
+The plugin API, version 1.2.0: every public type and member of `Codalus.Plugins.Abstractions`, from its documentation comments. How to write a plugin is in the [plugin guide](../plugins.md); this page is generated from the API and checked by its tests, so it matches the version it names.
 
 ## Codalus.Plugins
 
@@ -400,6 +400,7 @@ A Git host. Override what the host supports: `HostingProvider.ResolveRepository`
 | `Task<PublishedRepository> PublishAsync(NewRepository request, CancellationToken cancellationToken)` | Creates a repository (Publish): the shell then adds it as a remote and pushes. |
 | `HostingRepository? ResolveRepository(string remoteUrl)` | The repository a remote URL (HTTPS or SSH) points to on this host, or null when it's another host's. |
 | `Task<HostingAccount> SignInAsync(IDeviceCodePrompt prompt, CancellationToken cancellationToken)` | Signs in with the OAuth device flow: get a code from the host, show it with `prompt`, wait for the user to approve it in the browser, and store the session (`ISecrets`). Cancelled when the user cancels. |
+| `Task<HostingAccount> SignInIntegratedAsync(CancellationToken cancellationToken)` | Signs in as the operating system's user, with no token: integrated authentication (Negotiate: Kerberos, or NTLM on Windows) against a self-hosted server that takes it. The shell offers it when the manifest's provider sets `integratedSignIn` and its server isn't one of its default hosts. Check it, then store the session. Since API 1.2.0. |
 | `Task<HostingAccount> SignInWithTokenAsync(string token, CancellationToken cancellationToken)` | Signs in with a personal access token the user pasted: check it, then store it. |
 | `Task SignOutAsync(CancellationToken cancellationToken)` | Forgets the session (deletes the stored secrets). |
 
@@ -965,7 +966,7 @@ Constants of this version of the plugin API.
 | Member | Description |
 |---|---|
 | `const string DeprecationDiagnostic = "CODALUS0001"` | The diagnostic id of deprecated API members (`[Obsolete(..., DiagnosticId = "CODALUS0001")]`). |
-| `const string Version = "1.1.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
+| `const string Version = "1.2.0"` | The API version that a plugin's `engines.codalus` range is checked against. Since 1.0 (M22a), minor versions only add to the API and a member goes away only after a major version, deprecated first with the `PluginApi.DeprecationDiagnostic` warning (ADR 0003, docs/plugins.md#changelog). |
 
 ### `PluginInfo`
 

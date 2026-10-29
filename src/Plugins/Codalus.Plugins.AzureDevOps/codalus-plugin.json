@@ -8,7 +8,7 @@
   "entry": { "runtime": "dotnet", "assembly": "Codalus.Plugins.AzureDevOps.dll" },
   "contributes": {
     "hostingProviders": [
-      { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "serverSetting": "azureDevOps.serverUrl", "icon": "cloud" }
+      { "id": "azure-devops", "label": "Azure DevOps", "hosts": ["dev.azure.com", "*.visualstudio.com", "ssh.dev.azure.com", "vs-ssh.visualstudio.com"], "serverSetting": "azureDevOps.serverUrl", "icon": "cloud", "integratedSignIn": true }
     ],
     "settings": {
       "title": "Azure DevOps",
@@ -16,7 +16,7 @@
         "azureDevOps.serverUrl": {
           "type": "string",
           "default": "https://dev.azure.com",
-          "description": "The Azure DevOps server: https://dev.azure.com, or an Azure DevOps Server's collection address without the collection.",
+          "description": "The Azure DevOps server: https://dev.azure.com, or an Azure DevOps Server's address without the collection (https://tfs.contoso.com/tfs). Set when you sign in from a repository whose remote is on an Azure DevOps Server.",
           "scope": "user"
         },
         "azureDevOps.authorityUrl": {

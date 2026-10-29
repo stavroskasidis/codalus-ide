@@ -13,6 +13,7 @@ using Codalus.Workbench.Commands;
 using Codalus.Workbench.Git;
 using Codalus.Workbench.Hosting;
 using Codalus.Workbench.Secrets;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.StatusBar;
 using Codalus.Workbench.Localization;
 
@@ -34,6 +35,9 @@ public sealed partial class ShellHost : IHostingActions
 
     private HostingMatch? _match;
     private HostingProviderInfo? _suggested;
+
+    /// <summary>The self-hosted server the repository's remote is on, for <see cref="_suggested"/>: signing in there sets it (ADR 0087).</summary>
+    private string? _suggestedServer;
     private CancellationTokenSource? _hostingCts;
     private string? _hostingKey;
     private string? _hostingFingerprint;
@@ -209,6 +213,10 @@ public sealed partial class ShellHost : IHostingActions
 
             _match = match;
             _suggested = match is null && Hosting.SuggestFor(remotes) is { } suggested && Hosting.AccountFor(suggested.Id) is null ? suggested : null;
+            var server = match is null && _suggested is null ? Hosting.SuggestServerFor(remotes) : null;
+            _suggested ??= server?.Provider;
+            _suggestedServer = server?.ServerUrl;
+            UpdateAccounts();
             Workbench.Context.Set("hostingRepository", match is not null);
             Workbench.Context.Set("hostingProvider", match?.Provider.Id);
             await PullRequests.ReloadAsync().ConfigureAwait(true);
@@ -329,14 +337,18 @@ public sealed partial class ShellHost : IHostingActions
 
     // ------------------------------------------------------------------ accounts
 
-    /// <summary>The Accounts page; with <paramref name="provider"/>, starts signing in to it.</summary>
+    /// <summary>
+    /// Opens the Accounts page; with <paramref name="provider"/>, starts its device sign-in, or, when the repository's
+    /// remote is on a self-hosted server the provider isn't set up for, shows that server on its row instead: signing in
+    /// there sets it (ADR 0087).
+    /// </summary>
     public AccountsDocument ShowAccounts(string? provider = null)
     {
         UpdateAccounts();
         _ = RefreshAuthenticationSessionsAsync();
         var document = Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId) ?? new AccountsDocument(Accounts);
         Layout.OpenDocument(document, focus: true);
-        if (provider is not null && Accounts.Row(provider) is { CanSignIn: true } row)
+        if (provider is not null && Accounts.Row(provider) is { CanSignIn: true, PendingServer: null, CanSignInIntegrated: false } row)
         {
             _ = SignInAsync(row, null);
         }
@@ -360,11 +372,17 @@ public sealed partial class ShellHost : IHostingActions
         {
             if (Accounts.Row(provider.Id) is not { } row)
             {
-                row = new AccountProviderRow(provider.Id, provider.Label, SignInAsync, SignOutAsync, CancelSignIn, CopyCodeAndOpen);
+                row = new AccountProviderRow(provider.Id, provider.Label, SignInAsync, SignOutAsync, CancelSignIn, CopyCodeAndOpen, target => SignInAsync(target, null, integrated: true));
                 Accounts.Providers.Add(row);
             }
 
-            row.ServerHint = ServerHint(provider.Id);
+            var pending = _suggested?.Id == provider.Id ? _suggestedServer : null;
+            row.PendingServer = pending;
+            row.ServerSetting = provider.ServerSetting;
+            row.ServerHint = pending is null
+                ? ServerHint(provider.Id)
+                : Localizer.Format("accounts.serverFromRemote", "Server: {0}, where this repository's remote is. Signing in sets {1} to it.", pending, provider.ServerSetting);
+            row.IntegratedSignIn = provider.IntegratedSignIn && (provider.IsSelfHosted || pending is not null);
             var account = Hosting.AccountFor(provider.Id);
             row.SetAccount(account?.Name, account?.Host);
         }
@@ -378,7 +396,10 @@ public sealed partial class ShellHost : IHostingActions
         _ => null,
     };
 
-    private async Task SignInAsync(AccountProviderRow row, string? token)
+    private Task SignInAsync(AccountProviderRow row, string? token) => SignInAsync(row, token, integrated: false);
+
+    /// <summary>Signs in with a device code, a token, or the operating system's account, on the row's pending server if it has one.</summary>
+    private async Task SignInAsync(AccountProviderRow row, string? token, bool integrated)
     {
         if (row.IsSigningIn)
         {
@@ -397,7 +418,13 @@ public sealed partial class ShellHost : IHostingActions
         row.SignInCancellation = cts;
         try
         {
-            var account = await Hosting.SignInAsync(row.Id, token, cts.Token).ConfigureAwait(true);
+            if (row is { PendingServer: { } server, ServerSetting: { } setting })
+            {
+                // The provider reads its server from the setting; the plugin host hears of it before the sign-in request.
+                await Workbench.Settings.SetAsync(setting, server, SettingScope.User, cts.Token).ConfigureAwait(true);
+            }
+
+            var account = await Hosting.SignInAsync(row.Id, token, cts.Token, integrated).ConfigureAwait(true);
             row.Token = string.Empty;
             StatusBar.ShowMessage(Localizer.Format("msg.hosting.signedInToAs", "Signed in to {0} as {1}.", row.Label, account.Name), TimeSpan.FromSeconds(5));
         }
@@ -534,9 +561,15 @@ public sealed partial class ShellHost : IHostingActions
             {
                 ShowAccounts(suggested.Id);
             }
+            else if (!GitChanges.HasRemote)
+            {
+                StatusBar.ShowMessage(Localizer.Get("msg.hosting.publishTheRepositoryFirst", "This repository has no remote: publish it to a Git host first."), TimeSpan.FromSeconds(5));
+            }
             else
             {
+                // A remote on a host no provider knows: the Accounts page says which servers each one uses.
                 StatusBar.ShowMessage(Localizer.Get("msg.hosting.thisRepositoryIsntOnAHost", "This repository isn't on a host you're signed in to."), TimeSpan.FromSeconds(5));
+                ShowAccounts();
             }
 
             return null;
