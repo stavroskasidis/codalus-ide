@@ -23,7 +23,7 @@ public sealed class DebugHotReloadTests
         var folder = f.CopySample("Debugging");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "HotReload.slnx"));
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 3 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
         f.Shell.Runs.SetStartupProject(Path.Combine(folder, "HotReload", "HotReload.csproj"));
         return Path.Combine(folder, "HotReload", "Program.cs");
     }
