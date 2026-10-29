@@ -399,8 +399,7 @@ public sealed partial class ShellHost : IHostingActions
                 ? ServerHint(provider.Id)
                 : Localizer.Format("accounts.serverFromRemote", "Server: {0}, where this repository's remote is. Signing in sets {1} to it.", pending, provider.ServerSetting);
             row.IntegratedSignIn = provider.IntegratedSignIn && (provider.IsSelfHosted || pending is not null);
-            row.DeviceSignIn = provider.ServerSetting is not { } serverSetting
-                || Workbench.Settings.GetString(serverSetting[..(serverSetting.LastIndexOf('.') + 1)] + "oauthClientId", string.Empty).Trim().Length > 0;
+            row.DeviceSignIn = HasDeviceSignIn(provider);
             var account = Hosting.AccountFor(provider.Id);
             row.SetAccount(account?.Name, account?.Host);
         }
@@ -417,6 +416,24 @@ public sealed partial class ShellHost : IHostingActions
     private Task SignInAsync(AccountProviderRow row, string? token) => SignInAsync(row, token, integrated: false);
 
     /// <summary>Signs in with a device code, a token, or the operating system's account, on the row's pending server if it has one.</summary>
+    /// <summary>
+    /// Whether the provider's device sign-in is set up: its section's <c>oauthClientId</c> (<c>github.oauthClientId</c>) is
+    /// set. On a self-hosted server, the setting's default (the public host's app, github.com's) doesn't count: that server
+    /// needs an app of its own. A provider without <c>serverSetting</c> keeps its sign-in.
+    /// </summary>
+    private bool HasDeviceSignIn(HostingProviderInfo provider)
+    {
+        if (provider.ServerSetting is not { } serverSetting)
+        {
+            return true;
+        }
+
+        var key = serverSetting[..(serverSetting.LastIndexOf('.') + 1)] + "oauthClientId";
+        var clientId = Workbench.Settings.GetString(key, string.Empty).Trim();
+        var builtIn = Workbench.Settings.Find(key)?.Default is { ValueKind: System.Text.Json.JsonValueKind.String } value ? value.GetString() : null;
+        return clientId.Length > 0 && !(provider.IsSelfHosted && clientId == builtIn);
+    }
+
     /// <summary>The scopes a personal access token needs, as the panel in Git Changes says them.</summary>
     private static string? TokenHint(string providerId) => providerId switch
     {

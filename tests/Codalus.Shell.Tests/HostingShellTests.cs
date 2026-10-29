@@ -493,6 +493,11 @@ public sealed class HostingShellTests
         Assert.Null(f.Shell.Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId));
         Assert.False(panel.Row.IsSigningIn); // no device sign-in started by itself
 
+        // github.com's own app (the default) is no use on another server, here the mock: no browser sign-in.
+        Assert.Equal("Ov23lieq6uB5CAp48llO", f.Shell.Workbench.Settings.Find("github.oauthClientId")?.Default.GetString());
+        await f.Shell.Workbench.Settings.SetAsync("github.oauthClientId", "Ov23lieq6uB5CAp48llO", SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => !panel.Row.CanSignInWithCode);
+
         // No OAuth app: no browser sign-in, here or on the Accounts page, and opening the page starts nothing.
         await f.Shell.Workbench.Settings.SetAsync("github.oauthClientId", string.Empty, SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => !panel.Row.CanSignInWithCode);

@@ -17,7 +17,7 @@ That page also offered **Sign In** (the OAuth device flow) for every provider. N
 | Where to sign in when the host is known | A focused dialog for that host; the Accounts page showing that host only; inline in Git Changes | **Inline in Git Changes.** The panel under the outgoing and incoming commits names the host and holds its ways in, with no window or page in between. |
 | Suggesting before it's needed | Only when a button needs it; a suggestion in Git Changes | **A suggestion in Git Changes**, the same panel collapsed: "This repository is on GitHub (github.com). Sign in to create pull requests and see CI status and work items." with **Sign In** and **×**. |
 | What **×** dismisses | That host; every host (a setting); that repository | **That repository, for good.** It is kept in the state folder's `hosting-sign-in-dismissed.json`, by the repository's root. The pull request button and the hosting windows' Sign in still open the panel, since they ask for it. |
-| The device code sign-in without an OAuth app | Keep the button and its error; hide it | **Hide it** wherever it shows (the panel and the Accounts page), and don't start it by itself. A provider with `serverSetting` has device sign-in only when its section's `oauthClientId` is set (`github.oauthClientId`…). A provider without one keeps it. |
+| The device code sign-in without an OAuth app | Keep the button and its error; hide it | **Hide it** wherever it shows (the panel and the Accounts page), and don't start it by itself. A provider with `serverSetting` has device sign-in only when its section's `oauthClientId` is set (`github.oauthClientId`…), and on a self-hosted server only when it isn't the setting's default (the public host's app). A provider without one keeps it. |
 
 ## Decision
 
@@ -42,5 +42,6 @@ That page also offered **Sign In** (the OAuth device flow) for every provider. N
 ## Consequences
 
 - One click in Git Changes leads to the right host's sign-in, and a token's page opens with the scopes set.
-- Without an OAuth app, a token is the only way in on github.com, gitlab.com and dev.azure.com; the panel leads with it. Registering the project's OAuth apps, and shipping their client ids as the defaults (a device flow's client id isn't a secret), is still `TODO(issue)` from ADR 0031.
+- **github.com has Codalus IDE's own OAuth app** (registered by the maintainer, 2026-10-29, with device flow on): `github.oauthClientId`'s default is its client id, which isn't a secret (a device flow has none). On a GitHub Enterprise Server that default doesn't count; the provider refuses it there with a message, and the shell hides the button.
+- Without an OAuth app, a token is the only way in on gitlab.com and dev.azure.com; the panel leads with it. Their apps (a non-confidential GitLab application with `api`; a public-client Entra app with Azure DevOps' `user_impersonation`) are still `TODO(issue)` from ADR 0031.
 - A dismissed repository keeps no suggestion even after a sign-out. The pull request button still leads to signing in.
