@@ -132,7 +132,7 @@ Settings under **Text Editor** turn each of these on or off.
 
 - **Inlay hints**: parameter names before literal and `new` arguments (`radius: 2`), and optionally the inferred types of `var` declarations and lambda parameters (**Inlay Hints: Types**, off by default). The caret moves over a hint in one step.
 - **CodeLens**: reference and implementation counts on a small row above each declaration, lined up with its code. Click a count to find the references or go to the implementations.
-  - In a Git repository, each member's history from blame follows: who changed it last and when, and how many authors and changes it has (`Ada, 3 days ago  |  2 authors, 5 changes`). Saved files are blamed again on save, and edited ones every few seconds with their unsaved text.
+  - In a Git repository, each member's history from blame follows: who changed it last and when, and how many authors and changes it has (`Ada, 3 days ago | 2 authors, 5 changes`). Saved files are blamed again on save, and edited ones every few seconds with their unsaved text.
   - Tests show their last outcome (`✓ Passed (12 ms)`, `✗ Failed`, `Not run`), and test classes how many of their tests pass (`✓ 4/4 passing`).
   - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
