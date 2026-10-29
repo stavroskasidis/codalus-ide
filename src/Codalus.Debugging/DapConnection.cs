@@ -61,7 +61,10 @@ public sealed class DapConnection : IAsyncDisposable
     /// <summary>Raised for each accepted reverse request, on the event loop, in order with the events.</summary>
     public event Func<DapReverseRequest, Task>? ReverseRequestReceived;
 
-    /// <summary>Completes when the adapter's output ends (it exited or closed the stream).</summary>
+    /// <summary>
+    /// Completes when the adapter's output ends (it exited or closed the stream) and the events read before the end
+    /// have been raised.
+    /// </summary>
     public Task Closed => _closed.Task;
 
     /// <summary>
@@ -292,8 +295,35 @@ public sealed class DapConnection : IAsyncDisposable
             pending.TrySetException(new DapConnectionLostException("The debug adapter exited.", failure));
         }
 
+        Volatile.Write(ref _outputEnded, true);
+        await CloseAfterEventsAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Completes <see cref="Closed"/> once the events read before the end have been raised: a session that ended on
+    /// Closed while a program's exited and terminated events were still on their way lost them (two startup projects
+    /// under the Codalus debugger, Linux arm64 CI, runs 40879387674 and 40911316698). A handler that hangs holds it
+    /// <see cref="EventDrainLimit"/> at most.
+    /// </summary>
+    private async Task CloseAfterEventsAsync()
+    {
+        try
+        {
+            await _eventLoop.WaitAsync(EventDrainLimit).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+        }
+
         _closed.TrySetResult();
     }
+
+    private static readonly TimeSpan EventDrainLimit = TimeSpan.FromSeconds(10);
+
+    private bool _outputEnded;
+
+    /// <summary>The adapter's output ended (<see cref="Closed"/> follows once its events have been raised).</summary>
+    public bool OutputEnded => Volatile.Read(ref _outputEnded);
 
     /// <summary>Runs a handled reverse request and answers it with the handler's body, or its failure.</summary>
     private async Task HandleAsync(JsonElement request, Func<JsonElement, CancellationToken, Task<JsonElement>> handler)
@@ -377,7 +407,7 @@ public sealed class DapConnection : IAsyncDisposable
             pending.TrySetException(new DapConnectionLostException("The debug adapter exited."));
         }
 
-        _closed.TrySetResult();
+        _ = CloseAfterEventsAsync();
     }
 
     public async ValueTask DisposeAsync()

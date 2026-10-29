@@ -56,6 +56,21 @@ public sealed class ErrorListViewModel : ObservableObject
     public const string IntelliSenseSource = "IntelliSense";
     public const string BuildSource = "Build";
     public const string BothSources = "Build + IntelliSense";
+
+    /// <summary>Rude edits and compile errors of Hot Reload while debugging (M55).</summary>
+    public const string HotReloadSource = "Hot Reload";
+
+    private IReadOnlyList<ErrorListRow> _hotReload = [];
+
+    /// <summary>
+    /// Shows Hot Reload's rude edits or compile errors (M55: an edit that couldn't be applied while debugging), replacing
+    /// the last ones; empty clears them.
+    /// </summary>
+    public void SetHotReload(IReadOnlyList<ErrorListRow> rows)
+    {
+        _hotReload = [.. rows.Select(r => r with { Source = HotReloadSource })];
+        ScheduleRefresh();
+    }
     public const string GroupBySetting = "errorList.groupBy";
     public const string AnalysisScopeSetting = "languageServices.analysisScope";
 
@@ -316,7 +331,7 @@ public sealed class ErrorListViewModel : ObservableObject
                 _computeAgain = false;
                 var generation = _generation;
                 var query = Query();
-                var view = await Task.Run(() => Compute(query, _store, _builds)).ConfigureAwait(true);
+                var view = await Task.Run(() => Compute(query, _store, _builds, _hotReload)).ConfigureAwait(true);
                 if (generation == _generation)
                 {
                     Apply(view);
@@ -334,7 +349,7 @@ public sealed class ErrorListViewModel : ObservableObject
     public void Refresh()
     {
         _generation++;
-        Apply(Compute(Query(), _store, _builds));
+        Apply(Compute(Query(), _store, _builds, _hotReload));
     }
 
     /// <summary>What the list shows, read on the UI thread so that <see cref="Compute"/> can run on any.</summary>
@@ -364,7 +379,7 @@ public sealed class ErrorListViewModel : ObservableObject
         GroupByValues[GroupBy],
         new HashSet<string>(_collapsed, StringComparer.Ordinal));
 
-    private static ListView Compute(ListQuery query, DiagnosticsStore store, BuildService builds)
+    private static ListView Compute(ListQuery query, DiagnosticsStore store, BuildService builds, IReadOnlyList<ErrorListRow> hotReload)
     {
         var projectName = ProjectNames(query.Projects);
         bool InScope(string path) => !query.CurrentDocumentOnly || SolutionService.PathComparer.Equals(path, query.ActivePath);
@@ -416,6 +431,11 @@ public sealed class ErrorListViewModel : ObservableObject
                     all.Add(row);
                 }
             }
+        }
+
+        if (query.SourceFilter != 2)
+        {
+            all.AddRange(hotReload.Where(r => InScope(r.Path)));
         }
 
         var errors = all.Count(r => r.IsError);
