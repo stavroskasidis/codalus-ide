@@ -121,6 +121,18 @@ public sealed class ProfilerToolsShellTests
         Assert.True(isPrime.Row.Delta > 0 && isPrime.Worse);
     }
 
+    /// <summary>
+    /// A heap snapshot, and why it wasn't taken when it wasn't: the hub's status and the notification (its error). The
+    /// first snapshot of this test once ran out its 5 minutes on Linux (CI, run 40865187796) with only "null" to show.
+    /// </summary>
+    private static async Task SnapshotAsync(ShellFixture f, PerformanceProfilerViewModel hub, string expected)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var file = await hub.TakeSnapshotAsync();
+        Assert.True(file == expected, $"The snapshot is '{file}', not {expected}, after {started.Elapsed.TotalSeconds:0} s. Status: {hub.Status}; "
+            + $"notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}");
+    }
+
     [AvaloniaFact]
     public async Task Memory_usage_takes_snapshots_diffs_them_and_inspects_a_full_dump()
     {
@@ -131,9 +143,9 @@ public sealed class ProfilerToolsShellTests
         Assert.NotNull(run);
         Assert.True(hub.CanSnapshot);
         await Task.Delay(1000, TestContext.Current.CancellationToken);
-        Assert.Equal("heap-1.nettrace", await hub.TakeSnapshotAsync());
+        await SnapshotAsync(f, hub, "heap-1.nettrace");
         await Task.Delay(2000, TestContext.Current.CancellationToken);
-        Assert.Equal("heap-2.nettrace", await hub.TakeSnapshotAsync());
+        await SnapshotAsync(f, hub, "heap-2.nettrace");
         Assert.Equal("full.dmp", await hub.CreateDumpAsync());
         Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
         await hub.StopAsync();
