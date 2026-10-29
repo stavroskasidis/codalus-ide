@@ -122,6 +122,35 @@ public sealed record RunInTerminalRequestArguments(string[] Args, string Cwd, st
 public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProcessId = null);
 
 /// <summary>
+/// The Codalus debugger's <c>codalus/applyChanges</c> request (M55, ADR 0086): an edit's deltas, one per module Roslyn
+/// emitted for (<see cref="ModuleDelta.ModuleId"/> is its MVID). Modules the program hasn't loaded are skipped.
+/// </summary>
+public sealed record ApplyChangesArguments(ModuleDelta[] Updates);
+
+/// <summary>Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON).</summary>
+public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta);
+
+/// <summary><c>codalus/applyChanges</c>'s answer: what happened to each module's delta.</summary>
+public sealed record ApplyChangesResponse(ModuleDeltaResult[] Results);
+
+/// <summary>
+/// <see cref="Status"/>: <c>applied</c>; <c>notLoaded</c> (the program doesn't have the module); <c>failed</c>, with the
+/// runtime's reason in <see cref="Message"/>.
+/// </summary>
+public sealed record ModuleDeltaResult(Guid ModuleId, string Status, string? Message = null)
+{
+    public const string Applied = "applied";
+    public const string NotLoaded = "notLoaded";
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// <c>codalus/hotReloadCapabilities</c>'s answer (M55): what the debugged runtime can apply (Roslyn's capability names,
+/// <c>Baseline</c> first), empty when it can't take edits.
+/// </summary>
+public sealed record HotReloadCapabilitiesResponse(string[] Capabilities);
+
+/// <summary>
 /// vscode-js-debug's browser <c>launch</c> arguments (ADR 0026). <see cref="Type"/> is <c>pwa-chrome</c> or
 /// <c>pwa-msedge</c>; <see cref="InspectUri"/> routes the connection through the Blazor WebAssembly debugging proxy;
 /// <see cref="UserDataDir"/> true gives the browser a temporary profile. <see cref="SkipNavigateForTest"/> (js-debug's
@@ -276,6 +305,9 @@ public static class DapEvents
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(RunInTerminalRequestArguments))]
 [JsonSerializable(typeof(RunInTerminalResponse))]
+[JsonSerializable(typeof(ApplyChangesArguments))]
+[JsonSerializable(typeof(ApplyChangesResponse))]
+[JsonSerializable(typeof(HotReloadCapabilitiesResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
 [JsonSerializable(typeof(StartDebuggingArguments))]
 [JsonSerializable(typeof(JsonElement))]

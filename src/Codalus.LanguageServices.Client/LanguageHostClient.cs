@@ -516,6 +516,29 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<WinFormsToolboxResult?> WinFormsToolboxAsync(string project, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.WinFormsToolbox, new WinFormsToolboxParams(project), ProtocolJsonContext.Default.WinFormsToolboxParams, ProtocolJsonContext.Default.WinFormsToolboxResult, cancellationToken);
 
+    /// <summary>
+    /// <c>codalus/hotReload/start</c> (M55): a Hot Reload session for a debugged program built from
+    /// <paramref name="projects"/>; false when the host has none of them.
+    /// </summary>
+    public Task<bool> HotReloadStartAsync(string session, string[] projects, string[] capabilities, CancellationToken cancellationToken) =>
+        Invoke(Methods.HotReloadStart, new HotReloadStartParams(session, projects, capabilities), ProtocolJsonContext.Default.HotReloadStartParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
+
+    /// <summary><c>codalus/hotReload/update</c>: the edits since the session's start or last commit, as deltas or rude edits.</summary>
+    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken) =>
+        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
+
+    /// <summary><c>codalus/hotReload/commit</c>: the debugger applied the last update.</summary>
+    public Task<bool> HotReloadCommitAsync(string session, CancellationToken cancellationToken) =>
+        Invoke(Methods.HotReloadCommit, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
+
+    /// <summary><c>codalus/hotReload/discard</c>: the last update wasn't applied.</summary>
+    public Task<bool> HotReloadDiscardAsync(string session, CancellationToken cancellationToken) =>
+        Invoke(Methods.HotReloadDiscard, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
+
+    /// <summary><c>codalus/hotReload/end</c>: the debugged program ended.</summary>
+    public Task<bool> HotReloadEndAsync(string session, CancellationToken cancellationToken) =>
+        Invoke(Methods.HotReloadEnd, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
+
     public Task<CodeMetricsResult?> CodeMetricsAsync(string? uri, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.CodeMetrics, new CodeMetricsParams(uri is null ? null : new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.CodeMetricsParams, ProtocolJsonContext.Default.CodeMetricsResult, cancellationToken);
 

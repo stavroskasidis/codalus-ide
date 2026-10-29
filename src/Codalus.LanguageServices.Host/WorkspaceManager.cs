@@ -358,7 +358,8 @@ internal sealed class WorkspaceManager : IDisposable
                     analyzerReferences: parsed.Analyzers,
                     additionalDocuments: parsed.AdditionalFiles.Select(f => FileDocument(id, f)),
                     outputRefFilePath: data.OutputRefPath)
-                .WithAnalyzerConfigDocuments(parsed.AnalyzerConfigFiles.Select(f => FileDocument(id, f))));
+                .WithAnalyzerConfigDocuments(parsed.AnalyzerConfigFiles.Select(f => FileDocument(id, f)))
+                .WithCompilationOutputInfo(default(CompilationOutputInfo).WithAssemblyPath(data.OutputPath)));
         }
 
         if (!Equals(project.CompilationOptions, parsed.CompilationOptions))
@@ -384,6 +385,12 @@ internal sealed class WorkspaceManager : IDisposable
         if (project.OutputFilePath != data.OutputPath)
         {
             solution = solution.WithProjectOutputFilePath(id, data.OutputPath);
+        }
+
+        if (project.CompilationOutputInfo.AssemblyPath != data.OutputPath)
+        {
+            // Hot Reload while debugging (M55) reads the build's assembly and PDB from here.
+            solution = solution.WithProjectCompilationOutputInfo(id, project.CompilationOutputInfo.WithAssemblyPath(data.OutputPath));
         }
 
         if (project.OutputRefFilePath != data.OutputRefPath)
@@ -578,10 +585,33 @@ internal sealed class WorkspaceManager : IDisposable
 
     // ------------------------------------------------------------------ open documents
 
+    /// <summary>
+    /// The encoding an open document is saved in: its file's byte order mark, else UTF-8. Emitting its debug information
+    /// needs one (Hot Reload's deltas, M55: CS8055 without), and the PDB's checksums are SHA-256 of those bytes.
+    /// </summary>
+    private static System.Text.Encoding EncodingOf(string path)
+    {
+        Span<byte> bom = stackalloc byte[3];
+        var read = 0;
+        try
+        {
+            using var file = File.OpenRead(path);
+            read = file.ReadAtLeast(bom, 3, throwOnEndOfStream: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return read >= 3 && bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF ? new System.Text.UTF8Encoding(true)
+            : read >= 2 && bom[0] == 0xFF && bom[1] == 0xFE ? System.Text.Encoding.Unicode
+            : read >= 2 && bom[0] == 0xFE && bom[1] == 0xFF ? System.Text.Encoding.BigEndianUnicode
+            : new System.Text.UTF8Encoding(false);
+    }
+
     public void Open(string path, string text, int version)
     {
         path = Path.GetFullPath(path);
-        var sourceText = SourceText.From(text);
+        var sourceText = SourceText.From(text, EncodingOf(path), SourceHashAlgorithm.Sha256);
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
@@ -625,7 +655,7 @@ internal sealed class WorkspaceManager : IDisposable
             {
                 text = change.Range is { } range
                     ? text.WithChanges(new TextChange(Positions.ToSpan(text, range), change.Text))
-                    : SourceText.From(change.Text);
+                    : SourceText.From(change.Text, text.Encoding, text.ChecksumAlgorithm);
             }
 
             var solution = _workspace.CurrentSolution;

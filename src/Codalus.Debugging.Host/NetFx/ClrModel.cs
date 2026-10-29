@@ -67,6 +67,27 @@ internal interface IClrProcess : IDisposable
 
     /// <summary>Lets the process go on without the debugger.</summary>
     void Detach();
+
+    /// <summary>
+    /// Asks the runtime to compile <paramref name="module"/>'s methods so that edits can be applied to them (M55: Edit and
+    /// Continue's JIT flags). Only while the module's load event is being handled, and only for a process debugged from
+    /// before the module loaded; false when the runtime refused (a module loaded before an attach).
+    /// </summary>
+    bool EnableEditAndContinue(IClrModule module) => false;
+
+    /// <summary>
+    /// Applies an edit to a loaded module (M55, ADR 0086: <c>ICorDebugModule2::ApplyChanges</c>), the process stopped:
+    /// the metadata and IL deltas Roslyn emitted for it. Later calls of a changed method run its new version; frames
+    /// already in it finish in the old one. Throws <see cref="ClrException"/> with the runtime's reason when refused.
+    /// </summary>
+    void ApplyChanges(IClrModule module, byte[] metadataDelta, byte[] ilDelta) =>
+        throw new ClrException("This debugger can't apply code changes.");
+
+    /// <summary>
+    /// The current version of a method (1 until an edit changed it, then one more for each edit): new calls run it,
+    /// and <see cref="CreateBreakpoint"/> sets breakpoints in it.
+    /// </summary>
+    int CodeVersion(IClrModule module, int methodToken) => 1;
 }
 
 /// <summary>A module loaded in an application domain.</summary>
@@ -117,6 +138,9 @@ internal interface IClrFrame
 
     /// <summary>A local variable by its slot; null when it isn't available (optimized code).</summary>
     IClrValue? Local(int slot);
+
+    /// <summary>The version of its method the frame runs (1 until an edit changed the method, M55).</summary>
+    int CodeVersion => 1;
 }
 
 internal enum ClrValueKind

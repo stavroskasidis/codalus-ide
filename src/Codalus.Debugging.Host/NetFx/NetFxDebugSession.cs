@@ -79,7 +79,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         public int? BoundLine { get; set; }
 
-        public List<(IClrModule Module, int Method, int Offset, IClrBreakpoint Breakpoint)> Bound { get; } = [];
+        public List<(IClrModule Module, int Method, int Offset, int Version, IClrBreakpoint Breakpoint)> Bound { get; } = [];
     }
 
     /// <summary>A step in progress: what was asked, where from, and how many times it went on by itself.</summary>
@@ -186,6 +186,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "disconnect" or "terminate":
                 Disconnect(Read(arguments, json.DisconnectArguments)?.TerminateDebuggee ?? !_attached);
                 return null;
+            case HotReloadCapabilitiesCommand:
+                return JsonSerializer.SerializeToElement(new HotReloadCapabilitiesResponse(HotReloadCapabilities()), json.HotReloadCapabilitiesResponse);
+            case ApplyChangesCommand:
+                return JsonSerializer.SerializeToElement(ApplyChanges(Read(arguments, json.ApplyChangesArguments)?.Updates ?? []), json.ApplyChangesResponse);
             default:
                 return null;
         }
@@ -193,6 +197,95 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private static T? Read<T>(JsonElement arguments, JsonTypeInfo<T> info) =>
         arguments.ValueKind == JsonValueKind.Object ? arguments.Deserialize(info) : arguments.ValueKind == JsonValueKind.Undefined ? s_empty.Deserialize(info) : default;
+
+    // ------------------------------------------------------------------ code changes (M55)
+
+    /// <summary>Applies an edit's deltas to the modules the program has loaded (Roslyn's, from the language host).</summary>
+    public const string ApplyChangesCommand = "codalus/applyChanges";
+
+    /// <summary>What the debugged runtime can apply, for Roslyn's analysis of an edit.</summary>
+    public const string HotReloadCapabilitiesCommand = "codalus/hotReloadCapabilities";
+
+    /// <summary>
+    /// The runtime's Hot Reload capabilities, by its version (CoreCLR's <c>MetadataUpdater.GetCapabilities</c>, read on
+    /// .NET 8 to 11: the generic ones from .NET 7, <c>AddFieldRva</c> from .NET 10). None for the .NET Framework, whose
+    /// debugger doesn't apply edits here, nor before the core library has loaded.
+    /// </summary>
+    private string[] HotReloadCapabilities()
+    {
+        if (debugger is not CoreClr.DbgShimDebugger)
+        {
+            return [];
+        }
+
+        int major;
+        lock (_gate)
+        {
+            if (_modules.FirstOrDefault(m => m.Info.AssemblyName == "System.Private.CoreLib").Info is not { Metadata.IsAssembly: true } coreLibrary)
+            {
+                return [];
+            }
+
+            major = coreLibrary.Metadata.GetAssemblyDefinition().Version.Major;
+        }
+
+        if (major < 6)
+        {
+            return [];
+        }
+
+        string[] capabilities = ["Baseline", "AddMethodToExistingType", "AddStaticFieldToExistingType", "AddInstanceFieldToExistingType", "NewTypeDefinition", "ChangeCustomAttributes", "UpdateParameters"];
+        if (major >= 7)
+        {
+            capabilities = [.. capabilities, "GenericUpdateMethod", "GenericAddMethodToExistingType", "GenericAddFieldToExistingType"];
+        }
+
+        return major >= 10 ? [.. capabilities, "AddFieldRva"] : capabilities;
+    }
+
+    /// <summary>
+    /// Applies each module's delta (the program stopped for it, if it runs), then binds the breakpoints again: in an
+    /// edited method's new version, which later calls run, beside the old one's.
+    /// </summary>
+    private ApplyChangesResponse ApplyChanges(ModuleDelta[] updates)
+    {
+        var results = new List<ModuleDeltaResult>();
+        lock (_gate)
+        {
+            WhileStopped(() =>
+            {
+                foreach (var update in updates)
+                {
+                    if (_modules.FirstOrDefault(m => m.Info.Mvid == update.ModuleId) is not ({ } module, { } info))
+                    {
+                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.NotLoaded));
+                        continue;
+                    }
+
+                    try
+                    {
+                        Process.ApplyChanges(module, update.MetadataDelta, update.IlDelta);
+                    }
+                    catch (ClrException ex)
+                    {
+                        log.WriteLine($"Applying an edit to {info.AssemblyName}: {ex.Message}");
+                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Failed, ex.Message));
+                        continue;
+                    }
+
+                    info.ApplyDelta(update.MetadataDelta, update.PdbDelta);
+                    foreach (var (path, states) in _breakpoints)
+                    {
+                        Bind(path, states, module, info);
+                    }
+
+                    results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Applied));
+                }
+            });
+        }
+
+        return new ApplyChangesResponse([.. results]);
+    }
 
     // ------------------------------------------------------------------ starting
 
@@ -393,6 +486,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         // Just My Code: the user's code is what has symbols and isn't optimized.
         var userCode = info is { HasSymbols: true, IsOptimized: false };
+        if (userCode && debugger is CoreClr.DbgShimDebugger && !_process!.EnableEditAndContinue(module))
+        {
+            // Loaded before an attach: edits apply only when the program runs with DOTNET_MODIFIABLE_ASSEMBLIES=debug.
+            log.WriteLine($"Edit and Continue's JIT flags weren't set for {info!.AssemblyName}.");
+        }
+
         if (info is not null)
         {
             _modules.Add((module, info));
@@ -558,14 +657,18 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private void BindAt(BreakpointState state, IClrModule module, int method, int offset, int line)
     {
-        if (state.Bound.Any(b => ReferenceEquals(b.Module, module) && b.Method == method && b.Offset == offset))
-        {
-            return;
-        }
-
         IClrBreakpoint breakpoint;
+        int version;
         try
         {
+            // In the method's current version (an edit makes a new one, M55); one in an older version stays for the
+            // frames still running it.
+            version = Process.CodeVersion(module, method);
+            if (state.Bound.Any(b => ReferenceEquals(b.Module, module) && b.Method == method && b.Offset == offset && b.Version == version))
+            {
+                return;
+            }
+
             breakpoint = Process.CreateBreakpoint(module, method, offset);
         }
         catch (InvalidOperationException ex)
@@ -574,7 +677,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return;
         }
 
-        state.Bound.Add((module, method, offset, breakpoint));
+        state.Bound.Add((module, method, offset, version, breakpoint));
         _byBreakpoint[breakpoint] = state;
         var newlyBound = state.BoundLine is null;
         state.BoundLine ??= line;
@@ -757,7 +860,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private void StartStep(IClrThread thread, ClrStepKind kind, IClrFrame? frame)
     {
         var ranges = new List<(int, int)>();
-        if (kind != ClrStepKind.Out && frame?.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset) is { } range)
+        if (kind != ClrStepKind.Out && frame?.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } range)
         {
             ranges.Add(range);
         }
@@ -807,7 +910,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return true;
         }
 
-        if (info is not null && info.SequencePointAt(frame.MethodToken, frame.IlOffset) is { } point && (point.IsHidden || (point.Offset != frame.IlOffset && step.Kind != ClrStepKind.Out)))
+        if (info is not null && info.SequencePointAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } point && (point.IsHidden || (point.Offset != frame.IlOffset && step.Kind != ClrStepKind.Out)))
         {
             // A hidden sequence point (compiler code) or the middle of a line: on to the next line start.
             StartStep(thread, ClrStepKind.Over, frame);
@@ -966,7 +1069,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
                 var info = Types.Info(module);
                 var name = info?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}]";
-                var point = info?.LineAt(frame.MethodToken, frame.IlOffset);
+                var point = info?.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion);
                 var file = point?.Document;
                 var hasSource = file is { Length: > 0 } && File.Exists(file);
                 var userCode = info is { HasSymbols: true, IsOptimized: false } && !info.IsNonUserCode(frame.MethodToken);
@@ -1030,7 +1133,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 variables.Add((method.ParameterNames[i], Live(() => frame.Argument(index))));
             }
 
-            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset))
+            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
             {
                 variables.Add((name, Live(() => frame.Local(slot))));
             }
@@ -1504,7 +1607,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             if (frame.Module is { } module && Types.Info(module) is { } info)
             {
                 var line = "   at " + info.MethodDisplayName(frame.MethodToken);
-                if (info.LineAt(frame.MethodToken, frame.IlOffset) is { Document.Length: > 0 } point)
+                if (info.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { Document.Length: > 0 } point)
                 {
                     line += $" in {point.Document}:line {point.StartLine.ToString(CultureInfo.InvariantCulture)}";
                 }
