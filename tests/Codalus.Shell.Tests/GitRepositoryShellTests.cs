@@ -61,7 +61,9 @@ public sealed class GitRepositoryShellTests
 
         // Someone else pushes a commit to origin's main.
         var other = Path.Combine(Path.GetDirectoryName(folder)!, "other");
-        Git(Path.GetDirectoryName(folder)!, "clone", "-q", origin, other);
+        // Without CRLF conversion from the first checkout: Windows' git converts by default, and then "Add notes upstream"
+        // also rewrote every file's line endings (Windows CI, run 40920756937).
+        Git(Path.GetDirectoryName(folder)!, "clone", "-q", "-c", "core.autocrlf=false", origin, other);
         Configure(other);
         File.WriteAllText(Path.Combine(other, "NOTES.md"), "notes\n");
         Git(other, "add", ".");
