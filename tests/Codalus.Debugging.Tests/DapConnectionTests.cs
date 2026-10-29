@@ -47,6 +47,40 @@ public sealed class DapConnectionTests
         Assert.Contains("0 request(s) unanswered; the connection is closed", connection.Describe(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Closed comes after the events read before the end: a two-program session ended on Closed while each program's
+    /// exited and terminated events were still on their way, and lost both exit lines (Linux arm64 CI, run 40911316698).
+    /// </summary>
+    [Fact]
+    public async Task Closed_completes_after_the_events_read_before_the_end_were_raised()
+    {
+        var toClient = new Pipe();
+        var toAdapter = new Pipe();
+        await using var connection = new DapConnection(toClient.Reader.AsStream(), toAdapter.Writer.AsStream());
+        var raised = new List<string>();
+        connection.EventReceived += async e =>
+        {
+            await Task.Delay(300); // a handler slower than the end of the adapter's output
+            lock (raised)
+            {
+                raised.Add(e.Name);
+            }
+        };
+        connection.Start();
+        var ct = TestContext.Current.CancellationToken;
+
+        await toClient.Writer.WriteAsync(Frame("""{"seq":1,"type":"event","event":"exited","body":{"exitCode":15}}"""), ct);
+        await toClient.Writer.WriteAsync(Frame("""{"seq":2,"type":"event","event":"terminated"}"""), ct);
+        await toClient.Writer.CompleteAsync();
+        await connection.Closed.WaitAsync(TimeSpan.FromSeconds(30), ct);
+
+        Assert.True(connection.OutputEnded);
+        lock (raised)
+        {
+            Assert.Equal([DapEvents.Exited, DapEvents.Terminated], raised);
+        }
+    }
+
     private static async Task WaitAsync(Func<bool> condition, CancellationToken cancellationToken)
     {
         while (!condition())
