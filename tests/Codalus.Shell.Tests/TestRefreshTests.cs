@@ -109,6 +109,41 @@ public sealed class TestRefreshTests
     }
 
     [AvaloniaFact]
+    public async Task A_view_built_again_while_the_old_one_shows_keeps_the_test_explorer_shown()
+    {
+        // Dock builds a tool window's view again for a new layout while the old one still shows: the new view says it's
+        // shown, then the old one says it isn't. With one flag for both, the explorer took itself for hidden while on
+        // screen, and stopped showing results.
+        await using var f = ShellFixture.Create();
+        var tests = f.Shell.Tests;
+        var explorer = f.Shell.TestExplorer;
+        tests.ControllerCreated(new TestControllerParams("codalus.synthetic", Controller, "Synthetic"), new Connection());
+        tests.ItemsUpdated(new TestItemsUpdateParams(Controller, [.. Items("P", Path.Combine(f.UserData, "CalcTests.cs"), 5)], []));
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => explorer.IsViewShown);
+
+        var second = new Avalonia.Controls.Window { Width = 400, Height = 300, Content = new Views.TestExplorerView { DataContext = explorer } };
+        second.Show();
+        ShellFixture.Pump();
+        f.Shell.Layout.CloseToolWindow(TestExplorerViewModel.ToolWindowId);
+        for (var i = 0; i < 5; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        Assert.True(explorer.IsViewShown, "the explorer took itself for hidden while a view still shows it");
+        var builds = explorer.Builds;
+        tests.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
+        Report(tests, "r1", Test("P", 0), TestStates.Passed);
+        tests.RunEnded("r1");
+        await ShellFixture.PumpUntil(() => explorer.Summary.Contains("1 passed", StringComparison.Ordinal));
+        Assert.True(explorer.Builds > builds);
+
+        second.Close();
+        await ShellFixture.PumpUntil(() => !explorer.IsViewShown);
+    }
+
+    [AvaloniaFact]
     public async Task Editors_refresh_their_test_glyphs_and_codelens_for_their_own_document_once_shown()
     {
         await using var f = ShellFixture.Create();

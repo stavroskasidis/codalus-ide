@@ -201,6 +201,31 @@ public class SolutionExplorerRevealTests
     }
 
     [AvaloniaFact]
+    public async Task A_view_built_again_while_the_old_one_shows_keeps_the_explorer_shown()
+    {
+        // Dock builds a tool window's view again for a new layout while the old one still shows: the new view says it's
+        // shown, then the old one says it isn't. With one flag for both, the explorer took itself for hidden while on
+        // screen, and Track Active Item stopped following.
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var second = new Window { Width = 300, Height = 400, Content = new SolutionExplorerView { DataContext = explorer } };
+        second.Show();
+        ShellFixture.Pump();
+        f.Shell.Layout.CloseToolWindow(SolutionExplorerViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => View(f) is null);
+        Assert.True(explorer.IsViewShown, "the explorer took itself for hidden while a view still shows it");
+
+        explorer.TrackActiveItem = true;
+        var file = Path.Combine(folder, "src", "App", "Many", "F120.cs");
+        await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == file);
+
+        second.Close();
+        await ShellFixture.PumpUntil(() => !explorer.IsViewShown);
+    }
+
+    [AvaloniaFact]
     public async Task Sync_on_a_project_file_selects_its_project_and_the_search_box_applies_the_last_filter()
     {
         var (f, folder) = await OpenAsync();

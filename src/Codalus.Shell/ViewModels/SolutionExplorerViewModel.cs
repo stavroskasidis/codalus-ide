@@ -729,7 +729,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private bool _trackQueued;
     private bool _trackWhenShown;
     private string? _trackWhenFound;
-    private bool _viewShown;
+    private readonly ShownViews _views = new();
 
     private void TrackActiveDocument()
     {
@@ -740,7 +740,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        if (!_viewShown)
+        if (!_views.Any)
         {
             _trackWhenShown = true;
             return;
@@ -762,17 +762,16 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Reveal(node.Id);
     }
 
-    /// <summary>Whether the view said the explorer is shown (tests).</summary>
-    internal bool IsViewShown => _viewShown;
+    /// <summary>Whether a view said the explorer is shown (tests).</summary>
+    internal bool IsViewShown => _views.Any;
 
     /// <summary>
-    /// The view tells whether the explorer is shown (attached and visible): Track Active Item does nothing while it
-    /// isn't, and reveals the active document when it is again.
+    /// A view tells whether it shows the explorer (attached and visible): Track Active Item does nothing while none does,
+    /// and reveals the active document when one does again.
     /// </summary>
-    public void SetViewShown(bool shown)
+    public void SetViewShown(object view, bool shown)
     {
-        _viewShown = shown;
-        if (shown && _trackWhenShown)
+        if (_views.Set(view, shown) && shown && _trackWhenShown)
         {
             _trackWhenShown = false;
             OnActiveDocumentChanged();

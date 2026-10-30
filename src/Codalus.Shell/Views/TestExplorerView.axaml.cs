@@ -30,7 +30,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
             {
                 if (_shown)
                 {
-                    old.SetViewShown(false);
+                    old.SetViewShown(this, false);
                 }
 
                 _reported = null;
@@ -93,7 +93,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         }
 
         _shown = shown;
-        _reported?.SetViewShown(shown);
+        _reported?.SetViewShown(this, shown);
     }
 
     private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;

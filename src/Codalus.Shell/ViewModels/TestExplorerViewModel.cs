@@ -143,7 +143,7 @@ public sealed class TestExplorerViewModel : ObservableObject
     private readonly DispatcherTimer _filterTimer;
     private readonly DispatcherTimer _changeTimer = new();
     private long _lastRefresh;
-    private bool _viewShown;
+    private readonly ShownViews _views = new();
     private bool _changedWhileHidden;
     private ObservableCollection<TestRowViewModel> _rows = [];
     private TestRowViewModel? _selected;
@@ -509,7 +509,7 @@ public sealed class TestExplorerViewModel : ObservableObject
     /// </summary>
     private void OnTestsChanged()
     {
-        if (!_viewShown)
+        if (!_views.Any)
         {
             _changedWhileHidden = true;
             return;
@@ -530,20 +530,19 @@ public sealed class TestExplorerViewModel : ObservableObject
         Refresh();
     }
 
-    /// <summary>Whether the view said the explorer is shown (tests).</summary>
-    internal bool IsViewShown => _viewShown;
+    /// <summary>Whether a view said the explorer is shown (tests).</summary>
+    internal bool IsViewShown => _views.Any;
 
     /// <summary>The rebuilds of the arranged tree (tests).</summary>
     internal int Builds { get; private set; }
 
     /// <summary>
-    /// The view tells whether the explorer is shown (attached and visible): changes to the tests rebuild nothing while it
-    /// isn't, and one rebuild catches up when it is again.
+    /// A view tells whether it shows the explorer (attached and visible): changes to the tests rebuild nothing while none
+    /// does, and one rebuild catches up when one does again.
     /// </summary>
-    public void SetViewShown(bool shown)
+    public void SetViewShown(object view, bool shown)
     {
-        _viewShown = shown;
-        if (shown && _changedWhileHidden)
+        if (_views.Set(view, shown) && shown && _changedWhileHidden)
         {
             _changedWhileHidden = false;
             QueueRefresh();

@@ -51,7 +51,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
                 old.RevealRequested -= OnRevealRequested;
                 if (_shown)
                 {
-                    old.SetViewShown(false);
+                    old.SetViewShown(this, false);
                 }
 
                 _reported = null;
@@ -135,7 +135,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         }
 
         _shown = shown;
-        _reported?.SetViewShown(shown);
+        _reported?.SetViewShown(this, shown);
         if (shown && _revealWhenShown is { } row && _reported?.Rows.Contains(row) == true)
         {
             _revealWhenShown = null;
