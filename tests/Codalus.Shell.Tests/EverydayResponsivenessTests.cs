@@ -1,7 +1,11 @@
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Codalus.LanguageServices.Protocol;
+using Codalus.Plugins.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
+using Codalus.Workbench.Testing;
+using Range = Codalus.LanguageServices.Protocol.Range;
 
 namespace Codalus.Shell.Tests;
 
@@ -24,6 +28,17 @@ public class EverydayResponsivenessTests
     {
         var until = DateTime.UtcNow.AddMilliseconds(milliseconds);
         await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until, seconds: 120);
+    }
+
+    /// <summary>Runs <paramref name="flow"/> once for the JIT, then again measured: no input may wait over the budget.</summary>
+    private static async Task FlowAsync(UiStallMonitor monitor, string name, Func<Task> flow)
+    {
+        await flow();
+        await WaitAsync(300);
+        monitor.Reset();
+        await flow();
+        await WaitAsync(300);
+        monitor.AssertResponsive(name, Budget);
     }
 
     [AvaloniaFact]
@@ -57,15 +72,7 @@ public class EverydayResponsivenessTests
         await ShellFixture.PumpUntil(() => explorer.TrackActiveItem);
 
         using var monitor = new UiStallMonitor();
-        async Task Flow(string name, Func<Task> flow)
-        {
-            await flow(); // the JIT's first time
-            await WaitAsync(300);
-            monitor.Reset();
-            await flow();
-            await WaitAsync(300);
-            monitor.AssertResponsive(name, Budget);
-        }
+        Task Flow(string name, Func<Task> flow) => FlowAsync(monitor, name, flow);
 
         await Flow("Track Active Item while opening files far apart", async () =>
         {
@@ -116,6 +123,114 @@ public class EverydayResponsivenessTests
             {
                 await f.Shell.OpenFileAsync(file);
             }
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task Error_list_flows_on_a_hundred_thousand_diagnostics()
+    {
+        // An unrestored solution reports 100,000 errors and more: each keystroke in the search box, each toggle and each
+        // regrouping sorted them all on the UI thread, up to a second each (M56).
+        await using var f = ShellFixture.Create();
+        var root = Path.Combine(Path.GetTempPath(), "codalus-everyday-" + Guid.NewGuid().ToString("N"));
+        Diagnostic[] items = [.. Enumerable.Range(0, 500).Select(line => new Diagnostic(
+            new Range(new Position(line, 0), new Position(line, 4)), line % 3 == 0 ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name 'Telerik' could not be found"))];
+        var list = f.Shell.ErrorList;
+        for (var file = 0; file < 200; file++)
+        {
+            f.Shell.Languages.Diagnostics.Set(Path.Combine(root, $"File{file:000}.cs"), "csharp", null, items);
+        }
+
+        f.Shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 100_000 && !list.IsRefreshing, seconds: 120);
+
+        using var monitor = new UiStallMonitor();
+        await FlowAsync(monitor, "typing in the Error List's search box and clearing it", async () =>
+        {
+            foreach (var text in new[] { "F", "Fi", "Fil", "File1", "File12", string.Empty })
+            {
+                list.Filter = text;
+                await WaitAsync(60);
+            }
+
+            await ShellFixture.PumpUntil(() => !list.IsRefreshing && list.Rows.Count == 100_000, seconds: 120);
+        });
+
+        await FlowAsync(monitor, "hiding warnings, grouping by file and collapsing groups", async () =>
+        {
+            list.ShowWarnings = false;
+            await ShellFixture.PumpUntil(() => !list.IsRefreshing, seconds: 120);
+            list.ShowWarnings = true;
+            list.GroupBy = Array.IndexOf(ErrorListViewModel.GroupByValues, "file");
+            await ShellFixture.PumpUntil(() => !list.IsRefreshing && list.Items.Count == 100_200, seconds: 120);
+            for (var i = 0; i < 2; i++)
+            {
+                foreach (var group in list.Items.OfType<ErrorListGroup>().Take(10).ToList())
+                {
+                    list.ToggleGroup(group);
+                    await WaitAsync(20);
+                }
+            }
+
+            list.GroupBy = 0;
+            await ShellFixture.PumpUntil(() => !list.IsRefreshing && list.Items.Count == 100_000, seconds: 120);
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task A_test_run_of_twenty_thousand_tests_with_editors_open()
+    {
+        // During discovery and runs the test service reports a change every 50 ms: at each one, every editor looked
+        // through every test of the solution twice, and the Test Explorer arranged them all, shown or not (M56).
+        await using var f = ShellFixture.Create();
+        const string controller = "codalus.synthetic:tests";
+        var folder = Path.Combine(f.UserData, "tests");
+        Directory.CreateDirectory(folder);
+        var items = new List<TestItemDto>();
+        var paths = new List<string>();
+        for (var d = 0; d < 200; d++)
+        {
+            var path = Path.Combine(folder, $"Tests{d:000}.txt");
+            paths.Add(path);
+            await File.WriteAllTextAsync(path, string.Join('\n', Enumerable.Range(0, 210).Select(i => $"line {i}")), TestContext.Current.CancellationToken);
+            var uri = DocumentUris.FromPath(path);
+            items.Add(new TestItemDto($"p{d}", null, $"P{d}", null, null, null, null, null, null));
+            items.Add(new TestItemDto($"p{d}|c", $"p{d}", "Calc", null, uri, new RangeDto(0, 0, 205, 0), null, null, null));
+            for (var t = 0; t < 100; t++)
+            {
+                items.Add(new TestItemDto($"p{d}|m{t}", $"p{d}|c", "Test" + t, null, uri, new RangeDto((2 * t) + 1, 0, (2 * t) + 2, 0), null, null, null));
+            }
+        }
+
+        var tests = f.Shell.Tests;
+        tests.ControllerCreated(new TestControllerParams("codalus.synthetic", controller, "Synthetic"), new TestRefreshTests.Connection());
+        tests.ItemsUpdated(new TestItemsUpdateParams(controller, [.. items], []));
+        foreach (var path in paths.Take(20))
+        {
+            await f.Shell.OpenFileAsync(path);
+        }
+
+        // The Start page opens in the left column once the Welcome plugin runs, and takes the column's tab: the Test
+        // Explorer shows after it (a later plugin host, after another test, covered it).
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => f.Shell.TestExplorer.IsViewShown && f.Shell.TestExplorer.Summary.Contains("20000 tests", StringComparison.Ordinal), seconds: 120, describe: () => $"shown: {f.Shell.TestExplorer.IsViewShown}, summary: {f.Shell.TestExplorer.Summary}");
+
+        using var monitor = new UiStallMonitor();
+        var runs = 0;
+        await FlowAsync(monitor, "a run reporting 20,000 results", async () =>
+        {
+            var run = "r" + ++runs;
+            tests.RunStarted(new TestRunStartedParams(controller, run, "Run", null, "run"));
+            for (var batch = 0; batch < 100; batch++)
+            {
+                TestStateDto[] states = [.. Enumerable.Range(batch * 200, 200).Select(n => new TestStateDto($"p{n / 100}|m{n % 100}", n % 17 == 0 ? TestStates.Failed : TestStates.Passed, 1, null))];
+                tests.RunUpdated(new TestRunUpdateParams(run, states, [], []));
+                await WaitAsync(30);
+            }
+
+            tests.RunEnded(run);
+            await ShellFixture.PumpUntil(() => f.Shell.TestExplorer.Summary.Contains("1177 failed", StringComparison.Ordinal), seconds: 120);
         });
     }
 }

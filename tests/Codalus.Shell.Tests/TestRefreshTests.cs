@@ -196,7 +196,8 @@ public sealed class TestRefreshTests
         Assert.Equal(before[1], (b.TestMargin.Refreshes, b.Insights.TestLensUpdates));
     }
 
-    private sealed class Connection : ITestControllerConnection
+    /// <summary>A controller's connection that runs nothing (the tests report results to the service themselves).</summary>
+    internal sealed class Connection : ITestControllerConnection
     {
         public Task<IReadOnlyList<string>> RunAsync(TestRunParams request, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
 
