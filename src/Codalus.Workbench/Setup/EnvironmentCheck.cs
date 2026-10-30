@@ -283,16 +283,8 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <summary>Checks everything; <paramref name="solutionFolder"/> also checks its <c>global.json</c>.</summary>
     public async Task<IReadOnlyList<ToolStatus>> CheckAsync(string? solutionFolder, CancellationToken cancellationToken)
     {
-        var dotnet = await DotnetAsync(solutionFolder, cancellationToken).ConfigureAwait(false);
-        var git = await VersionOfAsync("git", environment("CODALUS_GIT") is { Length: > 0 } g ? g : FindOnPath("git"), ["--version"], "git version ", cancellationToken).ConfigureAwait(false);
-        var tools = new List<ToolStatus>
-        {
-            dotnet,
-            HostRuntimeStatus(),
-            Status("git", "Git", required: true, git, "Source control, and cloning repositories"),
-        };
-
-        if (git.State == ToolState.Found)
+        var tools = new List<ToolStatus>(await CheckRequiredAsync(solutionFolder, cancellationToken).ConfigureAwait(false));
+        if (tools.Single(t => t.Id == "git") is { State: ToolState.Found } git)
         {
             var lfs = await VersionOfAsync("git-lfs", git.Path, ["lfs", "version"], "git-lfs/", cancellationToken).ConfigureAwait(false);
             tools.Add(Status("git-lfs", "Git LFS", required: false, lfs, "Repositories that keep large files in Git LFS"));
@@ -309,6 +301,19 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         }
 
         return tools;
+    }
+
+    /// <summary>
+    /// The tools Codalus IDE needs, which startup offers to install when they're missing: the .NET SDK (against
+    /// <paramref name="solutionFolder"/>'s <c>global.json</c>), the runtime of its hosts and Git. The optional ones wait
+    /// for the Check Environment window: their <c>--version</c>s cost every start seconds of CPU (Podman's starts its
+    /// machine's client), competing with the window and the solution opening.
+    /// </summary>
+    public async Task<IReadOnlyList<ToolStatus>> CheckRequiredAsync(string? solutionFolder, CancellationToken cancellationToken)
+    {
+        var dotnet = await DotnetAsync(solutionFolder, cancellationToken).ConfigureAwait(false);
+        var git = await VersionOfAsync("git", environment("CODALUS_GIT") is { Length: > 0 } g ? g : FindOnPath("git"), ["--version"], "git version ", cancellationToken).ConfigureAwait(false);
+        return [dotnet, HostRuntimeStatus(), Status("git", "Git", required: true, git, "Source control, and cloning repositories")];
     }
 
     /// <summary>

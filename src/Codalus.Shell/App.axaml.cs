@@ -10,6 +10,9 @@ public sealed class App : Application
 {
     internal static ShellOptions Options { get; set; } = new();
 
+    /// <summary>The login shell's PATH and network settings being taken (Program.Main); the shell waits for it before it starts anything.</summary>
+    internal static Task<bool> LoginShellImport { get; set; } = Task.FromResult(false);
+
     public ShellHost? Shell { get; private set; }
 
     public override void RegisterServices()
@@ -33,6 +36,7 @@ public sealed class App : Application
         TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            LoginShellImport.Wait(); // its own timeout bounds it (5 s)
             var shell = Shell = new ShellHost(this, Options);
             desktop.MainWindow = new MainWindow(shell);
             desktop.Exit += (_, _) => shell.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3));

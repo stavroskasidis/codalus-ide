@@ -84,6 +84,14 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         Assert.All(calls, c => Assert.StartsWith("dotnet ", c, StringComparison.Ordinal));
         Assert.Contains("--version 9.0.100", InstallPlans.For(sdk, PlatformKind.Linux, _dir, false, "fedora")!.Command, StringComparison.Ordinal);
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
+
+        // What every start checks: the required tools, without running Git LFS, Docker or Podman.
+        calls.Clear();
+        var required = await check.CheckRequiredAsync(null, TestContext.Current.CancellationToken);
+        Assert.Equal(["dotnet", "dotnet-runtime", "git"], required.Select(t => t.Id));
+        Assert.All(required, t => Assert.True(t.Required, t.Id));
+        Assert.Equal("2.51.0", required.Single(t => t.Id == "git").Version);
+        Assert.All(calls, c => Assert.Matches("^(dotnet|git) --", c));
     }
 
     [Fact]

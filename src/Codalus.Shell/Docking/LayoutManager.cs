@@ -334,7 +334,11 @@ public sealed class LayoutManager : ObservableObject
     /// Shows <paramref name="document"/> (or the open document with its id). A <paramref name="preview"/> document
     /// takes the place of the group's current preview tab, unless that one was modified.
     /// </summary>
-    public void OpenDocument(ShellDocument document, bool preview = false, bool focus = false)
+    /// <param name="activate">
+    /// False to add the tab behind the active one (a session's documents being restored): its view is made when it's
+    /// first shown, not now.
+    /// </param>
+    public void OpenDocument(ShellDocument document, bool preview = false, bool focus = false, bool activate = true)
     {
         var existing = Documents.FirstOrDefault(d => d.Id == document.Id);
         if (existing is null)
@@ -363,6 +367,11 @@ public sealed class LayoutManager : ObservableObject
         else if (!preview)
         {
             existing.IsPreview = false;
+        }
+
+        if (!activate)
+        {
+            return;
         }
 
         if (focus)

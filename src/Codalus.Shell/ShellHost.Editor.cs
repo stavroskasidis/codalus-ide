@@ -287,7 +287,8 @@ public sealed partial class ShellHost : IEditorServices
     /// Opens a file in the editor (or shows its open tab). <paramref name="preview"/> opens it in the group's preview
     /// tab; <paramref name="at"/> moves the caret there.
     /// </summary>
-    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null, bool textEditor = false)
+    /// <param name="activate">False to add the tab behind the active one, its view made when it's first shown (a session restored).</param>
+    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null, bool textEditor = false, bool activate = true)
     {
         path = Path.GetFullPath(path);
         if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
@@ -331,7 +332,7 @@ public sealed partial class ShellHost : IEditorServices
 
         if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null) is { } open)
         {
-            Layout.OpenDocument(open, preview, focus: !preview);
+            Layout.OpenDocument(open, preview, focus: !preview, activate);
             if (at is { } position)
             {
                 open.Navigate(position);
@@ -346,7 +347,7 @@ public sealed partial class ShellHost : IEditorServices
             var created = CodeDocument.Create(path, initialContent);
             Track(created);
             view = CreateView(created, primary: true);
-            Layout.OpenDocument(view, preview, focus: !preview);
+            Layout.OpenDocument(view, preview, focus: !preview, activate);
         }
         else
         {
@@ -365,7 +366,7 @@ public sealed partial class ShellHost : IEditorServices
                 }
 
                 view = CreateView(model, primary: true);
-                Layout.OpenDocument(view, preview, focus: !preview);
+                Layout.OpenDocument(view, preview, focus: !preview, activate);
             }
             finally
             {

@@ -109,11 +109,18 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
-    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer)
+    /// <summary>Whether <see cref="Tools"/> has every tool, not only the required ones startup checks.</summary>
+    public bool ToolsComplete { get; private set; }
+
+    /// <param name="requiredOnly">The required tools alone (startup: what it offers to install).</param>
+    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer, bool requiredOnly = false)
     {
         try
         {
-            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true), .. NetFrameworkTools()];
+            Tools = requiredOnly
+                ? await EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true)
+                : [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true), .. NetFrameworkTools()];
+            ToolsComplete = !requiredOnly;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -542,6 +549,7 @@ public sealed partial class ShellHost
         if (await EnvironmentCheck.CheckDotnetAsync(folder, CancellationToken.None).ConfigureAwait(true) is { State: ToolState.Mismatch } sdk)
         {
             Tools = await EnvironmentCheck.CheckAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            ToolsComplete = false; // without the mobile, Windows app and .NET Framework rows
             ToolsChanged?.Invoke(this, EventArgs.Empty);
             await OfferInstallAsync(sdk).ConfigureAwait(true);
         }

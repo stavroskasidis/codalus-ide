@@ -78,7 +78,7 @@ public sealed class EnvironmentViewModel : ObservableObject
         shell.ToolsChanged += (_, _) => Ui.Post(Fill);
         CheckCommand = new RelayCommand(() => _ = CheckAsync(), () => !_checking);
         Fill();
-        if (shell.Tools.Count == 0)
+        if (shell.Tools.Count == 0 || !shell.ToolsComplete)
         {
             _ = CheckAsync();
         }

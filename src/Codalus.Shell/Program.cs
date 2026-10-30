@@ -132,8 +132,12 @@ internal static partial class Program
             }
         }
 
-        // Started from the Finder, macOS gives the app only the system's PATH: take the login shell's (dotnet, git…).
-        Codalus.Workbench.Setup.LoginShellPath.Import();
+        // Started from the Finder, macOS gives the app only the system's PATH: take the login shell's (dotnet, git…). An
+        // interactive login shell can take a second (oh-my-zsh, nvm): it runs while the windowing system and the app's
+        // resources load, and the shell waits for it before it starts anything (App.OnFrameworkInitializationCompleted).
+        App.LoginShellImport = Codalus.Workbench.Setup.LoginShellPath.ShouldImport(Environment.GetEnvironmentVariable)
+            ? Task.Run(Codalus.Workbench.Setup.LoginShellPath.Import)
+            : Task.FromResult(false);
         App.Options = options;
         try
         {

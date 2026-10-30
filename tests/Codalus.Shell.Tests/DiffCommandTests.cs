@@ -30,7 +30,13 @@ public sealed class DiffCommandTests
     public async Task A_second_process_hands_its_request_to_the_running_one()
     {
         var name = SingleInstance.PipeName(Path.Combine(Path.GetTempPath(), "codalus-instance-" + Guid.NewGuid().ToString("N")));
+
+        // No shell running: the request is refused at once (a connect where nothing listens waits for its whole
+        // timeout, half a second before every codalus <solution> started an IDE).
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        Assert.False(SingleInstance.MayBeListening(name));
         Assert.False(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
+        Assert.True(started.ElapsedMilliseconds < 250, $"refused after {started.ElapsedMilliseconds} ms");
 
         var received = new TaskCompletionSource<InstanceRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = SingleInstance.Listen(name, request =>
@@ -49,6 +55,7 @@ public sealed class DiffCommandTests
         }
 
         Assert.True(sent);
+        Assert.True(SingleInstance.MayBeListening(name));
         var request = await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Equal("diff", request.Command);
         Assert.Equal(["left.txt", "right.txt"], request.Arguments);

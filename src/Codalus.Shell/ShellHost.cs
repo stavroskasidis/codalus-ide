@@ -358,7 +358,8 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench.Log.AppendLine($"[setup] First-run setup: {setup}.");
         if (Options.SmokeTest is null && Options.Bench is null)
         {
-            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show);
+            // The required tools at every start; the first-run setup's Tools step shows them all.
+            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show, requiredOnly: setup != SetupDecision.Show);
         }
         _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
