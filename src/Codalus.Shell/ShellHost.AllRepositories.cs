@@ -81,10 +81,14 @@ public sealed partial class ShellHost
         try
         {
             var folders = solution.Projects.Select(p => Path.GetDirectoryName(p.Path)).OfType<string>().Prepend(solution.Directory).Concat(_addedRepositories).ToList();
-            var found = await Git.FindRepositoriesAsync(folders).ConfigureAwait(true);
+            var found = await Git.FindRepositoriesAsync(folders, _lifetime.Token).ConfigureAwait(true);
             var roots = found.Where((root, index) => index == 0 || !_removedRepositories.Contains(root, PathComparer)).ToList();
             Git.Repositories = roots;
             await ShowRepositoriesAsync(roots).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // The shell closed meanwhile: its git stopped with it.
         }
         catch (Exception ex) when (ex is GitException or IOException)
         {

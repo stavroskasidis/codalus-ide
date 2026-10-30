@@ -69,6 +69,9 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>The shell is being disposed: its timers stay stopped.</summary>
     private bool _disposing;
 
+    /// <summary>Cancelled when the shell is disposed: work it started for itself (the environment check) stops with it.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
     public ShellHost(Application app, ShellOptions options)
     {
         Options = options;
@@ -1035,6 +1038,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         var designers = StopWinFormsDesignersAsync();
         var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
+        _lifetime.Cancel(); // not awaited: the dispose stays on the UI thread until its first await below
         await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {

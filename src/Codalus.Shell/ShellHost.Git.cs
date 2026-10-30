@@ -139,10 +139,14 @@ public sealed partial class ShellHost
     {
         try
         {
-            if (!await Git.OpenAsync(folder, CancellationToken.None).ConfigureAwait(true))
+            if (!await Git.OpenAsync(folder, _lifetime.Token).ConfigureAwait(true))
             {
                 UpdateGitStatus();
             }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // The shell closed meanwhile: its git stopped with it.
         }
         catch (GitException ex)
         {
