@@ -41,9 +41,11 @@
       <TextBlock Classes="muted" TextWrapping="Wrap" Text="{l:T solutionExplorer.noSolutionIsOpen}" />
       <Button Classes="iconText" controls:ButtonIcon.Kind="folder-open" Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
     </StackPanel>
+    <!-- Only reveals scroll (M56): Avalonia's scroll to the selected row ran after every change to the rows. -->
     <ListBox x:Name="List"
              ItemsSource="{Binding Rows}"
              SelectedItem="{Binding Selected}"
+             AutoScrollToSelectedItem="False"
              IsVisible="{Binding HasSolution}"
              Background="Transparent"
              DragDrop.AllowDrop="True"

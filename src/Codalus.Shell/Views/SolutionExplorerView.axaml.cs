@@ -34,6 +34,8 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private PointerPressedEventArgs? _dragStart;
     private Point _dragOrigin;
     private ListBoxItem? _dropTarget;
+    private ExplorerRowViewModel? _revealWhenShown;
+    private bool _shown;
 
     public SolutionExplorerView()
     {
@@ -46,6 +48,18 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
                 vm.SearchRequested += OnSearchRequested;
                 vm.RevealRequested -= OnRevealRequested;
                 vm.RevealRequested += OnRevealRequested;
+                _shown = false;
+                UpdateShown();
+            }
+        };
+        AttachedToVisualTree += (_, _) => UpdateShown();
+        DetachedFromVisualTree += (_, _) => UpdateShown();
+        List.EffectiveViewportChanged += (_, _) => UpdateShown();
+        List.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty)
+            {
+                UpdateShown();
             }
         };
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
@@ -83,18 +97,40 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private SolutionExplorerViewModel? ViewModel => DataContext as SolutionExplorerViewModel;
 
     /// <summary>
-    /// A revealed row comes into view at once (M50): the list scrolls only when its selection changes, so a row that was
-    /// already selected but scrolled away stayed hidden.
+    /// A revealed row comes into view at once (M50), with one scroll: the list doesn't follow its selection on its own
+    /// (M56). A reveal while the explorer is hidden waits for it to be shown.
     /// </summary>
     private void OnRevealRequested(object? sender, ExplorerRowViewModel row)
     {
-        if (!List.IsEffectivelyVisible)
+        if (!this.IsAttachedToVisualTree() || !List.IsEffectivelyVisible)
+        {
+            _revealWhenShown = row;
+            return;
+        }
+
+        _revealWhenShown = null;
+        List.ScrollIntoView(row); // lays the row out itself when it isn't realized
+    }
+
+    /// <summary>
+    /// Tells the view model whether the explorer is shown (Track Active Item waits while it isn't), and brings a reveal
+    /// that came while it was hidden into view.
+    /// </summary>
+    private void UpdateShown()
+    {
+        var shown = this.IsAttachedToVisualTree() && List.IsEffectivelyVisible;
+        if (shown == _shown)
         {
             return;
         }
 
-        List.UpdateLayout();
-        List.ScrollIntoView(row);
+        _shown = shown;
+        ViewModel?.SetViewShown(shown);
+        if (shown && _revealWhenShown is { } row && ViewModel?.Rows.Contains(row) == true)
+        {
+            _revealWhenShown = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => List.ScrollIntoView(row), Avalonia.Threading.DispatcherPriority.Loaded);
+        }
     }
 
     private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;

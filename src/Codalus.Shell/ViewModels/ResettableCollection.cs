@@ -31,4 +31,41 @@ public sealed class ResettableCollection<T> : ObservableCollection<T>
         OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
         OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
     }
+
+    /// <summary>
+    /// Inserts <paramref name="items"/> at <paramref name="index"/> with one <see cref="NotifyCollectionChangedAction.Add"/>.
+    /// A list that keeps its selection's anchor updates it once, not once per item: Avalonia's queued one scroll to the
+    /// selected row for each row inserted above it, which walked the Solution Explorer through them (M56).
+    /// </summary>
+    public void InsertRange(int index, IReadOnlyList<T> items)
+    {
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        CheckReentrancy();
+        var added = items as List<T> ?? [.. items];
+        ((List<T>)Items).InsertRange(index, added);
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, added, index));
+    }
+
+    /// <summary>Removes <paramref name="count"/> items from <paramref name="index"/> with one <see cref="NotifyCollectionChangedAction.Remove"/>.</summary>
+    public void RemoveRange(int index, int count)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        CheckReentrancy();
+        var list = (List<T>)Items;
+        var removed = list.GetRange(index, count);
+        list.RemoveRange(index, count);
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, removed, index));
+    }
 }

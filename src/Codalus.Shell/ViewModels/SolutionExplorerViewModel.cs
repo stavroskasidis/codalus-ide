@@ -125,7 +125,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
     private ExplorerNode? _root;
     private ExplorerRowViewModel? _selected;
-    private bool _refreshQueued;
+    private int _refreshQueued; // set from the model's events, which come on any thread
     private string? _pendingReveal;
     private (IReadOnlyList<string> Paths, bool Cut)? _clipboard;
     private string? _startupProject;
@@ -181,7 +181,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Refresh();
     }
 
-    public ObservableCollection<ExplorerRowViewModel> Rows { get; } = [];
+    /// <summary>The visible rows. Changes are applied as ranges, one event each (see <see cref="Apply"/>).</summary>
+    public ResettableCollection<ExplorerRowViewModel> Rows { get; } = [];
 
     public RelayCommand OpenSolutionCommand { get; }
 
@@ -341,7 +342,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>The disk listing arrived (tests wait for it).</summary>
     public event EventHandler? DiskLoaded;
 
-    /// <summary>Filters the tree to the items whose names contain the text, with their parents (the search box, M29).</summary>
+    /// <summary>
+    /// Filters the tree to the items whose names contain the text, with their parents (the search box, M29). The matches
+    /// are found off the UI thread once typing pauses: in a large solution a short filter matches tens of thousands of
+    /// nodes, and each keystroke walked every node and applied the rows one at a time on the UI thread (M56). Clearing it
+    /// shows the tree again at once.
+    /// </summary>
     public string Filter
     {
         get => _filter;
@@ -349,8 +355,41 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             if (SetField(ref _filter, value ?? string.Empty))
             {
-                Refresh();
+                if (_filter.Trim().Length == 0)
+                {
+                    CancelFilter();
+                    Refresh();
+                }
+                else
+                {
+                    (_filterDebounce ??= new UiDebouncer(Refresh, TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(600))).Request();
+                }
             }
+        }
+    }
+
+    private UiDebouncer? _filterDebounce;
+    private int _filterGeneration; // a newer filter, tree or clear makes the matches being found stale
+    private bool _filtering;
+
+    /// <summary>Whether a filter's matches are still being found (tests).</summary>
+    internal bool IsFiltering => _filterDebounce?.IsPending == true || _filtering;
+
+    private void CancelFilter()
+    {
+        Interlocked.Increment(ref _filterGeneration);
+        _filtering = false;
+    }
+
+    /// <summary>Clears the search box and shows the whole tree now (Sync, Track Active Item, Home).</summary>
+    private void ClearFilter()
+    {
+        if (_filter.Length > 0)
+        {
+            _filter = string.Empty;
+            OnPropertyChanged(nameof(Filter));
+            CancelFilter();
+            Refresh();
         }
     }
 
@@ -362,21 +401,26 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>Home: back to the solution node, collapsed to its projects.</summary>
     public void Home()
     {
-        Filter = string.Empty;
+        ClearFilter();
         CollapseAll();
         Selected = Rows.FirstOrDefault();
+        if (Selected is { } top)
+        {
+            RevealRequested?.Invoke(this, top); // the list only scrolls for reveals
+        }
     }
 
-    /// <summary>Sync with Active Document: selects the active document's file in the tree.</summary>
+    /// <summary>Sync with Active Document: selects the active document's file in the tree, at once.</summary>
     public void SyncWithActiveDocument()
     {
-        if (_shell.ActiveEditor?.Model.Path is not { } path || _root is null || FindByPath(_root, path) is not { } node)
+        RefreshIfQueued(); // a project that just loaded is in the tree to find
+        if (_shell.ActiveEditor?.Model.Path is not { } path || FindByPath(path) is not { } node)
         {
             _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
             return;
         }
 
-        Filter = string.Empty;
+        ClearFilter();
         Reveal(node.Id);
     }
 
@@ -400,42 +444,158 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>
     /// The active document changed: with Track Active Item on, its file is selected, without a message when it isn't in
-    /// the solution, and the search box's filter kept when the file is among its matches.
+    /// the solution, and the search box's filter kept when the file is among its matches. One reveal for a burst of
+    /// activations (Ctrl+Tab held, Close All, opening many files, debugger steps), after the new editor's first frame and
+    /// any queued refresh, and none while the explorer isn't shown: it catches up when shown (M56). Each reveal used to
+    /// run inside the activation, so every tab passed through was revealed, and its folders expanded, before the next.
     /// </summary>
     public void OnActiveDocumentChanged()
     {
-        if (!TrackActiveItem || _shell.ActiveEditor?.Model.Path is not { } path || _root is null || FindByPath(_root, path) is not { } node)
+        if (!TrackActiveItem || _trackQueued)
         {
+            return;
+        }
+
+        _trackQueued = true;
+        Avalonia.Threading.Dispatcher.UIThread.Post(TrackActiveDocument, Avalonia.Threading.DispatcherPriority.Background);
+    }
+
+    private bool _trackQueued;
+    private bool _trackWhenShown;
+    private string? _trackWhenFound;
+    private bool _viewShown;
+
+    private void TrackActiveDocument()
+    {
+        _trackQueued = false;
+        _trackWhenFound = null;
+        if (!TrackActiveItem || _shell.ActiveEditor?.Model.Path is not { } path)
+        {
+            return;
+        }
+
+        if (!_viewShown)
+        {
+            _trackWhenShown = true;
+            return;
+        }
+
+        _trackWhenShown = false;
+        if (FindByPath(path) is not { } node)
+        {
+            _trackWhenFound = path; // its project may not be in the tree yet: tried again after the next refresh
             return;
         }
 
         if (_filter.Length > 0 && !Rows.Any(r => r.Id == node.Id))
         {
-            Filter = string.Empty;
+            ClearFilter();
         }
 
         Reveal(node.Id);
     }
 
+    /// <summary>
+    /// The view tells whether the explorer is shown (attached and visible): Track Active Item does nothing while it
+    /// isn't, and reveals the active document when it is again.
+    /// </summary>
+    public void SetViewShown(bool shown)
+    {
+        _viewShown = shown;
+        if (shown && _trackWhenShown)
+        {
+            _trackWhenShown = false;
+            OnActiveDocumentChanged();
+        }
+    }
+
     /// <summary>Raised when a row was revealed: the view scrolls it into view at once, selected or not before.</summary>
     public event EventHandler<ExplorerRowViewModel>? RevealRequested;
 
-    private static ExplorerNode? FindByPath(ExplorerNode node, string path)
+    // ------------------------------------------------------------------ the tree's index
+
+    // The tree's nodes by id (with their parents) and its files, folders and projects by path, built on the first lookup
+    // after a refresh: Track and Sync walked the whole tree twice for each activation, dependencies first (M56).
+    private Dictionary<string, (ExplorerNode Node, ExplorerNode? Parent)>? _byId;
+    private Dictionary<string, ExplorerNode>? _byPath;
+
+    private void EnsureIndex()
     {
-        if (node.Kind is not ExplorerNodeKind.Solution and not ExplorerNodeKind.Project && node.Path is { } nodePath && SolutionService.PathComparer.Equals(nodePath, path))
+        if (_byId is not null || _root is null)
         {
-            return node;
+            return;
         }
 
-        foreach (var child in node.Children)
+        var byId = new Dictionary<string, (ExplorerNode, ExplorerNode?)>(StringComparer.Ordinal);
+        var byPath = new Dictionary<string, ExplorerNode>(SolutionService.PathComparer);
+        var stack = new Stack<(ExplorerNode Node, ExplorerNode? Parent)>();
+        stack.Push((_root, null));
+        while (stack.Count > 0)
         {
-            if (FindByPath(child, path) is { } found)
+            var (node, parent) = stack.Pop();
+            byId.TryAdd(node.Id, (node, parent));
+
+            // A project's file is its node (the classic IDE's); its dependencies are never revealed by path, and a
+            // project reference carries the referenced project's path.
+            if (node is { Kind: ExplorerNodeKind.Project or ExplorerNodeKind.File or ExplorerNodeKind.Folder or ExplorerNodeKind.SolutionItem, Path: { } path })
             {
-                return found;
+                byPath.TryAdd(path, node);
+            }
+
+            if (node.Kind == ExplorerNodeKind.Dependencies)
+            {
+                continue; // thousands of transitive packages per project: found by walking their project's when asked for
+            }
+
+            for (var i = node.Children.Count - 1; i >= 0; i--)
+            {
+                stack.Push((node.Children[i], node)); // tree order, so the first node with a path wins
             }
         }
 
-        return null;
+        _byId = byId;
+        _byPath = byPath;
+    }
+
+    /// <summary>The file's, folder's or project's node with <paramref name="path"/>, or null.</summary>
+    private ExplorerNode? FindByPath(string path)
+    {
+        EnsureIndex();
+        return _byPath?.GetValueOrDefault(path);
+    }
+
+    /// <summary>The nodes from the root down to the node with <paramref name="id"/>, or null.</summary>
+    private List<ExplorerNode>? PathTo(string id)
+    {
+        EnsureIndex();
+        if (_byId is null)
+        {
+            return null;
+        }
+
+        if (!_byId.TryGetValue(id, out var entry))
+        {
+            // Under a project's dependencies: walk that project's subtree, the only one that can hold it.
+            foreach (var (_, (node, _)) in _byId)
+            {
+                if (node.Kind == ExplorerNodeKind.Dependencies && Path(node, id) is { } below)
+                {
+                    var path = PathTo(node.Id)!;
+                    path.AddRange(below.Skip(1));
+                    return path;
+                }
+            }
+
+            return null;
+        }
+
+        var chain = new List<ExplorerNode> { entry.Node };
+        for (var parent = entry.Parent; parent is not null; parent = _byId[parent.Id].Parent)
+        {
+            chain.Insert(0, parent);
+        }
+
+        return chain;
     }
 
     public bool HasSolution => _shell.Solutions.IsOpen;
@@ -505,18 +665,25 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     private void QueueRefresh()
     {
-        if (_refreshQueued)
+        if (Interlocked.Exchange(ref _refreshQueued, 1) == 1)
         {
             return;
         }
 
-        _refreshQueued = true;
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            _refreshQueued = false;
-            Refresh();
-        }, Avalonia.Threading.DispatcherPriority.Background);
+        Avalonia.Threading.Dispatcher.UIThread.Post(RefreshIfQueued, Avalonia.Threading.DispatcherPriority.Background);
     }
+
+    /// <summary>Runs a queued refresh now (Sync looks for a file whose project just loaded); the queued job then does nothing.</summary>
+    private void RefreshIfQueued()
+    {
+        if (Interlocked.Exchange(ref _refreshQueued, 0) == 1)
+        {
+            Refresh();
+        }
+    }
+
+    /// <summary>The tree was built again (tests count them: an expansion or a reveal doesn't).</summary>
+    internal int Builds { get; private set; }
 
     public void Refresh()
     {
@@ -528,23 +695,92 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 FolderEntries = IsFolderView ? _folderEntries : null,
             }, _treeCache)
             : null;
-        OnPropertyChanged(nameof(HasSolution));
-        if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)
+        Builds++;
+        _byId = null;
+        _byPath = null;
+        if (_root is null)
         {
-            Reveal(pending, rebuild: true);
-            return;
+            _withMembers.Clear();
+            _loadingRows.Clear();
         }
-        var rows = new List<(ExplorerNode Node, int Depth)>();
+        OnPropertyChanged(nameof(HasSolution));
+
+        // A reveal that waited for its node: its ancestors expand in this build's rows.
+        string? reveal = null;
+        if (_pendingReveal is { } pending && PathTo(pending) is { } path)
+        {
+            _pendingReveal = null;
+            reveal = pending;
+            foreach (var ancestor in path.SkipLast(1))
+            {
+                _expanded.Add(ancestor.Id);
+            }
+        }
+
         if (_root is not null && _filter.Trim() is { Length: > 0 } filter)
         {
-            FlattenMatching(_root, 0, filter, rows);
+            _ = FilterAsync(_root, filter, reveal);
+            return;
         }
-        else if (_root is not null)
+
+        CancelFilter();
+        var rows = new List<(ExplorerNode Node, int Depth)>();
+        if (_root is not null)
         {
             Flatten(_root, 0, rows);
         }
 
         Apply(rows);
+        AfterRefresh(reveal);
+    }
+
+    private void AfterRefresh(string? reveal)
+    {
+        if (reveal is not null && Rows.FirstOrDefault(r => r.Id == reveal) is { } row)
+        {
+            Selected = row;
+            RevealRequested?.Invoke(this, row);
+        }
+
+        if (_trackWhenFound is { } path && SolutionService.PathComparer.Equals(_shell.ActiveEditor?.Model.Path, path) && FindByPath(path) is not null)
+        {
+            _trackWhenFound = null;
+            OnActiveDocumentChanged();
+        }
+    }
+
+    /// <summary>A filter's matches, found off the UI thread and shown with one reset, unless the filter or the tree changed meanwhile.</summary>
+    private async Task FilterAsync(ExplorerNode root, string filter, string? reveal)
+    {
+        var generation = Interlocked.Increment(ref _filterGeneration);
+        _filtering = true;
+        bool Stale() => Volatile.Read(ref _filterGeneration) != generation;
+        List<(ExplorerNode Node, int Depth)> rows;
+        try
+        {
+            rows = await Task.Run(() =>
+            {
+                var matches = new List<(ExplorerNode, int)>();
+                FlattenMatching(root, 0, filter, matches, Stale);
+                return matches;
+            }).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (Stale() || !ReferenceEquals(_root, root) || _filter.Trim() != filter)
+        {
+            return;
+        }
+
+        _filtering = false;
+        var selectedId = _selected?.Id;
+        Rows.Reset(rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, true, ProjectInfoOf)));
+        MarkStartupProject();
+        Selected = selectedId is null ? null : Rows.FirstOrDefault(r => r.Id == selectedId);
+        AfterRefresh(reveal);
     }
 
     private void Flatten(ExplorerNode node, int depth, List<(ExplorerNode, int)> rows)
@@ -567,13 +803,18 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     /// <summary>The nodes whose names contain <paramref name="filter"/>, with their ancestors, all expanded.</summary>
-    private static bool FlattenMatching(ExplorerNode node, int depth, string filter, List<(ExplorerNode, int)> rows)
+    private static bool FlattenMatching(ExplorerNode node, int depth, string filter, List<(ExplorerNode, int)> rows, Func<bool> stale)
     {
+        if (stale())
+        {
+            throw new OperationCanceledException();
+        }
+
         var at = rows.Count;
         var any = false;
         foreach (var child in node.Children)
         {
-            any |= FlattenMatching(child, depth + 1, filter, rows);
+            any |= FlattenMatching(child, depth + 1, filter, rows, stale);
         }
 
         if (any || depth == 0 || node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
@@ -585,7 +826,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         return false;
     }
 
-    /// <summary>Updates <see cref="Rows"/> in place: only the changed middle part is replaced, so scrolling is kept.</summary>
+    /// <summary>
+    /// Updates <see cref="Rows"/> in place: only the changed middle part is replaced, with one removal and one insertion,
+    /// so scrolling is kept. Row by row, each insertion above the selected row made Avalonia queue a scroll to it: the
+    /// list walked through every inserted row, a frame each, with input waiting (M56).
+    /// </summary>
     private void Apply(List<(ExplorerNode Node, int Depth)> rows)
     {
         var selectedId = _selected?.Id;
@@ -608,15 +853,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             suffix++;
         }
 
-        for (var i = Rows.Count - suffix - 1; i >= prefix; i--)
-        {
-            Rows.RemoveAt(i);
-        }
-
-        for (var i = prefix; i < rows.Count - suffix; i++)
-        {
-            Rows.Insert(i, new ExplorerRowViewModel(rows[i].Node, rows[i].Depth, _expanded.Contains(rows[i].Node.Id), ProjectInfoOf));
-        }
+        Rows.RemoveRange(prefix, Rows.Count - suffix - prefix);
+        Rows.InsertRange(prefix, rows.Skip(prefix).Take(rows.Count - suffix - prefix).Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf)).ToList());
 
         MarkStartupProject();
         var before = _selected;
@@ -649,7 +887,52 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        Refresh();
+        // Only the row's own rows change: the tree isn't built again (a filter shows every match expanded anyway).
+        if (_filter.Trim().Length > 0 || Rows.IndexOf(row) < 0)
+        {
+            Refresh();
+        }
+        else if (expanded)
+        {
+            ExpandRows(row);
+        }
+        else
+        {
+            CollapseRows(row);
+        }
+    }
+
+    /// <summary>Shows an expanded row's descendants (with the expansion they had) right below it, with one insertion.</summary>
+    private void ExpandRows(ExplorerRowViewModel row)
+    {
+        var rows = new List<(ExplorerNode Node, int Depth)>();
+        foreach (var child in row.Node.Children)
+        {
+            Flatten(child, row.Depth + 1, rows);
+        }
+
+        row.IsExpanded = true;
+        Rows.InsertRange(Rows.IndexOf(row) + 1, rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf)).ToList());
+        MarkStartupProject();
+    }
+
+    /// <summary>Hides a collapsed row's descendants, with one removal; the selection goes with a hidden row.</summary>
+    private void CollapseRows(ExplorerRowViewModel row)
+    {
+        var index = Rows.IndexOf(row);
+        var end = index + 1;
+        while (end < Rows.Count && Rows[end].Depth > row.Depth)
+        {
+            end++;
+        }
+
+        row.IsExpanded = false;
+        var selectionHidden = _selected is not null && Rows.IndexOf(_selected) is var at && at > index && at < end;
+        Rows.RemoveRange(index + 1, end - index - 1);
+        if (selectionHidden)
+        {
+            Selected = null;
+        }
     }
 
     public void Toggle(ExplorerRowViewModel row) => SetExpanded(row, !_expanded.Contains(row.Id));
@@ -689,13 +972,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Reveal(id);
     }
 
-    /// <summary>Selects (and reveals) the node with <paramref name="id"/>.</summary>
-    public void Reveal(string id) => Reveal(id, rebuild: false);
-
-    /// <summary><paramref name="rebuild"/>: the tree was just rebuilt and its rows aren't applied yet.</summary>
-    private void Reveal(string id, bool rebuild)
+    /// <summary>
+    /// Selects (and reveals) the node with <paramref name="id"/>. Its collapsed ancestors expand: the topmost one's rows
+    /// are inserted below it, with one insertion, instead of the tree being built again and every row compared (M56).
+    /// </summary>
+    public void Reveal(string id)
     {
-        if (_root is null || Path(_root, id) is not { } path)
+        if (PathTo(id) is not { } path)
         {
             return;
         }
@@ -705,15 +988,25 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _pendingReveal = null;
         }
 
-        // Rebuilding the tree costs a frame or more in a large solution: only when a row must appear (M50, the sync's
-        // slow scroll).
-        var expanded = false;
+        ExplorerNode? topmost = null;
         foreach (var ancestor in path.SkipLast(1))
         {
-            expanded |= _expanded.Add(ancestor.Id);
+            if (_expanded.Add(ancestor.Id))
+            {
+                topmost ??= ancestor;
+            }
         }
 
-        if (rebuild || expanded || !Rows.Any(r => r.Id == id))
+        var top = topmost is null ? null : Rows.FirstOrDefault(r => r.Id == topmost.Id);
+        if (_filter.Trim().Length > 0)
+        {
+            // The filtered rows show every match with its ancestors; the expansion shows when the filter is cleared.
+        }
+        else if (top is { IsExpanded: false })
+        {
+            ExpandRows(top);
+        }
+        else if (topmost is not null || !Rows.Any(r => r.Id == id))
         {
             Refresh();
         }
@@ -781,11 +1074,31 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _ = LoadMembersAsync(path);
             }
 
-            members = [new ExplorerNode(node.Id + "|members-loading", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = node.ProjectPath }];
+            if (!_loadingRows.TryGetValue(node.Id, out members))
+            {
+                _loadingRows[node.Id] = members = [new ExplorerNode(node.Id + "|members-loading", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = node.ProjectPath }];
+            }
         }
 
-        return members.Count == 0 && node.Children.Count == 0 ? node : node with { Children = [.. node.Children, .. members] };
+        if (members.Count == 0 && node.Children.Count == 0)
+        {
+            return node;
+        }
+
+        // The same node and members give the same result, so an unchanged row keeps its node and a refresh raises nothing
+        // for it: each refresh gave every code file's row a new node, and its thirteen property changes (M56).
+        if (_withMembers.TryGetValue(path, out var known) && ReferenceEquals(known.Node, node) && ReferenceEquals(known.Members, members))
+        {
+            return known.Result;
+        }
+
+        var result = node with { Children = [.. node.Children, .. members] };
+        _withMembers[path] = (node, members, result);
+        return result;
     }
+
+    private readonly Dictionary<string, (ExplorerNode Node, IReadOnlyList<ExplorerNode> Members, ExplorerNode Result)> _withMembers = new(SolutionService.PathComparer);
+    private readonly Dictionary<string, IReadOnlyList<ExplorerNode>> _loadingRows = new(StringComparer.Ordinal);
 
     /// <summary>The file's symbols from its language service, as member nodes; then the tree again.</summary>
     private async Task LoadMembersAsync(string path)
@@ -837,12 +1150,32 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         return Nodes(symbols, fileId);
     }
 
-    /// <summary>A file changed (an edit, a save, a change on disk): its members, and generated files, are read again when shown.</summary>
+    /// <summary>
+    /// A file changed (an edit, a save, a change on disk): its members, and generated files, are read again when shown,
+    /// once typing pauses. Each keystroke cleared them and built the tree again, twice with members or generated files
+    /// shown (M56).
+    /// </summary>
     public void OnFileChanged(string path)
+    {
+        _changedFiles.Add(path);
+        (_fileChanges ??= new UiDebouncer(ApplyFileChanges, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2))).Request();
+    }
+
+    private readonly HashSet<string> _changedFiles = new(SolutionService.PathComparer);
+    private UiDebouncer? _fileChanges;
+
+    private void ApplyFileChanges()
     {
         var generated = _generated.Count > 0;
         _generated.Clear();
-        if (_members.Remove(path) || generated)
+        var members = false;
+        foreach (var path in _changedFiles)
+        {
+            members |= _members.Remove(path);
+        }
+
+        _changedFiles.Clear();
+        if (members || generated)
         {
             QueueRefresh();
         }
