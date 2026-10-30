@@ -104,9 +104,8 @@ public sealed class ShellCollectionTests
 
         if (shell.IsAlive)
         {
-            // TODO(issue): on the macOS runner every case failed here, after the shell's own git and probes were cancelled
-            // on dispose (docs/ci-flakes.md). What ran then, and whether the shell goes later (work that ends by itself)
-            // or never (something keeps it), say what keeps it.
+            // What ran then, and whether the shell goes later (work that ends by itself) or never (something keeps it): on
+            // the macOS runner this told the application menu's entries from the shell's own git (docs/ci-flakes.md).
             var children = ChildProcesses();
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (shell.IsAlive && clock.Elapsed < TimeSpan.FromSeconds(30))
