@@ -13,9 +13,11 @@ public interface IShownAware
 /// Stacks and Parallel Watch asked the adapter for every thread's stack at each stop, open or not, ahead of the
 /// next step's own requests.
 /// </summary>
-public sealed class ShownRefresh(Action refresh)
+/// <param name="refresh">The refresh.</param>
+/// <param name="stale">Whether the window refreshes when it's first shown, asked or not.</param>
+public sealed class ShownRefresh(Action refresh, bool stale = true)
 {
-    private bool _stale = true;
+    private bool _stale = stale;
 
     /// <summary>Whether the window is shown.</summary>
     public bool IsShown { get; private set; }
@@ -33,6 +35,9 @@ public sealed class ShownRefresh(Action refresh)
             _stale = true;
         }
     }
+
+    /// <summary>The window refreshed by itself (a command, a test): it's up to date, and showing it asks nothing again.</summary>
+    public void Fresh() => _stale = false;
 
     public void SetShown(bool shown)
     {

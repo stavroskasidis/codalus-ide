@@ -8,20 +8,26 @@ using Codalus.Workbench.Debugging;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>QuickWatch (Shift+F9, ADR 0021): one expression evaluated as a tree, editable, and added to Watch on request.</summary>
-public sealed class QuickWatchViewModel : ObservableObject
+/// <summary>
+/// QuickWatch (Shift+F9, ADR 0021): one expression evaluated as a tree, editable, and added to Watch on request; again at
+/// each stop while the window is shown, and once when it's shown again (M56).
+/// </summary>
+public sealed class QuickWatchViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.quickWatch";
 
     private readonly DebugService _debugger;
     private readonly Func<string, Task> _addWatch;
+    private readonly ShownRefresh _refresh;
     private string _expression = string.Empty;
     private string? _error;
+    private int _generation;
 
     public QuickWatchViewModel(DebugService debugger, Func<string, Task> addWatch)
     {
         _debugger = debugger;
         _addWatch = addWatch;
+        _refresh = new ShownRefresh(() => _ = ReevaluateAsync(), stale: false);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
@@ -29,8 +35,10 @@ public sealed class QuickWatchViewModel : ObservableObject
                 Roots.Clear();
             }
         });
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = ReevaluateAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
     }
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
 
     public string Expression
     {
@@ -60,6 +68,7 @@ public sealed class QuickWatchViewModel : ObservableObject
     /// <summary>Evaluates <paramref name="expression"/> (or the current one) in the selected frame.</summary>
     public async Task EvaluateAsync(string? expression = null)
     {
+        _refresh.Fresh();
         if (expression is not null)
         {
             Expression = expression;
@@ -70,6 +79,7 @@ public sealed class QuickWatchViewModel : ObservableObject
 
     private async Task ReevaluateAsync()
     {
+        var generation = ++_generation;
         var expression = Expression.Trim();
         if (expression.Length == 0)
         {
@@ -88,6 +98,11 @@ public sealed class QuickWatchViewModel : ObservableObject
         try
         {
             var result = await _debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
+            if (generation != _generation)
+            {
+                return; // an answer for an earlier stop, or expression
+            }
+
             foreach (var old in Roots)
             {
                 old.CancelLoads();
@@ -106,6 +121,11 @@ public sealed class QuickWatchViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
+            if (generation != _generation)
+            {
+                return;
+            }
+
             Roots.Clear();
             Error = ex.Message;
         }
@@ -297,6 +317,7 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         if (_debugger.State != DebugState.Stopped)
         {
@@ -418,6 +439,7 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
 
     public void Refresh()
     {
+        _refresh.Fresh();
         Rows.Reset([.. _debugger.Modules.Where(m => _filter.Length == 0
                      || m.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)
                      || (m.Path?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false)).Select(m => new ModuleRow(m))]);

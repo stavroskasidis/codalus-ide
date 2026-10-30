@@ -97,6 +97,41 @@ public sealed class HiddenDebuggerWindowsTests
     }
 
     [AvaloniaFact]
+    public async Task Autos_and_Watch_evaluate_nothing_at_a_stop_while_hidden_and_catch_up_when_shown()
+    {
+        var log = Path.Combine(Path.GetTempPath(), "codalus-hidden-windows-" + Guid.NewGuid().ToString("N") + ".log");
+        try
+        {
+            await using var s = await StartAsync(Code, Line, Stops(12), requestLog: log);
+            var stops = 0;
+            s.F.Shell.Debugger.Stopped += (_, _) => Interlocked.Increment(ref stops);
+            int Stopped() => Volatile.Read(ref stops);
+            int Count(string command) => Requests(log).Count(r => r.Command == command);
+            s.F.Shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+            await ShellFixture.PumpUntil(() => s.F.Shell.Locals.Roots.Any(r => r.Name == "total"));
+            await s.F.Shell.Watch.AddAsync("total"); // evaluated once, as it's added
+            await WaitAsync(300);
+            var (scopes, evaluations) = (Count("scopes"), Count("evaluate"));
+
+            // Locals reads its scope at each stop; Autos and Watch, behind it or closed, ask for nothing.
+            await StepAsync(s, Stopped);
+            await StepAsync(s, Stopped);
+            Assert.Equal((scopes + 2, evaluations), (Count("scopes"), Count("evaluate")));
+
+            // Shown, each catches up once.
+            s.F.Shell.Layout.ShowToolWindow(WatchViewModel.ToolWindowId, focus: false);
+            await ShellFixture.PumpUntil(() => Count("evaluate") == evaluations + 1 && s.F.Shell.Watch.Roots.Single().Value == "2");
+            s.F.Shell.Layout.ShowToolWindow(VariablesViewModel.AutosWindowId, focus: false);
+            await ShellFixture.PumpUntil(() => s.F.Shell.Autos.Roots.Any(r => r.Name == "total"));
+            Assert.Equal(scopes + 3, Count("scopes"));
+        }
+        finally
+        {
+            File.Delete(log);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Each_process_is_described_once_for_the_session_and_off_the_UI_thread()
     {
         var described = 0;

@@ -12,6 +12,7 @@ public sealed partial class QuickWatchView : UserControl, IPaneView
     public QuickWatchView()
     {
         InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
         Input.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter && DataContext is QuickWatchViewModel vm)

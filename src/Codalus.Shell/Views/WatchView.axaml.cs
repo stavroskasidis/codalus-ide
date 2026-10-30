@@ -15,6 +15,7 @@ public sealed partial class WatchView : UserControl, IPaneView
     public WatchView()
     {
         InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
         Input.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter && DataContext is WatchViewModel vm)

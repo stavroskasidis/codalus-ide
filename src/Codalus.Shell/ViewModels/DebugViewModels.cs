@@ -669,8 +669,15 @@ public sealed class VariableNode : ObservableObject
     }
 }
 
-/// <summary>Locals or Autos: the selected frame's variables, refreshed on every stop and frame change.</summary>
-public sealed class VariablesViewModel : ObservableObject
+/// <summary>
+/// Locals or Autos: the selected frame's variables, refreshed on every stop and frame change. Autos, often the tab
+/// behind Locals, reads them only while it's shown, and once when it's shown (M56).
+/// </summary>
+/// <remarks>
+/// TODO(issue): Locals only while shown too: the shell shows it at a session's first stop, and later sessions' stops
+/// (the smoke test's, DebugSessionsTests') read it while another window is in front of it.
+/// </remarks>
+public sealed class VariablesViewModel : ObservableObject, IShownAware
 {
     public const string LocalsWindowId = "debug.locals";
     public const string AutosWindowId = "debug.autos";
@@ -678,6 +685,7 @@ public sealed class VariablesViewModel : ObservableObject
     private readonly DebugService _debugger;
     private readonly Func<string, int, string?> _lineText;
     private readonly VariableSource _source;
+    private readonly ShownRefresh _refresh;
     private bool _isEmpty = true;
     private int _generation;
 
@@ -687,8 +695,9 @@ public sealed class VariablesViewModel : ObservableObject
         _source = new VariableSource(debugger);
         IsAutos = autos;
         _lineText = lineText;
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
-        debugger.FrameChanged += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(Refresh);
+        debugger.FrameChanged += (_, _) => Ui.Post(Refresh);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
@@ -699,6 +708,26 @@ public sealed class VariablesViewModel : ObservableObject
     }
 
     public bool IsAutos { get; }
+
+    private void Refresh()
+    {
+        if (IsAutos)
+        {
+            _refresh.Request();
+        }
+        else
+        {
+            _ = RefreshAsync();
+        }
+    }
+
+    void IShownAware.SetViewShown(bool shown)
+    {
+        if (IsAutos)
+        {
+            _refresh.SetShown(shown);
+        }
+    }
 
     /// <summary>The frame's variables, replaced at once at each stop (M56).</summary>
     public ResettableCollection<VariableNode> Roots { get; } = [];
@@ -732,6 +761,7 @@ public sealed class VariablesViewModel : ObservableObject
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         if (_debugger.State != DebugState.Stopped || _debugger.SelectedFrame is not { } frame)
         {
@@ -827,13 +857,17 @@ public sealed class VariablesViewModel : ObservableObject
     public string? ReadOnlyReason(VariableNode node) => VariableEditing.ReadOnlyReason(_debugger, node);
 }
 
-/// <summary>The Watch window: user expressions, evaluated in the selected frame on every stop.</summary>
-public sealed class WatchViewModel : ObservableObject
+/// <summary>
+/// The Watch window: user expressions, evaluated in the selected frame on every stop while the window is shown, and once
+/// when it's shown (M56).
+/// </summary>
+public sealed class WatchViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.watch";
 
     private readonly DebugService _debugger;
     private readonly VariableSource _source;
+    private readonly ShownRefresh _refresh;
     private string _newExpression = string.Empty;
     private int _generation;
 
@@ -841,8 +875,9 @@ public sealed class WatchViewModel : ObservableObject
     {
         _debugger = debugger;
         _source = new VariableSource(debugger);
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
-        debugger.FrameChanged += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
+        debugger.FrameChanged += (_, _) => Ui.Post(_refresh.Request);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State == DebugState.Idle)
@@ -858,6 +893,8 @@ public sealed class WatchViewModel : ObservableObject
     public ObservableCollection<VariableNode> Roots { get; } = [];
 
     public IReadOnlyList<string> Expressions => [.. Roots.Select(r => r.Name)];
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
 
     /// <summary>What's expanded, by evaluate name: opened again when a watch's value changes (D44, decision 9).</summary>
     public ExpansionMemory Expansion { get; } = new();
@@ -891,7 +928,7 @@ public sealed class WatchViewModel : ObservableObject
         Roots.Add(node);
         NewExpression = string.Empty;
         Changed?.Invoke(this, EventArgs.Empty);
-        await EvaluateAsync(node, _generation).ConfigureAwait(true);
+        await EvaluateAsync(node, null).ConfigureAwait(true); // its first value, whatever refresh runs meanwhile
     }
 
     public void Remove(VariableNode node)
@@ -926,6 +963,7 @@ public sealed class WatchViewModel : ObservableObject
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         foreach (var node in Roots.ToList())
         {
@@ -942,7 +980,7 @@ public sealed class WatchViewModel : ObservableObject
     /// Evaluates a watch. An answer for an earlier stop or frame is dropped (M56): it could come after the next refresh's
     /// and overwrite the newer value.
     /// </summary>
-    private async Task EvaluateAsync(VariableNode node, int generation)
+    private async Task EvaluateAsync(VariableNode node, int? generation)
     {
         if (_debugger.State != DebugState.Stopped)
         {
@@ -952,7 +990,7 @@ public sealed class WatchViewModel : ObservableObject
         try
         {
             var result = await _debugger.EvaluateAsync(node.Name, "watch").ConfigureAwait(true);
-            if (generation != _generation)
+            if (generation is { } asked && asked != _generation)
             {
                 return;
             }
@@ -963,7 +1001,7 @@ public sealed class WatchViewModel : ObservableObject
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
-            if (generation != _generation)
+            if (generation is { } asked && asked != _generation)
             {
                 return;
             }
@@ -1313,6 +1351,7 @@ public sealed class BreakpointsViewModel : ObservableObject, IShownAware
 
     public void Refresh()
     {
+        _refresh.Fresh();
         var store = _debugger.Breakpoints;
         var filter = _filter.Trim();
         Rows.Reset([.. store.All.Select(b => new BreakpointRow(b, store.StateOf(b), SetEnabled))

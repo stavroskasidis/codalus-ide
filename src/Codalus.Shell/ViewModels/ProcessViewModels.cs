@@ -79,6 +79,7 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
 
     public void Refresh()
     {
+        _refresh.Fresh();
         var rows = new List<ProcessRow>();
         if (_debugger.State != DebugState.Idle)
         {

@@ -64,6 +64,7 @@ public sealed class ParallelStacksViewModel : ObservableObject, IShownAware
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         IReadOnlyDictionary<int, IReadOnlyList<StackFrame>> stacks;
         try
@@ -132,6 +133,7 @@ public sealed class ParallelWatchViewModel : ObservableObject, IShownAware
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         var expression = Expression.Trim();
         Rows.Clear();
