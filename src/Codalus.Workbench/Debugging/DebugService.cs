@@ -1275,6 +1275,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             foreach (var file in Breakpoints.Files)
@@ -1293,7 +1294,7 @@ public sealed class DebugService : IAsyncDisposable
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
         {
-            Output?.Invoke(this, new DebugOutput("console", $"Preparing the detach: {ex.Message}\n"));
+            Output?.Invoke(this, new DebugOutput("console", $"Preparing the detach: {ex.Message} (after {clock.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s)\n"));
         }
     }
 
