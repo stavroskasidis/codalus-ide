@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Localization;
@@ -16,6 +17,9 @@ public sealed partial class ShellHost
     public const string StartupSetting = "workbench.startup";
 
     private StartWindow? _startWindow;
+
+    /// <summary>Whether recent entries are there, off the UI thread (M56; tests replace what it asks the disk).</summary>
+    internal PathProbe RecentProbe { get; set; } = new();
 
     /// <summary>Whether the start window is open.</summary>
     public bool IsStartWindowOpen => _startWindow is not null;
@@ -48,13 +52,43 @@ public sealed partial class ShellHost
 
         switch (Workbench.Settings.GetString(StartupSetting, "startWindow"))
         {
-            case "lastSolution" when Recent.Items.FirstOrDefault(p => File.Exists(p) || Directory.Exists(p)) is { } last:
-                _ = Directory.Exists(last) ? OpenFolderAsync(last) : OpenSolutionAsync(last);
+            case "lastSolution":
+                _ = OpenLastSolutionAsync();
                 break;
             case "startWindow":
                 Infrastructure.Ui.Post(ShowStartWindow);
                 break;
         }
+    }
+
+    /// <summary>
+    /// The last-solution startup: the first recent entry that is there, in the list's order, each checked off the UI thread
+    /// (M56: an entry on a share that is offline counts as not there once its probe's time is up). Nothing opens when the
+    /// user opened something meanwhile.
+    /// </summary>
+    private async Task OpenLastSolutionAsync()
+    {
+        var opens = _openRequests;
+        if (await FirstRecentThereAsync().ConfigureAwait(true) is not { } last || opens != _openRequests || Solutions.IsOpen)
+        {
+            return;
+        }
+
+        await (last.Kind == PathState.Folder ? OpenFolderAsync(last.Path) : OpenSolutionAsync(last.Path)).ConfigureAwait(true);
+    }
+
+    /// <summary>The first recent entry that is there, and what it is; null when none is.</summary>
+    internal async Task<(string Path, PathState Kind)?> FirstRecentThereAsync()
+    {
+        foreach (var path in Recent.Items)
+        {
+            if (await RecentProbe.KindAsync(path).ConfigureAwait(true) is var kind and (PathState.File or PathState.Folder))
+            {
+                return (path, kind);
+            }
+        }
+
+        return null;
     }
 
     public void ShowStartWindow()
@@ -82,11 +116,13 @@ public sealed partial class ShellHost
     /// <summary>Opens a recent entry: a folder, or a solution or project; a missing one offers to leave the list.</summary>
     internal async Task OpenRecentEntryAsync(string path)
     {
-        if (Directory.Exists(path))
+        // Off the UI thread (M56): on a share that is offline, the check waits for the network's timeout.
+        var kind = await Task.Run(() => PathProbe.Kind(path)).ConfigureAwait(true);
+        if (kind == PathState.Folder)
         {
             await OpenFolderAsync(path).ConfigureAwait(true);
         }
-        else if (File.Exists(path))
+        else if (kind == PathState.File)
         {
             await OpenSolutionAsync(path).ConfigureAwait(true);
         }

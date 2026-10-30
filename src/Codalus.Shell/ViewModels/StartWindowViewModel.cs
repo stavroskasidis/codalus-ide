@@ -16,20 +16,42 @@ public sealed class StartGroupRowViewModel(string title) : StartRowViewModel
     public string Title { get; } = title;
 }
 
-public sealed class StartEntryRowViewModel(RecentEntry entry, StartWindowViewModel owner) : StartRowViewModel
+public sealed class StartEntryRowViewModel(RecentEntry entry, StartWindowViewModel owner, PathState? kind = null) : StartRowViewModel
 {
+    private PathState? _kind = kind;
+
     public RecentEntry Entry { get; } = entry;
 
     public string Name => Entry.Name;
 
     public string Folder => Path.GetDirectoryName(Entry.Path) ?? Entry.Path;
 
-    public string Icon => Directory.Exists(Entry.Path) ? FileIcons.ForFolder(Entry.Name, open: false) : FileIcons.ForFile(Entry.Name);
+    /// <summary>
+    /// What the entry is on disk once its probe has answered, null until then (M56: probed off the UI thread, never in a
+    /// getter, as a share that is offline waits for the network's timeout). One that isn't there, or whose probe didn't
+    /// answer in time, shows as not found.
+    /// </summary>
+    public PathState? Kind
+    {
+        get => _kind;
+        internal set
+        {
+            if (SetField(ref _kind, value))
+            {
+                OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(Exists));
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
+
+    /// <summary>A folder's icon for a folder, else a file's (a missing entry's too); until the probe answers, what the name suggests.</summary>
+    public string Icon => (_kind ?? PathProbe.Guess(Entry.Path)) == PathState.Folder ? FileIcons.ForFolder(Entry.Name, open: false) : FileIcons.ForFile(Entry.Name);
 
     /// <summary>When it was last opened, in the user's format; blank for entries from before M38 (no time kept).</summary>
     public string Opened => Entry.LastOpened == DateTimeOffset.MinValue ? string.Empty : Entry.LastOpened.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
 
-    public bool Exists => File.Exists(Entry.Path) || Directory.Exists(Entry.Path);
+    public bool Exists => _kind is null or PathState.File or PathState.Folder;
 
     public bool IsPinned => Entry.Pinned;
 
@@ -56,6 +78,8 @@ public sealed class StartWindowViewModel : ObservableObject
 {
     private readonly ShellHost _shell;
     private readonly Func<DateTimeOffset> _clock;
+    private readonly Dictionary<string, PathState> _kinds = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _probed = new(StringComparer.Ordinal);
     private string _search = string.Empty;
     private StartRowViewModel? _selected;
 
@@ -124,13 +148,28 @@ public sealed class StartWindowViewModel : ObservableObject
             Rows.Add(new StartGroupRowViewModel(GroupTitle(group)));
             foreach (var entry in items)
             {
-                Rows.Add(new StartEntryRowViewModel(entry, this));
+                Rows.Add(new StartEntryRowViewModel(entry, this, _kinds.TryGetValue(entry.Path, out var kind) ? kind : null));
+                if (_probed.Add(entry.Path))
+                {
+                    _ = ProbeAsync(entry.Path);
+                }
             }
         }
 
         Selected = Rows.OfType<StartEntryRowViewModel>().FirstOrDefault(r => r.Entry.Path == keep);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(EmptyText));
+    }
+
+    /// <summary>Whether an entry is there, checked once per window, off the UI thread; its rows show the answer.</summary>
+    private async Task ProbeAsync(string path)
+    {
+        var kind = await _shell.RecentProbe.KindAsync(path).ConfigureAwait(true);
+        _kinds[path] = kind;
+        foreach (var row in Rows.OfType<StartEntryRowViewModel>().Where(r => r.Entry.Path == path))
+        {
+            row.Kind = kind;
+        }
     }
 
     /// <summary>The first entry (Enter in the search box opens it).</summary>
