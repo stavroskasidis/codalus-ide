@@ -1039,6 +1039,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Theme.Dispose();
         Editor.CodeColors.Release(Languages.LanguageIdOf);
         ReleaseViewCallbacks();
+        Views.MenuBuilder.Release(this);
         CrashReporter.Release(this);
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var designers = StopWinFormsDesignersAsync();

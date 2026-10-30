@@ -76,6 +76,15 @@ public sealed class ShellCollectionTests
         return Task.CompletedTask;
     });
 
+    [AvaloniaFact]
+    public Task A_disposed_shell_whose_entries_were_in_the_application_menu_is_collected() => AssertCollectedAsync(f =>
+    {
+        // macOS's application menu (About, Settings…) outlives the window: its entries' commands kept every shell, and
+        // failed every case of this class on the Mac.
+        Codalus.Shell.Views.MenuBuilder.AttachApplicationMenu(f.Shell);
+        return Task.CompletedTask;
+    });
+
     private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose = null)
     {
         var (shell, window) = await CreateUseAndDisposeAsync(use, afterDispose);
