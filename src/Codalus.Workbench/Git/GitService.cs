@@ -344,28 +344,27 @@ public sealed partial class GitService : IDisposable
 
     private void OnFileEvent(object sender, FileSystemEventArgs e)
     {
+        if (ChangesStatus(Path.GetRelativePath(Root ?? string.Empty, e.FullPath).Replace('\\', '/')))
+        {
+            _debounce?.Change(400, Timeout.Infinite);
+        }
+    }
+
+    /// <summary>Whether a change to a path (relative to the worktree, with <c>/</c>) can change the repository's status.</summary>
+    internal static bool ChangesStatus(string relative)
+    {
         // Inside .git only the index, HEAD and refs matter; build outputs churn but are usually ignored, so status is cheap.
-        var relative = Path.GetRelativePath(Root ?? string.Empty, e.FullPath).Replace('\\', '/');
         if (relative.StartsWith(".git/", StringComparison.Ordinal)
             && !(relative is ".git/index" or ".git/HEAD" or ".git/MERGE_HEAD" || relative.StartsWith(".git/refs/", StringComparison.Ordinal)))
         {
-            return;
-        }
-
-        if (relative.EndsWith(".lock", StringComparison.Ordinal))
-        {
-            return;
+            return false;
         }
 
         // obj/ is .NET's intermediate output, which every .NET .gitignore leaves out: design-time builds, restores and
         // the C# service's state, which it writes after each background pass (every pause in typing). Each was a full
         // status of the worktree, seconds of git in a large repository. (bin/ isn't skipped: scripts live there too.)
-        if (relative.StartsWith("obj/", StringComparison.Ordinal) || relative.Contains("/obj/", StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        _debounce?.Change(400, Timeout.Infinite);
+        return !relative.EndsWith(".lock", StringComparison.Ordinal)
+            && !relative.StartsWith("obj/", StringComparison.Ordinal) && !relative.Contains("/obj/", StringComparison.Ordinal);
     }
 
     private async Task RefreshSafeAsync()

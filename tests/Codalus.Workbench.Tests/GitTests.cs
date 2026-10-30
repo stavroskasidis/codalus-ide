@@ -119,6 +119,21 @@ public sealed class GitServiceTests : IAsyncLifetime
         Assert.False(GitService.IsLockBusy(1, "error: pathspec 'b.txt' did not match any file(s) known to git"));
     }
 
+    [Fact]
+    public void Writes_under_obj_and_inside_git_but_its_index_and_refs_dont_ask_for_a_status()
+    {
+        // The C# service writes its state under obj/ after each background pass, so at every pause in typing.
+        Assert.True(GitService.ChangesStatus("src/App/Program.cs"));
+        Assert.True(GitService.ChangesStatus("src/App/bin/run.sh"));
+        Assert.True(GitService.ChangesStatus("src/objects/Model.cs"));
+        Assert.True(GitService.ChangesStatus(".git/index"));
+        Assert.True(GitService.ChangesStatus(".git/refs/heads/main"));
+        Assert.False(GitService.ChangesStatus("src/App/obj/codalus.designtime.json"));
+        Assert.False(GitService.ChangesStatus("obj/project.assets.json"));
+        Assert.False(GitService.ChangesStatus(".git/objects/ab/cdef"));
+        Assert.False(GitService.ChangesStatus(".git/index.lock"));
+    }
+
     /// <summary>Variables for a git process that, when read, wait for the caller of RunAsync to have returned (5 s at most).</summary>
     private sealed class StartProbe(ManualResetEventSlim returned) : IReadOnlyDictionary<string, string>
     {
