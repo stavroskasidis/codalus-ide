@@ -110,29 +110,81 @@ public sealed partial class ShellHost
         }
 
         var paths = files.Select(f => f.TryGetLocalPath()).OfType<string>().ToList();
-        Ui.Post(() =>
-        {
-            foreach (var path in paths)
-            {
-                OpenFromOs(path);
-            }
-        });
+        Ui.Post(() => OpenFromOs(paths));
     }
 
-    /// <summary>A path the OS handed over: a solution, project or folder (here, or in a new window when one is open), or a file in the editor.</summary>
-    private void OpenFromOs(string path)
+    /// <summary>
+    /// Paths the OS handed over (or a drop): solutions, projects and folders (here, or in a new window when one is open),
+    /// and files in the editor, together: the last one is the active tab (M56).
+    /// </summary>
+    internal void OpenFromOs(IReadOnlyList<string> paths)
     {
-        Workbench.Log.AppendLine($"[os] Opened from the system: {path}");
-        if (Directory.Exists(path) || SolutionTree.IsSolutionOrProjectFile(path))
+        var files = new List<(string, LanguageServices.Protocol.Position?)>();
+        foreach (var path in paths)
         {
-            if (!TakeOpenPath(path))
+            Workbench.Log.AppendLine($"[os] Opened from the system: {path}");
+            if (Directory.Exists(path) || SolutionTree.IsSolutionOrProjectFile(path))
             {
-                StartNewWindow(path);
+                if (!TakeOpenPath(path))
+                {
+                    StartNewWindow(path);
+                }
+
+                continue;
             }
 
-            return;
+            files.Add((path, null));
         }
 
-        _ = OpenFileAsync(path);
+        if (files.Count > 0)
+        {
+            _ = OpenFilesAsync(files);
+        }
+    }
+
+    /// <summary>How long files other <c>codalus</c> processes ask to open wait for the others of their batch (<see cref="OpenTogetherAsync"/>).</summary>
+    internal static readonly TimeSpan OpenBatchWindow = TimeSpan.FromMilliseconds(150);
+
+    private List<(string Path, LanguageServices.Protocol.Position? At, TaskCompletionSource<bool> Opened)>? _openBatch;
+
+    /// <summary>
+    /// A file another <c>codalus</c> process asked to open (on the UI thread). Explorer's and the file managers' Open with on
+    /// several files start one process per file: the requests that come within <see cref="OpenBatchWindow"/> of the first
+    /// open together, the last one active (M56), instead of each becoming the active tab in turn. Completes with whether
+    /// the file opened in an editor.
+    /// </summary>
+    internal Task<bool> OpenTogetherAsync(string path, LanguageServices.Protocol.Position? at)
+    {
+        var opened = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (_openBatch is null)
+        {
+            _openBatch = [];
+            Avalonia.Threading.DispatcherTimer.RunOnce(() => _ = OpenBatchAsync(), OpenBatchWindow);
+        }
+
+        _openBatch.Add((path, at, opened));
+        return opened.Task;
+    }
+
+    private async Task OpenBatchAsync()
+    {
+        var batch = _openBatch ?? [];
+        _openBatch = null;
+        try
+        {
+            var opened = await OpenFilesAsync([.. batch.Select(b => (b.Path, b.At))]).ConfigureAwait(true);
+            for (var i = 0; i < batch.Count; i++)
+            {
+                batch[i].Opened.TrySetResult(opened[i]);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error(ex.Message);
+            foreach (var (_, _, opened) in batch)
+            {
+                opened.TrySetResult(false);
+            }
+        }
     }
 }

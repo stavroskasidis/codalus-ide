@@ -328,9 +328,13 @@ public sealed partial class MainWindow : Window, IShellWindow
         RequestAnimationFrame(_ => RequestAnimationFrame(_ =>
         {
             BenchEvents.Emit(BenchEventNames.FirstFrame);
-            Dispatcher.UIThread.Post(() =>
+            Dispatcher.UIThread.Post(async () =>
             {
                 BenchEvents.Emit(BenchEventNames.Interactive);
+
+                // Started from the Finder or a desktop launcher, the startup's work (which starts processes and goes online)
+                // waits for the login shell's PATH and network settings; the window didn't (M56). At once otherwise.
+                await _shell.EnvironmentReady.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
                 _shell.OnInteractive();
                 StartBenchDriver();
                 if (_shell.Options.Screenshot is { } screenshot && _shell.Options.Remote is not null)
@@ -378,6 +382,11 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
+        if (_shuttingDown)
+        {
+            return; // the shutdown below, closing the window for good
+        }
+
         if (!_closeConfirmed && _shell.HasUnsavedDocuments)
         {
             e.Cancel = true;
@@ -386,6 +395,41 @@ public sealed partial class MainWindow : Window, IShellWindow
         }
 
         _shell.SaveState(Placement);
+
+        // The user closed the window (or quit): it goes at once, and the shell shuts down behind it with the UI thread free
+        // (M56); the lifetime's Exit waited for that on the UI thread, up to 3 s, with the window gone and the app not
+        // answering. A forced shutdown (the smoke test's, the benchmarks') can't be cancelled, and the OS's logout mustn't
+        // be: the Exit still waits for those.
+        if (e.CloseReason is WindowCloseReason.OSShutdown || (e.CloseReason is WindowCloseReason.ApplicationShutdown && e.IsProgrammatic))
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        _ = ShutDownAsync();
+    }
+
+    private bool _shuttingDown;
+
+    private async Task ShutDownAsync()
+    {
+        _shuttingDown = true;
+        _shell.StopListening(); // a codalus started now opens its own window, not one in this closing process
+        var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
+        foreach (var window in desktop?.Windows.ToList() ?? [this])
+        {
+            window.Hide(); // the floating tool windows and the start window too
+        }
+
+        await _shell.ShutDownAsync(ShellHost.ShutdownLimit).ConfigureAwait(true);
+        if (desktop is not null)
+        {
+            desktop.Shutdown();
+        }
+        else
+        {
+            Close();
+        }
     }
 
     private async Task ConfirmCloseAsync()
@@ -478,16 +522,25 @@ public sealed partial class MainWindow : Window, IShellWindow
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
-    /// <summary>Dropping a solution, project or folder from the file manager opens it.</summary>
+    /// <summary>
+    /// Dropping a solution, project or folder from the file manager opens it; dropped files open in editors together, the
+    /// last one active (M56).
+    /// </summary>
     private void OnFileDrop(object? sender, DragEventArgs e)
     {
-        if (e.Handled || e.DataTransfer.TryGetFiles() is not [{ } item, ..] || item.TryGetLocalPath() is not { } path)
+        if (e.Handled || e.DataTransfer.TryGetFiles() is not [{ } item, ..] items || item.TryGetLocalPath() is not { } path)
         {
             return;
         }
 
         e.Handled = true;
-        _ = Directory.Exists(path) ? _shell.OpenFolderAsync(path) : _shell.OpenSolutionAsync(path);
+        if (Directory.Exists(path) || Codalus.Workbench.Projects.SolutionTree.IsSolutionOrProjectFile(path))
+        {
+            _ = Directory.Exists(path) ? _shell.OpenFolderAsync(path) : _shell.OpenSolutionAsync(path);
+            return;
+        }
+
+        _shell.OpenFromOs([.. items.Select(i => i.TryGetLocalPath()).OfType<string>()]);
     }
 
     private void SaveScreenshot(string path)

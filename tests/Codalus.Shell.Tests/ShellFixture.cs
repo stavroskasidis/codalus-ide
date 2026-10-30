@@ -96,9 +96,12 @@ internal sealed class ShellFixture : IAsyncDisposable
             Codalus.Workbench.Setup.OsLauncher.Current(userData), Path.Combine(userData, "os", "data"), Path.Combine(userData, "os", "config"),
             (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
         Window = new MainWindow(Shell);
+        Window.Closed += (_, _) => _closed = true;
         Window.Show();
         Pump();
     }
+
+    private bool _closed;
 
     public string UserData { get; }
 
@@ -438,9 +441,20 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        Window.Close();
+        if (!_closed)
+        {
+            Window.Close();
+        }
+
         Pump();
         await Shell.DisposeAsync();
+        if (Shell.IsShuttingDown)
+        {
+            // The window hides as it closes and goes for good once the shell has shut down (M56); with unsaved changes it
+            // asked instead, and stays.
+            await PumpUntil(() => _closed);
+        }
+
         try
         {
             // git writes its object files read-only.

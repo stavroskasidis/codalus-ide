@@ -81,10 +81,23 @@ public interface IShellTab
 /// <summary>A tool window in the dock layout. Its view is chosen by the type of <see cref="Content"/>.</summary>
 public sealed class ToolWindowDockable : Tool, IShellTab
 {
+    private Func<object?>? _create;
+    private object? _content;
+
     public ToolWindowDockable(ToolWindowDescriptor descriptor, object? content)
+        : this(descriptor) => _content = content;
+
+    /// <summary>
+    /// A tool window whose content is made when it's first asked for, which is when Dock first presents its tab (M56): a
+    /// restored layout's tabs behind others and its auto-hidden tool windows made theirs before the first frame, and the
+    /// Test Explorer's started the test plugin's host for a tab nobody had opened.
+    /// </summary>
+    public ToolWindowDockable(ToolWindowDescriptor descriptor, Func<object?> content)
+        : this(descriptor) => _create = content;
+
+    private ToolWindowDockable(ToolWindowDescriptor descriptor)
     {
         Descriptor = descriptor;
-        Content = content;
         Id = descriptor.Id;
         Title = descriptor.Title;
         CanClose = true;
@@ -94,7 +107,23 @@ public sealed class ToolWindowDockable : Tool, IShellTab
 
     public ToolWindowDescriptor Descriptor { get; }
 
-    public object? Content { get; }
+    /// <summary>The tool window's view model, made the first time it's read (on the UI thread).</summary>
+    public object? Content
+    {
+        get
+        {
+            if (_create is { } create)
+            {
+                _create = null;
+                _content = create();
+            }
+
+            return _content;
+        }
+    }
+
+    /// <summary>Whether <see cref="Content"/> was made (tests).</summary>
+    internal bool HasContent => _create is null;
 
     /// <summary>
     /// The tab's icon: the one its View menu entry shows, in its command family's color (<c>kind@Family</c>), or null.

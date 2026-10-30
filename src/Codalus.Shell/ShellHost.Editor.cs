@@ -388,6 +388,56 @@ public sealed partial class ShellHost : IEditorServices
     }
 
     /// <summary>
+    /// Opens several files at once (the OS's multi-open, a drop, several <c>codalus file</c> requests together): each as a
+    /// tab behind the active one, its view made when it's first shown, and the last one active (M56). Opening each as the
+    /// active tab built every one's editor in turn on the UI thread, with its language requests, for tabs not looked at.
+    /// </summary>
+    /// <returns>For each file, whether it opened in a text editor.</returns>
+    public async Task<IReadOnlyList<bool>> OpenFilesAsync(IReadOnlyList<(string Path, Position? At)> files)
+    {
+        var opened = new bool[files.Count];
+        // The text editors' files are read first, together, so their tabs then open in one go: a layout pass between two of
+        // them made the first tab of an empty group active, and built its editor, before the last one was.
+        var reads = files.Select(f => Path.GetFullPath(f.Path)).Distinct(SolutionPaths.Comparer).Where(OpensAsText).ToList();
+        foreach (var path in reads)
+        {
+            BeginModelRequest(path);
+        }
+
+        try
+        {
+            foreach (var read in reads.Select(ModelAsync).ToList())
+            {
+                await ((Task)read).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext); // a failed read: the open says why
+            }
+
+            // Adding a tab to an empty group made it active (its tab strip selects it), before the last one was.
+            using (Layout.DeferActiveDocument())
+            {
+                for (var i = 0; i < files.Count; i++)
+                {
+                    opened[i] = await OpenFileAsync(files[i].Path, at: files[i].At, activate: i == files.Count - 1).ConfigureAwait(true) is not null;
+                }
+            }
+        }
+        finally
+        {
+            foreach (var path in reads)
+            {
+                EndModelRequest(path);
+            }
+        }
+
+        return opened;
+    }
+
+    /// <summary>Whether <see cref="OpenFileAsync"/> opens the file in a text editor: not an image, a binary, resources, a form or a plugin's editor.</summary>
+    private bool OpensAsText(string path) =>
+        _models.ContainsKey(path)
+        || (File.Exists(path) && !Views.ImageDocument.IsImage(path) && !Views.ResxEditorDocument.IsResx(path) && !OpensInWinFormsDesigner(path)
+            && Plugins.CustomEditorFor(path) is null && !Views.HexDocument.LooksBinary(path));
+
+    /// <summary>
     /// The text model of a file that editors, designers and Code Search's preview share: the tracked one, or the one
     /// being read for another caller, or a new one. Two models of one file would be two documents for the language
     /// service, and letting go of either would close the file there or send it the text of a model already gone (M47:
@@ -1022,23 +1072,15 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>Close All (or Close All But This): together, so no tab becomes active on the way (M56).</summary>
     public void CloseAllDocuments(bool exceptActive)
     {
         var active = Layout.ActiveDocument;
-        foreach (var document in Layout.Documents.Where(d => !exceptActive || d != active).ToList())
-        {
-            Layout.CloseDocument(document);
-        }
+        Layout.CloseDocuments([.. Layout.Documents.Where(d => !exceptActive || d != active)]);
     }
 
-    /// <summary>Closes every document that isn't pinned (M34d).</summary>
-    public void CloseUnpinnedDocuments()
-    {
-        foreach (var document in Layout.Documents.Where(d => !d.IsPinned).ToList())
-        {
-            Layout.CloseDocument(document);
-        }
-    }
+    /// <summary>Closes every document that isn't pinned (M34d), together.</summary>
+    public void CloseUnpinnedDocuments() => Layout.CloseDocuments([.. Layout.Documents.Where(d => !d.IsPinned)]);
 
     public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
 
@@ -1079,14 +1121,8 @@ public sealed partial class ShellHost : IEditorServices
         return false;
     }
 
-    /// <summary>Closing a solution closes its documents (unsaved ones stay open, as the user has to decide).</summary>
-    private void CloseSolutionDocuments()
-    {
-        foreach (var editor in Editors.Where(e => !e.Model.IsModified).ToList())
-        {
-            Layout.CloseDocument(editor);
-        }
-    }
+    /// <summary>Closing a solution closes its documents together (unsaved ones stay open, as the user has to decide).</summary>
+    private void CloseSolutionDocuments() => Layout.CloseDocuments([.. Editors.Where(e => !e.Model.IsModified)]);
 
     // ------------------------------------------------------------------ split views
 
