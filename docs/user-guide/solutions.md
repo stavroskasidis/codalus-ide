@@ -35,7 +35,7 @@ Codalus IDE watches the files: changes made outside the IDE (a `git pull`, anoth
 ## What a solution reopens with
 
 Like the classic IDE's `.vs` folder, Codalus IDE keeps your own state for a solution in `.codalus/state/` next to it. The folder has one subfolder per solution file (`App.slnx/`, `App.sln/`, and `folder/` for a folder opened without a solution), so several solutions in one folder each keep their own state:
-- `session.json`: the open documents (with their carets and pinned tabs) and the active one; breakpoints, exception settings, Watch expressions and pinned data tips; the startup project or projects, launch profiles, devices and the ASP.NET Core environment; the solution configuration and platform; the target framework chosen for multi-targeted projects; the Solution Explorer's expanded nodes (Collapse All clears them); the Error List's filters and the Test Explorer's grouping.
+- `session.json`: the open documents (with their carets and pinned tabs) and the active one (the others come back as tabs behind it, and each makes its editor when you first show it); breakpoints, exception settings, Watch expressions and pinned data tips; the startup project or projects, launch profiles, devices and the ASP.NET Core environment; the solution configuration and platform; the target framework chosen for multi-targeted projects; the Solution Explorer's expanded nodes (Collapse All clears them); the Error List's filters and the Test Explorer's grouping.
 - `bookmarks.json`: the solution's bookmarks.
 - `solution.json`: the unloaded projects.
 

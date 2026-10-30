@@ -2,6 +2,17 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.11.0
+
+- **CodeLens no longer moves the code** ([user guide](docs/user-guide/editing.md#inline-information), [ADR 0017](docs/adr/0017-navigation-and-inline-information.md#amendment-2026-10-30-codelens-rows-from-the-first-frame)): a C# file opened without its CodeLens rows, then each row pushed the code below it down as the language service listed and counted the references. The rows are there, empty, from the moment the file opens, as in the classic IDE, and the counts fill them in. The same goes for files opened at startup while the solution is still loading, and for a file reloaded after a change outside the editor.
+- **Large solutions open without freezing the window.** Each project's evaluation set off work that went through every project: Database Explorer looked for connection strings again in every project's files, the Solution Explorer built every project's tree again, and the toolbar, tab colors and editors' project contexts were redone. Opening a generated 300-project solution in the headless shell, the UI thread stalled for 15–17 s in total while the projects loaded, up to 11 s at once. It now stalls about 5 s in total, never more than 0.7 s at once. This work now waits for a burst of evaluations to settle, runs off the UI thread, or reuses what didn't change.
+- **Typing in a large solution stays smooth.** The C# language service reports ready after every pause in typing, and each time Code Search indexed the whole solution again on the UI thread, every open editor asked again for its colors, hints and CodeLens, and git ran a full status because the service had written its state under `obj/`. Now Code Search indexes the documents you edit as you type, and the whole solution when its projects change and every few minutes. Editors that aren't showing ask when you show them, and writes under `obj/` don't run git.
+- **Faster startup.**
+  - `codalus <solution>`, `codalus <file>` and Open with… no longer wait half a second when no Codalus IDE is running.
+  - Each start checks only the tools it offers to install (the .NET SDK, the runtime Codalus IDE needs, and git). Git LFS, Docker and Podman are checked when Check Environment opens.
+  - A solution's restored tabs make their editors when you first show them.
+  - On macOS and Linux, the login shell's `PATH` is read while the window loads.
+
 ## 0.10.0
 
 - **Sign in to the repository's host from Git Changes** ([user guide](docs/user-guide/git.md#signing-in-from-git-changes), [ADR 0088](docs/adr/0088-signing-in-from-git-changes.md)): when the repository is on GitHub, Azure DevOps or GitLab and you aren't signed in there, Git Changes says so and signs you in in place, with that host's ways in only: your Windows account on an Azure DevOps Server, the browser where the host's OAuth app is set up, or a personal access token, with **Create a token** opening the host's page for one. **×** hides the suggestion for that repository for good. The pull request button and the Pull Requests and Work Items windows' **Sign in** open the same panel instead of Git Hosting Accounts, and the pull request form opens once you're signed in.
