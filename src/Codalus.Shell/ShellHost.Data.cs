@@ -70,10 +70,17 @@ public sealed partial class ShellHost
         var scan = _connectionScan = new CancellationTokenSource();
         var solution = Solutions.Solution;
         var projects = Solutions.Projects.Values.ToList();
-        var found = await Task.Run(() => FindConnections(solution, projects), scan.Token).ConfigureAwait(true);
-        if (!scan.IsCancellationRequested && ReferenceEquals(Solutions.Solution, solution))
+        try
         {
-            SetDiscoveredConnections(found);
+            var found = await Task.Run(() => FindConnections(solution, projects), scan.Token).ConfigureAwait(true);
+            if (!scan.IsCancellationRequested && ReferenceEquals(Solutions.Solution, solution))
+            {
+                SetDiscoveredConnections(found);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer scan, or the Database Explorer's own, took over before this one started.
         }
     }
 

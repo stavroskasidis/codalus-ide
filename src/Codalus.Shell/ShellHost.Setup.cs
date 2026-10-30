@@ -108,10 +108,10 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
     /// <summary>Whether <see cref="Tools"/> has every tool, not only the required ones startup checks.</summary>
     public bool ToolsComplete { get; private set; }
 
+    /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
     /// <param name="requiredOnly">The required tools alone (startup: what it offers to install).</param>
     public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer, bool requiredOnly = false)
     {
