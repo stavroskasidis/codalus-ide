@@ -434,7 +434,7 @@ public sealed class DataTipRow : Border
                 new ColumnDefinition(panel.NameColumn, GridUnitType.Pixel),
                 new ColumnDefinition(1, GridUnitType.Pixel),
                 new ColumnDefinition(panel.ViewColumn, GridUnitType.Pixel),
-                new ColumnDefinition(panel.ValueColumn, GridUnitType.Pixel),
+                new ColumnDefinition(GridLength.Auto) { MinWidth = panel.ValueColumn }, // a value's box widens its row while it's edited
                 new ColumnDefinition(22, GridUnitType.Pixel),
             },
         };
@@ -648,7 +648,7 @@ public sealed class DataTipRow : Border
     {
         _grid.ColumnDefinitions[5].Width = new GridLength(name, GridUnitType.Pixel);
         _grid.ColumnDefinitions[7].Width = new GridLength(view, GridUnitType.Pixel);
-        _grid.ColumnDefinitions[8].Width = new GridLength(value, GridUnitType.Pixel);
+        _grid.ColumnDefinitions[8].MinWidth = value;
         _value.MaxWidth = valueMaxWidth;
     }
 
