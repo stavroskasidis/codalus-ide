@@ -228,10 +228,15 @@ public sealed partial class ShellHost : IEditorServices
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
         Languages.Diagnostics.Changed += (_, _) => ScheduleDiagnosticsStatus();
-        // Once for a burst: each editor walks the multi-targeted projects' items and refills its project-context list.
-        var projectContexts = new UiDebouncer(() => ProjectContextsChanged?.Invoke(this, EventArgs.Empty), TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(1));
+        // Once for a burst: each editor finds its project context again, in an index built for it.
+        var projectContexts = new UiDebouncer(() =>
+        {
+            _contextIndex = null;
+            ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
+        }, TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(1));
         Solutions.ProjectChanged += (_, _) => projectContexts.Request();
         Solutions.CompilerInputsChanged += (_, _) => projectContexts.Request();
+        Solutions.SolutionChanged += (_, _) => projectContexts.Request();
         InitializeProfiles();
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
@@ -723,17 +728,30 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
-    public ProjectContext? ProjectContextOf(CodeDocument document)
+    public ProjectContext? ProjectContextOf(CodeDocument document) =>
+        (_contextIndex ??= ContextIndex()).TryGetValue(document.Path, out var project)
+            ? new ProjectContext(project.Path, project.Name, project.TargetFrameworks, Solutions.ActiveFramework(project.Path) ?? project.TargetFrameworks[0])
+            : null;
+
+    /// <summary>
+    /// The multi-targeted projects' files by path, the first project that lists a file winning, built at the first lookup
+    /// after their projects changed: each editor looked through every item of every such project after each burst, 50-150
+    /// ms with 100 editors and 300 of them (M56).
+    /// </summary>
+    private Dictionary<string, Codalus.Projects.Protocol.ProjectInfo>? _contextIndex;
+
+    private Dictionary<string, Codalus.Projects.Protocol.ProjectInfo> ContextIndex()
     {
+        var index = new Dictionary<string, Codalus.Projects.Protocol.ProjectInfo>(SolutionPaths.Comparer);
         foreach (var project in Solutions.Projects.Values.Where(p => p.TargetFrameworks.Length > 1))
         {
-            if (project.Items.Any(i => SolutionPaths.Comparer.Equals(i.Path, document.Path)))
+            foreach (var item in project.Items)
             {
-                return new ProjectContext(project.Path, project.Name, project.TargetFrameworks, Solutions.ActiveFramework(project.Path) ?? project.TargetFrameworks[0]);
+                index.TryAdd(item.Path, project);
             }
         }
 
-        return null;
+        return index;
     }
 
     public async Task SetActiveFrameworkAsync(string projectPath, string targetFramework)

@@ -333,9 +333,10 @@ public sealed class CodeEditorView : UserControl, IPaneView
     {
         var context = _services.ProjectContextOf(_document.Model);
         _contextBar.IsVisible = context is not null;
-        if (context is null)
+        if (context is null || (_context.Tag is ProjectContext shown && shown.ProjectPath == context.ProjectPath && shown.Active == context.Active
+                                && shown.Frameworks.SequenceEqual(context.Frameworks)))
         {
-            return;
+            return; // none, or the same: a burst of project changes refilled every editor's list
         }
 
         _updatingContext = true;
