@@ -30,6 +30,9 @@ public sealed class TestControllerInfo
     internal List<TestNode> Roots { get; } = [];
 
     internal Dictionary<string, TestNode> Index { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The items that name a document, by its URI (ignoring case, as editors compare them).</summary>
+    internal Dictionary<string, HashSet<TestNode>> ByDocument { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>
@@ -48,6 +51,14 @@ public sealed class TestService : ITestSink, IDisposable
     private readonly Dictionary<string, List<TestResult>> _history = new(StringComparer.Ordinal);
     private readonly List<TestRunRecord> _finishedRuns = [];
     private readonly Dictionary<string, TaskCompletionSource> _runEnded = new(StringComparer.Ordinal);
+
+    // The documents' versions (DocumentVersion): each change gets a stamp, given to the documents of the items it touched
+    // and of their ancestors (a class's glyph and CodeLens sum up its tests). _allDocuments is the stamp of the last
+    // change to every document (a controller went away).
+    private readonly Dictionary<string, long> _documentVersions = new(StringComparer.OrdinalIgnoreCase);
+    private long _stamp;
+    private long _allDocuments;
+    private long _order;
     private readonly Timer _notifyTimer;
     private CancellationTokenSource? _current;
     private (TestRunKind Kind, IReadOnlyList<string>? Include)? _last;
@@ -136,16 +147,87 @@ public sealed class TestService : ITestSink, IDisposable
     }
 
     /// <summary>The innermost test item declared at <paramref name="line"/> (zero-based) of a document.</summary>
-    public TestNode? FindAt(string uri, int line) => Read(roots =>
-        roots.SelectMany(r => r.SelfAndDescendants())
-            .Where(n => n.Uri is not null && string.Equals(n.Uri, uri, StringComparison.OrdinalIgnoreCase) && n.Range is { } range && range.StartLine <= line && line <= range.EndLine)
-            .OrderBy(n => n.Range!.EndLine - n.Range.StartLine)
-            .FirstOrDefault());
+    public TestNode? FindAt(string uri, int line)
+    {
+        lock (_gate)
+        {
+            return Declared(uri)
+                .Where(n => n.Range!.StartLine <= line && line <= n.Range.EndLine)
+                .OrderBy(n => n.Range!.EndLine - n.Range.StartLine)
+                .FirstOrDefault();
+        }
+    }
 
-    /// <summary>Items declared in a document, for editor glyphs.</summary>
-    public IReadOnlyList<TestNode> InDocument(string uri) => Read(roots =>
-        (IReadOnlyList<TestNode>)[.. roots.SelectMany(r => r.SelfAndDescendants())
-            .Where(n => n.Uri is not null && n.Range is not null && string.Equals(n.Uri, uri, StringComparison.OrdinalIgnoreCase))]);
+    /// <summary>Items declared in a document, for editor glyphs, as a walk of the tree meets them.</summary>
+    public IReadOnlyList<TestNode> InDocument(string uri)
+    {
+        lock (_gate)
+        {
+            return Declared(uri);
+        }
+    }
+
+    /// <summary>
+    /// Changes whenever the items declared in a document, or their outcomes, may have: editors refresh their glyphs and
+    /// CodeLens when it did, instead of looking through every test of the solution at each change (M56).
+    /// </summary>
+    public long DocumentVersion(string uri)
+    {
+        lock (_gate)
+        {
+            return Math.Max(_allDocuments, _documentVersions.GetValueOrDefault(uri));
+        }
+    }
+
+    // Under _gate: the items with a range in the document, from the controllers' indexes, in tree order (parents first,
+    // children in order): editors keep the first of the items that start on a line and are as small.
+    private List<TestNode> Declared(string uri)
+    {
+        var declared = new List<TestNode>();
+        foreach (var controller in _controllers.Values)
+        {
+            if (controller.ByDocument.TryGetValue(uri, out var items))
+            {
+                // Controller by controller, as Read lists their trees.
+                var nodes = items.Where(n => n.Range is not null).ToArray();
+                Array.Sort(nodes.Select(PathOf).ToArray(), nodes, Comparer<long[]>.Create(ComparePaths));
+                declared.AddRange(nodes);
+            }
+        }
+
+        return declared;
+    }
+
+    /// <summary>The <see cref="TestNode.Order"/> of the node and of its ancestors, root first.</summary>
+    private static long[] PathOf(TestNode node)
+    {
+        var depth = 0;
+        for (var n = node; n is not null; n = n.Parent)
+        {
+            depth++;
+        }
+
+        var path = new long[depth];
+        for (var n = node; n is not null; n = n.Parent)
+        {
+            path[--depth] = n.Order;
+        }
+
+        return path;
+    }
+
+    private static int ComparePaths(long[] a, long[] b)
+    {
+        for (var i = 0; i < a.Length && i < b.Length; i++)
+        {
+            if (a[i] != b[i])
+            {
+                return a[i].CompareTo(b[i]);
+            }
+        }
+
+        return a.Length.CompareTo(b.Length);
+    }
 
     // ------------------------------------------------------------------ ITestSink
 
@@ -163,7 +245,13 @@ public sealed class TestService : ITestSink, IDisposable
     {
         lock (_gate)
         {
-            _controllers.Remove(controllerId);
+            if (_controllers.Remove(controllerId))
+            {
+                // Its items leave every document.
+                _documentVersions.Clear();
+                _allDocuments = ++_stamp;
+            }
+
             foreach (var run in _runs.Values.Where(r => r.ControllerId == controllerId).ToList())
             {
                 _runs.Remove(run.RunId);
@@ -183,34 +271,40 @@ public sealed class TestService : ITestSink, IDisposable
                 return;
             }
 
+            var stamp = ++_stamp;
+            var touched = new HashSet<TestNode>();
             foreach (var id in update.Removed)
             {
                 if (controller.Index.TryGetValue(id, out var removed))
                 {
-                    Detach(controller, removed);
+                    Detach(controller, removed, stamp, touched);
                 }
             }
 
             foreach (var item in update.Items)
             {
-                Upsert(controller, item);
+                Upsert(controller, item, stamp, touched);
             }
         }
 
         ScheduleChanged();
     }
 
-    private static void Upsert(TestControllerInfo controller, TestItemDto item)
+    private void Upsert(TestControllerInfo controller, TestItemDto item, long stamp, HashSet<TestNode> touched)
     {
         if (!controller.Index.TryGetValue(item.Id, out var node))
         {
             node = new TestNode(controller.Id, item.Id);
             controller.Index[item.Id] = node;
         }
+        else
+        {
+            Stamp(node.Uri, stamp); // the document it leaves, or whose glyph changes
+        }
 
         node.Label = item.Label;
         node.Description = item.Description;
-        node.Uri = item.Uri;
+        SetUri(controller, node, item.Uri);
         node.Range = item.Range;
         node.Traits = item.Traits ?? [];
         node.SortText = item.SortText;
@@ -219,9 +313,65 @@ public sealed class TestService : ITestSink, IDisposable
         var parent = item.ParentId is { } parentId ? controller.Index.GetValueOrDefault(parentId) : null;
         if (node.Parent != parent || (parent is null && !controller.Roots.Contains(node)))
         {
+            if (node.Parent is { } old)
+            {
+                Touch(old, stamp, touched);
+            }
+
             Unlink(controller, node);
             node.Parent = parent;
+            node.Order = ++_order;
             (parent?.MutableChildren ?? controller.Roots).Add(node);
+        }
+
+        Touch(node, stamp, touched);
+    }
+
+    // Under _gate: keeps the controller's index of items by document.
+    private static void SetUri(TestControllerInfo controller, TestNode node, string? uri)
+    {
+        if (string.Equals(node.Uri, uri, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Unindex(controller, node);
+        node.Uri = uri;
+        if (uri is not null)
+        {
+            if (!controller.ByDocument.TryGetValue(uri, out var items))
+            {
+                controller.ByDocument[uri] = items = [];
+            }
+
+            items.Add(node);
+        }
+    }
+
+    private static void Unindex(TestControllerInfo controller, TestNode node)
+    {
+        if (node.Uri is { } uri && controller.ByDocument.TryGetValue(uri, out var items) && items.Remove(node) && items.Count == 0)
+        {
+            controller.ByDocument.Remove(uri);
+        }
+    }
+
+    // Under _gate: the change's stamp goes to the node's document and its ancestors'; an ancestor already touched by the
+    // change (a sibling's) ends the climb.
+    private void Touch(TestNode node, long stamp, HashSet<TestNode> touched)
+    {
+        Stamp(node.Uri, stamp);
+        for (var ancestor = node.Parent; ancestor is not null && touched.Add(ancestor); ancestor = ancestor.Parent)
+        {
+            Stamp(ancestor.Uri, stamp);
+        }
+    }
+
+    private void Stamp(string? uri, long stamp)
+    {
+        if (uri is not null)
+        {
+            _documentVersions[uri] = stamp;
         }
     }
 
@@ -237,12 +387,19 @@ public sealed class TestService : ITestSink, IDisposable
         }
     }
 
-    private static void Detach(TestControllerInfo controller, TestNode node)
+    private void Detach(TestControllerInfo controller, TestNode node, long stamp, HashSet<TestNode> touched)
     {
+        if (node.Parent is { } parent)
+        {
+            Touch(parent, stamp, touched);
+        }
+
         Unlink(controller, node);
         node.Parent = null;
         foreach (var descendant in node.SelfAndDescendants())
         {
+            Stamp(descendant.Uri, stamp);
+            Unindex(controller, descendant);
             if (controller.Index.TryGetValue(descendant.Id, out var known) && ReferenceEquals(known, descendant))
             {
                 controller.Index.Remove(descendant.Id);
@@ -314,6 +471,8 @@ public sealed class TestService : ITestSink, IDisposable
                 run.AddAttachment(attachment);
             }
 
+            var stamp = ++_stamp;
+            var touched = new HashSet<TestNode>();
             foreach (var state in update.States)
             {
                 if (!controller.Index.TryGetValue(state.ItemId, out var node))
@@ -321,6 +480,7 @@ public sealed class TestService : ITestSink, IDisposable
                     continue;
                 }
 
+                Touch(node, stamp, touched);
                 var outcome = TestOutcomes.Parse(state.State);
                 if (!outcome.IsFinal())
                 {
@@ -391,9 +551,12 @@ public sealed class TestService : ITestSink, IDisposable
             if (_controllers.TryGetValue(run.ControllerId, out var controller))
             {
                 // Tests still queued or running when the run ended did not run.
+                var stamp = ++_stamp;
+                var touched = new HashSet<TestNode>();
                 foreach (var node in controller.Index.Values.Where(n => n.Pending != TestOutcome.None))
                 {
                     node.Pending = TestOutcome.None;
+                    Touch(node, stamp, touched);
                 }
             }
 
@@ -623,6 +786,8 @@ public sealed class TestService : ITestSink, IDisposable
         {
             run = new TestRunRecord("import:" + Guid.NewGuid().ToString("N"), string.Empty, name, null, TestRunKind.Run) { Ended = DateTimeOffset.Now };
             var leaves = _controllers.Values.SelectMany(c => c.Roots).SelectMany(r => r.Leaves()).ToList();
+            var stamp = ++_stamp;
+            var touched = new HashSet<TestNode>();
             foreach (var imported in results)
             {
                 var node = leaves.FirstOrDefault(n => match(n, imported));
@@ -632,6 +797,7 @@ public sealed class TestService : ITestSink, IDisposable
                     continue;
                 }
 
+                Touch(node, stamp, touched);
                 var result = imported.Result with { RunId = run.RunId };
                 node.Result = result;
                 run.Results[node.Key] = result;

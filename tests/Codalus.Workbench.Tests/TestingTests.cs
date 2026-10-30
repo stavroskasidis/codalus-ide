@@ -167,6 +167,101 @@ public sealed class TestingTests : IDisposable
         Assert.Equal(3, _service.InDocument("file:///c:/src/Calc.cs").Count);
     }
 
+    [Fact]
+    public void The_document_index_finds_what_a_walk_of_the_trees_finds()
+    {
+        // Editors ask for a document's items: from the controllers' indexes, not a walk of every test (M56). After random
+        // additions, moves, changes of document and removals, in two controllers of which one goes away, the index gives
+        // the walk's items in the walk's order (editors keep the first of the items that start on a line).
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c1", "One"), _connection);
+        service.ControllerCreated(new TestControllerParams("x", "c2", "Two"), _connection);
+        string?[] documents = ["file:///c:/src/A.cs", "file:///C:/SRC/a.cs", "file:///c:/src/B.cs", null];
+        var random = new Random(56);
+        for (var step = 0; step < 600; step++)
+        {
+            var controller = random.Next(4) == 0 ? "c2" : "c1";
+            var id = random.Next(40);
+            if (random.Next(6) == 0)
+            {
+                service.ItemsUpdated(new TestItemsUpdateParams(controller, [], ["n" + id]));
+            }
+            else
+            {
+                // A parent has a smaller number: no cycles.
+                var parent = id == 0 || random.Next(4) == 0 ? null : "n" + random.Next(id);
+                var line = random.Next(6);
+                var range = random.Next(5) == 0 ? null : new RangeDto(line, 0, line + random.Next(3), 0);
+                service.ItemsUpdated(new TestItemsUpdateParams(controller, [new TestItemDto("n" + id, parent, "N" + id, null, documents[random.Next(documents.Length)], range, null, null, null)], []));
+            }
+
+            if (step == 450)
+            {
+                service.ControllerDisposed("c2");
+            }
+
+            foreach (var document in new[] { "file:///c:/src/a.cs", "file:///c:/src/B.cs" })
+            {
+                var walked = service.Read(roots => roots.SelectMany(r => r.SelfAndDescendants())
+                    .Where(n => n.Range is not null && string.Equals(n.Uri, document, StringComparison.OrdinalIgnoreCase)).ToList());
+                Assert.Equal(walked, service.InDocument(document));
+                for (var line = 0; line < 9; line++)
+                {
+                    var innermost = walked.Where(n => n.Range!.StartLine <= line && line <= n.Range.EndLine).OrderBy(n => n.Range!.EndLine - n.Range.StartLine).FirstOrDefault();
+                    Assert.Same(innermost, service.FindAt(document, line));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void A_documents_version_changes_with_its_items_and_their_outcomes_only()
+    {
+        // Editors refresh their glyphs and CodeLens when their document's version changed (M56). The class is declared in
+        // Calc.cs: its CodeLens sums up the tests under it, wherever they are declared.
+        const string calc = "file:///c:/src/Calc.cs";
+        const string other = "file:///c:/src/Other.cs";
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|c:Tests.Calc", "P|n:Tests", "Calc", uri: calc, line: 5), Item("Q|m:Waits", "Q|c:Other.Slow", "Waits", uri: other, line: 3)], []));
+        var seen = new Dictionary<string, long> { [calc] = _service.DocumentVersion(calc), [other] = _service.DocumentVersion(other) };
+        string Changed()
+        {
+            var changed = seen.Keys.Where(uri => _service.DocumentVersion(uri) != seen[uri]).ToList();
+            foreach (var uri in changed)
+            {
+                seen[uri] = _service.DocumentVersion(uri);
+            }
+
+            return string.Join(", ", changed.Select(uri => uri[(uri.LastIndexOf('/') + 1)..]));
+        }
+
+        _service.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
+        Report("r1", ("Q|m:Waits", TestStates.Passed, 1));
+        Assert.Equal("Other.cs", Changed());
+        Report("r1", ("P|m:Adds", TestStates.Started, null));
+        Assert.Equal("Calc.cs", Changed());
+
+        // Output changes neither: glyphs and CodeLens don't show it. The run's end leaves Adds not run.
+        _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", "hello\n")], []));
+        Assert.Equal(string.Empty, Changed());
+        _service.RunEnded("r1");
+        Assert.Equal("Calc.cs", Changed());
+
+        // A test of the class declared elsewhere (a partial class), then a test moved to Calc.cs: both documents.
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|m:Elsewhere", "P|c:Tests.Calc", "Elsewhere", uri: other, line: 9)], []));
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("Q|m:Waits", "Q|c:Other.Slow", "Waits", uri: calc, line: 40)], []));
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Equal(["Calc", "Adds", "Fails", "Divides", "Waits"], _service.InDocument(calc).Select(n => n.Label));
+        Assert.Equal(["Elsewhere"], _service.InDocument(other).Select(n => n.Label));
+
+        // Removing a project: its tests' document. The controller going away: every document.
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [], ["Q"]));
+        Assert.Equal("Calc.cs", Changed());
+        _service.ControllerDisposed(Controller);
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Empty(_service.InDocument(calc));
+    }
+
     [Theory]
     [InlineData("", 5)]
     [InlineData("adds", 1)]

@@ -62,6 +62,8 @@ public sealed class EditorInsights : IDisposable
     private Dictionary<int, string> _gitLenses = [];
     private Dictionary<int, string> _testLenses = [];
     private bool _testLensesQueued;
+    private long _testLensVersion = -1; // the document's version (TestService.DocumentVersion) the test lenses show
+    private bool _testsChangedWhileHidden;
     private static readonly TimeSpan s_blameInterval = TimeSpan.FromSeconds(3);
     private CancellationTokenSource? _hintCts;
     private CancellationTokenSource? _lensCts;
@@ -102,6 +104,7 @@ public sealed class EditorInsights : IDisposable
             _ = RefreshSymbolsAsync();
         };
         view.ScrollOffsetChanged += OnScrolled;
+        view.VisualLinesChanged += OnVisualLinesChanged;
         document.Changed += OnDocumentChanged;
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         services.Options.PropertyChanged += OnOptionsChanged;
@@ -235,7 +238,9 @@ public sealed class EditorInsights : IDisposable
         return parts;
     }
 
-    private void OnTestsChanged(object? sender, EventArgs e)
+    private void OnTestsChanged(object? sender, EventArgs e) => QueueTestLenses();
+
+    private void QueueTestLenses()
     {
         if (_testLensesQueued)
         {
@@ -248,18 +253,51 @@ public sealed class EditorInsights : IDisposable
             _testLensesQueued = false;
             if (!_disposed)
             {
-                UpdateTestLenses();
+                UpdateTestLensesIfChanged();
             }
         });
     }
 
+    /// <summary>
+    /// The test lenses follow when the document's tests changed, and only while the editor shows: a hidden one catches up
+    /// when it's shown. Every editor, hidden tabs too, looked through every test of the solution at each change (M56).
+    /// </summary>
+    private void UpdateTestLensesIfChanged()
+    {
+        if (_editor.TextArea.TextView is not { IsEffectivelyVisible: true } view || TopLevel.GetTopLevel(view) is null)
+        {
+            _testsChangedWhileHidden = true;
+            return;
+        }
+
+        _testsChangedWhileHidden = false;
+        if (_services.Tests.DocumentVersion(DocumentUris.FromPath(Model.Path)) != _testLensVersion)
+        {
+            UpdateTestLenses();
+        }
+    }
+
+    private void OnVisualLinesChanged(object? sender, EventArgs e)
+    {
+        if (_testsChangedWhileHidden)
+        {
+            QueueTestLenses(); // shown again: after this layout pass
+        }
+    }
+
+    /// <summary>How many times the test lenses were worked out (tests).</summary>
+    internal int TestLensUpdates { get; private set; }
+
     /// <summary>The test outcomes by the line their test (or class) starts on; the innermost wins a line.</summary>
     private void UpdateTestLenses()
     {
+        var uri = DocumentUris.FromPath(Model.Path);
+        _testLensVersion = _services.Tests.DocumentVersion(uri);
+        TestLensUpdates++;
         var lenses = new Dictionary<int, string>();
         if (Options.CodeLens && Options.TestCodeLens)
         {
-            foreach (var node in _services.Tests.InDocument(DocumentUris.FromPath(Model.Path)).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            foreach (var node in _services.Tests.InDocument(uri).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
             {
                 if (LensDetails.Tests(node) is { } text)
                 {
@@ -955,6 +993,7 @@ public sealed class EditorInsights : IDisposable
         view.BackgroundRenderers.Remove(_guides);
         view.LineTransformers.Remove(_brackets);
         view.ScrollOffsetChanged -= OnScrolled;
+        view.VisualLinesChanged -= OnVisualLinesChanged;
         _editor.Document.Changed -= OnDocumentChanged;
         _brackets.Detach();
         _hints.Disconnect(_editor.Document);

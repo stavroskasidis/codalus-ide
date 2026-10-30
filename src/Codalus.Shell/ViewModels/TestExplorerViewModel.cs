@@ -123,17 +123,28 @@ public sealed record HistoryRow(string Outcome, string When, string Duration, st
 /// <summary>
 /// The Test Explorer (ADR 0010): the tests of every controller, arranged (<see cref="TestProjection"/>), filtered and
 /// flattened for a virtualized list; the selected test's details; the toolbar. Rebuilds are coalesced and keep
-/// expansion and selection by key.
+/// expansion and selection by key. Changes to the tests show at most every <see cref="ChangeInterval"/>, and not while
+/// the explorer is hidden: it catches up once when it's shown (M56).
 /// </summary>
 public sealed class TestExplorerViewModel : ObservableObject
 {
     public const string ToolWindowId = "testExplorer";
+
+    /// <summary>
+    /// The least time between two rebuilds for changes to the tests (discovery, a run's results): each rebuild arranges
+    /// every test, and the service reports changes every 50 ms. The last change always shows.
+    /// </summary>
+    public static readonly TimeSpan ChangeInterval = TimeSpan.FromMilliseconds(200);
 
     private static readonly TimeSpan s_filterDelay = TimeSpan.FromMilliseconds(150);
     private readonly ShellHost _shell;
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _filterTimer;
+    private readonly DispatcherTimer _changeTimer = new();
+    private long _lastRefresh;
+    private bool _viewShown;
+    private bool _changedWhileHidden;
     private ObservableCollection<TestRowViewModel> _rows = [];
     private TestRowViewModel? _selected;
     private string _filterText = string.Empty;
@@ -153,6 +164,11 @@ public sealed class TestExplorerViewModel : ObservableObject
             _filterTimer.Stop();
             _filter = TestFilter.Parse(_filterText);
             Refresh();
+        };
+        _changeTimer.Tick += (_, _) =>
+        {
+            _changeTimer.Stop();
+            OnTestsChanged();
         };
         shell.Tests.Changed += (_, _) => QueueRefresh();
         shell.Tests.RunningChanged += (_, _) => Ui.Post(() =>
@@ -482,8 +498,56 @@ public sealed class TestExplorerViewModel : ObservableObject
         Dispatcher.UIThread.Post(() =>
         {
             Interlocked.Exchange(ref _refreshQueued, 0);
-            Refresh();
+            OnTestsChanged();
         });
+    }
+
+    /// <summary>
+    /// The tests changed: a rebuild now, or when <see cref="ChangeInterval"/> has passed since the last one, or, while the
+    /// explorer is hidden, none until it's shown. Each rebuild used to come at every change, shown or not: 50-100 ms of
+    /// the UI thread twenty times a second for 100K tests during discovery and runs (M56).
+    /// </summary>
+    private void OnTestsChanged()
+    {
+        if (!_viewShown)
+        {
+            _changedWhileHidden = true;
+            return;
+        }
+
+        var wait = ChangeInterval - System.Diagnostics.Stopwatch.GetElapsedTime(_lastRefresh);
+        if (wait > TimeSpan.Zero)
+        {
+            if (!_changeTimer.IsEnabled)
+            {
+                _changeTimer.Interval = wait;
+                _changeTimer.Start();
+            }
+
+            return;
+        }
+
+        Refresh();
+    }
+
+    /// <summary>Whether the view said the explorer is shown (tests).</summary>
+    internal bool IsViewShown => _viewShown;
+
+    /// <summary>The rebuilds of the arranged tree (tests).</summary>
+    internal int Builds { get; private set; }
+
+    /// <summary>
+    /// The view tells whether the explorer is shown (attached and visible): changes to the tests rebuild nothing while it
+    /// isn't, and one rebuild catches up when it is again.
+    /// </summary>
+    public void SetViewShown(bool shown)
+    {
+        _viewShown = shown;
+        if (shown && _changedWhileHidden)
+        {
+            _changedWhileHidden = false;
+            QueueRefresh();
+        }
     }
 
     public void Refresh()
@@ -494,6 +558,10 @@ public sealed class TestExplorerViewModel : ObservableObject
             return;
         }
 
+        Builds++;
+        _lastRefresh = System.Diagnostics.Stopwatch.GetTimestamp();
+        _changeTimer.Stop(); // this rebuild shows the changes it waited for
+        _changedWhileHidden = false;
         var playlist = _playlist is null ? null : new HashSet<string>(_playlist.Tests, StringComparer.Ordinal);
         var (groups, summary) = _shell.Tests.Read(roots => (TestProjection.Build(roots, _grouping, _filter, playlist), TestProjection.Summary(roots)));
         Summary = summary;
