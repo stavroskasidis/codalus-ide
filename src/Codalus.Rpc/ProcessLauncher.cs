@@ -54,8 +54,10 @@ public sealed class LocalProcessLauncher : IProcessLauncher
     /// <summary>How the check finds .NET roots (tests describe a machine).</summary>
     public DotnetRootResolver Roots { get; init; } = DotnetRootResolver.Default;
 
-    public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+    public async Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
     {
+        // The login shell's PATH and DOTNET_ROOT, while they're still being taken (M56): the runtime check reads them too.
+        await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
         if (launch.CheckRuntime && HostRuntimeCheck.Check(launch, Roots) is { IsSatisfied: false } missing)
         {
             throw new HostRuntimeMissingException(missing);
@@ -90,7 +92,7 @@ public sealed class LocalProcessLauncher : IProcessLauncher
         }
 
         var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {launch.FileName}.");
-        return Task.FromResult<IHostProcess>(new LocalHostProcess(process));
+        return new LocalHostProcess(process);
     }
 }
 

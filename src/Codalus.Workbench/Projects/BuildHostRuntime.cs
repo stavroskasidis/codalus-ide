@@ -20,10 +20,15 @@ public static class BuildHostRuntime
 
     /// <summary>
     /// The build host's environment for a solution in <paramref name="solutionDirectory"/>, or null to start it as it
-    /// is. Asks <c>dotnet</c> only when an SDK newer than the hosts' .NET is installed.
+    /// is. Asks <c>dotnet</c> only when an SDK newer than the hosts' .NET is installed. On the thread pool: it reads the
+    /// PATH's folders and the SDKs', and may start <c>dotnet</c>, and a solution opens from the UI thread (M56).
     /// </summary>
-    public static async Task<IReadOnlyDictionary<string, string>?> EnvironmentAsync(string solutionDirectory, CancellationToken cancellationToken)
+    public static Task<IReadOnlyDictionary<string, string>?> EnvironmentAsync(string solutionDirectory, CancellationToken cancellationToken) =>
+        Task.Run(() => EnvironmentCoreAsync(solutionDirectory, cancellationToken), cancellationToken);
+
+    private static async Task<IReadOnlyDictionary<string, string>?> EnvironmentCoreAsync(string solutionDirectory, CancellationToken cancellationToken)
     {
+        await Rpc.ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false); // DOTNET_ROOT and the login shell's PATH
         if (DotnetExecutable() is not { } dotnet || !HasNewerSdk(Path.GetDirectoryName(dotnet)!, HostMajor))
         {
             return null;

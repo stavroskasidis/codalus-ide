@@ -186,7 +186,10 @@ public sealed class SupervisedProcess : IAsyncDisposable
         IHostProcess process;
         try
         {
-            process = await (_launch.Launcher ?? LocalProcessLauncher.Instance).StartAsync(_launch, cancellationToken).ConfigureAwait(false);
+            // On the thread pool: a launcher works synchronously (the runtime check's file probes, then Process.Start,
+            // which on Windows waits for .NET's process-creation lock behind any other start), and hosts are started from
+            // the UI thread (a restored tab, a solution's open, a plugin's activation), which held each start (M56).
+            process = await Task.Run(() => (_launch.Launcher ?? LocalProcessLauncher.Instance).StartAsync(_launch, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
         catch (HostRuntimeMissingException ex)
         {

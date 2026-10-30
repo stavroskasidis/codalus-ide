@@ -94,6 +94,39 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         Assert.All(calls, c => Assert.Matches("^(dotnet|git) --", c));
     }
 
+    /// <summary>
+    /// Every start checks the required tools from the UI thread (M56): looking for dotnet reads folders and starts a process,
+    /// so it runs on the thread pool. Here the first look blocks until the test lets it go, which the caller couldn't do if
+    /// the look ran on its thread.
+    /// </summary>
+    [Fact]
+    public async Task The_startup_check_looks_for_tools_off_the_callers_thread()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var calls = 0;
+        var threads = new System.Collections.Concurrent.ConcurrentBag<int>();
+        var check = new EnvironmentCheck(PlatformKind.Linux, name =>
+        {
+            threads.Add(Environment.CurrentManagedThreadId);
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            }
+
+            return name == "PATH" ? "/usr/bin" : null;
+        }, (_, _, _, _) => Task.FromResult((1, "")), _ => false);
+        var caller = Environment.CurrentManagedThreadId;
+
+        var checking = check.CheckRequiredAsync(null, TestContext.Current.CancellationToken);
+
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        Assert.DoesNotContain(caller, threads);
+        release.Set();
+        Assert.Equal(ToolState.Missing, (await checking).Single(t => t.Id == "dotnet").State);
+    }
+
     [Fact]
     public async Task Podmans_docker_emulation_shows_its_version_line_without_its_notice()
     {

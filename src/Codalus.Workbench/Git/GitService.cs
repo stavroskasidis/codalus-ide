@@ -139,6 +139,7 @@ public sealed partial class GitService : IDisposable
     private async Task<(int ExitCode, string Output, string Error)> RunOnceAsync(
         string directory, IReadOnlyList<string> arguments, string? input, bool readOnly, IReadOnlyDictionary<string, string>? environment, CancellationToken cancellationToken)
     {
+        await Codalus.Rpc.ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false); // the login shell's PATH and proxies (M56)
         var process = await Task.Run(() => Start(directory, arguments, input is not null, readOnly, environment), CancellationToken.None).ConfigureAwait(false);
         using (process)
         {
