@@ -249,7 +249,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         DiscoverPlugins();
         RestoreLayout();
-        InitializeTabColors();
+        InitializeTabs();
         UpdateStatusItems();
         ReportPreviousCrashes();
     }

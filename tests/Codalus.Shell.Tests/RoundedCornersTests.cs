@@ -267,6 +267,30 @@ public sealed class RoundedCornersTests
     }
 
     [AvaloniaFact]
+    public async Task The_edge_is_unbroken_under_a_selected_tab_on_the_pinned_row()
+    {
+        // The pinned row (workbench.editor.pinnedTabsOnSeparateRow) is above the other tabs: its selected tab doesn't
+        // reach the frame, so the line runs under the whole strip; a selected tab on the row above it opens it again.
+        await using var f = await OpenAsync("light");
+        var edge = Single<TabStripEdge>(f);
+        var notes = f.Shell.Layout.Documents.Single(d => d.FilePath?.EndsWith("Notes.txt", StringComparison.Ordinal) == true);
+        f.Shell.Layout.SetPinned(notes, true);
+        f.Shell.Layout.OpenDocument(notes);
+        await ShellFixture.PumpUntil(() => edge.SelectedTab is { } tab && DocumentTab.GetIsPinned(tab));
+        f.Window.UpdateLayout();
+        ShellFixture.Pump();
+        var selected = edge.SelectedTab!;
+        Assert.True(selected.TranslatePoint(default, edge)!.Value.Y < -selected.Bounds.Height * 1.5, "the pinned tab is on the row above the others");
+        Assert.Null(edge.Gap());
+
+        f.Shell.Layout.OpenDocument(f.Shell.Layout.Documents.Single(d => d != notes));
+        await ShellFixture.PumpUntil(() => edge.SelectedTab is { } tab && !DocumentTab.GetIsPinned(tab));
+        f.Window.UpdateLayout();
+        ShellFixture.Pump();
+        Assert.NotNull(edge.Gap());
+    }
+
+    [AvaloniaFact]
     public async Task The_families_keep_their_shapes()
     {
         await using var f = await OpenAsync("harbor.dark");

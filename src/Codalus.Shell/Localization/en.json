@@ -4283,6 +4283,8 @@
   "setting.workbench.commandBarCustomizations.title": "Menu and Toolbar Customizations",
   "setting.workbench.editor.colorTabsByProject.description": "Mark each document tab with its project's color, a stripe along the tab's bottom edge.",
   "setting.workbench.editor.colorTabsByProject.title": "Color Document Tabs by Project",
+  "setting.workbench.editor.pinnedTabsOnSeparateRow.description": "Show a document group's pinned tabs on a row of their own, above its other tabs.",
+  "setting.workbench.editor.pinnedTabsOnSeparateRow.title": "Show Pinned Tabs in a Separate Row",
   "setting.workbench.iconTheme.description": "The icons of files and folders. Plugins can add icon themes.",
   "setting.workbench.iconTheme.enum.default": "Built in (classic)",
   "setting.workbench.iconTheme.enum.material": "Material Icon Theme (built in)",
