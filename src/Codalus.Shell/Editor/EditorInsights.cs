@@ -279,9 +279,19 @@ public sealed class EditorInsights : IDisposable
 
     private void OnVisualLinesChanged(object? sender, EventArgs e)
     {
-        if (_testsChangedWhileHidden)
+        if (_testsChangedWhileHidden && !_testLensesQueued)
         {
-            QueueTestLenses(); // shown again: after this layout pass
+            // Shown again: after this layout pass. Ui.Post would run it inside it, where the redraw for new lenses throws
+            // away the visual lines just built.
+            _testLensesQueued = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _testLensesQueued = false;
+                if (!_disposed)
+                {
+                    UpdateTestLensesIfChanged();
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
         }
     }
 
@@ -294,17 +304,20 @@ public sealed class EditorInsights : IDisposable
         var uri = DocumentUris.FromPath(Model.Path);
         _testLensVersion = _services.Tests.DocumentVersion(uri);
         TestLensUpdates++;
-        var lenses = new Dictionary<int, string>();
-        if (Options.CodeLens && Options.TestCodeLens)
+        var lenses = !(Options.CodeLens && Options.TestCodeLens) ? new Dictionary<int, string>() : _services.Tests.InDocument(uri, nodes =>
         {
-            foreach (var node in _services.Tests.InDocument(uri).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            // Under the model's lock: a class's text walks the tests under it, which discovery changes meanwhile.
+            var texts = new Dictionary<int, string>();
+            foreach (var node in nodes.OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
             {
                 if (LensDetails.Tests(node) is { } text)
                 {
-                    lenses.TryAdd(node.Range!.StartLine + 1, text);
+                    texts.TryAdd(node.Range!.StartLine + 1, text);
                 }
             }
-        }
+
+            return texts;
+        });
 
         if (!lenses.OrderBy(p => p.Key).SequenceEqual(_testLenses.OrderBy(p => p.Key)))
         {

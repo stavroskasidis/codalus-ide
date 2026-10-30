@@ -41,6 +41,11 @@ public sealed class DotNetTestTreeTests
         Assert.Equal(MethodId(p1, "Adds"), tree.ItemFor(p1.RunnerTests[string.Empty][0])?.Id);
         Assert.Equal(MethodId(projects[0], "Fails"), tree.ItemFor(projects[0].RunnerTests[string.Empty][1])?.Id);
         Assert.Equal(MethodId(projects[2], "Fails"), tree.ItemFor(projects[2].RunnerTests[string.Empty][1])?.Id);
+
+        // P2 leaves the solution: its runner tests leave the index (they stayed, for as long as the plugin ran).
+        tree.Update([projects[0], p1]);
+        Assert.Null(tree.ItemFor(projects[2].RunnerTests[string.Empty][0]));
+        Assert.Equal(3, tree.MappedRunnerTests);
     }
 
     /// <summary>A controller whose <see cref="Find"/> walks the tree (the trees here are small).</summary>

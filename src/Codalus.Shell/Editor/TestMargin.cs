@@ -87,14 +87,17 @@ public sealed class TestMargin : AbstractMargin
         var uri = DocumentUris.FromPath(_path());
         _version = _tests.DocumentVersion(uri);
         Refreshes++;
-        var byLine = new Dictionary<int, TestNode>();
-        foreach (var node in _tests.InDocument(uri).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+        _byLine = _tests.InDocument(uri, nodes =>
         {
-            // The innermost item wins a line (a method over its class when both start there).
-            byLine.TryAdd(node.Range!.StartLine + 1, node);
-        }
+            var byLine = new Dictionary<int, TestNode>();
+            foreach (var node in nodes.OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            {
+                // The innermost item wins a line (a method over its class when both start there).
+                byLine.TryAdd(node.Range!.StartLine + 1, node);
+            }
 
-        _byLine = byLine;
+            return byLine;
+        });
         InvalidateMeasure();
         InvalidateVisual();
     }
@@ -119,15 +122,11 @@ public sealed class TestMargin : AbstractMargin
 
     private void OnVisualLinesChanged(object? sender, EventArgs e)
     {
-        if (_changedWhileHidden && !_refreshQueued)
+        if (_changedWhileHidden)
         {
-            // Shown again: after this layout pass (the glyphs can change the margin's width).
-            _refreshQueued = true;
-            Ui.Post(() =>
-            {
-                _refreshQueued = false;
-                RefreshIfChanged();
-            });
+            // Shown again: at once, inside the text view's layout pass, so no frame shows the glyphs from before it was
+            // hidden (glyphs that change the margin's width have it measured again).
+            RefreshIfChanged();
         }
 
         InvalidateVisual();

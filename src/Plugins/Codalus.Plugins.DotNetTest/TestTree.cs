@@ -75,6 +75,18 @@ internal sealed class TestTree(ITestController controller)
     // through every runner test of the solution, for each project (M56).
     private readonly Dictionary<string, HashSet<string>> _runnerKeysOfProject = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>How many runner tests are mapped to an item (tests).</summary>
+    internal int MappedRunnerTests
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _itemOfRunnerTest.Count;
+            }
+        }
+    }
+
     public ItemInfo? Info(string itemId)
     {
         lock (_gate)
@@ -114,6 +126,23 @@ internal sealed class TestTree(ITestController controller)
             {
                 _info.Remove(key);
             }
+
+            foreach (var project in _runnerKeysOfProject.Keys.Where(p => !live.Contains(p)).ToList())
+            {
+                ForgetRunnerTests(project);
+            }
+        }
+    }
+
+    // Under _gate: the project's runner tests leave the index (a rebuild maps them again).
+    private void ForgetRunnerTests(string project)
+    {
+        if (_runnerKeysOfProject.Remove(project, out var mapped))
+        {
+            foreach (var key in mapped)
+            {
+                _itemOfRunnerTest.Remove(key);
+            }
         }
     }
 
@@ -125,13 +154,7 @@ internal sealed class TestTree(ITestController controller)
         item.Error = project.Error;
         item.Uri = new Uri(project.Path).AbsoluteUri;
 
-        if (_runnerKeysOfProject.Remove(project.Path, out var mapped))
-        {
-            foreach (var key in mapped)
-            {
-                _itemOfRunnerTest.Remove(key);
-            }
-        }
+        ForgetRunnerTests(project.Path);
 
         // Methods from source, then from runners; a runner test whose type and method are known joins its source method.
         var methods = new Dictionary<(string Type, string Method), MethodEntry>();

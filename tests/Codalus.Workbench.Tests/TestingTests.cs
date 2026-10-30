@@ -260,6 +260,58 @@ public sealed class TestingTests : IDisposable
         _service.ControllerDisposed(Controller);
         Assert.Equal("Calc.cs, Other.cs", Changed());
         Assert.Empty(_service.InDocument(calc));
+
+        // A controller created again (a plugin that came back) drops the old one's items from every document too.
+        _service.ControllerCreated(new TestControllerParams("codalus.dotnettest", Controller, ".NET"), _connection);
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|c:Tests.Calc", null, "Calc", uri: calc, line: 5)], []));
+        Changed();
+        _service.ControllerCreated(new TestControllerParams("codalus.dotnettest", Controller, ".NET"), _connection);
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Empty(_service.InDocument(calc));
+    }
+
+    [Fact]
+    public void An_item_whose_parent_is_itself_or_under_it_becomes_a_root()
+    {
+        // Ids are unique per controller, but nothing makes a plugin keep to it: a parent that is the item itself, or an
+        // item under it, made a cycle, and the editors' walk up the tree for the document's items never left it.
+        const string uri = "file:///c:/src/Loop.cs";
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c", "C"), _connection);
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [Item("self", "self", "Self", uri: uri, line: 1), Item("a", null, "A", uri: uri, line: 3), Item("b", "a", "B", uri: uri, line: 4)], []));
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [Item("a", "b", "A", uri: uri, line: 3)], []));
+
+        Assert.Equal(["Self", "A", "B"], service.InDocument(uri).Select(n => n.Label));
+        Assert.Equal(["Self", "A"], service.Read(roots => roots.Select(r => r.Label).ToList()));
+        Assert.Same(service.Find(TestNode.KeyOf("c", "a")), service.Find(TestNode.KeyOf("c", "b"))!.Parent);
+    }
+
+    [Fact]
+    public void A_documents_items_cost_what_the_document_has()
+    {
+        // Each open editor asks for its document's items at each change: the index answers from that document's items,
+        // where a walk of every test took 12-25 ms for 100K tests (M56). 1,000 questions to a forest of 100,000 tests:
+        // seconds for a walk, milliseconds for the index.
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c", "C"), _connection);
+        var items = new List<TestItemDto>();
+        for (var project = 0; project < 100; project++)
+        {
+            items.Add(Item("p" + project, null, "P" + project));
+            for (var test = 0; test < 1000; test++)
+            {
+                items.Add(Item($"p{project}|{test}", "p" + project, "T" + test, uri: $"file:///c:/src/P{project}/T{test / 10}.cs", line: test % 10));
+            }
+        }
+
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [.. items], []));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 1000; i++)
+        {
+            Assert.Equal(10, service.InDocument($"file:///c:/src/P{i % 100}/T{i % 7}.cs").Count);
+        }
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"1,000 documents' items took {clock.Elapsed.TotalMilliseconds:0} ms");
     }
 
     [Theory]

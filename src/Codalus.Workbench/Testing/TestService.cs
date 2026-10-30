@@ -168,6 +168,18 @@ public sealed class TestService : ITestSink, IDisposable
     }
 
     /// <summary>
+    /// Runs <paramref name="read"/> on the items declared in a document (as <see cref="InDocument(string)"/> lists them)
+    /// with the model locked: what it reads of them (ranges, outcomes, the tests under a class) can't change meanwhile.
+    /// </summary>
+    public T InDocument<T>(string uri, Func<IReadOnlyList<TestNode>, T> read)
+    {
+        lock (_gate)
+        {
+            return read(Declared(uri));
+        }
+    }
+
+    /// <summary>
     /// Changes whenever the items declared in a document, or their outcomes, may have: editors refresh their glyphs and
     /// CodeLens when it did, instead of looking through every test of the solution at each change (M56).
     /// </summary>
@@ -235,6 +247,7 @@ public sealed class TestService : ITestSink, IDisposable
     {
         lock (_gate)
         {
+            Forget(controller.ControllerId); // created again: the old one's items and runs go first
             _controllers[controller.ControllerId] = new TestControllerInfo(controller.ControllerId, controller.PluginId, controller.Label, connection);
         }
 
@@ -245,21 +258,26 @@ public sealed class TestService : ITestSink, IDisposable
     {
         lock (_gate)
         {
-            if (_controllers.Remove(controllerId))
-            {
-                // Its items leave every document.
-                _documentVersions.Clear();
-                _allDocuments = ++_stamp;
-            }
-
-            foreach (var run in _runs.Values.Where(r => r.ControllerId == controllerId).ToList())
-            {
-                _runs.Remove(run.RunId);
-                RunEndedSignal(run.RunId).TrySetResult();
-            }
+            Forget(controllerId);
         }
 
         ScheduleChanged();
+    }
+
+    // Under _gate: a controller's items leave every document, and its runs end.
+    private void Forget(string controllerId)
+    {
+        if (_controllers.Remove(controllerId))
+        {
+            _documentVersions.Clear();
+            _allDocuments = ++_stamp;
+        }
+
+        foreach (var run in _runs.Values.Where(r => r.ControllerId == controllerId).ToList())
+        {
+            _runs.Remove(run.RunId);
+            RunEndedSignal(run.RunId).TrySetResult();
+        }
     }
 
     public void ItemsUpdated(TestItemsUpdateParams update)
@@ -311,6 +329,17 @@ public sealed class TestService : ITestSink, IDisposable
         node.Error = item.Error;
 
         var parent = item.ParentId is { } parentId ? controller.Index.GetValueOrDefault(parentId) : null;
+        for (var above = parent; above is not null; above = above.Parent)
+        {
+            if (above == node)
+            {
+                // The item itself, or an item under it (a plugin that reuses an id): a cycle that walks up the tree would
+                // never leave. The item becomes a root instead.
+                parent = null;
+                break;
+            }
+        }
+
         if (node.Parent != parent || (parent is null && !controller.Roots.Contains(node)))
         {
             if (node.Parent is { } old)
