@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
@@ -273,6 +274,91 @@ public class EverydayResponsivenessTests
 
             tests.RunEnded(run);
             await ShellFixture.PumpUntil(() => f.Shell.TestExplorer.Summary.Contains("1177 failed", StringComparison.Ordinal), seconds: 120);
+        });
+    }
+
+    /// <summary>
+    /// Git Changes with 10,000 untracked files in 1,000 folders (a generated folder nobody ignored): status reads, Stage All
+    /// and Unstage All, the list and back, collapsing and expanding, typing a filter. Each status read rebuilt every row and
+    /// tree view item on the UI thread: seconds each (M56).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_changes_flows_on_ten_thousand_files()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = GitChangesRowsTests.CreateRepository(Path.Combine(f.UserData, "Generated"), folders: 1000, files: 10);
+        f.Shell.Trust.Trust(folder);
+        f.Window.Height = 700;
+        await f.Shell.OpenFolderAsync(folder);
+        var vm = f.Shell.GitChanges;
+        await ShellFixture.PumpUntil(() => vm.Changes.Count == 10_000 && !vm.IsRefreshing, seconds: 120);
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => vm.IsViewShown && vm.ChangesRows.Count == 1 + 1 + 1000 + 10_000 && !vm.IsRefreshing, seconds: 120);
+        var view = f.Window.GetVisualDescendants().OfType<GitChangesView>().Single();
+        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<ListBoxItem>().Any());
+        Assert.InRange(view.GetVisualDescendants().OfType<ListBoxItem>().Count(), 1, 300); // the rows in view, not 11,000
+        var readme = Path.Combine(folder, "README.md");
+
+        using var monitor = new UiStallMonitor();
+        async Task Flow(string name, Func<Task> flow)
+        {
+            await flow(); // the JIT's first time
+            await WaitAsync(300);
+            monitor.Reset();
+            await flow();
+            await WaitAsync(300);
+            monitor.AssertResponsive(name, Budget);
+        }
+
+        await Flow("status reads after saves", async () =>
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                await File.AppendAllTextAsync(readme, "saved\n", TestContext.Current.CancellationToken);
+                await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+                await ShellFixture.PumpUntil(() => !vm.IsRefreshing, seconds: 60);
+            }
+        });
+
+        await Flow("Stage All, then Unstage All", async () =>
+        {
+            await vm.StageAllAsync();
+            await ShellFixture.PumpUntil(() => vm.Staged.Count == 10_001 && vm.StagedRows.Count > 10_000 && !vm.IsRefreshing, seconds: 120);
+            await vm.UnstageAllAsync();
+            await ShellFixture.PumpUntil(() => vm.Changes.Count == 10_001 && vm.StagedRows.Count == 0 && !vm.IsRefreshing, seconds: 120);
+        });
+
+        await Flow("the list view and back", async () =>
+        {
+            vm.IsTreeView = false;
+            await ShellFixture.PumpUntil(() => vm.ChangesItems.Count == 10_001 && !vm.IsRefreshing, seconds: 60);
+            vm.IsTreeView = true;
+            await ShellFixture.PumpUntil(() => vm.ChangesRows.Count > 10_000 && !vm.IsRefreshing, seconds: 60);
+        });
+
+        await Flow("collapsing and expanding the repository and its folders", async () =>
+        {
+            var repository = vm.ChangesRows[0];
+            vm.SetExpanded(repository, false);
+            await WaitAsync(50);
+            vm.SetExpanded(repository, true);
+            await WaitAsync(50);
+            vm.SetExpandedUnder("changes", folder, expanded: false);
+            await WaitAsync(50);
+            vm.SetExpandedUnder("changes", folder, expanded: true);
+            await ShellFixture.PumpUntil(() => vm.ChangesRows.Count > 10_000);
+        });
+
+        await Flow("typing in the filter and clearing it", async () =>
+        {
+            vm.ShowFilter = true;
+            foreach (var text in new[] { "d", "d1", "d12", "d123", string.Empty })
+            {
+                vm.FilterText = text;
+                await WaitAsync(80);
+            }
+
+            await ShellFixture.PumpUntil(() => !vm.IsRefreshing && vm.ChangesRows.Count > 10_000, seconds: 60);
         });
     }
 }
