@@ -495,6 +495,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Reveal(node.Id);
     }
 
+    /// <summary>Whether the view said the explorer is shown (tests).</summary>
+    internal bool IsViewShown => _viewShown;
+
     /// <summary>
     /// The view tells whether the explorer is shown (attached and visible): Track Active Item does nothing while it
     /// isn't, and reveals the active document when it is again.

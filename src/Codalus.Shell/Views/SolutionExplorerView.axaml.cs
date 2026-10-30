@@ -36,32 +36,42 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private ListBoxItem? _dropTarget;
     private ExplorerRowViewModel? _revealWhenShown;
     private bool _shown;
+    private SolutionExplorerViewModel? _reported; // the view model told whether the explorer is shown
 
     public SolutionExplorerView()
     {
         InitializeComponent();
         DataContextChanged += (_, _) =>
         {
-            if (ViewModel is { } vm)
+            // A closed tool window clears its view's data context before the view leaves the tree: the view model it
+            // reported to hears that the explorer is hidden now.
+            if (_reported is { } old && !ReferenceEquals(old, ViewModel))
             {
-                vm.SearchRequested -= OnSearchRequested;
+                old.SearchRequested -= OnSearchRequested;
+                old.RevealRequested -= OnRevealRequested;
+                if (_shown)
+                {
+                    old.SetViewShown(false);
+                }
+
+                _reported = null;
+                _shown = false;
+            }
+
+            if (ViewModel is { } vm && !ReferenceEquals(vm, _reported))
+            {
                 vm.SearchRequested += OnSearchRequested;
-                vm.RevealRequested -= OnRevealRequested;
                 vm.RevealRequested += OnRevealRequested;
+                _reported = vm;
                 _shown = false;
                 UpdateShown();
             }
         };
+        // Shown or hidden: a closed or auto-hidden tool window keeps its view attached, invisible, and its next layout
+        // pass tells (no viewport change is raised for an ancestor's visibility).
         AttachedToVisualTree += (_, _) => UpdateShown();
-        DetachedFromVisualTree += (_, _) => UpdateShown();
-        List.EffectiveViewportChanged += (_, _) => UpdateShown();
-        List.PropertyChanged += (_, e) =>
-        {
-            if (e.Property == IsVisibleProperty)
-            {
-                UpdateShown();
-            }
-        };
+        DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
+        List.LayoutUpdated += (_, _) => UpdateShown();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         List.DoubleTapped += (_, e) =>
         {
@@ -116,17 +126,17 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     /// Tells the view model whether the explorer is shown (Track Active Item waits while it isn't), and brings a reveal
     /// that came while it was hidden into view.
     /// </summary>
-    private void UpdateShown()
+    private void UpdateShown(bool detaching = false)
     {
-        var shown = this.IsAttachedToVisualTree() && List.IsEffectivelyVisible;
+        var shown = !detaching && this.IsAttachedToVisualTree() && List.IsEffectivelyVisible;
         if (shown == _shown)
         {
             return;
         }
 
         _shown = shown;
-        ViewModel?.SetViewShown(shown);
-        if (shown && _revealWhenShown is { } row && ViewModel?.Rows.Contains(row) == true)
+        _reported?.SetViewShown(shown);
+        if (shown && _revealWhenShown is { } row && _reported?.Rows.Contains(row) == true)
         {
             _revealWhenShown = null;
             Avalonia.Threading.Dispatcher.UIThread.Post(() => List.ScrollIntoView(row), Avalonia.Threading.DispatcherPriority.Loaded);
