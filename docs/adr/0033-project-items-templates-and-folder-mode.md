@@ -56,3 +56,12 @@ Constraints: MSBuild runs only in the build host, only for trusted folders (ADR 
 - Plugin API 0.2.8 (additive): `contributes.propertyProviders` and `contributes.externalToolMacros`; M26b adds `contributes.customTools`.
 - Folder mode reuses the solution machinery, so loaded projects get every solution feature; a folder without loaded projects still has search, Git, the terminal, tasks and launch configurations.
 - `TODO(issue)`, not in M26a: multi-selection in the Solution Explorer (edits act on one item); `LinkBase` for linked globs; the classic IDE's `.vstemplate` item templates; CMake and other non-.NET folder workflows.
+
+## Amendment (2026-10-30): Show All Files lists a folder that isn't in the project once it's expanded
+
+On a large solution, Show All Files listed every loaded project's whole folder again, one project at a time, at every folder change, build and evaluation, `bin` and `obj` included, and each listing rebuilt the project's subtree on the UI thread (M56, [checkpoint](../checkpoints/m56.md)).
+- **As the classic IDE does,** a project's listing goes into the folders that hold its items and the folders that are expanded. `bin`, `obj` and the other folders that aren't in the project show at once, dimmed, and what is in them is listed once they're expanded ("Loading…" until then), then again when they change. `fs/listTree` takes the folders to go into (`folders`, optional; without it, everything, as before).
+- **Only the projects a change concerns are listed again:** for a folder that changed, the projects whose folders hold it; after a build, the project built and the projects it references; after an evaluation, that project. The listings run off the UI thread, four at a time, and a listing equal to the last one keeps the project's subtree.
+- **The tree's build touches no disk:** the build host marks the analyzers that aren't on disk in the compiler inputs it sends (`missingAnalyzers`, optional), so a host on another machine reports its own disk.
+- The folder view still lists the whole workspace, and skips the rebuild when the listing didn't change. `TODO(issue)`: list it lazily too.
+

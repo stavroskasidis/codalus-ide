@@ -92,7 +92,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter.
 - **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.
-- **Class View** (View → Other Windows): each C# and Visual Basic project's namespaces, types and members, with their signatures. Select one to see its declaration and summary at the bottom; double-click it, or press Enter, to go to it. The search box lists the types and members whose names contain what you type.
+- **Class View** (View → Other Windows): each C# and Visual Basic project's namespaces, types and members, with their signatures. Select one to see its declaration and summary at the bottom; double-click it, or press Enter, to go to it. The search box lists the types and members whose names contain what you type, the first 1,000 of them: type more to narrow it down.
 - **Object Browser** (View → Other Windows → Object Browser): the assemblies a project compiles against, its own first, down to their namespaces, types and members. Pick the project at the top. Library code opens read-only, from its PDB's source or decompiled, as Go to Definition does. Search looks through them all.
 
 ## Code Search

@@ -23,7 +23,8 @@ The tree shows the solution, its solution folders, projects, project folders and
 | Add files | **Add New Item** (`Ctrl+Shift+A`), **Add Existing Item** (`Shift+Alt+A`), or **Add Existing Item As Link**. |
 | See what a code file declares | Expand a C# or Visual Basic file: its types, and under each type its members, come from the language service and follow your edits. Click one to go to it. Turn this off with Solution Explorer → Show Members Under Files (`solutionExplorer.showMembers`). |
 | See files that aren't in the project | **Show All Files** on the Solution Explorer's toolbar: files on disk outside the project show dimmed. |
-| Find the active document's file | **Sync with Active Document** (the toolbar's link button, `Ctrl+[`, `S`) selects it and scrolls it into view. **Track Active Item**, the toggle beside it (`solutionExplorer.trackActiveItem`, off by default), does it each time you switch documents. |
+| Find a file by name | Type in the search box at the top (`Ctrl+;`): the tree narrows to the items whose names contain what you type, with their parents. It narrows once you pause typing; clearing the box brings the whole tree back. |
+| Find the active document's file | **Sync with Active Document** (the toolbar's link button, `Ctrl+[`, `S`) selects it and scrolls straight to it; on a project file it selects the project. **Track Active Item**, the toggle beside it (`solutionExplorer.trackActiveItem`, off by default), does it each time you switch documents: once you stop switching, and when the Solution Explorer is hidden, once you show it. Otherwise the tree stays where you scrolled it, also when items above come and go. |
 | Take a file out of the project, or put it back | **Exclude From Project** and **Include In Project** in the context menu. |
 | See and change a file's Build Action, Copy to Output Directory or Custom Tool | **Properties** (`F4`). |
 | Change the solution | Add Existing Project, New Solution Folder, Remove from Solution. |
@@ -55,7 +56,7 @@ Values set in the project file are in bold. Changes are written the way the clas
 
 ## Show All Files, Include and Exclude
 
-**Show All Files** adds the files and folders on disk that aren't in their project, dimmed (including `bin` and `obj`). **Exclude From Project** writes a `Remove` item (`<Compile Remove="Old.cs" />`; for a folder, `Remove="Folder\**"` for each kind of default item), and **Include In Project** removes it again, or adds an `Include` when a wider `Remove` still excludes the file.
+**Show All Files** adds the files and folders on disk that aren't in their project, dimmed (including `bin` and `obj`). As in the classic IDE, a folder that isn't in the project shows at once, and what's in it is listed when you expand it, then again when it changes. **Exclude From Project** writes a `Remove` item (`<Compile Remove="Old.cs" />`; for a folder, `Remove="Folder\**"` for each kind of default item), and **Include In Project** removes it again, or adds an `Include` when a wider `Remove` still excludes the file.
 
 ## Adding items and templates
 

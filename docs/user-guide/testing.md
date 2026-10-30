@@ -14,6 +14,9 @@ Test → Test Explorer (`Ctrl+E T`). It lists every test of the solution, groupe
   themselves, so theory cases, data rows and generated tests appear too.
 - **Outcomes** are shown with an icon and a color: ✓ passed, ✗ failed, – skipped, ○ not run. Groups show the worst
   outcome under them. The summary above the list counts them.
+- **During a run**, the list and the summary catch up with the results up to five times a second, and show the final
+  state when the run ends. While the Test Explorer is closed or hidden it does no work, and it catches up when you
+  show it. Editors update their test glyphs and CodeLens the same way: for their own file's tests, once they show.
 - **Group by** project, namespace and class (the default), project, outcome, traits (xUnit traits, NUnit and MSTest
   categories) or duration.
 - **Search** filters as you type. Plain words match test names. Fields narrow further:
