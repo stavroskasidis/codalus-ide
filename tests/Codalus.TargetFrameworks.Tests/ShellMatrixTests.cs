@@ -20,17 +20,42 @@ public sealed class ShellMatrixTests
         CompatRoot.Require();
         var folder = f.CopySample("TargetFrameworks");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        var arrived = new System.Collections.Concurrent.ConcurrentDictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        DateTime? restored = null;
+        f.Shell.Solutions.CompilerInputsChanged += (_, inputs) => arrived[inputs.Path] = DateTime.UtcNow;
+        f.Shell.Solutions.RestoreStateChanged += (_, e) => restored = e.State is "succeeded" or "failed" ? DateTime.UtcNow : restored;
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "TargetFrameworks.sln"));
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 38 && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.RestoreState is "succeeded" or "failed", seconds: 600);
         Assert.Equal("succeeded", f.Shell.Solutions.RestoreState);
 
         // The design-time builds after the restore: .NET Core 2.x and 3.0 get their framework from packages.
-        // The projects still without references, and what the design-time build gave each (timed out once in the full
-        // suite of eng/validate.sh on Linux, 2026-10-29, and passed alone).
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600, describe: () =>
-            "no references yet: " + string.Join(", ", f.Shell.Solutions.Projects.Keys.Where(p => !MatrixFixture.HasReferences(f.Shell.Solutions, p)).Select(p =>
-                $"{Path.GetFileNameWithoutExtension(p)} ({(f.Shell.Solutions.CompilerInputs.TryGetValue(p, out var inputs) ? inputs.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase)) + " references" : "no compiler inputs")})")));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600, describe: () => Unreferenced(f, arrived, restored));
         return folder;
+    }
+
+    /// <summary>
+    /// The projects still without references, each with what its design-time build gave and when, next to when its
+    /// assets file was written and the restore ended; and the build host's evaluations, restores and design-time batches
+    /// (each batch names the projects it built and why). The wait timed out in the full suite of eng/validate.sh on Linux
+    /// on 2026-10-29 and again on 2026-10-30 (Web21: compiler inputs without references), and passed alone.
+    /// </summary>
+    private static string Unreferenced(ShellFixture f, System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> arrived, DateTime? restored)
+    {
+        static string Time(DateTime? time) => time?.ToString("HH:mm:ss.fff", System.Globalization.CultureInfo.InvariantCulture) ?? "never";
+
+        string Project(string path)
+        {
+            var inputs = f.Shell.Solutions.CompilerInputs.TryGetValue(path, out var i)
+                ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : "")}, {i.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))} references, at {Time(arrived.TryGetValue(path, out var at) ? at : null)}"
+                : "no compiler inputs";
+            var assets = Path.Combine(Path.GetDirectoryName(path)!, "obj", "project.assets.json");
+            return $"{Path.GetFileNameWithoutExtension(path)} ({inputs}; assets {(File.Exists(assets) ? "written at " + Time(File.GetLastWriteTimeUtc(assets)) : "missing")})";
+        }
+
+        var log = f.Shell.Workbench.Output.GetOrCreate("codalus.buildhost", "Build Host").GetText().Split('\n')
+            .Where(l => l.Contains("Evaluated", StringComparison.Ordinal) || l.Contains("estor", StringComparison.Ordinal) || l.Contains("Design-time", StringComparison.Ordinal));
+        return $"no references yet: {string.Join(", ", f.Shell.Solutions.Projects.Keys.Where(p => !MatrixFixture.HasReferences(f.Shell.Solutions, p)).Select(Project))}; "
+            + $"the restore ended at {Time(restored)}, now {Time(DateTime.UtcNow)} (UTC)\nBuild host:\n{string.Join("\n", log.TakeLast(80))}";
     }
 
     private static string AppProgram(string folder, Framework framework) => Path.Combine(folder, framework.Id, framework.App, "Program.cs");
