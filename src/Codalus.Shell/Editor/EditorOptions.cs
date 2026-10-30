@@ -235,6 +235,12 @@ public interface IEditorServices
     LanguageHostClient? Client(CodeDocument document);
 
     /// <summary>
+    /// Whether a document's language service will list CodeLens for it, before it answers (a C# file, unless the C#
+    /// service couldn't start or has no CodeLens): the editor keeps the rows' room from the first frame.
+    /// </summary>
+    bool ExpectsCodeLens(CodeDocument document) => false;
+
+    /// <summary>
     /// The language embedded at <paramref name="offset"/> (a caret) of <paramref name="document"/>, to ask too: HTML at
     /// a Razor file's markup. Null elsewhere, and when its server isn't running.
     /// </summary>

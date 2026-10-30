@@ -497,7 +497,11 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    private void OnReloaded(object? sender, EventArgs e) => RefreshAll();
+    private void OnReloaded(object? sender, EventArgs e)
+    {
+        _insights.Reloaded();
+        RefreshAll();
+    }
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -229,6 +229,11 @@ public sealed class LanguageService : IAsyncDisposable
     public LanguageHostClient? RunningClient(string languageId) =>
         ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;
 
+    /// <summary>Whether a language's service was started and couldn't (until it's tried again).</summary>
+    public bool HasFailed(string languageId) =>
+        ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted
+        && (!lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null);
+
     /// <summary>Server settings for every language service (e.g. <c>{ "analysisScope": "solution" }</c>).</summary>
     public async Task ConfigureAsync(JsonElement settings)
     {

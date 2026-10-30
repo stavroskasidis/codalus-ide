@@ -560,6 +560,12 @@ public sealed partial class ShellHost : IEditorServices
         }
         else
         {
+            // No service: the CodeLens rows kept for it go.
+            foreach (var editor in LanguageViews.Where(e => e.Model == model))
+            {
+                editor.Controller?.Insights.Refresh();
+            }
+
             await OfferWebLanguagesAsync(languageId).ConfigureAwait(true);
             await OfferFSharpAsync(languageId).ConfigureAwait(true);
         }
@@ -636,6 +642,10 @@ public sealed partial class ShellHost : IEditorServices
 
     LanguageHostClient? IEditorServices.Client(CodeDocument document) =>
         document.LanguageId is { } languageId ? Languages.RunningClient(languageId) : null;
+
+    bool IEditorServices.ExpectsCodeLens(CodeDocument document) =>
+        document is { IsReadOnly: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.CodeLensProvider: null };
 
     public void OpenLocations(IReadOnlyList<Location> locations, string title) => _ = OpenLocationsAsync(locations, title);
 
