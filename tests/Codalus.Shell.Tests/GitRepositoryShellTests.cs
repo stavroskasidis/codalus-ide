@@ -98,7 +98,7 @@ public sealed class GitRepositoryShellTests
     }
 
     /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>, the window in Harbor Light, Classic Dark and Harbor High contrast, saved there.</summary>
-    private static void Snapshots(Window window, string name)
+    internal static void Snapshots(Window window, string name)
     {
         if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is not { Length: > 0 } folder)
         {

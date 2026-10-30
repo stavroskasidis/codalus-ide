@@ -44,4 +44,4 @@ The branch menu's context (`GitBranchScope`) and titles (`GitBranchTitle`) now t
 
 - No plugin API change: the document reuses `gitChanges/branch`; tags, pull requests and submodules have no menu location yet. `TODO(issue)`: a `gitRepository/*` menu location per node kind, if plugins need one.
 - The website's Features page shows the document and a commit's tab (`git-repository.png`, `git-commit.png`), from the `git.repository` smoke step of CI run 40931330284.
-- `TODO(issue)`: the pull request filters of the Pull Requests window (Mine, Review requested) in the tree; it lists all open ones.
+- Pull Requests has the Pull Requests window's filters as folders (the maintainer's choice of 2026-10-29): **Mine**, **Review requested** and **All open**, each with its count, the first two expanded. The three are asked of the host at once; one the host can't answer leaves only its folder empty ("The host didn't say").

@@ -152,7 +152,29 @@ public sealed partial class ShellHost
                 : new GitRepositoryPullRequests([], Localizer.Get("msg.gitRepository.notOnAHost", "The remotes aren't on a Git host Codalus knows."));
         }
 
-        return new GitRepositoryPullRequests(await Hosting.PullRequestsAsync(match, "all", cancellationToken).ConfigureAwait(true), null, match);
+        // The Pull Requests window's three filters, asked of the host at once; one it can't answer leaves only its folder empty.
+        async Task<IReadOnlyList<PullRequestDto>?> FilterAsync(string filter)
+        {
+            try
+            {
+                return await Hosting.PullRequestsAsync(match, filter, cancellationToken).ConfigureAwait(true);
+            }
+            catch (HostingRequestException ex) when (filter != "all")
+            {
+                GitLog.AppendLine($"[hosting] {filter}: {ex.Message}");
+                return null;
+            }
+        }
+
+        var all = FilterAsync("all");
+        var mine = FilterAsync("mine");
+        var reviewRequested = FilterAsync("reviewRequested");
+        await Task.WhenAll(all, mine, reviewRequested).ConfigureAwait(true);
+        return new GitRepositoryPullRequests(await all.ConfigureAwait(true) ?? [], null, match)
+        {
+            Mine = await mine.ConfigureAwait(true),
+            ReviewRequested = await reviewRequested.ConfigureAwait(true),
+        };
     }
 
     /// <summary>

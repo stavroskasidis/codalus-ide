@@ -184,6 +184,42 @@ public sealed class HostingShellTests
     }
 
     [AvaloniaFact]
+    public async Task The_git_repository_window_lists_pull_requests_by_the_pull_requests_windows_filters()
+    {
+        var (f, github, _, _) = await OpenHostedRepositoryAsync();
+        await using var _f = f;
+        await using var _g = github;
+
+        // #1 is bo's, asking for ada's review; #2 is ada's own (the signed-in user).
+        github.PullRequests.Add(new MockPullRequest(2, "Tidy the docs", "ada", "docs/tidy", "main"));
+        await f.RunAsync("git.manageBranches");
+        await ShellFixture.PumpUntil(
+            () => f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: var vm } && vm.Roots.Count == 3 && vm.Roots[1].Children.Count == 3,
+            seconds: 60,
+            describe: () => string.Join(" | ", (f.Shell.Layout.ActiveDocument as GitRepositoryDocument)?.ViewModel.Roots.Select(r => r.Text + ": " + string.Join(", ", r.Children.Select(c => c.Text))) ?? []));
+        var vm = ((GitRepositoryDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
+
+        // Mine, Review requested and All open, with their counts; the first two open, All open collapsed.
+        var folders = vm.Roots[1].Children;
+        Assert.Equal(["Mine (1)", "Review requested (1)", "All open (2)"], folders.Select(c => c.Text));
+        Assert.Equal([true, true, false], folders.Select(c => c.IsExpanded));
+        Assert.Equal(["#2 Tidy the docs"], folders[0].Children.Select(c => c.Text));
+        Assert.Equal(["#1 Add the greeter"], folders[1].Children.Select(c => c.Text));
+        Assert.Equal(["#1 Add the greeter", "#2 Tidy the docs"], folders[2].Children.Select(c => c.Text).Order());
+        Assert.All(folders.SelectMany(c => c.Children), c => Assert.NotNull(c.Match));
+
+        // The view, with the pull request that asks for a review selected (CODALUS_UI_SNAPSHOTS keeps a picture of it).
+        vm.Selected = folders[1].Children[0];
+        folders[1].Children[0].IsSelected = true;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any() && vm.HasMessage || vm.HasHistory);
+        GitRepositoryShellTests.Snapshots(f.Window, "git-repository-pull-requests");
+
+        // The tree's filter keeps the folders with a match.
+        vm.Filter = "docs";
+        Assert.Equal(["Mine (1)", "All open (2)"], vm.Roots[1].Children.Select(c => c.Text));
+    }
+
+    [AvaloniaFact]
     public async Task A_pull_request_is_created_after_pushing_the_branch()
     {
         var (f, github, folder, bare) = await OpenHostedRepositoryAsync();
