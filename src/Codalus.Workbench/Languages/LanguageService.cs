@@ -344,6 +344,14 @@ public sealed class LanguageService : IAsyncDisposable
             stage = "started";
             return client;
         }
+        catch (OperationCanceledException)
+        {
+            // Disposed while it started: a cancelled start leaves its host running (SupervisedProcess), and no one else
+            // holds the client to end it. Each C# host left so cost ~150 MB, and a full run of the shell tests, whose
+            // windows close as soon as they pass, ran out of memory with dozens of them (docs/ci-flakes.md).
+            await client.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcConnectionLostException)
         {
             Log?.Invoke(this, $"[{languageId}] The language service could not start: {ex.Message}");
