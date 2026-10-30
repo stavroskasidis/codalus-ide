@@ -68,6 +68,7 @@ public sealed partial class ShellHost
 
         var server = BrowserRefreshServer.Start();
         server.Log += line => Ui.Post(() => DebugLog.AppendLine(line));
+        server.LateAnswer += answer => Ui.Post(() => OnLateBrowserAnswer(answer));
         var major = frameworks.Min(BrowserHotReload.FrameworkMajor) ?? 10;
         DebugEdits.UseBrowser(new BrowserHotReload(browserProjects, server, BrowserHotReload.WebAssemblyCapabilities(major)));
         DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.serverAndBrowser",
@@ -92,6 +93,7 @@ public sealed partial class ShellHost
         { Unreachable: true } => Localizer.Format("status.debugHotReload.browserNeedsRestart", "Hot Reload: applied to the server at {0}; the browser needs a restart", time),
         { Errors.Count: > 0 } => Localizer.Format("status.debugHotReload.browserFailed", "Hot Reload: applied to the server at {0}; the browser couldn't apply it", time),
         { Pages: 0 } => Localizer.Format("status.debugHotReload.noPage", "Hot Reload: applied at {0} (no page open)", time),
+        { Unanswered: > 0 } => Localizer.Format("status.debugHotReload.sentToBrowser", "Hot Reload: applied to the server at {0}, sent to the browser", time),
         _ => Localizer.Format("status.debugHotReload.serverAndBrowser", "Hot Reload: applied at {0} (server and browser)", time),
     };
 
@@ -114,22 +116,50 @@ public sealed partial class ShellHost
                     "Hot Reload: the edit changed code that runs in the browser, which gets it after a restart (Ctrl+Shift+F5): {0}.", DebugEdits.Browser?.Reason ?? string.Empty));
                 break;
             case { Errors.Count: > 0 } failed:
-                foreach (var error in failed.Errors)
-                {
-                    DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.browserError", "Hot Reload: the browser couldn't apply the edit: {0}", error));
-                }
-
-                var restart = Localizer.Get("action.debugHotReload.restart", "Restart");
-                _ = Workbench.Notifications.Warning(
-                    Localizer.Get("msg.debugHotReload.browserFailed", "The server took the edit, but the browser couldn't apply it, so the two run different code now (see the Debug Console). Restart to run the edit in both."),
-                    restart).Result.ContinueWith(t =>
-                {
-                    if (t.Result == restart)
-                    {
-                        Ui.Post(() => _ = RestartDebuggingAsync());
-                    }
-                }, TaskScheduler.Default);
+                ReportBrowserFailed(failed.Errors);
                 break;
         }
+    }
+
+    /// <summary>The page's errors in the Debug Console, and a warning that offers Restart (not waited for).</summary>
+    private void ReportBrowserFailed(IEnumerable<string> errors)
+    {
+        foreach (var error in errors)
+        {
+            DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.browserError", "Hot Reload: the browser couldn't apply the edit: {0}", error));
+        }
+
+        var restart = Localizer.Get("action.debugHotReload.restart", "Restart");
+        _ = Workbench.Notifications.Warning(
+            Localizer.Get("msg.debugHotReload.browserFailed", "The server took the edit, but the browser couldn't apply it, so the two run different code now (see the Debug Console). Restart to run the edit in both."),
+            restart).Result.ContinueWith(t =>
+        {
+            if (t.Result == restart)
+            {
+                Ui.Post(() => _ = RestartDebuggingAsync());
+            }
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>A page answered an edit after the apply stopped waiting for it: the status says so, and a failure is reported as one.</summary>
+    private void OnLateBrowserAnswer(BrowserLateAnswer answer)
+    {
+        if (!DebugEdits.IsActive)
+        {
+            return;
+        }
+
+        if (answer.Error is { } error)
+        {
+            _debugEditsStatus = Localizer.Format("status.debugHotReload.browserFailed", "Hot Reload: applied to the server at {0}; the browser couldn't apply it", _debugEditsTime ?? string.Empty);
+            ReportBrowserFailed([error]);
+        }
+        else
+        {
+            _debugEditsStatus = Localizer.Format("status.debugHotReload.serverAndBrowser", "Hot Reload: applied at {0} (server and browser)", _debugEditsTime ?? string.Empty);
+            DebugLog.AppendLine(Localizer.Get("msg.debugHotReload.browserApplied", "Hot Reload: the browser applied the code changes."));
+        }
+
+        UpdateHotReloadStatus();
     }
 }

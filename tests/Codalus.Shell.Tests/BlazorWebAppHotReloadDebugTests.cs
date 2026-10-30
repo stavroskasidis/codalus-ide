@@ -70,7 +70,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     private static string Diagnostics(ShellFixture f) =>
-        $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}.\n"
+        $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}"
+        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty) + ".\n"
         + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
 
     /// <summary>
@@ -263,7 +264,9 @@ public sealed class BlazorWebAppHotReloadDebugTests
         }, seconds: 120, describe: () => $"The server answered '{answer}'. " + Diagnostics(f));
         Assert.Equal(server, f.Shell.Debugger.ProcessId);
 
-        // 2. The page: the tick, every half second, now adds 1000, and the browser's agent says it applied it.
+        // 2. The page: the tick, every half second, now adds 1000, and the browser's agent says it applied it. (Only an edit
+        // to code that runs in the browser says "server and browser": the server-only edit above didn't, so this status is
+        // this edit's. A page slow to answer says it later.)
         var counterEditor = await f.Shell.OpenFileAsync(counter, preview: false, null);
         await ShellFixture.PumpUntil(() => counterEditor?.Controller is not null);
         offset = counterEditor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
@@ -272,13 +275,31 @@ public sealed class BlazorWebAppHotReloadDebugTests
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text
             .Contains("(server and browser)", StringComparison.Ordinal), seconds: 120, describe: () => Diagnostics(f));
 
-        // The page runs it: a few ticks later, stopped in the next one, the count has jumped by thousands.
-        await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
-        f.Shell.Debugger.Breakpoints.Toggle(counter, Line(counter, "tick"));
-        var tick = await NextStopAsync(f, null, 120);
-        Assert.StartsWith("Browser:", ThreadName(f, tick), StringComparison.Ordinal);
-        var ticks = int.Parse((await f.Shell.Debugger.EvaluateAsync("ticks", "watch", TestContext.Current.CancellationToken)).Result, System.Globalization.CultureInfo.InvariantCulture);
-        Assert.True(ticks >= 1000, $"ticks is {ticks}: the page didn't run the edit. " + Diagnostics(f));
+        // The page runs it. The breakpoint stops before the line runs, so a stop can read the count the old code left: the
+        // tick is looked at until the edited line has run (the Mac's full run read 1 at the first stop, the page still
+        // applying the edit, run of 2026-10-30).
+        var ticks = 0;
+        StopInfo? previous = null;
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(120);
+        while (true)
+        {
+            f.Shell.Debugger.Breakpoints.Toggle(counter, Line(counter, "tick"));
+            var tick = await NextStopAsync(f, previous, 120);
+            previous = tick;
+            Assert.StartsWith("Browser:", ThreadName(f, tick), StringComparison.Ordinal);
+            ticks = int.Parse((await f.Shell.Debugger.EvaluateAsync("ticks", "watch", TestContext.Current.CancellationToken)).Result, System.Globalization.CultureInfo.InvariantCulture);
+            if (ticks >= 1000 || DateTime.UtcNow > deadline)
+            {
+                break;
+            }
+
+            f.Shell.Debugger.Breakpoints.Clear();
+            await f.RunAsync("debug.continue");
+            await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(ticks >= 1000, $"ticks is {ticks} after 120 s: the page didn't run the edit. " + Diagnostics(f));
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("the browser couldn't apply it", StringComparison.Ordinal));
 
         await StopAndCheckAsync(f, server);
     }

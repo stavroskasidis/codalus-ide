@@ -167,6 +167,16 @@ public sealed class BrowserHotReloadTests
         await SendAsync(page, """{"success":false,"log":[{"message":"ENC0001: not supported","severity":2}]}""");
         Assert.Equal(["ENC0001: not supported"], (await applying).Errors);
 
+        // A page slow to apply it (under load, Windows: more than the wait) isn't a failure: its answer comes later.
+        var late = new TaskCompletionSource<BrowserLateAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.LateAnswer += answer => late.TrySetResult(answer);
+        var slow = await server.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromMilliseconds(200), Ct);
+        Assert.Equal(1, slow.Unanswered);
+        Assert.Empty(slow.Errors);
+        var updateId = (await ReceiveAsync(page)).GetProperty("updateId").GetInt32();
+        await SendAsync(page, """{"success":true,"log":[]}""");
+        Assert.Equal(new BrowserLateAnswer(updateId, null), await late.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+
         // RefreshBrowser asks nothing back; capabilities are the page's string.
         await server.RefreshAsync(Ct);
         Assert.Equal("RefreshBrowser", (await ReceiveAsync(page)).GetProperty("type").GetString());

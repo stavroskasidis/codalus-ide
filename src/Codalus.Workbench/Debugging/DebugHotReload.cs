@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Codalus.Debugging;
 using Codalus.LanguageServices.Client;
@@ -40,11 +39,11 @@ public sealed record HotReloadOutcome(string Kind, IReadOnlyList<HotReloadDiagno
 }
 
 /// <summary>
-/// What a Blazor Web App's pages made of an edit (ADR 0090): <see cref="Unreachable"/> when it changed code that runs in
-/// the browser and no channel reaches it (an older app or SDK); else how many pages were open and the errors of those
-/// that couldn't apply it.
+/// What a Blazor Web App's pages made of an edit to code that runs in the browser (ADR 0090): <see cref="Unreachable"/>
+/// when no channel reaches it (an older app or SDK); else how many pages were open, the errors of those that couldn't
+/// apply it, and how many hadn't answered yet (their answers come later, <see cref="BrowserRefreshServer.LateAnswer"/>).
 /// </summary>
-public sealed record HotReloadBrowserOutcome(bool Unreachable, int Pages, IReadOnlyList<string> Errors);
+public sealed record HotReloadBrowserOutcome(bool Unreachable, int Pages, IReadOnlyList<string> Errors, int Unanswered = 0);
 
 /// <summary>
 /// Hot Reload while debugging (M55, ADR 0086): while the Codalus debugger runs a program, a Hot Reload session of the
@@ -307,17 +306,16 @@ public sealed class DebugHotReload : IAsyncDisposable
             return inBrowser.Count == 0 ? outcome : outcome with { Browser = new HotReloadBrowserOutcome(Unreachable: true, 0, []) };
         }
 
-        // Stopped, a page paused at a breakpoint answers once it goes on: it isn't waited for, nor taken for a failure.
-        var result = inBrowser.Count == 0 ? new BrowserApplyResult(server.Pages, []) : await server.ApplyAsync(inBrowser, stopped ? TimeSpan.Zero : s_answerWait, cancellationToken).ConfigureAwait(false);
-        var errors = stopped || result.Unanswered == 0
-            ? result.Errors
-            : [.. result.Errors, string.Create(CultureInfo.InvariantCulture, $"{result.Unanswered} page(s) didn't answer within {s_answerWait.TotalSeconds:0} s.")];
+        // Stopped, a page paused at a breakpoint answers once it goes on: it isn't waited for. A page that doesn't answer in
+        // time isn't taken for a failure either: its answer comes later.
+        var result = inBrowser.Count == 0 ? null : await server.ApplyAsync(inBrowser, stopped ? TimeSpan.Zero : s_answerWait, cancellationToken).ConfigureAwait(false);
         if (!stopped)
         {
             await server.RefreshAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return outcome with { Browser = new HotReloadBrowserOutcome(Unreachable: false, result.Pages, errors) };
+        // An edit to the server only (the pages refreshed what it renders) says nothing of the browser.
+        return result is null ? outcome : outcome with { Browser = new HotReloadBrowserOutcome(Unreachable: false, result.Pages, result.Errors, result.Unanswered) };
     }
 
     private async Task EndAsync()

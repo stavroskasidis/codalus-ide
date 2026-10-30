@@ -28,6 +28,9 @@ public sealed partial class ShellHost
     private string? _debugEditsStatus;
     private bool _debugEditsLanguageSaid;
 
+    /// <summary>When the last edits applied, for a page's answer that comes later (ADR 0090).</summary>
+    private string? _debugEditsTime;
+
     /// <summary>Whether the Debug Console said that a Blazor Web App's browser gets WebAssembly edits after a restart (once a session).</summary>
     private bool _debugEditsBrowserSaid;
 
@@ -39,6 +42,7 @@ public sealed partial class ShellHost
             if (!DebugEdits.IsActive)
             {
                 _debugEditsStatus = null;
+                _debugEditsTime = null;
                 _debugEditsOffered = false;
                 _debugEditsLanguageSaid = false;
                 _debugEditsBrowserSaid = false;
@@ -83,6 +87,7 @@ public sealed partial class ShellHost
             case HotReloadOutcome.Applied:
                 ErrorList.SetHotReload([]);
                 _debugEditsStatus = AppliedStatus(outcome.Browser, time);
+                _debugEditsTime = time;
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.applied", "Hot Reload: the code changes were applied ({0}).", time));
                 ReportApplied(outcome);
                 break;

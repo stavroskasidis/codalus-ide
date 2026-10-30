@@ -26,12 +26,15 @@ public sealed record BrowserApplyAnswer(bool Success, BrowserLogEntry[]? Log);
 
 /// <summary>
 /// What the pages made of an edit: how many were open, the errors of those that couldn't apply it, and how many didn't
-/// answer in time (a page paused at a breakpoint answers when it goes on).
+/// answer in time (a page paused at a breakpoint, or slow to apply, answers later: <see cref="BrowserRefreshServer.LateAnswer"/>).
 /// </summary>
 public sealed record BrowserApplyResult(int Pages, IReadOnlyList<string> Errors, int Unanswered = 0)
 {
     public static readonly BrowserApplyResult NoPage = new(0, []);
 }
+
+/// <summary>A page's answer to an edit that came after <see cref="BrowserRefreshServer.ApplyAsync"/> stopped waiting: null <see cref="Error"/> is applied.</summary>
+public sealed record BrowserLateAnswer(int UpdateId, string? Error);
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(BrowserApplyMessage))]
@@ -65,6 +68,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     private HttpListener _listener = new();
     private Task _loop = Task.CompletedTask;
     private int _nextUpdate;
+    private int _connections;
     private int _disposed;
 
     private BrowserRefreshServer()
@@ -80,8 +84,14 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     /// <summary>The pages connected now.</summary>
     public int Pages => _pages.Count;
 
+    /// <summary>How many times a page connected: each load and reload of a page connects again.</summary>
+    public int Connections => Volatile.Read(ref _connections);
+
     /// <summary>What happened (pages that connected or were refused), for the Debug Console.</summary>
     public event Action<string>? Log;
+
+    /// <summary>A page answered an edit after the wait for it ended (on any thread).</summary>
+    public event Action<BrowserLateAnswer>? LateAnswer;
 
     /// <summary>Listens on a free loopback port.</summary>
     public static BrowserRefreshServer Start()
@@ -150,6 +160,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             var socket = (await context.AcceptWebSocketAsync(protocol).ConfigureAwait(false)).WebSocket;
             var page = new Page(socket, context, secret);
             _pages[socket] = page;
+            var connection = Interlocked.Increment(ref _connections);
+            Log?.Invoke(string.Create(CultureInfo.InvariantCulture, $"Hot Reload: a page connected (connection {connection}, {_pages.Count} open)."));
             try
             {
                 await page.ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -157,6 +169,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             finally
             {
                 _pages.TryRemove(socket, out _);
+                Log?.Invoke(string.Create(CultureInfo.InvariantCulture, $"Hot Reload: a page left ({_pages.Count} open)."));
                 page.Close();
                 page.Dispose();
             }
@@ -187,7 +200,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     /// <summary>
     /// Sends every open page an edit's deltas and waits up to <paramref name="timeout"/> for each to apply them. A page
     /// whose Blazor hasn't started yet applies them as it starts (the script posted them to the middleware) and says so
-    /// as a success. A page that doesn't answer in time is counted, not taken for a failure.
+    /// as a success. A page that doesn't answer in time is counted, not taken for a failure, and its answer comes as a
+    /// <see cref="LateAnswer"/>: under load, applying took a page more than ten seconds (Windows, a CPU-bound run).
     /// </summary>
     public async Task<BrowserApplyResult> ApplyAsync(IReadOnlyList<HotReloadModuleUpdate> updates, TimeSpan timeout, CancellationToken cancellationToken)
     {
@@ -202,23 +216,38 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
         var answers = await Task.WhenAll(pages.Select(async Task<(bool Answered, string? Error)> (page) =>
         {
             var message = new BrowserApplyMessage("ApplyManagedCodeUpdates", page.Secret, id, deltas, ResponseLoggingLevel: 0);
-            var answer = await page.RequestAsync(JsonSerializer.SerializeToUtf8Bytes(message, BrowserRefreshJsonContext.Default.BrowserApplyMessage), timeout, cancellationToken).ConfigureAwait(false);
-            if (answer is null)
-            {
-                return (false, null);
-            }
-
+            var answer = await page.RequestAsync(JsonSerializer.SerializeToUtf8Bytes(message, BrowserRefreshJsonContext.Default.BrowserApplyMessage), cancellationToken).ConfigureAwait(false);
             try
             {
-                var applied = JsonSerializer.Deserialize(answer, BrowserRefreshJsonContext.Default.BrowserApplyAnswer);
-                return (true, applied is { Success: true } ? null : string.Join(" ", applied?.Log?.Select(l => l.Message) ?? ["The page couldn't apply the edit."]));
+                return await answer.WaitAsync(timeout, cancellationToken).ConfigureAwait(false) is { } text ? (true, Error(text)) : (false, null);
             }
-            catch (JsonException)
+            catch (TimeoutException)
             {
-                return (true, "The page's answer wasn't understood: " + answer);
+                _ = answer.ContinueWith(late =>
+                {
+                    if (late.Result is { } text)
+                    {
+                        LateAnswer?.Invoke(new BrowserLateAnswer(id, Error(text)));
+                    }
+                }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+                return (false, null);
             }
         })).ConfigureAwait(false);
         return new BrowserApplyResult(pages.Length, [.. answers.Select(a => a.Error).OfType<string>()], answers.Count(a => !a.Answered));
+    }
+
+    /// <summary>A page's answer to an edit: null when it applied it, else why not.</summary>
+    private static string? Error(string answer)
+    {
+        try
+        {
+            var applied = JsonSerializer.Deserialize(answer, BrowserRefreshJsonContext.Default.BrowserApplyAnswer);
+            return applied is { Success: true } ? null : string.Join(" ", applied?.Log?.Select(l => l.Message) ?? ["The page couldn't apply the edit."]);
+        }
+        catch (JsonException)
+        {
+            return "The page's answer wasn't understood: " + answer;
+        }
     }
 
     /// <summary>
@@ -243,7 +272,15 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
         }
 
         var message = JsonSerializer.SerializeToUtf8Bytes(new BrowserMessage("GetApplyUpdateCapabilities"), BrowserRefreshJsonContext.Default.BrowserMessage);
-        return await page.RequestAsync(message, timeout, cancellationToken).ConfigureAwait(false);
+        var answer = await page.RequestAsync(message, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await answer.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Closes a listener without throwing; only <see cref="HttpListener.Close"/> (see <c>IdeExecutionServer</c>).</summary>
@@ -343,7 +380,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             }
         }
 
-        public async Task<string?> RequestAsync(byte[] message, TimeSpan timeout, CancellationToken cancellationToken)
+        /// <summary>Sends <paramref name="message"/>; the task it returns completes with the page's answer (null when the page closed first).</summary>
+        public async Task<Task<string?>> RequestAsync(byte[] message, CancellationToken cancellationToken)
         {
             var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             await _sending.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -361,14 +399,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
                 _sending.Release();
             }
 
-            try
-            {
-                return await answer.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
-            }
-            catch (TimeoutException)
-            {
-                return null;
-            }
+            return answer.Task;
         }
 
         public async Task SendAsync(byte[] message, CancellationToken cancellationToken)
