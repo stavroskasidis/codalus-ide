@@ -95,6 +95,45 @@ public sealed class ErrorListGroupingTests
     }
 
     [AvaloniaFact]
+    public async Task Typing_a_filter_and_toggling_a_group_build_no_rows_on_the_UI_thread()
+    {
+        // M56: with 100,000 errors, each keystroke in the search box, each toggle and each tab switch (with Current
+        // Document) built and sorted every row on the UI thread, up to a second each.
+        await using var f = ShellFixture.Create();
+        var root = Path.Combine(Path.GetTempPath(), "codalus-errorlist-" + Guid.NewGuid().ToString("N"));
+        Diagnostic[] items = [.. Enumerable.Range(0, 100).Select(line => new Diagnostic(
+            new Range(new Position(line, 0), new Position(line, 4)), DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name 'Telerik' could not be found"))];
+        var list = f.Shell.ErrorList;
+        for (var file = 0; file < 200; file++)
+        {
+            f.Shell.Languages.Diagnostics.Set(Path.Combine(root, $"File{file}.cs"), "csharp", null, items);
+        }
+
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 20_000, seconds: 60);
+
+        // Typing: nothing is built until it pauses, then only the last filter's rows, off the UI thread, with one reset.
+        var resets = 0;
+        list.Rows.CollectionChanged += (_, _) => resets++;
+        list.Filter = "F";
+        list.Filter = "Fi";
+        list.Filter = "File42.";
+        Assert.Equal(20_000, list.Rows.Count);
+        Assert.True(list.IsRefreshing);
+        await ShellFixture.PumpUntil(() => !list.IsRefreshing);
+        Assert.Equal(100, list.Rows.Count);
+        Assert.Equal(1, resets);
+
+        // Grouped by file, a header collapses at once, with the rows already shown: they aren't built again.
+        list.Filter = string.Empty;
+        list.GroupBy = Array.IndexOf(ErrorListViewModel.GroupByValues, "file");
+        await ShellFixture.PumpUntil(() => !list.IsRefreshing && list.Items.Count == 20_200, seconds: 60);
+        resets = 0;
+        list.ToggleGroup(list.Items.OfType<ErrorListGroup>().First());
+        Assert.Equal(20_100, list.Items.Count);
+        Assert.Equal(0, resets);
+    }
+
+    [AvaloniaFact]
     public async Task The_list_groups_collapses_and_sets_the_analysis_scope()
     {
         await using var f = ShellFixture.Create();
