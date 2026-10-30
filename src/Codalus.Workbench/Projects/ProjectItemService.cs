@@ -43,9 +43,12 @@ public sealed class ProjectItemService(SolutionService solutions)
         return result;
     }
 
-    /// <summary>Everything under a folder (Show All Files, the folder view).</summary>
-    public Task<ListTreeResult> ListTreeAsync(string path, CancellationToken cancellationToken, int? maxEntries = null) =>
-        solutions.RequestAsync(ItemMethods.ListTree, new ListTreeParams(path, maxEntries), Json.ListTreeParams, Json.ListTreeResult, cancellationToken);
+    /// <summary>
+    /// Everything under a folder (Show All Files, the folder view); with <paramref name="folders"/>, going only into those
+    /// folders below it (the others are listed without what is in them).
+    /// </summary>
+    public Task<ListTreeResult> ListTreeAsync(string path, CancellationToken cancellationToken, int? maxEntries = null, IReadOnlyCollection<string>? folders = null) =>
+        solutions.RequestAsync(ItemMethods.ListTree, new ListTreeParams(path, maxEntries, folders is null ? null : [.. folders]), Json.ListTreeParams, Json.ListTreeResult, cancellationToken);
 
     /// <summary>Folder mode: the project files under the folder.</summary>
     public async Task<IReadOnlyList<string>> DiscoverProjectsAsync(CancellationToken cancellationToken) =>

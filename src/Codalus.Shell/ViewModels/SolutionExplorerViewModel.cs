@@ -116,7 +116,9 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 /// Show All Files adds the files on disk that aren't items (ADR 0033), and in folder mode the folder view shows the
 /// folder as it is on disk. TODO(issue): multi-selection. (Open documents whose files were deleted are flagged in their tabs.)
 /// </summary>
+#pragma warning disable CA1001 // The disk listings' token sources are only cancelled (a newer listing, Show All Files off, the solution closed), never waited on: no handle to free.
 public sealed class SolutionExplorerViewModel : ObservableObject
+#pragma warning restore CA1001
 {
     public const string ToolWindowId = "solutionExplorer";
 
@@ -132,9 +134,21 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private string _filter = string.Empty;
     private bool _showAllFiles;
     private bool _folderView;
+
+    // Show All Files: each loaded project's files on disk, down to the folders its listing went into (see LoadProjectsAsync).
     private readonly Dictionary<string, IReadOnlyList<DirectoryEntry>> _disk = new(SolutionService.PathComparer);
+    private readonly Dictionary<string, IReadOnlySet<string>> _diskFolders = new(SolutionService.PathComparer);
+    private readonly Dictionary<string, int> _diskListings = new(SolutionService.PathComparer); // each project's newest listing
+    private readonly HashSet<string> _diskQueue = new(SolutionService.PathComparer);
+    private bool _diskQueueAll;
+    private int _diskListing;
+    private CancellationTokenSource _diskCancellation = new();
+
+    // The folder view: the workspace folder's files on disk.
     private IReadOnlyList<DirectoryEntry> _folderEntries = [];
-    private int _diskGeneration;
+    private bool _folderQueued;
+    private int _folderGeneration;
+    private bool _rootIsFolderView;
     private bool _diskQueued;
 
     /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
@@ -166,9 +180,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
         solutions.ProjectChanged += (_, project) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            if (_showAllFiles && !_disk.ContainsKey(project.Path))
+            // An evaluation can change the folders that hold the project's items: its folder is listed again (and only its).
+            if (_showAllFiles)
             {
-                QueueDiskRefresh();
+                QueueDiskRefresh([project.Path]);
             }
         });
         ShowAllFilesCommand = new RelayCommand(() => ShowAllFiles = !ShowAllFiles);
@@ -198,7 +213,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     public RelayCommand SwitchViewsCommand { get; }
 
-    /// <summary>Show All Files: files and folders on disk that aren't in their project show dimmed (ADR 0033).</summary>
+    /// <summary>
+    /// Show All Files: files and folders on disk that aren't in their project show dimmed (ADR 0033). A folder that isn't in
+    /// its project shows at once, and what is in it once it's expanded, as the classic IDE's does (M56).
+    /// </summary>
     public bool ShowAllFiles
     {
         get => _showAllFiles;
@@ -209,11 +227,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _shell.Workbench.Context.Set("explorerShowAllFiles", value);
                 if (value)
                 {
-                    QueueDiskRefresh();
+                    QueueDiskRefresh(projects: null);
                 }
                 else
                 {
-                    _disk.Clear();
+                    ForgetListings();
                     Refresh();
                 }
             }
@@ -233,7 +251,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFolderView));
         if (IsFolderView)
         {
-            QueueDiskRefresh();
+            QueueFolderRefresh();
         }
         else
         {
@@ -248,37 +266,124 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         SwitchViewsCommand.RaiseCanExecuteChanged();
         _shell.Workbench.Context.Set("folderMode", _shell.Solutions.Solution?.IsFolder == true);
         _shell.Workbench.Context.Set("explorerFolderView", IsFolderView);
-        if (_shell.Solutions.Solution is null)
+        if (_shell.Solutions.Solution is not { } solution)
         {
-            _disk.Clear();
+            ForgetListings();
+            _folderCancellation.Cancel();
             _folderEntries = [];
             _folderView = false;
+            return;
         }
-        else if (_showAllFiles || IsFolderView)
+
+        // The projects the solution lost lose their listings; the ones it gained are listed once they've loaded.
+        var projects = solution.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer);
+        foreach (var gone in _diskListings.Keys.Where(p => !projects.Contains(p)).ToList())
         {
-            QueueDiskRefresh();
+            _disk.Remove(gone);
+            _diskFolders.Remove(gone);
+            _diskListings.Remove(gone);
+        }
+
+        if (IsFolderView)
+        {
+            QueueFolderRefresh();
         }
     }
 
-    /// <summary>Folders changed on disk (the build host's watcher): Show All Files and the folder view list them again.</summary>
+    /// <summary>
+    /// Folders changed on disk (the build host's watcher, which leaves out bin and obj): the folder view lists the folder
+    /// again, and Show All Files the projects whose folders hold them.
+    /// </summary>
     public void OnFilesChanged(IReadOnlyList<string> directories)
     {
-        if (_showAllFiles || IsFolderView)
+        if (IsFolderView)
         {
-            QueueDiskRefresh();
+            QueueFolderRefresh();
+        }
+
+        if (_showAllFiles)
+        {
+            QueueDiskRefresh(ProjectsHolding(_shell.Solutions.Projects.Keys, directories));
         }
     }
 
-    /// <summary>Lists the disk again (after a build, a new tasks.json…), when Show All Files or the folder view needs it.</summary>
-    public void RefreshDisk()
+    /// <summary>
+    /// Lists the disk again, when Show All Files or the folder view needs it: after a build of <paramref name="project"/>
+    /// (with the projects it references, built first; null: of every project), a new tasks.json…
+    /// </summary>
+    public void RefreshDisk(string? project = null)
     {
-        if (_showAllFiles || IsFolderView)
+        if (IsFolderView)
         {
-            QueueDiskRefresh();
+            QueueFolderRefresh();
+        }
+
+        if (_showAllFiles)
+        {
+            QueueDiskRefresh(project is null ? null : WithReferences(_shell.Solutions.Projects, project));
         }
     }
 
-    private void QueueDiskRefresh()
+    /// <summary>The projects whose folders hold any of <paramref name="directories"/>.</summary>
+    internal static HashSet<string> ProjectsHolding(IEnumerable<string> projects, IReadOnlyList<string> directories)
+    {
+        var byFolder = projects.ToLookup(p => System.IO.Path.GetDirectoryName(p)!, SolutionService.PathComparer);
+        var holding = new HashSet<string>(SolutionService.PathComparer);
+        foreach (var directory in directories)
+        {
+            for (var folder = System.IO.Path.TrimEndingDirectorySeparator(directory); !string.IsNullOrEmpty(folder); folder = System.IO.Path.GetDirectoryName(folder))
+            {
+                holding.UnionWith(byFolder[folder]);
+            }
+        }
+
+        return holding;
+    }
+
+    /// <summary><paramref name="project"/> and the projects it references, directly or not.</summary>
+    internal static HashSet<string> WithReferences(IReadOnlyDictionary<string, ProjectInfo> projects, string project)
+    {
+        var built = new HashSet<string>(SolutionService.PathComparer);
+        var pending = new Stack<string>([project]);
+        while (pending.TryPop(out var next))
+        {
+            if (built.Add(next) && projects.TryGetValue(next, out var info))
+            {
+                foreach (var reference in info.References)
+                {
+                    if (reference is { Kind: ReferenceKinds.Project, Path: { } path })
+                    {
+                        pending.Push(path);
+                    }
+                }
+            }
+        }
+
+        return built;
+    }
+
+    /// <summary>Queues listings of the projects' folders (null: every loaded project's).</summary>
+    private void QueueDiskRefresh(IEnumerable<string>? projects)
+    {
+        if (projects is null)
+        {
+            _diskQueueAll = true;
+        }
+        else
+        {
+            _diskQueue.UnionWith(projects);
+        }
+
+        QueueDiskLoad();
+    }
+
+    private void QueueFolderRefresh()
+    {
+        _folderQueued = true;
+        QueueDiskLoad();
+    }
+
+    private void QueueDiskLoad()
     {
         if (_diskQueued)
         {
@@ -293,53 +398,179 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
-    /// <summary>Lists each loaded project's folder (Show All Files) or the workspace folder (folder view) through the build host.</summary>
-    public async Task LoadDiskAsync()
+    /// <summary>Lists what is queued, through the build host: the workspace folder (the folder view) and projects' folders (Show All Files).</summary>
+    public Task LoadDiskAsync() => Task.WhenAll(LoadFolderAsync(), LoadProjectsAsync());
+
+    /// <summary>Drops Show All Files' listings, and stops the ones on their way.</summary>
+    private void ForgetListings()
     {
-        var generation = ++_diskGeneration;
-        if (_shell.Solutions.Solution is not { } solution)
+        _diskCancellation.Cancel();
+        _diskCancellation.Dispose();
+        _diskCancellation = new CancellationTokenSource();
+        _disk.Clear();
+        _diskFolders.Clear();
+        _diskListings.Clear();
+        _diskQueue.Clear();
+        _diskQueueAll = false;
+    }
+
+    private CancellationTokenSource _folderCancellation = new();
+
+    /// <summary>The folder view's listing of the workspace folder; the tree is built again when it changed.</summary>
+    private async Task LoadFolderAsync()
+    {
+        if (!_folderQueued)
         {
             return;
         }
 
+        _folderQueued = false;
+        if (!IsFolderView || _shell.Solutions.Solution is not { } solution)
+        {
+            return;
+        }
+
+        var generation = ++_folderGeneration;
+        _folderCancellation.Cancel();
+        _folderCancellation.Dispose();
+        _folderCancellation = new CancellationTokenSource();
+        var cancellationToken = _folderCancellation.Token;
+        var old = _folderEntries;
+        IReadOnlyList<DirectoryEntry> entries;
         try
         {
-            if (IsFolderView)
+            // Compared off the UI thread: an equal listing keeps the old one, and the tree isn't built again.
+            entries = await Task.Run(async () =>
             {
-                var tree = await _shell.ProjectItems.ListTreeAsync(solution.Directory, CancellationToken.None).ConfigureAwait(true);
-                if (generation == _diskGeneration)
-                {
-                    _folderEntries = tree.Entries;
-                }
-            }
-
-            if (_showAllFiles)
-            {
-                foreach (var project in _shell.Solutions.Projects.Values.Where(p => p.State == ProjectStates.Loaded).ToList())
-                {
-                    var tree = await _shell.ProjectItems.ListTreeAsync(System.IO.Path.GetDirectoryName(project.Path)!, CancellationToken.None).ConfigureAwait(true);
-                    if (generation != _diskGeneration)
-                    {
-                        return;
-                    }
-
-                    _disk[project.Path] = tree.Entries;
-                }
-            }
+                var tree = await _shell.ProjectItems.ListTreeAsync(solution.Directory, cancellationToken).ConfigureAwait(false);
+                return old.SequenceEqual(tree.Entries) ? old : tree.Entries;
+            }, cancellationToken).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException or OperationCanceledException)
         {
-            _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {ex.Message}");
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {ex.Message}");
+            }
+
+            return;
         }
 
-        if (generation == _diskGeneration)
+        if (generation != _folderGeneration || !IsFolderView)
         {
-            DiskLoaded?.Invoke(this, EventArgs.Empty);
+            return;
+        }
+
+        DiskLoaded?.Invoke(this, EventArgs.Empty);
+        if (!ReferenceEquals(entries, _folderEntries) || !_rootIsFolderView)
+        {
+            _folderEntries = entries;
             Refresh();
         }
     }
 
-    /// <summary>The disk listing arrived (tests wait for it).</summary>
+    /// <summary>
+    /// Show All Files' listings of the queued projects' folders, through the build host and off the UI thread, four at a
+    /// time. Each goes into the folders that hold the project's items and the folders expanded: another folder (bin, obj)
+    /// shows, without what is in it until it's expanded. A listing equal to the project's last keeps its instance, so the
+    /// tree keeps the project's subtree; the tree is built again once, if any changed. Every project's whole folder, bin
+    /// and obj with hundreds of files after a build, was listed again one project at a time for each change of any folder
+    /// and each build, and every project's subtree built again on the UI thread (M56).
+    /// </summary>
+    private async Task LoadProjectsAsync()
+    {
+        var queued = _diskQueueAll ? [.. _shell.Solutions.Projects.Keys] : _diskQueue.ToList();
+        _diskQueue.Clear();
+        _diskQueueAll = false;
+        var requests = new List<(string Project, ProjectInfo Info, IReadOnlyList<DirectoryEntry>? Old, int Number)>();
+        foreach (var project in _showAllFiles ? queued : [])
+        {
+            if (_shell.Solutions.Projects.TryGetValue(project, out var info) && info.State == ProjectStates.Loaded)
+            {
+                requests.Add((project, info, _disk.GetValueOrDefault(project), _diskListings[project] = ++_diskListing));
+            }
+        }
+
+        if (requests.Count == 0)
+        {
+            return;
+        }
+
+        var expanded = _expanded.Where(id => id.StartsWith("d:", StringComparison.Ordinal)).Select(id => id[2..]).ToList();
+        var listings = new System.Collections.Concurrent.ConcurrentBag<ProjectListing>();
+        try
+        {
+            await Parallel.ForEachAsync(requests, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = _diskCancellation.Token }, async (r, cancellationToken) =>
+                listings.Add(await ListProjectAsync(r.Project, r.Info, r.Old, r.Number, expanded, cancellationToken).ConfigureAwait(false))).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // Show All Files went off, or the solution closed
+        }
+
+        var changed = false;
+        foreach (var listing in listings)
+        {
+            if (!_diskListings.TryGetValue(listing.Project, out var newest) || newest != listing.Number)
+            {
+                continue; // a newer listing of the project is on its way
+            }
+
+            if (listing.Error is { } error)
+            {
+                _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {error}");
+                continue;
+            }
+
+            // The folders listed decide which folders have a "Loading…" row, so they count too.
+            var folders = _diskFolders.GetValueOrDefault(listing.Project);
+            changed |= !ReferenceEquals(_disk.GetValueOrDefault(listing.Project), listing.Entries) || folders is null || !folders.SetEquals(listing.Folders);
+            _disk[listing.Project] = listing.Entries;
+            _diskFolders[listing.Project] = listing.Folders;
+        }
+
+        Listings += listings.Count;
+        DiskLoaded?.Invoke(this, EventArgs.Empty);
+        if (changed)
+        {
+            Refresh();
+        }
+    }
+
+    private sealed record ProjectListing(string Project, int Number, IReadOnlyList<DirectoryEntry> Entries, IReadOnlySet<string> Folders, string? Error = null);
+
+    /// <summary>A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread).</summary>
+    private async Task<ProjectListing> ListProjectAsync(string project, ProjectInfo info, IReadOnlyList<DirectoryEntry>? old, int number, IReadOnlyList<string> expanded, CancellationToken cancellationToken)
+    {
+        var directory = System.IO.Path.GetDirectoryName(project)!;
+        var below = System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar;
+        var comparison = SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var folders = new HashSet<string>(SolutionTree.ItemFolders(project, info), SolutionService.PathComparer);
+        folders.UnionWith(expanded.Where(f => f.StartsWith(below, comparison)));
+        try
+        {
+            var tree = await _shell.ProjectItems.ListTreeAsync(directory, cancellationToken, folders: folders).ConfigureAwait(false);
+            return new ProjectListing(project, number, old is not null && old.SequenceEqual(tree.Entries) ? old : tree.Entries, folders);
+        }
+        catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException
+                                   || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return new ProjectListing(project, number, [], folders, ex.Message);
+        }
+    }
+
+    /// <summary>The projects' folders listed so far (tests).</summary>
+    internal int Listings { get; private set; }
+
+    /// <summary>
+    /// Show All Files: a folder that isn't in its project, whose contents aren't listed until it's expanded (it has a
+    /// "Loading…" row, so it can be).
+    /// </summary>
+    private bool IsUnlisted(ExplorerNode node) =>
+        node is { Kind: ExplorerNodeKind.Folder, IsExcluded: true, Path: { } path, ProjectPath: { } project }
+        && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path);
+
+    /// <summary>A disk listing arrived (tests wait for it).</summary>
     public event EventHandler? DiskLoaded;
 
     /// <summary>
@@ -416,12 +647,47 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         RefreshIfQueued(); // a project that just loaded is in the tree to find
         if (_shell.ActiveEditor?.Model.Path is not { } path || FindByPath(path) is not { } node)
         {
+            if (_shell.ActiveEditor?.Model.Path is { } unlisted && ListDownTo(unlisted))
+            {
+                ClearFilter();
+                _pendingReveal = "f:" + unlisted; // once its folders are listed
+                return;
+            }
+
             _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
             return;
         }
 
         ClearFilter();
         Reveal(node.Id);
+    }
+
+    /// <summary>
+    /// Show All Files: a file in a folder that isn't in its project shows once the folder is expanded and listed. This
+    /// expands the folders down to <paramref name="path"/> in the project whose folder holds it, and lists them; true when
+    /// it did (the file is in the tree after the listing's refresh), false when they were expanded already.
+    /// </summary>
+    private bool ListDownTo(string path)
+    {
+        if (!_showAllFiles || System.IO.Path.GetDirectoryName(path) is not { } folder
+            || ProjectsHolding(_diskFolders.Keys, [folder]).MaxBy(p => System.IO.Path.GetDirectoryName(p)!.Length) is not { } project)
+        {
+            return false;
+        }
+
+        var directory = System.IO.Path.GetDirectoryName(project)!;
+        var expanded = false;
+        for (var down = folder; down.Length > directory.Length; down = System.IO.Path.GetDirectoryName(down)!)
+        {
+            expanded |= _expanded.Add("d:" + down);
+        }
+
+        if (expanded)
+        {
+            QueueDiskRefresh([project]);
+        }
+
+        return expanded;
     }
 
     /// <summary>
@@ -483,7 +749,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         _trackWhenShown = false;
         if (FindByPath(path) is not { } node)
         {
-            _trackWhenFound = path; // its project may not be in the tree yet: tried again after the next refresh
+            _trackWhenFound = path; // its project, or its folder, may not be in the tree yet: tried again after the next refresh
+            ListDownTo(path);
             return;
         }
 
@@ -698,6 +965,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 FolderEntries = IsFolderView ? _folderEntries : null,
             }, _treeCache)
             : null;
+        _rootIsFolderView = _root is not null && IsFolderView;
         Builds++;
         _byId = null;
         _byPath = null;
@@ -884,6 +1152,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             _ = LoadGeneratedAsync(row.Node.ProjectPath!);
         }
+        else if (expanded && IsUnlisted(row.Node))
+        {
+            QueueDiskRefresh([row.Node.ProjectPath!]); // its project's listing goes into it now (it's in the expanded ones by then)
+        }
 
         if (!row.HasChildren || (expanded ? !_expanded.Add(row.Id) : !_expanded.Remove(row.Id)))
         {
@@ -1064,6 +1336,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return WithGeneratedFiles(node);
         }
 
+        if (IsUnlisted(node))
+        {
+            return With(node, LoadingRow(node, "|listing"));
+        }
+
         if (!ShowsMembers(node))
         {
             return node;
@@ -1077,19 +1354,29 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 _ = LoadMembersAsync(path);
             }
 
-            if (!_loadingRows.TryGetValue(node.Id, out members))
-            {
-                _loadingRows[node.Id] = members = [new ExplorerNode(node.Id + "|members-loading", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = node.ProjectPath }];
-            }
+            members = LoadingRow(node, "|members-loading");
         }
 
-        if (members.Count == 0 && node.Children.Count == 0)
+        return members.Count == 0 && node.Children.Count == 0 ? node : With(node, members);
+    }
+
+    /// <summary>The node's "Loading…" row, the same one each time.</summary>
+    private IReadOnlyList<ExplorerNode> LoadingRow(ExplorerNode node, string suffix)
+    {
+        if (!_loadingRows.TryGetValue(node.Id, out var row))
         {
-            return node;
+            _loadingRows[node.Id] = row = [new ExplorerNode(node.Id + suffix, ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorer.loadingMembers", "Loading…")) { Icon = "dot", ProjectPath = node.ProjectPath }];
         }
 
+        return row;
+    }
+
+    /// <summary>The node with <paramref name="members"/> after its own children.</summary>
+    private ExplorerNode With(ExplorerNode node, IReadOnlyList<ExplorerNode> members)
+    {
         // The same node and members give the same result, so an unchanged row keeps its node and a refresh raises nothing
         // for it: each refresh gave every code file's row a new node, and its thirteen property changes (M56).
+        var path = node.Path!;
         if (_withMembers.TryGetValue(path, out var known) && ReferenceEquals(known.Node, node) && ReferenceEquals(known.Members, members))
         {
             return known.Result;

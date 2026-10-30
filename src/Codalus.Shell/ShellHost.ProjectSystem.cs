@@ -41,7 +41,7 @@ public sealed partial class ShellHost
         PropertiesWindow = new PropertiesWindowViewModel(this);
         InitializeBuildDepth();
         Solutions.FilesChanged += (_, directories) => Ui.Post(() => Explorer.OnFilesChanged(directories));
-        Builds.Finished += (_, _) => Ui.Post(Explorer.RefreshDisk);
+        Builds.Finished += (_, build) => Ui.Post(() => Explorer.RefreshDisk(build.Request.Project));
         Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
         {
             if (!Solutions.IsOpen)

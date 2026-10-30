@@ -690,7 +690,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 unreadable.Add(inputs.Path);
             }
 
-            await _events.CompilerInputsAsync(inputs).ConfigureAwait(false);
+            await _events.CompilerInputsAsync(ExplorerFiles.WithMissingAnalyzers(inputs)).ConfigureAwait(false);
             await _events.DesignTimeProgressAsync(new DesignTimeProgressParams(Interlocked.Increment(ref built), total, false)).ConfigureAwait(false);
         }, cancellationToken).ConfigureAwait(false);
 

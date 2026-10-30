@@ -54,6 +54,31 @@ public sealed class SolutionTreeCacheTests
         Assert.Equal(0, cache.Reused);
     }
 
+    [Fact]
+    public void A_change_of_the_solution_file_reuses_the_subtrees_of_the_projects_it_left_as_they_were()
+    {
+        // The build host sends the whole solution again for each change of the solution file (a project or solution folder
+        // added, a git pull): every entry is a new instance, and each built every project's subtree again.
+        var solution = new SolutionInfo(Path.Combine(s_root, "All.slnx"), SolutionFormats.Slnx, [],
+            [.. Enumerable.Range(0, 3).Select(i => new SolutionProjectInfo(ProjectPath(i), $"Lib{i}", null, null))], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+        var projects = Enumerable.Range(0, 4).ToDictionary(ProjectPath, i => Evaluated(i, "A.cs"));
+        var cache = new SolutionTreeCache();
+        var first = SolutionTree.Build(solution, projects, cache: cache);
+
+        var added = solution with
+        {
+            Folders = [new SolutionFolderInfo("/tests/", "tests", null, [])],
+            Projects = [.. solution.Projects.Select(p => p with { }), new SolutionProjectInfo(ProjectPath(3), "Lib3", "/tests/", null)],
+        };
+        var second = SolutionTree.Build(added, projects, cache: cache);
+        Assert.Equal(3, cache.Reused);
+        Assert.All(first.Children, project => Assert.Contains(project, second.Children));
+
+        // A renamed project is built again.
+        SolutionTree.Build(added with { Projects = [added.Projects[0] with { Name = "Renamed" }, .. added.Projects[1..]] }, projects, cache: cache);
+        Assert.Equal(3, cache.Reused);
+    }
+
     /// <summary>Two trees with the same nodes (records compare their children lists by reference).</summary>
     private sealed class NodeComparer : IEqualityComparer<ExplorerNode>
     {

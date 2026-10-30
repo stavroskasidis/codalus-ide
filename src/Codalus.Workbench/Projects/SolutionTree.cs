@@ -74,10 +74,11 @@ public sealed record ExplorerOptions
 
 /// <summary>
 /// The projects' subtrees of a <see cref="SolutionTree"/> build, for the next one: a project's subtree is reused while its
-/// solution entry, evaluation, compiler inputs and files on disk are the same instances (the solution service replaces
-/// a project's only when it changes). A solution's projects evaluate one at a time, each a rebuild of the tree, and
-/// building every project's folders, files and dependencies again for each cost a 300-project solution's open 4.2 s
-/// of the UI thread. Not thread-safe: one builder at a time.
+/// solution entry is equal and its evaluation, compiler inputs and files on disk are the same instances (the solution
+/// service replaces a project's only when it changes). A solution's projects evaluate one at a time, each a rebuild of
+/// the tree, and building every project's folders, files and dependencies again for each cost a 300-project solution's
+/// open 4.2 s of the UI thread. The entries are compared by value: the build host sends the whole solution again for
+/// every change of the solution file, each entry a new instance (M56). Not thread-safe: one builder at a time.
 /// </summary>
 public sealed class SolutionTreeCache
 {
@@ -97,7 +98,7 @@ public sealed class SolutionTreeCache
 
     internal ExplorerNode Project(SolutionProjectInfo project, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs, IReadOnlyList<DirectoryEntry>? disk)
     {
-        if (_projects.TryGetValue(project.Path, out var cached) && ReferenceEquals(cached.Project, project) && ReferenceEquals(cached.Info, info)
+        if (_projects.TryGetValue(project.Path, out var cached) && cached.Project == project && ReferenceEquals(cached.Info, info)
             && cached.Trusted == trusted && ReferenceEquals(cached.Inputs, inputs) && ReferenceEquals(cached.Disk, disk))
         {
             Reused++;
@@ -223,14 +224,27 @@ public static class SolutionTree
     {
         var root = System.IO.Path.TrimEndingDirectorySeparator(solution.Directory);
         var loaded = solution.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer);
-        string? Owner(string path) => solution.Projects
-            .Select(p => p.Path)
-            .Where(p => IsUnder(path, System.IO.Path.GetDirectoryName(p)!) || SolutionService.PathComparer.Equals(path, System.IO.Path.GetDirectoryName(p)))
-            .OrderByDescending(p => p.Length)
-            .FirstOrDefault();
+
+        // A node's project is, of the projects whose folder holds it, the one with the longest path (the first of those):
+        // ranked once, and carried down the folders. Each node looked for it among every project, allocating for each: a
+        // 300-project folder's 20,000 entries made 6 million comparisons, 2 s of the UI thread (M56).
+        var byFolder = new Dictionary<string, (string Path, int Rank)>(SolutionService.PathComparer);
+        foreach (var (path, rank) in solution.Projects.Select((p, i) => (p.Path, i)).OrderByDescending(p => p.Path.Length).ThenBy(p => p.i).Select((p, rank) => (p.Path, rank)))
+        {
+            byFolder.TryAdd(System.IO.Path.GetDirectoryName(path)!, (path, rank));
+        }
+
+        (string Path, int Rank)? Inside(string folder, (string Path, int Rank)? outer) =>
+            byFolder.TryGetValue(folder, out var own) && (outer is null || own.Rank < outer.Value.Rank) ? own : outer;
+        (string Path, int Rank)? rootOwner = null;
+        for (var folder = root; !string.IsNullOrEmpty(folder); folder = System.IO.Path.GetDirectoryName(folder))
+        {
+            rootOwner = Inside(folder, rootOwner);
+        }
 
         var children = new Dictionary<string, List<DirectoryEntry>>(SolutionService.PathComparer);
-        foreach (var entry in entries.Where(e => IsUnder(e.Path, root)))
+        var below = Below(root);
+        foreach (var entry in entries.Where(e => IsBelow(e.Path, below)))
         {
             var parent = System.IO.Path.GetDirectoryName(entry.Path)!;
             if (!children.TryGetValue(parent, out var list))
@@ -241,15 +255,20 @@ public static class SolutionTree
             list.Add(entry);
         }
 
-        IReadOnlyList<ExplorerNode> NodesOf(string folder) =>
+        // owner: the project of what is in the folder.
+        IReadOnlyList<ExplorerNode> NodesOf(string folder, (string Path, int Rank)? owner) =>
         [
             .. (children.GetValueOrDefault(folder) ?? []).Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
-                .Select(e => new ExplorerNode("d:" + e.Path, ExplorerNodeKind.Folder, System.IO.Path.GetFileName(e.Path))
+                .Select(e =>
                 {
-                    Path = e.Path,
-                    ProjectPath = Owner(e.Path),
-                    Icon = "folder",
-                    Children = NodesOf(e.Path),
+                    var inside = Inside(e.Path, owner);
+                    return new ExplorerNode("d:" + e.Path, ExplorerNodeKind.Folder, System.IO.Path.GetFileName(e.Path))
+                    {
+                        Path = e.Path,
+                        ProjectPath = inside?.Path,
+                        Icon = "folder",
+                        Children = NodesOf(e.Path, inside),
+                    };
                 }),
             .. (children.GetValueOrDefault(folder) ?? []).Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
                 .Select(e =>
@@ -259,7 +278,7 @@ public static class SolutionTree
                     return new ExplorerNode("f:" + e.Path, ExplorerNodeKind.File, name)
                     {
                         Path = e.Path,
-                        ProjectPath = isProject && loaded.Contains(e.Path) ? e.Path : Owner(e.Path),
+                        ProjectPath = isProject && loaded.Contains(e.Path) ? e.Path : owner?.Path,
                         Icon = isProject ? "project" : FileIcon(name),
                         Detail = isProject && !loaded.Contains(e.Path) ? "(not loaded)" : null,
                     };
@@ -272,7 +291,7 @@ public static class SolutionTree
             Path = solution.Path,
             Icon = "folder",
             Detail = count == 1 ? "(1 project loaded)" : $"({count} projects loaded)",
-            Children = NodesOf(root),
+            Children = NodesOf(root, rootOwner),
         };
     }
 
@@ -361,12 +380,48 @@ public static class SolutionTree
     public static bool IsOrdered(string projectPath) => projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// The folders of a project's tree that hold its items, with the project's own folder: Show All Files lists what is
+    /// on disk in these, and in a folder that isn't in the project only once it's expanded, as the classic IDE does (M56).
+    /// </summary>
+    public static IReadOnlySet<string> ItemFolders(string projectPath, ProjectInfo info)
+    {
+        var projectDirectory = System.IO.Path.GetDirectoryName(projectPath)!;
+        var below = Below(projectDirectory);
+        var folders = new HashSet<string>(SolutionService.PathComparer) { projectDirectory };
+        foreach (var item in info.Items)
+        {
+            if (SolutionService.PathComparer.Equals(item.Path, projectPath))
+            {
+                continue;
+            }
+
+            var segments = DisplaySegments(item, projectDirectory, IsBelow(item.Path, below));
+            var folder = projectDirectory;
+            for (var i = 0; i < (IsFolderItem(item) ? segments.Length : segments.Length - 1); i++)
+            {
+                folder = System.IO.Path.Combine(folder, segments[i]);
+                folders.Add(folder);
+            }
+        }
+
+        return folders;
+    }
+
+    /// <summary>Where an item shows under its project, folder by folder: its link, its path in the project's folder, or (outside it) its name.</summary>
+    private static string[] DisplaySegments(ProjectItemInfo item, string projectDirectory, bool inside) =>
+        (item.Link ?? (inside ? System.IO.Path.GetRelativePath(projectDirectory, item.Path) : System.IO.Path.GetFileName(item.Path)))
+        .Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+
+    private static bool IsFolderItem(ProjectItemInfo item) => item.Kind.Equals("Folder", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Folders and files of a project, with nesting applied. With <paramref name="disk"/> (Show All Files), files and
     /// folders on disk that aren't items are added, marked <see cref="ExplorerNode.IsExcluded"/>.
     /// </summary>
     public static IReadOnlyList<ExplorerNode> Contents(string projectPath, ProjectInfo info, IReadOnlyList<DirectoryEntry>? disk = null)
     {
         var projectDirectory = System.IO.Path.GetDirectoryName(projectPath)!;
+        var below = Below(projectDirectory);
         var root = new FolderBuilder(projectDirectory, string.Empty);
         var seen = new HashSet<string>(SolutionService.PathComparer);
         var ordered = IsOrdered(projectPath);
@@ -379,16 +434,15 @@ public static class SolutionTree
                 continue;
             }
 
-            var inside = IsUnder(item.Path, projectDirectory);
-            var display = item.Link ?? (inside ? System.IO.Path.GetRelativePath(projectDirectory, item.Path) : System.IO.Path.GetFileName(item.Path));
-            var segments = display.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            var inside = IsBelow(item.Path, below);
+            var segments = DisplaySegments(item, projectDirectory, inside);
             if (segments.Length == 0)
             {
                 continue;
             }
 
             var folder = root;
-            var isFolderItem = item.Kind.Equals("Folder", StringComparison.OrdinalIgnoreCase);
+            var isFolderItem = IsFolderItem(item);
             var folderSegments = isFolderItem ? segments.Length : segments.Length - 1;
             // F#: compiled files keep the project's order (the compile order); folders sit where their first one does.
             var order = ordered && item.Kind.Equals("Compile", StringComparison.OrdinalIgnoreCase) ? index : int.MaxValue;
@@ -412,7 +466,7 @@ public static class SolutionTree
 
         foreach (var entry in disk ?? [])
         {
-            if (SolutionService.PathComparer.Equals(entry.Path, projectPath) || !IsUnder(entry.Path, projectDirectory) || (!entry.IsDirectory && seen.Contains(entry.Path)))
+            if (SolutionService.PathComparer.Equals(entry.Path, projectPath) || !IsBelow(entry.Path, below) || (!entry.IsDirectory && seen.Contains(entry.Path)))
             {
                 continue;
             }
@@ -457,9 +511,14 @@ public static class SolutionTree
             }));
         }
 
-        // Nesting: each file finds its parent among its siblings; files without a parent are roots.
+        // Nesting: each file finds its parent among its siblings; files without a parent are roots. The files nested under
+        // each are grouped once: each file looked for them among all its siblings, F² lookups for a folder of F files (a
+        // folder of 20,000 files took 16 s, M56).
         var names = folder.Files.Select(f => f.Name).ToHashSet(s_names);
         var parentOf = folder.Files.GroupBy(f => f.Name, s_names).ToDictionary(g => g.Key, g => NestParent(g.Key, names, g.First().DependentUpon), s_names);
+        var nested = folder.Files.Where(f => parentOf[f.Name] is not null)
+            .GroupBy(f => parentOf[f.Name]!, s_names)
+            .ToDictionary(g => g.Key, g => g.OrderBy(f => f.Name, Order).ToList(), s_names);
         ExplorerNode File(FileEntry file) =>
             new("f:" + file.FullPath, ExplorerNodeKind.File, file.Name)
             {
@@ -468,10 +527,7 @@ public static class SolutionTree
                 Icon = FileIcon(file.Name),
                 IsLinked = file.Linked,
                 IsExcluded = file.Excluded,
-                Children = [.. folder.Files
-                    .Where(f => s_names.Equals(parentOf[f.Name], file.Name))
-                    .OrderBy(f => f.Name, Order)
-                    .Select(File)],
+                Children = nested.TryGetValue(file.Name, out var children) ? [.. children.Select(File)] : [],
             };
 
         nodes.AddRange(folder.Files.Where(f => parentOf[f.Name] is null).OrderBy(f => f.Name, Order).Select(f => (f.Order, File(f))));
@@ -555,15 +611,14 @@ public static class SolutionTree
 
     /// <summary>The <c>/analyzer:</c> arguments of a compiler command line (paths may be quoted, several per argument).</summary>
     public static IReadOnlyList<string> AnalyzerPaths(IEnumerable<string> arguments) =>
-        [.. arguments
-            .Where(a => a.StartsWith("/analyzer:", StringComparison.OrdinalIgnoreCase) || a.StartsWith("-analyzer:", StringComparison.OrdinalIgnoreCase))
-            .SelectMany(a => a["/analyzer:".Length..].Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
-            .Select(a => a.Trim('"'))
-            .Distinct(SolutionService.PathComparer)];
+        [.. CompilerInputsInfo.AnalyzerPaths(arguments).Distinct(SolutionService.PathComparer)];
 
-    private static bool IsUnder(string path, string directory) =>
-        path.StartsWith(System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar,
-            SolutionService.PathComparer == StringComparer.OrdinalIgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    /// <summary>A folder's path with a separator at its end, for <see cref="IsBelow"/> (made once for a loop).</summary>
+    private static string Below(string directory) => System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar;
+
+    /// <summary>Whether <paramref name="path"/> is under the folder of <paramref name="below"/> (<see cref="Below"/>).</summary>
+    private static bool IsBelow(string path, string below) =>
+        path.StartsWith(below, SolutionService.PathComparer == StringComparer.OrdinalIgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
 
     // ------------------------------------------------------------------ dependencies
 
@@ -584,6 +639,10 @@ public static class SolutionTree
 
         var id = "deps:" + projectPath;
         var analyzers = inputs is { State: CompilerInputStates.Ok } ? AnalyzerPaths(inputs.Arguments) : [];
+
+        // Which analyzers are missing comes with the inputs from the build host, which owns the disk: a File.Exists for each
+        // here cost a 300-project solution 6,000 checks on the UI thread for each build of the tree (M56).
+        var missing = new HashSet<string>(inputs?.MissingAnalyzers ?? [], SolutionService.PathComparer);
         var graph = info.Packages
             .GroupBy(p => (p.TargetFramework, p.Name.ToLowerInvariant()))
             .ToDictionary(g => g.Key, g => g.First());
@@ -627,7 +686,7 @@ public static class SolutionTree
             var list = references.ToList();
             if (withAnalyzers)
             {
-                list.AddRange(analyzers.Select(a => new ReferenceInfo(ReferenceKinds.Analyzer, System.IO.Path.GetFileNameWithoutExtension(a), null, a, inputs!.TargetFramework, File.Exists(a))));
+                list.AddRange(analyzers.Select(a => new ReferenceInfo(ReferenceKinds.Analyzer, System.IO.Path.GetFileNameWithoutExtension(a), null, a, inputs!.TargetFramework, !missing.Contains(a))));
             }
 
             var groups = new List<ExplorerNode>();

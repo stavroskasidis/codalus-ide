@@ -336,7 +336,22 @@ public sealed record CompilerInputsInfo(
     string[] Arguments,
     string[] ProjectReferences,
     string? OutputPath,
-    string? OutputRefPath);
+    string? OutputRefPath)
+{
+    /// <summary>
+    /// The analyzers of <see cref="Arguments"/> (as <see cref="AnalyzerPaths"/> gives them) that weren't on disk when the
+    /// host sent the inputs, or null when none is missing. The Solution Explorer marks them: the host owns the disk (and
+    /// may run on another machine), and the shell's tree is built on the UI thread.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string[]? MissingAnalyzers { get; init; }
+
+    /// <summary>The <c>/analyzer:</c> arguments of a compiler command line (paths may be quoted, several per argument).</summary>
+    public static IEnumerable<string> AnalyzerPaths(IEnumerable<string> arguments) => arguments
+        .Where(a => a.StartsWith("/analyzer:", StringComparison.OrdinalIgnoreCase) || a.StartsWith("-analyzer:", StringComparison.OrdinalIgnoreCase))
+        .SelectMany(a => a["/analyzer:".Length..].Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
+        .Select(a => a.Trim('"'));
+}
 
 public sealed record DesignTimeProgressParams(int Built, int Total, bool Completed)
 {

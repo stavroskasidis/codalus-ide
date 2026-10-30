@@ -98,8 +98,12 @@ public sealed record MoveItemParams(string Project, string Path, string Target, 
 /// </summary>
 public sealed record AddExistingItemsParams(string Project, string TargetFolder, string[] Files, bool AsLink);
 
-/// <summary>Everything under <see cref="Path"/> (folders first), up to <see cref="MaxEntries"/> (default 20,000).</summary>
-public sealed record ListTreeParams(string Path, int? MaxEntries = null);
+/// <summary>
+/// Everything under <see cref="Path"/> (folders first), up to <see cref="MaxEntries"/> (default 20,000). With
+/// <see cref="Folders"/>, only these folders below <see cref="Path"/> are gone into; the others are listed without what
+/// is in them (Show All Files lists a folder that isn't in its project once it's expanded, as the classic IDE does).
+/// </summary>
+public sealed record ListTreeParams(string Path, int? MaxEntries = null, string[]? Folders = null);
 
 public sealed record ListTreeResult(DirectoryEntry[] Entries, bool Truncated);
 
