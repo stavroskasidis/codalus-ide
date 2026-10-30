@@ -46,7 +46,7 @@ public sealed class CursorPicture : Control
         ["WaitCursor"] = [new("M4,1.5 H12 V3 C12,5.5 9.5,6.8 9.5,8 C9.5,9.2 12,10.5 12,13 V14.5 H4 V13 C4,10.5 6.5,9.2 6.5,8 C6.5,6.8 4,5.5 4,3 Z", s_white, s_black), new("M5.5,13.5 C5.5,11.5 8,10.5 8,10.5 C8,10.5 10.5,11.5 10.5,13.5 Z", s_black, null)],
     };
 
-    private static readonly Dictionary<string, Geometry> s_geometries = new(StringComparer.Ordinal);
+    private static readonly Controls.DispatcherCache<string, Geometry> s_geometries = new(StringComparer.Ordinal);
 
     static CursorPicture()
     {
@@ -72,11 +72,12 @@ public sealed class CursorPicture : Control
             return;
         }
 
+        var geometries = s_geometries.Current;
         foreach (var layer in layers)
         {
-            if (!s_geometries.TryGetValue(layer.Path, out var geometry))
+            if (!geometries.TryGetValue(layer.Path, out var geometry))
             {
-                s_geometries[layer.Path] = geometry = Geometry.Parse(layer.Path);
+                geometries[layer.Path] = geometry = Geometry.Parse(layer.Path);
             }
 
             context.DrawGeometry(layer.Fill, layer.Stroke is null ? null : new Pen(layer.Stroke, layer.Thickness, lineJoin: PenLineJoin.Round, lineCap: PenLineCap.Round), geometry);
