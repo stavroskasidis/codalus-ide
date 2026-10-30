@@ -72,7 +72,7 @@
 
     <Grid Grid.Row="2">
       <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="List" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.commits}">
+      <ListBox x:Name="List" ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}" SelectionMode="Multiple" Background="Transparent" AutomationProperties.Name="{l:T gitHistory.commits}">
         <ListBox.Styles>
           <Style Selector="ListBoxItem">
             <Setter Property="Padding" Value="4,0" />
@@ -145,22 +145,26 @@
         </ListBox.DataTemplates>
         <ListBox.ContextMenu>
           <ContextMenu x:Name="CommitMenu">
-            <MenuItem controls:MenuEntry.Icon="document-text" Header="{l:T gitHistory.viewCommitDetails}" Tag="details" Click="OnCommitAction" FontWeight="SemiBold" />
+            <MenuItem controls:MenuEntry.Icon="document-text" Header="{l:T gitHistory.viewCommitDetails}" Tag="details" Click="OnCommitAction" FontWeight="SemiBold" IsEnabled="{Binding IsSingleSelection}" />
             <Separator />
-            <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" />
-            <MenuItem controls:MenuEntry.Icon="branch" Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" />
-            <MenuItem controls:MenuEntry.Icon="tag" Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" />
+            <!-- Two selected commits (Ctrl+click, Shift+click), or one and its parent: the Compare document, the older on the left. -->
+            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitHistory.compareWithPrevious}" Click="OnCompareWithPrevious" IsEnabled="{Binding CanCompareWithPrevious}" />
+            <MenuItem controls:MenuEntry.Icon="compare" Header="{l:T gitHistory.compareCommits}" Click="OnCompareCommits" IsEnabled="{Binding CanCompareCommits}" />
             <Separator />
-            <MenuItem controls:MenuEntry.Icon="fork" Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnCommitAction" />
-            <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T gitHistory.revert}" Tag="revert" Click="OnCommitAction" />
-            <MenuItem controls:MenuEntry.Icon="reset" Header="{l:T gitHistory.reset}">
+            <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T gitHistory.checkoutDetached}" Tag="checkout" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
+            <MenuItem controls:MenuEntry.Icon="branch" Header="{l:T gitHistory.newBranchHere}" Tag="branch" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
+            <MenuItem controls:MenuEntry.Icon="tag" Header="{l:T gitHistory.createTag}" Tag="tag" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
+            <Separator />
+            <MenuItem controls:MenuEntry.Icon="fork" Header="{l:T gitHistory.cherryPick}" Tag="cherryPick" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
+            <MenuItem controls:MenuEntry.Icon="undo" Header="{l:T gitHistory.revert}" Tag="revert" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
+            <MenuItem controls:MenuEntry.Icon="reset" Header="{l:T gitHistory.reset}" IsEnabled="{Binding IsSingleSelection}">
               <MenuItem Header="{l:T gitHistory.keepChangesStagedSoft}" Tag="reset-soft" Click="OnCommitAction" />
               <MenuItem Header="{l:T gitHistory.keepChangesMixed}" Tag="reset-mixed" Click="OnCommitAction" />
               <MenuItem Header="{l:T gitHistory.discardChangesHard}" Tag="reset-hard" Click="OnCommitAction" />
             </MenuItem>
-            <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitHistory.interactiveRebaseFromHere}" Tag="rebaseInteractive" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="arrow-sort" Header="{l:T gitHistory.interactiveRebaseFromHere}" Tag="rebaseInteractive" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
             <Separator />
-            <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" />
+            <MenuItem controls:MenuEntry.Icon="copy" Header="{l:T gitHistory.copyCommitHash}" Tag="copyHash" Click="OnCommitAction" IsEnabled="{Binding IsSingleSelection}" />
           </ContextMenu>
         </ListBox.ContextMenu>
       </ListBox>

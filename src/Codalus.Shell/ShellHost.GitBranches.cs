@@ -523,13 +523,27 @@ public sealed partial class ShellHost
 
         var from = git.Status?.Branch is { } current ? "refs/heads/" + current : "HEAD";
         var fromName = git.Status?.Branch ?? "HEAD";
-        var id = GitCompareDocument.IdFor(from, reference) + (git == Git ? string.Empty : "@" + git.Root);
+        return await OpenCompareAsync(git, from, fromName, reference, ShortRefName(reference), commits: false).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Compare Commits and Compare with Previous (the history's menu): the files <paramref name="newer"/> differs in from
+    /// <paramref name="older"/>, in a document named "1a2b3c4d → 5e6f7a8b", the older on the left.
+    /// </summary>
+    public Task<GitCompareDocument?> OpenCommitCompareAsync(GitCommit older, GitCommit newer) =>
+        Repo.Root is null ? Task.FromResult<GitCompareDocument?>(null) : OpenCompareAsync(Repo, older.Hash, older.ShortHash, newer.Hash, newer.ShortHash, commits: true);
+
+    /// <summary>Opens (or brings back) the Compare document from <paramref name="from"/> to <paramref name="to"/>, two branches or two commits.</summary>
+    private async Task<GitCompareDocument?> OpenCompareAsync(GitService git, string from, string fromName, string to, string toName, bool commits)
+    {
+        var id = GitCompareDocument.IdFor(from, to) + (git == Git ? string.Empty : "@" + git.Root);
         if (Layout.FindDocument<GitCompareDocument>(id) is not { } document)
         {
-            var viewModel = new GitCompareViewModel(git, from, fromName, reference, ShortRefName(reference))
+            var viewModel = new GitCompareViewModel(git, from, fromName, to, toName)
             {
-                OpenFile = (file) => InRepositoryAsync(git, () => OpenCompareFileAsync(from, fromName, reference, ShortRefName(reference), file)),
-                ShowHistory = () => InRepositoryAsync(git, () => HistoryCommandAsync([JsonSerializer.SerializeToElement(reference, Docking.ShellJsonContext.Default.String)])),
+                ComparesCommits = commits,
+                OpenFile = (file) => InRepositoryAsync(git, () => OpenCompareFileAsync(from, fromName, to, toName, file)),
+                ShowHistory = commits ? null : () => InRepositoryAsync(git, () => HistoryCommandAsync([JsonSerializer.SerializeToElement(to, Docking.ShellJsonContext.Default.String)])),
             };
             document = new GitCompareDocument(viewModel, id);
         }
@@ -539,7 +553,7 @@ public sealed partial class ShellHost
         return document;
     }
 
-    /// <summary>A file of the Compare document: the current branch's version on the left, the other's on the right (question 9).</summary>
+    /// <summary>A file of the Compare document: the current branch's (or the older commit's) version on the left, the other's on the right (question 9).</summary>
     private Task OpenCompareFileAsync(string from, string fromName, string to, string toName, GitChangedFile file)
     {
         var git = Repo;
