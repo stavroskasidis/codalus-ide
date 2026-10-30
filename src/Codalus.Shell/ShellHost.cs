@@ -1008,6 +1008,12 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        StopTimers();
+        CloseEditorViews();
+        Theme.Dispose();
+        Editor.CodeColors.Release(Languages.LanguageIdOf);
+        ReleaseViewCallbacks();
+        CrashReporter.Release(this);
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var designers = StopWinFormsDesignersAsync();
         var openSolution = Solutions.Solution?.Path;
@@ -1049,5 +1055,57 @@ public sealed partial class ShellHost : IAsyncDisposable
         await designers.ConfigureAwait(false);
         Workbench.Dispose();
         RestartIfRequested(openSolution);
+    }
+
+    /// <summary>
+    /// Tears the open editors down as closing their documents does: each one's timers (inlay hints, CodeLens, symbols)
+    /// keep running until then, and hold the editor and this shell.
+    /// </summary>
+    private void CloseEditorViews()
+    {
+        foreach (var editor in Editors)
+        {
+            editor.View?.Close();
+        }
+
+        _previewView?.Close();
+    }
+
+    /// <summary>
+    /// Takes back the views' static callbacks that call this shell, unless another shell set them since: a static would
+    /// hold this shell, with all it reaches, once it's disposed.
+    /// </summary>
+    private void ReleaseViewCallbacks()
+    {
+        Views.GitChangesView.ReportError = Unless(Views.GitChangesView.ReportError);
+        Views.DiffView.ReportError = Unless(Views.DiffView.ReportError);
+        Views.MergeEditorView.ReportError = Unless(Views.MergeEditorView.ReportError);
+        Views.BreakpointsView.RunCommand = Unless(Views.BreakpointsView.RunCommand);
+        Views.BreakpointsView.AskLabels = Unless(Views.BreakpointsView.AskLabels);
+        Views.VariableActions.AddWatch = Unless(Views.VariableActions.AddWatch);
+        Views.VariableActions.QuickWatch = Unless(Views.VariableActions.QuickWatch);
+        Views.VariableActions.Visualize = Unless(Views.VariableActions.Visualize);
+        Views.VariableActions.PluginVisualizers = Unless(Views.VariableActions.PluginVisualizers);
+        Views.VariableActions.VisualizeWithPlugin = Unless(Views.VariableActions.VisualizeWithPlugin);
+        Views.VariableActions.CopyText = Unless(Views.VariableActions.CopyText);
+        Views.VariableActions.AskAi = Unless(Views.VariableActions.AskAi);
+        Views.VariableActions.CanAskAi = Unless(Views.VariableActions.CanAskAi);
+    }
+
+    /// <summary>The callback, or null when it calls this shell.</summary>
+    private T? Unless<T>(T? callback)
+        where T : Delegate => callback?.Target == this ? null : callback;
+
+    /// <summary>
+    /// Stops the shell's timers. The dispatcher holds every enabled timer and the shell its tick calls, and a pending
+    /// one-shot timer of a dispatcher that no longer runs never ticks: the hosting status timer (every two minutes) kept
+    /// each disposed shell of the shell tests reachable, with all it reached, until a full run ran out of memory.
+    /// </summary>
+    private void StopTimers()
+    {
+        foreach (var timer in new[] { _statusTimer, _repositoryTimer, _autoRecoverTimer, _indexTimer, _codeSearchRefresh, _gitRepositoryTimer, _endpointsRefresh })
+        {
+            timer?.Stop();
+        }
     }
 }

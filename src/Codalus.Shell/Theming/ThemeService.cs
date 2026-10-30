@@ -33,7 +33,7 @@ public sealed record ThemeFamily(string Id, string Title, string Description)
 /// saves. The resolved theme is the <c>theme</c> context key (its kind: <c>light</c>, <c>dark</c> or <c>highContrast</c>;
 /// Classic's Blue stays <c>blue</c>) and its family the <c>themeFamily</c> key.
 /// </summary>
-public sealed class ThemeService
+public sealed class ThemeService : IDisposable
 {
     public const string SettingKey = "workbench.colorTheme";
 
@@ -113,6 +113,7 @@ public sealed class ThemeService
     private readonly WorkbenchServices _workbench;
     private readonly Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>> _contributed;
     private string? _preview;
+    private Avalonia.Platform.IPlatformSettings? _platform;
 
     public ThemeService(Application app, WorkbenchServices workbench, Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>>? contributed = null)
     {
@@ -130,11 +131,24 @@ public sealed class ThemeService
         if (app.PlatformSettings is { } platform)
         {
             // The OS switching light and dark, or high contrast on and off: a family that follows the system follows it.
-            platform.ColorValuesChanged += (_, _) => Ui.Post(Apply);
+            _platform = platform;
+            platform.ColorValuesChanged += OnColorValuesChanged;
         }
 
         Apply();
     }
+
+    /// <summary>Stops following the OS's colors: the platform's settings outlive a shell, and would hold it.</summary>
+    public void Dispose()
+    {
+        if (_platform is { } platform)
+        {
+            platform.ColorValuesChanged -= OnColorValuesChanged;
+            _platform = null;
+        }
+    }
+
+    private void OnColorValuesChanged(object? sender, Avalonia.Platform.PlatformColorValues e) => Ui.Post(Apply);
 
     /// <summary>
     /// The resolved theme: Classic's <c>blue</c>, <c>light</c>, <c>dark</c> or <c>highContrast</c> (also a plugin's theme's
