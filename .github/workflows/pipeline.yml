@@ -230,8 +230,9 @@ jobs:
         # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
         # the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
         # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
-        # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both.
-        timeout-minutes: ${{ matrix.os == 'macos-latest' && (matrix.shard == 'shell-2' && 40 || 60) || 40 }}
+        # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS debug-codalus
+        # (7 minutes) too: its runner was lost 44.5 minutes into this step (run 41115971500).
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && ((matrix.shard == 'shell-2' || matrix.shard == 'debug-codalus') && 40 || 60) || 40 }}
         run: bash eng/ci-test.sh ${{ matrix.shard }}
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded
