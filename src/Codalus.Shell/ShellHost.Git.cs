@@ -34,6 +34,11 @@ public sealed partial class ShellHost
         Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         Git.StatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
         Git.SiblingStatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
+
+        // A build's outputs churn under bin/ (which is watched: scripts live there): a status read at most every 2 s while
+        // it runs, and one when it ends.
+        Builds.Started += (_, _) => Git.IsBuildRunning = true;
+        Builds.Finished += (_, _) => Git.IsBuildRunning = Builds.IsBuilding;
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChanges.RunWithArguments = RunOnGitChangeAsync;

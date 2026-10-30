@@ -117,8 +117,11 @@ public sealed partial class GitService
             .Select((parts, index) => new GitStash(index, parts[0], parts[1]))];
     }
 
-    /// <summary>Stashes the changes (only <paramref name="paths"/> when given: a partial stash), with untracked files optionally.</summary>
-    public Task StashAsync(string? message, bool includeUntracked, IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Stashes the changes (only <paramref name="paths"/> when given: a partial stash, its paths resolved off the caller's
+    /// thread and given to git on its input), with untracked files optionally.
+    /// </summary>
+    public async Task StashAsync(string? message, bool includeUntracked, IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
     {
         var arguments = new List<string> { "stash", "push" };
         if (message is { Length: > 0 })
@@ -131,13 +134,14 @@ public sealed partial class GitService
             arguments.Add("--include-untracked");
         }
 
+        string? input = null;
         if (paths is { Count: > 0 })
         {
-            arguments.Add("--");
-            arguments.AddRange(paths.Select(Relative));
+            arguments.AddRange(s_pathspecsFromInput);
+            input = Pathspecs(await RelativeAsync(paths, cancellationToken).ConfigureAwait(false));
         }
 
-        return MutateAsync(arguments, cancellationToken);
+        await MutateAsync(arguments, cancellationToken, input).ConfigureAwait(false);
     }
 
     /// <summary>Applies a stash; <paramref name="pop"/> also drops it when it applied cleanly.</summary>
