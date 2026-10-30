@@ -350,9 +350,18 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     // ------------------------------------------------------------------ startup
 
-    /// <summary>Called once the window is interactive: deferred work that must not delay the first frame.</summary>
+    /// <summary>
+    /// Called once the window is interactive: deferred work that must not delay the first frame. Nothing once the shell is
+    /// being disposed (its window closed before its first frames): what it starts, such as the listener for other
+    /// <c>codalus</c> processes, would outlive the shell.
+    /// </summary>
     public void OnInteractive()
     {
+        if (_disposing)
+        {
+            return;
+        }
+
         _ = OfferRecoveryAsync();
         StartUpdates();
 

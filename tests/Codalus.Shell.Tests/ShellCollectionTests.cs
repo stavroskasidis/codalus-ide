@@ -37,9 +37,38 @@ public sealed class ShellCollectionTests
         Assert.True(f.Shell.HasUnsavedDocuments);
     });
 
-    private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use)
+    [AvaloniaFact]
+    public async Task A_code_viewer_releases_its_grammar_when_its_window_closes()
     {
-        var (shell, window) = await CreateUseAndDisposeAsync(use);
+        // A tool window's viewer (Code Definition, an HTTP response), which its owner never releases: its grammar's
+        // tokenizer thread waited for work and held it, its window and the shell.
+        await using var f = ShellFixture.Create();
+        var viewer = new Codalus.Shell.Editor.CodeViewer(f.Shell, f.Shell.EditorFont);
+        var window = new Avalonia.Controls.Window { Content = viewer, Width = 400, Height = 300 };
+        window.Show();
+        viewer.Show("class C { int x = 1; }", "csharp", null);
+        ShellFixture.Pump();
+        Assert.True(viewer.HasGrammar);
+
+        window.Content = null;
+        Assert.False(viewer.HasGrammar);
+
+        window.Content = viewer; // back in a window: its colors come back
+        ShellFixture.Pump();
+        Assert.True(viewer.HasGrammar);
+
+        window.Close();
+        Assert.False(viewer.HasGrammar);
+    }
+
+    [AvaloniaFact]
+    public Task A_shell_disposed_before_its_window_is_interactive_is_collected() => AssertCollectedAsync(
+        _ => Task.CompletedTask,
+        afterDispose: f => f.Shell.OnInteractive()); // the window's first frames came after its close: the listener for other processes kept the shell
+
+    private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose = null)
+    {
+        var (shell, window) = await CreateUseAndDisposeAsync(use, afterDispose);
         await Task.Yield(); // off the frames of the dispose, whose continuations ran inline and still hold the fixture
 
         // The work the dispose queued runs, but no timer is waited for: a pending one holds the shell until it ticks, and
@@ -60,7 +89,7 @@ public sealed class ShellCollectionTests
 
     /// <summary>Not inlined, so no local of the test's method holds the fixture.</summary>
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static async Task<(WeakReference Shell, WeakReference Window)> CreateUseAndDisposeAsync(Func<ShellFixture, Task> use)
+    private static async Task<(WeakReference Shell, WeakReference Window)> CreateUseAndDisposeAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose)
     {
         var f = ShellFixture.Create();
         var references = (new WeakReference(f.Shell), new WeakReference(f.Window));
@@ -72,6 +101,8 @@ public sealed class ShellCollectionTests
         {
             await f.DisposeAsync();
         }
+
+        afterDispose?.Invoke(f);
 
         return references;
     }
