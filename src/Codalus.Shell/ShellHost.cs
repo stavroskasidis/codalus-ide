@@ -66,6 +66,9 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private readonly HashSet<string> _viewCommands = new(StringComparer.Ordinal);
 
+    /// <summary>The shell is being disposed: its timers stay stopped.</summary>
+    private bool _disposing;
+
     public ShellHost(Application app, ShellOptions options)
     {
         Options = options;
@@ -1008,8 +1011,9 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _disposing = true;
         StopTimers();
-        CloseEditorViews();
+        CloseEditors();
         Theme.Dispose();
         Editor.CodeColors.Release(Languages.LanguageIdOf);
         ReleaseViewCallbacks();
@@ -1058,10 +1062,10 @@ public sealed partial class ShellHost : IAsyncDisposable
     }
 
     /// <summary>
-    /// Tears the open editors down as closing their documents does: each one's timers (inlay hints, CodeLens, symbols)
+    /// Tears the open editors and their models down as closing their documents does: each editor's timers (inlay hints, CodeLens, symbols)
     /// keep running until then, and hold the editor and this shell.
     /// </summary>
-    private void CloseEditorViews()
+    private void CloseEditors()
     {
         foreach (var editor in Editors)
         {
@@ -1069,6 +1073,15 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _previewView?.Close();
+
+        // The documents' models too, as closing the last editor of each does: their file watchers keep them, and they
+        // hold this shell's handlers.
+        foreach (var model in _models.Values)
+        {
+            model.Dispose();
+        }
+
+        _models.Clear();
     }
 
     /// <summary>
@@ -1095,6 +1108,19 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>The callback, or null when it calls this shell.</summary>
     private T? Unless<T>(T? callback)
         where T : Delegate => callback?.Target == this ? null : callback;
+
+    /// <summary>
+    /// (Re)starts one of the shell's timers, unless the shell is being disposed: its dispose raises events (the solution
+    /// closing) whose handlers, posted to run later, would start them again after <see cref="StopTimers"/>.
+    /// </summary>
+    private void StartTimer(Avalonia.Threading.DispatcherTimer timer)
+    {
+        timer.Stop();
+        if (!_disposing)
+        {
+            timer.Start();
+        }
+    }
 
     /// <summary>
     /// Stops the shell's timers. The dispatcher holds every enabled timer and the shell its tick calls, and a pending

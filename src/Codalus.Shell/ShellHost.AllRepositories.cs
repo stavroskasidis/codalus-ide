@@ -48,8 +48,7 @@ public sealed partial class ShellHost
     private void ScheduleRepositoryDiscovery()
     {
         _repositoryTimer ??= CreateRepositoryTimer();
-        _repositoryTimer.Stop();
-        _repositoryTimer.Start();
+        StartTimer(_repositoryTimer);
     }
 
     private DispatcherTimer CreateRepositoryTimer()

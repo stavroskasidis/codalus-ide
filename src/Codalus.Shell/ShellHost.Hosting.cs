@@ -173,7 +173,7 @@ public sealed partial class ShellHost : IHostingActions
         _statusTimer.Interval = TimeSpan.FromSeconds(Math.Max(15, Workbench.Settings.GetInt32(HostingStatusSecondsSetting, 120)));
         _statusTimer.Tick -= OnStatusTimer;
         _statusTimer.Tick += OnStatusTimer;
-        _statusTimer.Start();
+        StartTimer(_statusTimer);
     }
 
     private void OnStatusTimer(object? sender, EventArgs e)
