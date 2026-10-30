@@ -69,6 +69,9 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>The shell is being disposed: its timers stay stopped.</summary>
     private bool _disposing;
 
+    /// <summary><see cref="OnInteractive"/> has run.</summary>
+    private bool _interactive;
+
     /// <summary>Cancelled when the shell is disposed: work it started for itself (the environment check) stops with it.</summary>
     private readonly CancellationTokenSource _lifetime = new();
 
@@ -355,15 +358,18 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     /// <summary>
     /// Called once the window is interactive: deferred work that must not delay the first frame. Nothing once the shell is
-    /// being disposed (its window closed before its first frames): what it starts, such as the listener for other
-    /// <c>codalus</c> processes, would outlive the shell.
+    /// being disposed (its window closed before its first frames), or the second time: what it starts, such as the
+    /// listener for other <c>codalus</c> processes, would outlive the shell (a second listener replaced the first, which
+    /// was never disposed).
     /// </summary>
     public void OnInteractive()
     {
-        if (_disposing)
+        if (_disposing || _interactive)
         {
             return;
         }
+
+        _interactive = true;
 
         _ = OfferRecoveryAsync();
         StartUpdates();

@@ -66,6 +66,16 @@ public sealed class ShellCollectionTests
         _ => Task.CompletedTask,
         afterDispose: f => f.Shell.OnInteractive()); // the window's first frames came after its close: the listener for other processes kept the shell
 
+    [AvaloniaFact]
+    public Task A_disposed_shell_whose_window_became_interactive_twice_is_collected() => AssertCollectedAsync(f =>
+    {
+        // The window's first frames, and a caller that asks again (tests do): a second listener for other processes
+        // replaced the first, which was never disposed and kept the shell.
+        f.Shell.OnInteractive();
+        f.Shell.OnInteractive();
+        return Task.CompletedTask;
+    });
+
     private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose = null)
     {
         var (shell, window) = await CreateUseAndDisposeAsync(use, afterDispose);
