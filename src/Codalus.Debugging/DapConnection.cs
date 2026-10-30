@@ -46,6 +46,7 @@ public sealed class DapConnection : IAsyncDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _seq;
+    private int _reading = 1;
     private Task _readLoop = Task.CompletedTask;
     private Task _eventLoop = Task.CompletedTask;
 
@@ -102,6 +103,13 @@ public sealed class DapConnection : IAsyncDisposable
         _unanswered[seq] = (command, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
+            if (Volatile.Read(ref _reading) == 0)
+            {
+                // No answer can be read any more: an event handler that asks while the last events are raised would
+                // wait for nothing, and hold Closed up to EventDrainLimit while a process still holds the adapter's input.
+                throw new DapConnectionLostException("The debug adapter exited.");
+            }
+
             await WriteAsync(writer =>
             {
                 writer.WriteNumber("seq", seq);
@@ -289,6 +297,7 @@ public sealed class DapConnection : IAsyncDisposable
             failure = ex;
         }
 
+        Interlocked.Exchange(ref _reading, 0); // before the requests fail: one made after this fails itself
         _events.Writer.TryComplete();
         foreach (var pending in _pending.Values)
         {
@@ -401,6 +410,7 @@ public sealed class DapConnection : IAsyncDisposable
     /// </summary>
     public void Abandon()
     {
+        Interlocked.Exchange(ref _reading, 0);
         _events.Writer.TryComplete();
         foreach (var pending in _pending.Values)
         {

@@ -81,6 +81,32 @@ public sealed class DapConnectionTests
         }
     }
 
+    /// <summary>
+    /// A request made once the adapter's output ended fails at once: its answer can't be read, and an event handler
+    /// waiting for it held Closed up (to its 10 s limit) while the last events were raised.
+    /// </summary>
+    [Fact]
+    public async Task A_request_made_after_the_output_ended_fails_at_once()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var toClient = new Pipe();
+        var toAdapter = new Pipe();
+        await using var connection = new DapConnection(toClient.Reader.AsStream(), toAdapter.Writer.AsStream());
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        connection.EventReceived += async _ => await held.Task; // the last events still being raised
+        connection.Start();
+
+        await toClient.Writer.WriteAsync(Frame("""{"seq":1,"type":"event","event":"exited","body":{"exitCode":15}}"""), ct);
+        await toClient.Writer.CompleteAsync();
+        await WaitAsync(() => connection.OutputEnded, ct);
+
+        var request = connection.RequestAsync("threads", new EmptyArguments(), DapJsonContext.Default.EmptyArguments, ct);
+        await Assert.ThrowsAsync<DapConnectionLostException>(() => request.WaitAsync(TimeSpan.FromSeconds(5), ct));
+        Assert.False(connection.Closed.IsCompleted); // the event is still being raised
+        held.SetResult();
+        await connection.Closed.WaitAsync(TimeSpan.FromSeconds(10), ct);
+    }
+
     private static async Task WaitAsync(Func<bool> condition, CancellationToken cancellationToken)
     {
         while (!condition())
