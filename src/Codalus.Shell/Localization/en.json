@@ -3169,6 +3169,7 @@
   "msg.symbolBrowser.assembly": "Assembly: {0}",
   "msg.symbolBrowser.couldNotLoad": "Could not load: {0}",
   "msg.symbolBrowser.loading": "Loading…",
+  "msg.symbolBrowser.moreResults": "More than {0} results: refine the search.",
   "msg.symbolBrowser.noLanguageService": "The C# language service isn't running.",
   "msg.symbolBrowser.none": "(none)",
   "msg.sync.settingsChangedBothHereAndIn": "Settings changed both here and in {0} since the last sync. Which do you keep?",
