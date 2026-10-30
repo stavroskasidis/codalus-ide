@@ -18,22 +18,32 @@ public sealed record ProcessRow(int Id, string Name, string Path, string Title, 
 /// The Processes window (M14b): the processes being debugged with their state, and Detach All, Terminate All and
 /// Attach to Process. A session debugs one .NET process (with a browser page in a compound session).
 /// </summary>
-public sealed class ProcessesViewModel : ObservableObject
+/// <remarks>
+/// Each process is described once for the session (its name, path and window title, from the OS), off the UI thread
+/// (M56): every step described it five times on the UI thread, for this window and the Debug Location toolbar, shown or
+/// not. The rows are built only while the window is shown, and once when it's shown.
+/// </remarks>
+public sealed class ProcessesViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.processes";
 
     private readonly DebugService _debugger;
     private readonly Action<string> _run;
+    private readonly ShownRefresh _refresh;
+    private readonly Dictionary<int, ProcessRow> _described = [];
+    private readonly HashSet<int> _describing = [];
+    private int _session;
 
     public ProcessesViewModel(DebugService debugger, Action<string> run)
     {
         _debugger = debugger;
         _run = run;
-        debugger.StateChanged += (_, _) => Ui.Post(Refresh);
-        debugger.ProcessesChanged += (_, _) => Ui.Post(Refresh);
+        _refresh = new ShownRefresh(Refresh);
+        debugger.StateChanged += (_, _) => Ui.Post(OnChanged);
+        debugger.ProcessesChanged += (_, _) => Ui.Post(OnChanged);
     }
 
-    public ObservableCollection<ProcessRow> Rows { get; } = [];
+    public ResettableCollection<ProcessRow> Rows { get; } = [];
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -43,12 +53,33 @@ public sealed class ProcessesViewModel : ObservableObject
     /// </summary>
     public bool CanDetach => !IsEmpty && _debugger.CanDetach;
 
+    /// <summary>Describes a process from the OS (tests count it); run off the UI thread, once per process for the session.</summary>
+    internal Func<int, ProcessRow> Describer { get; set; } = pid => Describe(pid, string.Empty, string.Empty);
+
+    /// <summary>A process was described: the Debug Location toolbar shows its name.</summary>
+    public event EventHandler? Described;
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+
     /// <summary>Runs one of the window's commands (attach, detach all, terminate all).</summary>
     public void Run(string commandId) => _run(commandId);
 
+    private void OnChanged()
+    {
+        if (_debugger.State == DebugState.Idle)
+        {
+            // The session ended: the next one's processes are described again, and a description still on its way is dropped.
+            _session++;
+            _described.Clear();
+            _describing.Clear();
+        }
+
+        _refresh.Request();
+    }
+
     public void Refresh()
     {
-        Rows.Clear();
+        var rows = new List<ProcessRow>();
         if (_debugger.State != DebugState.Idle)
         {
             var state = _debugger.State == DebugState.Stopped ? "Break" : "Running";
@@ -68,18 +99,56 @@ public sealed class ProcessesViewModel : ObservableObject
                 if (process.Target is { } target)
                 {
                     // On another machine: what the session knows, not this machine's process of that id.
-                    Rows.Add(new ProcessRow(pid, process.Name, target, string.Empty, process.Ended ? "Exited" : state, kind));
+                    rows.Add(new ProcessRow(pid, process.Name, target, string.Empty, process.Ended ? "Exited" : state, kind));
+                }
+                else if (Known(pid) is { } described)
+                {
+                    rows.Add(described with { Name = process.Ended ? process.Name : described.Name, State = process.Ended ? "Exited" : state, Kind = kind });
                 }
                 else
                 {
-                    var row = Describe(pid, process.Ended ? "Exited" : state, kind);
-                    Rows.Add(process.Ended ? row with { Name = process.Name } : row);
+                    // Until it's described: what the session calls it.
+                    rows.Add(new ProcessRow(pid, process.Name, string.Empty, string.Empty, process.Ended ? "Exited" : state, kind));
                 }
             }
         }
 
+        Rows.Reset(rows);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(CanDetach));
+    }
+
+    /// <summary>The process's name: the OS's once it's described, what the session calls it until then.</summary>
+    public string NameOf(int pid) =>
+        Known(pid)?.Name ?? _debugger.Processes.FirstOrDefault(p => p.Id == pid)?.Name ?? string.Empty;
+
+    /// <summary>The process's description, or null while it's being made (it's asked for then).</summary>
+    private ProcessRow? Known(int pid)
+    {
+        if (_described.TryGetValue(pid, out var row))
+        {
+            return row;
+        }
+
+        if (_debugger.State != DebugState.Idle && _describing.Add(pid))
+        {
+            var session = _session;
+            var describe = Describer;
+            _ = Task.Run(() => describe(pid)).ContinueWith(task => Ui.Post(() =>
+            {
+                if (session != _session || !task.IsCompletedSuccessfully)
+                {
+                    return;
+                }
+
+                _describing.Remove(pid);
+                _described[pid] = task.Result;
+                _refresh.Request();
+                Described?.Invoke(this, EventArgs.Empty);
+            }), TaskScheduler.Default);
+        }
+
+        return null;
     }
 
     /// <summary>The process's name, path and window title, as far as the OS tells them.</summary>
@@ -126,17 +195,21 @@ public sealed record DebugLocationFrame(StackFrame Frame)
 public sealed class DebugLocationViewModel : ObservableObject
 {
     private readonly DebugService _debugger;
+    private readonly ProcessesViewModel _processes;
     private string _process = string.Empty;
     private DebugLocationThread? _thread;
     private DebugLocationFrame? _frame;
     private bool _syncing;
 
-    public DebugLocationViewModel(DebugService debugger)
+    /// <param name="processes">The Processes window's, which describes each process once (M56).</param>
+    public DebugLocationViewModel(DebugService debugger, ProcessesViewModel processes)
     {
         _debugger = debugger;
+        _processes = processes;
         debugger.StateChanged += (_, _) => Ui.Post(Refresh);
         debugger.FrameChanged += (_, _) => Ui.Post(Refresh);
         debugger.Stopped += (_, _) => Ui.Post(Refresh);
+        processes.Described += (_, _) => Refresh();
     }
 
     public string Process
@@ -180,7 +253,7 @@ public sealed class DebugLocationViewModel : ObservableObject
         {
             var stopped = _debugger.State == DebugState.Stopped;
             Process = _debugger.ProcessId is { } pid && _debugger.State != DebugState.Idle
-                ? $"[{pid.ToString(CultureInfo.InvariantCulture)}] {ProcessesViewModel.Describe(pid, string.Empty, string.Empty).Name}"
+                ? $"[{pid.ToString(CultureInfo.InvariantCulture)}] {_processes.NameOf(pid)}"
                 : string.Empty;
             Replace(Threads, stopped ? _debugger.Threads.Select(t => new DebugLocationThread(t.Id, t.Name)) : []);
             Thread = Threads.FirstOrDefault(t => t.Id == _debugger.SelectedThreadId);

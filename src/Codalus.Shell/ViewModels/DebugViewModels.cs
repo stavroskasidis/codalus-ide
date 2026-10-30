@@ -1252,13 +1252,18 @@ public sealed class BreakpointRow : ObservableObject
     public string AccessibleName => $"Breakpoint {Location}{(Enabled ? string.Empty : ", disabled")}{(HasLabels ? ", labels " + Labels : string.Empty)}{(Details.Length > 0 ? ", " + Details : string.Empty)}";
 }
 
-/// <summary>The Breakpoints window: source and function breakpoints, searchable by location, condition or label.</summary>
-public sealed class BreakpointsViewModel : ObservableObject
+/// <summary>
+/// The Breakpoints window: source and function breakpoints, searchable by location, condition or label. The rows are
+/// built again once per burst of changes, with one reset, and only while the window is shown (M56): a session's start
+/// sent one setBreakpoints per file, and each answer rebuilt every row.
+/// </summary>
+public sealed class BreakpointsViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.breakpoints";
 
     private readonly DebugService _debugger;
     private readonly Func<string, int, Task> _open;
+    private readonly ShownRefresh _refresh;
     private bool _refreshQueued;
     private string _filter = string.Empty;
 
@@ -1266,13 +1271,15 @@ public sealed class BreakpointsViewModel : ObservableObject
     {
         _debugger = debugger;
         _open = open;
+        _refresh = new ShownRefresh(Refresh);
         debugger.Breakpoints.Changed += (_, _) => Ui.Post(QueueRefresh);
         debugger.Breakpoints.FunctionsChanged += (_, _) => Ui.Post(QueueRefresh);
         debugger.Breakpoints.StatesChanged += (_, _) => Ui.Post(QueueRefresh);
-        Refresh();
     }
 
-    public ObservableCollection<BreakpointRow> Rows { get; } = [];
+    public ResettableCollection<BreakpointRow> Rows { get; } = [];
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -1300,21 +1307,17 @@ public sealed class BreakpointsViewModel : ObservableObject
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             _refreshQueued = false;
-            Refresh();
+            _refresh.Request();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     public void Refresh()
     {
         var store = _debugger.Breakpoints;
-        Rows.Clear();
-        var rows = store.All.Select(b => new BreakpointRow(b, store.StateOf(b), SetEnabled))
-            .Concat(store.Functions.Select(f => new BreakpointRow(f, store.StateOf(f), SetEnabled)));
-        foreach (var row in rows.Where(r => r.Matches(_filter.Trim())))
-        {
-            Rows.Add(row);
-        }
-
+        var filter = _filter.Trim();
+        Rows.Reset([.. store.All.Select(b => new BreakpointRow(b, store.StateOf(b), SetEnabled))
+            .Concat(store.Functions.Select(f => new BreakpointRow(f, store.StateOf(f), SetEnabled)))
+            .Where(r => r.Matches(filter))]);
         OnPropertyChanged(nameof(IsEmpty));
     }
 

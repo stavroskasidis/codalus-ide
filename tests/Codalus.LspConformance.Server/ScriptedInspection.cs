@@ -28,18 +28,22 @@ internal sealed class ScriptedInspection
     private readonly string _path;
     private readonly int _line;
     private readonly JsonArray _stops;
+    private readonly int? _processId;
     private int _stop;
 
-    private ScriptedInspection(string path, int line, JsonArray stops)
+    private ScriptedInspection(string path, int line, JsonArray stops, int? processId)
     {
         _path = path;
         _line = line;
         _stops = stops;
+        _processId = processId;
     }
 
+    /// <summary>The script's <c>inspect</c>; its <c>processId</c> (optional) is reported as the program's, as netcoredbg's process event does.</summary>
     public static ScriptedInspection? From(JsonElement? launch) =>
         launch is { ValueKind: JsonValueKind.Object } arguments && arguments.TryGetProperty("inspect", out var inspect)
-            ? new ScriptedInspection(inspect.GetProperty("path").GetString()!, inspect.GetProperty("line").GetInt32(), JsonNode.Parse(inspect.GetProperty("stops").GetRawText())!.AsArray())
+            ? new ScriptedInspection(inspect.GetProperty("path").GetString()!, inspect.GetProperty("line").GetInt32(), JsonNode.Parse(inspect.GetProperty("stops").GetRawText())!.AsArray(),
+                inspect.TryGetProperty("processId", out var processId) ? processId.GetInt32() : null)
             : null;
 
     private JsonObject Stop => _stops[_stop]!.AsObject();
@@ -52,6 +56,11 @@ internal sealed class ScriptedInspection
         {
             case "configurationDone":
                 await ScriptedDap.RespondAsync(output, requestSeq, command, null);
+                if (_processId is { } processId)
+                {
+                    await ScriptedDap.EventAsync(output, "process", new JsonObject { ["name"] = "program", ["systemProcessId"] = processId, ["isLocalProcess"] = true, ["startMethod"] = "launch" });
+                }
+
                 await ScriptedDap.EventAsync(output, "thread", new JsonObject { ["reason"] = "started", ["threadId"] = 1 });
                 await ScriptedDap.EventAsync(output, "stopped", new JsonObject { ["reason"] = "breakpoint", ["threadId"] = 1, ["allThreadsStopped"] = true });
                 return true;

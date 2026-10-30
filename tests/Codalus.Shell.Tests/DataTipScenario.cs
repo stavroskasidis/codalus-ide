@@ -44,7 +44,8 @@ internal sealed class DataTipScenario : IAsyncDisposable
     /// <paramref name="stops"/> (the inspection script's <c>stops</c>).
     /// </summary>
     /// <param name="requestLog">A file the scripted adapter writes each request to, a line each: its command and arguments.</param>
-    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null, string? requestLog = null)
+    /// <param name="processId">The process id the scripted adapter reports as the program's.</param>
+    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null, string? requestLog = null, int? processId = null)
     {
         var f = ShellFixture.Create();
         try
@@ -63,10 +64,13 @@ internal sealed class DataTipScenario : IAsyncDisposable
             before?.Invoke(f);
             await f.Shell.OpenFileAsync(path);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
-            var configuration = new Dictionary<string, object>
+            var inspect = new Dictionary<string, object> { ["path"] = path, ["line"] = line, ["stops"] = stops };
+            if (processId is not null)
             {
-                ["inspect"] = new Dictionary<string, object> { ["path"] = path, ["line"] = line, ["stops"] = stops },
-            };
+                inspect["processId"] = processId;
+            }
+
+            var configuration = new Dictionary<string, object> { ["inspect"] = inspect };
             if (requestLog is not null)
             {
                 configuration["requestLog"] = requestLog;

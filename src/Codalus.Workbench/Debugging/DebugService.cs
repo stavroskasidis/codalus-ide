@@ -1547,6 +1547,7 @@ public sealed class DebugService : IAsyncDisposable
 
     private void MarkRunning()
     {
+        Interlocked.Increment(ref _stops);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         CurrentStop = null;
         Frames = [];
@@ -1718,6 +1719,16 @@ public sealed class DebugService : IAsyncDisposable
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Counts the stops and resumes: a loop over the threads (one request each, which the adapter answers one at a time)
+    /// stops asking once the program has run on, and doesn't hold up the next stop's own requests behind its own (M56).
+    /// </summary>
+    private int _stops;
+
+    /// <summary>Whether the program is still at the stop <paramref name="stop"/> counted, and the loop is still wanted.</summary>
+    private bool IsStop(int stop, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested && State == DebugState.Stopped && stop == Volatile.Read(ref _stops);
+
     /// <summary>The top frame of each thread (for the Threads window), while stopped. Threads without frames are left out.</summary>
     public async Task<IReadOnlyDictionary<int, StackFrame>> TopFramesAsync(CancellationToken cancellationToken)
     {
@@ -1728,8 +1739,14 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var stop = Volatile.Read(ref _stops);
         foreach (var thread in Threads)
         {
+            if (!IsStop(stop, linked.Token))
+            {
+                break; // the program ran on: the next stop asks again
+            }
+
             try
             {
                 var frames = await adapter.StackTraceAsync(thread.Id, 1, linked.Token).ConfigureAwait(false);
@@ -1757,8 +1774,14 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var stop = Volatile.Read(ref _stops);
         foreach (var thread in Threads)
         {
+            if (!IsStop(stop, linked.Token))
+            {
+                break; // the program ran on: the next stop asks again
+            }
+
             try
             {
                 var frames = await adapter.StackTraceAsync(thread.Id, levels, linked.Token).ConfigureAwait(false);
@@ -2007,6 +2030,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_resumedAt);
+        Interlocked.Increment(ref _stops);
         try
         {
             var (threadId, frames) = await StoppedThreadAsync(adapter, stopped).ConfigureAwait(false);

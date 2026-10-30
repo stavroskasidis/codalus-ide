@@ -190,6 +190,7 @@ public sealed class DataTipViewModel(DebugService debugger, string expression, E
 public sealed class ThreadRow(DapThread thread, string location, bool isCurrent, bool isFlagged, Action<ThreadRow, bool> setFlagged) : ObservableObject
 {
     private bool _isFlagged = isFlagged;
+    private bool _isCurrent = isCurrent;
 
     public DapThread Thread { get; } = thread;
 
@@ -201,7 +202,19 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 
     public string Location { get; } = location;
 
-    public bool IsCurrent { get; } = isCurrent;
+    /// <summary>The active thread: the marker follows it when another is picked, without reading the stacks again (M56).</summary>
+    public bool IsCurrent
+    {
+        get => _isCurrent;
+        set
+        {
+            if (SetField(ref _isCurrent, value))
+            {
+                OnPropertyChanged(nameof(Marker));
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
 
     public string Marker => IsCurrent ? "▶" : string.Empty;
 
@@ -220,27 +233,39 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
     public string AccessibleName => $"Thread {IdText} {Name}, {Location}{(IsCurrent ? ", current" : string.Empty)}{(IsFlagged ? ", flagged" : string.Empty)}";
 }
 
-/// <summary>The Threads window: every thread with its location; flags; switching the active thread.</summary>
-public sealed class ThreadsViewModel : ObservableObject
+/// <summary>
+/// The Threads window: every thread with its location; flags; switching the active thread. Each thread's location is
+/// a request of its own: they're read at a stop only while the window is shown, and once when it's shown (M56).
+/// </summary>
+public sealed class ThreadsViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.threads";
 
     private readonly DebugService _debugger;
     private readonly HashSet<int> _flagged = [];
+    private readonly ShownRefresh _refresh;
     private bool _flaggedOnly;
     private int _generation;
 
     public ThreadsViewModel(DebugService debugger)
     {
         _debugger = debugger;
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
-        debugger.FrameChanged += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
+        debugger.FrameChanged += (_, _) => Ui.Post(() =>
+        {
+            // Another frame or thread: the locations (each thread's top frame) stay; the marker follows the thread.
+            foreach (var row in Rows)
+            {
+                row.IsCurrent = row.Id == _debugger.SelectedThreadId;
+            }
+        });
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
             {
                 _generation++;
-                Rows.Clear();
+                Rows.Reset([]);
                 OnPropertyChanged(nameof(IsEmpty));
             }
 
@@ -251,7 +276,9 @@ public sealed class ThreadsViewModel : ObservableObject
         });
     }
 
-    public ObservableCollection<ThreadRow> Rows { get; } = [];
+    public ResettableCollection<ThreadRow> Rows { get; } = [];
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -273,7 +300,7 @@ public sealed class ThreadsViewModel : ObservableObject
         var generation = ++_generation;
         if (_debugger.State != DebugState.Stopped)
         {
-            Rows.Clear();
+            Rows.Reset([]);
             OnPropertyChanged(nameof(IsEmpty));
             return;
         }
@@ -293,11 +320,11 @@ public sealed class ThreadsViewModel : ObservableObject
             return;
         }
 
-        Rows.Clear();
+        var rows = new List<ThreadRow>();
         foreach (var thread in _debugger.Threads.Where(t => !_flaggedOnly || _flagged.Contains(t.Id)))
         {
             var location = tops.TryGetValue(thread.Id, out var frame) ? frame.Name : "[External Code]";
-            Rows.Add(new ThreadRow(thread, location, thread.Id == _debugger.SelectedThreadId, _flagged.Contains(thread.Id), (row, flagged) =>
+            rows.Add(new ThreadRow(thread, location, thread.Id == _debugger.SelectedThreadId, _flagged.Contains(thread.Id), (row, flagged) =>
             {
                 if (flagged)
                 {
@@ -310,6 +337,7 @@ public sealed class ThreadsViewModel : ObservableObject
             }));
         }
 
+        Rows.Reset(rows);
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -335,23 +363,29 @@ public sealed record ModuleRow(DebugModule Module)
     public string AccessibleName => $"{Name}, {SymbolStatus}";
 }
 
-/// <summary>The Modules window: the modules the debuggee loaded, with their symbol status (from <c>module</c> events).</summary>
-public sealed class ModulesViewModel : ObservableObject
+/// <summary>
+/// The Modules window: the modules the debuggee loaded, with their symbol status (from <c>module</c> events). The rows
+/// are built again once per burst of events, with one reset, and only while the window is shown (M56).
+/// </summary>
+public sealed class ModulesViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.modules";
 
     private readonly DebugService _debugger;
+    private readonly ShownRefresh _refresh;
     private string _filter = string.Empty;
     private bool _queued;
 
     public ModulesViewModel(DebugService debugger)
     {
         _debugger = debugger;
+        _refresh = new ShownRefresh(Refresh);
         debugger.ModulesChanged += (_, _) => Ui.Post(Queue);
-        Refresh();
     }
 
-    public ObservableCollection<ModuleRow> Rows { get; } = [];
+    public ResettableCollection<ModuleRow> Rows { get; } = [];
+
+    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -378,20 +412,15 @@ public sealed class ModulesViewModel : ObservableObject
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             _queued = false;
-            Refresh();
+            _refresh.Request();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     public void Refresh()
     {
-        Rows.Clear();
-        foreach (var module in _debugger.Modules.Where(m => _filter.Length == 0
+        Rows.Reset([.. _debugger.Modules.Where(m => _filter.Length == 0
                      || m.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-                     || (m.Path?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false)))
-        {
-            Rows.Add(new ModuleRow(module));
-        }
-
+                     || (m.Path?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false)).Select(m => new ModuleRow(m))]);
         OnPropertyChanged(nameof(IsEmpty));
     }
 }

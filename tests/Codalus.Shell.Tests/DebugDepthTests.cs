@@ -107,6 +107,7 @@ public sealed class DebugDepthTests
         // The Processes window and the Debug Location toolbar (M14b).
         f.Shell.Layout.ShowToolWindow(ProcessesViewModel.ToolWindowId);
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ProcessesView>().Any());
+        await ShellFixture.PumpUntil(() => f.Shell.ProcessesWindow.Rows.Count == 1); // filled once shown (M56)
         var process = Assert.Single(f.Shell.ProcessesWindow.Rows);
         Assert.Equal((f.Shell.Debugger.ProcessId, "Break", "Launched"), ((int?)process.Id, process.State, process.Kind));
         var location = f.Shell.DebugLocation;

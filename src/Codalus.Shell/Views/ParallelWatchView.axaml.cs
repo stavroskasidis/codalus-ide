@@ -8,7 +8,11 @@ namespace Codalus.Shell.Views;
 /// <summary>Parallel Watch (M14b): Enter or Evaluate runs the expression on every thread.</summary>
 public sealed partial class ParallelWatchView : UserControl
 {
-    public ParallelWatchView() => InitializeComponent();
+    public ParallelWatchView()
+    {
+        InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
+    }
 
     private void OnEvaluate(object? sender, RoutedEventArgs e) => _ = (DataContext as ParallelWatchViewModel)?.RefreshAsync();
 

@@ -42,7 +42,7 @@ public sealed partial class ShellHost
         ParallelStacksWindow = new ParallelStacksViewModel(Debugger);
         ParallelWatchWindow = new ParallelWatchViewModel(Debugger);
         ProcessesWindow = new ProcessesViewModel(Debugger, Run);
-        DebugLocation = new DebugLocationViewModel(Debugger);
+        DebugLocation = new DebugLocationViewModel(Debugger, ProcessesWindow);
         Toolbar.DebugLocation = DebugLocation;
         ExceptionSettingsWindow = new ExceptionSettingsViewModel(Debugger.ExceptionSettings);
         Debugger.ExceptionSettings.Changed += (_, _) => Ui.Post(SaveEditorSession);
