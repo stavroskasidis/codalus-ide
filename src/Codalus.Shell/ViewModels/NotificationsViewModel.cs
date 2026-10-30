@@ -56,12 +56,13 @@ public sealed class NotificationViewModel
 /// themselves after <c>workbench.notifications.autoHideSeconds</c> but stay in the center until dismissed;
 /// warnings and errors stay until dismissed or hidden with Escape.
 /// </summary>
-public sealed class NotificationsViewModel : ObservableObject
+public sealed class NotificationsViewModel : ObservableObject, IDisposable
 {
     private const int MaxToasts = 3;
     private readonly NotificationService _service;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Notification, byte> _leftToasts = new();
     private readonly Func<int> _autoHideSeconds;
+    private readonly HashSet<IDisposable> _hideTimers = [];
 
     public NotificationsViewModel(NotificationService service, Func<int> autoHideSeconds)
     {
@@ -132,11 +133,28 @@ public sealed class NotificationsViewModel : ObservableObject
 
             if (notification.Severity == NotificationSeverity.Info && _autoHideSeconds() is > 0 and var seconds)
             {
-                Avalonia.Threading.DispatcherTimer.RunOnce(() => HideToast(vm), TimeSpan.FromSeconds(seconds));
+                IDisposable? timer = null;
+                timer = Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+                {
+                    _hideTimers.Remove(timer!);
+                    HideToast(vm);
+                }, TimeSpan.FromSeconds(seconds));
+                _hideTimers.Add(timer);
             }
         }
 
         RaiseChanged();
+    }
+
+    /// <summary>Stops the toasts' timers: a pending one-shot timer holds the toast and this list (and the shell) until it ticks.</summary>
+    public void Dispose()
+    {
+        foreach (var timer in _hideTimers)
+        {
+            timer.Dispose();
+        }
+
+        _hideTimers.Clear();
     }
 
     private void HideToast(NotificationViewModel vm)

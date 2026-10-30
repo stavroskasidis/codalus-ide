@@ -399,6 +399,16 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     public void RequestClose() => Close();
 
+    /// <summary>
+    /// Closes without asking about unsaved documents, as Exit Without Saving does (tests: a window that asked would
+    /// stay open, with its shell, after its test).
+    /// </summary>
+    internal void CloseWithoutConfirming()
+    {
+        _closeConfirmed = true;
+        Close();
+    }
+
     private WindowState _beforeFullScreen = WindowState.Normal;
 
     public bool IsFullScreen

@@ -1014,6 +1014,10 @@ public sealed partial class ShellHost : IAsyncDisposable
         _disposing = true;
         StopTimers();
         CloseEditors();
+        SyntaxVisualizer.Dispose();
+        CodeMetrics.Dispose();
+        StatusBar.Dispose();
+        Notifications.Dispose();
         Theme.Dispose();
         Editor.CodeColors.Release(Languages.LanguageIdOf);
         ReleaseViewCallbacks();

@@ -22,6 +22,22 @@ public sealed class ShellCollectionTests
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
     });
 
+    [AvaloniaFact]
+    public Task A_disposed_shell_with_unsaved_changes_a_status_message_and_a_toast_is_collected() => AssertCollectedAsync(async f =>
+    {
+        // A window with unsaved changes asks before it closes (and stayed open); the status bar's message and the toast
+        // wait to hide themselves.
+        var file = Path.Combine(f.UserData, "notes.txt");
+        File.WriteAllText(file, "notes\n");
+        await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
+        f.Shell.ActiveEditor!.Model.Text.Insert(0, "more ");
+        f.Shell.StatusBar.ShowMessage("Saved.", TimeSpan.FromMinutes(1));
+        f.Shell.Workbench.Notifications.Info("Done.");
+        ShellFixture.Pump();
+        Assert.True(f.Shell.HasUnsavedDocuments);
+    });
+
     private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use)
     {
         var (shell, window) = await CreateUseAndDisposeAsync(use);
