@@ -54,7 +54,10 @@ export CODALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
 echo "== restore / build / test"
 dotnet restore Codalus.slnx
 dotnet build Codalus.slnx -c Release --no-restore
-dotnet test --solution Codalus.slnx -c Release --no-build "$@"
+# A few test projects at a time, as CI's shards run them (eng/ci-test.sh): all twelve at once, each with its own
+# hosts, builds and browsers, put the machine at several times CI's load (WSL's load average passed 100 on 20 cores),
+# and tests with time limits failed there that pass alone (docs/ci-flakes.md, M55's validation).
+dotnet test --solution Codalus.slnx -c Release --no-build --max-parallel-test-modules "${CODALUS_TEST_MODULES:-3}" "$@"
 
 [ "$smoke" = yes ] || exit 0
 # Native AOT links with the selected Xcode's clang and ld; use that Xcode's SDK too. Otherwise clang may pick a newer

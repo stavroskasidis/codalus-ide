@@ -325,16 +325,44 @@ internal sealed class Dumps : IDisposable
         }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
+            // Slow or stalled: what createdump had written, and whether it still ran (a dump timed out once on a loaded
+            // Mac with nothing more to go on, M55's validation).
+            var progress = Progress(path, started);
             EndCreatedump(started);
             if (ex is OperationCanceledException)
             {
                 throw;
             }
 
-            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s. On macOS, check for a password prompt from the system (developer tools access) and approve it.");
+            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s ({progress}). On macOS, check for a password prompt from the system (developer tools access) and approve it.");
         }
 
         return new CreateDumpResult(path, new FileInfo(path).Length);
+    }
+
+    /// <summary>How far a dump got: its file's size so far, and the createdump processes of the request and how long they ran.</summary>
+    private static string Progress(string path, DateTime since)
+    {
+        var written = File.Exists(path) ? $"{new FileInfo(path).Length / 1024 / 1024} MB written" : "no file yet";
+        var running = new List<string>();
+        foreach (var process in System.Diagnostics.Process.GetProcessesByName("createdump"))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.StartTime >= since)
+                    {
+                        running.Add($"{(DateTime.Now - process.StartTime).TotalSeconds:0} s");
+                    }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                {
+                }
+            }
+        }
+
+        return written + (running.Count > 0 ? $", createdump running for {string.Join(", ", running)}" : ", no createdump running");
     }
 
     /// <summary>Ends the createdump processes started for this request (none older than it).</summary>

@@ -10,7 +10,7 @@ Codalus IDE: a .NET IDE built on Avalonia, shipped as a Native AOT shell that su
 
 ```bash
 dotnet build Codalus.slnx                          # warnings are errors
-dotnet test --solution Codalus.slnx                # unit, host integration, Avalonia headless UI
+dotnet test --solution Codalus.slnx --max-parallel-test-modules 3   # unit, host integration, Avalonia headless UI; a few projects at a time, as CI
 dotnet run --project src/Codalus.Shell -- --user-data-dir .work/user-data
 dotnet publish src/Codalus.Shell -c Release -r win-x64 -o artifacts/shell   # Native AOT, hosts and plugins alongside
 dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
