@@ -48,7 +48,7 @@
       <Setter Property="Padding" Value="4,1" />
       <Setter Property="MinHeight" Value="22" />
     </Style>
-    <Style Selector="TreeView.changeTree">
+    <Style Selector="ListBox.changeTree">
       <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
     </Style>
     <Style Selector="ListBox.changeList">
@@ -57,9 +57,13 @@
     <Style Selector="ListBox.changeList ListBoxItem">
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     </Style>
-    <Style Selector="TreeView.changeTree TreeViewItem" x:DataType="vm:GitChangeNode">
-      <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+    <!-- A tree's rows (M56): a virtualized list of the expanded folders' rows, each indented by its level, as the Solution Explorer's. -->
+    <Style Selector="ListBox.changeTree ListBoxItem" x:DataType="vm:GitChangeRow">
+      <Setter Property="Padding" Value="0" />
       <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
     </Style>
     <Style Selector="Button.columnHeader">
       <Setter Property="Background" Value="Transparent" />
@@ -103,27 +107,30 @@
     </DataTemplate>
     <!-- A node of the tree view: the repository, a folder or a file, with its hover actions (Stage, Discard, Unstage: the menu's
          commands on the files shown, T1), a folder's "2 of 5 files" while a filter hides some (T6), and a file's status letter.
-         Its menu is gitChanges/context's (D38). -->
-    <TreeDataTemplate x:Key="NodeRow" x:DataType="vm:GitChangeNode" ItemsSource="{Binding Children}">
-      <Grid Classes="changeRow" ColumnDefinitions="Auto,*,Auto,18" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
-        <controls:Icon Kind="{Binding Icon}" Margin="0,0,6,0" VerticalAlignment="Center" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+         Its menu is gitChanges/context's (D38). A row of a flattened tree (M56): its level's indentation, then a folder's chevron. -->
+    <DataTemplate x:Key="NodeRow" x:DataType="vm:GitChangeRow">
+      <Grid Classes="changeRow" ColumnDefinitions="Auto,Auto,*,Auto,18" Margin="{Binding Indent}" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
+        <Border Classes="chevron" Width="16" Height="18" Background="Transparent" VerticalAlignment="Center">
+          <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <controls:Icon Grid.Column="1" Kind="{Binding Icon}" Margin="2,0,6,0" VerticalAlignment="Center" />
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6">
           <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
           <TextBlock Text="{Binding CountText}" IsVisible="{Binding HasCountText}" Classes="muted" VerticalAlignment="Center" />
           <Border IsVisible="{Binding HasBadge}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="1" CornerRadius="3" Padding="3,0" VerticalAlignment="Center" ToolTip.Tip="{Binding BadgeTooltip}">
             <TextBlock Text="{Binding Badge}" FontSize="{DynamicResource Shell.FontSize.Small}" Classes="muted" />
           </Border>
         </StackPanel>
-        <StackPanel Grid.Column="2" Classes="rowActions" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
+        <StackPanel Grid.Column="3" Classes="rowActions" Orientation="Horizontal" Spacing="2" Margin="6,0,0,0">
           <Button Classes="toolbar icon" controls:ButtonIcon.Kind="add" ToolTip.Tip="{l:T gitChanges.stage}" IsVisible="{Binding CanStage}" Tag="stage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.stage}" />
           <Button Classes="toolbar icon" controls:ButtonIcon.Kind="subtract" ToolTip.Tip="{l:T gitChanges.unstage}" IsVisible="{Binding CanUnstage}" Tag="unstage" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.unstage}" />
           <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.discardChanges}" IsVisible="{Binding CanDiscard}" Tag="discard" Click="OnFileAction" AutomationProperties.Name="{l:T gitChanges.discardChanges}">
             <controls:Icon Kind="discard" />
           </Button>
         </StackPanel>
-        <TextBlock Grid.Column="3" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
+        <TextBlock Grid.Column="4" Text="{Binding Letter}" HorizontalAlignment="Right" VerticalAlignment="Center" ToolTip.Tip="{Binding Description}" />
       </Grid>
-    </TreeDataTemplate>
+    </DataTemplate>
     <DataTemplate x:Key="StashRow" x:DataType="git:GitStash">
       <DockPanel Background="Transparent" ToolTip.Tip="{l:T gitChanges.doubleClickAppliesTheStash}">
         <DockPanel.ContextMenu>
@@ -378,7 +385,8 @@
         </Border>
       </StackPanel>
 
-      <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <!-- The sections' lists virtualize inside it (M56): each realizes only the rows in its view. -->
+      <ScrollViewer x:Name="Sections" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="4,0,4,8" Spacing="2">
           <!-- Related Items: the issues and work items the message mentions. -->
           <ToggleButton x:Name="RelatedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.relatedItems}">
@@ -413,8 +421,8 @@
               </StackPanel>
             </ToggleButton>
             <StackPanel IsVisible="{Binding #ConflictsToggle.IsChecked}">
-              <TreeView x:Name="ConflictTree" Classes="changeTree" ItemsSource="{Binding ConflictsTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
-                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+              <ListBox x:Name="ConflictTree" Classes="changeTree" ItemsSource="{Binding ConflictsRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
               <ListBox x:Name="ConflictList" Classes="changeList" ItemsSource="{Binding ConflictsItems}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" Margin="18,0,0,0"
                        IsVisible="{Binding IsListView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
             </StackPanel>
@@ -432,8 +440,8 @@
             </DockPanel>
             <StackPanel IsVisible="{Binding #StagedToggle.IsChecked}">
               <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding StagedFilteredOut}" />
-              <TreeView x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
-                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+              <ListBox x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
               <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
                 <DockPanel>
@@ -481,8 +489,8 @@
             <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoUnstagedChangesIn}" IsVisible="{Binding !HasChanges}" />
             <StackPanel IsVisible="{Binding HasChanges}">
               <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding ChangesFilteredOut}" />
-              <TreeView x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesTree}" ItemTemplate="{StaticResource NodeRow}" Background="Transparent" Margin="4,0,0,0"
-                        IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
+              <ListBox x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
               <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
                 <DockPanel>

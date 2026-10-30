@@ -69,6 +69,12 @@ public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? 
     public bool HasOldName => Status.OriginalPath is not null;
 
     public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
+
+    /// <summary>The same file shown the same way: its status, section, repository and LFS badge (a refresh keeps such a row).</summary>
+    internal bool IsSameAs(GitFileRow other) =>
+        Status == other.Status && Staged == other.Staged && RepositoryOrder == other.RepositoryOrder
+        && string.Equals(Repository, other.Repository, StringComparison.Ordinal) && string.Equals(Location, other.Location, StringComparison.Ordinal)
+        && Equals(_lfsFile, other._lfsFile) && Equals(_lock, other._lock);
 }
 
 /// <summary>
@@ -108,6 +114,15 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
         }
     }
 
+    /// <summary>Expands or collapses it without telling its owner, which does (Git Changes' rows).</summary>
+    internal void SetExpanded(bool expanded)
+    {
+        if (SetField(ref _isExpanded, expanded, nameof(IsExpanded)))
+        {
+            OnPropertyChanged(nameof(Icon));
+        }
+    }
+
     public string Icon => Row is { } file ? file.Icon
         : IsRepository ? Controls.FileIcons.ForFile(".gitignore")
         : Controls.FileIcons.ForFolder(System.IO.Path.GetFileName(Text), _isExpanded);
@@ -141,8 +156,8 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
     /// <summary>The section it's in: <c>changes</c>, <c>staged</c> or <c>conflicts</c>.</summary>
     public string Section { get; init; } = string.Empty;
 
-    /// <summary>The changed files at and under it that the window shows (a filter can hide some).</summary>
-    public int ShownFiles => Rows.Count();
+    /// <summary>The changed files at and under it that the window shows (a filter can hide some), counted as the tree is built.</summary>
+    public int ShownFiles { get; init; } = row is null ? 0 : 1;
 
     /// <summary>The changed files at and under it in its section, shown or not.</summary>
     public int TotalFiles { get; set; }
@@ -160,6 +175,128 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
         : TotalFiles == 1
             ? Localizer.Format("msg.gitChanges.folderAccessibleNameOne", "{0}, folder, 1 changed file", Text)
             : Localizer.Format("msg.gitChanges.folderAccessibleName", "{0}, folder, {1} changed files", Text, TotalFiles));
+}
+
+/// <summary>
+/// One visible line of a Git Changes section's tree, as the Solution Explorer's rows: the tree is flattened so the list
+/// can virtualize (M56: a tree view made controls for every file, seconds for 10,000). A refresh keeps the row of a node
+/// that's still in its place, with its new node, so its controls, the selection and the scroll position stay.
+/// </summary>
+public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObject
+{
+    private GitChangeNode _node = node;
+
+    public GitChangeNode Node
+    {
+        get => _node;
+        set
+        {
+            var old = _node;
+            if (ReferenceEquals(old, value))
+            {
+                return;
+            }
+
+            _node = value;
+
+            // Only what differs: unchanged rows raise nothing, and formatting every row's texts again took the UI thread's time.
+            var file = old.Row is { } before && value.Row is { } after ? !before.IsSameAs(after) : !ReferenceEquals(old.Row, value.Row);
+            var counts = old.TotalFiles != value.TotalFiles || old.ShownFiles != value.ShownFiles;
+            var expanded = old.IsExpanded != value.IsExpanded;
+            if (!string.Equals(old.Text, value.Text, StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(Text));
+            }
+
+            if (file || expanded || old.Children.Count == 0 != (value.Children.Count == 0))
+            {
+                OnPropertyChanged(nameof(Icon));
+                OnPropertyChanged(nameof(HasChildren));
+                OnPropertyChanged(nameof(Chevron));
+                OnPropertyChanged(nameof(IsExpanded));
+            }
+
+            if (file)
+            {
+                foreach (var name in new[] { nameof(Letter), nameof(Description), nameof(Badge), nameof(HasBadge), nameof(BadgeTooltip), nameof(CanDiscard) })
+                {
+                    OnPropertyChanged(name);
+                }
+            }
+
+            if (counts)
+            {
+                OnPropertyChanged(nameof(CountText));
+                OnPropertyChanged(nameof(HasCountText));
+            }
+
+            if (file || counts || expanded || !string.Equals(old.Text, value.Text, StringComparison.Ordinal))
+            {
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
+
+    /// <summary>The section and path that identify it across refreshes.</summary>
+    public string Key => _node.Key;
+
+    public int Depth { get; } = depth;
+
+    /// <summary>The indentation of its level, 16 px each, as the tree view's.</summary>
+    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+
+    public bool IsFile => _node.IsFile;
+
+    /// <summary>The repository or a folder: it expands and collapses.</summary>
+    public bool HasChildren => _node.Children.Count > 0;
+
+    public bool IsExpanded => _node.IsExpanded;
+
+    public string? Chevron => HasChildren ? (_node.IsExpanded ? "chevron-down" : "chevron-right") : null;
+
+    public string Icon => _node.Icon;
+
+    public string Text => _node.Text;
+
+    public string? CountText => _node.CountText;
+
+    public bool HasCountText => _node.HasCountText;
+
+    public string? Letter => _node.Letter;
+
+    public string? Description => _node.Description;
+
+    public bool HasBadge => _node.HasBadge;
+
+    public string? Badge => _node.Badge;
+
+    public string? BadgeTooltip => _node.BadgeTooltip;
+
+    public bool CanStage => _node.CanStage;
+
+    public bool CanUnstage => _node.CanUnstage;
+
+    public bool CanDiscard => _node.CanDiscard;
+
+    /// <summary>The node's name, and a folder's state: a list's row has no expander for a screen reader to read.</summary>
+    public string AccessibleName => !HasChildren ? _node.AccessibleName
+        : _node.IsExpanded ? Localizer.Format("msg.gitChanges.expandedAccessibleName", "{0}, expanded", _node.AccessibleName)
+        : Localizer.Format("msg.gitChanges.collapsedAccessibleName", "{0}, collapsed", _node.AccessibleName);
+
+    /// <summary>Expands or collapses its node (its owner then shows or hides the rows under it).</summary>
+    internal void SetExpanded(bool expanded)
+    {
+        if (_node.IsExpanded == expanded)
+        {
+            return;
+        }
+
+        _node.SetExpanded(expanded);
+        OnPropertyChanged(nameof(IsExpanded));
+        OnPropertyChanged(nameof(Chevron));
+        OnPropertyChanged(nameof(Icon));
+        OnPropertyChanged(nameof(AccessibleName));
+    }
 }
 
 /// <summary>
@@ -250,19 +387,25 @@ public sealed partial class GitChangesViewModel : ObservableObject
         _git = git;
         _openDiff = openDiff;
         _run = run;
-        git.StatusChanged += (_, _) => Ui.Post(Refresh);
-        git.SiblingStatusChanged += (_, _) => Ui.Post(Refresh);
+
+        // One refresh for a burst, the repository's and its siblings' (each read posted its own, and each rebuilt everything).
+        git.StatusChanged += (_, _) => RequestRefresh(stashes: true);
+        git.SiblingStatusChanged += (_, _) => RequestRefresh(stashes: true);
         Refresh();
     }
 
     /// <summary>The repositories the window shows: every one of the solution's in All Repositories (ADR 0085), else the open one.</summary>
     public IReadOnlyList<GitService> Services => _isAllRepositories ? _git.AllServices : [_git];
 
-    public ObservableCollection<GitFileRow> Staged { get; } = [];
+    /// <summary>
+    /// The files with staged changes, kept current while the window is hidden (the commands read them); replaced at once,
+    /// and only when a file changed.
+    /// </summary>
+    public ResettableCollection<GitFileRow> Staged { get; } = [];
 
-    public ObservableCollection<GitFileRow> Changes { get; } = [];
+    public ResettableCollection<GitFileRow> Changes { get; } = [];
 
-    public ObservableCollection<GitFileRow> Conflicts { get; } = [];
+    public ResettableCollection<GitFileRow> Conflicts { get; } = [];
 
     // ------------------------------------------------------------------ tree and list views
 
@@ -273,20 +416,30 @@ public sealed partial class GitChangesViewModel : ObservableObject
     private string _filterText = string.Empty;
     private bool _sortByPath;
     private bool _sortDescending;
+    private IReadOnlyList<GitChangeNode> _stagedTree = [];
+    private IReadOnlyList<GitChangeNode> _changesTree = [];
+    private IReadOnlyList<GitChangeNode> _conflictsTree = [];
 
-    /// <summary>The staged changes as a tree: the repository, its folders, their files.</summary>
-    public ObservableCollection<GitChangeNode> StagedTree { get; } = [];
+    /// <summary>The staged changes as a tree: the repository, its folders, their files (built while the window is shown, in the tree view).</summary>
+    public IReadOnlyList<GitChangeNode> StagedTree => _stagedTree;
 
-    public ObservableCollection<GitChangeNode> ChangesTree { get; } = [];
+    public IReadOnlyList<GitChangeNode> ChangesTree => _changesTree;
 
-    public ObservableCollection<GitChangeNode> ConflictsTree { get; } = [];
+    public IReadOnlyList<GitChangeNode> ConflictsTree => _conflictsTree;
 
-    /// <summary>The staged changes as a list (filtered and sorted).</summary>
-    public ObservableCollection<GitFileRow> StagedItems { get; } = [];
+    /// <summary>The staged changes' tree as the list shows it: a row for each node of an expanded folder (or the repository).</summary>
+    public ResettableCollection<GitChangeRow> StagedRows { get; } = [];
 
-    public ObservableCollection<GitFileRow> ChangesItems { get; } = [];
+    public ResettableCollection<GitChangeRow> ChangesRows { get; } = [];
 
-    public ObservableCollection<GitFileRow> ConflictsItems { get; } = [];
+    public ResettableCollection<GitChangeRow> ConflictsRows { get; } = [];
+
+    /// <summary>The staged changes as a list (filtered and sorted), built while the window is shown, in the list view.</summary>
+    public ResettableCollection<GitFileRow> StagedItems { get; } = [];
+
+    public ResettableCollection<GitFileRow> ChangesItems { get; } = [];
+
+    public ResettableCollection<GitFileRow> ConflictsItems { get; } = [];
 
     /// <summary>Files as a tree of folders (the default), or as a list with Name and Path columns.</summary>
     public bool IsTreeView
@@ -298,6 +451,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(IsListView));
                 OnPropertyChanged(nameof(SwitchViewText));
+                Refresh();
             }
         }
     }
@@ -336,7 +490,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
         ? Localizer.Get("msg.gitChanges.hideFilter", "Hide Filter")
         : Localizer.Get("msg.gitChanges.showFilter", "Show Filter");
 
-    /// <summary>Shows only the files whose path contains this text.</summary>
+    /// <summary>Shows only the files whose path contains this text, once typing pauses (the views are built off the UI thread).</summary>
     public string FilterText
     {
         get => _filterText;
@@ -344,10 +498,12 @@ public sealed partial class GitChangesViewModel : ObservableObject
         {
             if (SetField(ref _filterText, value ?? string.Empty))
             {
-                RebuildViews();
+                (_filterRefresh ??= new UiDebouncer(Refresh, TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(600))).Request();
             }
         }
     }
+
+    private UiDebouncer? _filterRefresh;
 
     /// <summary>The list view's order: by Path (then name) or by Name.</summary>
     public bool SortByPath => _sortByPath;
@@ -369,7 +525,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
             OnPropertyChanged(name);
         }
 
-        RebuildViews();
+        Refresh();
     }
 
     /// <summary>Opens a file (set by the shell), for <see cref="OpenFileAsDefault"/>.</summary>
@@ -381,41 +537,41 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     public Task OpenFileAsync(GitFileRow row) => OpenFile is { } open && !row.IsDeleted ? open(row.Status.Path) : Task.CompletedTask;
 
-    public Task StageAsync(GitChangeNode node) => EachRepositoryAsync(node.Rows, (git, paths) => git.StageAsync(paths));
+    public Task StageAsync(GitChangeNode node) => StageAsync(node.Rows);
 
-    public Task UnstageAsync(GitChangeNode node) => EachRepositoryAsync(node.Rows, (git, paths) => git.UnstageAsync(paths));
+    public Task UnstageAsync(GitChangeNode node) => UnstageAsync(node.Rows);
 
-    /// <summary>Runs <paramref name="action"/> on the rows' files in each one's repository (one, unless all are shown).</summary>
-    private async Task EachRepositoryAsync(IEnumerable<GitFileRow> rows, Func<GitService, IReadOnlyList<string>, Task> action)
+    /// <summary>Stages files of the window, in each one's repository.</summary>
+    public Task StageAsync(IEnumerable<GitFileRow> rows) => EachRepositoryAsync(rows, (git, files) => git.StageAsync(files));
+
+    /// <summary>Unstages files of the window, in each one's repository.</summary>
+    public Task UnstageAsync(IEnumerable<GitFileRow> rows) => EachRepositoryAsync(rows, (git, files) => git.UnstageAsync(files));
+
+    /// <summary>Discards the unstaged changes of files of the window (deletes the untracked ones), in each one's repository.</summary>
+    public Task DiscardAsync(IEnumerable<GitFileRow> rows) => EachRepositoryAsync(rows, (git, files) => git.DiscardAsync(files));
+
+    /// <summary>
+    /// Runs <paramref name="action"/> on the rows' files in each one's repository (one, unless all are shown), by the
+    /// paths git gave them: the status's paths are real already, and resolving each again held the UI thread for a
+    /// second with 10,000 files (two stats per folder of each path on Linux and macOS).
+    /// </summary>
+    private async Task EachRepositoryAsync(IEnumerable<GitFileRow> rows, Func<GitService, IReadOnlyList<GitFileStatus>, Task> action)
     {
-        foreach (var (git, paths) in _git.GroupByRepository(rows.Select(r => r.Status.Path)))
+        var services = Services.Append(_git).Where(s => s.Root is not null).Distinct().ToDictionary(s => s.Root!, StringComparer.Ordinal);
+        foreach (var group in rows.GroupBy(r => r.Repository, StringComparer.Ordinal).OrderBy(g => g.First().RepositoryOrder))
         {
-            await action(git, paths).ConfigureAwait(true);
+            // A row of a repository closed since (its paths are relative to it) waits for the refresh that removes it.
+            if (services.GetValueOrDefault(group.Key) is { } git)
+            {
+                await action(git, [.. group.Select(r => r.Status)]).ConfigureAwait(true);
+            }
         }
     }
 
-    private bool Matches(GitFileRow row) =>
-        _filterText.Length == 0 || row.Status.RelativePath.Contains(_filterText.Trim(), StringComparison.OrdinalIgnoreCase);
+    private bool Matches(GitFileRow row) => Matches(row, _filterText.Trim());
 
-    private void RebuildViews()
-    {
-        Fill(StagedTree, Forest(Staged, "staged", staged: true));
-        Fill(ChangesTree, Forest(Changes, "changes", staged: false));
-        Fill(ConflictsTree, Forest(Conflicts, "conflicts", staged: false));
-        Fill(StagedItems, Sorted(Staged.Where(Matches)));
-        Fill(ChangesItems, Sorted(Changes.Where(Matches)));
-        Fill(ConflictsItems, Sorted(Conflicts.Where(Matches)));
-        foreach (var name in new[] { nameof(StagedHeader), nameof(ChangesHeader), nameof(ConflictsHeader), nameof(IsFiltered), nameof(StagedFilteredOut), nameof(ChangesFilteredOut), nameof(FilteredOutText) })
-        {
-            OnPropertyChanged(name);
-        }
-    }
-
-    /// <summary>A section's tree: one repository node, or with all repositories shown one per repository with changes, in order.</summary>
-    private IEnumerable<GitChangeNode> Forest(IReadOnlyList<GitFileRow> rows, string section, bool staged) => !_isAllRepositories
-        ? BuildTree(_git.Root ?? string.Empty, rows.Where(Matches), section, staged, _collapsed, OnExpandedChanged, rows)
-        : rows.GroupBy(r => r.Repository, StringComparer.Ordinal).SelectMany(g =>
-            BuildTree(g.Key, g.Where(Matches), section, staged, _collapsed, OnExpandedChanged, [.. g], key: section + ":" + g.Key, text: g.First().Location.Split(System.IO.Path.DirectorySeparatorChar)[0]));
+    private static bool Matches(GitFileRow row, string filter) =>
+        filter.Length == 0 || row.Status.RelativePath.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A filter is hiding files (the menu's folder actions then act on the files shown, question 2).</summary>
     public bool IsFiltered => _filterText.Trim().Length > 0;
@@ -442,16 +598,20 @@ public sealed partial class GitChangesViewModel : ObservableObject
             || file.StartsWith(folder + System.IO.Path.DirectorySeparatorChar, Workbench.Projects.SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>The tree's node for <paramref name="path"/> in <paramref name="section"/>, or null.</summary>
+    private IReadOnlyList<GitChangeNode> TreeOf(string section) => section switch { "staged" => _stagedTree, "conflicts" => _conflictsTree, _ => _changesTree };
+
+    /// <summary>The rows of a section's tree.</summary>
+    public ResettableCollection<GitChangeRow> RowsOf(string section) => section switch { "staged" => StagedRows, "conflicts" => ConflictsRows, _ => ChangesRows };
+
+    /// <summary>The tree's node for <paramref name="path"/> in <paramref name="section"/>, or null (the trees are built while the window is shown).</summary>
     public GitChangeNode? FindNode(string section, string path)
     {
-        var tree = section switch { "staged" => StagedTree, "conflicts" => ConflictsTree, _ => ChangesTree };
-        return tree.SelectMany(Flatten).FirstOrDefault(n => Workbench.Projects.SolutionService.PathComparer.Equals(n.FullPath, System.IO.Path.TrimEndingDirectorySeparator(path)));
+        return TreeOf(section).SelectMany(Flatten).FirstOrDefault(n => Workbench.Projects.SolutionService.PathComparer.Equals(n.FullPath, System.IO.Path.TrimEndingDirectorySeparator(path)));
 
         static IEnumerable<GitChangeNode> Flatten(GitChangeNode node) => node.Children.SelectMany(Flatten).Prepend(node);
     }
 
-    /// <summary>Expand All and Collapse All on a folder or the repository node: it and every folder under it.</summary>
+    /// <summary>Expand All and Collapse All on a folder or the repository node: it and every folder under it, its rows shown again at once.</summary>
     public void SetExpandedUnder(string section, string path, bool expanded)
     {
         if (FindNode(section, path) is not { } node)
@@ -460,6 +620,10 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
 
         Apply(node);
+        KeepExpansion();
+        var rows = new List<(GitChangeNode Node, int Depth)>();
+        Flatten(TreeOf(section), 0, rows);
+        PatchRows(RowsOf(section), rows);
 
         void Apply(GitChangeNode n)
         {
@@ -468,7 +632,8 @@ public sealed partial class GitChangesViewModel : ObservableObject
                 return;
             }
 
-            n.IsExpanded = expanded;
+            Remember(n.Key, expanded);
+            n.SetExpanded(expanded);
             foreach (var child in n.Children)
             {
                 Apply(child);
@@ -476,10 +641,47 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
     }
 
-    /// <summary>The staged section has files, but the filter shows none of them.</summary>
-    public bool StagedFilteredOut => IsFiltered && Staged.Count > 0 && !Staged.Any(Matches);
+    /// <summary>Expands or collapses a row (the chevron, Left and Right, double-click): only the rows under it change.</summary>
+    public void SetExpanded(GitChangeRow row, bool expanded)
+    {
+        if (!row.HasChildren || row.IsExpanded == expanded)
+        {
+            return;
+        }
 
-    public bool ChangesFilteredOut => IsFiltered && Changes.Count > 0 && !Changes.Any(Matches);
+        Remember(row.Key, expanded);
+        KeepExpansion();
+        row.SetExpanded(expanded);
+        var rows = RowsOf(row.Node.Section);
+        var index = rows.IndexOf(row);
+        if (index < 0)
+        {
+            return;
+        }
+
+        if (expanded)
+        {
+            var below = new List<(GitChangeNode Node, int Depth)>();
+            Flatten(row.Node.Children, row.Depth + 1, below);
+            rows.InsertRange(index + 1, [.. below.Select(r => new GitChangeRow(r.Node, r.Depth))]);
+            return;
+        }
+
+        var end = index + 1;
+        while (end < rows.Count && rows[end].Depth > row.Depth)
+        {
+            end++;
+        }
+
+        rows.RemoveRange(index + 1, end - index - 1);
+    }
+
+    public void Toggle(GitChangeRow row) => SetExpanded(row, !row.IsExpanded);
+
+    /// <summary>The staged section has files, but the filter shows none of them.</summary>
+    public bool StagedFilteredOut => IsFiltered && Staged.Count > 0 && _stagedShown == 0;
+
+    public bool ChangesFilteredOut => IsFiltered && Changes.Count > 0 && _changesShown == 0;
 
     /// <summary>"No files match “Greeter”." in a section the filter empties (T6).</summary>
     public string FilteredOutText => Localizer.Format("msg.gitChanges.noFilesMatch", "No files match “{0}”.", _filterText.Trim());
@@ -488,24 +690,45 @@ public sealed partial class GitChangesViewModel : ObservableObject
         ? Localizer.Format("msg.gitChanges.sectionOfTotal", "{0} ({1} of {2})", title, shown, total)
         : string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{title} ({total})");
 
+    /// <summary>A node's IsExpanded was set: its rows follow.</summary>
     private void OnExpandedChanged(GitChangeNode node, bool expanded)
+    {
+        if (RowsOf(node.Section).FirstOrDefault(r => ReferenceEquals(r.Node, node)) is { } row)
+        {
+            node.SetExpanded(!expanded);
+            SetExpanded(row, expanded);
+            return;
+        }
+
+        Remember(node.Key, expanded);
+        KeepExpansion();
+    }
+
+    private void Remember(string key, bool expanded)
     {
         if (expanded)
         {
-            _collapsed.Remove(node.Key);
+            _collapsed.Remove(key);
         }
         else
         {
-            _collapsed.Add(node.Key);
+            _collapsed.Add(key);
         }
     }
 
-    private IEnumerable<GitFileRow> Sorted(IEnumerable<GitFileRow> rows)
+    /// <summary>Views being built with the expansion before a change are built again (they'd undo it).</summary>
+    private void KeepExpansion()
     {
-        var ordered = _sortByPath
+        _generation++;
+        _computeAgain |= _computing;
+    }
+
+    private static IEnumerable<GitFileRow> Sorted(IEnumerable<GitFileRow> rows, bool byPath, bool descending)
+    {
+        var ordered = byPath
             ? rows.OrderBy(r => r.Location, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
             : rows.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase).ThenBy(r => r.Location, StringComparer.OrdinalIgnoreCase);
-        return _sortDescending ? ordered.Reverse() : ordered;
+        return descending ? ordered.Reverse() : ordered;
     }
 
     private static void Fill<T>(ObservableCollection<T> target, IEnumerable<T> items)
@@ -517,11 +740,66 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
     }
 
+    /// <summary>The rows of <paramref name="nodes"/> at <paramref name="depth"/>: each node, then its children's rows when it's expanded.</summary>
+    internal static void Flatten(IEnumerable<GitChangeNode> nodes, int depth, List<(GitChangeNode Node, int Depth)> rows)
+    {
+        foreach (var node in nodes)
+        {
+            rows.Add((node, depth));
+            if (!node.IsFile && node.IsExpanded)
+            {
+                Flatten(node.Children, depth + 1, rows);
+            }
+        }
+    }
+
+    /// <summary>Shows a section's new rows: the rows of the same nodes in the same places stay, with their new nodes.</summary>
+    private static void PatchRows(ResettableCollection<GitChangeRow> target, IReadOnlyList<(GitChangeNode Node, int Depth)> rows) =>
+        Patch(target, rows, (row, r) => row.Depth == r.Depth && string.Equals(row.Key, r.Node.Key, StringComparison.Ordinal), r => new GitChangeRow(r.Node, r.Depth), (row, r) => row.Node = r.Node);
+
+    /// <summary>
+    /// Updates <paramref name="target"/> to <paramref name="items"/> in place: the rows alike at its start and at its end
+    /// stay (updated), and the rest is replaced with one removal and one insertion, or one reset when none stays. A
+    /// collection refilled a row at a time raised a change for each, and new rows lost their controls and the selection.
+    /// </summary>
+    private static void Patch<TRow, TItem>(ResettableCollection<TRow> target, IReadOnlyList<TItem> items, Func<TRow, TItem, bool> alike, Func<TItem, TRow> create, Action<TRow, TItem>? update = null)
+    {
+        var prefix = 0;
+        while (prefix < items.Count && prefix < target.Count && alike(target[prefix], items[prefix]))
+        {
+            update?.Invoke(target[prefix], items[prefix]);
+            prefix++;
+        }
+
+        var suffix = 0;
+        while (suffix < items.Count - prefix && suffix < target.Count - prefix && alike(target[target.Count - 1 - suffix], items[items.Count - 1 - suffix]))
+        {
+            update?.Invoke(target[target.Count - 1 - suffix], items[items.Count - 1 - suffix]);
+            suffix++;
+        }
+
+        if (prefix == 0 && suffix == 0)
+        {
+            if (target.Count > 0 || items.Count > 0)
+            {
+                target.Reset(items.Select(create));
+            }
+
+            return;
+        }
+
+        target.RemoveRange(prefix, target.Count - suffix - prefix);
+        target.InsertRange(prefix, [.. items.Skip(prefix).Take(items.Count - suffix - prefix).Select(create)]);
+    }
+
     /// <summary>
     /// The tree of <paramref name="rows"/>: one repository node (none without rows), folders first then files, each by
     /// name; a folder with nothing but one folder in it is shown with it (<c>src\Data</c>). Keys in
     /// <paramref name="collapsed"/> start collapsed; the repository node's is <paramref name="key"/> (<c>changes:</c> by
     /// default; with all repositories shown, one per repository), its text <paramref name="text"/> (the folder by default).
+    /// Each folder counts its files as they're added, shown (<see cref="GitChangeNode.ShownFiles"/>) and in all
+    /// (<paramref name="all"/>, the section's rows before the filter): a count over every file for each folder was folders ×
+    /// files, seconds for 50,000 files in 5,000 folders.
     /// </summary>
     public static IReadOnlyList<GitChangeNode> BuildTree(string root, IEnumerable<GitFileRow> rows, string section, bool staged, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool>? expandedChanged = null, IReadOnlyList<GitFileRow>? all = null, string? key = null, string? text = null)
     {
@@ -529,6 +807,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
         foreach (var row in rows)
         {
             var folder = top;
+            folder.Shown++;
             var segments = row.Status.RelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
             foreach (var segment in segments[..^1])
             {
@@ -538,6 +817,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
                 }
 
                 folder = child;
+                folder.Shown++;
             }
 
             folder.Files.Add(row);
@@ -548,29 +828,32 @@ public sealed partial class GitChangesViewModel : ObservableObject
             return [];
         }
 
-        key ??= section + ":";
-        var rootPath = root.Replace('/', System.IO.Path.DirectorySeparatorChar);
-        var repository = new GitChangeNode(key, text ?? rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged) { FullPath = rootPath, Section = section };
-        Add(repository, top, key, string.Empty);
-        var everything = (all ?? []).Select(r => r.Status.RelativePath.Replace('\\', '/')).ToList();
-        Count(repository);
-        return [repository];
-
-        // Each folder's files in the section, shown or not (all: the section's rows before the filter).
-        void Count(GitChangeNode node)
+        // Each folder's files in the section, shown or not: one for each folder on each file's way.
+        Dictionary<string, int>? totals = null;
+        if (all is not null)
         {
-            if (node.IsFile)
+            totals = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var row in all)
             {
-                return;
-            }
-
-            var prefix = node.IsRepository ? string.Empty : node.RelativePath + "/";
-            node.TotalFiles = all is null ? node.ShownFiles : everything.Count(p => p.StartsWith(prefix, StringComparison.Ordinal));
-            foreach (var child in node.Children)
-            {
-                Count(child);
+                var path = row.Status.RelativePath.Replace('\\', '/');
+                for (var slash = path.IndexOf('/', StringComparison.Ordinal); slash > 0; slash = path.IndexOf('/', slash + 1))
+                {
+                    System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(totals, path[..slash], out _)++;
+                }
             }
         }
+
+        key ??= section + ":";
+        var rootPath = root.Replace('/', System.IO.Path.DirectorySeparatorChar);
+        var repository = new GitChangeNode(key, text ?? rootPath, null, isRepository: true, staged, !collapsed.Contains(key), expandedChanged)
+        {
+            FullPath = rootPath,
+            Section = section,
+            ShownFiles = top.Shown,
+            TotalFiles = all?.Count ?? top.Shown,
+        };
+        Add(repository, top, key, string.Empty);
+        return [repository];
 
         void Add(GitChangeNode parent, TreeFolder folder, string parentKey, string parentRelative)
         {
@@ -592,6 +875,8 @@ public sealed partial class GitChangesViewModel : ObservableObject
                     FullPath = System.IO.Path.Combine(rootPath, relative.Replace('/', System.IO.Path.DirectorySeparatorChar)),
                     RelativePath = relative,
                     Section = section,
+                    ShownFiles = contents.Shown,
+                    TotalFiles = totals?.GetValueOrDefault(relative) ?? contents.Shown,
                 };
                 parent.Children.Add(node);
                 Add(node, contents, folderKey, relative);
@@ -614,6 +899,272 @@ public sealed partial class GitChangesViewModel : ObservableObject
         public Dictionary<string, TreeFolder> Folders { get; } = new(StringComparer.Ordinal);
 
         public List<GitFileRow> Files { get; } = [];
+
+        /// <summary>The files at and under it.</summary>
+        public int Shown { get; set; }
+    }
+
+    // ------------------------------------------------------------------ refreshing, off the UI thread
+
+    private int _generation;
+    private bool _computing;
+    private bool _computeAgain;
+    private int _refreshPosted;
+    private bool _stashesStale;
+    private bool _viewShown;
+    private bool _viewsStale = true;
+    private int _stagedShown;
+    private int _changesShown;
+    private int _conflictsShown;
+
+    /// <summary>How many times the trees and lists were built (tests: none while the window is hidden).</summary>
+    internal int ViewsBuilt { get; private set; }
+
+    /// <summary>Whether a refresh is waiting or running (tests).</summary>
+    internal bool IsRefreshing => _computing || Volatile.Read(ref _refreshPosted) == 1 || _filterRefresh?.IsPending == true;
+
+    /// <summary>Whether the view said the window is shown (tests).</summary>
+    internal bool IsViewShown => _viewShown;
+
+    /// <summary>
+    /// The view tells whether the window is shown (attached and visible). While it isn't, refreshes keep the files current
+    /// (<see cref="Staged"/>, <see cref="Changes"/>, <see cref="Conflicts"/>: the commands read them) but build no tree or
+    /// list; showing it builds them once. The window lives for the whole session, and every status read rebuilt them all.
+    /// </summary>
+    public void SetViewShown(bool shown)
+    {
+        _viewShown = shown;
+        if (shown && _viewsStale)
+        {
+            Refresh();
+        }
+    }
+
+    /// <summary>A refresh for a status read, from any thread: one for a burst, after the input waiting (at background priority).</summary>
+    private void RequestRefresh(bool stashes)
+    {
+        if (stashes)
+        {
+            Volatile.Write(ref _stashesRequested, 1);
+        }
+
+        if (Interlocked.Exchange(ref _refreshPosted, 1) == 0)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                Volatile.Write(ref _refreshPosted, 0);
+                _stashesStale |= Interlocked.Exchange(ref _stashesRequested, 0) == 1;
+                Refresh();
+            }, Avalonia.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    private int _stashesRequested;
+
+    /// <summary>
+    /// Shows the status again: the files, and while the window is shown its trees and lists, built on the thread pool and
+    /// applied in place (a view built for an older status, filter or expansion is dropped and built again). On the UI
+    /// thread this took 0.2-3 s per status read with 10,000-50,000 changed files, shown or not.
+    /// </summary>
+    public void Refresh()
+    {
+        _generation++;
+        _ = RefreshInBackgroundAsync();
+    }
+
+    private async Task RefreshInBackgroundAsync()
+    {
+        if (_computing)
+        {
+            _computeAgain = true;
+            return;
+        }
+
+        _computing = true;
+        try
+        {
+            do
+            {
+                _computeAgain = false;
+                var generation = _generation;
+                var query = Query();
+                var view = await Task.Run(() => Compute(query)).ConfigureAwait(true);
+                if (generation == _generation)
+                {
+                    Apply(view);
+                }
+            }
+            while (_computeAgain);
+        }
+        finally
+        {
+            _computing = false;
+        }
+    }
+
+    /// <summary>A repository the window shows, as <see cref="Compute"/> reads it: its status (a new one at each read) and names.</summary>
+    private sealed record RepositoryState(GitStatus Status, string Name, string Root, int Order);
+
+    /// <summary>What the window shows, read on the UI thread so that <see cref="Compute"/> can run on any.</summary>
+    private sealed record ChangesQuery(
+        IReadOnlyList<RepositoryState> Repositories,
+        GitLfsStatus Lfs,
+        string Filter,
+        bool SortByPath,
+        bool SortDescending,
+        bool AllRepositories,
+        string Root,
+        IReadOnlySet<string> Collapsed,
+        bool Views,
+        bool TreeView,
+        IReadOnlyList<GitFileRow> Staged,
+        IReadOnlyList<GitFileRow> Changes,
+        IReadOnlyList<GitFileRow> Conflicts,
+        Action<GitChangeNode, bool> ExpandedChanged);
+
+    /// <summary>A section as the window shows it: its tree and the tree's rows, or its list.</summary>
+    private sealed record SectionView(IReadOnlyList<GitChangeNode> Tree, IReadOnlyList<(GitChangeNode Node, int Depth)> Rows, IReadOnlyList<GitFileRow> Items);
+
+    /// <summary>The files of each section (the same list when nothing changed), how many the filter shows, and the views when built.</summary>
+    private sealed record ChangesView(
+        IReadOnlyList<GitFileRow> Staged,
+        IReadOnlyList<GitFileRow> Changes,
+        IReadOnlyList<GitFileRow> Conflicts,
+        int StagedShown,
+        int ChangesShown,
+        int ConflictsShown,
+        (SectionView Staged, SectionView Changes, SectionView Conflicts)? Views);
+
+    private ChangesQuery Query() => new(
+        [.. Services.Select((git, order) => (git, order)).Where(s => s.git.Status is not null).Select(s => new RepositoryState(s.git.Status!, s.git.Name, s.git.Root ?? string.Empty, s.order))],
+        _lfs,
+        _filterText.Trim(),
+        _sortByPath,
+        _sortDescending,
+        _isAllRepositories,
+        _git.Root ?? string.Empty,
+        _collapsed.ToHashSet(StringComparer.Ordinal),
+        _viewShown,
+        _isTreeView,
+        [.. Staged],
+        [.. Changes],
+        [.. Conflicts],
+        OnExpandedChanged);
+
+    private static ChangesView Compute(ChangesQuery query)
+    {
+        var staged = Rows(query, s => s.Staged, staged: true, query.Staged);
+        var changes = Rows(query, s => s.Unstaged, staged: false, query.Changes);
+        var conflicts = Rows(query, s => s.Conflicts, staged: false, query.Conflicts);
+        return new ChangesView(
+            staged,
+            changes,
+            conflicts,
+            staged.Count(r => Matches(r, query.Filter)),
+            changes.Count(r => Matches(r, query.Filter)),
+            conflicts.Count(r => Matches(r, query.Filter)),
+            query.Views ? (Section(staged, "staged", true), Section(changes, "changes", false), Section(conflicts, "conflicts", false)) : null);
+
+        SectionView Section(IReadOnlyList<GitFileRow> rows, string section, bool isStaged)
+        {
+            if (!query.TreeView)
+            {
+                return new SectionView([], [], [.. Sorted(rows.Where(r => Matches(r, query.Filter)), query.SortByPath, query.SortDescending)]);
+            }
+
+            IReadOnlyList<GitChangeNode> tree = !query.AllRepositories
+                ? BuildTree(query.Root, rows.Where(r => Matches(r, query.Filter)), section, isStaged, query.Collapsed, query.ExpandedChanged, rows)
+                : [.. rows.GroupBy(r => r.Repository, StringComparer.Ordinal).SelectMany(g =>
+                    BuildTree(g.Key, g.Where(r => Matches(r, query.Filter)), section, isStaged, query.Collapsed, query.ExpandedChanged, [.. g], key: section + ":" + g.Key, text: g.First().Location.Split(System.IO.Path.DirectorySeparatorChar)[0]))];
+            var flat = new List<(GitChangeNode Node, int Depth)>();
+            Flatten(tree, 0, flat);
+            return new SectionView(tree, flat, []);
+        }
+    }
+
+    /// <summary>A section's files, in the repositories' order then by path; the list shown now when each file is the same.</summary>
+    private static IReadOnlyList<GitFileRow> Rows(ChangesQuery query, Func<GitStatus, IEnumerable<GitFileStatus>> files, bool staged, IReadOnlyList<GitFileRow> shown)
+    {
+        var rows = query.Repositories
+            .SelectMany(r => files(r.Status).Select(f => Row(r, f)))
+            .OrderBy(r => r.RepositoryOrder)
+            .ThenBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return rows.Count == shown.Count && rows.Zip(shown).All(p => p.First.IsSameAs(p.Second)) ? shown : rows;
+
+        GitFileRow Row(RepositoryState repository, GitFileStatus file)
+        {
+            var folder = System.IO.Path.GetDirectoryName(file.RelativePath.Replace('\\', '/'))?.Replace('/', System.IO.Path.DirectorySeparatorChar) ?? string.Empty;
+            return new GitFileRow(file, staged, query.Lfs)
+            {
+                Location = folder.Length > 0 ? repository.Name + System.IO.Path.DirectorySeparatorChar + folder : repository.Name,
+                Repository = repository.Root,
+                RepositoryOrder = repository.Order,
+            };
+        }
+    }
+
+    /// <summary>Shows a computed view: the files that changed (one reset each), the views in place when built, the headers.</summary>
+    private void Apply(ChangesView view)
+    {
+        if (!SameRows(Staged, view.Staged))
+        {
+            Staged.Reset(view.Staged);
+        }
+
+        if (!SameRows(Changes, view.Changes))
+        {
+            Changes.Reset(view.Changes);
+        }
+
+        if (!SameRows(Conflicts, view.Conflicts))
+        {
+            Conflicts.Reset(view.Conflicts);
+        }
+
+        (_stagedShown, _changesShown, _conflictsShown) = (view.StagedShown, view.ChangesShown, view.ConflictsShown);
+        if (view.Views is var (staged, changes, conflicts))
+        {
+            ViewsBuilt++;
+            _viewsStale = false;
+            if (_isTreeView)
+            {
+                (_stagedTree, _changesTree, _conflictsTree) = (staged.Tree, changes.Tree, conflicts.Tree);
+                PatchRows(StagedRows, staged.Rows);
+                PatchRows(ChangesRows, changes.Rows);
+                PatchRows(ConflictsRows, conflicts.Rows);
+            }
+            else
+            {
+                Patch(StagedItems, staged.Items, (row, item) => ReferenceEquals(row, item) || row.IsSameAs(item), item => item);
+                Patch(ChangesItems, changes.Items, (row, item) => ReferenceEquals(row, item) || row.IsSameAs(item), item => item);
+                Patch(ConflictsItems, conflicts.Items, (row, item) => ReferenceEquals(row, item) || row.IsSameAs(item), item => item);
+            }
+        }
+        else
+        {
+            _viewsStale = true;
+        }
+
+        foreach (var name in new[]
+        {
+            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchTooltip), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
+            nameof(IsDetached), nameof(IsUnborn), nameof(ShowPublishBranch), nameof(ShowPublishToHost),
+            nameof(OutgoingIncomingTooltip), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader),
+            nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText), nameof(CommitText), nameof(CommitAndPushText), nameof(CommitAndSyncText),
+            nameof(CanCommit), nameof(IsFiltered), nameof(StagedFilteredOut), nameof(ChangesFilteredOut), nameof(FilteredOutText),
+        })
+        {
+            OnPropertyChanged(name);
+        }
+
+        if (_stashesStale)
+        {
+            _stashesStale = false;
+            _ = LoadStashesAsync();
+        }
+
+        static bool SameRows(IReadOnlyList<GitFileRow> shown, IReadOnlyList<GitFileRow> rows) => ReferenceEquals(shown, rows) || (shown.Count == rows.Count && shown.Zip(rows).All(p => ReferenceEquals(p.First, p.Second)));
     }
 
     public bool HasRepository => _git.Status is not null;
@@ -764,9 +1315,9 @@ public sealed partial class GitChangesViewModel : ObservableObject
     public bool HasConflicts => Conflicts.Count > 0;
 
     /// <summary>"Staged Changes (2)", or "(0 of 2)" while a filter hides some (T6).</summary>
-    public string StagedHeader => Header(Localizer.Get("msg.gitChanges.stagedChanges", "Staged Changes"), Staged.Count(Matches), Staged.Count);
+    public string StagedHeader => Header(Localizer.Get("msg.gitChanges.stagedChanges", "Staged Changes"), _stagedShown, Staged.Count);
 
-    public string ChangesHeader => Changes.Count > 0 ? Header(Localizer.Get("msg.gitChanges.changes", "Changes"), Changes.Count(Matches), Changes.Count) : Localizer.Get("msg.gitChanges.changes", "Changes");
+    public string ChangesHeader => Changes.Count > 0 ? Header(Localizer.Get("msg.gitChanges.changes", "Changes"), _changesShown, Changes.Count) : Localizer.Get("msg.gitChanges.changes", "Changes");
 
     /// <summary>
     /// The commit button commits the staged changes when there are some, otherwise every change; with all repositories
@@ -796,7 +1347,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>Amend is one repository's: hidden while all are shown.</summary>
     public bool CanAmend => !_isAllRepositories;
 
-    public string ConflictsHeader => Header(Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"), Conflicts.Count(Matches), Conflicts.Count);
+    public string ConflictsHeader => Header(Localizer.Get("msg.gitChanges.mergeConflicts", "Merge Conflicts"), _conflictsShown, Conflicts.Count);
 
     public string Message
     {
@@ -956,14 +1507,21 @@ public sealed partial class GitChangesViewModel : ObservableObject
     private string? _ciTooltip;
     private string? _pullRequestText;
 
-    /// <summary>The repository's Git LFS files and locks: the rows' badges.</summary>
+    /// <summary>
+    /// The repository's Git LFS files and locks: the rows' badges. The same files and locks again refresh nothing (they're
+    /// read after every status read, which refreshed the window a second time).
+    /// </summary>
     public GitLfsStatus Lfs
     {
         get => _lfs;
         set
         {
+            var same = _lfs.IsSameAs(value);
             _lfs = value;
-            Refresh();
+            if (!same)
+            {
+                Refresh();
+            }
         }
     }
 
@@ -1088,6 +1646,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
             _updatingRepositories = false;
         }
 
+        _stashesStale = true;
         Refresh();
     }
 
@@ -1228,56 +1787,14 @@ public sealed partial class GitChangesViewModel : ObservableObject
         return (text[..query.Start] + inserted + rest, query.Start + reference.Length + 1);
     }
 
-    public void Refresh()
-    {
-        var services = Services.Select((git, order) => (git, order)).Where(s => s.git.Status is not null).ToList();
-        Replace(Staged, services.SelectMany(s => s.git.Status!.Staged.Select(f => Row(s.git, s.order, f, staged: true))));
-        Replace(Changes, services.SelectMany(s => s.git.Status!.Unstaged.Select(f => Row(s.git, s.order, f, staged: false))));
-        Replace(Conflicts, services.SelectMany(s => s.git.Status!.Conflicts.Select(f => Row(s.git, s.order, f, staged: false))));
-        RebuildViews();
-        foreach (var name in new[]
-        {
-            nameof(HasRepository), nameof(HasNoRepository), nameof(BranchName), nameof(BranchTooltip), nameof(BranchAccessibleName), nameof(IsPublished), nameof(IsNotPublished), nameof(OutgoingIncomingText),
-            nameof(IsDetached), nameof(IsUnborn), nameof(ShowPublishBranch), nameof(ShowPublishToHost),
-            nameof(OutgoingIncomingTooltip), nameof(IsMerging), nameof(HasStaged), nameof(HasChanges), nameof(HasConflicts), nameof(StagedHeader),
-            nameof(ChangesHeader), nameof(ConflictsHeader), nameof(OperationText), nameof(CommitText), nameof(CommitAndPushText), nameof(CommitAndSyncText),
-            nameof(CanCommit),
-        })
-        {
-            OnPropertyChanged(name);
-        }
+    public Task StageAsync(GitFileRow row) => StageAsync([row]);
 
-        _ = LoadStashesAsync();
+    public Task UnstageAsync(GitFileRow row) => UnstageAsync([row]);
 
-        GitFileRow Row(GitService git, int order, GitFileStatus file, bool staged)
-        {
-            var repository = git.Name;
-            var folder = System.IO.Path.GetDirectoryName(file.RelativePath.Replace('\\', '/'))?.Replace('/', System.IO.Path.DirectorySeparatorChar) ?? string.Empty;
-            return new GitFileRow(file, staged, _lfs)
-            {
-                Location = folder.Length > 0 ? repository + System.IO.Path.DirectorySeparatorChar + folder : repository,
-                Repository = git.Root ?? string.Empty,
-                RepositoryOrder = order,
-            };
-        }
-    }
+    /// <summary>Stage All: every file of Changes (conflicted files aren't there: staging one marks it resolved).</summary>
+    public Task StageAllAsync() => Changes.Count == 0 ? Task.CompletedTask : StageAsync([.. Changes]);
 
-    private static void Replace(ObservableCollection<GitFileRow> target, IEnumerable<GitFileRow>? rows)
-    {
-        target.Clear();
-        foreach (var row in (rows ?? []).OrderBy(r => r.RepositoryOrder).ThenBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase))
-        {
-            target.Add(row);
-        }
-    }
-
-    public Task StageAsync(GitFileRow row) => EachRepositoryAsync([row], (git, paths) => git.StageAsync(paths));
-
-    public Task UnstageAsync(GitFileRow row) => EachRepositoryAsync([row], (git, paths) => git.UnstageAsync(paths));
-
-    public Task StageAllAsync() => Changes.Count == 0 ? Task.CompletedTask : EachRepositoryAsync(Changes, (git, paths) => git.StageAsync(paths));
-
-    public Task UnstageAllAsync() => Staged.Count == 0 ? Task.CompletedTask : EachRepositoryAsync(Staged, (git, paths) => git.UnstageAsync(paths));
+    public Task UnstageAllAsync() => Staged.Count == 0 ? Task.CompletedTask : UnstageAsync([.. Staged]);
 
     public Task OpenDiffAsync(GitFileRow row) => _openDiff(row.Status.Path, row.Staged);
 
@@ -1328,9 +1845,9 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
         var failures = await GitService.ForEachAsync(targets, async git =>
         {
-            if (all && git.Status?.Unstaged.Where(f => f.IsUntracked).Select(f => f.Path).ToList() is { Count: > 0 })
+            if (all && git.Status is { } status && status.Unstaged.Any(f => f.IsUntracked))
             {
-                await git.StageAsync([.. git.Status!.Unstaged.Select(f => f.Path)]).ConfigureAwait(false);
+                await git.StageAsync([.. status.Unstaged]).ConfigureAwait(false);
             }
 
             await git.CommitAsync(message, amend: false, all).ConfigureAwait(false);
@@ -1393,5 +1910,5 @@ public sealed partial class GitChangesViewModel : ObservableObject
         RunWithArguments is { } run ? run(command, ArgumentsFor(row.Status.Path, SectionOf(row), [row.Status.Path])) : Task.CompletedTask;
 
     /// <summary>The section a file row is in.</summary>
-    public string SectionOf(GitFileRow row) => row.Staged ? "staged" : Conflicts.Contains(row) ? "conflicts" : "changes";
+    public string SectionOf(GitFileRow row) => row.Staged ? "staged" : row.Status.IsConflict ? "conflicts" : "changes";
 }

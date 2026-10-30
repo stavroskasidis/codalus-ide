@@ -115,7 +115,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await Git.ServiceFor(path).StageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+        await GitChanges.StageAsync(files).ConfigureAwait(true);
     });
 
     /// <summary>Unstage on a node of Staged Changes.</summary>
@@ -126,7 +126,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        await Git.ServiceFor(path).UnstageAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+        await GitChanges.UnstageAsync(files).ConfigureAwait(true);
     });
 
     /// <summary>
@@ -190,7 +190,7 @@ public sealed partial class ShellHost
         }).ConfigureAwait(true);
         if (choice.Button == discard)
         {
-            await Git.ServiceFor(path).DiscardAsync([.. files.Select(f => f.Status.Path)]).ConfigureAwait(true);
+            await GitChanges.DiscardAsync(files).ConfigureAwait(true);
         }
     });
 
