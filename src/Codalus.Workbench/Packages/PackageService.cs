@@ -28,8 +28,11 @@ public sealed class PackageService
             }
         };
 
-        // A project re-evaluated after an edit: what an earlier read saw (mid-evaluation) may be stale.
-        solutions.ProjectChanged += (_, _) => PackagesChanged?.Invoke(this, EventArgs.Empty);
+        // A project re-evaluated after an edit: what an earlier read saw (mid-evaluation) may be stale; only when its
+        // packages or its restore changed, once for a burst (PackageChanges).
+        var changes = new PackageChanges(() => PackagesChanged?.Invoke(this, EventArgs.Empty));
+        solutions.ProjectChanged += (_, project) => changes.Observe(project);
+        solutions.SolutionChanged += (_, _) => changes.Clear();
     }
 
     /// <summary>Only local sources (folders, the global packages folder) are used.</summary>
@@ -126,4 +129,64 @@ public sealed class PackageService
 
     public Task<ToolCommandResult> RunToolCommandAsync(ToolCommandParams command, CancellationToken cancellationToken) =>
         _solutions.RequestAsync(PackageMethods.ToolCommand, command, Json.ToolCommandParams, Json.ToolCommandResult, cancellationToken, s_toolTimeout);
+}
+
+/// <summary>
+/// The evaluations that change a project's packages (its package references or its restore), announced once for a burst:
+/// once changes stop for 300 ms, and at least every 3 s while they keep coming. Every evaluation of a large solution's open
+/// had each NuGet window read every project's packages again, 300 times for 300 projects (M56).
+/// </summary>
+internal sealed class PackageChanges(Action announce)
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _keys = new(SolutionService.PathComparer);
+    private readonly Lock _gate = new();
+    private long _burstStarted; // the burst's first unannounced change (Stopwatch ticks), or 0 when none waits
+    private long _lastChange;
+
+    /// <summary>A project was evaluated: whether its packages changed, which announces them once the burst settles.</summary>
+    public bool Observe(ProjectInfo project)
+    {
+        var key = project.Restored + "|" + string.Join(';', project.References.Where(r => r.Kind == ReferenceKinds.Package).Select(r => $"{r.Name}/{r.Version}/{r.TargetFramework}").Order(StringComparer.Ordinal));
+        if (_keys.TryGetValue(project.Path, out var known) && known == key)
+        {
+            return false;
+        }
+
+        _keys[project.Path] = key;
+        lock (_gate)
+        {
+            _lastChange = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (_burstStarted != 0)
+            {
+                return true; // the burst's announcement is on its way
+            }
+
+            _burstStarted = _lastChange;
+        }
+
+        _ = AnnounceWhenQuietAsync();
+        return true;
+    }
+
+    /// <summary>Forgets the projects (another solution): their first evaluations announce again.</summary>
+    public void Clear() => _keys.Clear();
+
+    private async Task AnnounceWhenQuietAsync()
+    {
+        while (true)
+        {
+            await Task.Delay(100).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (System.Diagnostics.Stopwatch.GetElapsedTime(_lastChange) >= TimeSpan.FromMilliseconds(300)
+                    || System.Diagnostics.Stopwatch.GetElapsedTime(_burstStarted) >= TimeSpan.FromSeconds(3))
+                {
+                    _burstStarted = 0;
+                    break;
+                }
+            }
+        }
+
+        announce();
+    }
 }
