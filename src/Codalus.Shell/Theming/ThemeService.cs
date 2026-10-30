@@ -114,6 +114,9 @@ public sealed class ThemeService
     private readonly Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>> _contributed;
     private string? _preview;
 
+    /// <summary>The theme shown without being saved (<see cref="Preview"/>), or null (the smoke test's diagnostics).</summary>
+    internal string? PreviewTheme => _preview;
+
     public ThemeService(Application app, WorkbenchServices workbench, Func<IReadOnlyList<Workbench.Plugins.ContributedTheme>>? contributed = null)
     {
         _app = app;
