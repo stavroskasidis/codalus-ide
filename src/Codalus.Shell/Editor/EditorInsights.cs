@@ -1125,7 +1125,7 @@ public sealed class EditorInsights : IDisposable
                 return new InlineTextElement(text, color, null, click);
             }
 
-            Action? lensClick = below.Lens is { } nextLens ? () => owner.RunLens(nextLens) : null;
+            Action? lensClick = below is { Lens: { } nextLens, Text.Length: > 0 } ? () => owner.RunLens(nextLens) : null; // an empty row isn't a link
             return new LensRowElement(owner, text, color, click, below, lensClick);
         }
     }

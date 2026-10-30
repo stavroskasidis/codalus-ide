@@ -75,9 +75,12 @@ public sealed class CodeLensDetailsTests
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(line) is { } eol && eol.Contains("Ada Tester", StringComparison.Ordinal), seconds: 90);
         Assert.Contains("Ada Tester, just now | 1 author, 1 change", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
 
-        // Turned off, it goes; the reference counts stay.
+        // Turned off, it goes; the reference counts stay. (The row stays too, empty while the counts are on their way: the
+        // history can come first.)
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.GitCodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
-        await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal));
-        Assert.Contains("references", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(
+            () => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal) && eol.Contains("references", StringComparison.Ordinal),
+            seconds: 60,
+            describe: () => $"'{shapes.Insights.EndOfLineText(line)}'");
     }
 }

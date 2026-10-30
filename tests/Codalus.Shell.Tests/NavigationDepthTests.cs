@@ -86,7 +86,7 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
         Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
         var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is not null, seconds: 60);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is { Length: > 0 }, seconds: 60); // its counts, to click: the row is there before them
         ShellFixture.Pump();
         var view = shapes.Editor.TextArea.TextView;
         view.EnsureVisualLines();
