@@ -141,6 +141,14 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 3,
             },
+            SettingDescriptor.Create(ShellHost.PinnedTabsOnSeparateRowSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Show Pinned Tabs in a Separate Row",
+                Category = "Appearance",
+                Description = "Show a document group's pinned tabs on a row of their own, above its other tabs.",
+                Scope = SettingScope.User,
+                Order = 3,
+            },
             SettingDescriptor.Create(Theming.ColorCustomizations.TokensKey, "{}", SettingType.Object, shell) with
             {
                 Title = "Syntax Colors",
