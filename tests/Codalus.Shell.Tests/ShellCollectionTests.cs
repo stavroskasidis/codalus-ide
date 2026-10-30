@@ -93,8 +93,59 @@ public sealed class ShellCollectionTests
             GC.Collect();
         }
 
-        Assert.False(shell.IsAlive, "The disposed shell is still reachable.");
+        if (shell.IsAlive)
+        {
+            // TODO(issue): on the macOS runner every case failed here, after the shell's own git and probes were cancelled
+            // on dispose (docs/ci-flakes.md). What ran then, and whether the shell goes later (work that ends by itself)
+            // or never (something keeps it), say what keeps it.
+            var children = ChildProcesses();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            while (shell.IsAlive && clock.Elapsed < TimeSpan.FromSeconds(30))
+            {
+                ShellFixture.Pump();
+                await Task.Delay(100);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+
+            Assert.Fail($"The disposed shell is still reachable{(shell.IsAlive ? " 30 s later too" : $" (collected {clock.Elapsed.TotalSeconds:0.0} s later)")}. The test host's child processes then: {children}");
+        }
+
         Assert.False(window.IsAlive, "The closed main window is still reachable.");
+    }
+
+    /// <summary>The test host's child processes, with their command lines on Unix.</summary>
+    private static string ChildProcesses()
+    {
+        var ids = Codalus.Platform.ProcessTree.Children(Environment.ProcessId);
+        if (ids.Count == 0)
+        {
+            return "none";
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return string.Join(", ", ids);
+        }
+
+        try
+        {
+            var ps = new System.Diagnostics.ProcessStartInfo("ps") { RedirectStandardOutput = true, UseShellExecute = false };
+            foreach (var argument in (string[])["-o", "pid=,etime=,command=", "-p", string.Join(',', ids)])
+            {
+                ps.ArgumentList.Add(argument);
+            }
+
+            using var process = System.Diagnostics.Process.Start(ps)!;
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(5000);
+            return "\n" + output.TrimEnd();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return string.Join(", ", ids);
+        }
     }
 
     /// <summary>Not inlined, so no local of the test's method holds the fixture.</summary>
