@@ -1031,6 +1031,7 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _disposing = true;
         StopTimers();
+        Interlocked.Exchange(ref _syncDebounce, null)?.Cancel(); // a change's sync, due in 5 s: it held the shell, then synced a closed window
         CloseEditors();
         SyntaxVisualizer.Dispose();
         CodeMetrics.Dispose();

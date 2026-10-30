@@ -85,6 +85,15 @@ public sealed class ShellCollectionTests
         return Task.CompletedTask;
     });
 
+    [AvaloniaFact]
+    public Task A_disposed_shell_whose_settings_changed_with_sync_on_is_collected() => AssertCollectedAsync(async f =>
+    {
+        // A change schedules a sync 5 s later: it held the disposed shell until then, and then synced from it.
+        var settings = f.Shell.Workbench.Settings;
+        await settings.SetAsync(ShellHost.SyncTargetSetting, Path.Combine(f.UserData, "cloud-drive"), Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+        await settings.SetAsync("editor.fontSize", 17, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+    });
+
     private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose = null)
     {
         var (shell, window) = await CreateUseAndDisposeAsync(use, afterDispose);
