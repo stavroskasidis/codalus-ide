@@ -71,6 +71,10 @@ internal sealed class TestTree(ITestController controller)
     private readonly Dictionary<string, ItemInfo> _info = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _itemOfRunnerTest = new(StringComparer.Ordinal);
 
+    // The keys of _itemOfRunnerTest by the runner test's project: a project's rebuild forgets its own instead of looking
+    // through every runner test of the solution, for each project (M56).
+    private readonly Dictionary<string, HashSet<string>> _runnerKeysOfProject = new(StringComparer.OrdinalIgnoreCase);
+
     public ItemInfo? Info(string itemId)
     {
         lock (_gate)
@@ -121,9 +125,12 @@ internal sealed class TestTree(ITestController controller)
         item.Error = project.Error;
         item.Uri = new Uri(project.Path).AbsoluteUri;
 
-        foreach (var key in _itemOfRunnerTest.Where(p => p.Key.StartsWith(project.Path + "|", StringComparison.OrdinalIgnoreCase)).Select(p => p.Key).ToList())
+        if (_runnerKeysOfProject.Remove(project.Path, out var mapped))
         {
-            _itemOfRunnerTest.Remove(key);
+            foreach (var key in mapped)
+            {
+                _itemOfRunnerTest.Remove(key);
+            }
         }
 
         // Methods from source, then from runners; a runner test whose type and method are known joins its source method.
@@ -290,7 +297,17 @@ internal sealed class TestTree(ITestController controller)
         return display.StartsWith(dotted, StringComparison.Ordinal) ? display[dotted.Length..] : display;
     }
 
-    private void Map(RunnerTest test, string itemId) => _itemOfRunnerTest[RunnerKey(test)] = itemId;
+    private void Map(RunnerTest test, string itemId)
+    {
+        var key = RunnerKey(test);
+        _itemOfRunnerTest[key] = itemId;
+        if (!_runnerKeysOfProject.TryGetValue(test.Project, out var keys))
+        {
+            _runnerKeysOfProject[test.Project] = keys = new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        keys.Add(key);
+    }
 
     private TestItem Item(string id, string label, ItemInfo info)
     {
