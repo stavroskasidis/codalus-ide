@@ -13,7 +13,8 @@ namespace Codalus.Shell;
 /// (as Start with Hot Reload does), attaches netcoredbg to the app process <c>dotnet watch</c> starts, and opens the page
 /// under vscode-js-debug in the same session. Edits to WebAssembly components apply in the browser while both are
 /// debugged; the server's runtime refuses edits under the debugger, and an edit that needs a restart restarts the app,
-/// which the session follows (<see cref="WatchedServerSession"/>).
+/// which the session follows (<see cref="WatchedServerSession"/>). Under the Codalus debugger, which applies edits to
+/// the server itself, F5 launches it instead (<c>ShellHost.BrowserHotReload.cs</c>, ADR 0090).
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -98,8 +99,7 @@ public sealed partial class ShellHost
         hotReload.Refused += () => Ui.Post(() => OnServerRefusedUpdates(session, project, name));
         hotReload.FilesUpdated += files =>
         {
-            // Under the Codalus debugger the server takes the edits in place (M55): its breakpoints bind in the new code.
-            if (session.State == WatchedServerState.Attached && !DebugEdits.IsActive)
+            if (session.State == WatchedServerState.Attached)
             {
                 _ = Debugger.ExcludeFromServerAsync(files, StaleServerBreakpoint);
             }
@@ -199,14 +199,6 @@ public sealed partial class ShellHost
     {
         if (!session.IsActive)
         {
-            return;
-        }
-
-        if (DebugEdits.IsActive)
-        {
-            // The Codalus debugger applies the server's edits itself (M55); dotnet watch's own copy is the one refused.
-            DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.serverTakesEdits",
-                "Edits apply to {0}'s server through the Codalus debugger, and to its WebAssembly components in the browser, as you save. Edits that need a restart restart the app.", name));
             return;
         }
 

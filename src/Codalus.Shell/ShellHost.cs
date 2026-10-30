@@ -1031,6 +1031,11 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = Interactive.DisposeAsync().AsTask();
         }
         await Debugger.DisposeAsync().ConfigureAwait(false);
+        if (DebugEdits is not null)
+        {
+            await DebugEdits.DisposeAsync().ConfigureAwait(false); // its Hot Reload agents' pipe (ADR 0090)
+        }
+
         Git.Dispose();
         EntityFramework.Dispose();
         await Data.DisposeAsync().ConfigureAwait(false);

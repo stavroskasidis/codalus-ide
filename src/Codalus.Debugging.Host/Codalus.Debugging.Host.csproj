@@ -13,7 +13,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!--
       The launcher (the launch mode, ADR 0086) runs with the debugged program's environment, so a DOTNET_STARTUP_HOOKS meant
-      for the program would run in it too; nothing here uses startup hooks.
+      for the program would run in it too; nothing here uses startup hooks. The runtime still ran them (.NET 11 RC3, ADR
+      0090), so Codalus.Debugging.StartupHook also does nothing in this host.
     -->
     <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>

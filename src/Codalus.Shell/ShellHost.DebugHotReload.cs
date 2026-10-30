@@ -26,10 +26,10 @@ public sealed partial class ShellHost
     public DebugHotReload DebugEdits { get; private set; } = null!;
 
     private string? _debugEditsStatus;
-
-    /// <summary>When the last edits applied (a Blazor Web App's status says it beside the browser's).</summary>
-    private string? _debugEditsApplied;
     private bool _debugEditsLanguageSaid;
+
+    /// <summary>Whether the Debug Console said that a Blazor Web App's browser gets WebAssembly edits after a restart (once a session).</summary>
+    private bool _debugEditsBrowserSaid;
 
     private void InitializeDebugHotReload()
     {
@@ -39,9 +39,9 @@ public sealed partial class ShellHost
             if (!DebugEdits.IsActive)
             {
                 _debugEditsStatus = null;
-                _debugEditsApplied = null;
                 _debugEditsOffered = false;
                 _debugEditsLanguageSaid = false;
+                _debugEditsBrowserSaid = false;
                 ErrorList.SetHotReload([]);
             }
             else
@@ -82,9 +82,9 @@ public sealed partial class ShellHost
         {
             case HotReloadOutcome.Applied:
                 ErrorList.SetHotReload([]);
-                _debugEditsStatus = Localizer.Format("status.debugHotReload.applied", "Hot Reload: applied at {0}", time);
-                _debugEditsApplied = time;
+                _debugEditsStatus = AppliedStatus(outcome.Browser, time);
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.applied", "Hot Reload: the code changes were applied ({0}).", time));
+                ReportApplied(outcome);
                 break;
             case HotReloadOutcome.None:
                 ErrorList.SetHotReload([]);
@@ -94,10 +94,6 @@ public sealed partial class ShellHost
                 ErrorList.SetHotReload(Rows(outcome.Diagnostics));
                 _debugEditsStatus = Localizer.Get("status.debugHotReload.errors", "Hot Reload: not applied (compile errors)");
                 DebugLog.AppendLine(Localizer.Get("msg.debugHotReload.errors", "Hot Reload: the code changes weren't applied: they don't compile (see the Error List)."));
-                break;
-            case HotReloadOutcome.Rude when WatchedServerDebugSession is { IsActive: true }:
-                // A Blazor Web App under dotnet watch: dotnet watch restarts it for the edit, and debugging follows (ADR 0040).
-                _debugEditsStatus = Localizer.Get("status.debugHotReload.watchRestarts", "Hot Reload: dotnet watch restarts the app");
                 break;
             case HotReloadOutcome.Rude:
                 ErrorList.SetHotReload(Rows(outcome.Diagnostics));

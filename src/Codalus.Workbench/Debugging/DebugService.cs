@@ -175,7 +175,28 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>Codalus IDE's CoreCLR adapter's launch arguments for a plan (M54): the desktop-CLR adapter's, as a launch of .NET.</summary>
     public NetFxDebugArguments CoreClrArguments(LaunchPlan plan) =>
-        DesktopClrArguments(plan, newConsole: false) with { Name = ".NET", Type = "coreclr" };
+        DesktopClrArguments(plan with { Environment = WithHotReloadAgent(plan.Environment) }, newConsole: false) with { Name = ".NET", Type = "coreclr" };
+
+    /// <summary>
+    /// The pipe the programs this debugger launches report to for Hot Reload (ADR 0090): through the startup hook, they
+    /// call their <c>[MetadataUpdateHandler]</c>s after each edit the debugger applied.
+    /// </summary>
+    public HotReloadAgents? HotReloadAgents { get; set; }
+
+    /// <summary>The plan's environment with the startup hook's Hot Reload agent, when there is a hook and a pipe.</summary>
+    private IReadOnlyDictionary<string, string> WithHotReloadAgent(IReadOnlyDictionary<string, string> planned)
+    {
+        if (StartupHook is not { } hook || HotReloadAgents is not { } agents)
+        {
+            return planned;
+        }
+
+        var environment = new Dictionary<string, string>(planned, StringComparer.Ordinal);
+        BrowserHotReload.PrependStartupHook(environment, hook);
+        var (name, value) = agents.Variable();
+        environment[name] = value;
+        return environment;
+    }
 
     /// <summary>
     /// Whether a local launch of <paramref name="plan"/> uses Codalus IDE's adapter; when the setting asks for it but the
@@ -188,10 +209,15 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var reason = plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName) ? "it runs as x64 on Apple silicon" : null;
+        var reason = RunsAsX64OnAppleSilicon(plan) ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
+
+    /// <summary>Whether a local launch of <paramref name="plan"/> will use Codalus IDE's adapter (nothing said).</summary>
+    public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && !RunsAsX64OnAppleSilicon(plan);
+
+    private static bool RunsAsX64OnAppleSilicon(LaunchPlan plan) => plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName);
 
     /// <summary>Whether an attach to <paramref name="processId"/> uses Codalus IDE's adapter, as for a launch.</summary>
     private bool UseCodalusAdapter(int processId)
