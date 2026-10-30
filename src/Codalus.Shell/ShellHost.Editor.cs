@@ -228,8 +228,10 @@ public sealed partial class ShellHost : IEditorServices
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
         Languages.Diagnostics.Changed += (_, _) => ScheduleDiagnosticsStatus();
-        Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
-        Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
+        // Once for a burst: each editor walks the multi-targeted projects' items and refills its project-context list.
+        var projectContexts = new UiDebouncer(() => ProjectContextsChanged?.Invoke(this, EventArgs.Empty), TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(1));
+        Solutions.ProjectChanged += (_, _) => projectContexts.Request();
+        Solutions.CompilerInputsChanged += (_, _) => projectContexts.Request();
         InitializeProfiles();
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme

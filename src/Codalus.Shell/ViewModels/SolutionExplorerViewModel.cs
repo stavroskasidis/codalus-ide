@@ -497,6 +497,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     // ------------------------------------------------------------------ tree
 
+    /// <summary>The projects' subtrees of the last refresh: a refresh builds again only the projects that changed.</summary>
+    private readonly SolutionTreeCache _treeCache = new();
+
+    /// <summary>The projects whose subtrees the last refresh reused (tests).</summary>
+    internal int ReusedProjects => _treeCache.Reused;
+
     private void QueueRefresh()
     {
         if (_refreshQueued)
@@ -520,7 +526,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             {
                 DiskEntries = _showAllFiles ? _disk : null,
                 FolderEntries = IsFolderView ? _folderEntries : null,
-            })
+            }, _treeCache)
             : null;
         OnPropertyChanged(nameof(HasSolution));
         if (_pendingReveal is { } pending && _root is not null && Path(_root, pending) is not null)

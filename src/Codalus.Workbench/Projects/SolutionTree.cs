@@ -73,6 +73,48 @@ public sealed record ExplorerOptions
 }
 
 /// <summary>
+/// The projects' subtrees of a <see cref="SolutionTree"/> build, for the next one: a project's subtree is reused while its
+/// solution entry, evaluation, compiler inputs and files on disk are the same instances (the solution service replaces
+/// a project's only when it changes). A solution's projects evaluate one at a time, each a rebuild of the tree, and
+/// building every project's folders, files and dependencies again for each cost a 300-project solution's open 4.2 s
+/// of the UI thread. Not thread-safe: one builder at a time.
+/// </summary>
+public sealed class SolutionTreeCache
+{
+    private Dictionary<string, Entry> _projects = new(SolutionService.PathComparer);
+    private Dictionary<string, Entry> _built = new(SolutionService.PathComparer);
+
+    private sealed record Entry(SolutionProjectInfo Project, ProjectInfo? Info, bool Trusted, CompilerInputsInfo? Inputs, IReadOnlyList<DirectoryEntry>? Disk, ExplorerNode Node);
+
+    /// <summary>The projects whose subtrees the last build reused (tests).</summary>
+    public int Reused { get; private set; }
+
+    internal void Begin()
+    {
+        _built = new Dictionary<string, Entry>(SolutionService.PathComparer);
+        Reused = 0;
+    }
+
+    internal ExplorerNode Project(SolutionProjectInfo project, ProjectInfo? info, bool trusted, CompilerInputsInfo? inputs, IReadOnlyList<DirectoryEntry>? disk)
+    {
+        if (_projects.TryGetValue(project.Path, out var cached) && ReferenceEquals(cached.Project, project) && ReferenceEquals(cached.Info, info)
+            && cached.Trusted == trusted && ReferenceEquals(cached.Inputs, inputs) && ReferenceEquals(cached.Disk, disk))
+        {
+            Reused++;
+            _built[project.Path] = cached;
+            return cached.Node;
+        }
+
+        var entry = new Entry(project, info, trusted, inputs, disk, SolutionTree.Project(project, info, trusted, inputs, disk));
+        _built[project.Path] = entry;
+        return entry.Node;
+    }
+
+    /// <summary>Keeps the projects of this build only (a removed project's subtree goes with it).</summary>
+    internal void End() => _projects = _built;
+}
+
+/// <summary>
 /// Derives the Solution Explorer tree from the build host's model (ADR 0004: presentation lives in the shell):
 /// solution folders and items, projects with their folders and files, file nesting, linked files, and a
 /// Dependencies node grouped per target framework when a project multi-targets.
@@ -117,17 +159,20 @@ public static class SolutionTree
     /// <summary>A project's folders that the classic IDE lists before the others, in this order.</summary>
     private static readonly string[] s_projectFoldersFirst = ["Properties", "My Project", "wwwroot"];
 
+    /// <param name="cache">The projects' subtrees of the last build, reused for the projects whose inputs didn't change.</param>
     public static ExplorerNode Build(
         SolutionInfo solution,
         IReadOnlyDictionary<string, ProjectInfo> projects,
         IReadOnlyDictionary<string, CompilerInputsInfo>? compilerInputs = null,
-        ExplorerOptions? options = null)
+        ExplorerOptions? options = null,
+        SolutionTreeCache? cache = null)
     {
         if (solution.IsFolder && options?.FolderEntries is { } entries)
         {
             return FolderView(solution, entries);
         }
 
+        cache?.Begin();
         var folders = solution.Folders.ToDictionary(f => f.Id, StringComparer.Ordinal);
         IReadOnlyList<ExplorerNode> ChildrenOf(string? parent)
         {
@@ -149,20 +194,25 @@ public static class SolutionTree
 
             foreach (var project in solution.Projects.Where(p => p.Parent == parent && (p.Parent is null || folders.ContainsKey(p.Parent))).OrderBy(p => p.Name, Order))
             {
-                nodes.Add(Project(project, projects.GetValueOrDefault(project.Path), solution.Trusted, compilerInputs?.GetValueOrDefault(project.Path), options?.DiskEntries?.GetValueOrDefault(project.Path)));
+                var info = projects.GetValueOrDefault(project.Path);
+                var inputs = compilerInputs?.GetValueOrDefault(project.Path);
+                var disk = options?.DiskEntries?.GetValueOrDefault(project.Path);
+                nodes.Add(cache is null ? Project(project, info, solution.Trusted, inputs, disk) : cache.Project(project, info, solution.Trusted, inputs, disk));
             }
 
             return nodes;
         }
 
         var count = solution.Projects.Length;
-        return new ExplorerNode("solution", ExplorerNodeKind.Solution, solution.IsFolder ? $"Folder '{solution.Name}'" : $"Solution '{solution.Name}'")
+        var root = new ExplorerNode("solution", ExplorerNodeKind.Solution, solution.IsFolder ? $"Folder '{solution.Name}'" : $"Solution '{solution.Name}'")
         {
             Path = solution.Path,
             Icon = solution.IsFolder ? "folder" : "solution",
             Detail = solution.IsFolder ? (count == 1 ? "(1 project loaded)" : $"({count} projects loaded)") : count == 1 ? "(1 project)" : $"({count} projects)",
             Children = ChildrenOf(null),
         };
+        cache?.End();
+        return root;
     }
 
     /// <summary>

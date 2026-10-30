@@ -443,8 +443,19 @@ public sealed partial class ShellHost
             BenchEvents.Emit(BenchEventNames.SolutionLoaded);
         }
 
-        UpdateSolutionStatus();
+        // Each project evaluated reports progress, and the toolbar's startup choices walk every project: once for a
+        // burst of them, and at once when they're all done.
+        if (progress.Completed)
+        {
+            UpdateSolutionStatus();
+        }
+        else
+        {
+            (_solutionStatus ??= new UiDebouncer(UpdateSolutionStatus, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500))).Request();
+        }
     }
+
+    private UiDebouncer? _solutionStatus;
 
     private void OnRestoreState(RestoreStateChangedEventArgs e)
     {

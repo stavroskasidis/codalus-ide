@@ -206,11 +206,20 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _editors.Children.Clear();
     }
 
-    private void OnDiagnosticsChanged(object? sender, string path) => Ui.Post(() =>
+    private void OnDiagnosticsChanged(object? sender, string path)
     {
-        _primary?.Ruler.Invalidate();
-        _split?.Ruler.Invalidate();
-    });
+        // The ruler marks this file's problems: another file's (a background pass publishes every file's) leave it as it is.
+        if (!SolutionPaths.Comparer.Equals(path, _document.Model.Path))
+        {
+            return;
+        }
+
+        Ui.Post(() =>
+        {
+            _primary?.Ruler.Invalidate();
+            _split?.Ruler.Invalidate();
+        });
+    }
 
     private EditorParts CreateEditor(bool primary)
     {
