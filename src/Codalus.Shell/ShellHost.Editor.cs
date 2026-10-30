@@ -519,6 +519,7 @@ public sealed partial class ShellHost : IEditorServices
         _snapshots[model] = model.Text.CreateSnapshot();
         model.ContentChanged += (_, e) =>
         {
+            _editedSinceReady.Add(model.Path);
             _snapshots[model] = model.Text.CreateSnapshot();
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
             ClearXamlBuildDiagnostics(model.Path);
@@ -608,15 +609,51 @@ public sealed partial class ShellHost : IEditorServices
 
     private WorkspaceStatusParams? _languageStatus;
 
+    /// <summary>The languages whose service reported loading (projects changed, a restart) since it last reported ready.</summary>
+    private readonly HashSet<string> _languagesLoading = new(StringComparer.Ordinal);
+
+    /// <summary>The languages whose service has reported ready at least once.</summary>
+    private readonly HashSet<string> _languagesReady = new(StringComparer.Ordinal);
+
+    /// <summary>The documents edited since a language service last reported ready (their editors asked again on their own).</summary>
+    private readonly HashSet<string> _editedSinceReady = new(SolutionPaths.Comparer);
+
     private void OnLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
         _languageStatus = status;
         UpdateLanguageStatus();
-        if (status.State == WorkspaceStates.Ready)
+        if (status.State != WorkspaceStates.Ready)
         {
-            Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.LanguageReady);
-            RefreshEditors();
+            _languagesLoading.Add(languageId);
+            return;
         }
+
+        Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.LanguageReady);
+        if (_languagesLoading.Remove(languageId) | _languagesReady.Add(languageId))
+        {
+            _editedSinceReady.Clear();
+            RefreshEditors(); // the projects loaded: everything may know more now
+        }
+        else
+        {
+            RefreshEditorsAfterEdits();
+        }
+    }
+
+    /// <summary>
+    /// The language service reported ready again after the background pass that edits start (at every pause in typing):
+    /// the other editors ask again for what those edits may have changed in them (colors, hints, CodeLens counts). An
+    /// edited document's editors have asked already, and a hidden editor asks when it shows again: asking for every
+    /// open editor at each pause kept a large solution's language service busy with documents nobody looked at.
+    /// </summary>
+    private void RefreshEditorsAfterEdits()
+    {
+        foreach (var editor in LanguageViews.Where(e => !_editedSinceReady.Contains(e.Model.Path)))
+        {
+            editor.Controller?.RefreshWhenShown();
+        }
+
+        _editedSinceReady.Clear();
     }
 
     /// <summary>

@@ -357,6 +357,14 @@ public sealed partial class GitService : IDisposable
             return;
         }
 
+        // obj/ is .NET's intermediate output, which every .NET .gitignore leaves out: design-time builds, restores and
+        // the C# service's state, which it writes after each background pass (every pause in typing). Each was a full
+        // status of the worktree, seconds of git in a large repository. (bin/ isn't skipped: scripts live there too.)
+        if (relative.StartsWith("obj/", StringComparison.Ordinal) || relative.Contains("/obj/", StringComparison.Ordinal))
+        {
+            return;
+        }
+
         _debounce?.Change(400, Timeout.Infinite);
     }
 

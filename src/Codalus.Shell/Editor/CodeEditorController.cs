@@ -539,6 +539,26 @@ public sealed partial class CodeEditorController : IDisposable
 
     private bool _refreshPending;
 
+    /// <summary>A refresh asked for while the editor was hidden, done when it shows again.</summary>
+    private bool _refreshWhenShown;
+
+    /// <summary>Whether the editor would ask again for everything the next time it shows (tests).</summary>
+    internal bool RefreshesWhenShown => _refreshWhenShown;
+
+    /// <summary>Requests everything again now if the editor shows, else the next time it does (its visual lines are built again).</summary>
+    public void RefreshWhenShown()
+    {
+        if (Editor.TextArea.TextView is { IsEffectivelyVisible: true } view && TopLevel.GetTopLevel(view) is not null)
+        {
+            _refreshWhenShown = false;
+            RefreshAll();
+        }
+        else
+        {
+            _refreshWhenShown = true;
+        }
+    }
+
     private void AfterTokens()
     {
         if (_refreshPending)
@@ -588,6 +608,12 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
+        if (_refreshWhenShown && Editor.TextArea.TextView is { IsEffectivelyVisible: true } shown && TopLevel.GetTopLevel(shown) is not null)
+        {
+            _refreshWhenShown = false;
+            RefreshAll();
+        }
+
         LightbulbChanged?.Invoke(this, EventArgs.Empty);
         var visible = VisibleLines();
         if (!_colorizer.Covers(visible) && !TokensInFlightCover(visible))
