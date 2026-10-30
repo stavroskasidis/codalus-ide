@@ -65,6 +65,9 @@ public sealed partial class ShellHost
         Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
             string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
             || (Path.GetDirectoryName(p.Path) is { Length: > 0 } folder && path.StartsWith(folder + Path.DirectorySeparatorChar, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase)));
+        // Each module's answer is kept for the session (M56), until the projects it was told from change.
+        Solutions.SolutionChanged += (_, _) => Debugger.UserCodeChanged();
+        Solutions.ProjectChanged += (_, _) => Debugger.UserCodeChanged();
         Locals = new VariablesViewModel(Debugger, autos: false, LineText);
         Autos = new VariablesViewModel(Debugger, autos: true, LineText);
         Watch = new WatchViewModel(Debugger);

@@ -93,7 +93,8 @@ public sealed class DataTipDebuggerTests(DebuggeeFixture debuggee) : IClassFixtu
         async Task<CollectionView> ViewAsync(string name)
         {
             var local = Assert.Single(locals, v => v.Name == name);
-            var view = await CollectionViews.ReadAsync(CollectionViews.KindOf(local.Type)!.Value, await _debug.VariablesAsync(local.VariablesReference), r => _debug.VariablesAsync(r), TestContext.Current.CancellationToken);
+            // Their arrays a page at a time, as the shell reads them (M56): a queue that has wrapped in two pages.
+            var view = await CollectionViews.ReadAsync(CollectionViews.KindOf(local.Type)!.Value, await _debug.VariablesAsync(local.VariablesReference), r => _debug.VariablesAsync(r), (r, start, count) => _debug.VariablesAsync(r, new VariablesPage(start, count)), TestContext.Current.CancellationToken);
             Assert.NotNull(view);
             return view;
         }

@@ -251,6 +251,8 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
 
     public Task<Variable[]> VariablesAsync(int variablesReference, CancellationToken cancellationToken) => Inner.VariablesAsync(variablesReference, cancellationToken);
 
+    public Task<Variable[]> VariablesAsync(int variablesReference, VariablesPage page, CancellationToken cancellationToken) => Inner.VariablesAsync(variablesReference, page, cancellationToken);
+
     public Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken) => Inner.EvaluateAsync(expression, frameId, context, cancellationToken);
 
     public Task<SetVariableResponse> SetVariableAsync(int variablesReference, string name, string value, CancellationToken cancellationToken) => Inner.SetVariableAsync(variablesReference, name, value, cancellationToken);

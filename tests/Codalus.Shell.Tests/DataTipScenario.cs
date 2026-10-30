@@ -43,7 +43,8 @@ internal sealed class DataTipScenario : IAsyncDisposable
     /// Opens <paramref name="code"/> (as <c>Program.cs</c>) and starts the program, paused at <paramref name="line"/> with
     /// <paramref name="stops"/> (the inspection script's <c>stops</c>).
     /// </summary>
-    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null)
+    /// <param name="requestLog">A file the scripted adapter writes each request to, a line each: its command and arguments.</param>
+    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null, string? requestLog = null)
     {
         var f = ShellFixture.Create();
         try
@@ -62,10 +63,16 @@ internal sealed class DataTipScenario : IAsyncDisposable
             before?.Invoke(f);
             await f.Shell.OpenFileAsync(path);
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller is not null);
-            var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object>
+            var configuration = new Dictionary<string, object>
             {
                 ["inspect"] = new Dictionary<string, object> { ["path"] = path, ["line"] = line, ["stops"] = stops },
-            });
+            };
+            if (requestLog is not null)
+            {
+                configuration["requestLog"] = requestLog;
+            }
+
+            var launch = JsonSerializer.SerializeToElement(configuration);
             await f.Shell.Debugger.LaunchAdapterAsync("Scripted", new DebugAdapterStartInfo("dotnet", [ScriptedServer, "--dap"], AppContext.BaseDirectory), launch, ShellFixture.RequestTimeout(60));
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && f.Shell.ActiveEditor?.Controller?.CurrentDebugLine() == line, seconds: 60,
                 describe: () => $"debugger {f.Shell.Debugger.State}, line {f.Shell.ActiveEditor?.Controller?.CurrentDebugLine()}");
@@ -80,23 +87,57 @@ internal sealed class DataTipScenario : IAsyncDisposable
         }
     }
 
-    /// <summary>A variable as netcoredbg sends it.</summary>
-    public static Dictionary<string, object?> Var(string name, string value, string? type = null, int reference = 0, string? evaluateName = null) => new()
+    /// <summary>A variable as netcoredbg sends it (<paramref name="named"/>: how many children it counts, an array's elements).</summary>
+    public static Dictionary<string, object?> Var(string name, string value, string? type = null, int reference = 0, string? evaluateName = null, int? named = null)
     {
-        ["name"] = name,
-        ["value"] = value,
-        ["type"] = type,
-        ["variablesReference"] = reference,
-        ["evaluateName"] = evaluateName,
-    };
+        var variable = new Dictionary<string, object?>
+        {
+            ["name"] = name,
+            ["value"] = value,
+            ["type"] = type,
+            ["variablesReference"] = reference,
+            ["evaluateName"] = evaluateName,
+        };
+        if (named is not null)
+        {
+            variable["namedVariables"] = named;
+        }
+
+        return variable;
+    }
 
     /// <summary>An evaluation's answer.</summary>
-    public static Dictionary<string, object?> Result(string result, string? type, int reference = 0) => new()
+    public static Dictionary<string, object?> Result(string result, string? type, int reference = 0, int? named = null)
     {
-        ["result"] = result,
-        ["type"] = type,
-        ["variablesReference"] = reference,
+        var answer = new Dictionary<string, object?>
+        {
+            ["result"] = result,
+            ["type"] = type,
+            ["variablesReference"] = reference,
+        };
+        if (named is not null)
+        {
+            answer["namedVariables"] = named;
+        }
+
+        return answer;
+    }
+
+    /// <summary>An array's elements, too many to list: the scripted adapter makes them up as it's asked for them.</summary>
+    public static Dictionary<string, object?> Generated(int count, string evaluateName) => new()
+    {
+        ["generate"] = count,
+        ["name"] = "[{0}]",
+        ["value"] = "{0}",
+        ["type"] = "int",
+        ["evaluateName"] = evaluateName + "[{0}]",
     };
+
+    /// <summary>The requests in a request log (<see cref="StartAsync"/>'s): each command and its arguments.</summary>
+    public static IReadOnlyList<(string Command, JsonElement Arguments)> Requests(string log) =>
+        File.Exists(log)
+            ? [.. File.ReadAllLines(log).Where(l => l.Length > 0).Select(l => (l[..l.IndexOf(' ', StringComparison.Ordinal)], JsonElement.Parse(l[(l.IndexOf(' ', StringComparison.Ordinal) + 1)..])))]
+            : [];
 
     /// <summary>Waits until the text stays put (the tool windows can still be arriving).</summary>
     public async Task SettleAsync()

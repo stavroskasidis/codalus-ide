@@ -65,6 +65,13 @@ internal static class ScriptedDap
                 s_requestLog = log;
             }
 
+            // A launch configuration's "requestLog": the file each request is written to (what a stop asked for, M56).
+            if (command == "launch" && message.TryGetProperty("arguments", out var launching) && launching.ValueKind == JsonValueKind.Object
+                && launching.TryGetProperty("requestLog", out var requestLog) && requestLog.GetString() is { Length: > 0 } launchLog)
+            {
+                s_requestLog = launchLog;
+            }
+
             if (s_requestLog is { } logging)
             {
                 await File.AppendAllTextAsync(logging, command + " " + (message.TryGetProperty("arguments", out var logged) ? logged.GetRawText() : "{}") + "\n");

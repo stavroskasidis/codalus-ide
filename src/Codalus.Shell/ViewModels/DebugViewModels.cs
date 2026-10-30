@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Codalus.Debugging;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Debugging;
@@ -15,22 +16,57 @@ namespace Codalus.Shell.ViewModels;
 /// members last; a getter that threw as "threw Type: message", and netcoredbg's <c>&lt;error&gt;</c> as "Couldn't
 /// evaluate" with Re-evaluate. Without a debugger (or its member lists), the kinds are guessed from the names.
 /// </summary>
+/// <remarks>
+/// A long array shows its elements in ranges (M56, the maintainer's choice): up to 1,000 show directly; a longer one
+/// shows [0..999], [1000..1999]… that read their elements with a page of the adapter's variables when expanded; over
+/// 1,000,000 the ranges nest, ranges of 1,000,000 holding ranges of 1,000. An adapter that sends more than 1,000
+/// children unasked (one that doesn't page, or doesn't count) shows the first 1,000 and a row that says how many more.
+/// The rows are built off the UI thread; each node's children change at once (<see cref="VariableNode.Children"/>).
+/// </remarks>
 public class VariableSource
 {
-    private readonly Func<int, Task<IReadOnlyList<Variable>>> _variables;
+    /// <summary>The most children a node shows at once (M56).</summary>
+    public const int PageSize = 1000;
 
-    public VariableSource(Func<int, Task<IReadOnlyList<Variable>>> variables) => _variables = variables;
+    /// <summary>Over this many elements, an array's ranges nest (M56).</summary>
+    public const int NestedPageSize = 1_000_000;
+
+    private readonly Func<int, VariablesPage?, Task<IReadOnlyList<Variable>>> _variables;
+
+    public VariableSource(Func<int, Task<IReadOnlyList<Variable>>> variables) => _variables = (r, _) => variables(r);
+
+    public VariableSource(Func<int, VariablesPage?, Task<IReadOnlyList<Variable>>> variables) => _variables = variables;
 
     public VariableSource(DebugService debugger)
-        : this(r => debugger.VariablesAsync(r)) => Debugger = debugger;
+        : this((r, page) => debugger.VariablesAsync(r, page)) => Debugger = debugger;
 
     protected DebugService? Debugger { get; }
 
-    /// <summary>The children of <paramref name="parent"/>, read from its variables reference.</summary>
+    /// <summary>The children of <paramref name="parent"/>, read from its variables reference (on any thread: they're built off the UI thread).</summary>
     public virtual async Task<IReadOnlyList<VariableNode>> ChildrenAsync(VariableNode parent, CancellationToken cancellationToken)
     {
-        var variables = await _variables(parent.Reference).ConfigureAwait(true);
+        if (parent.Kind == MemberKind.Range)
+        {
+            return await ElementsAsync(parent, parent.RangeStart, parent.Counts.Indexed ?? 0, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (parent.Counts.Indexed is > 0 and var count)
+        {
+            // An array: its named children (a script's array has some), then its elements, or their ranges.
+            IReadOnlyList<VariableNode> named = parent.Counts is { Filter: not null, Named: > 0 and var namedCount }
+                ? await NodesAsync(VariableGrouping.Group(await PageAsync(parent.Reference, new VariablesPage(0, namedCount, "named")).ConfigureAwait(false), null, _ => false), parent, parent.Reference, cancellationToken).ConfigureAwait(false)
+                : [];
+            return [.. named, .. await ElementsAsync(parent, 0, count, cancellationToken).ConfigureAwait(false)];
+        }
+
+        var variables = await _variables(parent.Reference, null).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
+        var more = variables.Count - PageSize;
+        if (more > 0)
+        {
+            variables = [.. variables.Take(PageSize)];
+        }
+
         IReadOnlyList<DebugMember> rows;
         if (Debugger is not { } debugger)
         {
@@ -39,22 +75,70 @@ public class VariableSource
         else if (parent.Kind == MemberKind.StaticGroup)
         {
             // netcoredbg's Static members node: its evaluate name is the type's.
-            rows = VariableGrouping.Statics(variables, await debugger.MembersAsync(parent.EvaluateName ?? string.Empty, cancellationToken).ConfigureAwait(true), debugger.IsUserCode);
+            rows = VariableGrouping.Statics(variables, await debugger.MembersAsync(parent.EvaluateName ?? string.Empty, cancellationToken).ConfigureAwait(false), debugger.IsUserCode);
         }
         else
         {
-            rows = VariableGrouping.Group(variables, await debugger.MembersAsync(parent.Type ?? string.Empty, cancellationToken).ConfigureAwait(true), debugger.IsUserCode);
+            rows = VariableGrouping.Group(variables, await debugger.MembersAsync(parent.Type ?? string.Empty, cancellationToken).ConfigureAwait(false), debugger.IsUserCode);
         }
 
         // List, Dictionary, HashSet, Queue and Stack: their elements, read from their fields, then Raw View with their own
         // members (decision 1); fields no table knows leave the members as they are.
         if (parent.Kind != MemberKind.RawView && CollectionViews.KindOf(parent.Type) is { } kind
-            && await CollectionViews.ReadAsync(kind, variables, _variables, cancellationToken).ConfigureAwait(true) is { } view)
+            && await CollectionViews.ReadAsync(kind, variables, r => _variables(r, null), (r, start, take) => _variables(r, new VariablesPage(start, take)), cancellationToken).ConfigureAwait(false) is { } view)
         {
             rows = [.. view.Elements, new DebugMember(new Variable("Raw View", string.Empty, parent.Type, parent.Reference), MemberKind.RawView) { Children = rows }];
         }
 
-        return await NodesAsync(rows, parent, parent.Reference, cancellationToken).ConfigureAwait(true);
+        var nodes = await NodesAsync(rows, parent, parent.Reference, cancellationToken).ConfigureAwait(false);
+        return more > 0 ? [.. nodes, VariableNode.More(more)] : nodes;
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> elements of <paramref name="parent"/>'s array from <paramref name="start"/>: a page of them,
+    /// or the ranges they make when there are more than <see cref="PageSize"/> (of <see cref="NestedPageSize"/> past that).
+    /// </summary>
+    private async Task<IReadOnlyList<VariableNode>> ElementsAsync(VariableNode parent, int start, int count, CancellationToken cancellationToken)
+    {
+        if (count > PageSize)
+        {
+            var size = count > NestedPageSize ? NestedPageSize : PageSize;
+            var ranges = new List<VariableNode>((count + size - 1) / size);
+            for (var at = start; at < start + count; at += size)
+            {
+                var length = Math.Min(size, start + count - at);
+                ranges.Add(new VariableNode(string.Create(CultureInfo.InvariantCulture, $"[{at}..{at + length - 1}]"), string.Empty, null, parent.Reference, this)
+                {
+                    Kind = MemberKind.Range,
+                    Icon = "symbol-raw-view",
+                    Parent = parent,
+                    RangeStart = at,
+                    Counts = new ChildCounts(length, null, parent.Counts.Filter),
+                });
+            }
+
+            return ranges;
+        }
+
+        // netcoredbg's short array at once, as before; a range, or an adapter that counts DAP's way, a page at a time.
+        var page = parent.Kind != MemberKind.Range && parent.Counts.Filter is null ? null : new VariablesPage(start, count, parent.Counts.Filter);
+        var variables = page is null ? await _variables(parent.Reference, null).ConfigureAwait(false) : await PageAsync(parent.Reference, page).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var more = variables.Count - PageSize;
+        var nodes = await NodesAsync(VariableGrouping.Group(more > 0 ? [.. variables.Take(PageSize)] : variables, null, _ => false), parent, parent.Reference, cancellationToken).ConfigureAwait(false);
+        return more > 0 ? [.. nodes, VariableNode.More(more)] : nodes;
+    }
+
+    /// <summary>A page of a reference's children; an adapter that sent more (it doesn't page) gives the page's own.</summary>
+    private async Task<IReadOnlyList<Variable>> PageAsync(int reference, VariablesPage page)
+    {
+        var variables = await _variables(reference, page).ConfigureAwait(false);
+        if (variables.Count <= page.Count)
+        {
+            return variables;
+        }
+
+        return variables.Count >= page.Start + page.Count ? [.. variables.Skip(page.Start).Take(page.Count)] : [.. variables.Take(page.Count)];
     }
 
     /// <summary>The rows' nodes under <paramref name="parent"/>; <paramref name="container"/> is the reference the adapter's variables are in (setVariable's).</summary>
@@ -63,7 +147,7 @@ public class VariableSource
         var nodes = new List<VariableNode>(rows.Count);
         foreach (var row in rows)
         {
-            nodes.Add(await NodeAsync(row, parent, container, nodes.Count, cancellationToken).ConfigureAwait(true));
+            nodes.Add(await NodeAsync(row, parent, container, nodes.Count, cancellationToken).ConfigureAwait(false));
         }
 
         return nodes;
@@ -77,7 +161,7 @@ public class VariableSource
         var reevaluate = false;
         if (row.Threw)
         {
-            value = await ThrewAsync(variable).ConfigureAwait(true);
+            value = await ThrewAsync(variable).ConfigureAwait(false);
             error = true;
         }
         else if (row.CouldNotEvaluate)
@@ -102,10 +186,11 @@ public class VariableSource
             Parent = parent,
             IsDisplayPending = row.Kind == MemberKind.Element && Debugger?.Displays is not null && index >= DebuggerDisplays.MaxPerList
                 && DebuggerDisplays.IsObjectValue(variable.Value, variable.Type) && variable.EvaluateName is not null,
+            Counts = group ? default : ChildCounts.Of(variable),
         };
         if (row.Children is { } children)
         {
-            node.SetFixedChildren(await NodesAsync(children, node, container, cancellationToken).ConfigureAwait(true));
+            node.SetFixedChildren(await NodesAsync(children, node, container, cancellationToken).ConfigureAwait(false));
         }
 
         Track(node);
@@ -158,7 +243,7 @@ public class VariableSource
             if (result.Result != VariableGrouping.Error)
             {
                 node.SetError(false, canReevaluate: false);
-                node.Update(result.Result, result.Type ?? node.Type, result.VariablesReference);
+                node.Update(result.Result, result.Type ?? node.Type, result.VariablesReference, ChildCounts.Of(result.Type ?? node.Type, result.NamedVariables, result.IndexedVariables));
             }
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
@@ -175,7 +260,7 @@ public class VariableSource
         {
             try
             {
-                var members = await _variables(variable.VariablesReference).ConfigureAwait(true);
+                var members = await _variables(variable.VariablesReference, null).ConfigureAwait(false);
                 message = (members.FirstOrDefault(m => m.Name == "Message") ?? members.FirstOrDefault(m => m.Name is "_message" or "message"))?.Value ?? string.Empty;
             }
             catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException)
@@ -271,6 +356,23 @@ public sealed class ExpansionMemory
     }
 }
 
+/// <summary>
+/// How many children the adapter counts for a value (M56): an array's elements are <see cref="Indexed"/>, DAP's
+/// <c>indexedVariables</c> (read with <see cref="Filter"/> <c>indexed</c>), or netcoredbg's <c>namedVariables</c> of
+/// an array (read without a filter); <see cref="Named"/> are the other children of an array that has both.
+/// </summary>
+public readonly record struct ChildCounts(int? Indexed, int? Named, string? Filter)
+{
+    public static ChildCounts Of(Variable variable) => Of(variable.Type, variable.NamedVariables, variable.IndexedVariables);
+
+    public static ChildCounts Of(EvaluateResponse result) => Of(result.Type, result.NamedVariables, result.IndexedVariables);
+
+    public static ChildCounts Of(string? type, int? named, int? indexed) =>
+        indexed is > 0 ? new(indexed, named, "indexed")
+        : named is > 0 && type is { } t && t.EndsWith(']') ? new(named, null, null)
+        : default;
+}
+
 /// <summary>A variable (or watch, or evaluated expression) in a debugger tree; children load when it is expanded.</summary>
 #pragma warning disable CA1001 // _loading is only cancelled (a newer load, or a new value), never waited on: no handle to free.
 public sealed class VariableNode : ObservableObject
@@ -278,6 +380,7 @@ public sealed class VariableNode : ObservableObject
 {
     private readonly VariableSource? _source;
     private CancellationTokenSource? _loading;
+    private ChildCounts _counts;
     private bool _isExpanded;
     private bool _loaded;
     private string _value;
@@ -306,6 +409,20 @@ public sealed class VariableNode : ObservableObject
 
     private static VariableNode Placeholder() => new(string.Empty, Localizer.Get("dataTip.loading", "Loading…"), null, 0, null) { IsPlaceholder = true };
 
+    /// <summary>The last row of a list cut at <see cref="VariableSource.PageSize"/>: how many more there are (M56), muted as "Loading…" is.</summary>
+    public static VariableNode More(int count) =>
+        new(string.Empty, Localizer.Format("dataTip.more", "{0} more", count.ToString("N0", CultureInfo.CurrentCulture)), null, 0, null) { IsPlaceholder = true };
+
+    /// <summary>How many children the adapter counts (an array's elements: over 1,000 they show in ranges, M56).</summary>
+    public ChildCounts Counts
+    {
+        get => _counts;
+        init => _counts = value;
+    }
+
+    /// <summary>A range's first element (<see cref="MemberKind.Range"/>; its <see cref="Counts"/> are its length).</summary>
+    public int RangeStart { get; init; }
+
     public string Name { get; }
 
     /// <summary>The expression that evaluates to this value (the adapter's <c>evaluateName</c>; a watch's own expression).</summary>
@@ -323,8 +440,8 @@ public sealed class VariableNode : ObservableObject
     /// <summary>A non-public member of the solution's own code: its icon carries the lock badge.</summary>
     public bool HasBadge { get; init; }
 
-    /// <summary>A node the shell adds (Non-Public members, Static members, Raw View): no value of its own, no pin.</summary>
-    public bool IsGroup => Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView;
+    /// <summary>A node the shell adds (Non-Public members, Static members, Raw View, an array's range): no value of its own, no pin.</summary>
+    public bool IsGroup => Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView or MemberKind.Range;
 
     /// <summary>False when the member list says the value can't be set (no setter, read-only); null when nothing says.</summary>
     public bool? CanWrite { get; init; }
@@ -352,7 +469,7 @@ public sealed class VariableNode : ObservableObject
     /// <summary>What a non-public member is, before its type in the name's tooltip ("Private field of Controller (your code)").</summary>
     public string? Description { get; init; }
 
-    /// <summary>The muted "Loading…" row shown while the children load.</summary>
+    /// <summary>The muted "Loading…" row shown while the children load (and the "1,000 more" row of a list cut short).</summary>
     public bool IsPlaceholder { get; private init; }
 
     /// <summary>Whether the value is a string (visualizers apply).</summary>
@@ -437,16 +554,15 @@ public sealed class VariableNode : ObservableObject
     {
         _fixed = true;
         _loaded = true;
-        Children.Clear();
-        foreach (var child in children)
-        {
-            Children.Add(child);
-        }
-
+        Children.Reset(children);
         OnPropertyChanged(nameof(HasChildren));
     }
 
-    public ObservableCollection<VariableNode> Children { get; } = [];
+    /// <summary>
+    /// The children, changed all at once (M56): a reset per load, not an event per child, each of which rebuilt every row
+    /// of an open data tip (a list of 1,000 built half a million rows).
+    /// </summary>
+    public ResettableCollection<VariableNode> Children { get; } = [];
 
     public string AccessibleName => HasType ? $"{Name} = {Value} ({Type})" : $"{Name} = {Value}";
 
@@ -473,27 +589,44 @@ public sealed class VariableNode : ObservableObject
     public Task LoadChildrenOnceAsync() => _loaded ? Task.CompletedTask : LoadChildrenAsync();
 
     /// <summary>A new value for this node (a re-evaluated watch, a changed variable): reloads its children if expanded.</summary>
-    public void Update(string value, string? type, int reference)
+    public void Update(string value, string? type, int reference, ChildCounts counts = default)
     {
         Value = value;
         Type = type;
-        if (_fixed || (reference == _reference && _loaded))
+        if (_fixed || (reference == _reference && _loaded && counts == _counts))
         {
             return;
         }
 
         _reference = reference;
+        _counts = counts;
         _loaded = false;
         _loading?.Cancel();
-        Children.Clear();
+        _loading = null;
+        Children.Reset(reference > 0 && _source is not null ? [Placeholder()] : []);
         OnPropertyChanged(nameof(HasChildren));
-        if (reference > 0 && _source is not null)
+        if (reference > 0 && _source is not null && _isExpanded)
         {
-            Children.Add(Placeholder());
-            if (_isExpanded)
-            {
-                _ = LoadChildrenAsync();
-            }
+            _ = LoadChildrenAsync();
+        }
+    }
+
+    /// <summary>
+    /// Stops loading the children of this node and of what's loaded under it: its rows went (a new stop's replaced them,
+    /// M56). A load nobody waited for anymore went on building nodes for rows that were gone.
+    /// </summary>
+    public void CancelLoads()
+    {
+        if (_loading is { } loading)
+        {
+            loading.Cancel();
+            _loading = null;
+            _loaded = false;
+        }
+
+        foreach (var child in Children)
+        {
+            child.CancelLoads();
         }
     }
 
@@ -509,24 +642,28 @@ public sealed class VariableNode : ObservableObject
         var loading = _loading = new CancellationTokenSource();
         try
         {
-            var children = await _source.ChildrenAsync(this, loading.Token).ConfigureAwait(true);
+            // Read and built off the UI thread (M56): up to a thousand rows' nodes, their grouping and their member lists.
+            var source = _source;
+            var children = await Task.Run(() => source.ChildrenAsync(this, loading.Token), loading.Token).ConfigureAwait(true);
             if (loading.IsCancellationRequested)
             {
                 return;
             }
 
-            Children.Clear();
-            foreach (var child in children)
-            {
-                Children.Add(child);
-            }
+            Children.Reset(children);
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
             if (!loading.IsCancellationRequested)
             {
-                Children.Clear();
-                Children.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" });
+                Children.Reset([new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" }]);
+            }
+        }
+        finally
+        {
+            if (ReferenceEquals(_loading, loading))
+            {
+                _loading = null;
             }
         }
     }
@@ -563,7 +700,8 @@ public sealed class VariablesViewModel : ObservableObject
 
     public bool IsAutos { get; }
 
-    public ObservableCollection<VariableNode> Roots { get; } = [];
+    /// <summary>The frame's variables, replaced at once at each stop (M56).</summary>
+    public ResettableCollection<VariableNode> Roots { get; } = [];
 
     /// <summary>What's expanded, by evaluate name: opened again at the next stop (D44, decision 9).</summary>
     public ExpansionMemory Expansion { get; } = new();
@@ -577,8 +715,19 @@ public sealed class VariablesViewModel : ObservableObject
     private void Clear()
     {
         _generation++;
-        Roots.Clear();
+        Replace([]);
         IsEmpty = true;
+    }
+
+    /// <summary>Shows <paramref name="roots"/>; what's still loading under the rows they replace stops (M56).</summary>
+    private void Replace(IReadOnlyList<VariableNode> roots)
+    {
+        foreach (var old in Roots)
+        {
+            old.CancelLoads();
+        }
+
+        Roots.Reset(roots);
     }
 
     public async Task RefreshAsync()
@@ -610,23 +759,23 @@ public sealed class VariablesViewModel : ObservableObject
                 return;
             }
 
-            Roots.Clear();
             var reference = scopes.Count > 0 ? scopes[0].VariablesReference : 0;
+            var roots = new List<VariableNode>(variables.Count);
             foreach (var variable in variables)
             {
-                var node = new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = "symbol-local" };
+                var node = new VariableNode(variable.Name, variable.Value, variable.Type, variable.VariablesReference, _source, reference, variable.EvaluateName) { Icon = "symbol-local", Counts = ChildCounts.Of(variable) };
                 _source.Track(node);
-                Roots.Add(node);
+                roots.Add(node);
             }
 
+            Replace(roots);
             IsEmpty = Roots.Count == 0;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
             if (generation == _generation)
             {
-                Roots.Clear();
-                Roots.Add(new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" });
+                Replace([new VariableNode(string.Empty, ex.Message, null, 0, null) { IsError = true, Icon = "error" }]);
                 IsEmpty = false;
             }
         }
@@ -686,6 +835,7 @@ public sealed class WatchViewModel : ObservableObject
     private readonly DebugService _debugger;
     private readonly VariableSource _source;
     private string _newExpression = string.Empty;
+    private int _generation;
 
     public WatchViewModel(DebugService debugger)
     {
@@ -741,7 +891,7 @@ public sealed class WatchViewModel : ObservableObject
         Roots.Add(node);
         NewExpression = string.Empty;
         Changed?.Invoke(this, EventArgs.Empty);
-        await EvaluateAsync(node).ConfigureAwait(true);
+        await EvaluateAsync(node, _generation).ConfigureAwait(true);
     }
 
     public void Remove(VariableNode node)
@@ -776,13 +926,23 @@ public sealed class WatchViewModel : ObservableObject
 
     public async Task RefreshAsync()
     {
+        var generation = ++_generation;
         foreach (var node in Roots.ToList())
         {
-            await EvaluateAsync(node).ConfigureAwait(true);
+            if (generation != _generation)
+            {
+                return; // the next stop (or frame) evaluates them again
+            }
+
+            await EvaluateAsync(node, generation).ConfigureAwait(true);
         }
     }
 
-    private async Task EvaluateAsync(VariableNode node)
+    /// <summary>
+    /// Evaluates a watch. An answer for an earlier stop or frame is dropped (M56): it could come after the next refresh's
+    /// and overwrite the newer value.
+    /// </summary>
+    private async Task EvaluateAsync(VariableNode node, int generation)
     {
         if (_debugger.State != DebugState.Stopped)
         {
@@ -792,12 +952,22 @@ public sealed class WatchViewModel : ObservableObject
         try
         {
             var result = await _debugger.EvaluateAsync(node.Name, "watch").ConfigureAwait(true);
+            if (generation != _generation)
+            {
+                return;
+            }
+
             node.SetError(false, canReevaluate: false);
-            node.Update(result.Result, result.Type, result.VariablesReference);
+            node.Update(result.Result, result.Type, result.VariablesReference, ChildCounts.Of(result));
             _source.Track(node);
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
+            if (generation != _generation)
+            {
+                return;
+            }
+
             // An expression that doesn't evaluate: the error icon and color (C2).
             node.SetError(true, canReevaluate: false);
             node.Update(ex.Message, null, 0);
@@ -1247,14 +1417,14 @@ internal static class VariableEditing
             if (!isWatchRoot && node.ParentReference is { } parent)
             {
                 var result = await debugger.SetVariableAsync(parent, node.Name, value).ConfigureAwait(true);
-                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0);
+                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0, ChildCounts.Of(result.Type ?? node.Type, result.NamedVariables, result.IndexedVariables));
                 return null;
             }
 
             if (node.EvaluateName is { } expression)
             {
                 var result = await debugger.SetExpressionAsync(expression, value).ConfigureAwait(true);
-                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0);
+                node.Update(result.Value, result.Type ?? node.Type, result.VariablesReference ?? 0, ChildCounts.Of(result.Type ?? node.Type, result.NamedVariables, result.IndexedVariables));
                 return null;
             }
 

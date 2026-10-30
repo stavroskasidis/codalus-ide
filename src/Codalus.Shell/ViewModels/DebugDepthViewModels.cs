@@ -88,8 +88,18 @@ public sealed class QuickWatchViewModel : ObservableObject
         try
         {
             var result = await _debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
+            foreach (var old in Roots)
+            {
+                old.CancelLoads();
+            }
+
             Roots.Clear();
-            var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression) { Icon = WatchViewModel.IconOf(expression), IsExpanded = result.VariablesReference > 0 };
+            var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression)
+            {
+                Icon = WatchViewModel.IconOf(expression),
+                Counts = ChildCounts.Of(result),
+                IsExpanded = result.VariablesReference > 0,
+            };
             root.Source?.Track(root);
             Roots.Add(root);
             Error = null;
@@ -124,7 +134,7 @@ public sealed class QuickWatchViewModel : ObservableObject
 /// </summary>
 public sealed class DataTipViewModel(DebugService debugger, string expression, EvaluateResponse result, string icon = "symbol-local") : ObservableObject
 {
-    public VariableNode Root { get; } = Tracked(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon });
+    public VariableNode Root { get; } = Tracked(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon, Counts = ChildCounts.Of(result) });
 
     private static VariableNode Tracked(VariableNode node)
     {

@@ -38,6 +38,11 @@ internal static class VariableTreeSupport
     /// The visualizers <paramref name="node"/> can be opened in, the likely one first: Text, JSON, XML and HTML for a
     /// string, Grid (and Image) for a collection, then the plugins' for its type.
     /// </summary>
+    /// <summary>Whether <see cref="VisualizerChoices"/> has any, without making them (a data tip asks it of each of its members).</summary>
+    public static bool HasVisualizers(VariableNode node) =>
+        !node.IsError && !node.IsPlaceholder
+        && (node.IsString || (node.EvaluateName is not null && (Visualizers.ForType(node.Type).Count > 0 || VariableActions.PluginVisualizers?.Invoke(node.Type) is { Count: > 0 })));
+
     public static IReadOnlyList<VisualizerChoice> VisualizerChoices(VariableNode node)
     {
         if (node.IsError || node.IsPlaceholder)

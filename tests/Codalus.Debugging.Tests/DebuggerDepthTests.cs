@@ -251,6 +251,34 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
         await EndedAsync();
     }
 
+    /// <summary>
+    /// A long array's ranges (M56) stand on netcoredbg: it counts an array's elements as named variables (it reports no
+    /// indexed ones), and a variables request's start and count page them, without a filter.
+    /// </summary>
+    [Fact]
+    public async Task Netcoredbg_counts_a_long_arrays_elements_and_pages_them()
+    {
+        _debug.Breakpoints.Set(new BreakpointSpec(Depth, Line("depth-end")));
+        await LaunchAsync();
+        await NextStopAsync();
+
+        var locals = await _debug.VariablesAsync((await _debug.ScopesAsync(_debug.SelectedFrame!))[0].VariablesReference);
+        var readings = Assert.Single(locals, v => v.Name == "readings");
+        Assert.Equal(("int[]", 2500, (int?)null), (readings.Type, readings.NamedVariables, readings.IndexedVariables));
+        var evaluated = await _debug.EvaluateAsync("readings", "watch", TestContext.Current.CancellationToken);
+        Assert.Equal(2500, evaluated.NamedVariables);
+
+        var page = await _debug.VariablesAsync(readings.VariablesReference, new VariablesPage(1000, 1000));
+        Assert.Equal(1000, page.Count);
+        Assert.Equal(("[1000]", "1000", "readings[1000]"), (page[0].Name, page[0].Value, page[0].EvaluateName));
+        Assert.Equal("[1999]", page[^1].Name);
+        var end = await _debug.VariablesAsync(readings.VariablesReference, new VariablesPage(2400, 1000));
+        Assert.Equal(["[2400]", "[2499]"], new[] { end[0].Name, end[^1].Name });
+        Assert.Equal(100, end.Count);
+        await _debug.StopAsync();
+        await EndedAsync();
+    }
+
     [Fact]
     public async Task Set_expression_modules_threads_and_long_strings()
     {

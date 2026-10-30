@@ -11,8 +11,10 @@ namespace Codalus.LspConformance.Server;
 /// "inspect": { "path": "/x/Program.cs", "line": 12, "stops": [ {
 ///     "line": 12,                                         (optional: another line for this stop)
 ///     "scopes": [ { "name": "Locals", "variablesReference": 1 } ],   (optional: this one is the default)
-///     "variables": { "1": [ { "name", "value", "type", "variablesReference", "evaluateName" } ] },
-///     "evaluate": { "app": { "result", "type", "variablesReference" } },
+///     "variables": { "1": [ { "name", "value", "type", "variablesReference", "evaluateName", "namedVariables" } ],
+///                    "5": { "generate": 100000, "name": "[{0}]", "value": "{0}", "type": "int", "evaluateName": "a[{0}]" } },
+///                                                         (a request's start and count page them, as netcoredbg's do)
+///     "evaluate": { "app": { "result", "type", "variablesReference", "namedVariables" } },
 ///     "errors": { "app.Name": "error: ..." }              (setVariable or setExpression by evaluateName fail with it;
 ///                                                          "app.Name=Production": only for that value)
 /// } ] }
@@ -71,9 +73,13 @@ internal sealed class ScriptedInspection
                 });
                 return true;
             case "variables":
-                var reference = arguments.GetProperty("variablesReference").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture);
-                await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject { ["variables"] = Stop["variables"]?[reference]?.DeepClone() ?? new JsonArray() });
-                return true;
+                {
+                    var reference = arguments.GetProperty("variablesReference").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var start = arguments.TryGetProperty("start", out var s) ? s.GetInt32() : 0;
+                    int? count = arguments.TryGetProperty("count", out var c) && c.GetInt32() > 0 ? c.GetInt32() : null;
+                    await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject { ["variables"] = Variables(Stop["variables"]?[reference], start, count) });
+                    return true;
+                }
             case "evaluate":
                 {
                     var expression = arguments.GetProperty("expression").GetString()!;
@@ -93,7 +99,7 @@ internal sealed class ScriptedInspection
                 {
                     var name = arguments.GetProperty("name").GetString()!;
                     var value = arguments.GetProperty("value").GetString()!;
-                    var list = Stop["variables"]?[arguments.GetProperty("variablesReference").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)]?.AsArray();
+                    var list = Stop["variables"]?[arguments.GetProperty("variablesReference").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)] as JsonArray;
                     var variable = list?.Select(v => v!.AsObject()).FirstOrDefault(v => v["name"]?.GetValue<string>() == name);
                     await SetAsync(output, requestSeq, command, variable?["evaluateName"]?.GetValue<string>() ?? name, value, variable);
                     return true;
@@ -126,6 +132,30 @@ internal sealed class ScriptedInspection
         }
     }
 
+    /// <summary>
+    /// A reference's children from <paramref name="start"/>, <paramref name="count"/> of them (all without one), as
+    /// netcoredbg pages them: listed, or generated (<c>{ "generate": 100000, "name": "[{0}]", "value": "{0}", "type":
+    /// "int", "evaluateName": "numbers[{0}]" }</c>, <c>{0}</c> the index) for an array too long to list.
+    /// </summary>
+    private static JsonArray Variables(JsonNode? listed, int start, int? count)
+    {
+        if (listed is JsonObject { } generator && generator["generate"]?.GetValue<int>() is { } length)
+        {
+            string Text(string key, int index) => (generator[key]?.GetValue<string>() ?? string.Empty).Replace("{0}", index.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            var end = count is { } n ? Math.Min(length, start + n) : length;
+            var page = new JsonArray();
+            for (var i = start; i < end; i++)
+            {
+                page.Add(new JsonObject { ["name"] = Text("name", i), ["value"] = Text("value", i), ["type"] = generator["type"]?.DeepClone(), ["variablesReference"] = 0, ["evaluateName"] = Text("evaluateName", i) });
+            }
+
+            return page;
+        }
+
+        var all = listed as JsonArray ?? [];
+        return [.. all.Skip(start).Take(count ?? int.MaxValue).Select(v => v?.DeepClone())];
+    }
+
     private JsonObject? Evaluate(string expression)
     {
         if (Stop["evaluate"]?[expression] is JsonObject listed)
@@ -139,7 +169,7 @@ internal sealed class ScriptedInspection
     }
 
     private JsonObject? Variable(string evaluateName) =>
-        (Stop["variables"] as JsonObject)?.SelectMany(list => list.Value?.AsArray() ?? [])
+        (Stop["variables"] as JsonObject)?.SelectMany(list => list.Value as JsonArray ?? [])
             .Select(v => v!.AsObject())
             .FirstOrDefault(v => v["evaluateName"]?.GetValue<string>() == evaluateName);
 

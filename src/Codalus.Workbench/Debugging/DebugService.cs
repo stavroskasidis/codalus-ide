@@ -53,6 +53,14 @@ public sealed class DebugService : IAsyncDisposable
     private readonly HashSet<int> _runToIds = [];
     private readonly List<BreakpointLocation> _hitLocations = [];
     private readonly Dictionary<string, DebugModule> _modules = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// <see cref="_modules"/> in load order, sorted once after they change (null until then); and whether each module
+    /// path asked about is the solution's code (M56): the data tip asked for each member of an object, and each asking
+    /// copied and sorted every module and scanned every project.
+    /// </summary>
+    private IReadOnlyList<DebugModule>? _moduleList;
+    private readonly Dictionary<string, bool> _userCode = new(SolutionService.PathComparer);
     private readonly List<DebugProcess> _processes = [];
     private readonly List<int> _terminalProcesses = [];
     private RunTarget? _runTo;
@@ -230,8 +238,27 @@ public sealed class DebugService : IAsyncDisposable
         {
             lock (_gate)
             {
-                return [.. _modules.Values.OrderBy(m => m.Order)];
+                return _moduleList ??= [.. _modules.Values.OrderBy(m => m.Order)];
             }
+        }
+    }
+
+    /// <summary>The modules changed: their list is sorted again when next read, and what's user code is asked again.</summary>
+    private void ModulesUpdated()
+    {
+        lock (_gate)
+        {
+            _moduleList = null;
+            _userCode.Clear();
+        }
+    }
+
+    /// <summary>The solution's projects changed (<see cref="IsUserModule"/>'s answers may have): user code is asked again.</summary>
+    public void UserCodeChanged()
+    {
+        lock (_gate)
+        {
+            _userCode.Clear();
         }
     }
 
@@ -1010,6 +1037,7 @@ public sealed class DebugService : IAsyncDisposable
             _runTo = null;
         }
 
+        ModulesUpdated();
         ModulesChanged?.Invoke(this, EventArgs.Empty);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         for (var attempt = 1; ; attempt++)
@@ -1204,6 +1232,7 @@ public sealed class DebugService : IAsyncDisposable
             _runTo = null;
         }
 
+        ModulesUpdated();
         Breakpoints.ClearStates();
         ProcessesChanged?.Invoke(this, EventArgs.Empty);
         ModulesChanged?.Invoke(this, EventArgs.Empty);
@@ -1568,7 +1597,8 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public DebuggerDisplays? Displays { get; set; }
 
-    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference)
+    /// <summary>A reference's children: all of them, or <paramref name="page"/> of them (a long array's range, M56).</summary>
+    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference, VariablesPage? page = null)
     {
         if (_adapter is not { } adapter || variablesReference <= 0)
         {
@@ -1576,7 +1606,9 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var token = _session.Token;
-        var variables = await adapter.VariablesAsync(variablesReference, token).ConfigureAwait(false);
+        var variables = page is null
+            ? await adapter.VariablesAsync(variablesReference, token).ConfigureAwait(false)
+            : await adapter.VariablesAsync(variablesReference, page, token).ConfigureAwait(false);
         return Displays is { } displays && State == DebugState.Stopped
             ? await displays.ApplyAsync(
                 variablesReference,
@@ -1611,8 +1643,22 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
+        lock (_gate)
+        {
+            if (_userCode.TryGetValue(path, out var known))
+            {
+                return known;
+            }
+        }
+
         var module = Modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
-        return module?.IsUserCode ?? IsUserModule(path);
+        var mine = module?.IsUserCode ?? IsUserModule(path);
+        lock (_gate)
+        {
+            _userCode[path] = mine;
+        }
+
+        return mine;
     }
 
     /// <summary>
@@ -1949,6 +1995,7 @@ public sealed class DebugService : IAsyncDisposable
             }
         }
 
+        ModulesUpdated();
         ModulesChanged?.Invoke(this, EventArgs.Empty);
     }
 

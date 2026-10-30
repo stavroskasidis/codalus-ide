@@ -768,6 +768,9 @@ public sealed partial class DebugAdapter : IDebugAdapter
     public async Task<Variable[]> VariablesAsync(int variablesReference, CancellationToken cancellationToken) =>
         (await _connection.RequestAsync("variables", new VariablesArguments(variablesReference), Json.VariablesArguments, Json.VariablesResponse, cancellationToken).ConfigureAwait(false)).Variables;
 
+    public async Task<Variable[]> VariablesAsync(int variablesReference, VariablesPage page, CancellationToken cancellationToken) =>
+        (await _connection.RequestAsync("variables", new VariablesArguments(variablesReference, page.Filter, page.Start, page.Count), Json.VariablesArguments, Json.VariablesResponse, cancellationToken).ConfigureAwait(false)).Variables;
+
     /// <summary>
     /// Evaluates <paramref name="expression"/>. netcoredbg answers a request that runs past its fixed 15 seconds with
     /// <see cref="CommandTimeoutMessage"/> while the request goes on: its worker finishes it before it takes the next.

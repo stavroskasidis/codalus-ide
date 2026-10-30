@@ -1056,6 +1056,7 @@
   "dataTip.memberOf": "{0} of {1}",
   "dataTip.memberOfYourCode": "{0} of {1} (your code)",
   "dataTip.membersOf": "Members of {0}",
+  "dataTip.more": "{0} more",
   "dataTip.noSetter": "{0} can't be changed: it has no setter.",
   "dataTip.nonPublic": "non-public",
   "dataTip.nonPublicMembers": "Non-Public members",

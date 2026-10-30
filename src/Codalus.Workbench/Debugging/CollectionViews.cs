@@ -100,17 +100,26 @@ public static class CollectionViews
     /// The elements of a collection of <paramref name="kind"/>, read from its members (<paramref name="raw"/>, the
     /// adapter's) through <paramref name="variables"/>; null when its fields aren't any table's (the raw members then).
     /// </summary>
-    public static async Task<CollectionView?> ReadAsync(CollectionKind kind, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables, CancellationToken cancellationToken = default)
+    public static Task<CollectionView?> ReadAsync(CollectionKind kind, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables, CancellationToken cancellationToken = default) =>
+        ReadAsync(kind, raw, variables, null, cancellationToken);
+
+    /// <summary>
+    /// The elements of a collection; with <paramref name="page"/> (a reference, the first slot, how many), the slots of an
+    /// array the adapter counts are read a page at a time, only those the view shows (M56): a list of 100,000 read all
+    /// 131,072 of its slots to keep 1,000.
+    /// </summary>
+    public static async Task<CollectionView?> ReadAsync(CollectionKind kind, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables, Func<int, int, int, Task<IReadOnlyList<Variable>>>? page, CancellationToken cancellationToken = default)
     {
+        var slots = new Slots(variables, page);
         foreach (var table in Tables)
         {
             var view = kind switch
             {
-                CollectionKind.List => await ListAsync(table, raw, variables).ConfigureAwait(false),
-                CollectionKind.Queue => await QueueAsync(table, raw, variables).ConfigureAwait(false),
-                CollectionKind.Stack => await StackAsync(table, raw, variables).ConfigureAwait(false),
-                CollectionKind.Dictionary => await EntriesAsync(table, raw, variables, table.DictionaryEntries, table.DictionaryCount, dictionary: true, cancellationToken).ConfigureAwait(false),
-                _ => await EntriesAsync(table, raw, variables, table.SetEntries, table.SetCount, dictionary: false, cancellationToken).ConfigureAwait(false),
+                CollectionKind.List => await ListAsync(table, raw, slots).ConfigureAwait(false),
+                CollectionKind.Queue => await QueueAsync(table, raw, slots).ConfigureAwait(false),
+                CollectionKind.Stack => await StackAsync(table, raw, slots).ConfigureAwait(false),
+                CollectionKind.Dictionary => await EntriesAsync(table, raw, slots, variables, table.DictionaryEntries, table.DictionaryCount, dictionary: true, cancellationToken).ConfigureAwait(false),
+                _ => await EntriesAsync(table, raw, slots, variables, table.SetEntries, table.SetCount, dictionary: false, cancellationToken).ConfigureAwait(false),
             };
             if (view is not null)
             {
@@ -126,19 +135,70 @@ public static class CollectionViews
     private static int? Int(IReadOnlyList<Variable> members, string name) =>
         Field(members, name) is { } field && int.TryParse(field.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : null;
 
-    private static async Task<(IReadOnlyList<Variable> Slots, int Reference)?> ArrayAsync(IReadOnlyList<Variable> members, string name, Func<int, Task<IReadOnlyList<Variable>>> variables)
+    /// <summary>
+    /// A collection's backing array (<paramref name="name"/>): its slots from <c>start</c>, <c>count</c> of them (fewer
+    /// past its end), read a page at a time when the adapter counts its elements and pages them, else all of it once.
+    /// </summary>
+    private sealed class Slots(Func<int, Task<IReadOnlyList<Variable>>> variables, Func<int, int, int, Task<IReadOnlyList<Variable>>>? page)
+    {
+        private readonly Dictionary<int, IReadOnlyList<Variable>> _whole = [];
+
+        /// <summary>The array's length as the adapter counts it (netcoredbg's named children, DAP's indexed ones), or null.</summary>
+        private static int? Length(Variable array) => array.IndexedVariables is > 0 ? array.IndexedVariables : array.NamedVariables;
+
+        /// <summary>How many slots the array has.</summary>
+        public async Task<int> LengthAsync(Variable array) =>
+            page is not null && Length(array) is { } length ? length : (await WholeAsync(array).ConfigureAwait(false)).Count;
+
+        public async Task<IReadOnlyList<Variable>> ReadAsync(Variable array, int start, int count)
+        {
+            if (count <= 0 || start < 0)
+            {
+                return [];
+            }
+
+            if (page is not null && Length(array) is { } length)
+            {
+                var take = Math.Min(count, length - start);
+                if (take <= 0)
+                {
+                    return [];
+                }
+
+                // An adapter that sends the whole array anyway: the page's own slots.
+                var slots = (await page(array.VariablesReference, start, take).ConfigureAwait(false)).Where(e => e.Name.StartsWith('[')).ToList();
+                return slots.Count > take ? [.. slots.Skip(slots.Count >= start + take ? start : 0).Take(take)] : slots;
+            }
+
+            return [.. (await WholeAsync(array).ConfigureAwait(false)).Skip(start).Take(count)];
+        }
+
+        private async Task<IReadOnlyList<Variable>> WholeAsync(Variable array)
+        {
+            if (!_whole.TryGetValue(array.VariablesReference, out var all))
+            {
+                all = [.. (await variables(array.VariablesReference).ConfigureAwait(false)).Where(e => e.Name.StartsWith('['))];
+                _whole[array.VariablesReference] = all;
+            }
+
+            return all;
+        }
+    }
+
+    /// <summary>The backing array <paramref name="name"/>: its variable (null: a null array), or null when the field isn't there.</summary>
+    private static (Variable? Array, bool Found) ArrayField(IReadOnlyList<Variable> members, string name)
     {
         if (Field(members, name) is not { } array)
         {
-            return null;
+            return (null, false);
         }
 
         if (array.VariablesReference <= 0)
         {
-            return array.Value == "null" ? ([], 0) : null;
+            return array.Value == "null" ? (null, true) : (null, false);
         }
 
-        return ([.. (await variables(array.VariablesReference).ConfigureAwait(false)).Where(e => e.Name.StartsWith('['))], array.VariablesReference);
+        return (array, true);
     }
 
     /// <summary>
@@ -149,82 +209,99 @@ public static class CollectionViews
         new(slot with { Name = "[" + index.ToString(CultureInfo.InvariantCulture) + "]" }, MemberKind.Element) { Container = array ?? DebugMember.ByExpression };
 
     // _items up to _size.
-    private static async Task<CollectionView?> ListAsync(FieldTable table, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables)
+    private static async Task<CollectionView?> ListAsync(FieldTable table, IReadOnlyList<Variable> raw, Slots slots)
     {
-        if (Int(raw, table.ListSize) is not { } size || await ArrayAsync(raw, table.ListItems, variables).ConfigureAwait(false) is not { } found)
+        if (Int(raw, table.ListSize) is not { } size || ArrayField(raw, table.ListItems) is not { Found: true } found)
         {
             return null;
         }
 
-        var (items, reference) = found;
+        if (found.Array is not { } array)
+        {
+            return new CollectionView([], size, table.Runtime);
+        }
 
-        var shown = Math.Min(Math.Min(size, items.Count), MaxElements);
-        return new CollectionView([.. items.Take(shown).Select((slot, i) => Element(slot, i, reference))], size, table.Runtime);
+        var items = await slots.ReadAsync(array, 0, Math.Min(size, MaxElements)).ConfigureAwait(false);
+        return new CollectionView([.. items.Select((slot, i) => Element(slot, i, array.VariablesReference))], size, table.Runtime);
     }
 
     // _array from _head, wrapping, _size of them.
-    private static async Task<CollectionView?> QueueAsync(FieldTable table, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables)
+    private static async Task<CollectionView?> QueueAsync(FieldTable table, IReadOnlyList<Variable> raw, Slots slots)
     {
-        if (Int(raw, table.QueueSize) is not { } size || Int(raw, table.QueueHead) is not { } head || await ArrayAsync(raw, table.QueueArray, variables).ConfigureAwait(false) is not { } found)
+        if (Int(raw, table.QueueSize) is not { } size || Int(raw, table.QueueHead) is not { } head || ArrayField(raw, table.QueueArray) is not { Found: true } found)
         {
             return null;
         }
 
-        var array = found.Slots;
-
-        var elements = new List<DebugMember>();
-        for (var i = 0; i < size && i < MaxElements && array.Count > 0; i++)
+        if (found.Array is not { } array || await slots.LengthAsync(array).ConfigureAwait(false) is not (> 0 and var length))
         {
-            elements.Add(Element(array[(head + i) % array.Count], i, null));
+            return new CollectionView([], size, table.Runtime);
         }
 
-        return new CollectionView(elements, size, table.Runtime);
+        // From the head to the array's end, then from its start: two pages at most.
+        var shown = Math.Min(size, MaxElements);
+        var from = head % length;
+        var first = await slots.ReadAsync(array, from, Math.Min(shown, length - from)).ConfigureAwait(false);
+        var rest = shown > first.Count ? await slots.ReadAsync(array, 0, shown - first.Count).ConfigureAwait(false) : [];
+        return new CollectionView([.. first.Concat(rest).Select((slot, i) => Element(slot, i, null))], size, table.Runtime);
     }
 
     // _array up to _size, the top (the last) first.
-    private static async Task<CollectionView?> StackAsync(FieldTable table, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables)
+    private static async Task<CollectionView?> StackAsync(FieldTable table, IReadOnlyList<Variable> raw, Slots slots)
     {
-        if (Field(raw, table.QueueHead) is not null || Int(raw, table.QueueSize) is not { } size || await ArrayAsync(raw, table.QueueArray, variables).ConfigureAwait(false) is not { } found)
+        if (Field(raw, table.QueueHead) is not null || Int(raw, table.QueueSize) is not { } size || ArrayField(raw, table.QueueArray) is not { Found: true } found)
         {
             return null; // a queue's fields are a stack's and _head: that's not a stack
         }
 
-        var array = found.Slots;
-
-        var elements = new List<DebugMember>();
-        for (var i = 0; i < size && i < MaxElements && size - 1 - i < array.Count; i++)
+        if (found.Array is not { } array)
         {
-            elements.Add(Element(array[size - 1 - i], i, null));
+            return new CollectionView([], size, table.Runtime);
         }
 
-        return new CollectionView(elements, size, table.Runtime);
+        // The top 1,000: the last slots in use, one page.
+        var shown = Math.Min(size, MaxElements);
+        var top = await slots.ReadAsync(array, size - shown, shown).ConfigureAwait(false);
+        return new CollectionView([.. top.Reverse().Select((slot, i) => Element(slot, i, null))], size, table.Runtime);
     }
 
     // A dictionary's or a set's slots up to the bound (the count of slots used so far), the free ones skipped.
-    private static async Task<CollectionView?> EntriesAsync(FieldTable table, IReadOnlyList<Variable> raw, Func<int, Task<IReadOnlyList<Variable>>> variables, string entriesName, string boundName, bool dictionary, CancellationToken cancellationToken)
+    private static async Task<CollectionView?> EntriesAsync(FieldTable table, IReadOnlyList<Variable> raw, Slots slots, Func<int, Task<IReadOnlyList<Variable>>> variables, string entriesName, string boundName, bool dictionary, CancellationToken cancellationToken)
     {
-        if (Int(raw, boundName) is not { } bound || await ArrayAsync(raw, entriesName, variables).ConfigureAwait(false) is not { } found)
+        if (Int(raw, boundName) is not { } bound || ArrayField(raw, entriesName) is not { Found: true } found)
         {
             return null;
         }
-
-        var entries = found.Slots;
 
         var (key, value, next, hash) = dictionary
             ? (table.DictionaryKey, table.DictionaryValue, table.DictionaryNext, table.DictionaryHashCode)
             : (string.Empty, table.SetValue, table.SetNext, table.SetHashCode);
         var elements = new List<DebugMember>();
-        var end = Math.Min(bound, entries.Count);
+        var end = found.Array is { } array ? Math.Min(bound, await slots.LengthAsync(array).ConfigureAwait(false)) : 0;
+        IReadOnlyList<Variable> entries = [];
+        var first = 0; // the slot entries[0] is
         var i = 0;
         for (; i < end && elements.Count < MaxElements; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (entries[i].VariablesReference <= 0)
+            if (i >= first + entries.Count)
+            {
+                // The next page of slots, until 1,000 used ones are read or the bound is.
+                first = i;
+                entries = await slots.ReadAsync(found.Array!, i, Math.Min(MaxElements, end - i)).ConfigureAwait(false);
+                if (entries.Count == 0)
+                {
+                    break;
+                }
+            }
+
+            var entry = entries[i - first];
+            if (entry.VariablesReference <= 0)
             {
                 return null;
             }
 
-            var fields = await variables(entries[i].VariablesReference).ConfigureAwait(false);
+            var fields = await variables(entry.VariablesReference).ConfigureAwait(false);
             if (Field(fields, value) is not { } item || (dictionary && Field(fields, key) is null))
             {
                 return null; // not this table's entry
