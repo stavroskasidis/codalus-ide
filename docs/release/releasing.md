@@ -147,7 +147,8 @@ one-time setup, the maintainer's:
    `pipeline.yml` can't publish. (The first run that names the environment creates it without that rule.)
 3. **Settings → Secrets and variables → Actions → New repository secret**: `NUGET_USER`, the nuget.org username of the
    account that created the policy: not the email address, and not an organization that owns the packages (the token
-   exchange fails with HTTP 401, "No matching trust policy owned by user", otherwise). Or `gh secret set NUGET_USER --repo stavroskasidis/codalus-ide`.
+   exchange fails with HTTP 401, "No matching trust policy owned by user", otherwise).
+   Or `gh secret set NUGET_USER --repo stavroskasidis/codalus-ide`.
 
 Without `NUGET_USER` the job packs the packages and pushes nothing, with a notice. When the push fails (the policy
 inactive, nuget.org down), the release is already out and only `finish` waits: fix the cause and use **Re-run failed
