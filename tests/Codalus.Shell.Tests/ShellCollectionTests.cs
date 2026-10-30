@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 
 namespace Codalus.Shell.Tests;
@@ -43,13 +42,6 @@ public sealed class ShellCollectionTests
         var (shell, window) = await CreateUseAndDisposeAsync(use);
         await Task.Yield(); // off the frames of the dispose, whose continuations ran inline and still hold the fixture
 
-        // AvaloniaEdit's commands keep the last focused element (a static) until another one takes the focus, as the next
-        // window does: an editor's text area would hold its closed editor, and through it the shell, until then.
-        var next = new Window { Content = new TextBox() };
-        next.Show();
-        ((TextBox)next.Content).Focus();
-        ShellFixture.Pump();
-        next.Close();
         // The work the dispose queued runs, but no timer is waited for: a pending one holds the shell until it ticks, and
         // once a test ends its dispatcher never ticks it (the repository discovery, started again by the solution closing
         // during the dispose, kept every shell of a full run).
@@ -62,7 +54,6 @@ public sealed class ShellCollectionTests
             GC.Collect();
         }
 
-        if (Environment.GetEnvironmentVariable("LEAK_PAUSE") is { } pause && shell.IsAlive) { File.WriteAllText(pause, Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)); Thread.Sleep(240_000); } // TEMP
         Assert.False(shell.IsAlive, "The disposed shell is still reachable.");
         Assert.False(window.IsAlive, "The closed main window is still reachable.");
     }
