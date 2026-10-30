@@ -8,8 +8,8 @@ namespace Codalus.Shell.Views;
 
 /// <summary>
 /// A history: a double-click or Enter on a commit opens its details (a tab), as View Commit Details on its menu does;
-/// a section's chevron collapses and expands it; scrolling near the end loads more;
-/// Enter in Filter History filters at once.
+/// Ctrl+click and Shift+click select several commits (Compare Commits on the menu); a section's chevron collapses and
+/// expands it; scrolling near the end loads more; Enter in Filter History filters at once.
 /// </summary>
 public sealed partial class GitHistoryView : UserControl, IPaneView
 {
@@ -25,6 +25,13 @@ public sealed partial class GitHistoryView : UserControl, IPaneView
             }
         };
         List.AddHandler(KeyDownEvent, OnListKeyDown, RoutingStrategies.Tunnel);
+        List.SelectionChanged += (_, _) =>
+        {
+            if (ViewModel is { } vm && List.SelectedItems is { } items)
+            {
+                vm.SelectedRows = [.. items.OfType<GitCommitRow>()];
+            }
+        };
         FilterBox.AddHandler(KeyDownEvent, (_, e) =>
         {
             if (e.Key == Key.Enter && ViewModel is { } vm)
@@ -82,6 +89,10 @@ public sealed partial class GitHistoryView : UserControl, IPaneView
             e.Handled = true;
         }
     }
+
+    private void OnCompareCommits(object? sender, RoutedEventArgs e) => _ = ViewModel?.CompareSelectedAsync();
+
+    private void OnCompareWithPrevious(object? sender, RoutedEventArgs e) => _ = ViewModel?.CompareWithPreviousAsync();
 
     private void OnCommitAction(object? sender, RoutedEventArgs e)
     {

@@ -11,7 +11,8 @@ namespace Codalus.Shell.ViewModels;
 /// current branch's, tip to tip, as a tree or a list with name-status letters (a file new on the other branch is A, a
 /// rename shows its old name). Named in diff order, "main → feature/sign-in", in the tab, the header and the status line;
 /// a file's diff shows the current branch on the left. While it compares, an indeterminate bar and a status line; with
-/// no differences, a sentence and View History.
+/// no differences, a sentence and View History. The history's Compare Commits and Compare with Previous use it for two
+/// commits, "1a2b3c4d → 5e6f7a8b", the older on the left.
 /// </summary>
 public sealed class GitCompareViewModel : ObservableObject
 {
@@ -37,6 +38,9 @@ public sealed class GitCompareViewModel : ObservableObject
 
     public string ToName { get; }
 
+    /// <summary>Two commits (the history's Compare Commits), not two branches' tips.</summary>
+    public bool ComparesCommits { get; init; }
+
     /// <summary>"main → feature/sign-in": the tab, the header and the accessible name.</summary>
     public string Title => Localizer.Format("msg.gitCompare.title", "{0} → {1}", FromName, ToName);
 
@@ -49,6 +53,8 @@ public sealed class GitCompareViewModel : ObservableObject
 
     /// <summary>View History (set by the shell): the next step when the files are the same (C3).</summary>
     public Func<Task>? ShowHistory { get; set; }
+
+    public bool CanShowHistory => ShowHistory is not null;
 
     public bool IsLoading
     {
@@ -100,9 +106,13 @@ public sealed class GitCompareViewModel : ObservableObject
 
     public bool HasFiles => !_isLoading && _rows.Count > 0;
 
-    public string EmptyText => Localizer.Format("msg.gitCompare.sameFiles", "No differences: {0} and {1} have the same files. Their commits can still differ; View History lists them.", FromName, ToName);
+    public string EmptyText => ComparesCommits
+        ? Localizer.Format("msg.gitCompare.sameFilesCommits", "No differences: {0} and {1} have the same files.", FromName, ToName)
+        : Localizer.Format("msg.gitCompare.sameFiles", "No differences: {0} and {1} have the same files. Their commits can still differ; View History lists them.", FromName, ToName);
 
-    public string Hint => Localizer.Format("msg.gitCompare.hint", "Letters say what {1} changes from {0}, tip to tip. Enter or double-click opens a file's diff: {0} on the left, {1} on the right.", FromName, ToName);
+    public string Hint => ComparesCommits
+        ? Localizer.Format("msg.gitCompare.hintCommits", "Letters say what {1} changes from {0}. Enter or double-click opens a file's diff: {0} on the left, {1} on the right.", FromName, ToName)
+        : Localizer.Format("msg.gitCompare.hint", "Letters say what {1} changes from {0}, tip to tip. Enter or double-click opens a file's diff: {0} on the left, {1} on the right.", FromName, ToName);
 
     /// <summary>Reads the files again (on open and Refresh), off the UI thread.</summary>
     public async Task LoadAsync()

@@ -86,6 +86,7 @@ public sealed partial class ShellHost
         var history = new GitHistoryViewModel(git, query, title, (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)), lines)
         {
             CanShowAllBranches = canShowAllBranches,
+            CompareCommits = (older, newer) => InRepositoryAsync(git, () => OpenCommitCompareAsync(older, newer)),
         };
         var settings = Workbench.Settings;
         history.InitializeToggles(
