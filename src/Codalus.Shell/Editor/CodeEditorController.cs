@@ -65,6 +65,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly CoverageMargin _coverageMargin;
     private readonly HotLineMargin _hotLineMargin;
     private readonly EditorInsights _insights;
+    private readonly LongLineCutter _longLines;
     private readonly BookmarkMargin _bookmarkMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
@@ -167,6 +168,8 @@ public sealed partial class CodeEditorController : IDisposable
         _gitTimer.Start();
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
+        _longLines = new LongLineCutter(() => ResourceBrush("Shell.Editor.InlayHint.Foreground"));
+        view.LineTransformers.Add(_longLines);
         _folding = FoldingManager.Install(editor.TextArea);
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
         _search = SearchPanel.Install(editor);
@@ -204,6 +207,8 @@ public sealed partial class CodeEditorController : IDisposable
         view.PointerPressed += OnPointerPressed;
         _multiCaret.Changed += (_, _) => OnCaretChanged(this, EventArgs.Empty);
 
+        view.AttachedToVisualTree += OnViewAttached;
+        view.DetachedFromVisualTree += OnViewDetached;
         UpdateDiagnostics();
         UpdateGrammar();
         RefreshAll();
@@ -413,7 +418,7 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Colors the document with its language's TextMate grammar (ADR 0016), if it has one.</summary>
     private void UpdateGrammar()
     {
-        var scope = _services.TextMate.ScopeFor(Model.LanguageId);
+        var scope = Model.IsLarge ? null : _services.TextMate.ScopeFor(Model.LanguageId);
         if (scope == GrammarScope)
         {
             return;
@@ -424,6 +429,7 @@ public sealed partial class CodeEditorController : IDisposable
         {
             _textMate?.Dispose();
             _textMate = null;
+            _grammarPaused = false;
             return;
         }
 
@@ -438,6 +444,11 @@ public sealed partial class CodeEditorController : IDisposable
             _textMate.SetGrammar(scope);
             KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
+            KeepLongLinesLast();
+            if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
+            {
+                PauseGrammar(); // built for a tab not shown yet
+            }
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -466,6 +477,62 @@ public sealed partial class CodeEditorController : IDisposable
         transformers.Insert(transformers.IndexOf(grammar) + 1, _colorizer);
         transformers.Insert(transformers.IndexOf(_colorizer) + 1, _markers);
     }
+
+    // ------------------------------------------------------------------ the grammar's tokenizer while hidden
+
+    /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
+    internal bool GrammarTokenizing => _textMate is { } installation && TokenizerModel(installation) is { IsStopped: false };
+
+    private bool _grammarPaused;
+
+    private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ResumeGrammar();
+
+    private void OnViewDetached(object? sender, VisualTreeAttachmentEventArgs e) => PauseGrammar();
+
+    /// <summary>
+    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view).
+    /// AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each editor as long as its tab is open, and a
+    /// session of many JSON, XML or Markdown tabs starved the pool (M56). The model and its lines' states stay: edits
+    /// meanwhile mark their lines, and the thread starts again from there when the editor shows.
+    /// </summary>
+    private void PauseGrammar()
+    {
+        if (!_grammarPaused && _textMate is { } installation && TokenizerModel(installation) is { } model && GrammarTransformer() is { } transformer)
+        {
+            _grammarPaused = true;
+            model.RemoveModelTokensChangedListener(transformer); // its last listener: the model stops its thread
+        }
+    }
+
+    private void ResumeGrammar()
+    {
+        if (_grammarPaused && _textMate is { } installation && TokenizerModel(installation) is { } model && GrammarTransformer() is { } transformer)
+        {
+            _grammarPaused = false;
+            model.AddModelTokensChangedListener(transformer); // starts its thread again
+        }
+    }
+
+    private AvaloniaEdit.TextMate.TextMateColoringTransformer? GrammarTransformer() =>
+        Editor.TextArea.TextView.LineTransformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+
+    // The installation's model isn't public; Native AOT resolves this accessor at compile time.
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_tmModel")]
+    private static extern ref TextMateSharp.Model.TMModel? TokenizerModel(AvaloniaEdit.TextMate.TextMate.Installation installation);
+
+    /// <summary>The cut of long lines after every colorizer (a grammar's installs itself last): nothing draws past it.</summary>
+    private void KeepLongLinesLast()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        if (transformers[^1] != _longLines)
+        {
+            transformers.Remove(_longLines);
+            transformers.Add(_longLines);
+        }
+    }
+
+    /// <summary>The long lines cut short so far (tests).</summary>
+    internal int LongLinesCut => _longLines.LinesCut;
 
     private void ApplyTheme()
     {
@@ -768,7 +835,13 @@ public sealed partial class CodeEditorController : IDisposable
 
     // ------------------------------------------------------------------ folding
 
-    private void ScheduleFolding(TimeSpan delay) => _ = FoldingAsync(delay, Restart(ref _foldingCts).Token);
+    private void ScheduleFolding(TimeSpan delay)
+    {
+        if (!Model.IsLarge)
+        {
+            _ = FoldingAsync(delay, Restart(ref _foldingCts).Token);
+        }
+    }
 
     private async Task FoldingAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
@@ -786,7 +859,10 @@ public sealed partial class CodeEditorController : IDisposable
                 var snapshot = Model.Text.CreateSnapshot();
                 var configuration = Configuration;
                 var languageId = Model.LanguageId;
-                var local = await Task.Run(() => LanguageFeatures.Foldings(new AvaloniaEdit.Document.TextDocument(snapshot), languageId, configuration), cancellationToken).ConfigureAwait(true);
+                var folded = Folded();
+                var local = await Task.Run(
+                    () => LanguageFeatures.CapFoldings(LanguageFeatures.Foldings(new AvaloniaEdit.Document.TextDocument(snapshot), languageId, configuration), folded),
+                    cancellationToken).ConfigureAwait(true);
                 if (!cancellationToken.IsCancellationRequested && version0 == Model.Version && !_disposed)
                 {
                     _folding.UpdateFoldings(local, -1);
@@ -833,8 +909,11 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         foldings.Sort((a, b) => a.StartOffset.CompareTo(b.StartOffset));
-        _folding.UpdateFoldings(foldings, -1);
+        _folding.UpdateFoldings(LanguageFeatures.CapFoldings(foldings, Folded()), -1);
     }
+
+    /// <summary>Where the collapsed foldings are: kept when the foldings are capped.</summary>
+    private HashSet<(int Start, int End)> Folded() => [.. _folding.AllFoldings.Where(f => f.IsFolded).Select(f => (f.StartOffset, f.EndOffset))];
 
     /// <summary>Toggles the innermost folding at the caret (Ctrl+M Ctrl+M).</summary>
     public void ToggleFoldAtCaret()
@@ -1884,7 +1963,7 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             var status = root == git.Root ? git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path)) : null;
-            var current = Model.Text.Text;
+            var current = Model.Text.CreateSnapshot(); // made a string off the UI thread, with the diff
             var baseline = _indexText ?? (status is { IsUntracked: true } ? string.Empty : null);
             if (baseline is null)
             {
@@ -1892,7 +1971,7 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current)), cancellationToken).ConfigureAwait(true);
+            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current.Text)), cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 _gitMargin.Changes = changes;
@@ -2327,6 +2406,8 @@ public sealed partial class CodeEditorController : IDisposable
         _disposed = true;
         CloseIntelliSense();
         _hoverPopup.Closed -= OnHoverClosed;
+        Editor.TextArea.TextView.AttachedToVisualTree -= OnViewAttached;
+        Editor.TextArea.TextView.DetachedFromVisualTree -= OnViewDetached;
         _textMate?.Dispose();
         _insights.Dispose();
         _inline.Dispose();

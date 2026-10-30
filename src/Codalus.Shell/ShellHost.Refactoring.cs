@@ -41,7 +41,7 @@ public sealed partial class ShellHost
         }
 
         var offset = controller.Editor.CaretOffset;
-        var name = WordAt(editor.Model.Text.Text, offset);
+        var name = IdentifierAt(editor.Model.Text, offset);
         if (editor.Model.LanguageId == CSharpLanguageId)
         {
             // Our host classifies references (read, write, declaration) and names their definitions for the References window's groups and columns.
@@ -594,21 +594,23 @@ public sealed partial class ShellHost
         return text.Length > 0 && (char.IsLetter(text[0]) || text[0] == '_') && text.All(c => char.IsLetterOrDigit(c) || c == '_');
     }
 
-    private static string WordAt(string text, int offset)
+    /// <summary>The identifier around an offset (letters, digits and '_'), read where it is rather than from a copy of the whole text.</summary>
+    private static string IdentifierAt(AvaloniaEdit.Document.TextDocument document, int offset)
     {
+        static bool IsWord(char c) => char.IsLetterOrDigit(c) || c == '_';
         var start = offset;
-        while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_'))
+        while (start > 0 && IsWord(document.GetCharAt(start - 1)))
         {
             start--;
         }
 
         var end = offset;
-        while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_'))
+        while (end < document.TextLength && IsWord(document.GetCharAt(end)))
         {
             end++;
         }
 
-        return text[start..end];
+        return document.GetText(start, end - start);
     }
 
     /// <summary>The identifier-like word around an offset (letters, digits, '_' and '-').</summary>

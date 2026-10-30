@@ -2388,6 +2388,8 @@
   "msg.editor.couldNotReload": "Could not reload {0}: {1}",
   "msg.editor.couldNotSave": "Could not save {0}: {1}",
   "msg.editor.languageServiceCouldntStart": "The {0} language service couldn't start: {1}",
+  "msg.editor.largeFile": "This file is large: colors, folding, CodeLens and the language service are off for it, so the editor stays responsive.",
+  "msg.editor.moreCharacters": "… {0:N0} more characters",
   "msg.editor.openAMarkdownFileToPreview": "Open a Markdown file to preview it.",
   "msg.editor.saveChangesToBeforeClosing": "Save changes to {0} before closing?",
   "msg.editor.saved": "Saved {0}",

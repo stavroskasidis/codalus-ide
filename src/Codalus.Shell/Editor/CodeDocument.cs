@@ -22,6 +22,12 @@ public sealed class CodeDocumentChangedEventArgs(int version, TextDocumentConten
 /// </summary>
 public sealed class CodeDocument : ObservableObject, IDisposable
 {
+    /// <summary>The characters past which a file opens in large-file mode (VS Code's limit, 20 MB).</summary>
+    public const int LargeFileCharacters = 20 * 1024 * 1024;
+
+    /// <summary>The lines past which a file opens in large-file mode (VS Code's limit).</summary>
+    public const int LargeFileLines = 300_000;
+
     private readonly List<TextDocumentContentChangeEvent> _pending = [];
     private FileSystemWatcher? _watcher;
     private DateTime _lastWrite;
@@ -40,6 +46,7 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         Format = format;
         IsReadOnly = isReadOnly;
         Text = new TextDocument(text) { FileName = path };
+        IsLarge = text.Length > LargeFileCharacters || Text.LineCount > LargeFileLines;
         Text.UndoStack.MarkAsOriginalFile();
         Text.UndoStack.PropertyChanged += OnUndoStackChanged;
         Text.Changing += OnChanging;
@@ -61,6 +68,13 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     /// <summary>Generated documents are read-only.</summary>
     public bool IsReadOnly { get; }
+
+    /// <summary>
+    /// The file had more than <see cref="LargeFileCharacters"/> characters or <see cref="LargeFileLines"/> lines when it
+    /// opened (M56, VS Code's limits): its editors have no colors, folding or CodeLens, and no language service gets it,
+    /// which kept the window busy for seconds on such a file. Decided once, when it opens.
+    /// </summary>
+    public bool IsLarge { get; }
 
     /// <summary>The language service that owns this document (<c>csharp</c>), or null.</summary>
     public string? LanguageId
@@ -98,12 +112,32 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     public event EventHandler? Saved;
 
+    /// <summary>
+    /// Reads a file into a new document. Opened from the UI thread, the text is decoded and its lines indexed off it (a
+    /// 20 MB file took a few hundred milliseconds there), and the document is handed to the UI thread when it's ready.
+    /// </summary>
     public static async Task<CodeDocument> OpenAsync(string path, CancellationToken cancellationToken)
     {
-        var (text, format) = await TextFiles.ReadAsync(path, cancellationToken).ConfigureAwait(true);
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return await ReadAsync(path, owner: null, cancellationToken).ConfigureAwait(true);
+        }
+
+        var owner = Thread.CurrentThread;
+        return await Task.Run(() => ReadAsync(path, owner, cancellationToken), cancellationToken).ConfigureAwait(true);
+    }
+
+    private static async Task<CodeDocument> ReadAsync(string path, Thread? owner, CancellationToken cancellationToken)
+    {
+        var (text, format) = await TextFiles.ReadAsync(path, cancellationToken).ConfigureAwait(owner is null);
         var document = new CodeDocument(path, null, text, format, isReadOnly: false);
         document.RememberFileState();
         document.Watch();
+        if (owner is not null)
+        {
+            document.Text.SetOwnerThread(owner); // AvaloniaEdit checks every access against the thread that built it
+        }
+
         return document;
     }
 
@@ -239,21 +273,47 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         Saved?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Replaces the text with the file's (one undoable change, so the language service sees an edit).</summary>
+    /// <summary>
+    /// Replaces the text with the file's (one undoable change, so the language service sees an edit): only the part that
+    /// differs, found off the UI thread. A log being written is reloaded at each write, and replacing all of it rebuilt
+    /// every editor's lines and sent the language service the whole text each time (M56); now that's what was appended.
+    /// </summary>
     public async Task ReloadAsync(CancellationToken cancellationToken)
     {
+        var version = Version;
+        var snapshot = Text.CreateSnapshot();
         var (text, format) = await TextFiles.ReadAsync(Path, cancellationToken).ConfigureAwait(true);
+        var (start, removed, inserted) = await Task.Run(() => Difference(snapshot.Text, text), cancellationToken).ConfigureAwait(true);
         Format = format;
         OnPropertyChanged(nameof(Format));
-        if (text != Text.Text)
+        if (Version != version)
         {
-            Text.Replace(0, Text.TextLength, text);
+            (start, removed, inserted) = (0, Text.TextLength, text); // edited while the file was read: all of it, as asked
+        }
+
+        if (removed > 0 || inserted.Length > 0)
+        {
+            Text.Replace(start, removed, inserted);
         }
 
         RememberFileState();
         Text.UndoStack.MarkAsOriginalFile();
         IsDeletedOnDisk = false;
         Reloaded?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>What turns <paramref name="before"/> into <paramref name="after"/>: the text between their common start and end.</summary>
+    internal static (int Start, int Removed, string Inserted) Difference(string before, string after)
+    {
+        var start = before.AsSpan().CommonPrefixLength(after);
+        var end = 0;
+        var most = Math.Min(before.Length, after.Length) - start;
+        while (end < most && before[before.Length - end - 1] == after[after.Length - end - 1])
+        {
+            end++;
+        }
+
+        return (start, before.Length - start - end, after[start..(after.Length - end)]);
     }
 
     public void SetLineEnding(string lineEnding)

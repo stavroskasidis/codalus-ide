@@ -537,8 +537,10 @@ public sealed partial class ShellHost : IEditorServices
         model.Saved += (_, _) => Ui.Post(() => OnSavedForDebugEdits(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         TrackForDiffs(model);
-        if (model.LanguageId is { } languageId)
+        if (model.LanguageId is { } languageId && !model.IsLarge)
         {
+            // A large file stays out of the language service (M56, as in VS Code): its didOpen alone, the whole text in
+            // JSON, kept the window busy, and the service would analyze it at every edit.
             _ = OpenInLanguageServiceAsync(model, languageId);
         }
     }
@@ -686,10 +688,10 @@ public sealed partial class ShellHost : IEditorServices
     // ------------------------------------------------------------------ IEditorServices
 
     LanguageHostClient? IEditorServices.Client(CodeDocument document) =>
-        document.LanguageId is { } languageId ? Languages.RunningClient(languageId) : null;
+        document is { LanguageId: { } languageId, IsLarge: false } ? Languages.RunningClient(languageId) : null;
 
     bool IEditorServices.ExpectsCodeLens(CodeDocument document) =>
-        document is { IsReadOnly: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        document is { IsReadOnly: false, IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
         && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.CodeLensProvider: null };
 
     public void OpenLocations(IReadOnlyList<Location> locations, string title) => _ = OpenLocationsAsync(locations, title);

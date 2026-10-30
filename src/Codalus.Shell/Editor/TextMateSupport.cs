@@ -12,7 +12,10 @@ namespace Codalus.Shell.Editor;
 /// <summary>
 /// TextMate grammars and themes for the editor (ADR 0016): plugin grammars from <see cref="LanguageRegistry"/>, then the
 /// VS Code grammars bundled in TextMateSharp. Tokenizing runs off the UI thread in AvaloniaEdit.TextMate's model.
-/// The bundled registry loads on first use (the first non-C# file), not at startup.
+/// The bundled registry loads on first use (the first non-C# file), not at startup. Grammars and themes are read once
+/// and shared by every editor (M56): TextMateSharp asks for them again for each editor and each theme, and parsing them
+/// (Markdown's grammar takes in 53 others) ran on the UI thread every time a tab was first shown. TextMateSharp copies a
+/// grammar before it compiles it, and only reads themes, so sharing them is safe.
 /// </summary>
 public sealed class TextMateSupport : IRegistryOptions
 {
@@ -31,7 +34,11 @@ public sealed class TextMateSupport : IRegistryOptions
     private readonly LanguageRegistry _languages;
     private readonly Lazy<RegistryOptions> _bundled = new(() => new RegistryOptions(ThemeName.DarkPlus), LazyThreadSafetyMode.ExecutionAndPublication);
     private readonly ConcurrentDictionary<string, IRawGrammar?> _files = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IRawGrammar?> _grammars = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, IRawTheme?> _themes = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<ThemeName, IRawTheme> _namedThemes = new();
     private readonly ConcurrentDictionary<string, LanguageConfiguration?> _configurations = new(StringComparer.Ordinal);
+    private int _grammarReads;
     private ThemeName _theme = ThemeName.DarkPlus;
     private TextMateSharp.Registry.Registry? _registry;
 
@@ -41,9 +48,15 @@ public sealed class TextMateSupport : IRegistryOptions
         languages.Changed += (_, _) =>
         {
             _files.Clear();
+            _grammars.Clear();
+            _themes.Clear();
+            _namedThemes.Clear();
             _configurations.Clear();
         };
     }
+
+    /// <summary>How many times a bundled grammar was read and parsed (tests: once per scope).</summary>
+    internal int GrammarReads => Volatile.Read(ref _grammarReads);
 
     /// <summary>Logs grammar problems (Language Services output).</summary>
     public Action<string>? Log { get; set; }
@@ -176,8 +189,11 @@ public sealed class TextMateSupport : IRegistryOptions
             _ => ThemeName.DarkPlus,
         };
         _recolors = RecolorsFor(themeId);
-        return Recolor(_bundled.Value.LoadTheme(_theme));
+        return Recolor(LoadTheme(_theme));
     }
+
+    /// <summary>A bundled theme as read, before <see cref="Recolor"/> (which differs by the shell's theme).</summary>
+    private IRawTheme LoadTheme(ThemeName name) => _namedThemes.GetOrAdd(name, n => _bundled.Value.LoadTheme(n));
 
     private IReadOnlyDictionary<string, string> _recolors = RecolorsFor("dark");
 
@@ -255,7 +271,7 @@ public sealed class TextMateSupport : IRegistryOptions
 
     // ------------------------------------------------------------------ IRegistryOptions
 
-    public IRawTheme GetTheme(string scopeName) => Recolor(_bundled.Value.GetTheme(scopeName));
+    public IRawTheme GetTheme(string scopeName) => Recolor(_themes.GetOrAdd(scopeName, s => _bundled.Value.GetTheme(s))!);
 
     public IRawGrammar GetGrammar(string scopeName)
     {
@@ -280,10 +296,14 @@ public sealed class TextMateSupport : IRegistryOptions
             }
         }
 
-        return _bundled.Value.GetGrammar(scopeName);
+        return _grammars.GetOrAdd(scopeName, s =>
+        {
+            Interlocked.Increment(ref _grammarReads);
+            return _bundled.Value.GetGrammar(s);
+        })!;
     }
 
     public ICollection<string> GetInjections(string scopeName) => _bundled.Value.GetInjections(scopeName);
 
-    public IRawTheme GetDefaultTheme() => Recolor(_bundled.Value.LoadTheme(_theme));
+    public IRawTheme GetDefaultTheme() => Recolor(LoadTheme(_theme));
 }

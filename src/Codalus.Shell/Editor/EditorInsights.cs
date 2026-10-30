@@ -81,7 +81,7 @@ public sealed class EditorInsights : IDisposable
         _lenses = new TextSegmentCollection<LensSegment>(document);
         _generator = new InlineGenerator(this);
         _guides = new IndentGuideRenderer(editor, Brush);
-        _brackets = new BracketPairColorizer(document, Brush, () => _model().LanguageId ?? string.Empty);
+        _brackets = new BracketPairColorizer(document, Brush, () => _model().LanguageId ?? string.Empty, () => _editor.TextArea.TextView.Redraw());
         Margin = new InheritanceMargin(this);
 
         var view = editor.TextArea.TextView;
@@ -334,7 +334,7 @@ public sealed class EditorInsights : IDisposable
     private async Task RefreshBlameAsync()
     {
         var model = Model;
-        if (!Options.CodeLens || !Options.GitCodeLens || _blameVersion == model.Version || _services.Git.RepositoryFor(model.Path) is null
+        if (!Options.CodeLens || !Options.GitCodeLens || model.IsLarge || _blameVersion == model.Version || _services.Git.RepositoryFor(model.Path) is null
             || model.IsModified && System.Diagnostics.Stopwatch.GetElapsedTime(_blameAt) < s_blameInterval)
         {
             return;
@@ -345,7 +345,10 @@ public sealed class EditorInsights : IDisposable
         _blameAt = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            var blame = await _services.Git.BlameInRepositoryAsync(model.Path, model.IsModified ? model.Text.Text : null, token).ConfigureAwait(true);
+            // The unsaved text, made a string off the UI thread (a copy of the whole document after each pause in typing).
+            var snapshot = model.IsModified ? model.Text.CreateSnapshot() : null;
+            var text = snapshot is null ? null : await Task.Run(() => snapshot.Text, token).ConfigureAwait(true);
+            var blame = await _services.Git.BlameInRepositoryAsync(model.Path, text, token).ConfigureAwait(true);
             if (token.IsCancellationRequested || _disposed || model.Version != version)
             {
                 return;
@@ -557,7 +560,7 @@ public sealed class EditorInsights : IDisposable
     {
         UpdateTestLenses();
         _guides.Enabled = Options.IndentGuides;
-        _brackets.Enabled = Options.BracketPairColorization;
+        _brackets.Enabled = Options.BracketPairColorization && !Model.IsLarge;
         Margin.IsVisible = Options.InheritanceMargin;
         _editor.TextArea.TextView.Redraw();
     }
@@ -1509,7 +1512,12 @@ internal sealed class IndentGuideRenderer(TextEditor editor, Func<string, IBrush
 
 /// <summary>
 /// Colors (), [] and {} by nesting depth, skipping strings and comments (C-style lexing: <c>//</c>, <c>/* */</c>,
-/// quotes, C# verbatim strings). The depth at each line start is cached and recomputed from the first changed line.
+/// quotes, C# verbatim strings). The lexer's state at each line start is cached. An edit keeps the states after it,
+/// moved with their lines, and lexes again from the edited line only until a state comes out as it was (most keystrokes
+/// change one line's). A line far past the known states isn't lexed on the UI thread: it shows in the default color
+/// until a pass over a snapshot of the text, off the UI thread, has its state and redraws it (M56, as VS Code does; a
+/// jump to the end of a 100,000-line file lexed every line before it in the frame). Only the first
+/// <see cref="LongLineCutter.MaxRendered"/> characters of a line count, the ones drawn.
 /// </summary>
 internal sealed class BracketPairColorizer : DocumentColorizingTransformer
 {
@@ -1520,78 +1528,291 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
         "java", "c", "cpp", "go", "rust", "fsharp", "powershell", "razor", "aspnetcorerazor", "kotlin", "swift", "dart", "php",
     };
 
+    /// <summary>The furthest a line may be past the known states and still be lexed on the UI thread, in lines.</summary>
+    internal const int SyncLines = 1_000;
+
+    /// <summary>The characters lexed on the UI thread for one line's state; past them the background pass takes over.</summary>
+    private const int SyncCharacters = 256 * 1024;
+
+    /// <summary>How far past the line asked for the background pass goes, so scrolling on finds its states there.</summary>
+    private const int BackgroundMargin = 2_000;
+
+    /// <summary>Lines longer than this aren't colored (their state still counts their first characters).</summary>
+    private const int MaxColoredLength = 2_000;
+
     private readonly TextDocument _document;
     private readonly Func<string, IBrush> _brush;
     private readonly Func<string> _language;
-    private readonly List<LineState> _states = [new(0, Lex.Code)];
+    private readonly Action _redraw;
 
-    private enum Lex
+    /// <summary>The lexer's state at the start of each line (index 0: line 1); only the first <see cref="_valid"/> are known.</summary>
+    private readonly List<LineState> _states = [new(0, Lex.Code)];
+    private int _valid = 1;
+
+    /// <summary>From this index on, a state lexed again that equals the one kept means the rest kept are right again.</summary>
+    private int _stableFrom;
+
+    private int _changes;
+    private int _editsInUpdate;
+    private int _changingLine;
+    private int _lineCountBefore;
+    private int _backgroundTarget;
+    private bool _backgroundRunning;
+    private bool _detached;
+
+    internal enum Lex
     {
         Code,
         BlockComment,
         VerbatimString,
     }
 
-    private readonly record struct LineState(int Depth, Lex Mode);
+    internal readonly record struct LineState(int Depth, Lex Mode);
 
-    public BracketPairColorizer(TextDocument document, Func<string, IBrush> brush, Func<string> language)
+    public BracketPairColorizer(TextDocument document, Func<string, IBrush> brush, Func<string> language, Action redraw)
     {
         _document = document;
         _brush = brush;
         _language = language;
+        _redraw = redraw;
+        document.UpdateStarted += OnUpdateStarted;
         document.Changing += OnChanging;
+        document.Changed += OnChanged;
     }
 
     public bool Enabled { get; set; } = true;
 
-    public void Detach() => _document.Changing -= OnChanging;
+    /// <summary>The lines lexed on the UI thread so far (tests).</summary>
+    internal int ScannedLines { get; private set; }
+
+    /// <summary>The passes over a snapshot that completed and were applied (tests).</summary>
+    internal int BackgroundPasses { get; private set; }
+
+    public void Detach()
+    {
+        _detached = true;
+        _document.UpdateStarted -= OnUpdateStarted;
+        _document.Changing -= OnChanging;
+        _document.Changed -= OnChanged;
+    }
+
+    private void OnUpdateStarted(object? sender, EventArgs e) => _editsInUpdate = 0;
 
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
-        var line = _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber;
-        if (_states.Count > line)
-        {
-            _states.RemoveRange(line, _states.Count - line);
-        }
+        _changingLine = _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber;
+        _lineCountBefore = _document.LineCount;
     }
 
-    protected override void ColorizeLine(DocumentLine line)
+    private void OnChanged(object? sender, DocumentChangeEventArgs e)
     {
-        if (!Enabled || !s_languages.Contains(_language()) || line.Length > 2000)
+        _changes++;
+
+        // The edited line's start state stands; the states after it move with their lines.
+        var line = Math.Min(_changingLine, _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber);
+        if (line >= _states.Count)
         {
             return;
         }
 
-        var state = StateAt(line.LineNumber);
+        if (++_editsInUpdate > 1)
+        {
+            // Many edits in one update (Format Document, Replace All; every edit is an update of its own): moving every
+            // state for each would cost more than lexing again, which the background pass does for lines far below.
+            _states.RemoveRange(line, _states.Count - line);
+            _valid = Math.Min(_valid, line);
+            return;
+        }
+
+        var pending = _valid < _states.Count;
+        var delta = _document.LineCount - _lineCountBefore;
+        if (delta > 0)
+        {
+            _states.InsertRange(line, new LineState[delta]);
+        }
+        else if (delta < 0)
+        {
+            _states.RemoveRange(line, Math.Min(-delta, _states.Count - line));
+        }
+
+        var lastEdited = _document.GetLineByOffset(Math.Min(e.Offset + e.InsertionLength, _document.TextLength)).LineNumber;
+        _stableFrom = pending ? Math.Max(_stableFrom >= line ? _stableFrom + delta : _stableFrom, lastEdited) : lastEdited;
+        _valid = Math.Min(_valid, line);
+    }
+
+    protected override void ColorizeLine(DocumentLine line)
+    {
+        if (!Enabled || !s_languages.Contains(_language()) || line.Length > MaxColoredLength || StateAt(line.LineNumber) is not { } state)
+        {
+            return;
+        }
+
         var brushes = s_brushes.Select(_brush).ToArray();
-        Scan(line, state, (offset, depth) =>
+        Scan(_document.GetText(line.Offset, line.Length), state, (offset, depth) =>
         {
             var b = brushes[((depth % brushes.Length) + brushes.Length) % brushes.Length];
-            ChangeLinePart(offset, offset + 1, element => element.TextRunProperties.SetForegroundBrush(b));
+            ChangeLinePart(line.Offset + offset, line.Offset + offset + 1, element => element.TextRunProperties.SetForegroundBrush(b));
         });
     }
 
-    /// <summary>The lexer state at the start of a one-based line (computed forward from the last cached line).</summary>
-    private LineState StateAt(int lineNumber)
+    /// <summary>
+    /// The lexer state at the start of a one-based line: lexed forward from the last known one when it's near, else null
+    /// until the background pass has it.
+    /// </summary>
+    internal LineState? StateAt(int lineNumber)
     {
-        while (_states.Count < lineNumber)
+        if (lineNumber <= _valid)
         {
-            var line = _document.GetLineByNumber(_states.Count);
-            _states.Add(Scan(line, _states[^1], null));
+            return _states[lineNumber - 1];
+        }
+
+        // Far past the known states, only an edit's states kept after it can make lexing on the UI thread short, when they
+        // compare equal soon; once a pass is lexing them, the frame doesn't try again.
+        var far = lineNumber - _valid > SyncLines;
+        if ((far && (_backgroundRunning || _valid >= _states.Count)) || !Advance(lineNumber))
+        {
+            LexInBackground(lineNumber);
+            return null;
         }
 
         return _states[lineNumber - 1];
     }
 
-    private LineState Scan(DocumentLine line, LineState state, Action<int, int>? bracket)
+    /// <summary>The lexer state at the start of a line, lexed from the first line of a text (tests: what the cache must equal).</summary>
+    internal static LineState Lexed(TextDocument document, int lineNumber)
+    {
+        var state = new LineState(0, Lex.Code);
+        for (var number = 1; number < lineNumber; number++)
+        {
+            var line = document.GetLineByNumber(number);
+            state = Scan(document.GetText(line.Offset, Math.Min(line.Length, LongLineCutter.MaxRendered)), state, null);
+        }
+
+        return state;
+    }
+
+    /// <summary>Lexes from the first unknown state up to a line's, within the UI thread's budget; false when it ran out.</summary>
+    private bool Advance(int lineNumber)
+    {
+        var budget = SyncCharacters;
+        var lines = SyncLines;
+        while (_valid < lineNumber)
+        {
+            if (budget <= 0 || lines-- <= 0)
+            {
+                return false;
+            }
+
+            var line = _document.GetLineByNumber(_valid);
+            var length = Math.Min(line.Length, LongLineCutter.MaxRendered);
+            var end = Scan(_document.GetText(line.Offset, length), _states[_valid - 1], null);
+            budget -= length + 1;
+            ScannedLines++;
+            if (_valid < _states.Count)
+            {
+                if (_valid >= _stableFrom && _states[_valid] == end)
+                {
+                    _valid = _states.Count; // as before the edit from here on
+                    continue;
+                }
+
+                _states[_valid] = end;
+            }
+            else
+            {
+                _states.Add(end);
+            }
+
+            _valid++;
+        }
+
+        return true;
+    }
+
+    /// <summary>Has the states up to a line (and a margin past it) lexed over a snapshot off the UI thread, then redraws.</summary>
+    private void LexInBackground(int lineNumber)
+    {
+        _backgroundTarget = Math.Max(_backgroundTarget, Math.Min(_document.LineCount, lineNumber + BackgroundMargin));
+        if (_backgroundRunning)
+        {
+            return;
+        }
+
+        _backgroundRunning = true;
+        var changes = _changes;
+        var start = _valid;
+        var state = _states[start - 1];
+        var target = _backgroundTarget;
+        var snapshot = _document.CreateSnapshot();
+        _ = Task.Run(() =>
+        {
+            var document = new TextDocument(snapshot);
+            var states = new List<LineState>(Math.Max(0, target - start));
+            for (var number = start; number < target; number++)
+            {
+                var line = document.GetLineByNumber(number);
+                state = Scan(document.GetText(line.Offset, Math.Min(line.Length, LongLineCutter.MaxRendered)), state, null);
+                states.Add(state);
+            }
+
+            return states;
+        }).ContinueWith(
+            t => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyBackground(t.IsCompletedSuccessfully ? t.Result : null, changes, start), Avalonia.Threading.DispatcherPriority.Background),
+            TaskScheduler.Default);
+    }
+
+    private void ApplyBackground(List<LineState>? states, int changes, int start)
+    {
+        _backgroundRunning = false;
+        var asked = _backgroundTarget;
+        _backgroundTarget = 0;
+        if (_detached)
+        {
+            return;
+        }
+
+        if (states is null || changes != _changes)
+        {
+            // Edited meanwhile: the lines still unknown when they're drawn again ask for a pass from the edit.
+            _redraw();
+            return;
+        }
+
+        // states[i] is the state at the start of line start + i + 1 (index start + i). The UI thread may have lexed some
+        // of them meanwhile, from the same text.
+        for (var index = _valid; index < start + states.Count; index++)
+        {
+            if (index < _states.Count)
+            {
+                _states[index] = states[index - start];
+            }
+            else
+            {
+                _states.Add(states[index - start]);
+            }
+        }
+
+        _valid = Math.Max(_valid, start + states.Count);
+        _stableFrom = Math.Max(_stableFrom, _valid); // states kept past the pass are confirmed by the next that compares equal
+        BackgroundPasses++;
+        if (asked > _valid)
+        {
+            LexInBackground(asked); // scrolled on meanwhile
+        }
+
+        _redraw();
+    }
+
+    /// <summary>Lexes a line's text from its start state; <paramref name="bracket"/> gets each bracket's offset in the line and depth.</summary>
+    private static LineState Scan(ReadOnlySpan<char> text, LineState state, Action<int, int>? bracket)
     {
         var depth = state.Depth;
         var mode = state.Mode;
-        var end = line.EndOffset;
-        for (var i = line.Offset; i < end; i++)
+        var end = text.Length;
+        for (var i = 0; i < end; i++)
         {
-            var c = _document.GetCharAt(i);
-            var next = i + 1 < end ? _document.GetCharAt(i + 1) : '\0';
+            var c = text[i];
+            var next = i + 1 < end ? text[i + 1] : '\0';
             switch (mode)
             {
                 case Lex.BlockComment:
@@ -1635,7 +1856,7 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
                     // A regular string or character literal ends on the line.
                     for (i++; i < end; i++)
                     {
-                        var s = _document.GetCharAt(i);
+                        var s = text[i];
                         if (s == '\\')
                         {
                             i++;
