@@ -390,8 +390,15 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
         get => _selectedRows;
         set
         {
-            var order = IncomingRows.Concat(Rows).ToList();
-            IReadOnlyList<GitCommitRow> rows = [.. value.Distinct().OrderBy(order.IndexOf)];
+            // Each row's place found once: a search of the loaded rows for each selected one was 200 million comparisons
+            // for Select All with 20,000 commits loaded.
+            var order = new Dictionary<GitCommitRow, int>();
+            foreach (var row in IncomingRows.Concat(Rows))
+            {
+                order.TryAdd(row, order.Count);
+            }
+
+            IReadOnlyList<GitCommitRow> rows = [.. value.Distinct().OrderBy(r => order.GetValueOrDefault(r, -1))];
             if (_selectedRows.SequenceEqual(rows))
             {
                 return;
