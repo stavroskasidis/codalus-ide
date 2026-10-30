@@ -186,19 +186,22 @@
           </Button.Flyout>
         </Button>
 
-        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h). -->
+        <!-- The branch, and fetch, pull, push, sync and more: Git's commands in the Git family's color, as in the menus (M34h).
+             While one of them runs, Cancel takes their place, as in the classic IDE. -->
         <DockPanel>
           <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="4,0,0,0">
-            <Button Classes="toolbar" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
+            <Button x:Name="CancelProgressButton" Content="{l:T gitChanges.cancel}" IsVisible="{Binding IsBusy}" Click="OnCancelProgress" Padding="8,3" Margin="0,0,2,0"
+                    VerticalAlignment="Stretch" ToolTip.Tip="{l:T gitChanges.stopTheRunningGitOperation}" AutomationProperties.Name="{l:T gitChanges.cancel}" />
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.fetch" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.fetch}" AutomationProperties.Name="{l:T gitChanges.fetch}">
               <controls:Icon Kind="arrow-down" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.pull" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.pull}" AutomationProperties.Name="{l:T gitChanges.pull}">
               <controls:Icon Kind="download" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.push" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.push}" AutomationProperties.Name="{l:T gitChanges.push}">
               <controls:Icon Kind="upload" Classes="accent-git" />
             </Button>
-            <Button Classes="toolbar" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
+            <Button Classes="toolbar" IsVisible="{Binding IsIdle}" Tag="git.sync" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.syncPullThenPush}" AutomationProperties.Name="{l:T gitChanges.sync}">
               <controls:Icon Kind="sync" Classes="accent-git" />
             </Button>
             <Button Classes="toolbar" ToolTip.Tip="{l:T gitChanges.moreActions}" AutomationProperties.Name="{l:T gitChanges.moreActions}">
@@ -212,6 +215,7 @@
                   <Separator />
                   <MenuItem controls:MenuEntry.CommandIcon="git.stash" Header="{l:T gitChanges.stashAll}" Tag="git.stash" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.history" Header="{l:T gitChanges.viewHistory}" Tag="git.history" Click="OnMenuCommand" />
+                  <MenuItem controls:MenuEntry.CommandIcon="git.manageBranches" Header="{l:T gitChanges.manageBranches}" Tag="git.manageBranches" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.Icon="cloud" Header="{l:T gitChanges.manageRemotes}" Tag="git.remotes" Click="OnMenuCommand" />
                   <MenuItem controls:MenuEntry.CommandIcon="git.tags" Header="{l:T gitChanges.manageTags}" Tag="git.tags" Click="OnMenuCommand" />
                   <Separator />
@@ -238,6 +242,12 @@
           </Panel>
         </DockPanel>
 
+        <!-- While a fetch, pull, push or sync runs: what it's doing, under the branch as in the classic IDE, over a running bar. -->
+        <StackPanel x:Name="Progress" Spacing="4" IsVisible="{Binding IsBusy}">
+          <TextBlock Text="{Binding ProgressText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ProgressText}" AutomationProperties.LiveSetting="Polite" />
+          <ProgressBar IsIndeterminate="True" Height="2" MinHeight="2" />
+        </StackPanel>
+
         <!-- Outgoing / incoming commits, the history, and pull requests. -->
         <DockPanel>
           <Button DockPanel.Dock="Right" Classes="toolbar" Tag="git.createPullRequest" Click="OnCommand" ToolTip.Tip="{l:T gitChanges.createAPullRequest}" AutomationProperties.Name="{l:T gitChanges.createAPullRequest}">
@@ -256,6 +266,49 @@
             <Button Classes="link" Content="{l:T gitChanges.publishToAGitHost}" Tag="git.publish" Click="OnCommand" IsVisible="{Binding ShowPublishToHost}" ToolTip.Tip="{Binding OutgoingIncomingTooltip}" VerticalAlignment="Center" />
           </WrapPanel>
         </DockPanel>
+
+        <!-- The repository's host while you're not signed in to it (ADR 0088): a suggestion until dismissed for the repository,
+             and its sign-in in place (Sign In, Create a pull request, the hosting windows' Sign in open it). -->
+        <Border x:Name="HostingSignInPanel" DataContext="{Binding HostingSignIn}" x:DataType="vm:HostingSignInViewModel" IsVisible="{Binding IsVisible, FallbackValue=False}"
+                Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" Background="{DynamicResource Shell.Status.Info}"
+                BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}"
+                AutomationProperties.Name="{Binding Text}">
+          <DockPanel>
+            <Button DockPanel.Dock="Right" Classes="toolbar" VerticalAlignment="Top" Margin="4,-2,-4,0" Command="{Binding DismissCommand}"
+                    ToolTip.Tip="{l:T gitChanges.dontSuggestSigningInForThisRepository}" AutomationProperties.Name="{l:T gitChanges.dontSuggestSigningInForThisRepository}">
+              <controls:Icon Kind="close" />
+            </Button>
+            <controls:Icon DockPanel.Dock="Left" Kind="cloud" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+            <StackPanel Spacing="6">
+              <TextBlock Classes="small" Text="{Binding Text}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+              <Button Classes="accent" Content="{l:T accounts.signIn}" Command="{Binding ExpandCommand}" IsVisible="{Binding IsCollapsed}" HorizontalAlignment="Left" />
+              <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
+                <TextBlock Classes="small" Text="{Binding Row.OtherServerText}" IsVisible="{Binding Row.ShowsOtherServer}" TextWrapping="Wrap" />
+                <Button Content="{l:T accounts.signOut}" Command="{Binding Row.SignOutCommand}" IsVisible="{Binding Row.IsSignedIn}" HorizontalAlignment="Left" />
+                <Button Classes="accent" Content="{x:Static vm:AccountProviderRow.IntegratedSignInLabel}" Command="{Binding Row.SignInIntegratedCommand}" IsVisible="{Binding Row.CanSignInIntegrated}" HorizontalAlignment="Left" />
+                <Button Classes="accent" Content="{l:T gitChanges.signInWithYourBrowser}" Command="{Binding Row.SignInCommand}" IsVisible="{Binding Row.CanSignInWithCode}" HorizontalAlignment="Left" />
+                <StackPanel Spacing="4" IsVisible="{Binding Row.HasCode}">
+                  <TextBlock Classes="small" Text="{l:T accounts.enterThisCodeInYourBrowser}" TextWrapping="Wrap" />
+                  <SelectableTextBlock Text="{Binding Row.UserCode}" FontSize="18" FontWeight="SemiBold" AutomationProperties.Name="{l:T accounts.deviceCode}" />
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <Button Classes="accent" Content="{l:T accounts.copyCodeAndOpenBrowser}" Command="{Binding Row.CopyAndOpenCommand}" />
+                    <Button Content="{l:T accounts.cancel}" Command="{Binding Row.CancelCommand}" />
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel Spacing="4" IsVisible="{Binding Row.CanSignIn}">
+                  <TextBlock Classes="small" Text="{Binding TokenPrompt}" TextWrapping="Wrap" />
+                  <TextBox x:Name="HostingToken" Text="{Binding Row.Token}" PasswordChar="●" PlaceholderText="{l:T accounts.personalAccessToken}"
+                           AutomationProperties.Name="{Binding Row.Label, StringFormat='Personal access token for {0}'}" />
+                  <Button Content="{l:T accounts.signInWithToken}" Command="{Binding Row.SignInWithTokenCommand}" HorizontalAlignment="Left" />
+                  <TextBlock Classes="small" Text="{Binding Row.TokenHint}" IsVisible="{Binding Row.HasTokenHint}" TextWrapping="Wrap" />
+                  <Button Classes="link" Content="{l:T gitChanges.createAToken}" Command="{Binding CreateTokenCommand}" IsVisible="{Binding HasTokenUrl}" HorizontalAlignment="Left" />
+                </StackPanel>
+                <TextBlock Classes="small" Text="{l:T accounts.signingIn}" IsVisible="{Binding Row.IsSigningIn}" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Classes="small" Text="{Binding Row.Error}" IsVisible="{Binding Row.HasError}" Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" />
+              </StackPanel>
+            </StackPanel>
+          </DockPanel>
+        </Border>
 
         <WrapPanel Orientation="Horizontal" IsVisible="{Binding HasCi}">
           <Button Classes="link" Tag="hosting.showChecks" Click="OnCommand" ToolTip.Tip="{Binding CiTooltip}" AutomationProperties.Name="{Binding CiText}">

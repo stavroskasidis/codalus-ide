@@ -6,8 +6,8 @@ name: Pipeline
 #   previous nightly as its notes. The newest 14 are kept.
 # - master: a stable release, v<VERSION> (every merge of a release/X.Y.Z branch, and every hotfix; the run fails if that
 #   tag exists already), the latest release, with notes from the commits since the previous stable release. Afterwards the
-#   site with the apt and dnf repositories is deployed, the AUR package pushed, and develop takes in master (a release
-#   branch's fixes, a hotfix) and moves past the released version.
+#   site with the apt and dnf repositories is deployed, the AUR package and the plugin SDK's NuGet packages pushed, and
+#   develop takes in master (a release branch's fixes, a hotfix) and moves past the released version.
 # - pull requests and other branches: CI only.
 # A release is atomic (the maintainer's rule, 2026-10-14): every gate runs first on the release's own commit: CI (test,
 # smoke), the packages installed and smoke-tested on every platform (packages), and for a stable release also the
@@ -80,7 +80,7 @@ jobs:
           fi
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
       - if: steps.kind.outputs.kind != ''
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - if: steps.kind.outputs.kind != ''
@@ -179,7 +179,9 @@ jobs:
 
   # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
   # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
-  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows).
+  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows). A fourth,
+  # debug-codalus, runs the debugger classes under Codalus IDE's own CoreCLR adapter (M54, ADR 0086), on Linux arm64
+  # too, where it is the only shard (the M54 plan: the other shards' coverage there is the packages' smoke test).
   test:
     name: test (${{ matrix.os }}, ${{ matrix.shard }})
     needs: gate
@@ -191,13 +193,15 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        shard: [shell-1, shell-2, others]
+        shard: [shell-1, shell-2, others, debug-codalus]
+        include:
+          - { os: ubuntu-24.04-arm, shard: debug-codalus }
     runs-on: ${{ matrix.os }}
     # macOS runners are the slowest and vary most: a Shell shard that takes 16 to 24 minutes on one ran past 40 on a slow
     # one (0.6.0's release run; develop's run 40241261003, M50), so macOS gets 20 minutes more.
     timeout-minutes: ${{ matrix.os == 'macos-latest' && 70 || 50 }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
       - id: setup
         uses: ./.github/actions/setup
@@ -207,12 +211,14 @@ jobs:
           netcoredbg: true
           devtools: true
           display: true
+          downloads: true
+          browser: true
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
         # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: ~/.nuget/packages
           key: ${{ steps.setup.outputs.nuget-cache-key }}
@@ -222,9 +228,24 @@ jobs:
       - name: Test (${{ matrix.shard }})
         shell: bash
         # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
-        # the steps below.
-        timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
+        # the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
+        # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
+        # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both.
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && (matrix.shard == 'shell-2' && 40 || 60) || 40 }}
         run: bash eng/ci-test.sh ${{ matrix.shard }}
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
       - name: Processes the tests left running
         # What the tests left behind is listed: a leak to fix.
         if: always() && runner.os != 'Windows'
@@ -246,7 +267,7 @@ jobs:
             cat "$dump.stacks.txt"
             echo "::endgroup::"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.shard }}
@@ -283,14 +304,16 @@ jobs:
     # of time in the middle of a passing smoke test (#111, run 39668401109).
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup
+      - uses: actions/checkout@v7
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           extra-sdks: true
           nuget-cache: true
           netcoredbg: true
           devtools: true
           display: true
+          downloads: true
       - name: Native AOT publish must stay warning-free in our code
         shell: bash
         run: |
@@ -307,8 +330,21 @@ jobs:
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
       # Always: the screenshots are the website's (CLAUDE.md, Website), and a failure's report.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: smoke-test-${{ runner.os }}
@@ -366,15 +402,18 @@ jobs:
     # The version and kind go into each command, never the job's environment: MSBuild reads environment variables as
     # properties, so a VERSION there would stamp every project the smoke test builds (Plain.1.0.0.nupkg wasn't).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # the release notes read the history and the tags
       # The smoke test has a .NET 11 step (M30); dumps and attaching need the developer tools (debug.companion,
-      # debug.roslyn, debug.remote).
-      - uses: ./.github/actions/setup
+      # debug.roslyn, debug.remote); browser debugging (blazor.wasmDebug, blazor.compoundDebug) a browser on Linux arm64.
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           extra-sdks: true
           devtools: true
+          downloads: true
+          browser: true
       - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages, Xvfb)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev squashfs-tools rpm zstd xvfb
@@ -407,21 +446,6 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
-      - name: A Chromium browser (Linux arm64)
-        # Browser debugging (blazor.wasmDebug, blazor.compoundDebug) needs one. The x64 runners have Chrome; there's no
-        # Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so Playwright's build (pinned).
-        # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package
-        # brings one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it:
-        # allow them on this throwaway runner rather than run the browser without its sandbox.
-        if: matrix.rid == 'linux-arm64'
-        shell: bash
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          npx -y playwright@1.56.1 install --with-deps chromium
-          chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
-          [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
-          sudo ln -sf "$chrome" /usr/local/bin/chromium
-          chromium --version
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true
@@ -429,13 +453,26 @@ jobs:
         shell: bash
         timeout-minutes: 40
         run: bash eng/smoke-test.sh --packages artifacts/packages artifacts/smoke-test
-      - uses: actions/upload-artifact@v4
+      - name: Anything downloaded (Node.js, vscode-js-debug)
+        id: downloaded
+        if: always() && steps.setup.outputs.downloads-hit != 'true'
+        shell: bash
+        run: if [ -n "$(ls -A "$CODALUS_DOWNLOAD_CACHE" 2> /dev/null)" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save the downloads
+        # After the steps that download them, passed or not: the next runs take them from the cache (the setup's
+        # downloads input). Several jobs may save the same key: the first one does, the others say it exists.
+        if: always() && steps.downloaded.outputs.any == 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ runner.temp }}/codalus-downloads
+          key: ${{ steps.setup.outputs.downloads-key }}
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: smoke-test-${{ matrix.rid }}
           path: artifacts/smoke-test/
           if-no-files-found: ignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: packages-${{ matrix.rid }}
           path: artifacts/packages/
@@ -471,7 +508,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
       - name: Linux prerequisites (Native AOT, AppImage, rpm, delta packages)
         if: runner.os == 'Linux'
@@ -514,7 +551,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
         with:
           display: true
@@ -599,7 +636,7 @@ jobs:
             --out "ci-results/regression-${RUNNER_OS}.md" || status=$?
           cat "ci-results/regression-${RUNNER_OS}.md" >> "$GITHUB_STEP_SUMMARY" || true
           exit "$status"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bench-results-${{ runner.os }}
@@ -645,11 +682,11 @@ jobs:
       contents: write
       pages: read # the site's address, to keep the nightly it serves
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: packages-*
           path: downloaded
@@ -704,7 +741,7 @@ jobs:
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 || gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
 
   # After a stable release is published, in this order: the site with the repositories (the Pages artifact the site
-  # gate uploaded), the AUR package, and develop last.
+  # gate uploaded), the AUR package, and develop last. The plugin SDK's NuGet packages go beside the site and the AUR.
   pages:
     needs: [plan, publish]
     if: needs.plan.outputs.kind == 'stable'
@@ -717,7 +754,7 @@ jobs:
       url: ${{ steps.address.outputs.url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
       # Pages reports http:// for a project site under its owner's custom domain, though the site is served over HTTPS.
       - id: address
         shell: bash
@@ -755,6 +792,54 @@ jobs:
           git add PKGBUILD .SRCINFO
           git diff --cached --quiet || { git commit -q -m "Update to $VERSION"; git push -q origin HEAD:master; }
 
+  # The plugin SDK on nuget.org: Codalus.Plugins.Abstractions, Codalus.Plugins.Testing and Codalus.Templates. Each has a
+  # version of its own, not the IDE's, and a version already on nuget.org is skipped, so a release pushes only the
+  # packages whose version it changed. No API key is stored: nuget.org's trusted publishing trades the job's GitHub OIDC
+  # token for a key valid for an hour, under a policy for this repository, pipeline.yml and the environment nuget
+  # (docs/release/releasing.md, "nuget.org"). NUGET_USER is the nuget.org account the policy belongs to; without it
+  # the packages are packed and not pushed.
+  nuget:
+    needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'stable'
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write # the OIDC token nuget.org trades for an API key
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Pack the plugin SDK
+        shell: bash
+        run: |
+          for project in Codalus.Plugins.Abstractions Codalus.Plugins.Testing Codalus.Templates; do
+            dotnet pack "src/$project/$project.csproj" -c Release -o artifacts/nuget
+          done
+      - id: account
+        name: The nuget.org account
+        shell: bash
+        env:
+          NUGET_USER: ${{ secrets.NUGET_USER }}
+        run: |
+          if [ -z "$NUGET_USER" ]; then
+            echo "::notice::NUGET_USER isn't set: the plugin SDK's packages are packed, not pushed to nuget.org."
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          fi
+      # Right before the push: the key lasts an hour.
+      - id: login
+        if: steps.account.outputs.push == 'true'
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+      - name: Push the plugin SDK to nuget.org
+        if: steps.account.outputs.push == 'true'
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push "artifacts/nuget/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
   # Last: develop takes in master (a release branch's fixes, a hotfix) and moves past the release, once everything is
   # out; develop keeps its VERSION, already moved on when the release branch was cut. The "protect" ruleset lets
   # develop change only through a pull request, so the job opens one and merges it (it needs no approval, and the
@@ -763,14 +848,14 @@ jobs:
   # pull request never reports ci, so the job posts it on the branch's head itself, as GitHub Actions (the source the
   # ruleset requires): GitHub offers no Actions bypass for a repository owned by a user.
   finish:
-    needs: [plan, aur]
+    needs: [plan, aur, nuget]
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
       checks: write # the branch's ci check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup

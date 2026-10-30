@@ -79,7 +79,9 @@ public sealed record MonoDebugArguments(
 /// The desktop-CLR (.NET Framework) debugger adapter's <c>launch</c> and <c>attach</c> arguments (M43b, ADR 0076,
 /// <c>codalus-debughost --netfx-dap</c>): <see cref="Program"/> (a managed <c>.exe</c>) with its arguments, working
 /// directory and environment, or <see cref="ProcessId"/> to attach to. <see cref="NewConsole"/> gives the program a
-/// console window of its own (with input); otherwise its output comes through the Debug Console.
+/// console window of its own (with input); otherwise its output comes through the Debug Console. CoreCLR's adapter
+/// (<c>--clr-dap</c>, M54, ADR 0086) takes the same arguments, and <see cref="Console"/> (DAP's own: <c>integratedTerminal</c>
+/// or <c>externalTerminal</c>) starts its launcher there through the client's <c>runInTerminal</c>.
 /// </summary>
 public sealed record NetFxDebugArguments(
     string? Program = null,
@@ -92,7 +94,8 @@ public sealed record NetFxDebugArguments(
     bool NewConsole = false,
     string Name = ".NET Framework",
     string Type = "clr",
-    string Request = "launch");
+    string Request = "launch",
+    string? Console = null);
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
@@ -117,6 +120,35 @@ public sealed record RunInTerminalRequestArguments(string[] Args, string Cwd, st
 
 /// <summary>The answer to <c>runInTerminal</c>: the program's process id, when the terminal knows it.</summary>
 public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProcessId = null);
+
+/// <summary>
+/// The Codalus debugger's <c>codalus/applyChanges</c> request (M55, ADR 0086): an edit's deltas, one per module Roslyn
+/// emitted for (<see cref="ModuleDelta.ModuleId"/> is its MVID). Modules the program hasn't loaded are skipped.
+/// </summary>
+public sealed record ApplyChangesArguments(ModuleDelta[] Updates);
+
+/// <summary>Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON).</summary>
+public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta);
+
+/// <summary><c>codalus/applyChanges</c>'s answer: what happened to each module's delta.</summary>
+public sealed record ApplyChangesResponse(ModuleDeltaResult[] Results);
+
+/// <summary>
+/// <see cref="Status"/>: <c>applied</c>; <c>pending</c> (the program hasn't loaded the module yet: the edits apply when
+/// it does); <c>failed</c>, with the runtime's reason in <see cref="Message"/>.
+/// </summary>
+public sealed record ModuleDeltaResult(Guid ModuleId, string Status, string? Message = null)
+{
+    public const string Applied = "applied";
+    public const string Pending = "pending";
+    public const string Failed = "failed";
+}
+
+/// <summary>
+/// <c>codalus/hotReloadCapabilities</c>'s answer (M55): what the debugged runtime can apply (Roslyn's capability names,
+/// <c>Baseline</c> first), empty when it can't take edits.
+/// </summary>
+public sealed record HotReloadCapabilitiesResponse(string[] Capabilities);
 
 /// <summary>
 /// vscode-js-debug's browser <c>launch</c> arguments (ADR 0026). <see cref="Type"/> is <c>pwa-chrome</c> or
@@ -273,6 +305,9 @@ public static class DapEvents
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(RunInTerminalRequestArguments))]
 [JsonSerializable(typeof(RunInTerminalResponse))]
+[JsonSerializable(typeof(ApplyChangesArguments))]
+[JsonSerializable(typeof(ApplyChangesResponse))]
+[JsonSerializable(typeof(HotReloadCapabilitiesResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
 [JsonSerializable(typeof(StartDebuggingArguments))]
 [JsonSerializable(typeof(JsonElement))]

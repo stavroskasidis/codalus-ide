@@ -199,6 +199,41 @@ public sealed record CommitCompletion(string Reference, string Title, string? De
 public sealed record RelatedItem(string Reference, string? Title);
 
 /// <summary>The Git Changes tool window (ADR 0008).</summary>
+/// <summary>A fetch, pull, push or sync that Git Changes shows while it runs (<see cref="GitChangesViewModel.BeginProgress"/>); dispose it when it ends.</summary>
+public sealed class GitProgress : IDisposable
+{
+    private readonly GitChangesViewModel _owner;
+    private readonly CancellationTokenSource _cancellation = new();
+
+    internal GitProgress(GitChangesViewModel owner, string text)
+    {
+        _owner = owner;
+        Text = text;
+    }
+
+    public string Text { get; }
+
+    /// <summary>Canceled by the window's Cancel, or the status bar's.</summary>
+    public CancellationToken Token => _cancellation.Token;
+
+    public bool IsCancellationRequested => _cancellation.IsCancellationRequested;
+
+    public void Cancel()
+    {
+        if (!_cancellation.IsCancellationRequested)
+        {
+            _cancellation.Cancel();
+            _owner.ProgressChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _owner.EndProgress(this);
+        _cancellation.Dispose();
+    }
+}
+
 public sealed partial class GitChangesViewModel : ObservableObject
 {
     public const string ToolWindowId = "git.changes";
@@ -619,6 +654,9 @@ public sealed partial class GitChangesViewModel : ObservableObject
     public bool IsPublished => _git.Status?.Upstream is not null;
 
     public bool IsNotPublished => HasRepository && !IsPublished;
+
+    /// <summary>The panel that suggests signing in to the repository's host, and signs in (ADR 0088); set by the shell.</summary>
+    public HostingSignInViewModel? HostingSignIn { get; set; }
 
     private bool _hasRemote = true;
 
@@ -1079,6 +1117,53 @@ public sealed partial class GitChangesViewModel : ObservableObject
         {
             OnPropertyChanged(name);
         }
+    }
+
+    // ------------------------------------------------------------------ fetch, pull, push and sync while they run
+
+    private readonly List<GitProgress> _progress = [];
+
+    /// <summary>"Fetching…", "Pulling…": the latest fetch, pull, push or sync running, shown under the branch as the classic IDE does; null when none runs.</summary>
+    public string? ProgressText => _progress.Count == 0 ? null
+        : _progress[^1].IsCancellationRequested ? Localizer.Get("msg.gitChanges.cancelling", "Cancelling…")
+        : _progress[^1].Text;
+
+    /// <summary>A fetch, pull, push or sync is running: the window shows it over a running bar, with Cancel in place of Fetch, Pull, Push and Sync.</summary>
+    public bool IsBusy => _progress.Count > 0;
+
+    public bool IsIdle => _progress.Count == 0;
+
+    /// <summary>Shows <paramref name="text"/> until the returned progress is disposed; Cancel cancels its token.</summary>
+    public GitProgress BeginProgress(string text)
+    {
+        var progress = new GitProgress(this, text);
+        _progress.Add(progress);
+        ProgressChanged();
+        return progress;
+    }
+
+    /// <summary>Cancel: stops every fetch, pull, push and sync running (git is killed through each one's token).</summary>
+    public void CancelProgress()
+    {
+        foreach (var progress in _progress.ToList())
+        {
+            progress.Cancel();
+        }
+    }
+
+    internal void EndProgress(GitProgress progress)
+    {
+        if (_progress.Remove(progress))
+        {
+            ProgressChanged();
+        }
+    }
+
+    internal void ProgressChanged()
+    {
+        OnPropertyChanged(nameof(ProgressText));
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(IsIdle));
     }
 
     /// <summary>"#1 Add the greeter": the open pull request of the current branch.</summary>

@@ -21,8 +21,8 @@ public sealed class CodeLensDetailsTests
             new(7, 1, new string('0', 40), "Not Committed Yet", s_now, "local"),
         ];
 
-        Assert.Equal("Grace, 3 days ago  |  2 authors, 2 changes", LensDetails.Git(blame, 1, 7, s_now));
-        Assert.Equal("Ada, 30 days ago  |  1 author, 1 change", LensDetails.Git(blame, 1, 3, s_now));
+        Assert.Equal("Grace, 3 days ago | 2 authors, 2 changes", LensDetails.Git(blame, 1, 7, s_now));
+        Assert.Equal("Ada, 30 days ago | 1 author, 1 change", LensDetails.Git(blame, 1, 3, s_now));
         Assert.Null(LensDetails.Git(blame, 7, 7, s_now)); // only uncommitted lines
         Assert.Null(LensDetails.Git(blame, 20, 30, s_now));
     }
@@ -73,7 +73,7 @@ public sealed class CodeLensDetailsTests
         var shapes = document!.Controller!;
         var line = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(line) is { } eol && eol.Contains("Ada Tester", StringComparison.Ordinal), seconds: 90);
-        Assert.Contains("Ada Tester, just now  |  1 author, 1 change", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
+        Assert.Contains("Ada Tester, just now | 1 author, 1 change", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
 
         // Turned off, it goes; the reference counts stay.
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.GitCodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);

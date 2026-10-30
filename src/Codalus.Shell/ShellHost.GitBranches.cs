@@ -31,7 +31,15 @@ public sealed partial class ShellHost
             return CommonBranchScope(branch);
         }
 
-        var git = GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo;
+        return GitBranchScope(branch, GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo, GitBranches.LocalTwin(branch), GitBranches.HasRemoteFor(branch));
+    }
+
+    /// <summary>
+    /// The context of a branch in <paramref name="git"/>: its local branch of the same name when it's a remote one
+    /// (<paramref name="localTwin"/>), and whether the repository has a remote (the drop-down's, or the Git Repository document's).
+    /// </summary>
+    internal IContextKeyReader GitBranchScope(GitBranchDetails branch, GitService git, GitBranchDetails? localTwin, bool hasRemote)
+    {
         var status = git.Status;
         var current = !branch.IsRemote && (branch.IsCurrent && status?.Branch is not null || branch.IsRebasingHere);
         var menuContext = new MenuContext();
@@ -39,9 +47,9 @@ public sealed partial class ShellHost
         menuContext.Set("gitBranchIsCurrent", current);
         menuContext.Set("gitBranchHasUpstream", branch is { Upstream: not null, UpstreamGone: false });
         menuContext.Set("gitBranchInOtherWorktree", branch.WorktreePath is not null);
-        menuContext.Set("gitBranchHasLocal", GitBranches.LocalTwin(branch) is not null);
+        menuContext.Set("gitBranchHasLocal", localTwin is not null);
         menuContext.Set("gitBranchUpdateBlocked", current && status?.Operation is "merge" or "rebase");
-        menuContext.Set("gitHasRemote", GitBranches.HasRemoteFor(branch));
+        menuContext.Set("gitHasRemote", hasRemote);
         menuContext.Set("gitBranchIsCommon", false);
         menuContext.Set("gitBranchRepository", git.Root);
         menuContext.Set("gitOperation", status?.Operation);
@@ -92,11 +100,16 @@ public sealed partial class ShellHost
             return CommonBranchTitle(command, branch);
         }
 
-        var current = (GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo).Status?.Branch;
+        return GitBranchTitle(command, branch, (GitBranches.IsAllRepositories ? GitBranches.RepositoryOf(branch) : Repo).Status?.Branch, GitBranches.LocalTwin(branch));
+    }
+
+    /// <summary>A branch command's title, with the repository's current branch and a remote branch's local one.</summary>
+    private static string? GitBranchTitle(string command, GitBranchDetails branch, string? current, GitBranchDetails? localTwin)
+    {
         var name = branch.Name;
         switch (command)
         {
-            case "git.switchBranch" when branch.IsRemote && GitBranches.LocalTwin(branch) is { } twin:
+            case "git.switchBranch" when branch.IsRemote && localTwin is { } twin:
                 var behind = CountBehindSync(twin, branch);
                 return behind > 0
                     ? Localizer.Format(behind == 1 ? "msg.gitBranches.switchToLocalBehindOne" : "msg.gitBranches.switchToLocalBehind", behind == 1 ? "Switch to Local '{0}' (1 commit behind)" : "Switch to Local '{0}' ({1} commits behind)", twin.Name, behind)
@@ -132,13 +145,13 @@ public sealed partial class ShellHost
         args.Count > 0 && args[0].ValueKind == JsonValueKind.String && args[0].GetString() is { Length: > 0 } value ? value : null;
 
     /// <summary>The branch a ref names (a full ref, or a local branch's name), from git; null when there's none.</summary>
-    private async Task<GitBranchDetails?> FindBranchAsync(string reference)
-    {
-        var branches = await Repo.BranchDetailsAsync().ConfigureAwait(true);
-        return branches.FirstOrDefault(b => b.FullRef == reference)
+    private async Task<GitBranchDetails?> FindBranchAsync(string reference) =>
+        FindBranch(await Repo.BranchDetailsAsync().ConfigureAwait(true), reference);
+
+    private static GitBranchDetails? FindBranch(IReadOnlyList<GitBranchDetails> branches, string reference) =>
+        branches.FirstOrDefault(b => b.FullRef == reference)
             ?? branches.FirstOrDefault(b => !b.IsRemote && b.Name == reference)
             ?? branches.FirstOrDefault(b => b.IsRemote && b.Name == reference);
-    }
 
     /// <summary>
     /// Checkout from the drop-down or a branch's menu (B1, B10, B11, B13): a local branch is switched to; a remote branch
@@ -147,12 +160,14 @@ public sealed partial class ShellHost
     /// </summary>
     public Task CheckoutBranchAsync(string reference) => GitActionAsync(async () =>
     {
-        if (await FindBranchAsync(reference).ConfigureAwait(true) is not { } branch)
+        var branches = await Repo.BranchDetailsAsync().ConfigureAwait(true);
+        if (FindBranch(branches, reference) is not { } branch)
         {
             throw new GitException(Localizer.Format("msg.gitBranches.noBranchNamed", "There is no branch named '{0}'.", ShortRefName(reference)), -1);
         }
 
-        var target = branch.IsRemote && GitBranches.LocalTwin(branch) is { } twin ? twin : branch;
+        // A remote branch switches to the local branch of its name, read with it (the drop-down may not have been opened).
+        var target = branch.IsRemote && branches.FirstOrDefault(b => !b.IsRemote && b.Name == branch.ShortName) is { } twin ? twin : branch;
         if (target is { IsRemote: false, IsCurrent: true })
         {
             GitBranches.IsOpen = false;
@@ -287,7 +302,7 @@ public sealed partial class ShellHost
 
     /// <summary>Push (a branch's menu): that branch, checked out or not; with no ref the current one.</summary>
     public Task PushCommandAsync(IReadOnlyList<JsonElement> args) =>
-        RefArgument(args) is { } reference ? GitActionAsync(() => Repo.PushBranchAsync(reference), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
+        RefArgument(args) is { } reference ? RemoteActionAsync(token => Repo.PushBranchAsync(reference, token), Localizer.Get("msg.git.pushing", "Pushing…")) : PushAsync();
 
     /// <summary>
     /// Rename… (P6, F2): the current name to edit, git's rules and the other branches' names as the error under the box;

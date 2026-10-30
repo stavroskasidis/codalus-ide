@@ -49,6 +49,13 @@ public sealed class RemoteShellTests
         return f.Shell.Remote!;
     }
 
+    /// <summary>The debugger's state, the link, the Debug Console and the end of each output channel.</summary>
+    private static string Describe(ShellFixture f, RemoteSession remote) =>
+        $"state {f.Shell.Debugger.State}, linked {remote.Connection.IsLinked}. Debug Console:\n{f.Shell.DebugLog.GetText()}\n"
+        + string.Join('\n', f.Shell.Workbench.Output.Channels.Select(c => c.GetText() is var text && text.Length > 4000
+            ? $"Output '{c.Name}' (the last 4000 characters):\n{text[^4000..]}"
+            : $"Output '{c.Name}':\n{text}"));
+
     private static string Screen(Workbench.Terminal.TerminalSession session) =>
         string.Join('\n', Enumerable.Range(0, session.Terminal.TotalRows).Select(i => session.Terminal.GetRow(i).GetText()));
 
@@ -207,7 +214,9 @@ public sealed class RemoteShellTests
         var line = Array.FindIndex(File.ReadAllLines(Path.Combine(folder, "src", "Hello", "Program.cs")), l => l.Contains("Console.WriteLine($\"args", StringComparison.Ordinal)) + 1;
         f.Shell.Debugger.Breakpoints.Toggle(program, line);
         await f.RunAsync("debug.start");
-        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300);
+        // It once waited the whole 300 s with nothing to show for it (Windows CI, run 40956611737): the failure says
+        // where F5 got to, the build or the launch.
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 300, describe: () => Describe(f, remote));
         try
         {
             await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } c2 && c2.Model.Path == program && c.CurrentDebugLine() == line, seconds: 30);

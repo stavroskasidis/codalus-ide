@@ -51,7 +51,7 @@ jobs:
     outputs:
       docs-only: ${{ steps.changes.outputs.docs-only }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - id: changes
@@ -80,14 +80,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # The whole history: the sitemap dates each page by its source's last commit (website/Site/PageDates.cs).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Tools
         run: sudo apt-get update && sudo apt-get install -y apt-utils createrepo-c rpm
       - name: The release's own packages (from this run)
         if: inputs.release != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: packages-linux-*
           path: downloaded
@@ -123,7 +123,7 @@ jobs:
       # The site's address as Pages serves it (a custom domain of the owner's, or <owner>.github.io), over HTTPS: apt
       # refuses a redirect from HTTPS to HTTP, which github.io gives when the owner has a custom domain.
       - id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Build the signed repositories
         shell: bash
         env:
@@ -161,7 +161,7 @@ jobs:
           dotnet run --project website -c Release --no-launch-profile --no-build -- --export "$RUNNER_TEMP/lighthouse-site" \
             --base-url "http://127.0.0.1:8765/" --ref "${{ github.ref_name }}" --stable "${{ steps.releases.outputs.stable }}" --nightly "${{ steps.releases.outputs.nightly }}"
           bash eng/lighthouse.sh "$RUNNER_TEMP/lighthouse-site"
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -176,7 +176,7 @@ jobs:
       url: ${{ steps.address.outputs.url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
       # Pages reports http:// for a project site under its owner's custom domain, though the site is served over HTTPS.
       - id: address
         shell: bash

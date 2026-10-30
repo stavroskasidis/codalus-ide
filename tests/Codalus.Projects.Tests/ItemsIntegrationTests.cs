@@ -358,7 +358,8 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
         _service.BuildOutput += (_, line) => output.Enqueue(line);
         var build = await _service.BuildAsync(BuildTargets.Build, null, Timeout());
         Assert.True(build.Succeeded, string.Join("\n", output.TakeLast(40)));
-        Assert.True(File.Exists(Path.Combine(folder, ".codalus", "folder.slnx")));
+        Assert.True(File.Exists(Path.Combine(folder, ".codalus", "state", "folder", "folder.slnx"))); // where Git doesn't show it
+        Assert.False(File.Exists(Path.Combine(folder, ".codalus", "folder.slnx")));
         Assert.True(Directory.Exists(Path.Combine(folder, "src", "Tool", "bin")));
 
         // Reopened: the projects are loaded again; removing one keeps the other.

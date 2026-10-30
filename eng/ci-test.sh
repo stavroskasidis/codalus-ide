@@ -3,10 +3,11 @@
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
 #   others   every other test project
+#   debug-codalus  the debugger classes in eng/ci-debug-codalus.txt, under Codalus IDE's own CoreCLR adapter (M54)
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
-shard="${1:?shard: shell-1, shell-2 or others}"
+shard="${1:?shard: shell-1, shell-2, others or debug-codalus}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -22,11 +23,18 @@ results="$PWD/artifacts/test-results/$shard"
 # shard's usual 30 put HangDump dumping the Shell tests' tree (the test process, its hosts and their build nodes) on a
 # 7 GB runner; a lost runner keeps neither its log nor its artifacts, so nothing said which test. The watchdog's stacks
 # (dotnet-stack, at 10 minutes) are in the log instead, and HangDump still names the tests still running and ends them.
+# The runner was lost a third time without the dump (run 40675641432), so the dump wasn't the cause: pipeline.yml now
+# stops macOS shell-2's step at 40 minutes, which keeps the log and the results folder.
 dump=Mini
 [[ "${RUNNER_OS:-}" == "macOS" && "$shard" == shell-* ]] && dump=None
 hang=(--hangdump --hangdump-timeout 15m --hangdump-type "$dump" --results-directory "$results")
 common=(-c "$configuration" --no-build -- "${hang[@]}")
 mkdir -p "$results"
+# netcoredbg's DAP log of every debug session (--engineLogging, a few KB each), in the results folder that CI uploads
+# when the shard fails: a func-eval netcoredbg refused once on Windows (0x80131313, CORDBG_E_FUNC_EVAL_BAD_START_POINT,
+# which the runtime returns while an aborted func-eval is pending; netcoredbg aborts one after 5 s) left no trace of
+# the evaluation before it (DataTipDebuggerTests, run 40375629247).
+export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;
@@ -149,6 +157,37 @@ case "$shard" in
     for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
     # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
     dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
+    ;;
+  debug-codalus)
+    # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
+    # folder (uploaded when the shard fails), as netcoredbg's is above: ADR 0086's one silent attach failure on Linux is
+    # watched for here.
+    export CODALUS_DEBUG_ADAPTER=codalus
+    export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
+    export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
+    # One test project at a time (each line's namespace names it), every one run whatever the one before did.
+    projects=()
+    while IFS= read -r line; do
+      line="${line%%#*}"
+      line="$(echo "$line" | tr -d '[:space:]')"
+      [[ -z "$line" ]] && continue
+      name="${line%()}"
+      [[ "$name" != "$line" ]] && name="${name%.*}" # a method: its class
+      project="${name%.*}"
+      [[ " ${projects[*]-} " == *" $project "* ]] || projects+=("$project")
+    done < eng/ci-debug-codalus.txt
+    status=0
+    for project in "${projects[@]}"; do
+      filters=()
+      while IFS= read -r line; do
+        line="${line%%#*}"
+        line="$(echo "$line" | tr -d '[:space:]')"
+        [[ "$line" == "$project".* ]] || continue
+        if [[ "$line" == *"()" ]]; then filters+=(--filter-method "${line%()}"); else filters+=(--filter-class "$line"); fi
+      done < eng/ci-debug-codalus.txt
+      dotnet test --project "tests/$project" --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1 || status=$?
+    done
+    exit "$status"
     ;;
   others)
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The

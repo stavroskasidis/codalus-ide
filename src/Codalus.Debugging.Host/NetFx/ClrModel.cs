@@ -67,6 +67,27 @@ internal interface IClrProcess : IDisposable
 
     /// <summary>Lets the process go on without the debugger.</summary>
     void Detach();
+
+    /// <summary>
+    /// Asks the runtime to compile <paramref name="module"/>'s methods so that edits can be applied to them (M55: Edit and
+    /// Continue's JIT flags). Only while the module's load event is being handled, and only for a process debugged from
+    /// before the module loaded; false when the runtime refused (a module loaded before an attach).
+    /// </summary>
+    bool EnableEditAndContinue(IClrModule module) => false;
+
+    /// <summary>
+    /// Applies an edit to a loaded module (M55, ADR 0086: <c>ICorDebugModule2::ApplyChanges</c>), the process stopped:
+    /// the metadata and IL deltas Roslyn emitted for it. Later calls of a changed method run its new version; frames
+    /// already in it finish in the old one. Throws <see cref="ClrException"/> with the runtime's reason when refused.
+    /// </summary>
+    void ApplyChanges(IClrModule module, byte[] metadataDelta, byte[] ilDelta) =>
+        throw new ClrException("This debugger can't apply code changes.");
+
+    /// <summary>
+    /// The current version of a method (1 until an edit changed it, then one more for each edit): new calls run it,
+    /// and <see cref="CreateBreakpoint"/> sets breakpoints in it.
+    /// </summary>
+    int CodeVersion(IClrModule module, int methodToken) => 1;
 }
 
 /// <summary>A module loaded in an application domain.</summary>
@@ -117,6 +138,9 @@ internal interface IClrFrame
 
     /// <summary>A local variable by its slot; null when it isn't available (optimized code).</summary>
     IClrValue? Local(int slot);
+
+    /// <summary>The version of its method the frame runs (1 until an edit changed the method, M55).</summary>
+    int CodeVersion => 1;
 }
 
 internal enum ClrValueKind
@@ -126,7 +150,7 @@ internal enum ClrValueKind
     String,
     Array,
 
-    /// <summary>An object or a value type's value (a struct, an enum, a boxed primitive whose type is a struct of mscorlib).</summary>
+    /// <summary>An object or a value type's value (a struct, an enum, a boxed primitive whose type is a struct of the core library).</summary>
     Object,
 }
 
@@ -163,6 +187,40 @@ internal interface IClrValue
 
     /// <summary>Changes a primitive in place (a local, an argument, a field, an element).</summary>
     void SetPrimitive(object value);
+
+    /// <summary>
+    /// Points a reference in place (a field, an element, a local of a class type) at <paramref name="value"/>'s object,
+    /// or at null (DAP's <c>setExpression</c>, M54).
+    /// </summary>
+    void SetReference(IClrValue? value) => throw new ClrException("This value can't be changed here.");
+}
+
+/// <summary>A func-eval's result when the method returns nothing (a property's setter, M54).</summary>
+internal sealed class ClrVoidValue : IClrValue
+{
+    public static readonly ClrVoidValue Instance = new();
+
+    public ClrValueKind Kind => ClrValueKind.Null;
+
+    public object? Primitive => null;
+
+    public string? Text => null;
+
+    public ClrType Type { get; } = ClrType.Named("void");
+
+    public bool IsValueType => false;
+
+    public int Length => 0;
+
+    public IReadOnlyList<int> Dimensions => [];
+
+    public ulong Address => 0;
+
+    public IClrValue Element(int index) => throw new ClrException("The method returns nothing.");
+
+    public IClrValue Field(IClrModule module, int typeToken, int fieldToken) => throw new ClrException("The method returns nothing.");
+
+    public void SetPrimitive(object value) => throw new ClrException("The method returns nothing.");
 }
 
 /// <summary>
@@ -236,12 +294,14 @@ internal sealed class ClrLiveValue : IClrValue
         new ClrLiveValue(_process, Current.Field(module, typeToken, fieldToken), () => Current.Field(module, typeToken, fieldToken));
 
     public void SetPrimitive(object value) => Current.SetPrimitive(value);
+
+    public void SetReference(IClrValue? value) => Current.SetReference(value);
 }
 
 /// <summary>
 /// A runtime type: a class or value type of a module (<see cref="Module"/> and <see cref="Token"/>, with its type
 /// arguments); an array of <see cref="Element"/>; or a primitive, <c>string</c> or <c>object</c> by
-/// <see cref="Name"/> (<c>System.Int32</c>), which the session finds in mscorlib.
+/// <see cref="Name"/> (<c>System.Int32</c>), which the session finds in the core library.
 /// </summary>
 internal sealed record ClrType(IClrModule? Module, int Token, string? Name = null, IReadOnlyList<ClrType>? Arguments = null, ClrType? Element = null, int Rank = 0)
 {
@@ -249,6 +309,12 @@ internal sealed record ClrType(IClrModule? Module, int Token, string? Name = nul
 
     /// <summary>The runtime's own type object (ICorDebugType), to pass back to it; not part of the type's identity.</summary>
     public object? Native { get; init; }
+
+    /// <summary>
+    /// The base type as the runtime instantiated it (<c>Collection&lt;string&gt;</c> under a class deriving from it), for
+    /// calls to a base's methods; null when unknown, and not part of the type's identity.
+    /// </summary>
+    public Func<ClrType?>? BaseOf { get; init; }
 
     public bool Equals(ClrType? other) =>
         other is not null && ReferenceEquals(Module, other.Module) && Token == other.Token && Name == other.Name && Rank == other.Rank

@@ -383,6 +383,7 @@ public sealed class DialogViewModel : ObservableObject
         _input = request.Input ?? string.Empty;
         OnPropertyChanged(nameof(InputText));
         Request = request;
+        Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.DialogShown, [], [("title", request.Title)]);
         Error = request.Validate?.Invoke(_input);
         Buttons.Clear();
         OptionChecked = request.Option?.Checked ?? false;

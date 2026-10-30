@@ -20,6 +20,7 @@ internal sealed class AnalysisSolution
     private State? _state;
     private Task<State?>? _building;
     private int _buildingGeneration = -1;
+    private bool _buildingReuse;
 
     public AnalysisSolution(WorkspaceManager workspace, Action<string> log)
     {
@@ -27,12 +28,28 @@ internal sealed class AnalysisSolution
         _log = log;
     }
 
-    /// <summary>A reference assembly that stands for a project, and where it came from (<c>cache</c> or <c>build</c>).</summary>
+    /// <summary>
+    /// A reference assembly that stands for a project, and where it came from: <c>cache</c> (its key unchanged),
+    /// <c>build</c> (its last build newer than its inputs) or <c>reused</c> (#208: from the cache, its own inputs unchanged
+    /// though a project it references changed).
+    /// </summary>
     internal sealed record Image(MetadataReference Reference, string Origin);
 
     private static readonly IReadOnlyDictionary<ProjectId, Image> s_none = new Dictionary<ProjectId, Image>();
 
-    private sealed record State(int Generation, ProjectKeys Keys, Dictionary<ProjectId, Image> Images, Solution Fork, HashSet<DocumentId> Synced);
+    private sealed record State(int Generation, bool Reuse, ProjectKeys Keys, Dictionary<ProjectId, Image> Images, Solution Fork, HashSet<DocumentId> Synced);
+
+    /// <summary>The reused images' origin (<see cref="Image"/>).</summary>
+    public const string ReusedOrigin = "reused";
+
+    /// <summary>
+    /// Whether a project's reference assembly from the last session stands for it while its own inputs are unchanged,
+    /// though a project it references changed (#208): an open after a pull compiles the changed projects, not every
+    /// project above them. What compiles against one may be wrong where the change below altered the project's public
+    /// surface (a constant, an inherited member), so the background pass checks those projects again from source and
+    /// keeps nothing of theirs for the next session. On by default; the pass turns it off after its first pass.
+    /// </summary>
+    public bool ReuseAcrossChanges { get; set; } = true;
 
     /// <summary>The projects that stand as reference assemblies in the current analysis solution (tests, logs).</summary>
     public IReadOnlyDictionary<ProjectId, Image> Images // the state's, read-only
@@ -97,15 +114,17 @@ internal sealed class AnalysisSolution
         Task<State?> building;
         lock (_gate)
         {
-            if (_state is { } state && state.Generation == generation)
+            if (_state is { } state && state.Generation == generation && state.Reuse == ReuseAcrossChanges)
             {
                 return state.Images.Count == 0 ? null : SyncLocked(state);
             }
 
-            if (_building is null || _buildingGeneration != generation)
+            var reuse = ReuseAcrossChanges;
+            if (_building is null || _buildingGeneration != generation || _buildingReuse != reuse)
             {
                 _buildingGeneration = generation;
-                _building = Task.Run(() => Build(generation), CancellationToken.None);
+                _buildingReuse = reuse;
+                _building = Task.Run(() => Build(generation, reuse), CancellationToken.None);
             }
 
             building = _building;
@@ -114,12 +133,13 @@ internal sealed class AnalysisSolution
         var built = await building.WaitAsync(cancellationToken).ConfigureAwait(false);
         lock (_gate)
         {
-            if (built is not null && built.Generation == _workspace.Generation && (_state is null || _state.Generation != built.Generation))
+            if (built is not null && built.Generation == _workspace.Generation && built.Reuse == ReuseAcrossChanges
+                && (_state is null || _state.Generation != built.Generation || _state.Reuse != built.Reuse))
             {
                 _state = built;
             }
 
-            return _state is { Images.Count: > 0 } current && current.Generation == _workspace.Generation ? SyncLocked(current) : null;
+            return _state is { Images.Count: > 0 } current && current.Generation == _workspace.Generation && current.Reuse == ReuseAcrossChanges ? SyncLocked(current) : null;
         }
     }
 
@@ -151,7 +171,7 @@ internal sealed class AnalysisSolution
         }
     }
 
-    private State? Build(int generation)
+    private State? Build(int generation, bool reuse)
     {
         try
         {
@@ -176,6 +196,11 @@ internal sealed class AnalysisSolution
                 {
                     images[id] = new Image(built, "build");
                 }
+                else if (reuse && keys.OwnKey(id) is { } own && LanguageStateCache.Read(folder) is { } kept && kept.OwnKey == own
+                    && LanguageStateCache.Reference(Path.Combine(folder, LanguageStateCache.ReferenceFile), Path.Combine(folder, LanguageStateCache.DocumentationFile)) is { } reused)
+                {
+                    images[id] = new Image(reused, ReusedOrigin);
+                }
             });
 
             var fork = solution;
@@ -194,10 +219,10 @@ internal sealed class AnalysisSolution
             if (!images.IsEmpty)
             {
                 _log($"Analysis solution: {images.Count} of {referenced.Count} referenced project(s) as reference assemblies ({images.Values.Count(i => i.Origin == "cache")} kept from the last session, "
-                     + $"{images.Values.Count(i => i.Origin == "build")} from builds) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
+                     + $"{images.Values.Count(i => i.Origin == "build")} from builds, {images.Values.Count(i => i.Origin == ReusedOrigin)} reused across a change below them) in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
             }
 
-            return new State(generation, keys, new Dictionary<ProjectId, Image>(images), fork, new HashSet<DocumentId>());
+            return new State(generation, reuse, keys, new Dictionary<ProjectId, Image>(images), fork, new HashSet<DocumentId>());
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

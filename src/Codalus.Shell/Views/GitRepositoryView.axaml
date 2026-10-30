@@ -1,0 +1,60 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.GitRepositoryView"
+             x:DataType="vm:GitRepositoryViewModel">
+  <Grid ColumnDefinitions="280,4,*">
+    <!-- The tree: Branches / Tags (each repository's local branches in folders, remotes, tags), Pull Requests, Submodules. -->
+    <DockPanel>
+      <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Margin="6,6,6,4" Text="{Binding Filter}" PlaceholderText="{l:T gitRepository.filter}"
+               AutomationProperties.Name="{l:T gitRepository.filterBranchesAndTags}" />
+      <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2" Margin="6,0" />
+      <TextBlock DockPanel.Dock="Top" Margin="8,4" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+      <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T gitRepository.branchesAndTags}">
+        <TreeView.Styles>
+          <Style Selector="TreeViewItem" x:DataType="vm:GitRepositoryNode">
+            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+            <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+          </Style>
+        </TreeView.Styles>
+        <TreeView.ItemTemplate>
+          <TreeDataTemplate x:DataType="vm:GitRepositoryNode" ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent" ToolTip.Tip="{Binding AccessibleName}">
+              <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding Text}" VerticalAlignment="Center" MaxWidth="600" TextTrimming="CharacterEllipsis"
+                         Classes.current="{Binding IsCurrent}" Classes.muted="{Binding IsMessage}">
+                <TextBlock.Styles>
+                  <Style Selector="TextBlock.current">
+                    <Setter Property="FontWeight" Value="Bold" />
+                  </Style>
+                </TextBlock.Styles>
+              </TextBlock>
+              <Border Classes="chip" IsVisible="{Binding HasTrack}" ToolTip.Tip="{Binding TrackName}" VerticalAlignment="Center">
+                <TextBlock Text="{Binding Track}" />
+              </Border>
+              <TextBlock Classes="muted" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" MaxWidth="400" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </StackPanel>
+          </TreeDataTemplate>
+        </TreeView.ItemTemplate>
+      </TreeView>
+    </DockPanel>
+
+    <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />
+
+    <!-- The selected branch's or tag's history: Incoming and Local History (a local branch with an upstream), the toolbar and the columns. -->
+    <DockPanel Grid.Column="2">
+      <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="8,6,8,2" Text="{Binding Header}" TextTrimming="CharacterEllipsis" />
+      <Panel>
+        <TextBlock Classes="emptyState" TextWrapping="Wrap" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+        <Panel IsVisible="{Binding HasHistory}">
+          <views:GitHistoryView x:Name="HistoryView" DataContext="{Binding History}" />
+        </Panel>
+      </Panel>
+    </DockPanel>
+  </Grid>
+</UserControl>

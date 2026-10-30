@@ -38,11 +38,7 @@ public sealed class HotReloadRestartTests
         var standIn = Path.Combine(f.UserData, "dotnet-stand-in");
         Directory.CreateDirectory(standIn);
         var dotnet = Path.Combine(standIn, "dotnet");
-        File.WriteAllText(dotnet, "#!/bin/sh\necho \"stand-in dotnet $*\"\nsleep 600 &\nwait\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(dotnet, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        Codalus.Tests.StandInScript.Write(dotnet, "#!/bin/sh\necho \"stand-in dotnet $*\"\nsleep 600 &\nwait\n");
         f.Shell.Runs.DotnetRoot = standIn;
 
         // Ending the tree takes 3 s, as when macOS's process list blocks (ReportCrash holding a crashed process).

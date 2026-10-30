@@ -47,6 +47,156 @@ public interface IHostingActions
 
 // ------------------------------------------------------------------ accounts
 
+/// <summary>
+/// Git Changes' sign-in panel (ADR 0088): the repository's host, when the user isn't signed in to it, with that host's
+/// sign-in inline (<see cref="Row"/>, the same row as on the Accounts page). Suggested until dismissed for the
+/// repository; opened (<see cref="IsExpanded"/>) by Sign In, Create a pull request and the hosting windows' Sign in.
+/// </summary>
+public sealed class HostingSignInViewModel : ObservableObject
+{
+    private readonly Action _dismiss;
+    private readonly Action<string> _openUrl;
+    private AccountProviderRow? _row;
+    private string _server = string.Empty;
+    private string? _tokenUrl;
+    private bool _isSuggested;
+    private bool _isExpanded;
+
+    public HostingSignInViewModel(Action dismiss, Action<string> openUrl)
+    {
+        _dismiss = dismiss;
+        _openUrl = openUrl;
+        ExpandCommand = new RelayCommand(() => IsExpanded = true);
+        DismissCommand = new RelayCommand(Dismiss);
+        CreateTokenCommand = new RelayCommand(() =>
+        {
+            if (_tokenUrl is { } url)
+            {
+                _openUrl(url);
+            }
+        });
+    }
+
+    /// <summary>The provider's row: its sign-in state, token, device code and errors. Null when there is nothing to sign in to.</summary>
+    public AccountProviderRow? Row
+    {
+        get => _row;
+        set
+        {
+            if (ReferenceEquals(_row, value))
+            {
+                return;
+            }
+
+            if (_row is not null)
+            {
+                _row.PropertyChanged -= OnRowChanged;
+            }
+
+            _row = value;
+            if (_row is not null)
+            {
+                _row.PropertyChanged += OnRowChanged;
+            }
+
+            NotifyAll();
+        }
+    }
+
+    /// <summary>The host the repository is on: <c>github.com</c>, <c>tfs.contoso.com/tfs</c>.</summary>
+    public string Server
+    {
+        get => _server;
+        set
+        {
+            if (SetField(ref _server, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    /// <summary>The host's page that creates a personal access token, if known.</summary>
+    public string? TokenUrl
+    {
+        get => _tokenUrl;
+        set
+        {
+            if (SetField(ref _tokenUrl, value))
+            {
+                OnPropertyChanged(nameof(HasTokenUrl));
+            }
+        }
+    }
+
+    public bool HasTokenUrl => _tokenUrl is not null;
+
+    /// <summary>Suggested without being asked: the repository's host, and not dismissed for this repository.</summary>
+    public bool IsSuggested
+    {
+        get => _isSuggested;
+        set
+        {
+            if (SetField(ref _isSuggested, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    /// <summary>The ways to sign in are shown (Sign In, Create a pull request, a hosting window's Sign in).</summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        set
+        {
+            if (SetField(ref _isExpanded, value))
+            {
+                NotifyAll();
+            }
+        }
+    }
+
+    public bool IsVisible => _row is not null && (_isSuggested || _isExpanded);
+
+    public bool IsCollapsed => !_isExpanded;
+
+    public string Label => _row?.Label ?? string.Empty;
+
+    /// <summary>"This repository is on GitHub (github.com). Sign in to create pull requests and see CI status and work items."</summary>
+    public string Text => Localizer.Format("gitChanges.signInSuggestion", "This repository is on {0} ({1}). Sign in to create pull requests and see CI status and work items.", Label, _server);
+
+    public System.Windows.Input.ICommand ExpandCommand { get; }
+
+    public System.Windows.Input.ICommand DismissCommand { get; }
+
+    public System.Windows.Input.ICommand CreateTokenCommand { get; }
+
+    /// <summary>Hides the panel and never suggests signing in for this repository again.</summary>
+    public void Dismiss()
+    {
+        _dismiss();
+        _isSuggested = false;
+        _isExpanded = false;
+        NotifyAll();
+    }
+
+    /// <summary>"Or sign in with a personal access token:" under another way to sign in; without one, the token is the way.</summary>
+    public string TokenPrompt => _row is { CanSignInIntegrated: true } or { CanSignInWithCode: true }
+        ? Localizer.Get("accounts.orSignInWithAPersonal", "Or sign in with a personal access token:")
+        : Localizer.Get("gitChanges.signInWithAPersonalAccessToken", "Sign in with a personal access token:");
+
+    private void OnRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) => OnPropertyChanged(nameof(TokenPrompt));
+
+    private void NotifyAll()
+    {
+        foreach (var name in new[] { nameof(Row), nameof(IsVisible), nameof(IsCollapsed), nameof(Label), nameof(Text), nameof(TokenPrompt) })
+        {
+            OnPropertyChanged(name);
+        }
+    }
+}
+
 /// <summary>A provider on the Accounts page: signed in or not, and the sign-in in progress (its device code).</summary>
 public sealed class AccountProviderRow : ObservableObject
 {
@@ -57,13 +207,25 @@ public sealed class AccountProviderRow : ObservableObject
     private string? _verificationUri;
     private string _token = string.Empty;
     private string? _error;
+    private string? _serverHint;
+    private string? _pendingServer;
+    private bool _integratedSignIn;
+    private bool _deviceSignIn = true;
 
-    public AccountProviderRow(string id, string label, Func<AccountProviderRow, string?, Task> signIn, Func<AccountProviderRow, Task> signOut, Action<AccountProviderRow> cancel, Action<AccountProviderRow> copyAndOpen)
+    public AccountProviderRow(
+        string id,
+        string label,
+        Func<AccountProviderRow, string?, Task> signIn,
+        Func<AccountProviderRow, Task> signOut,
+        Action<AccountProviderRow> cancel,
+        Action<AccountProviderRow> copyAndOpen,
+        Func<AccountProviderRow, Task>? signInIntegrated = null)
     {
         Id = id;
         Label = label;
         SignInCommand = new RelayCommand(() => _ = signIn(this, null));
         SignInWithTokenCommand = new RelayCommand(() => _ = signIn(this, Token));
+        SignInIntegratedCommand = new RelayCommand(() => _ = signInIntegrated?.Invoke(this));
         SignOutCommand = new RelayCommand(() => _ = signOut(this));
         CancelCommand = new RelayCommand(() => cancel(this));
         CopyAndOpenCommand = new RelayCommand(() => copyAndOpen(this));
@@ -73,9 +235,87 @@ public sealed class AccountProviderRow : ObservableObject
 
     public string Label { get; }
 
-    public string? ServerHint { get; set; }
+    public string? ServerHint
+    {
+        get => _serverHint;
+        set
+        {
+            if (SetField(ref _serverHint, value))
+            {
+                OnPropertyChanged(nameof(HasServerHint));
+            }
+        }
+    }
 
     public bool HasServerHint => ServerHint is { Length: > 0 };
+
+    /// <summary>What a personal access token needs on this host ("A token needs the repo, read:org and workflow scopes.").</summary>
+    public string? TokenHint { get; set; }
+
+    public bool HasTokenHint => TokenHint is { Length: > 0 };
+
+    /// <summary>The setting with the provider's server (<c>azureDevOps.serverUrl</c>).</summary>
+    public string? ServerSetting { get; set; }
+
+    /// <summary>
+    /// A self-hosted server the repository's remote is on, which the provider isn't set up for: signing in writes it to
+    /// <see cref="ServerSetting"/> first (ADR 0087). Null otherwise.
+    /// </summary>
+    public string? PendingServer
+    {
+        get => _pendingServer;
+        set
+        {
+            if (SetField(ref _pendingServer, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    /// <summary>Signed in elsewhere while the repository is on <see cref="PendingServer"/>: sign out to sign in there.</summary>
+    public bool ShowsOtherServer => IsSignedIn && _pendingServer is not null;
+
+    public string OtherServerText => Localizer.Format("accounts.signOutToSignInTo", "This repository is on {0}. Sign out, then sign in there.", _pendingServer ?? string.Empty);
+
+    /// <summary>The provider signs in as the operating system's user on its self-hosted server (or the pending one).</summary>
+    public bool IntegratedSignIn
+    {
+        get => _integratedSignIn;
+        set
+        {
+            if (SetField(ref _integratedSignIn, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    public bool CanSignInIntegrated => CanSignIn && _integratedSignIn;
+
+    /// <summary>
+    /// The provider's device code sign-in is set up: its OAuth app's client id (<c>github.oauthClientId</c>…) is set.
+    /// Without one, Sign In could only fail, so a token is the way in (ADR 0088).
+    /// </summary>
+    public bool DeviceSignIn
+    {
+        get => _deviceSignIn;
+        set
+        {
+            if (SetField(ref _deviceSignIn, value))
+            {
+                Notify();
+            }
+        }
+    }
+
+    /// <summary>The device code sign-in: set up, and not a server signed in to with the system's account.</summary>
+    public bool CanSignInWithCode => CanSignIn && _deviceSignIn && !_integratedSignIn;
+
+    /// <summary>Windows authentication on Windows; a Kerberos ticket (<c>kinit</c>) elsewhere.</summary>
+    public static string IntegratedSignInLabel => OperatingSystem.IsWindows()
+        ? Localizer.Get("accounts.signInWithYourWindowsAccount", "Sign in with your Windows account")
+        : Localizer.Get("accounts.signInWithKerberos", "Sign in with Kerberos");
 
     public bool IsSignedIn => _account is not null;
 
@@ -150,6 +390,8 @@ public sealed class AccountProviderRow : ObservableObject
 
     public ICommand SignInWithTokenCommand { get; }
 
+    public ICommand SignInIntegratedCommand { get; }
+
     public ICommand SignOutCommand { get; }
 
     public ICommand CancelCommand { get; }
@@ -161,7 +403,7 @@ public sealed class AccountProviderRow : ObservableObject
 
     private void Notify()
     {
-        foreach (var name in new[] { nameof(IsSignedIn), nameof(CanSignIn), nameof(StatusText), nameof(Account), nameof(UserCode), nameof(VerificationUri), nameof(HasCode), nameof(AccessibleName) })
+        foreach (var name in new[] { nameof(IsSignedIn), nameof(CanSignIn), nameof(CanSignInIntegrated), nameof(CanSignInWithCode), nameof(ShowsOtherServer), nameof(OtherServerText), nameof(StatusText), nameof(Account), nameof(UserCode), nameof(VerificationUri), nameof(HasCode), nameof(AccessibleName) })
         {
             OnPropertyChanged(name);
         }

@@ -76,7 +76,8 @@
               "label": { "type": "string" },
               "hosts": { "type": "array", "items": { "type": "string" }, "description": "The remotes' hosts it serves by default; *.example.com matches subdomains." },
               "serverSetting": { "type": "string", "description": "A setting with an enterprise server's URL, whose host counts too." },
-              "icon": { "type": "string" }
+              "icon": { "type": "string" },
+              "integratedSignIn": { "type": "boolean", "description": "Offers signing in as the operating system's user (Kerberos or NTLM) when the server in serverSetting isn't one of hosts (API 1.2.0)." }
             }
           }
         },

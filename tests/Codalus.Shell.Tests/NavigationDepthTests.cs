@@ -150,6 +150,113 @@ public class NavigationDepthTests
     }
 
     [AvaloniaFact]
+    public async Task A_lens_clicked_before_it_resolves_runs_once_it_does()
+    {
+        // A refresh (an option changed, the language service restarted, the document reloaded) replaces the lenses with
+        // ones that keep their titles and get their commands one request at a time. A click on such a row did nothing:
+        // Linux CI's run 40706281162 clicked IShape.Area's after an option change and a scroll away and back, before the
+        // refresh had resolved it. Here the click comes as the refresh replaces the lenses (its Updated), before any
+        // of them is resolved again.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(areaDeclaration) == true, seconds: 60);
+        var view = shapes.Editor.TextArea.TextView;
+        var references = 0;
+        f.Shell.Workbench.Commands.Executed += (_, e) => references += e.CommandId is "editor.action.showReferences" or "editor.action.referenceSearch" ? 1 : 0;
+
+        var clicked = false;
+        var rowLines = 0;
+        shapes.Insights.Updated += (_, _) =>
+        {
+            if (clicked || shapes.Insights.LensResolvedAbove(areaDeclaration) != false)
+            {
+                return;
+            }
+
+            clicked = true;
+            view.EnsureVisualLines(); // the row now holds the new lens
+            var before = view.GetVisualLine(areaDeclaration - 1)!;
+            rowLines = before.TextLines.Count;
+            var codeX = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(areaDeclaration, shapes.Model.Text.GetLineByNumber(areaDeclaration).Length - "double Area();".Length + 1), AvaloniaEdit.Rendering.VisualYPosition.LineTop).X;
+            var rowTop = before.VisualTop + before.TextLines[0].Height - view.VerticalOffset;
+            var click = Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(codeX + 8, rowTop + before.TextLines[^1].Height / 2), f.Window)!.Value;
+            // Raised on the text view itself: the headless window's MouseDown runs the dispatcher's jobs first, and the
+            // refresh's next answer could resolve the lens in between.
+            var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, isPrimary: true);
+            view.RaiseEvent(new PointerPressedEventArgs(view, pointer, f.Window, click, 0, new PointerPointProperties(RawInputModifiers.LeftMouseButton, PointerUpdateKind.LeftButtonPressed), KeyModifiers.None));
+            view.RaiseEvent(new PointerReleasedEventArgs(view, pointer, f.Window, click, 0, new PointerPointProperties(RawInputModifiers.None, PointerUpdateKind.LeftButtonReleased), KeyModifiers.None, MouseButton.Left));
+        };
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => clicked, seconds: 30, describe: () => $"the refresh didn't replace the lens; resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}");
+        Assert.Equal(2, rowLines); // the row kept its title
+        await ShellFixture.PumpUntil(() => references > 0, seconds: 30, describe: () => $"commands run: {references}; resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}");
+        Assert.Equal(1, references);
+    }
+
+    [AvaloniaFact]
+    public async Task Lenses_in_view_get_their_counts_after_an_edit_far_above_them()
+    {
+        // A lens refresh redraws, and the redraw invalidates the visual lines it then read for the lines in view: it
+        // resolved the first 60 lines instead. Scrolled further down, an edit left the lenses in view without counts
+        // (rows gone) until the next scroll.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 600;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 60);
+
+        // 80 lines above the code, then scrolled to it before the edit's refresh (700 ms later).
+        var view = shapes.Editor.TextArea.TextView;
+        shapes.Editor.Document.Insert(0, new string('\n', 80));
+        var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
+        await ShellFixture.PumpUntil(() => view.DocumentHeight > areaDeclaration * view.DefaultLineHeight);
+        shapes.Editor.ScrollTo(areaDeclaration, 1);
+        await ShellFixture.PumpUntil(() => view.VisualLinesValid && view.VisualLines[0].FirstDocumentLine.LineNumber > 60);
+
+        // Both of the row's lenses, each resolved on its own.
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 references | 1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
+    }
+
+    [AvaloniaFact]
+    public async Task Lens_titles_out_of_view_stay_through_refreshes()
+    {
+        // A refresh keeps the titles of the lenses it replaces until their new counts arrive, so rows don't come and
+        // go (and move the code) while typing; it kept only those of resolved lenses, so a second refresh before a
+        // lens out of view was resolved again dropped its row.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 360;
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
+        var scaleLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Scale(IShape", StringComparison.Ordinal)).LineNumber;
+        var view = shapes.Editor.TextArea.TextView;
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 60);
+        shapes.Editor.ScrollTo(scaleLine, 1);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(scaleLine) == true, seconds: 30);
+        var title = shapes.Insights.LensRowAbove(scaleLine);
+        Assert.NotNull(title);
+        shapes.Editor.ScrollToHome();
+        await ShellFixture.PumpUntil(() => view.VerticalOffset == 0 && view.VisualLinesValid && view.VisualLines[^1].LastDocumentLine.LineNumber < scaleLine - 10);
+
+        // Two refreshes: the first keeps Scale's title on a lens it doesn't resolve (out of view), the second keeps it again.
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensResolvedAbove(scaleLine) == false, seconds: 30);
+        Assert.Equal(title, shapes.Insights.LensRowAbove(scaleLine));
+        var rebuilt = false;
+        shapes.Insights.Updated += (_, _) => rebuilt |= shapes.Insights.LensResolvedAbove(interfaceLine) == false; // replaced, not resolved yet
+        shapes.Insights.Refresh();
+        await ShellFixture.PumpUntil(() => rebuilt && shapes.Insights.LensResolvedAbove(interfaceLine) == true, seconds: 30);
+        Assert.Equal(title, shapes.Insights.LensRowAbove(scaleLine));
+    }
+
+    [AvaloniaFact]
     public async Task Ctrl_hover_shows_a_symbol_as_a_link_to_its_definition()
     {
         await using var f = ShellFixture.Create();
@@ -350,25 +457,36 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => help is not null, seconds: 30);
         Assert.Equal("https://learn.microsoft.com/dotnet/api/system.console", help!.ToString());
 
-        // Find All References: classified, grouped by file or project, filtered, kept.
+        // Find All References: the References window, grouped by project then definition, filtered by a column, kept.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("circle =", StringComparison.Ordinal) + 1;
         await f.Shell.FindReferencesAsync();
-        var results = f.Shell.FindResults;
-        Assert.Contains("References to 'circle'", results.Summary, StringComparison.Ordinal);
+        var results = f.Shell.References;
+        Assert.Equal("'circle' references", results.Title);
+        Assert.Equal("'circle' references", f.Shell.Layout.ToolWindow(ViewModels.ReferencesViewModel.ToolWindowId)!.Title);
         Assert.Equal([ReferenceItemKinds.Declaration, ReferenceItemKinds.Read, ReferenceItemKinds.Read], results.Rows.Where(r => !r.IsHeader).Select(r => r.Kind));
-        results.GroupBy = "Project";
-        // M34h: a group's header is its label with its count as a badge (the count stays in its Code and screen readers' name).
-        Assert.Equal(("App", 3), (results.Rows[0].Label, results.Rows[0].Count));
-        Assert.Equal("App (3)", results.Rows[0].Code);
-        results.KindFilter = "Read";
-        Assert.Equal(2, results.Rows.Count(r => !r.IsHeader));
-        results.KindFilter = "All";
+        Assert.Equal(("App (3)", "project"), (results.Rows[0].Label, results.Rows[0].HeaderIcon));
+        Assert.Equal(("circle (3)", true), (results.Rows[1].Label, results.Rows[1].IsDefinition));
+        Assert.All(results.Rows.Where(r => !r.IsHeader), r => Assert.Equal("Program", r.ContainingType));
+        Assert.Equal("circle", string.Concat(results.Rows[3].Highlights!.Select(i => results.Rows[3].Text[i])));
+        var read = results.KindFilter.Values.Single(v => v.Value == "Read");
+        read.IsChecked = false;
+        Assert.Single(results.Rows, r => !r.IsHeader);
+        Assert.True(results.HasFilters);
+        results.ClearFiltersCommand.Execute(null);
+        Assert.Equal(3, results.Rows.Count(r => !r.IsHeader));
+
+        // Keep Results: the next search opens another References window beside it; this one stays.
+        results.KeepResults = true;
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Circle(2)", StringComparison.Ordinal) + 1;
         await f.Shell.FindReferencesAsync();
-        Assert.Equal(["References to 'Circle'", "References to 'circle'"], results.ReferenceSets.Select(s => s.Title));
-        results.CurrentSet = results.ReferenceSets[1];
-        await ShellFixture.PumpUntil(() => results.Rows.Count(r => !r.IsHeader) == 3);
-        results.GroupBy = "File";
+        Assert.Equal(2, f.Shell.ReferenceWindows.Count);
+        var kept = f.Shell.ReferenceWindows[1];
+        Assert.Equal("'Circle' references", kept.Title);
+        Assert.Equal("'circle' references", results.Title);
+        Assert.True(f.Shell.Layout.IsVisible(kept.Id));
+        f.Shell.Layout.CloseToolWindow(kept.Id);
+        Assert.Single(f.Shell.ReferenceWindows);
+        results.KeepResults = false;
 
         // Go to Last Edit Location returns to the edit after moving elsewhere.
         program.Editor.CaretOffset = program.Model.Text.Text.IndexOf("Reporter.Run();", StringComparison.Ordinal);

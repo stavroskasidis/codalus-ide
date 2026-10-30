@@ -1,7 +1,7 @@
 using Debuggee;
 
 // Tests find lines by the "// [name]" markers; keep each marker on its statement's line.
-if (args.Length == 2 && args[0] == "--wait-for")
+if (args.Length == 2 && args[0] == "--wait-for") // [first]
 {
     // Attach tests: wait until the test creates the file, then run as usual.
     Console.WriteLine("waiting");

@@ -293,13 +293,22 @@ public sealed class BreakpointStore
     public void Clear()
     {
         bool hadFunctions;
+        List<string> files;
         lock (_gate)
         {
+            files = [.. _files.Keys];
             _files.Clear();
             _states.Clear();
             hadFunctions = _functions.Count > 0;
             _functions.Clear();
             _functionStates.Clear();
+        }
+
+        // Each file that had breakpoints, by its path: a debug session sends a file's (now none) when it changes, and
+        // "every file" after the clear is none of them, so a running program kept stopping at them (M55's tests).
+        foreach (var file in files)
+        {
+            Changed?.Invoke(this, file);
         }
 
         Changed?.Invoke(this, null);

@@ -101,6 +101,12 @@ public static class BenchEventNames
     public const string SolutionLoaded = "solution_loaded";
 
     /// <summary>
+    /// A dialog opened and waits for an answer: <c>title</c> (text). A run that waits for a later event and never gets it
+    /// (a <c>--exit-on</c> run at the trust prompt, its trusted-folders file unreadable) shows what it waits on.
+    /// </summary>
+    public const string DialogShown = "dialog_shown";
+
+    /// <summary>
     /// Every project's compiler inputs are known: design-time builds (or their cache) finished once (M34b). Fields
     /// <c>cache_hits</c> and <c>cache_misses</c>, and <c>cache_miss_reasons</c> (text, <c>Name: reason</c> joined by
     /// <c>"; "</c>) when some missed (M34c).

@@ -7,6 +7,7 @@
     <Version>1.0.0</Version>
     <Title>Codalus IDE templates</Title>
     <Description>Templates for Codalus IDE: dotnet new codalus-plugin, a plugin with unit tests.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>codalus;plugin;template</PackageTags>
     <IsPackable>true</IsPackable>
     <IncludeBuildOutput>false</IncludeBuildOutput>
@@ -18,5 +19,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="content\**\*" Exclude="content\**\bin\**;content\**\obj\**" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

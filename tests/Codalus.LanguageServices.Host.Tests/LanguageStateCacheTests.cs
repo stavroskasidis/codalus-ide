@@ -110,6 +110,51 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_change_below_a_project_reuses_its_reference_assembly_then_checks_again_from_source()
+    {
+        // Top uses a constant of Mid that Mid takes from Base: a reference assembly reused across a change in Base keeps
+        // the old value, the trade-off #208 accepts for an open after a pull. 1 / (1 - 1) is an error (CS0020); 1 / (2 - 1) isn't.
+        Write("Base/Limits.cs", "namespace Base; public static class Limits { public const int Size = 1; }");
+        Write("Mid/Buffer.cs", "namespace Mid; public static class Buffer { public const int Size = Base.Limits.Size; }");
+        Write("Top/Use.cs", "namespace Top; static class Use { const int Ratio = 1 / (Mid.Buffer.Size - 1); }");
+        foreach (var name in new[] { "Base", "Mid", "Top" })
+        {
+            Directory.CreateDirectory(Path.Combine(_root, name, "obj"));
+        }
+
+        // As MSBuild hands them over: Top references Base too, through Mid.
+        ProjectData[] Projects() => [Project("Base", ["Limits.cs"]), Project("Mid", ["Buffer.cs"], ["Base"]), Project("Top", ["Use.cs"], ["Mid", "Base"])];
+        var use = Path.Combine(_root, "Top", "Use.cs");
+        await using (var first = await SessionAsync(null, Projects()))
+        {
+            await first.ReadyAsync();
+            await LanguageFixture.WaitUntilAsync(() => first.Has(use, "CS0020"), TimeSpan.FromSeconds(60), () => Describe(first));
+        }
+
+        Assert.True(File.Exists(Path.Combine(_root, "Mid", "obj", LanguageStateCache.ReferenceFile)));
+
+        // Base changes: Mid's own inputs don't. Its reference assembly from the last session stands for it, so Top
+        // compiles at once, against the old constant; then the pass checks Top again from source.
+        Write("Base/Limits.cs", "namespace Base; public static class Limits { public const int Size = 2; }");
+        File.SetLastWriteTimeUtc(Path.Combine(_root, "Base", "Limits.cs"), DateTime.UtcNow.AddSeconds(5));
+        await using (var second = await SessionAsync(null, Projects()))
+        {
+            await second.ReadyAsync();
+            await LanguageFixture.WaitUntilAsync(() => second.Logged("1 reused across a change below them"), TimeSpan.FromSeconds(60), () => Describe(second));
+            await LanguageFixture.WaitUntilAsync(() => second.Logged("1 project(s) compiled against reference assemblies reused across a change below them: checked again from source."), TimeSpan.FromSeconds(60), () => Describe(second));
+            await LanguageFixture.WaitUntilAsync(() => !second.Has(use, "CS0020") && second.Logged("1 compiled"), TimeSpan.FromSeconds(60), () => Describe(second));
+        }
+
+        // Nothing changed since: what the next session takes from the cache is the check from source, not the stale error.
+        await using (var third = await SessionAsync(null, Projects()))
+        {
+            await third.ReadyAsync();
+            await LanguageFixture.WaitUntilAsync(() => third.Logged("3 since the last session, 0 compiled"), TimeSpan.FromSeconds(60), () => Describe(third));
+            Assert.False(third.Has(use, "CS0020"));
+        }
+    }
+
+    [Fact]
     public void CS4014_on_a_call_into_another_project_is_left_out_in_methods_that_are_not_async()
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
@@ -137,6 +182,8 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
 
     // ------------------------------------------------------------------ sessions
 
+    private static string Describe(Session session) => Environment.NewLine + string.Join(Environment.NewLine, session.Log.Where(l => !l.Contains("[trace]", StringComparison.Ordinal)).TakeLast(30));
+
     private void Write(string relative, string text)
     {
         var path = Path.Combine(_root, relative);
@@ -161,16 +208,19 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
             [.. (projectReferences ?? []).Select(r => Path.Combine(_root, r, r + ".csproj"))]);
     }
 
-    private async Task<Session> SessionAsync(string? open)
+    private Task<Session> SessionAsync(string? open) =>
+        SessionAsync(open, [Project("Lib", ["Context.cs", "Warnings.cs"]), Project("App", ["Page.cs", "Closed.cs"], ["Lib"])]);
+
+    private async Task<Session> SessionAsync(string? open, ProjectData[] projects)
     {
-        var session = new Session(new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) }));
+        var session = new Session(new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) }), projects.Length);
         await session.Client.StartAsync(Ct);
         if (open is not null)
         {
             await session.Client.DidOpenAsync(new OpenDocumentState(DocumentUris.FromPath(open), "csharp", 1, await File.ReadAllTextAsync(open, Ct)), Ct);
         }
 
-        await session.Client.UpdateProjectsAsync([Project("Lib", ["Context.cs", "Warnings.cs"]), Project("App", ["Page.cs", "Closed.cs"], ["Lib"])], Ct, loading: false);
+        await session.Client.UpdateProjectsAsync(projects, Ct, loading: false);
         return session;
     }
 
@@ -179,9 +229,12 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
         private readonly ConcurrentDictionary<string, Diagnostic[]> _diagnostics = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentQueue<WorkspaceStatusParams> _status = new();
 
-        public Session(LanguageHostClient client)
+        private readonly int _projects;
+
+        public Session(LanguageHostClient client, int projects)
         {
             Client = client;
+            _projects = projects;
             client.Diagnostics += (_, p) => _diagnostics[p.Uri] = p.Diagnostics;
             client.WorkspaceStatus += (_, s) => _status.Enqueue(s);
             client.Log += (_, line) => Log.Enqueue(line);
@@ -197,7 +250,7 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
 
         public bool Logged(string text) => Log.Any(l => l.Contains(text, StringComparison.Ordinal));
 
-        public Task ReadyAsync() => LanguageFixture.WaitUntilAsync(() => _status.Any(s => s.State == WorkspaceStates.Ready && s.Projects == 2), TimeSpan.FromSeconds(90));
+        public Task ReadyAsync() => LanguageFixture.WaitUntilAsync(() => _status.Any(s => s.State == WorkspaceStates.Ready && s.Projects == _projects), TimeSpan.FromSeconds(90));
 
         public ValueTask DisposeAsync() => Client.DisposeAsync();
     }

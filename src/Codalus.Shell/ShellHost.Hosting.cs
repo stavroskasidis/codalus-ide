@@ -13,6 +13,7 @@ using Codalus.Workbench.Commands;
 using Codalus.Workbench.Git;
 using Codalus.Workbench.Hosting;
 using Codalus.Workbench.Secrets;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.StatusBar;
 using Codalus.Workbench.Localization;
 
@@ -34,6 +35,15 @@ public sealed partial class ShellHost : IHostingActions
 
     private HostingMatch? _match;
     private HostingProviderInfo? _suggested;
+
+    /// <summary>The self-hosted server the repository's remote is on, for <see cref="_suggested"/>: signing in there sets it (ADR 0087).</summary>
+    private string? _suggestedServer;
+
+    /// <summary>The remote the suggestion is for (its organization names Azure DevOps' token page).</summary>
+    private string? _suggestedRemote;
+
+    /// <summary>Create a pull request asked to sign in first: once signed in, the form opens (ADR 0088).</summary>
+    private bool _pullRequestAfterSignIn;
     private CancellationTokenSource? _hostingCts;
     private string? _hostingKey;
     private string? _hostingFingerprint;
@@ -120,7 +130,7 @@ public sealed partial class ShellHost : IHostingActions
             {
                 if (t.Result == "Sign In")
                 {
-                    Ui.Post(() => ShowAccounts(providerId));
+                    Ui.Post(() => ((IHostingActions)this).SignIn(providerId)); // the repository's host: Git Changes' panel (ADR 0088)
                 }
             }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
         });
@@ -133,6 +143,7 @@ public sealed partial class ShellHost : IHostingActions
         WorkItems = new WorkItemsViewModel(this);
         Worktrees = new WorktreesViewModel(Git, WorktreeActionAsync);
         GitChanges.CompletionSource = CommitCompletionsAsync;
+        GitChanges.HostingSignIn = new HostingSignInViewModel(DismissSignInSuggestion, OpenUrl);
         ReviewThreads.Changed += (_, _) => ReviewThreadsChanged?.Invoke(this, EventArgs.Empty);
         Git.StatusChanged += (_, _) => Ui.Post(() =>
         {
@@ -209,6 +220,18 @@ public sealed partial class ShellHost : IHostingActions
 
             _match = match;
             _suggested = match is null && Hosting.SuggestFor(remotes) is { } suggested && Hosting.AccountFor(suggested.Id) is null ? suggested : null;
+            var server = match is null && _suggested is null ? Hosting.SuggestServerFor(remotes) : null;
+            _suggested ??= server?.Provider;
+            _suggestedServer = server?.ServerUrl;
+            _suggestedRemote = HostingService.Ordered(remotes) is [var first, ..] ? first.FetchUrl : null;
+            UpdateAccounts();
+            UpdateSignInPanel();
+            if (match is not null && _pullRequestAfterSignIn)
+            {
+                _pullRequestAfterSignIn = false;
+                _ = CreatePullRequestAsync();
+            }
+
             Workbench.Context.Set("hostingRepository", match is not null);
             Workbench.Context.Set("hostingProvider", match?.Provider.Id);
             await PullRequests.ReloadAsync().ConfigureAwait(true);
@@ -329,14 +352,18 @@ public sealed partial class ShellHost : IHostingActions
 
     // ------------------------------------------------------------------ accounts
 
-    /// <summary>The Accounts page; with <paramref name="provider"/>, starts signing in to it.</summary>
+    /// <summary>
+    /// Opens the Accounts page; with <paramref name="provider"/>, starts its device sign-in, or, when the repository's
+    /// remote is on a self-hosted server the provider isn't set up for, shows that server on its row instead: signing in
+    /// there sets it (ADR 0087).
+    /// </summary>
     public AccountsDocument ShowAccounts(string? provider = null)
     {
         UpdateAccounts();
         _ = RefreshAuthenticationSessionsAsync();
         var document = Layout.FindDocument<AccountsDocument>(AccountsDocument.DocumentId) ?? new AccountsDocument(Accounts);
         Layout.OpenDocument(document, focus: true);
-        if (provider is not null && Accounts.Row(provider) is { CanSignIn: true } row)
+        if (provider is not null && Accounts.Row(provider) is { CanSignInWithCode: true, PendingServer: null } row)
         {
             _ = SignInAsync(row, null);
         }
@@ -360,11 +387,19 @@ public sealed partial class ShellHost : IHostingActions
         {
             if (Accounts.Row(provider.Id) is not { } row)
             {
-                row = new AccountProviderRow(provider.Id, provider.Label, SignInAsync, SignOutAsync, CancelSignIn, CopyCodeAndOpen);
+                row = new AccountProviderRow(provider.Id, provider.Label, SignInAsync, SignOutAsync, CancelSignIn, CopyCodeAndOpen, target => SignInAsync(target, null, integrated: true));
                 Accounts.Providers.Add(row);
             }
 
-            row.ServerHint = ServerHint(provider.Id);
+            var pending = _suggested?.Id == provider.Id ? _suggestedServer : null;
+            row.PendingServer = pending;
+            row.ServerSetting = provider.ServerSetting;
+            row.TokenHint = TokenHint(provider.Id);
+            row.ServerHint = pending is null
+                ? ServerHint(provider.Id)
+                : Localizer.Format("accounts.serverFromRemote", "Server: {0}, where this repository's remote is. Signing in sets {1} to it.", pending, provider.ServerSetting);
+            row.IntegratedSignIn = provider.IntegratedSignIn && (provider.IsSelfHosted || pending is not null);
+            row.DeviceSignIn = HasDeviceSignIn(provider);
             var account = Hosting.AccountFor(provider.Id);
             row.SetAccount(account?.Name, account?.Host);
         }
@@ -378,7 +413,37 @@ public sealed partial class ShellHost : IHostingActions
         _ => null,
     };
 
-    private async Task SignInAsync(AccountProviderRow row, string? token)
+    private Task SignInAsync(AccountProviderRow row, string? token) => SignInAsync(row, token, integrated: false);
+
+    /// <summary>Signs in with a device code, a token, or the operating system's account, on the row's pending server if it has one.</summary>
+    /// <summary>
+    /// Whether the provider's device sign-in is set up: its section's <c>oauthClientId</c> (<c>github.oauthClientId</c>) is
+    /// set. On a self-hosted server, the setting's default (the public host's app, github.com's) doesn't count: that server
+    /// needs an app of its own. A provider without <c>serverSetting</c> keeps its sign-in.
+    /// </summary>
+    private bool HasDeviceSignIn(HostingProviderInfo provider)
+    {
+        if (provider.ServerSetting is not { } serverSetting)
+        {
+            return true;
+        }
+
+        var key = serverSetting[..(serverSetting.LastIndexOf('.') + 1)] + "oauthClientId";
+        var clientId = Workbench.Settings.GetString(key, string.Empty).Trim();
+        var builtIn = Workbench.Settings.Find(key)?.Default is { ValueKind: System.Text.Json.JsonValueKind.String } value ? value.GetString() : null;
+        return clientId.Length > 0 && !(provider.IsSelfHosted && clientId == builtIn);
+    }
+
+    /// <summary>The scopes a personal access token needs, as the panel in Git Changes says them.</summary>
+    private static string? TokenHint(string providerId) => providerId switch
+    {
+        "github" => Localizer.Get("gitChanges.githubTokenScopes", "The token needs the repo, read:org and workflow scopes."),
+        "gitlab" => Localizer.Get("gitChanges.gitlabTokenScopes", "The token needs the api scope."),
+        "azure-devops" => Localizer.Get("gitChanges.azureDevOpsTokenScopes", "The token needs Code (read and write), Build (read) and Work Items (read)."),
+        _ => null,
+    };
+
+    private async Task SignInAsync(AccountProviderRow row, string? token, bool integrated)
     {
         if (row.IsSigningIn)
         {
@@ -397,7 +462,13 @@ public sealed partial class ShellHost : IHostingActions
         row.SignInCancellation = cts;
         try
         {
-            var account = await Hosting.SignInAsync(row.Id, token, cts.Token).ConfigureAwait(true);
+            if (row is { PendingServer: { } server, ServerSetting: { } setting })
+            {
+                // The provider reads its server from the setting; the plugin host hears of it before the sign-in request.
+                await Workbench.Settings.SetAsync(setting, server, SettingScope.User, cts.Token).ConfigureAwait(true);
+            }
+
+            var account = await Hosting.SignInAsync(row.Id, token, cts.Token, integrated).ConfigureAwait(true);
             row.Token = string.Empty;
             StatusBar.ShowMessage(Localizer.Format("msg.hosting.signedInToAs", "Signed in to {0} as {1}.", row.Label, account.Name), TimeSpan.FromSeconds(5));
         }
@@ -483,7 +554,77 @@ public sealed partial class ShellHost : IHostingActions
 
     void IHostingActions.CreatePullRequest() => _ = CreatePullRequestAsync();
 
-    void IHostingActions.SignIn(string? providerId) => ShowAccounts(providerId);
+    void IHostingActions.SignIn(string? providerId)
+    {
+        if (providerId is null || providerId != _suggested?.Id || !GuideSignIn(pullRequest: false))
+        {
+            ShowAccounts(providerId);
+        }
+    }
+
+    // ------------------------------------------------------------------ the sign-in panel in Git Changes (ADR 0088)
+
+    /// <summary>
+    /// Git Changes' sign-in panel follows the repository's host: shown while the user isn't signed in to the provider its
+    /// remote is on (suggested until dismissed for the repository), hidden once signed in or with hosting turned off.
+    /// </summary>
+    private void UpdateSignInPanel()
+    {
+        if (GitChanges.HostingSignIn is not { } panel)
+        {
+            return;
+        }
+
+        if (_match is not null || _suggested is not { } provider || !Hosting.IsEnabled || Git.Root is not { } root || Accounts.Row(provider.Id) is not { } row)
+        {
+            panel.Row = null;
+            panel.IsExpanded = false;
+            if (_match is null)
+            {
+                _pullRequestAfterSignIn = false; // nothing to sign in to any more (signed in, the form opens instead)
+            }
+
+            return;
+        }
+
+        var configured = provider.ServerSetting is { } setting ? Workbench.Settings.GetString(setting, string.Empty).Trim().TrimEnd('/') : string.Empty;
+        var server = _suggestedServer ?? (configured.Length > 0 ? configured : null);
+        panel.Server = server is not null ? ServerText(server) : provider.Hosts is [var host, ..] ? host : provider.Label;
+        panel.TokenUrl = server is null ? null : HostingService.TokenPageUrl(provider.Id, server, _suggestedRemote);
+        panel.IsSuggested = !Hosting.IsSignInSuggestionDismissed(root);
+        panel.Row = row;
+    }
+
+    /// <summary>A server URL as the panel shows it: its host and path (<c>tfs.contoso.com/tfs</c>).</summary>
+    private static string ServerText(string serverUrl) =>
+        Uri.TryCreate(serverUrl, UriKind.Absolute, out var uri) ? (uri.Authority + uri.AbsolutePath).TrimEnd('/') : serverUrl;
+
+    /// <summary>
+    /// Opens Git Changes' sign-in panel for the repository's host (false when there is none: an unknown host, no remote);
+    /// with <paramref name="pullRequest"/>, the pull request form opens once the user is signed in.
+    /// </summary>
+    private bool GuideSignIn(bool pullRequest)
+    {
+        UpdateSignInPanel();
+        if (GitChanges.HostingSignIn is not { Row: not null } panel)
+        {
+            return false;
+        }
+
+        _pullRequestAfterSignIn = pullRequest;
+        panel.IsExpanded = true;
+        Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId, focus: true);
+        return true;
+    }
+
+    private void DismissSignInSuggestion()
+    {
+        _pullRequestAfterSignIn = false;
+        if (Git.Root is { } root)
+        {
+            Hosting.DismissSignInSuggestion(root);
+        }
+    }
 
     public void OpenUrl(string url)
     {
@@ -530,13 +671,19 @@ public sealed partial class ShellHost : IHostingActions
     {
         if (_match is not { } match)
         {
-            if (_suggested is { } suggested)
+            if (GuideSignIn(pullRequest: true))
             {
-                ShowAccounts(suggested.Id);
+                // The repository's host is known: sign in to it in Git Changes, then the form opens.
+            }
+            else if (!GitChanges.HasRemote)
+            {
+                StatusBar.ShowMessage(Localizer.Get("msg.hosting.publishTheRepositoryFirst", "This repository has no remote: publish it to a Git host first."), TimeSpan.FromSeconds(5));
             }
             else
             {
+                // A remote on a host no provider knows: the Accounts page says which servers each one uses.
                 StatusBar.ShowMessage(Localizer.Get("msg.hosting.thisRepositoryIsntOnAHost", "This repository isn't on a host you're signed in to."), TimeSpan.FromSeconds(5));
+                ShowAccounts();
             }
 
             return null;

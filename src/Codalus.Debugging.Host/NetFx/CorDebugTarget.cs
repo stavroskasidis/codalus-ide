@@ -172,8 +172,10 @@ internal sealed class CorDebugger : IClrDebugger
     }
 }
 
-/// <summary>One debugged desktop-CLR process through ICorDebug (M43b): its callbacks become <see cref="ClrEvent"/>s.</summary>
-[SupportedOSPlatform("windows")]
+/// <summary>
+/// One debugged process through ICorDebug: the desktop CLR's (M43b), or CoreCLR's through dbgshim (M54, ADR 0086).
+/// Its callbacks become <see cref="ClrEvent"/>s.
+/// </summary>
 internal sealed class CorDebugTarget : IClrProcess
 {
     private readonly CorDebug _corDebug;
@@ -182,7 +184,7 @@ internal sealed class CorDebugTarget : IClrProcess
     private readonly Lock _gate = new();
     private readonly Dictionary<(ulong, string), CorModule> _modules = [];
     private readonly Dictionary<int, CorThread> _threads = [];
-    private readonly Dictionary<(ulong, int, int), CorBreakpoint> _breakpoints = [];
+    private readonly Dictionary<(ulong Module, int Method, int Offset, int Version), CorBreakpoint> _breakpoints = [];
     private readonly List<CorDebugHandleValue> _handles = [];
     private readonly List<Task> _pumps = [];
     private CorDebugProcess? _process;
@@ -211,10 +213,17 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public ChannelReader<ClrEvent> Events => _events.Reader;
 
+    /// <summary>
+    /// A CoreCLR program the launcher started (ADR 0086): its exit code comes from the launcher, which is its parent, and
+    /// a detach tells the launcher to leave it running.
+    /// </summary>
+    public CoreClr.LaunchedProgram? Launched { get; set; }
+
     private CorDebugProcess Process => _process ?? throw new ClrException("The process isn't running.");
 
     // ------------------------------------------------------------------ starting
 
+    [SupportedOSPlatform("windows")]
     public void Launch(string program, NetFxDebugArguments arguments, Action<string, string> output)
     {
         var commandLine = DesktopClr.CommandLine(program, arguments.Args ?? []);
@@ -505,7 +514,11 @@ internal sealed class CorDebugTarget : IClrProcess
         int? code = null;
         try
         {
-            if (_os is { } os && os.WaitForExit(5000))
+            if (Launched is { } launched)
+            {
+                code = launched.WaitForExit(TimeSpan.FromSeconds(5));
+            }
+            else if (_os is { } os && os.WaitForExit(5000))
             {
                 code = os.ExitCode;
             }
@@ -582,6 +595,14 @@ internal sealed class CorDebugTarget : IClrProcess
 
             _process.Detach();
         });
+        try
+        {
+            Launched?.Detach();
+        }
+        catch (ClrException)
+        {
+        }
+
         _exited = true;
         _events.Writer.TryWrite(new ClrExited(null));
         _events.Writer.TryComplete();
@@ -594,16 +615,45 @@ internal sealed class CorDebugTarget : IClrProcess
         Translate(() =>
         {
             var corModule = (CorModule)module;
+            // The method's current version: an edit (M55) makes a new one, which later calls run.
             var function = corModule.Raw.GetFunctionFromToken(new mdMethodDef(methodToken));
             var breakpoint = new CorBreakpoint(function.ILCode.CreateBreakpoint(ilOffset));
             breakpoint.Activate(true);
             lock (_gate)
             {
-                _breakpoints[(corModule.Raw.BaseAddress.Value, methodToken, ilOffset)] = breakpoint;
+                _breakpoints[(corModule.Raw.BaseAddress.Value, methodToken, ilOffset, function.VersionNumber)] = breakpoint;
             }
 
             return (IClrBreakpoint)breakpoint;
         });
+
+    public bool EnableEditAndContinue(IClrModule module) =>
+        ((CorModule)module).Raw.TrySetJITCompilerFlags(CorDebugJITCompilerFlags.CORDEBUG_JIT_ENABLE_ENC) == HRESULT.S_OK;
+
+    /// <summary><c>IMetaDataImport</c>'s interface id.</summary>
+    private static readonly Guid s_metadataImport = new("7DAC8207-D3AE-4C75-9B67-92801A497D44");
+
+    public unsafe void ApplyChanges(IClrModule module, byte[] metadataDelta, byte[] ilDelta)
+    {
+        // mscordbi reads the module's metadata for the edit through an importer it creates when it first needs one (a
+        // stop's stack walk does); applied before that (a program that hasn't stopped yet), ApplyChanges crashed the
+        // adapter in mscordbi (Windows, .NET 11 RC3). Asking for the importer first creates it.
+        ((CorModule)module).Raw.TryGetMetaDataInterface(s_metadataImport, out _);
+        HRESULT result;
+        fixed (byte* metadata = metadataDelta)
+        fixed (byte* il = ilDelta)
+        {
+            result = ((CorModule)module).Raw.TryApplyChanges(metadataDelta.Length, (IntPtr)metadata, ilDelta.Length, (IntPtr)il);
+        }
+
+        if (result != HRESULT.S_OK)
+        {
+            throw new ClrException(Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture));
+        }
+    }
+
+    public int CodeVersion(IClrModule module, int methodToken) =>
+        Translate(() => ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).VersionNumber);
 
     private CorBreakpoint? Breakpoint(CorDebugBreakpoint breakpoint)
     {
@@ -613,7 +663,7 @@ internal sealed class CorDebugTarget : IClrProcess
         }
 
         var function = new CorDebugFunctionBreakpoint(raw);
-        var key = (function.Function.Module.BaseAddress.Value, (int)function.Function.Token.Value, function.Offset);
+        var key = (function.Function.Module.BaseAddress.Value, (int)function.Function.Token.Value, function.Offset, function.Function.VersionNumber);
         lock (_gate)
         {
             return _breakpoints.GetValueOrDefault(key);
@@ -702,7 +752,7 @@ internal sealed class CorDebugTarget : IClrProcess
     // ------------------------------------------------------------------ func-eval
 
     public IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
-        Evaluate(thread, timeout, eval =>
+        (IClrValue?)Evaluate(thread, timeout, eval =>
         {
             var function = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken));
             var types = typeArguments.Select(t => t.Native as CorDebugType).ToList();
@@ -715,10 +765,10 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 eval.CallFunction(function.Raw, values.Length, values);
             }
-        });
+        }) ?? ClrVoidValue.Instance;
 
     public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout) =>
-        Evaluate(thread, timeout, eval => eval.NewString(text));
+        Evaluate(thread, timeout, eval => eval.NewString(text)) ?? throw new ClrException("The string wasn't created.");
 
     public IClrValue NewPrimitive(IClrThread thread, object value) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, CreatePrimitive(((CorThread)thread).Raw, value)));
@@ -763,7 +813,8 @@ internal sealed class CorDebugTarget : IClrProcess
     }
 
     /// <summary>Runs a func-eval on <paramref name="thread"/>, the other threads suspended, and waits for it (aborting it after <paramref name="timeout"/>).</summary>
-    private CorValue Evaluate(IClrThread thread, TimeSpan timeout, Action<CorDebugEval> start)
+    /// <summary>A func-eval's result; null when the method returns nothing.</summary>
+    private CorValue? Evaluate(IClrThread thread, TimeSpan timeout, Action<CorDebugEval> start)
     {
         var corThread = ((CorThread)thread).Raw;
         CorDebugEval eval;
@@ -804,7 +855,12 @@ internal sealed class CorDebugTarget : IClrProcess
                 throw new ClrException("The process ended during the evaluation.");
             }
 
-            var result = Translate(() => CorValue.Result(this, corThread, eval.Result));
+            if (eval.TryGetResult(out var raw) == HRESULT.CORDBG_S_FUNC_EVAL_HAS_NO_RESULT && completed)
+            {
+                return null; // a method that returns nothing (a property's setter)
+            }
+
+            var result = Translate(() => CorValue.Result(this, corThread, raw ?? eval.Result));
             return completed ? result : throw new ClrEvalException(result, "The evaluation threw an exception.");
         }
         finally
@@ -916,10 +972,10 @@ internal sealed class CorDebugTarget : IClrProcess
         }
 
         _os?.Dispose();
+        Launched?.Dispose();
     }
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorModule(CorDebugModule module) : IClrModule
 {
     public CorDebugModule Raw { get; } = module;
@@ -929,13 +985,11 @@ internal sealed class CorModule(CorDebugModule module) : IClrModule
     public bool IsDynamic { get; } = module.IsDynamic || module.IsInMemory;
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorBreakpoint(CorDebugFunctionBreakpoint breakpoint) : IClrBreakpoint
 {
     public void Activate(bool active) => CorDebugTarget.Translate(() => breakpoint.Activate(active));
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : IClrThread
 {
     public CorDebugThread Raw { get; } = thread;
@@ -1001,7 +1055,6 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
     public IClrValue? ThreadObject() => CorDebugTarget.Translate(() => Raw.Object is { } value ? CorValue.Wrap(target, value) : null);
 }
 
-[SupportedOSPlatform("windows")]
 internal sealed class CorFrame : IClrFrame
 {
     private readonly CorThread _thread;
@@ -1022,6 +1075,13 @@ internal sealed class CorFrame : IClrFrame
             Module = thread.Target.Module(function.Module);
             MethodToken = (int)function.Token.Value;
             IlOffset = frame.IP.pnOffset;
+            try
+            {
+                CodeVersion = function.VersionNumber;
+            }
+            catch (COMException)
+            {
+            }
             try
             {
                 StackStart = frame.StackRange.pStart.Value;
@@ -1048,6 +1108,8 @@ internal sealed class CorFrame : IClrFrame
     public int IlOffset { get; }
 
     public string? Description { get; }
+
+    public int CodeVersion { get; } = 1;
 
     /// <summary>The frame as ICorDebug has it now: the cached one until the process ran (a func-eval), then read again.</summary>
     private CorDebugILFrame Il
@@ -1103,7 +1165,6 @@ internal sealed class CorFrame : IClrFrame
 /// func-eval's result (<see cref="Result"/>) stays valid itself: an object is held by a strong handle and dereferenced
 /// again, a primitive is kept and created again when it's passed to another call.
 /// </summary>
-[SupportedOSPlatform("windows")]
 internal sealed class CorValue : IClrValue
 {
     private readonly CorDebugTarget _target;
@@ -1213,6 +1274,22 @@ internal sealed class CorValue : IClrValue
         Write(new CorDebugGenericValue((ICorDebugGenericValue)Value.Raw), value);
     });
 
+    public void SetReference(IClrValue? value) => CorDebugTarget.Translate(() =>
+    {
+        if (_snapshot is not null || Original.Raw is not ICorDebugReferenceValue reference || Original is CorDebugHandleValue)
+        {
+            throw new ClrException("Only a field, an element or a variable of a class type can point elsewhere.");
+        }
+
+        if (value is not null && value.Kind != ClrValueKind.Null && value.IsValueType)
+        {
+            throw new ClrException("A value type's value can't be stored in a reference.");
+        }
+
+        new CorDebugReferenceValue(reference).Value = value?.Address ?? 0;
+        _generation = -1; // read again
+    });
+
     /// <summary>Wraps a value as ICorDebug gives it: null references, strings, arrays, primitives and objects (boxes opened).</summary>
     public static CorValue Wrap(CorDebugTarget target, CorDebugValue value) => new(target, value);
 
@@ -1300,13 +1377,25 @@ internal sealed class CorValue : IClrValue
         {
             case CorElementType.Class or CorElementType.ValueType:
                 var cls = type.Class;
-                return new ClrType(target.Module(cls.Module), (int)cls.Token.Value, null, [.. type.TypeParameters.Select(t => TypeOf(target, t))]) { Native = type };
+                return new ClrType(target.Module(cls.Module), (int)cls.Token.Value, null, [.. type.TypeParameters.Select(t => TypeOf(target, t))]) { Native = type, BaseOf = () => BaseOf(target, type) };
             case CorElementType.SZArray:
                 return ClrType.ArrayOf(TypeOf(target, type.FirstTypeParameter)) with { Native = type };
             case CorElementType.Array:
                 return ClrType.ArrayOf(TypeOf(target, type.FirstTypeParameter), type.Rank) with { Native = type };
             default:
                 return Named(type.Type) with { Native = type };
+        }
+    }
+
+    private static ClrType? BaseOf(CorDebugTarget target, CorDebugType type)
+    {
+        try
+        {
+            return type.Base is { } baseType ? TypeOf(target, baseType) : null;
+        }
+        catch (COMException)
+        {
+            return null;
         }
     }
 

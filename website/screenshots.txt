@@ -13,11 +13,14 @@ debugging.png             Linux     smoke-test-debug-depth.png
 editor-dark.png           Linux     smoke-test-theme-dark.png
 ef-core.png               Linux     smoke-test-ef-model.png
 find-in-files.png         Linux     smoke-test-find-results.png
+git-commit.png            Linux     smoke-test-git-commit.png
+git-repository.png        Linux     smoke-test-git-repository.png
 intellisense.png          Linux     smoke-test-intellisense.png
 maui.png                  Linux     maui-devices.png
 netfx.png                 Windows   netfx-debugging.png
 new-project.png           Linux     new-project.png
 profiler.png              Linux     smoke-test-profiler.png
+references.png            Linux     smoke-test-references.png
 setup.png                 Linux     setup-appearance.png
 theme-classic.png         Linux     smoke-test-theme-light.png
 theme-daylight.png        Linux     smoke-test-theme-daylight.light.png

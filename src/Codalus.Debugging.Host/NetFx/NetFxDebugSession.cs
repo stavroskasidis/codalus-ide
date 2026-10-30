@@ -12,11 +12,14 @@ internal interface IClrDebugger
     IClrProcess Launch(NetFxDebugArguments arguments, Action<string, string> output);
 
     IClrProcess Attach(int processId);
+
+    /// <summary>The runtime it debugs, for messages: ".NET Framework" (the desktop CLR) or ".NET" (CoreCLR, ADR 0086).</summary>
+    string Runtime => ".NET Framework";
 }
 
 /// <summary>
-/// The desktop-CLR debugger adapter (M43b, ADR 0076): DAP on one side, a debugged .NET Framework process on the other
-/// (<see cref="IClrProcess"/>). Breakpoints (with conditions) bound in modules as they load through their portable
+/// The desktop-CLR debugger adapter (M43b, ADR 0076), and CoreCLR's (ADR 0086): DAP on one side, a debugged .NET
+/// Framework or .NET process on the other (<see cref="IClrProcess"/>, through <see cref="IClrDebugger"/>). Breakpoints (with conditions) bound in modules as they load through their portable
 /// PDBs, function breakpoints, stepping by source line with Just My Code and step filtering, threads and stacks,
 /// locals and arguments (async state machines' hoisted variables too), members through fields and property getters,
 /// evaluation of C# expressions (<see cref="ClrEvaluator"/>), exceptions (all with a type filter, or unhandled), and
@@ -30,10 +33,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private readonly Lock _gate = new();
     private readonly List<(IClrModule Module, ClrModuleInfo Info)> _modules = [];
+    private readonly HashSet<IClrModule> _loaded = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<string, List<BreakpointState>> _breakpoints = new(s_paths);
     private readonly List<BreakpointState> _functionBreakpoints = [];
     private readonly Dictionary<IClrBreakpoint, BreakpointState> _byBreakpoint = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, IClrFrame> _frames = [];
+    private readonly Dictionary<Guid, List<ModuleDelta>> _pendingDeltas = [];
     private readonly Dictionary<int, Func<IReadOnlyList<Variable>>> _children = [];
     private readonly Dictionary<int, Lazy<Dictionary<string, IClrValue>>> _childValues = [];
     private readonly Dictionary<int, IClrValue> _exceptions = [];
@@ -75,7 +80,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         public int? BoundLine { get; set; }
 
-        public List<(IClrModule Module, int Method, int Offset, IClrBreakpoint Breakpoint)> Bound { get; } = [];
+        public List<(IClrModule Module, int Method, int Offset, int Version, IClrBreakpoint Breakpoint)> Bound { get; } = [];
     }
 
     /// <summary>A step in progress: what was asked, where from, and how many times it went on by itself.</summary>
@@ -103,6 +108,14 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         switch (command)
         {
             case "initialize":
+                if (debugger is CoreClr.DbgShimDebugger shim && Read(arguments, json.InitializeArguments)?.SupportsRunInTerminalRequest == true)
+                {
+                    // The client starts programs in its terminal for us (M54): the launcher runs there.
+                    shim.RunInTerminal = request => dap.RequestAsync("runInTerminal", request, json.RunInTerminalRequestArguments, CancellationToken.None).GetAwaiter().GetResult() is { } body
+                        ? body.Deserialize(json.RunInTerminalResponse)?.ProcessId
+                        : null;
+                }
+
                 return JsonSerializer.SerializeToElement(new Capabilities
                 {
                     SupportsConfigurationDoneRequest = true,
@@ -152,7 +165,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "setVariable":
                 return JsonSerializer.SerializeToElement(SetVariable(Read(arguments, json.SetVariableArguments)!), json.SetVariableResponse);
             case "setExpression":
-                throw new DapRequestException("Assigning to expressions isn't supported for .NET Framework programs: change a variable in the Locals window.");
+                var assignment = Read(arguments, json.SetExpressionArguments)!;
+                return JsonSerializer.SerializeToElement(SetExpression(assignment.Expression, assignment.Value, assignment.FrameId), json.SetExpressionResponse);
             case "continue":
                 Resume();
                 return JsonSerializer.SerializeToElement(new ContinueResponse(AllThreadsContinued: true), json.ContinueResponse);
@@ -173,6 +187,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "disconnect" or "terminate":
                 Disconnect(Read(arguments, json.DisconnectArguments)?.TerminateDebuggee ?? !_attached);
                 return null;
+            case HotReloadCapabilitiesCommand:
+                return JsonSerializer.SerializeToElement(new HotReloadCapabilitiesResponse(HotReloadCapabilities()), json.HotReloadCapabilitiesResponse);
+            case ApplyChangesCommand:
+                return JsonSerializer.SerializeToElement(ApplyChanges(Read(arguments, json.ApplyChangesArguments)?.Updates ?? []), json.ApplyChangesResponse);
             default:
                 return null;
         }
@@ -180,6 +198,107 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private static T? Read<T>(JsonElement arguments, JsonTypeInfo<T> info) =>
         arguments.ValueKind == JsonValueKind.Object ? arguments.Deserialize(info) : arguments.ValueKind == JsonValueKind.Undefined ? s_empty.Deserialize(info) : default;
+
+    // ------------------------------------------------------------------ code changes (M55)
+
+    /// <summary>Applies an edit's deltas to the modules the program has loaded (Roslyn's, from the language host).</summary>
+    public const string ApplyChangesCommand = "codalus/applyChanges";
+
+    /// <summary>What the debugged runtime can apply, for Roslyn's analysis of an edit.</summary>
+    public const string HotReloadCapabilitiesCommand = "codalus/hotReloadCapabilities";
+
+    /// <summary>
+    /// The runtime's Hot Reload capabilities, by its version (CoreCLR's <c>MetadataUpdater.GetCapabilities</c>, read on
+    /// .NET 8 to 11: the generic ones from .NET 7, <c>AddFieldRva</c> from .NET 10). The version is the one dbgshim
+    /// reported for the attach (<c>11.0.0-rc.3…</c>, the runtime's folder), known before any module loads; a
+    /// self-contained program's folder isn't one, and then the core library's version says it. None for the .NET
+    /// Framework, whose debugger doesn't apply edits here, nor before the program has started.
+    /// </summary>
+    private string[] HotReloadCapabilities()
+    {
+        if (debugger is not CoreClr.DbgShimDebugger || _process is not { } process)
+        {
+            return [];
+        }
+
+        if (!int.TryParse(process.RuntimeVersion.Split('.')[0], NumberStyles.None, CultureInfo.InvariantCulture, out var major))
+        {
+            lock (_gate)
+            {
+                if (_modules.FirstOrDefault(m => m.Info.AssemblyName == "System.Private.CoreLib").Info is not { Metadata.IsAssembly: true } coreLibrary)
+                {
+                    return [];
+                }
+
+                major = coreLibrary.Metadata.GetAssemblyDefinition().Version.Major;
+            }
+        }
+
+        if (major < 6)
+        {
+            return [];
+        }
+
+        string[] capabilities = ["Baseline", "AddMethodToExistingType", "AddStaticFieldToExistingType", "AddInstanceFieldToExistingType", "NewTypeDefinition", "ChangeCustomAttributes", "UpdateParameters"];
+        if (major >= 7)
+        {
+            capabilities = [.. capabilities, "GenericUpdateMethod", "GenericAddMethodToExistingType", "GenericAddFieldToExistingType"];
+        }
+
+        return major >= 10 ? [.. capabilities, "AddFieldRva"] : capabilities;
+    }
+
+    /// <summary>
+    /// Applies each module's delta (the program stopped for it, if it runs), then binds the breakpoints again: in an
+    /// edited method's new version, which later calls run, beside the old one's.
+    /// </summary>
+    private ApplyChangesResponse ApplyChanges(ModuleDelta[] updates)
+    {
+        var results = new List<ModuleDeltaResult>();
+        lock (_gate)
+        {
+            WhileStopped(() =>
+            {
+                foreach (var update in updates)
+                {
+                    if (_modules.FirstOrDefault(m => m.Info.Mvid == update.ModuleId) is not ({ } module, { } info))
+                    {
+                        // Not loaded yet (a library the program hasn't called): the module it loads is the one built, so
+                        // the edits apply as it loads, in order.
+                        if (!_pendingDeltas.TryGetValue(update.ModuleId, out var pending))
+                        {
+                            _pendingDeltas[update.ModuleId] = pending = [];
+                        }
+
+                        pending.Add(update);
+                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Pending));
+                        continue;
+                    }
+
+                    try
+                    {
+                        Process.ApplyChanges(module, update.MetadataDelta, update.IlDelta);
+                    }
+                    catch (ClrException ex)
+                    {
+                        log.WriteLine($"Applying an edit to {info.AssemblyName}: {ex.Message}");
+                        results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Failed, ex.Message));
+                        continue;
+                    }
+
+                    info.ApplyDelta(update.MetadataDelta, update.PdbDelta);
+                    foreach (var (path, states) in _breakpoints)
+                    {
+                        Bind(path, states, module, info);
+                    }
+
+                    results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Applied));
+                }
+            });
+        }
+
+        return new ApplyChangesResponse([.. results]);
+    }
 
     // ------------------------------------------------------------------ starting
 
@@ -196,7 +315,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         if (attach)
         {
             var id = arguments.ProcessId ?? throw new DapRequestException("Attach needs a process id.");
-            log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} on the desktop CLR…");
+            log.WriteLine($"Attaching to process {id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime})…");
             _process = debugger.Attach(id);
         }
         else
@@ -206,11 +325,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 throw new DapRequestException("Launch needs a program.");
             }
 
-            log.WriteLine($"Starting {arguments.Program} on the desktop CLR…");
+            log.WriteLine($"Starting {arguments.Program} ({debugger.Runtime})…");
             _process = debugger.Launch(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
         }
 
-        log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} (.NET Framework, CLR {_process.RuntimeVersion}).");
+        log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
         _ = dap.SendEventAsync(DapEvents.Process, new ProcessEvent(Path.GetFileName(arguments.Program ?? "process"), _process.Id, IsLocalProcess: true, StartMethod: attach ? "attach" : "launch"), DapJsonContext.Default.ProcessEvent);
         _ = Task.Factory.StartNew(EventLoopAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
     }
@@ -343,8 +462,27 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     // ------------------------------------------------------------------ modules
 
+    /// <summary>
+    /// Registers a module a stop's frames are in that its load event hasn't brought yet: an attach's module loads arrive
+    /// after <c>DebugActiveProcess</c> returns, in order, and a Break All right after the attach (or a stop in between)
+    /// can come first, which showed the program's own frames without source (CI, run 40792217459, Linux). Its load event
+    /// then finds it registered.
+    /// </summary>
+    private void EnsureModule(IClrModule module)
+    {
+        if (!_loaded.Contains(module))
+        {
+            LoadModule(module);
+        }
+    }
+
     private void LoadModule(IClrModule module)
     {
+        if (!_loaded.Add(module))
+        {
+            return; // registered at a stop that came first (EnsureModule)
+        }
+
         ClrModuleInfo? info = null;
         string? problem = null;
         if (!module.IsDynamic && module.Path.Length > 0)
@@ -361,6 +499,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         // Just My Code: the user's code is what has symbols and isn't optimized.
         var userCode = info is { HasSymbols: true, IsOptimized: false };
+        if (userCode && debugger is CoreClr.DbgShimDebugger && !_process!.EnableEditAndContinue(module))
+        {
+            // Loaded before an attach: edits apply only when the program runs with DOTNET_MODIFIABLE_ASSEMBLIES=debug.
+            log.WriteLine($"Edit and Continue's JIT flags weren't set for {info!.AssemblyName}.");
+        }
+
         if (info is not null)
         {
             _modules.Add((module, info));
@@ -371,6 +515,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             catch (InvalidOperationException ex)
             {
                 log.WriteLine($"Just My Code for {info.AssemblyName}: {ex.Message}");
+            }
+
+            // Edits made before the module loaded (M55): the program is stopped in its load, as ApplyChanges wants.
+            if (_pendingDeltas.Remove(info.Mvid, out var deltas))
+            {
+                foreach (var delta in deltas)
+                {
+                    try
+                    {
+                        _process!.ApplyChanges(module, delta.MetadataDelta, delta.IlDelta);
+                        info.ApplyDelta(delta.MetadataDelta, delta.PdbDelta);
+                    }
+                    catch (ClrException ex)
+                    {
+                        log.WriteLine($"Applying an earlier edit to {info.AssemblyName} as it loaded: {ex.Message}");
+                        break;
+                    }
+                }
             }
 
             foreach (var (path, states) in _breakpoints)
@@ -402,6 +564,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private void UnloadModule(IClrModule module)
     {
+        _loaded.Remove(module);
         var index = _modules.FindIndex(m => ReferenceEquals(m.Module, module));
         if (index >= 0)
         {
@@ -525,14 +688,18 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private void BindAt(BreakpointState state, IClrModule module, int method, int offset, int line)
     {
-        if (state.Bound.Any(b => ReferenceEquals(b.Module, module) && b.Method == method && b.Offset == offset))
-        {
-            return;
-        }
-
         IClrBreakpoint breakpoint;
+        int version;
         try
         {
+            // In the method's current version (an edit makes a new one, M55); one in an older version stays for the
+            // frames still running it.
+            version = Process.CodeVersion(module, method);
+            if (state.Bound.Any(b => ReferenceEquals(b.Module, module) && b.Method == method && b.Offset == offset && b.Version == version))
+            {
+                return;
+            }
+
             breakpoint = Process.CreateBreakpoint(module, method, offset);
         }
         catch (InvalidOperationException ex)
@@ -541,7 +708,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return;
         }
 
-        state.Bound.Add((module, method, offset, breakpoint));
+        state.Bound.Add((module, method, offset, version, breakpoint));
         _byBreakpoint[breakpoint] = state;
         var newlyBound = state.BoundLine is null;
         state.BoundLine ??= line;
@@ -724,7 +891,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private void StartStep(IClrThread thread, ClrStepKind kind, IClrFrame? frame)
     {
         var ranges = new List<(int, int)>();
-        if (kind != ClrStepKind.Out && frame?.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset) is { } range)
+        if (kind != ClrStepKind.Out && frame?.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } range)
         {
             ranges.Add(range);
         }
@@ -774,7 +941,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return true;
         }
 
-        if (info is not null && info.SequencePointAt(frame.MethodToken, frame.IlOffset) is { } point && (point.IsHidden || (point.Offset != frame.IlOffset && step.Kind != ClrStepKind.Out)))
+        if (info is not null && info.SequencePointAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } point && (point.IsHidden || (point.Offset != frame.IlOffset && step.Kind != ClrStepKind.Out)))
         {
             // A hidden sequence point (compiler code) or the middle of a line: on to the next line start.
             StartStep(thread, ClrStepKind.Over, frame);
@@ -808,6 +975,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _step = null;
             ClearHandles();
             var threads = Process.Threads();
+            foreach (var module in threads.SelectMany(t => t.Frames()).Select(f => f.Module).OfType<IClrModule>().Distinct())
+            {
+                EnsureModule(module);
+            }
+
             thread = threads.FirstOrDefault(t => t.Frames().Any(f => f.Module is { } m && Types.Info(m) is { HasSymbols: true })) ?? (threads.Count > 0 ? threads[0] : null);
         }
 
@@ -862,7 +1034,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private string ThreadName(IClrThread thread)
     {
-        var name = SafeValue(thread.ThreadObject) is { Kind: ClrValueKind.Object } value ? SafeValue(() => Types.Field(value, "m_Name")) : null;
+        // System.Threading.Thread's name: m_Name on the desktop CLR, _name on CoreCLR.
+        var name = SafeValue(thread.ThreadObject) is { Kind: ClrValueKind.Object } value ? SafeValue(() => Types.Field(value, "m_Name") ?? Types.Field(value, "_name")) : null;
         return name is { Kind: ClrValueKind.String, Text: { Length: > 0 } text } ? text : "Thread " + thread.Id.ToString(CultureInfo.InvariantCulture);
     }
 
@@ -879,14 +1052,41 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     }
 
     /// <summary>The innermost IL frame (with a module) of a thread.</summary>
-    private static IClrFrame? TopFrame(IClrThread thread) => thread.Frames().FirstOrDefault(f => f.Module is not null);
+    private IClrFrame? TopFrame(IClrThread thread) => VisibleFrames(thread).FirstOrDefault(f => f.Module is not null);
+
+    /// <summary>
+    /// A thread's frames as the user sees them. On .NET 9 and later CoreCLR reports a thrown exception from its managed
+    /// exception dispatcher: the frames above the throw are <c>System.Runtime.EH</c>'s and native ones, which are left
+    /// out, so the throw is on top (as the stop's location, a module condition's module and evaluation's frame).
+    /// </summary>
+    private IReadOnlyList<IClrFrame> VisibleFrames(IClrThread thread)
+    {
+        var frames = thread.Frames();
+        var skip = 0;
+        var dispatcher = false;
+        while (skip < frames.Count && (frames[skip].Module is null || IsExceptionDispatch(frames[skip])))
+        {
+            dispatcher |= frames[skip].Module is not null;
+            skip++;
+        }
+
+        return dispatcher && skip < frames.Count ? [.. frames.Skip(skip)] : frames;
+    }
+
+    private bool IsExceptionDispatch(IClrFrame frame) =>
+        frame.Module is { } module && Types.Info(module)?.MethodDisplayName(frame.MethodToken) is { } name && name.StartsWith("System.Runtime.EH.", StringComparison.Ordinal);
 
     private StackTraceResponse StackTrace(int threadId, int start, int levels)
     {
         lock (_gate)
         {
             RequireStopped();
-            var frames = Thread(threadId).Frames();
+            var frames = VisibleFrames(Thread(threadId));
+            foreach (var module in frames.Select(f => f.Module).OfType<IClrModule>().Distinct())
+            {
+                EnsureModule(module);
+            }
+
             var result = new List<StackFrame>();
             foreach (var frame in frames.Skip(start).Take(levels > 0 ? levels : int.MaxValue))
             {
@@ -900,7 +1100,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
                 var info = Types.Info(module);
                 var name = info?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}]";
-                var point = info?.LineAt(frame.MethodToken, frame.IlOffset);
+                var point = info?.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion);
                 var file = point?.Document;
                 var hasSource = file is { Length: > 0 } && File.Exists(file);
                 var userCode = info is { HasSymbols: true, IsOptimized: false } && !info.IsNonUserCode(frame.MethodToken);
@@ -964,7 +1164,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 variables.Add((method.ParameterNames[i], Live(() => frame.Argument(index))));
             }
 
-            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset))
+            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
             {
                 variables.Add((name, Live(() => frame.Local(slot))));
             }
@@ -1147,8 +1347,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         var result = new List<Variable>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        var chain = Types.Chain(target.Type).Where(c => c.Info.TypeFullName(c.Token) is not ("System.Object" or "System.ValueType")).ToList();
-        foreach (var (module, token, info) in chain)
+        var chain = Types.ChainWithArguments(target.Type).Where(c => c.Info.TypeFullName(c.Token) is not ("System.Object" or "System.ValueType")).ToList();
+        foreach (var (module, token, info, _) in chain)
         {
             foreach (var field in info.Fields(token).Where(f => !f.IsStatic))
             {
@@ -1162,7 +1362,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         var thread = CurrentThread();
         var timedOut = false;
-        foreach (var (module, token, info) in chain)
+        foreach (var (module, token, info, typeArguments) in chain)
         {
             foreach (var property in info.Properties(token).Where(p => !p.IsStatic && p.IndexParameters == 0 && p.GetterToken != 0))
             {
@@ -1180,12 +1380,13 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
                 try
                 {
-                    var value = Process.Call(thread, module, property.GetterToken, target.Type.TypeArguments, [target], EvalTimeout);
+                    var value = Process.Call(thread, module, property.GetterToken, typeArguments, [target], EvalTimeout);
                     result.Add(VariableOf(property.Name, ClrLiveValue.Of(Process, value, () => value), path));
                 }
                 catch (ClrEvalException ex)
                 {
-                    result.Add(new Variable(property.Name, "{" + Types.FullName(ex.Exception.Type) + "}", null, 0, path));
+                    // As netcoredbg shows it: the exception, typed (the data tip marks the getter as having thrown) and expandable.
+                    result.Add(VariableOf(property.Name, ex.Exception, path));
                 }
                 catch (TimeoutException)
                 {
@@ -1196,6 +1397,59 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 {
                     result.Add(new Variable(property.Name, "(" + ex.Message + ")", null, 0, path));
                 }
+            }
+        }
+
+        var members = result.OrderBy(v => v.Name, StringComparer.Ordinal).Take(MaxChildren).ToList();
+
+        // The type's static members under one node, last, as netcoredbg lists them (the data tip's static group, M54):
+        // no value or type, the type's name to evaluate.
+        if (Types.Definition(target.Type) is { } own && Types.Info(own.Module) is { } ownInfo
+            && (ownInfo.Fields(own.Token).Any(f => f.IsStatic && !f.IsLiteral) || ownInfo.Properties(own.Token).Any(p => p.IsStatic && p.IndexParameters == 0 && p.GetterToken != 0)))
+        {
+            var type = target.Type;
+            members.Add(new Variable(StaticMembers, string.Empty, string.Empty, Handle(() => Statics(own.Module, own.Token, type)), ownInfo.TypeFullName(own.Token)));
+        }
+
+        return members;
+    }
+
+    private const string StaticMembers = "Static members";
+
+    /// <summary>A type's own static fields and properties (through their getters).</summary>
+    private List<Variable> Statics(IClrModule module, int token, ClrType type)
+    {
+        var result = new List<Variable>();
+        var info = Types.Info(module)!;
+        var name = info.TypeFullName(token);
+        var thread = CurrentThread();
+        foreach (var field in info.Fields(token).Where(f => f.IsStatic && !f.IsLiteral))
+        {
+            if (ClrTypeSystem.DisplayFieldName(field.Name) is { } display && thread is not null)
+            {
+                var fieldToken = field.Token;
+                result.Add(VariableOf(display, SafeValue(() => Process.GetStaticField(thread, type, fieldToken)), name + "." + display));
+            }
+        }
+
+        foreach (var property in info.Properties(token).Where(p => p.IsStatic && p.IndexParameters == 0 && p.GetterToken != 0 && result.All(v => v.Name != p.Name)))
+        {
+            if (thread is null)
+            {
+                break;
+            }
+
+            try
+            {
+                result.Add(VariableOf(property.Name, Process.Call(thread, module, property.GetterToken, type.TypeArguments, [], EvalTimeout), name + "." + property.Name));
+            }
+            catch (ClrEvalException ex)
+            {
+                result.Add(VariableOf(property.Name, ex.Exception, name + "." + property.Name));
+            }
+            catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+            {
+                result.Add(new Variable(property.Name, "(" + ex.Message + ")", null, 0, name + "." + property.Name));
             }
         }
 
@@ -1249,6 +1503,27 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 RemoteValue remote => new EvaluateResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim())),
                 TypeValue type => throw new DapRequestException($"'{expression.Trim()}' is a type ({Types.Name(ClrTypeSystem.TypeOf(type.Module, type.Token))}), not a value."),
                 _ => throw new DapRequestException($"'{expression.Trim()}' is a namespace, not a value."),
+            };
+        }
+    }
+
+    /// <summary>Assigns a value to an expression (a member, an element, a variable) in a stopped frame (M54).</summary>
+    private SetExpressionResponse SetExpression(string expression, string value, int? frameId)
+    {
+        lock (_gate)
+        {
+            RequireStopped();
+            var frame = frameId is { } id ? Frame(id) : _frames.Values.FirstOrDefault(f => f.Module is not null) ?? throw new DapRequestException("Assignment needs a stopped frame.");
+            if (frame.Module is null)
+            {
+                throw new DapRequestException("Expressions can't be assigned in this frame (it isn't managed code).");
+            }
+
+            return Evaluator(frame).Assign(expression, value) switch
+            {
+                LocalValue local => new SetExpressionResponse(ClrTypeSystem.FormatPrimitive(local.Value), local.Value is null ? null : LocalTypeName(local.Value)),
+                RemoteValue remote => new SetExpressionResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim())),
+                _ => throw new DapRequestException($"'{expression.Trim()}' isn't a value."),
             };
         }
     }
@@ -1363,7 +1638,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             if (frame.Module is { } module && Types.Info(module) is { } info)
             {
                 var line = "   at " + info.MethodDisplayName(frame.MethodToken);
-                if (info.LineAt(frame.MethodToken, frame.IlOffset) is { Document.Length: > 0 } point)
+                if (info.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { Document.Length: > 0 } point)
                 {
                     line += $" in {point.Document}:line {point.StartLine.ToString(CultureInfo.InvariantCulture)}";
                 }

@@ -1633,7 +1633,8 @@ internal sealed partial class SmokeTest
             // Found when the task is collected: it may be an earlier command's.
             var inner = e.Exception.InnerException ?? e.Exception;
             var frame = inner.StackTrace?.Split('\n').Select(l => l.Trim()).FirstOrDefault(l => l.Contains("Codalus.", StringComparison.Ordinal));
-            _sweepUnhandled.Add($"unobserved (from this or an earlier command) {inner.GetType().Name}: {inner.Message}{(frame is null ? string.Empty : " " + frame)}");
+            var request = inner is Codalus.Rpc.JsonRpcRemoteException { Method: { } method } ? $" (request {method})" : string.Empty;
+            _sweepUnhandled.Add($"unobserved (from this or an earlier command) {inner.GetType().Name}: {inner.Message}{request}{(frame is null ? string.Empty : " " + frame)}");
         }
     }
 
@@ -1844,6 +1845,10 @@ internal sealed partial class SmokeTest
         private TimeSpan _maxGcPause;
         private string? _maxJob;
         private int _probes;
+        private int _probesSent;
+        private int _probesAnswered;
+        private int _samplesTaken;
+        private int _probesRecorded;
 
         public SweepStallMonitor()
         {
@@ -1902,6 +1907,33 @@ internal sealed partial class SmokeTest
             }
         }
 
+        /// <summary>
+        /// Whether a probe waits for the UI thread: while the UI thread is blocked, the probe's wait measures the block.
+        /// Tests block the UI thread until one does, since the monitor's thread can wake late on a loaded machine.
+        /// </summary>
+        public bool ProbePending => Volatile.Read(ref _probesSent) > Volatile.Read(ref _probesAnswered);
+
+        /// <summary>The samples of what the UI thread runs taken since the monitor started (every 100 ms of a probe's wait).</summary>
+        public int SamplesTaken => Volatile.Read(ref _samplesTaken);
+
+        /// <summary>The probes sent since the monitor started.</summary>
+        public int ProbesSent => Volatile.Read(ref _probesSent);
+
+        /// <summary>
+        /// The probes whose wait is in <see cref="MaxMilliseconds"/>: the monitor's thread records a wait when it next
+        /// wakes after the probe's answer, so a stall that just ended may not be in it yet.
+        /// </summary>
+        public int ProbesRecorded
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _probesRecorded;
+                }
+            }
+        }
+
         public void Reset()
         {
             lock (_gate)
@@ -1923,7 +1955,12 @@ internal sealed partial class SmokeTest
                 Task probe;
                 try
                 {
-                    probe = Dispatcher.UIThread.InvokeAsync(() => Interlocked.Exchange(ref answered, Stopwatch.GetTimestamp()), DispatcherPriority.Send).GetTask();
+                    Interlocked.Increment(ref _probesSent);
+                    probe = Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        Interlocked.Exchange(ref answered, Stopwatch.GetTimestamp());
+                        Interlocked.Increment(ref _probesAnswered);
+                    }, DispatcherPriority.Send).GetTask();
                 }
                 catch (InvalidOperationException)
                 {
@@ -1945,6 +1982,7 @@ internal sealed partial class SmokeTest
                         var job = Ui.RunningJob is { } posted ? "the job posted at " + posted : "no posted job";
                         jobs[job] = jobs.GetValueOrDefault(job) + 1;
                         samples++;
+                        Interlocked.Increment(ref _samplesTaken);
                     }
                 }
                 catch (AggregateException)
@@ -1957,6 +1995,7 @@ internal sealed partial class SmokeTest
                 lock (_gate)
                 {
                     _probes++;
+                    _probesRecorded++;
                     if (ticks > _maxTicks)
                     {
                         _maxTicks = ticks;

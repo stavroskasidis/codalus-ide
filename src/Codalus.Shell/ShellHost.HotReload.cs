@@ -23,6 +23,7 @@ public sealed partial class ShellHost
 
     private void InitializeHotReload()
     {
+        InitializeDebugHotReload();
         Runs.DotnetRoot = Terminals.DotnetRoot;
         Solutions.SolutionChanged += (_, _) => Runs.DotnetRoot = Terminals.DotnetRoot;
         Runs.RunningChanged += (_, _) => Ui.Post(UpdateHotReloadStatus);
@@ -63,6 +64,13 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task ApplyCodeChangesAsync()
     {
+        if (HotReloadProgram is null && DebugEdits.IsActive)
+        {
+            // Under the Codalus debugger (M55): the editors' text as it is, saved or not.
+            await ApplyDebugEditsAsync().ConfigureAwait(true);
+            return;
+        }
+
         if (HotReloadProgram is not { } program)
         {
             ShowMessage("Start with Hot Reload first (Debug → Start with Hot Reload).");
@@ -108,7 +116,7 @@ public sealed partial class ShellHost
 
     /// <summary>The toolbar's Hot Reload button (deferred from M15b).</summary>
     private void UpdateToolbarHotReload() =>
-        Toolbar?.SetHotReload(HotReloadUnsupportedReason(Runs.StartupProject) is null, HotReloadProgram is not null, Workbench.Settings.GetBoolean(HotReloadSetting, false));
+        Toolbar?.SetHotReload(HotReloadUnsupportedReason(Runs.StartupProject) is null, HotReloadProgram is not null || DebugEdits?.IsActive == true, Workbench.Settings.GetBoolean(HotReloadSetting, false));
 
     /// <summary>The Hot Reload menu's Hot Reload on Start Without Debugging: turns the <c>run.hotReload</c> setting over.</summary>
     public Task ToggleHotReloadOnStartAsync() =>
@@ -117,10 +125,23 @@ public sealed partial class ShellHost
     private void UpdateHotReloadStatus()
     {
         var program = HotReloadProgram;
-        Workbench.Context.Set("hotReloadRunning", program is not null);
+        var debugEdits = DebugEdits?.IsActive == true;
+        Workbench.Context.Set("hotReloadRunning", program is not null || debugEdits);
         UpdateToolbarHotReload();
         if (program?.HotReload is not { } session)
         {
+            if (debugEdits && _debugEditsStatus is { } status)
+            {
+                // Hot Reload while debugging (M55): the last apply's outcome.
+                Workbench.StatusBar.Set(new StatusBarItem(HotReloadStatusItem, "$(flame) " + status, StatusBarAlignment.Left, 46, ContributionSource.Shell.Id)
+                {
+                    Command = "run.applyCodeChanges",
+                    Tooltip = Localizer.Get("status.debugHotReload.tooltip", "Apply Code Changes (Alt+F10): the edits apply to the program being debugged. Continue applies them too, and so does a save while it runs."),
+                    AccessibleName = status,
+                });
+                return;
+            }
+
             Workbench.StatusBar.Remove(HotReloadStatusItem);
             return;
         }
@@ -130,6 +151,12 @@ public sealed partial class ShellHost
         var debugged = ReferenceEquals(program, Volatile.Read(ref _watchedProgram));
         var text = session.State switch
         {
+            // Under the Codalus debugger (M55) the server takes the edits from the debugger, and refuses dotnet watch's
+            // copy, which dotnet watch reports as not applied: the server's outcome is the debugger's.
+            not (HotReloadState.Starting or HotReloadState.Restarting or HotReloadState.Errors or HotReloadState.Exited) when debugged && debugEdits =>
+                _debugEditsApplied is { } at
+                    ? Localizer.Format("status.debugHotReload.serverAndBrowser", "Hot Reload: applied to the server at {0}, sent to the browser", at)
+                    : "Hot Reload: sent to the browser",
             HotReloadState.Applying when debugged => "Hot Reload: sent to the browser",
             HotReloadState.Watching when debugged && (session.LastApplied is not null || session.UpdatesRefused) => "Hot Reload: sent to the browser",
             HotReloadState.NotApplied => "Hot Reload: not applied (see the output)",

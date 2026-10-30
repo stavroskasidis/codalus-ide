@@ -39,6 +39,15 @@ public sealed class LoadingTests : IAsyncLifetime
         }
     }
 
+    /// <summary>
+    /// What the host said by the time a wait ran out: the document's last diagnostics and every workspace status. The
+    /// wait for the semantic error after loading ended ran out twice on Linux (WSL, both while another test suite ran
+    /// on the same machine), and 20 runs alone, ten with every core busy, passed.
+    /// </summary>
+    private string Seen(string uri) =>
+        "diagnostics: " + (_diagnostics.TryGetValue(uri, out var found) ? string.Join(", ", found.Select(d => d.Code)) : "none")
+        + "; statuses: " + string.Join(", ", _status.Select(s => $"{s.State} ({s.Projects} projects, {s.Documents} documents)"));
+
     [Fact]
     public async Task Documents_outside_loaded_projects_get_syntax_diagnostics_until_loading_ends()
     {
@@ -58,7 +67,36 @@ public sealed class LoadingTests : IAsyncLifetime
 
         // Loading ended: the file really is on its own, and its semantic errors are real.
         await _client.UpdateProjectsAsync([], Ct, loading: false);
-        await LanguageFixture.WaitUntilAsync(() => _diagnostics[uri].Any(d => d.Code == "CS0246"), TimeSpan.FromSeconds(60));
-        await LanguageFixture.WaitUntilAsync(() => _status.Any(s => s.State == WorkspaceStates.Ready), TimeSpan.FromSeconds(60));
+        await LanguageFixture.WaitUntilAsync(() => _diagnostics[uri].Any(d => d.Code == "CS0246"), TimeSpan.FromSeconds(60), () => Seen(uri));
+        await LanguageFixture.WaitUntilAsync(() => _status.Any(s => s.State == WorkspaceStates.Ready), TimeSpan.FromSeconds(60), () => Seen(uri));
+    }
+
+    [Fact]
+    public async Task A_Hot_Reload_session_starts_once_the_solution_has_loaded()
+    {
+        // M55: a baseline taken while projects were still arriving took their arrival for changed references, a
+        // restart, and Continue waited on that question (arm64 CI, run 40896721482).
+        await _client.UpdateProjectsAsync([], Ct, loading: true);
+        var start = _client.HotReloadStartAsync("loading", [], ["Baseline"], Ct);
+        await Task.Delay(1000, Ct);
+        Assert.False(start.IsCompleted, "The session started while the solution was loading.");
+
+        await _client.UpdateProjectsAsync([], Ct, loading: false);
+        Assert.False(await start.WaitAsync(TimeSpan.FromSeconds(60), Ct)); // no projects to follow
+    }
+
+    [Fact]
+    public async Task A_Hot_Reload_start_waiting_for_the_solution_ends_with_the_debug_session()
+    {
+        await _client.UpdateProjectsAsync([], Ct, loading: true);
+        using var cancel = new CancellationTokenSource();
+        var start = _client.HotReloadStartAsync("ended", [], ["Baseline"], cancel.Token);
+        await Task.Delay(500, Ct);
+        await cancel.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => start.WaitAsync(TimeSpan.FromSeconds(60), Ct));
+
+        // The host dropped the wait: a later start is answered.
+        await _client.UpdateProjectsAsync([], Ct, loading: false);
+        Assert.False(await _client.HotReloadStartAsync("after", [], ["Baseline"], Ct).WaitAsync(TimeSpan.FromSeconds(60), Ct));
     }
 }

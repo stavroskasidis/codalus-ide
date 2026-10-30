@@ -26,6 +26,9 @@ public sealed partial class ShellHost
     /// <summary>Step over properties and operators (M14b).</summary>
     public const string StepFilteringSetting = "debug.stepOverPropertiesAndOperators";
 
+    /// <summary>The adapter that debugs .NET programs: netcoredbg, or Codalus IDE's own, a preview (M54, ADR 0086).</summary>
+    public const string DebugAdapterSetting = "debug.adapter";
+
     private const string DebugStatusItem = "codalus.debug";
     private bool _debugWindowsShown;
     private string? _pendingBrowserUrl;
@@ -50,7 +53,11 @@ public sealed partial class ShellHost
 
     private void InitializeDebugging()
     {
-        Debugger = new DebugService(DebugAdapterLocator.Resolve) { JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true) };
+        Debugger = new DebugService(DebugAdapterLocator.Resolve)
+        {
+            JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true),
+            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter),
+        };
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
             await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));

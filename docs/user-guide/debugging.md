@@ -1,6 +1,6 @@
 # Debugging
 
-Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)).
+Codalus IDE debugs .NET programs with **netcoredbg**, the open-source .NET debugger from Samsung, which is bundled with the packages. It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and the macOS package bundles the x64 netcoredbg for them ([Older .NET versions](dotnet-versions.md)). Codalus IDE also has a .NET debugger of its own, a preview you can turn on: [the Codalus debugger](#the-codalus-debugger-preview).
 
 On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
 
@@ -23,7 +23,7 @@ The program's output and the debugger's messages appear in the **Debug Console**
 
 ### The program's console
 
-On Windows a debugged console or web app gets a **console window** of its own, as in the classic IDE: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Codalus IDE starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS the setting has no effect yet: the debugger can't attach to a program held in the terminal there, so programs use the Debug Console.
+On Windows a debugged console or web app gets a **console window** of its own, as in the classic IDE: it takes input, the window stays open after the program ends until you press a key, Stop closes it, and a web app's browser opens once its address answers. Elsewhere it writes to the Debug Console and gets no input. Set **`debug.console`** to `internalConsole`, `integratedTerminal` or `externalConsole` (Windows) to choose; Run Without Debugging has the same choice in **`run.console`** (`outputWindow`, `integratedTerminal`, `externalConsole`). With `integratedTerminal` to start it in a new integrated terminal instead: a real console that takes input, colors and all. Codalus IDE starts the program there, holds it before `Main` until the debugger has attached and set your breakpoints, then lets it run. Stop ends it; **Detach All** leaves it running in its terminal. On macOS, netcoredbg can't attach to a program held in the terminal, so programs use the Debug Console there, unless [the Codalus debugger](#the-codalus-debugger-preview) debugs them: it starts the program in the terminal itself, on every OS, and stops on `Main`'s first line when a breakpoint is there.
 
 ### Several startup projects
 
@@ -184,8 +184,43 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 - Dumps open on the operating system that wrote them, because the runtime's debugging library has to load on the machine reading them. It comes from a .NET installation with the dump's runtime version (`dotnet --list-runtimes`): on Linux and macOS, a dump of a runtime that isn't installed (a self-contained app's) doesn't open.
 - On macOS, the first dump may make the system ask for your password (access to developer tools). The dump waits until you approve it, and is abandoned with a message after 3 minutes.
 
+## The Codalus debugger (preview)
+
+Codalus IDE has a .NET debugger of its own, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). netcoredbg stays the default while it matures: to try it, set **`debug.adapter`** to `codalus` (Options › Debugging › **Debugger for .NET programs**). It applies from the next session, to Start Debugging, Attach to Process, debugging tests and several startup projects, and the first line in the Debug Console says which debugger a session uses.
+
+What it does that netcoredbg doesn't:
+- **Hot Reload while debugging**: edits apply to the program you're debugging (below)
+- the program's own exit code on macOS (netcoredbg reports 0 there)
+- programs in the integrated terminal or a console window start under the debugger, so a breakpoint on `Main`'s first line stops there; the integrated terminal works on macOS too, and no startup hook is needed
+- casts and C#'s operators in Watch, QuickWatch and conditions
+- exception module conditions on .NET 11 programs
+
+What it doesn't do yet, so netcoredbg debugs these and the Debug Console says why:
+- x64 programs on Apple silicon (.NET 5 and earlier under Rosetta 2)
+- remote targets: SSH, containers and WSL
+
+Its expressions are the .NET Framework debugger's C# subset: names, members, indexers, method calls, operators, `?:`, `??` and casts, but no `new`, lambdas or generic methods. If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its log there, to attach to a report.
+
+### Hot Reload while debugging
+
+Under the Codalus debugger, C#, Visual Basic and Razor edits apply to the program while you debug it ([ADR 0086](../adr/0086-a-managed-coreclr-debugger.md)):
+- **Apply Code Changes** (`Alt+F10`, or the toolbar's Hot Reload button) applies the editors' text as it is, saved or not.
+- **Continue**, a step or Run to Cursor applies the edits you made while stopped, before the program goes on.
+- **Saving a file** applies it while the program runs, with **Hot Reload while debugging** (`debug.hotReload`) on, as it is by default.
+
+The status bar's Hot Reload item says when the edits last applied, and the Debug Console says each time. As with `dotnet watch`, a changed method runs its new code from its next call: a method already running (the one you're stopped in, say) finishes in its old version. Breakpoints bind in the new code, so a breakpoint on a line you just added stops there.
+
+Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too.
+
+Edits apply to programs started in the Debug Console, the integrated terminal or a console window, to tests you debug, and to a library the program hasn't loaded yet (they apply as it loads). A **Blazor Web App**'s server, which `dotnet watch` runs, takes them in place too, while `dotnet watch` updates its WebAssembly components in the browser; an edit that needs a restart restarts the app, and debugging follows it. A program you **attach** to takes edits only if it was started with `DOTNET_MODIFIABLE_ASSEMBLIES=debug` (as `dotnet watch` starts programs); Apply Code Changes says so when it wasn't. F# and XAML edits run after a restart.
+
+Under netcoredbg, the first edit you save while debugging offers the Codalus debugger, once; **Don't Show Again** turns the offer off (`debug.codalusOffer`).
+
 ## Settings
 
+- `debug.adapter`: the debugger for .NET programs, `netcoredbg` (the default) or `codalus` ([the Codalus debugger](#the-codalus-debugger-preview), a preview).
+- `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger).
+- `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.
@@ -198,7 +233,7 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 Blazor WebAssembly apps, and the pages of ASP.NET Core apps, are debugged in the browser (see [Web development](web.md#debugging-the-server-and-the-page-together)). There, function breakpoints, the Modules window and the .NET exception settings don't apply.
 
 These come from netcoredbg:
-- no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.
+- no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). [The Codalus debugger](#hot-reload-while-debugging) applies edits while debugging. Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.
 - no data breakpoints
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows

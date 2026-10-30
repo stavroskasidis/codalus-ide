@@ -141,7 +141,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
     private async Task AbandonUnlessClosedAsync()
     {
         await _connection.Closed.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-        if (!_connection.Closed.IsCompleted)
+        if (!_connection.Closed.IsCompleted && !_connection.OutputEnded)
         {
             Log?.Invoke(this, $"The debug adapter exited (code {ExitCode()}), and a process it started still holds its output.");
             _connection.Abandon();
@@ -174,6 +174,9 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
     public DapConnection Connection => _connection;
 
+    /// <summary>The Codalus debugger (<c>codalus-debughost --clr-dap</c>, M54), which answers <c>codalus/applyChanges</c> (M55).</summary>
+    public bool IsCodalus { get; private init; }
+
     /// <summary>Starts the adapter at <paramref name="path"/> and sends <c>initialize</c>.</summary>
     /// <param name="environment">Added to the adapter's own environment (M33: what netcoredbg needs on Linux).</param>
     public static Task<DebugAdapter> StartAsync(string path, CancellationToken cancellationToken, IReadOnlyDictionary<string, string>? environment = null) =>
@@ -193,7 +196,12 @@ public sealed partial class DebugAdapter : IDebugAdapter
                 : info.WorkingDirectory ?? (Path.IsPathRooted(info.Program) ? Path.GetDirectoryName(info.Program)! : Environment.CurrentDirectory),
         };
         var process = await (info.Launcher ?? LocalProcessLauncher.Instance).StartAsync(launch, cancellationToken).ConfigureAwait(false);
-        var adapter = new DebugAdapter(process) { Transport = info.Transport, _local = info.Transport is null && info.Launcher is null or LocalProcessLauncher };
+        var adapter = new DebugAdapter(process)
+        {
+            Transport = info.Transport,
+            _local = info.Transport is null && info.Launcher is null or LocalProcessLauncher,
+            IsCodalus = info.Arguments.Contains(CoreClrAdapter.AdapterArgument),
+        };
         if (terminal is not null)
         {
             adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));

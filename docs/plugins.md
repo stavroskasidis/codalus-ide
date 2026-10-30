@@ -2,7 +2,7 @@
 
 Plugins extend Codalus IDE with commands, menus, key bindings, settings, tool windows, notifications, output channels and status bar items. This guide walks through the sample in [`samples/plugins/HelloWorld`](../samples/plugins/HelloWorld). The design and its reasons are in [ADR 0003](adr/0003-plugin-api.md), and the wire protocol is in [plugin-protocol.md](plugin-protocol.md).
 
-**API version 1.1.0** ([ADR 0058](adr/0058-plugin-api-1-0.md)). The API is frozen: minor releases (1.x) only add, and a member goes away only in a major release, after it has been marked obsolete (warning `CODALUS0001`) for at least two minor releases. Ask for `^1.0.0`, or `^1.1.0` when you use what 1.1 added. See the [changelog](#changelog).
+**API version 1.2.0** ([ADR 0058](adr/0058-plugin-api-1-0.md)). The API is frozen: minor releases (1.x) only add, and a member goes away only in a major release, after it has been marked obsolete (warning `CODALUS0001`) for at least two minor releases. Ask for `^1.0.0`, or `^1.1.0` or `^1.2.0` when you use what that version added. See the [changelog](#changelog).
 
 ## How plugins run
 
@@ -20,7 +20,7 @@ dotnet new install Codalus.Templates
 dotnet new codalus-plugin -n Contoso.Greeter --publisher contoso
 ```
 
-It makes `Contoso.Greeter.slnx` with the plugin (`src/Contoso.Greeter`: the manifest, a command, a setting and a status bar item) and its unit tests (`tests/Contoso.Greeter.Tests`, on [`Codalus.Plugins.Testing`](#testing-plugins); `--skipTests` leaves them out). The plugin's id is `<publisher>.<name>` in lower case. Until the packages are on nuget.org (M22c), install the template from a clone (`dotnet new install src/Codalus.Templates/content/CodalusPlugin`) and pack the two API packages into a local feed (`dotnet pack src/Codalus.Plugins.Abstractions -o feed`, and `Codalus.Plugins.Testing`).
+It makes `Contoso.Greeter.slnx` with the plugin (`src/Contoso.Greeter`: the manifest, a command, a setting and a status bar item) and its unit tests (`tests/Contoso.Greeter.Tests`, on [`Codalus.Plugins.Testing`](#testing-plugins); `--skipTests` leaves them out). The plugin's id is `<publisher>.<name>` in lower case. `Codalus.Templates`, `Codalus.Plugins.Abstractions` and `Codalus.Plugins.Testing` are on nuget.org, pushed by each stable release whose version of them is new (from 0.10.0). To build against an API that isn't released yet, install the template from a clone (`dotnet new install src/Codalus.Templates/content/CodalusPlugin`), pack the two API packages into a local feed (`dotnet pack src/Codalus.Plugins.Abstractions -o feed`, and `Codalus.Plugins.Testing`) and pass their version as `--codalusVersion`.
 
 By hand, a plugin project is:
 
@@ -42,7 +42,7 @@ By hand, a plugin project is:
 </Project>
 ```
 
-The `Codalus.Plugins.Abstractions` package isn't on nuget.org yet (it comes with the marketplace, M22c). Until then, reference the project directly, as the samples do. Every type and member is in the [API reference](user-guide/plugin-api.md).
+`Codalus.Plugins.Abstractions` comes from nuget.org; the samples in this repository reference the project instead. Every type and member is in the [API reference](user-guide/plugin-api.md).
 
 ## The manifest
 
@@ -97,7 +97,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 - **keybindings:** `key` plus optional `mac`, `linux` and `win` overrides, `command`, `when` and `args`. Chords are space-separated (`ctrl+k ctrl+h`). `primary` means ⌘ on macOS and Ctrl elsewhere. Users override bindings in the Keyboard Shortcuts editor; user bindings win over plugin bindings, which win over defaults.
 - **toolWindows:** `id`, `title`, `location` (`left`, `right`, `bottom`), `kind` (`tree`, `markdown`, or since 1.0 `view`, a [declarative view](#declarative-views-and-custom-editors)) and `icon`.
 - **settings:** `title` (the Settings UI category) and `properties`, each with `type` (`string`, `boolean`, `integer`, `number`, `string[]`), `default`, `description`, `enum` and `enumDescriptions`, `minimum`/`maximum`, `scope` (`user`, or `workspace` to allow per-workspace overrides) and `order`. Invalid values in settings.json fall back to the default and are reported in the Settings UI.
-- **hostingProviders** (since 0.2.6, proposed API): Git hosting providers, `id`, `label`, `hosts` (the remotes' hosts by default; `*.example.com` matches subdomains), `serverSetting` (a setting with an enterprise server's URL, whose host counts too) and `icon`. The shell knows them before the plugin loads, and activates the plugin only when it needs the provider: to sign in, or for a repository on a host where the user is signed in. See [Proposed APIs](#proposed-apis).
+- **hostingProviders** (since 0.2.6, proposed API): Git hosting providers, `id`, `label`, `hosts` (the remotes' hosts by default; `*.example.com` matches subdomains), `serverSetting` (a setting with an enterprise server's URL, whose host counts too), `icon`, and since 1.2.0 `integratedSignIn` (the Accounts page offers signing in as the operating system's user when the server in `serverSetting` isn't one of `hosts`). The shell knows them before the plugin loads, and activates the plugin only when it needs the provider: to sign in, or for a repository on a host where the user is signed in. See [Proposed APIs](#proposed-apis).
 
 - **propertyProviders** (since 0.2.8): rows for the Properties window, `{ command, when }`. The command gets `{ kind, path, project }` of the Solution Explorer's selection (`kind` as in `explorerItemKind`) and returns `[{ category, name, value, description }]`; the rows are read only and show under their category (default: the plugin's name). `when` limits the selections it is asked for.
 - **externalToolMacros** (since 0.2.8): macros for External Tools' command, arguments and initial directory, `{ name, command, description }`. A tool that uses `$(name)` runs the command first; its string result replaces the macro.
@@ -279,7 +279,7 @@ Since 0.2.6 ([ADR 0031](adr/0031-git-hosting-and-repository-features.md)):
 
 - **`Hosting`: Git hosting providers.** Declare the provider in the manifest (`contributes.hostingProviders`), then `RegisterProvider` an instance of your `HostingProvider` subclass when the plugin activates. The shell shows the Accounts page, the Pull Requests and Work Items windows, review comments in editors, CI status and `#` completion in commit messages; the provider talks to its host.
   - Required: `ResolveRepository` (the repository a remote URL points to, or null when it's another host's), `GetAccountAsync` (from the stored session; no network call), `SignInAsync` (the OAuth device flow: show the code with the `IDeviceCodePrompt` the shell passes, then poll the host) and `SignOutAsync`.
-  - Optional (the defaults throw `NotSupportedException`, and the shell leaves the feature out): `SignInWithTokenAsync`, `GetRepositoryInfoAsync`, `GetPullRequestsAsync` (all, mine, review requested), `GetPullRequestAsync` (description, review threads on file lines, conversation), `GetCheckoutAsync` (a remote or a fork's URL, a ref, the local branch), `CreatePullRequestAsync`, `GetBranchStatusAsync`, `GetWorkItemsAsync` (assigned to the user, or by number or words), `GetOwnersAsync` and `PublishAsync`.
+  - Optional (the defaults throw `NotSupportedException`, and the shell leaves the feature out): `SignInWithTokenAsync`, `SignInIntegratedAsync` (since 1.2.0: the operating system's user, through Negotiate, on a self-hosted server; the manifest's `integratedSignIn` shows the button), `GetRepositoryInfoAsync`, `GetPullRequestsAsync` (all, mine, review requested), `GetPullRequestAsync` (description, review threads on file lines, conversation), `GetCheckoutAsync` (a remote or a fork's URL, a ref, the local branch), `CreatePullRequestAsync`, `GetBranchStatusAsync`, `GetWorkItemsAsync` (assigned to the user, or by number or words), `GetOwnersAsync` and `PublishAsync`.
   - Throw `HostingAuthenticationException` when the stored session is no longer valid: the shell forgets the account and asks the user to sign in again.
 - **`Secrets`: the plugin's own secrets** (`GetAsync`, `StoreAsync`, `DeleteAsync` by key), kept in the OS credential store: Windows Credential Manager, the macOS Keychain, or the Secret Service through libsecret. Never write a token anywhere else.
 
@@ -369,6 +369,15 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### 1.2.0 (Codalus IDE 0.10)
+
+Added, for Azure DevOps Server ([ADR 0087](adr/0087-azure-devops-server.md)):
+- `HostingProvider.SignInIntegratedAsync`: sign in as the operating system's user, with no token (Windows authentication, or a Kerberos ticket on macOS and Linux), on a self-hosted server that takes it.
+- The manifest's `hostingProviders[].integratedSignIn`: the Accounts page shows **Sign in with your Windows account** (**Sign in with Kerberos** elsewhere) when the provider's server is self-hosted, instead of the device code.
+- The protocol's `hosting/signIn` takes `integrated`.
+
+Plugins that override `SignInIntegratedAsync` ask for `^1.2.0`; plugins built for 1.0 and 1.1 keep working. The shell command `git.createPullRequest` is now enabled in any Git repository (`gitRepository`), not only on a host you're signed in to: it opens the Accounts page first when it needs to.
 
 ### All Repositories (Codalus IDE 0.9, no API version change)
 

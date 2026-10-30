@@ -183,6 +183,7 @@ class Codalus.Plugins.HostingProvider
   PublishAsync(Codalus.Plugins.NewRepository request, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.PublishedRepository>
   ResolveRepository(System.String remoteUrl) -> Codalus.Plugins.HostingRepository?
   SignInAsync(Codalus.Plugins.IDeviceCodePrompt prompt, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
+  SignInIntegratedAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
   SignInWithTokenAsync(System.String token, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.HostingAccount>
   SignOutAsync(System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task
 class Codalus.Plugins.HostingRepository
@@ -457,7 +458,7 @@ class Codalus.Plugins.ParameterOutline
   Type { get; init; } : System.String
 static class Codalus.Plugins.PluginApi
   DeprecationDiagnostic : System.String = CODALUS0001
-  Version : System.String = 1.1.0
+  Version : System.String = 1.2.0
 class Codalus.Plugins.PluginInfo
   .ctor(System.String Id, System.String Version, System.String InstallPath)
   Deconstruct(out System.String Id, out System.String Version, out System.String InstallPath) -> System.Void

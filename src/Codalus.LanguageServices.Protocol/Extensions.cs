@@ -224,7 +224,27 @@ public static class ReferenceItemKinds
 /// A reference with what Find All References shows besides its location (<c>codalus/references</c>): how the symbol is
 /// used (<see cref="ReferenceItemKinds"/>), the member and project containing it, and its line's text.
 /// </summary>
-public sealed record ReferenceItem(Location Location, string Kind, string? ContainingMember, string? Project, string LineText);
+public sealed record ReferenceItem(Location Location, string Kind, string? ContainingMember, string? Project, string LineText)
+{
+    /// <summary>
+    /// The definition the reference is to, as the References window's Definition groups show it
+    /// (<c>Shape.Shape(double)</c>): the symbol searched for, or one Find All References cascaded to (an override, a
+    /// constructor, an accessor).
+    /// </summary>
+    public string? Definition { get; init; }
+
+    /// <summary>The definition's LSP symbol kind (its icon).</summary>
+    public int? DefinitionKind { get; init; }
+
+    /// <summary>The type containing the reference (<c>App.Program</c>); null at the top level of a namespace.</summary>
+    public string? ContainingType { get; init; }
+
+    /// <summary>
+    /// Where the reference's name starts in <see cref="LineText"/> (the line trimmed), for its highlight; null when the
+    /// server doesn't say.
+    /// </summary>
+    public int? TextStart { get; init; }
+}
 
 public sealed record ReferenceItemsResult(string SymbolName, ReferenceItem[] Items);
 
@@ -644,3 +664,30 @@ public sealed record WinFormsToolboxItem(string Type, string Name, string Projec
 }
 
 public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);
+
+/// <summary>
+/// Starts a Hot Reload session (M55) named <see cref="Session"/> for the debugged program built from
+/// <see cref="Projects"/> (project file paths; empty: every project), with the runtime's <see cref="Capabilities"/> (Roslyn's names).
+/// </summary>
+public sealed record HotReloadStartParams(string Session, string[] Projects, string[] Capabilities);
+
+/// <summary>Names a Hot Reload session (update, commit, discard, end).</summary>
+public sealed record HotReloadSessionParams(string Session);
+
+/// <summary>
+/// The edits since the session's start or its last commit. <see cref="Status"/>: <c>none</c> (nothing to apply),
+/// <c>ready</c> (<see cref="Updates"/> to apply, or rude edits that need <see cref="ProjectsToRestart"/> restarted), or
+/// <c>blocked</c> (<see cref="Errors"/>: the code doesn't compile).
+/// </summary>
+public sealed record HotReloadUpdateResult(string Status, HotReloadModuleUpdate[] Updates, HotReloadDiagnostic[] RudeEdits, HotReloadDiagnostic[] Errors, string[] ProjectsToRestart)
+{
+    public const string None = "none";
+    public const string Ready = "ready";
+    public const string Blocked = "blocked";
+}
+
+/// <summary>One module's deltas (its MVID; base64 in JSON), from <see cref="Project"/>.</summary>
+public sealed record HotReloadModuleUpdate(Guid ModuleId, string Project, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta, int[] UpdatedTypes);
+
+/// <summary>A rude edit or an error: Roslyn's id (<c>ENC0004</c>, <c>CS1002</c>), its message, and where.</summary>
+public sealed record HotReloadDiagnostic(string Id, string Message, Location? Location);

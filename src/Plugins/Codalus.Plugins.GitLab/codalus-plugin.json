@@ -21,8 +21,8 @@
         },
         "gitlab.oauthClientId": {
           "type": "string",
-          "default": "",
-          "description": "The application id of the OAuth application used to sign in with a device code (GitLab 17.2 or later). Empty: sign in with a personal access token.",
+          "default": "2c35238ebaf91fb42707d52c576c1ea3bbba6c1ef885b938b29e8fdf754e9dfa",
+          "description": "The application id of the OAuth application used to sign in with a device code (GitLab 17.2 or later). The default is Codalus IDE's application on gitlab.com; a self-managed GitLab needs its own. Empty: sign in with a personal access token.",
           "scope": "user"
         }
       }

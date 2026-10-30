@@ -18,14 +18,17 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
 
     public ClrModuleInfo? Info(IClrModule? module) => module is null ? null : Modules.FirstOrDefault(m => ReferenceEquals(m.Module, module)).Info;
 
-    /// <summary>mscorlib (where System.Object, System.String and the primitives are).</summary>
+    /// <summary>
+    /// The core library, where System.Object, System.String and the primitives are: mscorlib on the desktop CLR,
+    /// System.Private.CoreLib on CoreCLR (ADR 0086).
+    /// </summary>
     public (IClrModule Module, ClrModuleInfo Info)? CoreLibrary
     {
         get
         {
             foreach (var entry in Modules)
             {
-                if (string.Equals(entry.Info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase))
+                if (IsCoreLibrary(entry.Info))
                 {
                     return entry;
                 }
@@ -34,6 +37,9 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
             return null;
         }
     }
+
+    private static bool IsCoreLibrary(ClrModuleInfo info) =>
+        string.Equals(info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase) || string.Equals(info.AssemblyName, "System.Private.CoreLib", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A type a module names, as a module and a type definition token; null when its assembly isn't loaded.</summary>
     public (IClrModule Module, int Token)? Resolve(IClrModule from, ClrTypeName name)
@@ -59,11 +65,11 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         return FindType(name.FullName);
     }
 
-    /// <summary>A type by its full name in any loaded module, mscorlib first.</summary>
+    /// <summary>A type by its full name in any loaded module, the core library first.</summary>
     public (IClrModule Module, int Token)? FindType(string fullName)
     {
         var all = Modules;
-        foreach (var (module, info) in all.OrderBy(m => string.Equals(m.Info.AssemblyName, "mscorlib", StringComparison.OrdinalIgnoreCase) ? 0 : 1))
+        foreach (var (module, info) in all.OrderBy(m => IsCoreLibrary(m.Info) ? 0 : 1))
         {
             if (info.FindType(fullName) is var token and not 0)
             {
@@ -110,7 +116,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
     /// <summary>A type definition as a runtime type (no type arguments).</summary>
     public static ClrType TypeOf(IClrModule module, int token) => new(module, token);
 
-    /// <summary>The module and token of a runtime type: its own, or mscorlib's for primitives, string and object.</summary>
+    /// <summary>The module and token of a runtime type: its own, or the core library's for primitives, string and object.</summary>
     public (IClrModule Module, int Token)? Definition(ClrType type)
     {
         if (type.Module is { } module && type.Token != 0)
@@ -134,6 +140,21 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
 
             yield return (c.Module, c.Token, info);
             current = info.BaseType(c.Token) is { } baseName ? Resolve(c.Module, baseName) : null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Chain"/> with each type's type arguments, as the runtime instantiated the bases (a method of
+    /// <c>Collection&lt;string&gt;</c> called on a class deriving from it needs <c>string</c>); a base the runtime didn't
+    /// describe gets none.
+    /// </summary>
+    public IEnumerable<(IClrModule Module, int Token, ClrModuleInfo Info, IReadOnlyList<ClrType> TypeArguments)> ChainWithArguments(ClrType type)
+    {
+        var current = (ClrType?)type;
+        foreach (var (module, token, info) in Chain(type))
+        {
+            yield return (module, token, info, current?.TypeArguments ?? []);
+            current = current?.BaseOf?.Invoke();
         }
     }
 
@@ -218,7 +239,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         }
     }
 
-    /// <summary>mscorlib's primitive structs: a boxed primitive may come as one, with its value in <c>m_value</c>.</summary>
+    /// <summary>The core library's primitive structs: a boxed primitive may come as one, with its value in <c>m_value</c>.</summary>
     private static readonly HashSet<string> s_primitiveStructs = new(StringComparer.Ordinal)
     {
         "System.Boolean", "System.Char", "System.SByte", "System.Byte", "System.Int16", "System.UInt16", "System.Int32", "System.UInt32",
@@ -241,7 +262,7 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         {
             case "System.Decimal" when ReadDecimal(value) is { } d:
                 return d.ToString(CultureInfo.InvariantCulture);
-            case "System.DateTime" when Field(value, "dateData") is { Primitive: ulong data }:
+            case "System.DateTime" when (Field(value, "dateData") ?? Field(value, "_dateData")) is { Primitive: ulong data }:
                 return "{" + new DateTime((long)(data & 0x3FFFFFFFFFFFFFFF)).ToString("yyyy-MM-dd HH:mm:ss.FFFFFFF", CultureInfo.InvariantCulture).TrimEnd('.') + "}";
             case "System.TimeSpan" when Field(value, "_ticks") is { Primitive: long ticks }:
                 return "{" + TimeSpan.FromTicks(ticks).ToString("c", CultureInfo.InvariantCulture) + "}";
@@ -285,15 +306,26 @@ internal sealed class ClrTypeSystem(Func<IReadOnlyList<(IClrModule Module, ClrMo
         return number.ToString(CultureInfo.InvariantCulture);
     }
 
+    /// <summary>A decimal's value: <c>flags</c>, <c>hi</c>, <c>mid</c> and <c>lo</c> on the desktop CLR; <c>_flags</c>, <c>_hi32</c> and <c>_lo64</c> on CoreCLR.</summary>
     private decimal? ReadDecimal(IClrValue value)
     {
         if (Field(value, "flags") is { Primitive: int flags } && Field(value, "hi") is { Primitive: int hi } && Field(value, "lo") is { Primitive: int lo } && Field(value, "mid") is { Primitive: int mid })
         {
-            var scale = (byte)((flags >> 16) & 0xFF);
-            return scale > 28 ? null : new decimal(lo, mid, hi, flags < 0, scale);
+            return Decimal(flags, hi, mid, lo);
+        }
+
+        if (Field(value, "_flags") is { Primitive: int coreFlags } && Field(value, "_hi32") is { Primitive: uint hi32 } && Field(value, "_lo64") is { Primitive: ulong lo64 })
+        {
+            return Decimal(coreFlags, unchecked((int)hi32), unchecked((int)(lo64 >> 32)), unchecked((int)lo64));
         }
 
         return null;
+    }
+
+    private static decimal? Decimal(int flags, int hi, int mid, int lo)
+    {
+        var scale = (byte)((flags >> 16) & 0xFF);
+        return scale > 28 ? null : new decimal(lo, mid, hi, flags < 0, scale);
     }
 
     /// <summary>An instance field of a value by name, in its type or a base type; null when there's none.</summary>

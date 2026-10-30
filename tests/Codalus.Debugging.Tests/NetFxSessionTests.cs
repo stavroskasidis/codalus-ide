@@ -210,6 +210,40 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     private static int Getter(ClrModuleInfo info, int type, string name) => info.Properties(type).Single(p => p.Name == name).GetterToken;
 
     [Fact]
+    public async Task A_pause_before_an_attachs_module_load_shows_the_programs_frames_with_source()
+    {
+        // An attach's module loads arrive after DebugActiveProcess returns; a Break All right after the attach can come
+        // first, and showed the program's frames without source (CI, run 40792217459, Linux, the Codalus debugger, M54).
+        fixture.RequireExe();
+        using var info = ClrModuleInfo.Open(fixture.Exe!);
+        var module = new FakeModule(fixture.Exe!);
+        var process = new FakeProcess();
+        await using var dap = new Harness(process);
+        await dap.RequestAsync("initialize", new InitializeArguments("codalus", "Codalus IDE", "clr"), s_json.InitializeArguments, s_json.Capabilities);
+        await dap.RequestAsync("attach", new NetFxDebugArguments(ProcessId: 4242, Request: "attach"), s_json.NetFxDebugArguments);
+        await dap.RequestAsync("configurationDone", new EmptyArguments(), s_json.EmptyArguments);
+        var sum = DebuggeeFixture.Line(fixture.Program, "netfx-sum");
+        var (total, offset, _) = info.Locations(info.MatchDocument(fixture.Program)!, sum).Single();
+        var thread = new FakeThread(7, process);
+        thread.FrameList.Add(new FakeFrame(thread, module, total, offset));
+        process.ThreadList.Add(thread);
+
+        await dap.RequestAsync("pause", new ThreadArguments(7), s_json.ThreadArguments);
+        Assert.Equal(7, (await dap.NextAsync(DapEvents.Stopped)).GetProperty("threadId").GetInt32());
+        var top = (await dap.RequestAsync("stackTrace", new StackTraceArguments(7, 0, 20), s_json.StackTraceArguments, s_json.StackTraceResponse)).StackFrames[0];
+        Assert.Equal("NetFxDebuggee.Cart.Total", top.Name);
+        Assert.Equal(sum, top.Line);
+        Assert.Contains(process.UserCode, u => ReferenceEquals(u.Module, module) && u.UserCode);
+
+        // Its load event, when it comes, finds it registered: no second module event.
+        process.Send(new ClrModuleLoaded(module));
+        await dap.RequestAsync("continue", new ThreadArguments(7), s_json.ThreadArguments, s_json.ContinueResponse);
+        process.Send(new ClrExited(0));
+        await dap.NextAsync(DapEvents.Terminated);
+        Assert.Single(process.UserCode, u => ReferenceEquals(u.Module, module));
+    }
+
+    [Fact]
     public async Task Breakpoints_stacks_variables_evaluation_steps_exceptions_and_the_end_through_dap()
     {
         fixture.RequireExe();
@@ -520,53 +554,22 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Contains(OperatingSystem.IsWindows() ? "doesn't exist" : "only on Windows", error.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Off_Windows_the_adapter_runs_without_ClrDebug_as_the_packages_ship_it()
+    [Theory]
+    [InlineData("win-x64", "dbgshim.dll")]
+    [InlineData("linux-x64", "libdbgshim.so")]
+    [InlineData("linux-arm64", "libdbgshim.so")]
+    [InlineData("osx-arm64", "libdbgshim.dylib")]
+    public void The_host_carries_ClrDebug_and_dbgshim_for_each_package_platform(string rid, string library)
     {
-        Assert.SkipWhen(OperatingSystem.IsWindows(), "Windows packages ship ClrDebug (the desktop-CLR debugger uses it).");
-
-        // A publish for Linux or macOS leaves ClrDebug.dll out, and out of the deps.json (Codalus.Debugging.Host.csproj):
-        // the host's files without it, as the package has them.
-        var folder = Path.Combine(Path.GetTempPath(), "codalus-debughost-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        try
-        {
-            var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
-            foreach (var (_, target) in deps["targets"]!.AsObject())
-            {
-                foreach (var (name, library) in target!.AsObject().ToList())
-                {
-                    if (name.StartsWith("ClrDebug/", StringComparison.Ordinal))
-                    {
-                        target.AsObject().Remove(name);
-                        continue;
-                    }
-
-                    library!["dependencies"]?.AsObject().Remove("ClrDebug");
-                    foreach (var (file, _) in library["runtime"]?.AsObject() ?? [])
-                    {
-                        File.Copy(Path.Combine(AppContext.BaseDirectory, Path.GetFileName(file)), Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
-                    }
-                }
-            }
-
-            foreach (var name in deps["libraries"]!.AsObject().Select(l => l.Key).Where(n => n.StartsWith("ClrDebug/", StringComparison.Ordinal)).ToList())
-            {
-                deps["libraries"]!.AsObject().Remove(name);
-            }
-
-            File.WriteAllText(Path.Combine(folder, "codalus-debughost.deps.json"), deps.ToJsonString());
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.runtimeconfig.json"), Path.Combine(folder, "codalus-debughost.runtimeconfig.json"));
-            Assert.False(File.Exists(Path.Combine(folder, "ClrDebug.dll")));
-
-            await using var adapter = await DebugAdapter.StartAsync(new DebugAdapterStartInfo("dotnet", [Path.Combine(folder, "codalus-debughost.dll"), DesktopClr.AdapterArgument], folder), Ct);
-            var launch = await Assert.ThrowsAsync<DapException>(() => adapter.LaunchAsync(new NetFxDebugArguments(Path.Combine(folder, "app.exe")), s_json.NetFxDebugArguments, Ct));
-            Assert.Contains("only on Windows", launch.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(folder, recursive: true);
-        }
+        // CoreCLR's debugger adapter (M54, ADR 0086) runs on every OS: ClrDebug ships everywhere again (it was left out
+        // of the Linux and macOS packages in 0.3.0), and dbgshim comes for the package's platform.
+        var deps = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.deps.json")))!;
+        var libraries = deps["targets"]!.AsObject().Single().Value!.AsObject();
+        Assert.Contains(libraries, l => l.Key.StartsWith("ClrDebug/", StringComparison.Ordinal) && l.Value!["runtime"] is not null);
+        var shim = libraries.Single(l => l.Key.StartsWith($"Microsoft.Diagnostics.DbgShim.{rid}/", StringComparison.Ordinal)).Value!;
+        var asset = Assert.Single(shim["runtimeTargets"]!.AsObject());
+        Assert.Equal($"runtimes/{rid}/native/{library}", asset.Key);
+        Assert.True(File.Exists(Path.Combine(AppContext.BaseDirectory, "runtimes", rid, "native", library)));
     }
 
     [Fact]

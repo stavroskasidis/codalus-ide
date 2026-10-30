@@ -23,6 +23,18 @@ inputs:
   display:
     description: An X server on Linux (Xvfb on :99, DISPLAY set for the job's later steps), a 1920x1080 screen on Windows
     default: "false"
+  browser:
+    description: >-
+      A Chromium browser on Linux arm64, for browser debugging (Blazor WebAssembly, a Blazor Web App's page): the x64
+      runners have Chrome; there's no Chrome or Chrome for Testing for Linux arm64, and Ubuntu's chromium is a snap, so
+      Playwright's build (pinned), as /usr/local/bin/chromium. Elsewhere nothing
+    default: "false"
+  downloads:
+    description: >-
+      Node.js and vscode-js-debug from the cache (CODALUS_DOWNLOAD_CACHE, set for the job's later steps), so the tests
+      and the smoke test don't wait on nodejs.org and github.com: a stalled download of Node.js failed the macOS smoke
+      test (run 40632085595). On a miss eng/get-downloads.sh fetches them; the job saves the folder with the outputs below
+    default: "false"
 outputs:
   nuget-cache-key:
     description: The NuGet cache's key, for the job that saves it
@@ -30,6 +42,12 @@ outputs:
   nuget-cache-hit:
     description: '"true" when the cache had that key exactly (nothing to save)'
     value: ${{ steps.restore-nuget.outputs.cache-hit }}
+  downloads-key:
+    description: The downloads cache's key, for the step that saves it
+    value: ${{ steps.restore-downloads.outputs.cache-primary-key }}
+  downloads-hit:
+    description: '"true" when the downloads cache had that key exactly (nothing to save)'
+    value: ${{ steps.restore-downloads.outputs.cache-hit }}
 runs:
   using: composite
   steps:
@@ -37,18 +55,18 @@ runs:
     # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
     # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.
     - if: inputs.extra-sdks != 'true'
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: 11.0.100-rc.3.26522.148
     - if: inputs.extra-sdks == 'true'
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           10.0.x
           11.0.100-rc.3.26522.148
     - if: inputs.nuget-cache == 'true'
       id: restore-nuget
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ~/.nuget/packages
         key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
@@ -61,7 +79,7 @@ runs:
       shell: bash
       run: echo "hash=$(sha256sum eng/get-netcoredbg.sh | cut -c1-64)" >> "$GITHUB_OUTPUT"
     - if: inputs.netcoredbg == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: .work/netcoredbg
         key: netcoredbg-${{ runner.os }}-${{ runner.arch }}-${{ steps.netcoredbg-key.outputs.hash }}
@@ -69,6 +87,40 @@ runs:
       if: inputs.netcoredbg == 'true'
       shell: bash
       run: eng/get-netcoredbg.sh
+    - if: inputs.downloads == 'true'
+      id: downloads-key
+      # The pinned versions and checksums are in these two files (the key from their own hash, as netcoredbg's above).
+      shell: bash
+      run: |
+        echo "hash=$(cat src/Codalus.Workbench/Node/NodeRuntime.cs src/Codalus.Workbench/Node/JsDebug.cs | sha256sum | cut -c1-64)" >> "$GITHUB_OUTPUT"
+        echo "CODALUS_DOWNLOAD_CACHE=$RUNNER_TEMP/codalus-downloads" >> "$GITHUB_ENV"
+    - if: inputs.downloads == 'true'
+      id: restore-downloads
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/codalus-downloads
+        key: downloads-${{ runner.os }}-${{ runner.arch }}-${{ steps.downloads-key.outputs.hash }}
+    - name: Downloads (Node.js, vscode-js-debug)
+      # Not in the cache yet (new versions): fetched here, resumed when they stall, with time of their own, instead of
+      # inside a test's minutes. Should it fail, the tests download them themselves.
+      if: inputs.downloads == 'true' && steps.restore-downloads.outputs.cache-hit != 'true'
+      continue-on-error: true
+      shell: bash
+      run: eng/get-downloads.sh "$RUNNER_TEMP/codalus-downloads"
+    - name: A Chromium browser (Linux arm64)
+      # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package brings
+      # one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it: allow them on
+      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests
+      # waited out their limits without one (run 40804553432).
+      if: inputs.browser == 'true' && runner.os == 'Linux' && runner.arch == 'ARM64'
+      shell: bash
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        npx -y playwright@1.56.1 install --with-deps chromium
+        chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
+        [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
+        sudo ln -sf "$chrome" /usr/local/bin/chromium
+        chromium --version
     - name: Developer tools access (macOS)
       # Otherwise the system asks for a password that nobody answers on a runner, and dumps and attaching time out (as
       # a person would approve once). The windowed app runs in the runner's GUI session, where the task port right

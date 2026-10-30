@@ -24,6 +24,7 @@ public sealed partial class GitBranchPickerView : UserControl
         List.ContextRequested += OnContextRequested;
         List.AddHandler(TappedEvent, OnTapped, RoutingStrategies.Bubble, handledEventsToo: false);
         Footer.Click += (_, _) => _ = ViewModel?.NewBranch?.Invoke(ViewModel.FooterName);
+        ManageBranches.Click += (_, _) => _ = ViewModel?.ManageBranches?.Invoke();
         TryAgain.Click += (_, _) => _ = ViewModel?.LoadAsync();
         BannerAction.Click += (_, _) => _ = ViewModel?.RunBannerActionAsync();
     }

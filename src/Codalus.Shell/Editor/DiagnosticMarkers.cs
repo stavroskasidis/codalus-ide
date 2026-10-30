@@ -14,8 +14,9 @@ public sealed class DiagnosticSegment(Diagnostic diagnostic) : TextSegment
 }
 
 /// <summary>
-/// Squiggles under errors (red), warnings (yellow) and information (blue), dots under hints, and faded text for
-/// unnecessary code (unused usings). Drawn behind the text; the segments track edits.
+/// Squiggles under errors (red) and warnings (yellow), dots under information (blue: Roslyn's suggestions, drawn as the
+/// classic IDE draws them) and hints, and faded text for unnecessary code (unused usings). Drawn behind the text; the
+/// segments track edits.
 /// </summary>
 public sealed class DiagnosticMarkers : DocumentColorizingTransformer, IBackgroundRenderer
 {
@@ -92,7 +93,7 @@ public sealed class DiagnosticMarkers : DocumentColorizingTransformer, IBackgrou
             var pen = new Pen(brush, 1);
             foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
             {
-                if (diagnostic.Severity == DiagnosticSeverity.Hint)
+                if (IsDotted(diagnostic.Severity))
                 {
                     // Three dots under the start, like other IDEs' suggestions.
                     for (var i = 0; i < 3; i++)
@@ -107,6 +108,9 @@ public sealed class DiagnosticMarkers : DocumentColorizingTransformer, IBackgrou
             }
         }
     }
+
+    /// <summary>Whether a diagnostic is marked by dots under its start rather than a squiggle: information and hints.</summary>
+    public static bool IsDotted(int severity) => severity is DiagnosticSeverity.Information or DiagnosticSeverity.Hint;
 
     private static StreamGeometry Squiggle(Rect rect)
     {

@@ -1,0 +1,27 @@
+# The debugger tests CI runs under Codalus IDE's own CoreCLR adapter (`codalus-debughost --clr-dap`, M54, ADR 0086) in
+# the debug-codalus shard (eng/ci-test.sh), with CODALUS_DEBUG_ADAPTER=codalus; the other shards run them under
+# netcoredbg, the default. They are the parity set: every test here passes under both adapters, with no skip for either
+# (the M54 plan). Each line is a test class, or one test method (ending in "()"), by its full name; its namespace names
+# its test project (tests/<namespace>). Tests of netcoredbg itself aren't here: NetcoredbgTests, DebugServiceStartTests
+# (a missing netcoredbg, the x64 one), LateRuntimeTests (its 5-second wait), RemoteTests and the Shell's
+# RemoteShellTests (remote targets keep netcoredbg), nor DebugAdapterChoiceTests (the variable overrides its setting).
+Codalus.Debugging.Tests.ClrDebuggerTests
+Codalus.Debugging.Tests.HotReloadDebuggingTests
+Codalus.Debugging.Tests.DebugServiceTests
+Codalus.Debugging.Tests.DataTipDebuggerTests
+Codalus.Debugging.Tests.DebuggerDepthTests
+Codalus.Debugging.Tests.DebuggerDisplayTests
+Codalus.Debugging.Tests.BreakpointFilterSessionTests
+Codalus.Debugging.Tests.CollectionVisualizerTests
+Codalus.Debugging.Tests.ConsoleWindowLaunchTests
+Codalus.Debugging.Tests.FSharpDebuggingTests
+Codalus.Debugging.Tests.PinnedDataTipSessionTests
+Codalus.Debugging.Tests.PluginVisualizerTests
+Codalus.Debugging.Tests.SessionsTests
+Codalus.Debugging.Tests.TerminalLaunchTests
+Codalus.Debugging.Tests.VisualBasicDebuggingTests
+Codalus.Shell.Tests.DebugTests
+Codalus.Shell.Tests.DebugSessionsTests
+Codalus.Shell.Tests.CompoundDebugTests
+Codalus.Shell.Tests.BlazorWebAppHotReloadDebugTests
+Codalus.Plugins.Tests.DotNetTestRunControlTests.Debugging_a_test_stops_at_its_breakpoint()

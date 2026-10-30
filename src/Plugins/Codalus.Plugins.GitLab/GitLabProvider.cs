@@ -25,7 +25,10 @@ internal sealed class GitLabProvider : HostingProviderBase
 
     private string Api => ServerUrl + "/api/v4";
 
-    private string ClientId => Settings.GetValue("gitlab.oauthClientId", string.Empty);
+    /// <summary>Codalus IDE's OAuth application on gitlab.com: <c>gitlab.oauthClientId</c>'s default in the manifest (ADR 0088).</summary>
+    internal const string DotComClientId = "2c35238ebaf91fb42707d52c576c1ea3bbba6c1ef885b938b29e8fdf754e9dfa";
+
+    private string ClientId => Settings.GetValue("gitlab.oauthClientId", string.Empty).Trim();
 
     protected override string ServerHost => RemoteUrl.HostOf(ServerUrl);
 
@@ -47,6 +50,12 @@ internal sealed class GitLabProvider : HostingProviderBase
 
     public override async Task<HostingAccount> SignInAsync(IDeviceCodePrompt prompt, CancellationToken cancellationToken)
     {
+        if (ClientId == DotComClientId && ServerHost != "gitlab.com")
+        {
+            // gitlab.com's application is no use on a self-managed GitLab, which needs its own.
+            throw new InvalidOperationException($"{ServerUrl} needs its own OAuth application for device sign-in: set gitlab.oauthClientId to its application id, or sign in with a personal access token.");
+        }
+
         var token = await DeviceFlow.SignInAsync(
             Http,
             new DeviceFlowEndpoints(ServerUrl + "/oauth/authorize_device", ServerUrl + "/oauth/token", ClientId, Scope),

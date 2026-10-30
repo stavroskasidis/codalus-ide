@@ -389,10 +389,12 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
             // Paths to roots: up from Order through its referrers to a root.
             IReadOnlyList<int> path = [order.Id];
             var reachedRoot = false;
+            var lastStep = string.Empty;
             for (var depth = 0; depth < 12 && !reachedRoot; depth++)
             {
                 var referrers = await second.ReferrersAsync(path, 0, 10, Timeout());
                 Assert.NotEmpty(referrers.Referrers);
+                lastStep = string.Join("; ", referrers.Referrers.Select(r => $"{r.Name} ({r.Id}): {r.Count}"));
                 var top = referrers.Referrers[0];
                 Assert.True(top.Count > 0 && top.Bytes > 0);
                 reachedRoot = top.Id < 0 && top.Id != int.MinValue;
@@ -403,7 +405,9 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
                 }
             }
 
-            Assert.True(reachedRoot, "a path from Order reaches a root: " + string.Join(" ← ", path));
+            // The whole last step when it doesn't: on Linux CI most orders were "not reached from a root" (run 40949955263).
+            Assert.True(reachedRoot, "a path from Order reaches a root: " + string.Join(" ← ", path)
+                + $". The snapshot: {second.Summary.Objects} objects, {second.Summary.Roots} roots; the last step's referrers: {lastStep}");
         }
         finally
         {

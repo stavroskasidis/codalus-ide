@@ -54,6 +54,7 @@ public sealed class EditorInsights : IDisposable
     private static readonly TimeSpan s_blameInterval = TimeSpan.FromSeconds(3);
     private CancellationTokenSource? _hintCts;
     private CancellationTokenSource? _lensCts;
+    private CancellationTokenSource? _runLensCts;
     private bool _disposed;
 
     public EditorInsights(TextEditor editor, Func<CodeDocument> model, Func<LanguageHostClient?> client, IEditorServices services)
@@ -301,6 +302,9 @@ public sealed class EditorInsights : IDisposable
     /// <summary>The CodeLens row shown above a one-based line, or null (none, or at the line's end when the line before is folded away) (tests).</summary>
     internal string? LensRowAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Text.Trim();
 
+    /// <summary>Whether the first CodeLens of the row above a one-based line has its command yet, or null without one (tests).</summary>
+    internal bool? LensResolvedAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Lens?.Resolved;
+
     /// <summary>
     /// A visual line's height without the CodeLens row that may end it (the next line's): what a line background covers.
     /// </summary>
@@ -475,13 +479,23 @@ public sealed class EditorInsights : IDisposable
     private (int First, int Last) VisibleLines()
     {
         var view = _editor.TextArea.TextView;
-        if (!view.VisualLinesValid || view.VisualLines.Count == 0)
+        if (view.VisualLinesValid && view.VisualLines.Count > 0)
         {
-            var lines = _editor.Document.LineCount;
+            return (view.VisualLines[0].FirstDocumentLine.LineNumber, view.VisualLines[^1].LastDocumentLine.LineNumber);
+        }
+
+        // The visual lines are built again at the next layout (a redraw invalidates them: a lens refresh's own, right
+        // before it resolves). The lines in view are still known from the scroll position and the height: the first 60
+        // lines were the lines above the view, scrolled down, and nothing in view got its counts until the next scroll.
+        var lines = _editor.Document.LineCount;
+        if (view.Bounds.Height <= 0)
+        {
             return (1, Math.Min(lines, 60));
         }
 
-        return (view.VisualLines[0].FirstDocumentLine.LineNumber, view.VisualLines[^1].LastDocumentLine.LineNumber);
+        var first = view.GetDocumentLineByVisualTop(view.VerticalOffset)?.LineNumber ?? 1;
+        var last = view.GetDocumentLineByVisualTop(view.VerticalOffset + view.Bounds.Height)?.LineNumber ?? lines;
+        return (first, last);
     }
 
     // ------------------------------------------------------------------ requests
@@ -585,8 +599,9 @@ public sealed class EditorInsights : IDisposable
                     return;
                 }
 
-                // Keep the previous titles until the new counts arrive, so lenses don't flicker while typing.
-                var previous = _lenses.Where(l => l.Resolved).GroupBy(l => (_editor.Document.GetLineByOffset(l.StartOffset).LineNumber, l.Lens.Data?.GetRawText()?.Split(',')[^1]))
+                // Keep the previous titles until the new counts arrive, so lenses don't flicker while typing: those still
+                // waiting for their counts too (out of view, a refresh before), or the next refresh dropped their rows.
+                var previous = _lenses.Where(l => l.Title is not null).GroupBy(l => (_editor.Document.GetLineByOffset(l.StartOffset).LineNumber, l.Lens.Data?.GetRawText()?.Split(',')[^1]))
                     .ToDictionary(g => g.Key, g => g.First().Title);
                 var collection = new TextSegmentCollection<LensSegment>(_editor.Document);
                 foreach (var lens in lenses)
@@ -700,8 +715,41 @@ public sealed class EditorInsights : IDisposable
 
     // ------------------------------------------------------------------ actions
 
-    private void RunLens(LensSegment lens)
+    private void RunLens(LensSegment lens) => _ = RunLensAsync(lens);
+
+    private async Task RunLensAsync(LensSegment lens)
     {
+        // A refresh's lenses keep their titles but get their commands one request at a time, near the viewport: one
+        // clicked before its turn is resolved now, or the click did nothing (Linux CI, run 40706281162).
+        if (!lens.Resolved)
+        {
+            if (_client() is not { } client)
+            {
+                return;
+            }
+
+            var version = Model.Version;
+            var token = Restart(ref _runLensCts).Token;
+            try
+            {
+                var resolved = await client.ResolveCodeLensAsync(lens.Lens, token).ConfigureAwait(true);
+                if (token.IsCancellationRequested || _disposed || Model.Version != version || resolved.Command is not { } resolvedCommand)
+                {
+                    return;
+                }
+
+                lens.Resolve(resolvedCommand);
+                if (_lenses.Contains(lens))
+                {
+                    _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(lens.StartOffset));
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
+            {
+                return;
+            }
+        }
+
         if (lens.Command is not { Arguments: [_, var at, ..] } command || string.IsNullOrEmpty(command.CommandId))
         {
             return;
@@ -766,7 +814,7 @@ public sealed class EditorInsights : IDisposable
         _hintTimer.Stop();
         _lensTimer.Stop();
         _symbolTimer.Stop();
-        foreach (var cts in new[] { _hintCts, _lensCts, _symbolCts, _blameCts })
+        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts })
         {
             cts?.Cancel();
             cts?.Dispose();
@@ -893,7 +941,7 @@ public sealed class EditorInsights : IDisposable
                 }
             }
 
-            return new LensRow(indent.ToString(), string.Join("  |  ", titles), lenses.FirstOrDefault());
+            return new LensRow(indent.ToString(), string.Join(" | ", titles), lenses.FirstOrDefault());
         }
 
         /// <summary>A line's CodeLens shows above it when the line before is there to end with it (not folded away).</summary>
@@ -947,8 +995,9 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>
     /// The end of a line's text and the next line's CodeLens row: the line's own end-of-line text (if any), a line break,
-    /// the next line's indentation and its CodeLens, smaller and muted. None of it is part of the document or takes the
-    /// caret; the next line itself keeps its height (no taller caret or selection), and the row clicks run its first lens.
+    /// the next line's indentation and its CodeLens, smaller, muted and in the UI's proportional font (compact, as in the
+    /// classic IDE). None of it is part of the document or takes the caret; the next line itself keeps its height (no
+    /// taller caret or selection), and the row clicks run its first lens.
     /// </summary>
     private sealed class LensRowElement : VisualLineElement
     {
@@ -975,7 +1024,7 @@ public sealed class EditorInsights : IDisposable
             var at = startVisualColumn - VisualColumn;
             if (at < _text.Length)
             {
-                return Run(_text[at..], _color, small: true);
+                return Run(_text[at..], _color, small: true, ui: false);
             }
 
             if (at == _text.Length)
@@ -985,14 +1034,19 @@ public sealed class EditorInsights : IDisposable
 
             at -= _text.Length + 1;
             return at < _row.Indent.Length
-                ? Run(_row.Indent[at..], _color, small: false)
-                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true);
+                ? Run(_row.Indent[at..], _color, small: false, ui: false)
+                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true, ui: true);
         }
 
-        private TextCharacters Run(string text, IBrush foreground, bool small)
+        private TextCharacters Run(string text, IBrush foreground, bool small, bool ui)
         {
             var properties = new VisualLineElementTextRunProperties(TextRunProperties);
             properties.SetForegroundBrush(foreground);
+            if (ui)
+            {
+                properties.SetTypeface(new Typeface(FontFamily.Default));
+            }
+
             if (small)
             {
                 properties.SetFontRenderingEmSize(TextRunProperties.FontRenderingEmSize * 0.9);

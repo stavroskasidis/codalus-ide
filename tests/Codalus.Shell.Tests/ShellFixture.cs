@@ -132,8 +132,44 @@ internal sealed class ShellFixture : IAsyncDisposable
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(target, "Directory.Build.props"), overwrite: true);
         File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(target, "Directory.Packages.props"), overwrite: true);
         Codalus.Tests.FixtureSdk.Pin(target);
-        Copy(Path.Combine(RepoRoot, "samples", name), Path.Combine(target, name));
+        var source = Path.Combine(RepoRoot, "samples", name);
+        Copy(source, Path.Combine(target, name), Ignored(source));
         return Path.Combine(target, name);
+    }
+
+    /// <summary>
+    /// The files and folders under <paramref name="folder"/> that git ignores, as full paths: what a run of the sample in
+    /// place left (a script's stamp.txt, a lock file), which a test of a fresh copy mustn't see. Empty outside a git work
+    /// tree (CI's checkout and WSL's mirror have none of them anyway).
+    /// </summary>
+    private static HashSet<string> Ignored(string folder)
+    {
+        var ignored = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("git", ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z", "."])
+            {
+                WorkingDirectory = folder, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
+            };
+            using var git = System.Diagnostics.Process.Start(start)!;
+            var stderr = git.StandardError.ReadToEndAsync();
+            var output = git.StandardOutput.ReadToEnd();
+            git.WaitForExit();
+            _ = stderr.Result;
+            if (git.ExitCode == 0)
+            {
+                foreach (var path in output.Split('\0', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    ignored.Add(Path.GetFullPath(Path.Combine(folder, path.TrimEnd('/'))));
+                }
+            }
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // No git: copy everything.
+        }
+
+        return ignored;
     }
 
     /// <summary>Opens samples/LanguageFeatures trusted and waits until the C# language service has loaded both projects.</summary>
@@ -146,17 +182,18 @@ internal sealed class ShellFixture : IAsyncDisposable
         return folder;
     }
 
-    private static void Copy(string source, string target)
+    private static void Copy(string source, string target, IReadOnlySet<string>? skip = null)
     {
         Directory.CreateDirectory(target);
-        foreach (var file in Directory.EnumerateFiles(source))
+        foreach (var file in Directory.EnumerateFiles(source).Where(f => skip?.Contains(Path.GetFullPath(f)) != true))
         {
             File.Copy(file, Path.Combine(target, Path.GetFileName(file)));
         }
 
-        foreach (var directory in Directory.EnumerateDirectories(source).Where(d => Path.GetFileName(d) is not ("bin" or "obj" or "node_modules")))
+        foreach (var directory in Directory.EnumerateDirectories(source)
+            .Where(d => Path.GetFileName(d) is not ("bin" or "obj" or "node_modules") && skip?.Contains(Path.GetFullPath(d)) != true))
         {
-            Copy(directory, Path.Combine(target, Path.GetFileName(directory)));
+            Copy(directory, Path.Combine(target, Path.GetFileName(directory)), skip);
         }
     }
 

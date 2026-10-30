@@ -3,6 +3,7 @@
 - **Status:** accepted (M14c, 2026-10-11; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-11
 - **Deciders:** maintainer
+- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (M54, 2026-10-29: under the Codalus debugger, `debug.adapter` `codalus`, a program in the integrated terminal or a console window starts there through the adapter's launcher, DAP's `runInTerminal`, instead of the startup hook's hold and an attach, and on macOS too; netcoredbg keeps this ADR's attach)
 
 ## Context
 

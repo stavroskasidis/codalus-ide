@@ -10,7 +10,7 @@ Codalus IDE: a .NET IDE built on Avalonia, shipped as a Native AOT shell that su
 
 ```bash
 dotnet build Codalus.slnx                          # warnings are errors
-dotnet test --solution Codalus.slnx                # unit, host integration, Avalonia headless UI
+dotnet test --solution Codalus.slnx --max-parallel-test-modules 3   # unit, host integration, Avalonia headless UI; a few projects at a time, as CI
 dotnet run --project src/Codalus.Shell -- --user-data-dir .work/user-data
 dotnet publish src/Codalus.Shell -c Release -r win-x64 -o artifacts/shell   # Native AOT, hosts and plugins alongside
 dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
@@ -54,6 +54,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 - Tests copy fixtures to a temp folder before changing them (`tests/Shared/FixtureSdk.cs`).
 - Tests never reach a real service: use `tests/Shared` mocks (HTTP, GitHub, NuGet feed, model servers), stand-in tools and recorded output. Nothing installs, registers (JIT debugging) or pulls images beyond `mcr.microsoft.com/dotnet` for real; container tests remove what they create.
+- **A test that fails and then passes alone, or on a retry, is a bug to find and fix, not noise.** That holds for every run: local, WSL, the Mac session and CI. Never set it aside as unrelated, flaky or load: find the root cause and fix it (in the product when users can hit it), or add the diagnostic that will find it, with skill `ci-failure`, and record it in `docs/ci-flakes.md`. Report it as open until it's fixed, not as a pass.
 - Regenerated files: `CODALUS_UPDATE_PUBLIC_API=1`, `CODALUS_UPDATE_API_REFERENCE=1`, `CODALUS_UPDATE_LOCALIZATION=1` (commit `en.json` and `localization-literals.txt` after changing UI text).
 - `eng/smoke-test.sh <codalus>` runs the real windowed app through each major feature (`SmokeTest` in `src/Codalus.Shell/Infrastructure`). Add a step when a feature must be proven in the shipped app.
 - Its last step, `shell.commandSweep` (`SmokeTest.CommandSweep.cs`), runs every command from its menu item, key binding and the palette and writes `command-sweep.json`; `CommandSweepTests` is its static half. A new command that leaves the machine gets a skip reason there; a triaged failure goes in `s_sweepKnown` with a `TODO(issue)`.

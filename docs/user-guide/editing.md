@@ -16,7 +16,7 @@ Codalus IDE uses Roslyn, with your projects' analyzers and source generators:
 - **Highlighting**, by meaning: types, members, locals, parameters, and more.
 - **Completion** (`Ctrl+Space`, and while you type). It can add the `using` an item needs. See [IntelliSense](#intellisense).
 - **Parameter info** (`Ctrl+Shift+Space`) and **Quick Info** on hover (`Ctrl+K Ctrl+I`).
-- **Live diagnostics**: squiggles as you type, and the **Error List** (View → Error List). The Error List filters by severity, by source (Build, IntelliSense or both) and by document; double-click an entry to go to it.
+- **Live diagnostics** as you type: squiggles under errors and warnings, three dots under suggestions (information, such as `.editorconfig` code-style rules at `suggestion`), and the **Error List** (View → Error List). The Error List filters by severity, by source (Build, IntelliSense or both) and by document; double-click an entry to go to it.
   - **Group By** groups the entries by project, file, severity, code or source. Click a group's header (or press Enter on it) to collapse or expand it. The choice is the `errorList.groupBy` setting.
   - **Analysis Scope** sets where analyzers (warnings such as `CA2200`) run in the background: **open documents** (the default), the **current project**, or the whole **solution**. The current project is the active document's project, or the startup project when no document is open. Compiler errors are always reported for the whole solution. The choice is the `languageServices.analysisScope` setting.
 - **Quick actions** (`Ctrl+.` or the lightbulb): code fixes and refactorings, each previewed before it applies. Those that rename or delete files (Rename File to Match Type, Move Type to File) do it through the project, so its items follow; an open file is saved and reopened under its new name.
@@ -78,7 +78,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Peek Definition | `Alt+F12` | The definition in a popup under the line. `Enter` or **Open** opens it; `Esc` closes. |
 | Go to Implementation, Go to Derived Types | `Ctrl+F12` | |
 | Go to Base | `Alt+Home` | Base types and interfaces, or the members a member overrides or implements. |
-| Find All References | `Shift+F12` | In the Find Results window. For C#: each reference is marked read, write or declaration with its containing member; group by file, project or none, show only reads, writes or declarations, and go back to earlier results from the drop-down. |
+| Find All References | `Shift+F12` | In the References window: see [Find All References](#find-all-references) below. |
 | Call Hierarchy | `Shift+Alt+H` | Calls to and calls from a method or property, expanding recursively, in the Hierarchy window. |
 | Type Hierarchy | (Edit menu, palette) | Base and derived types, in the Hierarchy window. |
 | Go To All (Code Search) | `Ctrl+T`, `Ctrl+,` | Files, types, members and text, with a live preview ([Code Search](#code-search), below). Go To File, Type, Member and Text (`Ctrl+1` then `F`, `T`, `M` or `X`) open it on that filter. |
@@ -119,12 +119,24 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 - **Find All** (`Enter`) lists the matches in the **Find Results** window and closes Find and Replace; **Append results** adds them under the earlier ones. **Find Next**, **Find Previous** and **Skip File** go through the matches one by one, opening each with the match selected, and leave the window open.
 - **Replace** replaces the current match and goes to the next. **Replace All** asks first, then replaces every match: open documents change in the editor, where you can undo and save, and the other files change on disk. Find Results then lists the changed lines.
 
-**Find Results** shows a line per match, grouped by file, with the file, line and column beside it. The line is drawn in the editor's colors for its language, in the current theme, with each match highlighted. A line above the results says what was searched (`Find all "Person", Match case, Whole word, Entire solution, "*.cs"`), and the status line below counts the matching lines and files and the files searched. Double-click or `Enter` opens a match; `F8` and `Shift+F8` (or the arrows on the toolbar) open the next and the previous; **Modify Find** opens Find and Replace again with the same search (it's off while the window shows references from Find All References).
+**Find Results** shows a line per match, grouped by file, with the file, line and column beside it. The line is drawn in the editor's colors for its language, in the current theme, with each match highlighted. A line above the results says what was searched (`Find all "Person", Match case, Whole word, Entire solution, "*.cs"`), and the status line below counts the matching lines and files and the files searched. Double-click or `Enter` opens a match; `F8` and `Shift+F8` (or the arrows on the toolbar) open the next and the previous; **Modify Find** opens Find and Replace again with the same search.
 
 - **Search Find Results**, the box at the right of the toolbar, shows only the matches whose code or file name contains its text, under their files' headers; the headers' counts and the summary below count what's shown.
 - **Tree** or **List**: Tree groups the matches by **Group by**: **File** (a header per file, the default), **Path and file** (a header per folder, below the folder searched or the solution's, with its files under it), or **None**. Each header shows its folder or file icon and how many matches it holds. Headers collapse and expand: click the chevron, double-click the header, or use `Left` and `Right`. Next and Previous skip what's collapsed. **List** shows the matches in one flat list with each file's full path in the File column.
 - **Keep Results** (the pin) keeps the current results: the next Find All opens a new page, **Find Results 2**, and so on, shown as tabs at the top of the window, each with its count. A kept page stays until you close its tab; Modify Find on it brings back its own search. Closing the last page clears it.
 - **Clear All** empties the page, and **Stop Searching** stops a search that is still running.
+
+## Find All References
+
+**Find All References** (`Shift+F12`, or a CodeLens count) lists the references to the symbol at the caret in the **References** window, whose tab names the symbol: `'Circle' references`. It is laid out as the classic IDE's:
+
+- **A tree.** By default the references are grouped by project, then by definition: the symbol itself, and the ones the search reached from it, such as a type's constructors or a method's overrides, each with its icon. **Group by** also offers *Definition only*, *Definition then Project*, *Definition then Path* (the file) and *Project, Definition then Path*; your choice is remembered. Each header shows how many references it holds. Headers collapse and expand: click the chevron, double-click the header, or use `Left` and `Right`; **Expand All** and **Collapse All** do every level at once. **List View** shows the references in one flat list.
+- **Columns.** Code (the line in the editor's colors, the symbol highlighted), File, Line, Col, Project, Containing member, Containing type and Kind (Read, Write, Declaration or Reference). Drag a header's right edge to resize its column; Code takes the rest. The widths are remembered.
+- **Filters.** The box at the left of the toolbar shows the references in the **Entire solution**, the **Current project**, the **Current document** or the **Open documents**; the search itself always covers the solution, so changing it doesn't search again. The funnel in the File, Project, Containing member, Containing type and Kind headers lists that column's values, each with how many references have it: uncheck one to hide its references (the funnel turns the accent color). **Search Find All References** shows the references whose code, file, project, member, type or definition contains its text. **Clear All Filters** checks every value again and empties the search.
+- **Opening and copying.** Double-click or `Enter` opens a reference with its name selected; `F8` and `Shift+F8` open the next and the previous. **Copy** (or `Ctrl+C`) copies the selected reference's columns, tab-separated, or a header's whole group.
+- **Keep Results** keeps the window as it is: the next Find All References opens another References window beside it. Close a kept window when you're done with it; the extra windows aren't reopened after a restart.
+
+Read, write and declaration, the containing member and type, and the definitions come from the C# language service. For other languages the window lists plain locations under the symbol's name.
 
 ## Inline information
 
@@ -132,7 +144,7 @@ Settings under **Text Editor** turn each of these on or off.
 
 - **Inlay hints**: parameter names before literal and `new` arguments (`radius: 2`), and optionally the inferred types of `var` declarations and lambda parameters (**Inlay Hints: Types**, off by default). The caret moves over a hint in one step.
 - **CodeLens**: reference and implementation counts on a small row above each declaration, lined up with its code. Click a count to find the references or go to the implementations.
-  - In a Git repository, each member's history from blame follows: who changed it last and when, and how many authors and changes it has (`Ada, 3 days ago  |  2 authors, 5 changes`). Saved files are blamed again on save, and edited ones every few seconds with their unsaved text.
+  - In a Git repository, each member's history from blame follows: who changed it last and when, and how many authors and changes it has (`Ada, 3 days ago | 2 authors, 5 changes`). Saved files are blamed again on save, and edited ones every few seconds with their unsaved text.
   - Tests show their last outcome (`✓ Passed (12 ms)`, `✗ Failed`, `Not run`), and test classes how many of their tests pass (`✓ 4/4 passing`).
   - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.

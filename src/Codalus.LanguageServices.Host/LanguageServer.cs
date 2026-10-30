@@ -20,6 +20,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly Razor.RazorFeatures _razor;
     private readonly CodeActionsFeature _codeActions;
     private readonly CodeCleanupFeature _cleanup;
+    private readonly HotReloadFeature _hotReload;
     private readonly DiagnosticsService _diagnostics;
     private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
@@ -34,6 +35,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
+        _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
@@ -294,6 +296,11 @@ internal sealed class LanguageServer : IAsyncDisposable
 
             return await CodeMetricsFeature.MetricsAsync(solution, project, _workspace.MiscellaneousProjectId, ct).ConfigureAwait(false);
         });
+        _connection.OnRequest(Methods.HotReloadStart, json.HotReloadStartParams, json.Boolean, _hotReload.StartAsync);
+        _connection.OnRequest(Methods.HotReloadUpdate, json.HotReloadSessionParams, json.HotReloadUpdateResult, _hotReload.UpdateAsync);
+        _connection.OnRequest(Methods.HotReloadCommit, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Commit(p)));
+        _connection.OnRequest(Methods.HotReloadDiscard, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Discard(p)));
+        _connection.OnRequest(Methods.HotReloadEnd, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.End(p.Session)));
         _connection.OnRequest(Methods.AspNetEndpoints, json.AspNetEndpointsParams, json.AspNetEndpointsResult,
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
         _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,
@@ -333,6 +340,7 @@ internal sealed class LanguageServer : IAsyncDisposable
 
     private void ProjectsChanged()
     {
+        _hotReload.ProjectsChanged();
         _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(WorkspaceStates.Loading, _workspace.ProjectCount, 0), ProtocolJsonContext.Default.WorkspaceStatusParams);
 
         // Open documents may have moved between projects, or their references changed.

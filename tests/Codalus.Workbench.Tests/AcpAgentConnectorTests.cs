@@ -87,6 +87,10 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         _connector.SearchPath = StandInNode.Create(folder, node, Dotnet, AcpAgentTests.StandInAgent, download, agentEnv: env);
     }
 
+    /// <summary>The result's outcome, with its failed step and message when it is another.</summary>
+    private static void Outcome(AcpTestOutcome expected, AcpTestResult result) =>
+        Assert.True(result.Outcome == expected, $"{result.Outcome} (expected {expected}) at {result.FailedStep?.ToString() ?? "no step"}: {result.Message}");
+
     /// <summary>A template for the stand-in, run through npx like a real one.</summary>
     private static AcpAgentTemplate Template(AcpSignInCheck check, int? node = 22, params AcpSignInOption[] signIn) =>
         new(new AcpKnownAgent("stand-in", "Stand-in", "A stand-in agent", "1.0.0", "npx", ["-y", "stand-in@1.0.0"], "stand-in@1.0.0", "stand-in"), "Tests", "stand-in", AcpTemplateTier.OneClick, check, signIn.Length > 0 ? signIn : [Already])
@@ -157,11 +161,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         Directory.CreateDirectory(installer);
         var node = Path.Combine(_connector.SearchPath!, OperatingSystem.IsWindows() ? "node.cmd" : "node");
         var script = Path.Combine(installer, OperatingSystem.IsWindows() ? "install.cmd" : "install");
-        File.WriteAllText(script, OperatingSystem.IsWindows() ? $"@echo off\r\n(echo @echo off& echo echo v22.1.0) > \"{node}\"\r\n" : $"#!/bin/sh\nprintf '#!/bin/sh\\necho v22.1.0\\n' > '{node}'\nchmod +x '{node}'\n");
-        if (!OperatingSystem.IsWindows())
-        {
-            File.SetUnixFileMode(script, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        StandInScript.Write(script, OperatingSystem.IsWindows() ? $"@echo off\r\n(echo @echo off& echo echo v22.1.0) > \"{node}\"\r\n" : $"#!/bin/sh\nprintf '#!/bin/sh\\necho v22.1.0\\n' > '{node}'\nchmod +x '{node}'\n");
 
         var option = new AcpInstallOption("snap", "Snap", "", Setup.InstallKind.Terminal, "sudo snap install node") { Program = script };
         Assert.Equal(0, await _connector.InstallAsync("stand-in", option, _host, null, Ct));
@@ -248,12 +248,12 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         // Signed out: needs sign-in, even with "I'm signed in already" (session/new alone would have passed).
         StandIns(modes: "ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=none");
         var (signedOut, _) = await TestAsync(new AcpConnectRequest(template, Already));
-        Assert.Equal(AcpTestOutcome.NeedsSignIn, signedOut.Outcome);
+        Outcome(AcpTestOutcome.NeedsSignIn, signedOut);
         Assert.Equal("Stand-in says you aren't signed in (Not logged in). Nothing was saved.", signedOut.Message);
 
         StandIns(modes: "ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=account");
         var (account, _) = await TestAsync(new AcpConnectRequest(template, Already));
-        Assert.Equal(AcpTestOutcome.Connected, account.Outcome);
+        Outcome(AcpTestOutcome.Connected, account);
         Assert.Equal("Claude Max · tester@example.com", account.SignedInAs);
         Assert.True(account.CanLogout);
         Assert.DoesNotContain("tester@example.com", AiLog, StringComparison.Ordinal); // the kind only in the log
@@ -261,7 +261,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
         // Silence is "not confirmed", never "connected".
         StandIns(modes: "ACP_FAKE_AUTH_ON_PROMPT=1;ACP_FAKE_AUTH_STATUS=silent");
         var (silent, _) = await TestAsync(new AcpConnectRequest(template, Already));
-        Assert.Equal(AcpTestOutcome.NotConfirmed, silent.Outcome);
+        Outcome(AcpTestOutcome.NotConfirmed, silent); // Failed once on Linux (WSL, 2026-10-28): its stand-in node was "Text file busy" (#209)
         Assert.StartsWith("Stand-in started, but it didn't say whether you're signed in within 3 seconds", silent.Message, StringComparison.Ordinal);
     }
 

@@ -26,6 +26,13 @@
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Workspaces" />
     <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic.Features" />
     <PackageReference Include="ICSharpCode.Decompiler" />
+    <!--
+      Hot Reload while debugging (M55, ADR 0086): Roslyn's Edit and Continue service, which dotnet watch reaches through
+      an internal wrapper. Publicizer compiles this host against Features with that namespace's internals made public
+      and marks the assembly IgnoresAccessChecksTo, which the runtime honors; the host is JIT-compiled and untrimmed.
+    -->
+    <PackageReference Include="Krafs.Publicizer" PrivateAssets="all" />
+    <Publicize Include="Microsoft.CodeAnalysis.Features" MemberPattern="^Microsoft.CodeAnalysis.(EditAndContinue|Contracts.EditAndContinue)." />
   </ItemGroup>
 
   <ItemGroup>

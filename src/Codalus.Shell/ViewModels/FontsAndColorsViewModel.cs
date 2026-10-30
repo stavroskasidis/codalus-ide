@@ -144,7 +144,7 @@ public sealed class FontsAndColorsViewModel : ObservableObject
         ["editor.findMatchHighlightBackground"] = "Find matches",
         ["editorError.foreground"] = "Error squiggles",
         ["editorWarning.foreground"] = "Warning squiggles",
-        ["editorInfo.foreground"] = "Information squiggles",
+        ["editorInfo.foreground"] = "Information dots",
         ["editorHint.foreground"] = "Hints",
     };
 

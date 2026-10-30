@@ -344,7 +344,7 @@ internal sealed partial class SolutionSession
     }
 
     /// <summary>
-    /// What a folder workspace builds: its one loaded project, or a generated <c>.codalus/folder.slnx</c> of the loaded
+    /// What a folder workspace builds: its one loaded project, or a generated <c>folder.slnx</c> (in its state folder) of the loaded
     /// projects.
     /// </summary>
     private string FolderBuildEntryPoint()
@@ -360,7 +360,12 @@ internal sealed partial class SolutionSession
             return projects[0];
         }
 
-        var file = System.IO.Path.Combine(Path, ".codalus", "folder.slnx");
+        return WriteFolderSolution(SolutionStateLayout.GeneratedFile(Path, IsFolder, "folder.slnx"), projects);
+    }
+
+    /// <summary>A generated <c>.slnx</c> of <paramref name="projects"/> (a folder workspace's): returns its path.</summary>
+    private static string WriteFolderSolution(string file, IReadOnlyList<string> projects)
+    {
         var directory = System.IO.Path.GetDirectoryName(file)!;
         var xml = new StringBuilder("<Solution>\n");
         foreach (var project in projects)
@@ -412,7 +417,7 @@ internal sealed partial class SolutionSession
         if (exitCode != 0 && text.Contains("is not restored", StringComparison.Ordinal) && parameters.Project is { Length: > 0 } unrestored)
         {
             // A project-capability constraint evaluates the project's assets: restore it, then try again.
-            await RunCliAsync(output, ["restore", System.IO.Path.GetFullPath(unrestored), "--nologo"], cancellationToken).ConfigureAwait(false);
+            await RunCliAsync(SolutionDirectory, ["restore", System.IO.Path.GetFullPath(unrestored), "--nologo"], cancellationToken).ConfigureAwait(false);
             (exitCode, text) = await RunCliAsync(output, args, cancellationToken).ConfigureAwait(false);
         }
 
