@@ -72,6 +72,50 @@ public sealed class LspBridgeTests : IAsyncLifetime
     /// A completion list already in the narrowed shape is returned as it is (checked in place, without the node round
     /// trip that cost 2 ms of a 4 ms SQL completion); one item that isn't sends the whole list through normalization.
     /// </summary>
+    /// <summary>
+    /// A service disposed while its host starts (the window closed before <c>initialize</c> was answered) ends the host.
+    /// A cancelled start leaves its process running, and the service didn't dispose the client then: every shell test
+    /// that closed its window while the C# host started left one (~150 MB), and a full run of them ran out of memory.
+    /// </summary>
+    [Fact]
+    public async Task A_service_disposed_while_its_host_starts_ends_the_host()
+    {
+        File.Delete(Gate);
+        var launcher = new RecordingLauncher();
+        var servers = new LanguageServiceRegistry();
+        servers.Register(new LanguageServiceDescriptor("conformance", "Conformance", [], null, () => ProcessLaunchInfo.FromPath(ServerPath, "--initialize-after", Gate) with { Launcher = launcher })
+        {
+            Languages = ["conf"],
+        });
+        var service = new LanguageService(servers, _solutions, languages: _languages);
+        var starting = service.ClientAsync("conf");
+        var host = await launcher.Started.Task.WaitAsync(Timeout());
+        try
+        {
+            await service.DisposeAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => starting);
+            var ended = await Task.WhenAny(host.Exited, Task.Delay(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+            Assert.True(ended == host.Exited, $"The host (pid {host.Id}) still runs 30 s after its service was disposed.");
+        }
+        finally
+        {
+            host.Kill();
+        }
+    }
+
+    /// <summary>Starts processes on this machine and hands the test the first one.</summary>
+    private sealed class RecordingLauncher : IProcessLauncher
+    {
+        public TaskCompletionSource<IHostProcess> Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+        {
+            var process = await LocalProcessLauncher.Instance.StartAsync(launch, cancellationToken).ConfigureAwait(false);
+            Started.TrySetResult(process);
+            return process;
+        }
+    }
+
     [Fact]
     public void A_narrowed_completion_list_passes_unchanged_and_any_other_is_normalized()
     {

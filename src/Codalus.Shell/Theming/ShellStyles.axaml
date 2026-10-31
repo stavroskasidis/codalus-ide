@@ -11,9 +11,14 @@
         xmlns:dockControls="using:Dock.Avalonia.Controls"
         xmlns:dockConverters="using:Dock.Avalonia.Converters">
   <Styles.Resources>
-    <!-- Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e). -->
+    <!--
+      Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e), with
+      pinned tabs on a row of their own while Shell.PinnedTabsOnSeparateRow is on (the shell sets it from the setting
+      workbench.editor.pinnedTabsOnSeparateRow in the application's resources, which floating windows see too).
+    -->
+    <x:Boolean x:Key="Shell.PinnedTabsOnSeparateRow">True</x:Boolean>
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
-      <controls:DocumentTabPanel />
+      <controls:DocumentTabPanel PinnedRow="{DynamicResource Shell.PinnedTabsOnSeparateRow}" />
     </ItemsPanelTemplate>
     <!-- The tab's close button: a 16 px square, as the pin beside it (Dock's was 14). -->
     <x:Double x:Key="DockCloseButtonSize">16</x:Double>

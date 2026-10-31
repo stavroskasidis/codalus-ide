@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
@@ -149,6 +150,50 @@ public sealed class GitDepthShellTests
             var documents = string.Join(", ", f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Select(d => $"{d.Title}:{d.ViewModel.Lines}:{d.ViewModel.Rows.Count}"));
             throw new InvalidOperationException($"Histories: {documents}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}", ex);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Two_selected_commits_or_one_and_its_parent_are_compared()
+    {
+        var (f, _, _) = await OpenRepositoryAsync();
+        await using var fixture = f;
+
+        await f.RunAsync("git.history");
+        var history = await RepositoryHistoryAsync(f, 2);
+        var (greetings, initial) = (history.Rows[0], history.Rows[1]);
+
+        // Ctrl+click a second commit in the list: both are selected, and only the compare commands apply to two.
+        ListBox? List() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().SingleOrDefault()?.FindControl<ListBox>("List");
+        await ShellFixture.PumpUntil(() => List() is { SelectedItems: not null });
+        var list = List()!;
+        list.SelectedItems!.Clear();
+        list.SelectedItems.Add(initial);
+        list.SelectedItems.Add(greetings);
+        Assert.Equal([greetings, initial], history.SelectedRows);
+        Assert.True(history.CanCompareCommits);
+        Assert.False(history.IsSingleSelection);
+        Assert.False(history.CanCompareWithPrevious);
+
+        // Compare Commits: the older on the left.
+        await history.CompareSelectedAsync();
+        var compare = Assert.IsType<GitCompareDocument>(f.Shell.Layout.ActiveDocument);
+        await ShellFixture.PumpUntil(() => compare.ViewModel is { IsLoading: false, HasFiles: true });
+        Assert.Equal($"{initial.ShortHash} → {greetings.ShortHash}", compare.Title);
+        Assert.True(compare.ViewModel.ComparesCommits);
+        Assert.False(compare.ViewModel.CanShowHistory);
+        Assert.Equal(["src/Greetings/Greeter.cs"], compare.ViewModel.Items.Select(r => r.Status.RelativePath));
+        Assert.Equal('M', compare.ViewModel.Items.Single().Status.Index);
+
+        // One commit: Compare with Previous is the same comparison, so the same document; the first commit has no parent.
+        history.Selected = greetings;
+        Assert.Equal([greetings], history.SelectedRows);
+        Assert.True(history.IsSingleSelection);
+        Assert.False(history.CanCompareCommits);
+        Assert.True(history.CanCompareWithPrevious);
+        await history.CompareWithPreviousAsync();
+        Assert.Same(compare, Assert.Single(f.Shell.Layout.Documents.OfType<GitCompareDocument>()));
+        history.Selected = initial;
+        Assert.False(history.CanCompareWithPrevious);
     }
 
     [AvaloniaFact]

@@ -34,7 +34,7 @@
       <StackPanel Classes="emptyState" IsVisible="{Binding IsEmpty}">
         <controls:Icon Kind="compare" />
         <TextBlock Text="{Binding EmptyText}" TextWrapping="Wrap" MaxWidth="420" TextAlignment="Center" />
-        <Button x:Name="HistoryButton" Classes="iconText" controls:ButtonIcon.Kind="history" Content="{l:T gitCompare.viewHistory}" HorizontalAlignment="Center" />
+        <Button x:Name="HistoryButton" Classes="iconText" controls:ButtonIcon.Kind="history" Content="{l:T gitCompare.viewHistory}" HorizontalAlignment="Center" IsVisible="{Binding CanShowHistory}" />
       </StackPanel>
       <TreeView x:Name="Tree" Classes="changeTree" ItemsSource="{Binding Tree}" IsVisible="{Binding IsTreeView}" Background="Transparent" Margin="4" AutomationProperties.Name="{Binding Title}">
         <TreeView.Styles>

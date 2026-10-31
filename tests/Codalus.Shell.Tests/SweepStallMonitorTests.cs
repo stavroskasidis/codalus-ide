@@ -26,17 +26,28 @@ public sealed class SweepStallMonitorTests
             // Every pool thread blocked for 1.5 s, and more work queued behind them (ending process trees, waiting for
             // a program's output): the pool adds threads slowly, so a continuation queued there waits about that long.
             using var release = new ManualResetEventSlim();
+            var phase = Stopwatch.StartNew();
             var blockers = Enumerable.Range(0, Environment.ProcessorCount * 4).Select(_ => Task.Run(() => release.Wait(TimeSpan.FromSeconds(10)))).ToArray();
+            long released = 0;
             var releaser = new Thread(() =>
             {
                 Thread.Sleep(1500);
+                Interlocked.Exchange(ref released, phase.ElapsedMilliseconds);
                 release.Set();
             }) { IsBackground = true };
             releaser.Start();
             await PumpForAsync(TimeSpan.FromMilliseconds(1800));
             await Task.WhenAll(blockers);
+            var unblocked = phase.ElapsedMilliseconds;
             await PumpForAsync(TimeSpan.FromMilliseconds(100));
-            Assert.True(stall.MaxMilliseconds < 500, $"A busy thread pool read as a UI stall of {stall.MaxMilliseconds:0} ms.");
+
+            // A 5.1 s stall here in a full local run (4 cores, every shell test before it) that passes alone: the
+            // releaser's wake-up and the phase's length say whether the whole process was starved or the UI thread ran
+            // something, and the job and GC pause what (docs/ci-flakes.md).
+            Assert.True(stall.MaxMilliseconds < 500,
+                $"A busy thread pool read as a UI stall of {stall.MaxMilliseconds:0} ms ({stall.GcPauseOfMaxMilliseconds:0} ms of it GC; the UI thread ran {stall.JobOfMax ?? "nothing sampled"}; "
+                + $"{stall.Probes} probe(s)). The releaser woke after {Interlocked.Read(ref released)} ms of its 1500, the blockers ended after {unblocked} ms and the phase took {phase.ElapsedMilliseconds} ms; "
+                + $"the pool has {ThreadPool.ThreadCount} thread(s) and {ThreadPool.PendingWorkItemCount} queued item(s) on {Environment.ProcessorCount} core(s).");
 
             // The UI thread itself blocked: that is a stall.
             stall.Reset();
