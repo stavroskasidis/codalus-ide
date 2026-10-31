@@ -39,6 +39,7 @@ public sealed class TextMateSupport : IRegistryOptions
     private readonly ConcurrentDictionary<ThemeName, IRawTheme> _namedThemes = new();
     private readonly ConcurrentDictionary<string, LanguageConfiguration?> _configurations = new(StringComparer.Ordinal);
     private int _grammarReads;
+    private int _themeReads;
     private ThemeName _theme = ThemeName.DarkPlus;
     private TextMateSharp.Registry.Registry? _registry;
 
@@ -57,6 +58,9 @@ public sealed class TextMateSupport : IRegistryOptions
 
     /// <summary>How many times a bundled grammar was read and parsed (tests: once per scope).</summary>
     internal int GrammarReads => Volatile.Read(ref _grammarReads);
+
+    /// <summary>How many times a bundled theme was read and parsed (tests: once per theme).</summary>
+    internal int ThemeReads => Volatile.Read(ref _themeReads);
 
     /// <summary>Logs grammar problems (Language Services output).</summary>
     public Action<string>? Log { get; set; }
@@ -193,7 +197,11 @@ public sealed class TextMateSupport : IRegistryOptions
     }
 
     /// <summary>A bundled theme as read, before <see cref="Recolor"/> (which differs by the shell's theme).</summary>
-    private IRawTheme LoadTheme(ThemeName name) => _namedThemes.GetOrAdd(name, n => _bundled.Value.LoadTheme(n));
+    private IRawTheme LoadTheme(ThemeName name) => _namedThemes.GetOrAdd(name, n =>
+    {
+        Interlocked.Increment(ref _themeReads);
+        return _bundled.Value.LoadTheme(n);
+    });
 
     private IReadOnlyDictionary<string, string> _recolors = RecolorsFor("dark");
 
@@ -271,7 +279,11 @@ public sealed class TextMateSupport : IRegistryOptions
 
     // ------------------------------------------------------------------ IRegistryOptions
 
-    public IRawTheme GetTheme(string scopeName) => Recolor(_themes.GetOrAdd(scopeName, s => _bundled.Value.GetTheme(s))!);
+    public IRawTheme GetTheme(string scopeName) => Recolor(_themes.GetOrAdd(scopeName, s =>
+    {
+        Interlocked.Increment(ref _themeReads);
+        return _bundled.Value.GetTheme(s);
+    })!);
 
     public IRawGrammar GetGrammar(string scopeName)
     {

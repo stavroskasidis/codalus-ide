@@ -41,7 +41,6 @@ public sealed partial class ShellHost
         }
 
         var offset = controller.Editor.CaretOffset;
-        var name = IdentifierAt(editor.Model.Text, offset);
         if (editor.Model.LanguageId == CSharpLanguageId)
         {
             // Our host classifies references (read, write, declaration) and names their definitions for the References window's groups and columns.
@@ -55,6 +54,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        var name = IdentifierAt(editor.Model.Text, offset);
         var locations = await client.ReferencesAsync(editor.Model.Uri, editor.Model.PositionAt(offset), includeDeclaration: true, CancellationToken.None).ConfigureAwait(true);
         if (locations.Length == 0)
         {

@@ -527,6 +527,11 @@ public sealed partial class ShellHost : IEditorServices
         {
             _editedSinceReady.Add(model.Path);
             _snapshots[model] = model.Text.CreateSnapshot();
+
+            // TODO(issue): didChange is JSON-encoded on the UI thread before its first await: the whole text at each
+            // keystroke for a server that syncs whole documents, every change of an update of thousands (Format
+            // Document, Replace All). An ordered writer in JsonRpcConnection, carrying every outgoing message and fed
+            // the snapshot rather than the text, would move it off without reordering.
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
             ClearXamlBuildDiagnostics(model.Path);
         };
@@ -556,6 +561,9 @@ public sealed partial class ShellHost : IEditorServices
             }
         }
 
+        // TODO(issue): didOpen makes the whole text a string and JSON-encodes it on the UI thread (0.1-0.3 s for a file
+        // just under the large-file limits, more for XML with the default escaping); the ordered writer of didChange's
+        // TODO, with relaxed escaping, would move it off too.
         if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
         {
             foreach (var editor in LanguageViews.Where(e => e.Model == model))

@@ -213,27 +213,47 @@ public sealed class EditorLargeTextTests
     public async Task A_large_file_opens_without_colors_folding_or_its_language_service()
     {
         await using var f = ShellFixture.Create();
-        var text = new StringBuilder("{\n");
-        for (var i = 0; i < CodeDocument.LargeFileLines; i++)
+        var services = (IEditorServices)f.Shell;
+        var text = new StringBuilder("<root>\n");
+        for (var i = 0; i <= CodeDocument.LargeFileLines / 3; i++)
         {
-            text.Append("  \"key").Append(i).Append("\": [1, 2],\n");
+            text.Append("  <item>\n    <v>").Append(i).Append("</v>\n  </item>\n");
         }
 
-        text.Append("  \"last\": 0\n}\n");
-        var large = await OpenAsync(f, "large.json", text.ToString());
+        text.Append("</root>\n");
+        var large = await OpenAsync(f, "large.xml", text.ToString());
         Assert.True(large.Model.IsLarge);
         Assert.Null(large.GrammarScope);
         Assert.False(f.Shell.Languages.IsOpen(large.Model.Path)); // no didOpen: the text never went to the markup service
         Assert.True(large.Editor.FindAncestorOfType<CodeEditorView>()!.ShowsLargeFileBar);
 
         // A file under the limits, the same language: colors, folding and the service.
-        var small = await OpenAsync(f, "small.json", "{\n  \"a\": [1, 2],\n  \"b\": {\n    \"c\": 3\n  }\n}\n");
+        var small = await OpenAsync(f, "small.xml", "<root>\n  <item>\n    <v>1</v>\n  </item>\n</root>\n");
         Assert.False(small.Model.IsLarge);
-        Assert.Equal("source.json", small.GrammarScope);
+        Assert.Equal("text.xml", small.GrammarScope);
         Assert.True(f.Shell.Languages.IsOpen(small.Model.Path));
         Assert.False(small.Editor.FindAncestorOfType<CodeEditorView>()!.ShowsLargeFileBar);
-        await ShellFixture.PumpUntil(() => small.Folding.AllFoldings.Any(), seconds: 20);
+        await ShellFixture.PumpUntil(() => small.Folding.AllFoldings.Any() && services.Client(small.Model) is not null, seconds: 20);
+        Assert.True(small.FoldingPasses > 0);
+        Assert.Null(services.Client(large.Model)); // the service runs, and still gets no requests for it
+
+        // The large one never folds, not even after an edit (its XML would have hundreds of thousands of foldings).
+        large.Model.Text.Insert(0, "<!-- -->");
+        ShellFixture.Pump();
+        Assert.Equal(0, large.FoldingPasses);
         Assert.Empty(large.Folding.AllFoldings);
+
+        // CodeLens isn't expected for a large C# file, as it is for a small one.
+        var folder = Path.Combine(f.UserData, "cs");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, "Large.cs"), string.Concat(Enumerable.Repeat("// line\n", CodeDocument.LargeFileLines + 1)), TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(folder, "Small.cs"), "class A { }\n", TestContext.Current.CancellationToken);
+        using var largeCs = await CodeDocument.OpenAsync(Path.Combine(folder, "Large.cs"), TestContext.Current.CancellationToken);
+        using var smallCs = await CodeDocument.OpenAsync(Path.Combine(folder, "Small.cs"), TestContext.Current.CancellationToken);
+        largeCs.LanguageId = smallCs.LanguageId = "csharp";
+        Assert.True(largeCs.IsLarge);
+        Assert.False(services.ExpectsCodeLens(largeCs));
+        Assert.True(services.ExpectsCodeLens(smallCs));
     }
 
     [AvaloniaFact]
@@ -509,6 +529,25 @@ public sealed class EditorLargeTextTests
         Assert.Same(few, LanguageFeatures.CapFoldings(few, new HashSet<(int, int)>())); // under the cap: as they are
     }
 
+    [Fact]
+    public void Themes_are_read_once_each_until_the_languages_change()
+    {
+        var languages = new Workbench.Languages.LanguageRegistry();
+        var textMate = new TextMateSupport(languages);
+        textMate.ThemeFor("dark");
+        textMate.ThemeFor("dark");
+        textMate.GetDefaultTheme();
+        Assert.Equal(1, textMate.ThemeReads);
+        textMate.ThemeFor("light");
+        textMate.ThemeFor("dark");
+        Assert.Equal(2, textMate.ThemeReads);
+
+        // A plugin's grammar or language may bring its own: read again after a change.
+        languages.Register(new Workbench.Languages.LanguageDefinition("sample", "Sample"));
+        textMate.ThemeFor("dark");
+        Assert.Equal(3, textMate.ThemeReads);
+    }
+
     [AvaloniaFact]
     public async Task Hidden_editors_stop_their_grammar_thread_and_grammars_are_read_once()
     {
@@ -523,15 +562,13 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => third.GrammarTokenizing && !first.GrammarTokenizing && !second.GrammarTokenizing);
         Assert.Equal(reads, f.Shell.TextMate.GrammarReads); // the same grammar, parsed once
 
-        // Shown again: its thread starts again, and an edit made while hidden is colored.
-        first.Editor.Document.Insert(0, "\"x\" ");
+        // Shown again: its thread starts again, and an edit made while hidden is tokenized again (the key's "a" moved from
+        // column 3 to 7, where the line's old tokens have the number).
+        first.Editor.Document.Insert(0, "[1, ");
+        ShellFixture.Pump();
+        Assert.Contains("constant.numeric.json", first.GrammarScopesAt(1, 7) ?? []); // hidden: not tokenized again yet
         await f.Shell.OpenFileAsync(first.Model.Path, preview: false, null);
         await ShellFixture.PumpUntil(() => first.GrammarTokenizing && !third.GrammarTokenizing);
-        var view = first.Editor.TextArea.TextView;
-        await ShellFixture.PumpUntil(() =>
-        {
-            view.EnsureVisualLines();
-            return view.GetVisualLine(1) is { } line && line.Elements.Select(e => e.TextRunProperties.ForegroundBrush).Distinct().Count() >= 3;
-        }, seconds: 20);
+        await ShellFixture.PumpUntil(() => first.GrammarScopesAt(1, 7)?.Any(s => s.StartsWith("support.type.property-name", StringComparison.Ordinal)) == true, seconds: 20);
     }
 }

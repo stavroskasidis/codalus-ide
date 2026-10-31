@@ -429,7 +429,6 @@ public sealed partial class CodeEditorController : IDisposable
         {
             _textMate?.Dispose();
             _textMate = null;
-            _grammarPaused = false;
             return;
         }
 
@@ -441,14 +440,15 @@ public sealed partial class CodeEditorController : IDisposable
                 _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
             }
 
+            // TODO(issue): AvaloniaEdit.TextMate copies each visible line whole on the UI thread at every scroll, to
+            // tokenize its first 10,000 characters there, and keeps a thread per editor: a megabyte line under the
+            // large-file limits costs a copy per scroll step. A colorizer on one shared tokenizer (as GrammarColorizer
+            // tokenizes) that reads only what's drawn, visible lines first, would end both.
             _textMate.SetGrammar(scope);
             KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
             KeepLongLinesLast();
-            if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
-            {
-                PauseGrammar(); // built for a tab not shown yet
-            }
+            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden: setting a grammar starts the thread
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -481,40 +481,97 @@ public sealed partial class CodeEditorController : IDisposable
     // ------------------------------------------------------------------ the grammar's tokenizer while hidden
 
     /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
-    internal bool GrammarTokenizing => _textMate is { } installation && TokenizerModel(installation) is { IsStopped: false };
+    internal bool GrammarTokenizing => _textMate is { } installation && Tokenizer(installation) is { IsStopped: false };
 
-    private bool _grammarPaused;
+    /// <summary>The scopes the grammar's tokenizer has for a one-based line's column, null when it has none (tests).</summary>
+    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) =>
+        _textMate is { } installation && Tokenizer(installation)?.GetLineTokens(line - 1) is { } tokens
+            ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
+            : null;
 
-    private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ResumeGrammar();
+    private static bool s_noTokenizer;
+    private bool _grammarCheckScheduled;
 
-    private void OnViewDetached(object? sender, VisualTreeAttachmentEventArgs e) => PauseGrammar();
+    private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
+
+    private void OnViewDetached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
 
     /// <summary>
-    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view).
-    /// AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each editor as long as its tab is open, and a
-    /// session of many JSON, XML or Markdown tabs starved the pool (M56). The model and its lines' states stay: edits
-    /// meanwhile mark their lines, and the thread starts again from there when the editor shows.
+    /// Checks once things settle: Dock detaches a view and attaches it again in one go when it moves (a tab dragged to
+    /// another pane or a floating window, Window > Split), and its tokenizer isn't stopped and started for that.
     /// </summary>
-    private void PauseGrammar()
+    private void ScheduleGrammarCheck()
     {
-        if (!_grammarPaused && _textMate is { } installation && TokenizerModel(installation) is { } model && GrammarTransformer() is { } transformer)
+        if (_grammarCheckScheduled)
         {
-            _grammarPaused = true;
-            model.RemoveModelTokensChangedListener(transformer); // its last listener: the model stops its thread
+            return;
         }
+
+        _grammarCheckScheduled = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                _grammarCheckScheduled = false;
+                if (!_disposed)
+                {
+                    MatchGrammarToView();
+                }
+            },
+            DispatcherPriority.Background);
     }
 
-    private void ResumeGrammar()
+    /// <summary>
+    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
+    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each
+    /// editor as long as its tab is open, and a session of many JSON, XML or Markdown tabs starved the pool (M56). The
+    /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
+    /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
+    /// <para>
+    /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
+    /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
+    /// visible lines on the UI thread at each scroll, beside the worker), and TextMateSharp queues a line that failed again.
+    /// </para>
+    /// </summary>
+    private void MatchGrammarToView()
     {
-        if (_grammarPaused && _textMate is { } installation && TokenizerModel(installation) is { } model && GrammarTransformer() is { } transformer)
+        if (_textMate is not { } installation || Tokenizer(installation) is not { } model || GrammarTransformer() is not { } transformer)
         {
-            _grammarPaused = false;
-            model.AddModelTokensChangedListener(transformer); // starts its thread again
+            return;
+        }
+
+        if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
+        {
+            model.RemoveModelTokensChangedListener(transformer); // its only listener: the model stops its thread
+        }
+        else
+        {
+            // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
+            // redraw, after the listener is in, shows them.
+            model.AddModelTokensChangedListener(transformer);
+            Editor.TextArea.TextView.Redraw();
         }
     }
 
     private AvaloniaEdit.TextMate.TextMateColoringTransformer? GrammarTransformer() =>
         Editor.TextArea.TextView.LineTransformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+
+    /// <summary>The installation's model, or null when the package has none by that name: no pausing then, rather than an exception at each tab switch.</summary>
+    private static TextMateSharp.Model.TMModel? Tokenizer(AvaloniaEdit.TextMate.TextMate.Installation installation)
+    {
+        if (!s_noTokenizer)
+        {
+            try
+            {
+                return TokenizerModel(installation);
+            }
+            catch (MissingFieldException)
+            {
+                s_noTokenizer = true;
+            }
+        }
+
+        return null;
+    }
 
     // The installation's model isn't public; Native AOT resolves this accessor at compile time.
     [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_tmModel")]
@@ -839,9 +896,13 @@ public sealed partial class CodeEditorController : IDisposable
     {
         if (!Model.IsLarge)
         {
+            FoldingPasses++;
             _ = FoldingAsync(delay, Restart(ref _foldingCts).Token);
         }
     }
+
+    /// <summary>The folding passes started so far (tests: none for a large file).</summary>
+    internal int FoldingPasses { get; private set; }
 
     private async Task FoldingAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
