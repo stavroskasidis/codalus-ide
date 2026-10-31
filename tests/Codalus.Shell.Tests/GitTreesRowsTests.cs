@@ -162,6 +162,23 @@ public sealed class GitTreesRowsTests
 
     private static GitRepositoryRow Row(GitRepositoryViewModel vm, string text) => vm.Rows.Single(r => r.Text == text);
 
+    private static void DeleteFolder(string folder)
+    {
+        try
+        {
+            // git writes its object files read-only.
+            foreach (var file in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
+            {
+                File.SetAttributes(file, FileAttributes.Normal);
+            }
+
+            Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
     [AvaloniaFact]
     public async Task Git_repository_with_thousands_of_refs_shows_rows_in_place_and_reads_nothing_while_hidden()
     {
@@ -346,12 +363,22 @@ public sealed class GitTreesRowsTests
         Assert.Equal(full + 20, vm.Rows.Count);
 
         // The chevron toggles a folder on each click, a double-click's second too; a double-click on its row toggles it once.
+        // The chevron selects nothing, as a tree view's expander (M57 review: the folder selected by the press dropped the
+        // selected branch's history beside the tree).
+        await FocusAsync(tree, Row(vm, "b0001"));
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0 });
+        var (branch, history) = (vm.Selected, vm.History);
         var team02 = await ItemAsync(tree, Row(vm, "team02"));
         var chevron = team02.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("chevron"));
         Click(f.Window, chevron);
         Assert.False(Row(vm, "team02").IsExpanded);
+        Assert.Same(branch, vm.Selected);
+        Assert.Same(history, vm.History);
         Click(f.Window, chevron);
         Assert.True(Row(vm, "team02").IsExpanded);
+        Assert.Same(branch, vm.Selected);
+        Assert.Same(history, vm.History);
+        Assert.True(tree.IsKeyboardFocusWithin);
         Click(f.Window, team02.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "team02"), clicks: 2);
         Assert.False(Row(vm, "team02").IsExpanded);
         Assert.Equal(ExpandCollapseState.Collapsed, TreeRowsAutomationTests.PeerOf(tree, Row(vm, "team02")).ExpandCollapseState);
@@ -397,6 +424,99 @@ public sealed class GitTreesRowsTests
         var b0007 = await ItemAsync(tree, Row(vm, "b0007"));
         Click(f.Window, b0007.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "b0007"), clicks: 2);
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "team00/b0007" });
+    }
+
+    /// <summary>
+    /// A double-click off the rows (the space under the last one) acts on no row (M57 review: it activated the selected
+    /// one, so a branch selected to read its history was checked out); Git Changes' trees open the selected file there,
+    /// as its lists do.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_double_click_under_the_git_repository_rows_toggles_and_checks_out_nothing()
+    {
+        await using var f = ShellFixture.Create();
+        var (vm, tree, _) = await ShowRepositoryAsync(f, tags: 0, branches: 3);
+        ShellFixture.RenderFrame(f.Window);
+        var below = new Point(tree.Bounds.Width / 2, tree.Bounds.Height - 8);
+        Assert.Null(TreeRows.RowAt(tree.InputHitTest(below))); // a few rows: the space under them is the list's
+        var at = tree.TranslatePoint(below, f.Window)!.Value;
+        void DoubleClickBelow()
+        {
+            f.Window.MouseMove(at);
+            for (var i = 0; i < 2; i++)
+            {
+                f.Window.MouseDown(at, MouseButton.Left);
+                f.Window.MouseUp(at, MouseButton.Left);
+            }
+
+            ShellFixture.Pump();
+        }
+
+        // A folder selected stays as it is.
+        await FocusAsync(tree, Row(vm, "team00"));
+        Assert.True(Row(vm, "team00").IsExpanded);
+        DoubleClickBelow();
+        Assert.True(Row(vm, "team00").IsExpanded);
+        Assert.Same(Row(vm, "team00"), tree.SelectedItem);
+
+        // A branch selected, its history read: not checked out.
+        await FocusAsync(tree, Row(vm, "b0001"));
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0 });
+        DoubleClickBelow();
+        var until = DateTime.UtcNow.AddMilliseconds(1500);
+        await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until);
+        Assert.Equal("main", f.Shell.Git.Status?.Branch);
+        Assert.Same(Row(vm, "b0001"), tree.SelectedItem);
+    }
+
+    /// <summary>
+    /// The document closed while its tree is built off the UI thread: the build shows nothing and starts no history (M57
+    /// review: it selected the current branch and read its log for a closed document, a history nothing disposed).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_repository_closed_during_a_build_starts_no_history()
+    {
+        var temp = Directory.CreateTempSubdirectory("codalus-repository-").FullName;
+        var folder = CreateManyRefs(Path.Combine(temp, "Refs"), tags: 10, branches: 10);
+        try
+        {
+            using var git = new Codalus.Workbench.Git.GitService(watch: false);
+            Assert.True(await git.OpenAsync(folder, TestContext.Current.CancellationToken));
+            await git.RefreshAsync(TestContext.Current.CancellationToken);
+            GitRepositoryViewModel? vm = null;
+            var (asked, histories) = (0, 0);
+            vm = new GitRepositoryViewModel(new GitRepositoryActions
+            {
+                // Asked once by the read, then by the build for what it's built of, on the UI thread before it runs on the
+                // pool: the document closes there, while the build is under way.
+                Repositories = () =>
+                {
+                    if (++asked == 2)
+                    {
+                        vm!.Dispose();
+                    }
+
+                    return [git];
+                },
+                PullRequests = (_, _) => Task.FromResult(new GitRepositoryPullRequests([], null)),
+                CreateHistory = (service, query, title, _) =>
+                {
+                    histories++;
+                    return new GitHistoryViewModel(service, query, title, (_, _) => Task.CompletedTask);
+                },
+                Run = (_, _, _) => Task.CompletedTask,
+            });
+            await vm.LoadAsync(pullRequests: false);
+            Assert.Equal(2, asked);
+            Assert.False(vm.IsReading);
+            Assert.Equal(0, vm.TreesBuilt);
+            Assert.Equal(0, histories);
+            Assert.Null(vm.History);
+        }
+        finally
+        {
+            DeleteFolder(temp);
+        }
     }
 
     [AvaloniaFact]

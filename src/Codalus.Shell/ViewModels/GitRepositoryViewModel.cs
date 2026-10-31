@@ -333,6 +333,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     private Task? _loading;
     private Task? _building;
     private bool _buildAgain;
+    private bool _disposed;
     private Avalonia.Threading.DispatcherTimer? _filterTimer;
 
     /// <summary>What was read of a repository: its branches, tags, remotes, submodules and pull requests, and HEAD's branch.</summary>
@@ -661,6 +662,12 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             _buildAgain = false;
             var query = Query();
             var tree = await Task.Run(() => Build(query)).ConfigureAwait(true);
+            if (_disposed)
+            {
+                // Closed during the build: nothing shown, no history started that nothing would dispose (M57 review).
+                return;
+            }
+
             if (!_buildAgain)
             {
                 Apply(tree);
@@ -1110,6 +1117,11 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     /// <summary>The right side for a node: a branch's or tag's history (and a local branch's incoming commits), a pull request's commits, a submodule's history.</summary>
     private async Task ShowAsync(GitRepositoryNode? node)
     {
+        if (_disposed)
+        {
+            return; // a select after the document closed (a menu's View History awaiting its read): nothing would dispose it
+        }
+
         _selectionCts?.Cancel();
         var cts = _selectionCts = new CancellationTokenSource();
         _historyFor = HistoryKey(node);
@@ -1316,6 +1328,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
 
     public void Dispose()
     {
+        _disposed = true;
         _filterTimer?.Stop();
         _loadCts?.Cancel();
         _selectionCts?.Cancel();

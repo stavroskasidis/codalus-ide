@@ -250,13 +250,14 @@ public sealed class GitChangesRowsTests
         Assert.Same(Row("src/D000"), tree.SelectedItem);
 
         // The chevron toggles a folder on each click, a double-click's second too (it raises no tap); a double-click on
-        // the folder's row toggles it once.
+        // the folder's row toggles it once. The chevron selects nothing, as a tree view's expander (M57 review).
         var d002 = await ItemAsync(tree, Row("src/D002"));
         var chevron = d002.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("chevron"));
         Click(f.Window, chevron);
         Assert.False(Expanded("src/D002"));
         Click(f.Window, chevron);
         Assert.True(Expanded("src/D002"));
+        Assert.Same(Row("src/D000"), tree.SelectedItem);
         Click(f.Window, d002.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "D002"), clicks: 2);
         Assert.False(Expanded("src/D002"));
         Click(f.Window, chevron);

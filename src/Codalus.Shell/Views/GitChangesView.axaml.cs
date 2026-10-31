@@ -46,7 +46,7 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         // double-click open a file.
         foreach (var tree in new[] { StagedTree, ChangesTree, ConflictTree })
         {
-            TreeRows.Attach(tree, () => DataContext as GitChangesViewModel, row => OpenSelected(row));
+            TreeRows.Attach(tree, () => DataContext as GitChangesViewModel, row => OpenSelected(row), offRowsActivatesSelected: true);
         }
 
         // The menu of a file, a folder or the repository node: gitChanges/context, built for the node (D38).
