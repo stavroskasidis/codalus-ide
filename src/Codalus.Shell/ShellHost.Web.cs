@@ -74,8 +74,10 @@ public sealed partial class ShellHost
 
     private void RestartEndpointsRefresh()
     {
-        _endpointsRefresh?.Stop();
-        _endpointsRefresh?.Start();
+        if (_endpointsRefresh is { } timer)
+        {
+            StartTimer(timer);
+        }
     }
 
     // ------------------------------------------------------------------ Endpoints Explorer

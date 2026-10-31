@@ -31,6 +31,7 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     private int _changeCheckScheduled;
     private int _saving;
     private bool _checkAfterSave;
+    private bool _disposed;
 
     private CodeDocument(string path, string? uri, string text, TextFileFormat format, bool isReadOnly)
     {
@@ -325,6 +326,11 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     private void CheckFile()
     {
         Interlocked.Exchange(ref _changeCheckScheduled, 0);
+        if (_disposed)
+        {
+            return;
+        }
+
         if (Remote is { } remote)
         {
             _ = remote.StatAsync(Path, CancellationToken.None).ContinueWith(
@@ -395,8 +401,17 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops watching the file and drops the handlers: a check posted before (its watcher saw a write) still runs later,
+    /// and through them it would hold their owners, the shell among them.
+    /// </summary>
     public void Dispose()
     {
+        _disposed = true;
+        ContentChanged = null;
+        ConflictDetected = null;
+        Reloaded = null;
+        Saved = null;
         _watcher?.Dispose();
         _watcher = null;
         _remoteWatch?.Dispose();

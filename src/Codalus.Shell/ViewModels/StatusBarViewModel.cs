@@ -69,7 +69,7 @@ public sealed partial class StatusItemViewModel : ObservableObject
     private static partial Regex IconPrefix();
 }
 
-public sealed class StatusBarViewModel : ObservableObject
+public sealed class StatusBarViewModel : ObservableObject, IDisposable
 {
     private readonly StatusBarService _service;
     private readonly Func<string, ICommand> _commandFor;
@@ -78,6 +78,7 @@ public sealed class StatusBarViewModel : ObservableObject
     private bool _hasSolution;
     private bool _isDebugging;
     private int _messageVersion;
+    private IDisposable? _messageTimeout;
 
     public StatusBarViewModel(StatusBarService service, Func<string, ICommand> commandFor)
     {
@@ -193,9 +194,9 @@ public sealed class StatusBarViewModel : ObservableObject
     {
         var version = ++_messageVersion;
         Message = message;
-        if (timeout is { } delay)
-        {
-            Avalonia.Threading.DispatcherTimer.RunOnce(
+        _messageTimeout?.Dispose();
+        _messageTimeout = timeout is { } delay
+            ? Avalonia.Threading.DispatcherTimer.RunOnce(
                 () =>
                 {
                     if (_messageVersion == version)
@@ -203,14 +204,21 @@ public sealed class StatusBarViewModel : ObservableObject
                         Message = null;
                     }
                 },
-                delay);
-        }
+                delay)
+            : null;
     }
 
     public void ClearMessage()
     {
         _messageVersion++;
         Message = null;
+    }
+
+    /// <summary>Stops the message's timeout: a pending one-shot timer holds the status bar (and its shell) until it ticks.</summary>
+    public void Dispose()
+    {
+        _messageTimeout?.Dispose();
+        _messageTimeout = null;
     }
 
     private void Refresh()

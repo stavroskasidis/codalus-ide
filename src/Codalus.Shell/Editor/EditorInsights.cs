@@ -36,6 +36,7 @@ public sealed class EditorInsights : IDisposable
     private readonly DispatcherTimer _hintTimer = new() { Interval = s_hintDelay };
     private readonly DispatcherTimer _lensTimer = new() { Interval = s_lensDelay };
     private readonly DispatcherTimer _symbolTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+    private readonly HashSet<IDisposable> _pending = [];
     private CancellationTokenSource? _symbolCts;
     private TextSegmentCollection<HintSegment> _hints;
     private TextSegmentCollection<LensSegment> _lenses;
@@ -549,7 +550,7 @@ public sealed class EditorInsights : IDisposable
                 // Asked before the language service had the document's semantics (it just opened, the project is
                 // still loading): ask again a few times rather than wait for the next edit or diagnostics.
                 _emptyHints++;
-                DispatcherTimer.RunOnce(() =>
+                RunOnce(() =>
                 {
                     if (!_disposed && _hints.Count == 0)
                     {
@@ -679,7 +680,22 @@ public sealed class EditorInsights : IDisposable
         _services.Log($"{Model.Name}: inline information request failed ({ex.GetType().Name}: {ex.Message}); retrying");
         _hintRange = (-1, -1);
         _lensVersion = -1;
-        DispatcherTimer.RunOnce(() => Restart(timer), TimeSpan.FromSeconds(_failures));
+        RunOnce(() => Restart(timer), TimeSpan.FromSeconds(_failures));
+    }
+
+    /// <summary>
+    /// A one-shot timer that <see cref="Dispose"/> stops: a pending one holds the editor (and its shell) until it ticks,
+    /// and a dispatcher that no longer runs (a test's, once it ended) never ticks it.
+    /// </summary>
+    private void RunOnce(Action action, TimeSpan delay)
+    {
+        IDisposable? timer = null;
+        timer = DispatcherTimer.RunOnce(() =>
+        {
+            _pending.Remove(timer!);
+            action();
+        }, delay);
+        _pending.Add(timer);
     }
 
     private static CancellationTokenSource Restart(ref CancellationTokenSource? cts)
@@ -814,6 +830,12 @@ public sealed class EditorInsights : IDisposable
         _hintTimer.Stop();
         _lensTimer.Stop();
         _symbolTimer.Stop();
+        foreach (var timer in _pending)
+        {
+            timer.Dispose();
+        }
+
+        _pending.Clear();
         foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts })
         {
             cts?.Cancel();

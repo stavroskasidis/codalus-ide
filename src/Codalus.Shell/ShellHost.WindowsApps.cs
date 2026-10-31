@@ -247,7 +247,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Check Environment's rows for the solution's Windows App SDK apps (on Windows): Developer Mode and the runtime.</summary>
-    private async Task<IReadOnlyList<ToolStatus>> WindowsAppToolsAsync()
+    private async Task<IReadOnlyList<ToolStatus>> WindowsAppToolsAsync(CancellationToken cancellationToken)
     {
         var projects = Solutions.Projects.Values.Where(p => p.State == ProjectStates.Loaded && WindowsApps.IsWindowsAppSdk(p)).ToList();
         if (projects.Count == 0 || Workbench.Platform != Codalus.Platform.PlatformKind.Windows)
@@ -258,7 +258,7 @@ public sealed partial class ShellHost
         IReadOnlyList<WindowsAppRuntime>? runtimes = null;
         try
         {
-            var (code, output) = await WindowsAppRunner("powershell.exe", WindowsApps.RuntimeListArguments(), null, CancellationToken.None).ConfigureAwait(true);
+            var (code, output) = await WindowsAppRunner("powershell.exe", WindowsApps.RuntimeListArguments(), null, cancellationToken).ConfigureAwait(true);
             runtimes = code == 0 ? WindowsApps.ParseRuntimes(output) : null;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)

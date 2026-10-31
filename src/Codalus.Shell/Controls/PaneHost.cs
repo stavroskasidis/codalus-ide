@@ -18,7 +18,11 @@ public interface IPaneView
 /// </summary>
 public sealed class PaneHost : Decorator
 {
-    private static readonly List<PaneHost> s_attached = [];
+    /// <summary>
+    /// The panes attached to a window, weakly: a closed window's tree stays attached, and its panes would stay here
+    /// with all they reach.
+    /// </summary>
+    private static readonly List<WeakReference<PaneHost>> s_attached = [];
 
     public PaneHost(IDockable dockable, Control content)
     {
@@ -62,6 +66,8 @@ public sealed class PaneHost : Decorator
     /// <summary>The visible panes of <paramref name="root"/> in reading order (top to bottom, left to right).</summary>
     public static IReadOnlyList<PaneHost> VisiblePanes(Visual root) =>
         [.. s_attached
+            .Select(w => w.TryGetTarget(out var pane) ? pane : null)
+            .OfType<PaneHost>()
             .Where(p => p.IsEffectivelyVisible && p.Bounds.Width > 0 && p.Bounds.Height > 0 && TopLevel.GetTopLevel(p) == TopLevel.GetTopLevel(root))
             .Select(p => (Pane: p, Origin: p.TranslatePoint(default, root) ?? default))
             .OrderBy(p => Math.Round(p.Origin.Y / 8))
@@ -75,12 +81,13 @@ public sealed class PaneHost : Decorator
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        s_attached.Add(this);
+        s_attached.RemoveAll(w => !w.TryGetTarget(out _));
+        s_attached.Add(new WeakReference<PaneHost>(this));
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        s_attached.Remove(this);
+        s_attached.RemoveAll(w => !w.TryGetTarget(out var pane) || pane == this);
     }
 }

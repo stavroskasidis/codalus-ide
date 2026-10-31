@@ -438,7 +438,7 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        Window.Close();
+        Window.CloseWithoutConfirming(); // a window with unsaved documents would ask, and stay open with its shell
         Pump();
         await Shell.DisposeAsync();
         try
