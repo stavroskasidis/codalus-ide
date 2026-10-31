@@ -84,6 +84,7 @@ Constraints:
 
 **Markdown**
 - Open Preview to the Side (Ctrl+K V) renders the document with the shell's Markdown renderer, 300 ms after each edit.
+- **The preview in the editor (2026-10-31, from the maintainer's request and decisions of that day).** A Markdown editor's tab shows the text and its live preview side by side (`MarkdownSplit`), half and half, from the first open. The divider resizes them; its chevron collapses the preview to a strip at the right edge, which shows it again when clicked, and Markdown: Toggle Preview (Ctrl+K Ctrl+V; Ctrl+Shift+V is the clipboard ring) does the same. Whether it is collapsed and its width are one state shared by every Markdown editor, kept in `state.json` rather than in settings, as the layout is: collapsing one collapses the open ones and the next ones. The two sides scroll each other by proportion (the rendered Markdown has no source positions to align by line); a sync ignores the scroll events it causes and a render's change of extent. A collapsed or hidden preview doesn't render: it renders once when it shows again. A large file (M56) opens collapsed. Open Preview to the Side stays, for a preview to move or float elsewhere. Code Search's preview has none.
 
 ## Consequences
 

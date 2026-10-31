@@ -1092,13 +1092,17 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         CodeSearch.RestoreState(state?.CodeSearch);
+        if (state?.MarkdownSplit is { } markdown)
+        {
+            MarkdownSplit.Set(markdown.Collapsed, markdown.Ratio);
+        }
     }
 
     /// <summary>Saves the layout (with the window placement) and the small state file. Called when the window closes.</summary>
     public void SaveState(WindowPlacement? placement)
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
-        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState() }, ShellJsonContext.Default.ShellState);
+        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState(), MarkdownSplit = MarkdownSplit }, ShellJsonContext.Default.ShellState);
         _ = SaveCodeSearchIndex(onlyIfChanged: true); // flushed in DisposeAsync
         SaveEditorSession(); // next to the solution, written in the background (flushed in DisposeAsync)
     }

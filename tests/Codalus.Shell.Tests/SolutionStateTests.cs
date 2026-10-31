@@ -143,8 +143,33 @@ public class SolutionStateTests
             { "documents": [{{string.Join(", ", paths.Select(p => $$"""{ "path": {{System.Text.Json.JsonSerializer.Serialize(p)}}, "line": 2, "character": 0 }"""))}}], "active": {{System.Text.Json.JsonSerializer.Serialize(paths[1])}} }
             """, TestContext.Current.CancellationToken);
 
+        // The tabs are added in one pass: a layout pass between two of them made the first tab of the empty group active,
+        // and built its editor (macOS CI, run 41237010138). A job posted when the first tab lands runs only if the UI
+        // thread is let go before the last one does.
+        var added = 0;
+        var yielded = false;
+        var yieldedBeforeLast = false;
+        f.Shell.Layout.Factory.DockableAdded += (_, e) =>
+        {
+            if (e.Dockable is not Editor.CodeEditorDocument)
+            {
+                return;
+            }
+
+            if (++added == 1)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => yielded = true, Avalonia.Threading.DispatcherPriority.Send);
+            }
+            else if (added == paths.Length)
+            {
+                yieldedBeforeLast = yielded;
+            }
+        };
+
         await OpenAsync(f, solution);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Name == "Program.cs");
+        Assert.Equal(paths.Length, added);
+        Assert.False(yieldedBeforeLast, "the UI thread was let go between two of the session's tabs");
         Assert.Equal(["README.md", "Program.cs", "Greeter.cs"], f.Shell.Editors.Select(e => e.Model.Name));
         Assert.Null(f.Shell.Editors.Single(e => e.Model.Name == "README.md").Controller);
         Assert.Null(f.Shell.Editors.Single(e => e.Model.Name == "Greeter.cs").Controller);

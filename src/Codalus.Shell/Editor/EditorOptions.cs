@@ -236,9 +236,17 @@ public interface IEditorServices
 
     /// <summary>
     /// Whether a document's language service will list CodeLens for it, before it answers (a C# file, unless the C#
-    /// service couldn't start or has no CodeLens): the editor keeps the rows' room from the first frame.
+    /// service couldn't start or has no CodeLens; an F# file once FsAutoComplete serves it, with its CodeLens on): the
+    /// editor keeps the rows' room from the first frame.
     /// </summary>
     bool ExpectsCodeLens(CodeDocument document) => false;
+
+    /// <summary>
+    /// Whether a document's language service will list its symbols, before it answers (the C# host's languages, F#,
+    /// JavaScript and TypeScript, style sheets; not once its service failed or if it has none): the navigation bar keeps
+    /// its room from the first frame when the text declares a type.
+    /// </summary>
+    bool ExpectsDocumentSymbols(CodeDocument document) => false;
 
     /// <summary>
     /// The language embedded at <paramref name="offset"/> (a caret) of <paramref name="document"/>, to ask too: HTML at
@@ -266,6 +274,9 @@ public interface IEditorServices
     void ShowMessage(string message);
 
     void OpenLink(string target);
+
+    /// <summary>How Markdown editors show their preview beside the text (shared by every one), or null for none.</summary>
+    MarkdownSplitState? MarkdownSplit => null;
 
     /// <summary>Writes to the Language Services log.</summary>
     void Log(string message);
