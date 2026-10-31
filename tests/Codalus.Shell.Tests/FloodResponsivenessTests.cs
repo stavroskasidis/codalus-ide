@@ -199,6 +199,62 @@ public sealed class FloodResponsivenessTests
     }
 
     [AvaloniaFact]
+    public async Task The_test_details_show_the_end_of_a_long_output_and_open_all_of_it_in_an_editor()
+    {
+        // A test's whole output went to a wrapping text block in the details pane, laid out at each selection and resize:
+        // megabytes froze the window. The run's output was read whole at its end, on the UI thread.
+        await using var f = ShellFixture.Create();
+        const string controller = "codalus.synthetic:tests";
+        var tests = f.Shell.Tests;
+        tests.ControllerCreated(new TestControllerParams("codalus.synthetic", controller, "Synthetic"), new TestRefreshTests.Connection());
+        tests.ItemsUpdated(new TestItemsUpdateParams(controller,
+        [
+            new TestItemDto("p", null, "P", null, null, null, null, null, null),
+            new TestItemDto("p|n", "p", "Tests", null, null, null, null, null, null),
+            new TestItemDto("p|c", "p|n", "Calc", null, null, null, null, null, null),
+            new TestItemDto("p|m", "p|c", "Logs", null, null, null, null, null, null),
+        ], []));
+        var chunk = new string('o', 4999) + "\n";
+        tests.RunStarted(new TestRunStartedParams(controller, "r1", "Run", null, "run"));
+        for (var i = 0; i < 1000; i++)
+        {
+            tests.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("p|m", chunk)], []));
+        }
+
+        tests.RunUpdated(new TestRunUpdateParams("r1", [new TestStateDto("p|m", TestStates.Failed, 5, [new TestMessageDto(new string('e', 100_000), null, null, null, null, null)])], [], []));
+        tests.RunEnded("r1");
+
+        // The test keeps the end of its output; the run's output went to Output > Tests as it came, capped.
+        var node = tests.Find(TestNode.KeyOf(controller, "p|m"))!;
+        var output = node.Result!.Output;
+        Assert.InRange(output.Length, TestService.MaxTestOutputLength, TestService.MaxTestOutputLength + 100);
+        Assert.StartsWith("[", output, StringComparison.Ordinal);
+        Assert.EndsWith(chunk, output, StringComparison.Ordinal);
+        var channel = f.Shell.Workbench.Output.GetOrCreate("codalus.tests", "Tests").GetText();
+        Assert.InRange(channel.Length, OutputChannel.MaxLength / 2, OutputChannel.MaxLength);
+        Assert.EndsWith(chunk, channel, StringComparison.Ordinal);
+
+        // The details pane shows the end of the output and the start of the message, and opens all of it.
+        // The Start page takes the left column once the Welcome plugin runs: the Test Explorer shows after it.
+        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
+        var explorer = f.Shell.TestExplorer;
+        await ShellFixture.PumpUntil(() => explorer.IsViewShown && explorer.Rows.Count > 0, seconds: 60);
+        explorer.Reveal(node.Key);
+        Assert.Equal(node.Key, explorer.Selected?.Group.Node?.Key);
+        Assert.True(explorer.IsDetailsCut);
+        Assert.InRange(explorer.DetailsOutput!.Length, 1, TestExplorerViewModel.DetailsTextLength + 2);
+        Assert.EndsWith(chunk, explorer.DetailsOutput, StringComparison.Ordinal);
+        Assert.InRange(explorer.DetailsMessage!.Length, 1, TestExplorerViewModel.DetailsTextLength + 2);
+        explorer.ShowFullOutputCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Uri.StartsWith("codalus-test-result:", StringComparison.Ordinal) == true);
+        var text = f.Shell.ActiveEditor!.Model.Text.Text;
+        Assert.Contains(new string('e', 100_000), text, StringComparison.Ordinal);
+        Assert.EndsWith(output + Environment.NewLine, text, StringComparison.Ordinal);
+        Assert.True(f.Shell.ActiveEditor.Model.IsReadOnly);
+    }
+
+    [AvaloniaFact]
     public async Task Terminal_find_looks_through_a_long_scrollback_a_slice_at_a_time()
     {
         // Find walked the whole scrollback at once, on the UI thread and holding the terminal: up to 1,000,000 rows, seconds

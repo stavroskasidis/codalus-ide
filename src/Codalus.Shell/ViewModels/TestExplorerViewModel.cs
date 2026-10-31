@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Threading;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Testing;
 
 namespace Codalus.Shell.ViewModels;
@@ -193,6 +194,7 @@ public sealed class TestExplorerViewModel : ObservableObject
                 _ = shell.OpenFileAsync(file, preview: false, new LanguageServices.Protocol.Position(Math.Max(0, frame.Line - 1), 0));
             }
         });
+        ShowFullOutputCommand = new RelayCommand(ShowFullOutput);
         Refresh();
     }
 
@@ -364,6 +366,9 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     public RelayCommand OpenFrameCommand { get; }
 
+    /// <summary>Opens the selected test's whole result in a read-only editor tab (the details pane shows part of a long one).</summary>
+    public RelayCommand ShowFullOutputCommand { get; }
+
     public TestRowViewModel? Selected
     {
         get => _selected;
@@ -407,6 +412,18 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     public bool HasOutput => !string.IsNullOrEmpty(DetailsOutput);
 
+    /// <summary>
+    /// The most of a test's output the details pane shows, its end; and of a message, an expected or an actual value, its
+    /// start (M56: a test's megabytes of output were laid out whole in the pane, at each selection and each resize).
+    /// </summary>
+    internal const int DetailsTextLength = 32 * 1024;
+
+    /// <summary>Whether the pane shows only part of the result's text: Show Full Output opens all of it.</summary>
+    public bool IsDetailsCut { get; private set; }
+
+    private string? _outputSource; // the output DetailsOutput was cut from: cut once per result, not at each refresh
+    private string? _outputShown;
+
     public IReadOnlyList<HistoryRow> DetailsHistory { get; private set; } = [];
 
     public bool HasHistory => DetailsHistory.Count > 1;
@@ -425,6 +442,7 @@ public sealed class TestExplorerViewModel : ObservableObject
             DetailsMessage = DetailsExpected = DetailsActual = DetailsOutput = DetailsSource = null;
             DetailsFrames = [];
             DetailsHistory = [];
+            IsDetailsCut = false;
         }
         else
         {
@@ -436,11 +454,19 @@ public sealed class TestExplorerViewModel : ObservableObject
             DetailsIcon = TestRowViewModel.Icons(outcome);
             DetailsStyle = new OutcomeStyle(outcome);
             var message = result is { Messages.Count: > 0 } ? result.Messages[0] : null;
-            DetailsMessage = message?.Message is { Length: > 0 } text ? text : node.Error;
-            DetailsExpected = message?.Expected;
-            DetailsActual = message?.Actual;
+            var fullMessage = message?.Message is { Length: > 0 } text ? text : node.Error;
+            DetailsMessage = Head(fullMessage);
+            DetailsExpected = Head(message?.Expected);
+            DetailsActual = Head(message?.Actual);
             DetailsFrames = [.. StackTraces.Parse(message?.StackTrace).Select(f => new StackFrameRow(f.Text.Trim(), f.File, f.Line))];
-            DetailsOutput = result?.Output;
+            if (!ReferenceEquals(result?.Output, _outputSource))
+            {
+                _outputSource = result?.Output;
+                _outputShown = Tail(_outputSource);
+            }
+
+            DetailsOutput = _outputShown;
+            IsDetailsCut = Longer(fullMessage) || Longer(message?.Expected) || Longer(message?.Actual) || Longer(result?.Output);
             DetailsSource = node.Uri is { } uri && LanguageServices.Protocol.DocumentUris.ToPath(uri) is { } path
                 ? $"{Path.GetFileName(path)}:{(node.Range?.StartLine ?? 0) + 1}"
                 : null;
@@ -456,11 +482,89 @@ public sealed class TestExplorerViewModel : ObservableObject
         {
             nameof(HasDetails), nameof(DetailsTitle), nameof(DetailsOutcome), nameof(DetailsIcon), nameof(DetailsStyle), nameof(DetailsMessage), nameof(HasMessage),
             nameof(DetailsExpected), nameof(DetailsActual), nameof(HasExpected), nameof(DetailsFrames), nameof(HasFrames), nameof(DetailsOutput), nameof(HasOutput),
-            nameof(DetailsHistory), nameof(HasHistory), nameof(DetailsSource), nameof(HasSource),
+            nameof(DetailsHistory), nameof(HasHistory), nameof(DetailsSource), nameof(HasSource), nameof(IsDetailsCut),
         })
         {
             OnPropertyChanged(name);
         }
+    }
+
+    private static bool Longer(string? text) => text?.Length > DetailsTextLength;
+
+    /// <summary>The start of a long text, to a line's end where one is near: the rest is in Show Full Output.</summary>
+    private static string? Head(string? text)
+    {
+        if (!Longer(text))
+        {
+            return text;
+        }
+
+        var end = text!.LastIndexOf('\n', DetailsTextLength - 1, 4096) is var newline and >= 0 ? newline : DetailsTextLength;
+        if (char.IsHighSurrogate(text[end - 1]))
+        {
+            end--;
+        }
+
+        return text[..end] + "\n…";
+    }
+
+    /// <summary>The end of a long text, from a line's start where one is near.</summary>
+    private static string? Tail(string? text)
+    {
+        if (!Longer(text))
+        {
+            return text;
+        }
+
+        var start = text!.Length - DetailsTextLength;
+        start = text.IndexOf('\n', start, 4096) is var newline and >= 0 ? newline + 1 : start;
+        if (char.IsLowSurrogate(text[start]))
+        {
+            start++;
+        }
+
+        return "…\n" + text[start..];
+    }
+
+    private void ShowFullOutput()
+    {
+        if (_selected?.Group.Node is { } selected && _shell.Tests.Find(selected.Key) is { IsLeaf: true, Result: { } result } node)
+        {
+            _shell.OpenTestDetails(node.FullLabel, DetailsText(node, result));
+        }
+    }
+
+    /// <summary>A result as text: the test, its outcome, its messages (expected and actual values, stack traces) and its output.</summary>
+    internal static string DetailsText(TestNode node, TestResult result)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine(node.FullLabel);
+        text.AppendLine(OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + Format(d) : string.Empty));
+        foreach (var message in result.Messages)
+        {
+            text.AppendLine(message.Message);
+            if (message.Expected is { } expected)
+            {
+                text.Append(Localizer.Get("testExplorer.expected", "Expected  ").Trim()).Append(": ").AppendLine(expected);
+            }
+
+            if (message.Actual is { } actual)
+            {
+                text.Append(Localizer.Get("testExplorer.actual", "Actual  ").Trim()).Append(": ").AppendLine(actual);
+            }
+
+            if (message.StackTrace is { } stack)
+            {
+                text.AppendLine(stack);
+            }
+        }
+
+        if (result.Output.Length > 0)
+        {
+            text.AppendLine().AppendLine(result.Output);
+        }
+
+        return text.ToString();
     }
 
     /// <summary>Opens the selected test's source (double-click, Enter).</summary>

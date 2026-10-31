@@ -199,7 +199,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         menu.Items.Add(Item("Copy Name", () => Copy(row.Group.Node?.FullLabel ?? row.Label), "copy"));
         if (row.Group.Node is { IsLeaf: true, Result: { } result })
         {
-            menu.Items.Add(Item("Copy Details", () => Copy(Describe(row.Group.Node, result)), "copy"));
+            menu.Items.Add(Item("Copy Details", () => Copy(TestExplorerViewModel.DetailsText(row.Group.Node, result)), "copy"));
             if (shell.Ai.IsEnabled && result.Outcome is not TestOutcome.Passed)
             {
                 menu.Items.Add(Item("Ask AI Why It Fails", () => _ = shell.ExplainTestWithAiAsync(), "sparkle"));
@@ -216,28 +216,6 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         {
             _ = Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, text);
         }
-    }
-
-    private static string Describe(TestNode node, TestResult result)
-    {
-        var text = new System.Text.StringBuilder();
-        text.AppendLine(node.FullLabel);
-        text.AppendLine(TestExplorerViewModel.OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + TestExplorerViewModel.Format(d) : string.Empty));
-        foreach (var message in result.Messages)
-        {
-            text.AppendLine(message.Message);
-            if (message.StackTrace is { } stack)
-            {
-                text.AppendLine(stack);
-            }
-        }
-
-        if (result.Output.Length > 0)
-        {
-            text.AppendLine().AppendLine(result.Output);
-        }
-
-        return text.ToString();
     }
 
     private void OnOpenFrame(object? sender, RoutedEventArgs e)

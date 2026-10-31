@@ -80,6 +80,21 @@ public sealed class TestService : ITestSink, IDisposable
     /// <summary>A run finished (results are in <see cref="TestRunRecord.Results"/>).</summary>
     public event EventHandler<TestRunRecord>? RunFinished;
 
+    /// <summary>A controller started a run (raised on its thread, before the run's output).</summary>
+    public event EventHandler<TestRunRecord>? RunBegan;
+
+    /// <summary>
+    /// Output a run reported, as it comes, on the controller's thread and in order: the Output window's Tests channel
+    /// follows it (M56: the whole run's output, read twice at its end on the UI thread, froze the window).
+    /// </summary>
+    public event EventHandler<TestRunOutput>? RunOutput;
+
+    /// <summary>
+    /// The most of a test's output its result keeps: the end of it (M56: a test's whole output stayed in memory, and in the
+    /// Test Explorer's details).
+    /// </summary>
+    public const int MaxTestOutputLength = 1024 * 1024;
+
     /// <summary>The latest coverage (ADR 0011), fed by <see cref="RunCoverage"/>.</summary>
     public CoverageStore Coverage { get; } = new();
 
@@ -459,14 +474,18 @@ public sealed class TestService : ITestSink, IDisposable
 
     public void RunStarted(TestRunStartedParams run)
     {
+        TestRunRecord record;
         lock (_gate)
         {
-            _runs[run.RunId] = new TestRunRecord(run.RunId, run.ControllerId, run.Name, run.RequestId, ParseKind(run.ProfileKind));
+            _runs[run.RunId] = record = new TestRunRecord(run.RunId, run.ControllerId, run.Name, run.RequestId, ParseKind(run.ProfileKind)) { StartedAlone = _runs.Count == 0 };
         }
+
+        RunBegan?.Invoke(this, record);
     }
 
     public void RunUpdated(TestRunUpdateParams update)
     {
+        TestRunOutput? reported = null;
         lock (_gate)
         {
             if (!_runs.TryGetValue(update.RunId, out var run) || !_controllers.TryGetValue(run.ControllerId, out var controller))
@@ -483,16 +502,27 @@ public sealed class TestService : ITestSink, IDisposable
                     if (run.Results.TryGetValue(key, out var finished) && controller.Index.TryGetValue(itemId, out var finishedNode))
                     {
                         // Output reported after the test's result belongs to that result.
-                        var updated = finished with { Output = finished.Output + output.Text };
+                        var updated = finished with { Output = KeptOutput(finished.Output + output.Text) };
                         run.Results[key] = updated;
                         finishedNode.Result = updated;
                         ReplaceHistory(key, finished, updated);
                     }
                     else
                     {
-                        _pendingOutput[key] = _pendingOutput.GetValueOrDefault(key) + output.Text;
+                        // Gathered in a builder: a string concatenated per chunk copied all of it each time, under this lock.
+                        if (!_pendingOutput.TryGetValue(key, out var pending))
+                        {
+                            _pendingOutput[key] = pending = new PendingOutput();
+                        }
+
+                        pending.Append(output.Text);
                     }
                 }
+            }
+
+            if (update.Output.Length > 0)
+            {
+                reported = new TestRunOutput(run, update.Output.Length == 1 ? update.Output[0].Text : string.Concat(update.Output.Select(o => o.Text)));
             }
 
             foreach (var attachment in update.Attachments)
@@ -523,7 +553,7 @@ public sealed class TestService : ITestSink, IDisposable
                     outcome,
                     state.DurationMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null,
                     state.Messages ?? [],
-                    testOutput ?? string.Empty,
+                    testOutput?.ToString() ?? string.Empty,
                     DateTimeOffset.Now,
                     run.RunId);
                 node.Pending = TestOutcome.None;
@@ -533,10 +563,48 @@ public sealed class TestService : ITestSink, IDisposable
             }
         }
 
+        if (reported is not null)
+        {
+            RunOutput?.Invoke(this, reported);
+        }
+
         ScheduleChanged();
     }
 
-    private readonly Dictionary<string, string> _pendingOutput = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PendingOutput> _pendingOutput = new(StringComparer.Ordinal);
+
+    /// <summary>The end of a test's output, at most <see cref="MaxTestOutputLength"/> characters, saying how much went before.</summary>
+    private static string KeptOutput(string output) =>
+        output.Length <= MaxTestOutputLength ? output : NotKept(output.Length - MaxTestOutputLength) + output[^MaxTestOutputLength..];
+
+    private static string NotKept(long characters) =>
+        Localization.Localizer.Format("msg.testing.earlierOutputNotKept", "[{0} earlier characters of output not kept]", characters.ToString("N0", CultureInfo.CurrentCulture)) + "\n";
+
+    /// <summary>A test's output while it runs: its last <see cref="MaxTestOutputLength"/> characters, and how many went before.</summary>
+    private sealed class PendingOutput
+    {
+        private readonly System.Text.StringBuilder _text = new();
+        private long _dropped;
+
+        public void Append(string text)
+        {
+            _text.Append(text);
+
+            // Dropped in large steps: a little at each chunk moved the whole megabyte each time.
+            if (_text.Length > 2 * MaxTestOutputLength)
+            {
+                var drop = _text.Length - MaxTestOutputLength;
+                _text.Remove(0, drop);
+                _dropped += drop;
+            }
+        }
+
+        public override string ToString()
+        {
+            var drop = Math.Max(0, _text.Length - MaxTestOutputLength);
+            return drop + _dropped == 0 ? _text.ToString() : NotKept(drop + _dropped) + _text.ToString(drop, _text.Length - drop);
+        }
+    }
 
     private void ReplaceHistory(string key, TestResult old, TestResult updated)
     {
@@ -804,22 +872,23 @@ public sealed class TestService : ITestSink, IDisposable
     // ------------------------------------------------------------------ imported results
 
     /// <summary>
-    /// Applies results from a file (TRX) to the tests they match by <paramref name="match"/>; results for unknown tests
-    /// are returned. The import becomes a finished run named <paramref name="name"/>.
+    /// Applies results from a file (TRX) to the tests they name (<see cref="TestNames.Matches"/>, the first in tree order),
+    /// looked up by name; results for unknown tests are returned. The import becomes a finished run named
+    /// <paramref name="name"/>.
     /// </summary>
-    public IReadOnlyList<ImportedResult> ApplyImported(string name, IReadOnlyList<ImportedResult> results, Func<TestNode, ImportedResult, bool> match)
+    public IReadOnlyList<ImportedResult> ApplyImported(string name, IReadOnlyList<ImportedResult> results)
     {
         var unmatched = new List<ImportedResult>();
         TestRunRecord run;
         lock (_gate)
         {
             run = new TestRunRecord("import:" + Guid.NewGuid().ToString("N"), string.Empty, name, null, TestRunKind.Run) { Ended = DateTimeOffset.Now };
-            var leaves = _controllers.Values.SelectMany(c => c.Roots).SelectMany(r => r.Leaves()).ToList();
+            var index = TestNames.Index(_controllers.Values.SelectMany(c => c.Roots).SelectMany(r => r.Leaves()));
             var stamp = ++_stamp;
             var touched = new HashSet<TestNode>();
             foreach (var imported in results)
             {
-                var node = leaves.FirstOrDefault(n => match(n, imported));
+                var node = index.Matches(imported.FullyQualifiedName, imported.DisplayName).FirstOrDefault();
                 if (node is null)
                 {
                     unmatched.Add(imported);

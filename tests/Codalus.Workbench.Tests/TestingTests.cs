@@ -388,7 +388,7 @@ public sealed class TestingTests : IDisposable
         using var other = new TestService();
         other.ControllerCreated(new TestControllerParams("x", Controller, ".NET"), _connection);
         other.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P", null, "Tests.Unit"), Item("P|n:Tests", "P", "Tests"), Item("P|c:Tests.Calc", "P|n:Tests", "Calc"), Item("P|m:Fails", "P|c:Tests.Calc", "Fails"), Item("P|m:Divides", "P|c:Tests.Calc", "Divides"), Item("P|t:1", "P|m:Divides", "Divides(a: 6, b: 3)"), Item("P|t:2", "P|m:Divides", "Divides(a: 9, b: 3)")], []));
-        var unmatched = other.ApplyImported("ci.trx", imported, (leaf, result) => TestNames.Matches(leaf, result.FullyQualifiedName, result.DisplayName));
+        var unmatched = other.ApplyImported("ci.trx", imported);
         Assert.Equal(2, unmatched.Count); // Adds and Waits are not in the fresh tree
         Assert.Equal(TestOutcome.Failed, other.Find(TestNode.KeyOf(Controller, "P|m:Fails"))!.Outcome);
         Assert.Equal(TestOutcome.Passed, other.Find(TestNode.KeyOf(Controller, "P|t:1"))!.Outcome);
@@ -455,6 +455,70 @@ public sealed class TestingTests : IDisposable
         Assert.Equal(("C:\\src\\Calc.cs", 21), (frames[1].File, frames[1].Line));
         Assert.Null(frames[2].File);
         Assert.Equal(frames[1], StackTraces.FirstUserFrame(frames, f => f.StartsWith("C:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Imported_results_and_playlists_are_looked_up_by_name_not_matched_against_every_test()
+    {
+        // M56: each TRX result (and each playlist entry) went through every test, building each test's name again: 5,000
+        // results against 5,000 tests froze the window for seconds. 20,000 of each take moments by name.
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", Controller, ".NET"), _connection);
+        var items = new List<TestItemDto> { Item("P", null, "Big.Tests"), Item("P|n", "P", "Big") };
+        for (var c = 0; c < 200; c++)
+        {
+            items.Add(Item($"P|c{c}", "P|n", $"Class{c}"));
+            for (var m = 0; m < 100; m++)
+            {
+                items.Add(Item($"P|c{c}|m{m}", $"P|c{c}", $"Test{m}"));
+            }
+        }
+
+        service.ItemsUpdated(new TestItemsUpdateParams(Controller, [.. items], []));
+        var results = Enumerable.Range(0, 20_000)
+            .Select(i => new ImportedResult($"Big.Class{i / 100}.Test{i % 100}", $"Test{i % 100}", new Codalus.Workbench.Testing.TestResult(i % 7 == 0 ? TestOutcome.Failed : TestOutcome.Passed, null, [], string.Empty, DateTimeOffset.Now, "import")))
+            .Append(new ImportedResult("Big.Missing.Test", "Test", new Codalus.Workbench.Testing.TestResult(TestOutcome.Passed, null, [], string.Empty, DateTimeOffset.Now, "import")))
+            .ToList();
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var unmatched = service.ApplyImported("big.trx", results);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"{watch.Elapsed} for 20,000 results"); // minutes before
+        Assert.Equal("Big.Missing.Test", Assert.Single(unmatched).FullyQualifiedName);
+        Assert.Equal(TestOutcome.Failed, service.Find(TestNode.KeyOf(Controller, "P|c0|m0"))!.Outcome);
+        Assert.Equal(TestOutcome.Passed, service.Find(TestNode.KeyOf(Controller, "P|c199|m98"))!.Outcome);
+
+        var playlist = XDocument.Parse($"<Playlist Version=\"1.0\">{string.Concat(Enumerable.Range(0, 20_000).Select(i => $"<Add Test=\"Big.Class{i / 100}.Test{i % 100}\" />"))}</Playlist>");
+        watch.Restart();
+        var keys = service.Read(roots => Playlists.ImportVisualStudio(playlist, roots));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"{watch.Elapsed} for 20,000 playlist entries");
+        Assert.Equal(20_000, keys.Count);
+    }
+
+    [Fact]
+    public void A_tests_output_keeps_its_last_megabyte_and_the_runs_output_is_reported_as_it_comes()
+    {
+        // M56: a test's output and a run's were kept whole (and concatenated per chunk under the service's lock); the run's
+        // was read whole at its end, on the UI thread.
+        var reported = new List<string>();
+        _service.RunOutput += (_, output) => reported.Add(output.Text);
+        _service.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
+        var chunk = new string('o', 9_999) + "\n";
+        for (var i = 0; i < 300; i++)
+        {
+            _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", chunk)], []));
+        }
+
+        _service.RunUpdated(new TestRunUpdateParams("r1", [new TestStateDto("P|m:Adds", TestStates.Passed, 1, null)], [], []));
+        _service.RunEnded("r1");
+
+        var output = Node("P|m:Adds").Result!.Output;
+        Assert.StartsWith("[", output, StringComparison.Ordinal); // how much went before
+        Assert.EndsWith(chunk, output, StringComparison.Ordinal);
+        Assert.Equal(TestService.MaxTestOutputLength, output.Length - output.IndexOf('\n', StringComparison.Ordinal) - 1);
+        Assert.Equal(300, reported.Count);
+        Assert.All(reported, text => Assert.Equal(chunk, text));
+        var run = Assert.Single(_service.History(Node("P|m:Adds").Key)).RunId;
+        Assert.Equal("r1", run);
     }
 
     private sealed class FakeConnection : ITestControllerConnection

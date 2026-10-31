@@ -128,6 +128,9 @@
             <TextBlock Classes="muted" Text="{l:T testExplorer.output}" />
             <SelectableTextBlock Text="{Binding DetailsOutput}" TextWrapping="Wrap" FontSize="12" />
           </StackPanel>
+          <!-- M56: the pane shows the end of a long output and the start of a long message; the rest opens in an editor. -->
+          <Button Classes="link" Content="{l:T testExplorer.showFullOutput}" IsVisible="{Binding IsDetailsCut}" Command="{Binding ShowFullOutputCommand}"
+                  AutomationProperties.Name="{l:T testExplorer.openTheWholeResultInAnEditor}" />
           <StackPanel IsVisible="{Binding HasHistory}" Spacing="1">
             <TextBlock Classes="muted" Text="{l:T testExplorer.history}" />
             <ItemsControl ItemsSource="{Binding DetailsHistory}">

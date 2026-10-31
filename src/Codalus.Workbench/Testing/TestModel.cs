@@ -1,4 +1,5 @@
 using Codalus.Plugins.Protocol;
+using Codalus.Workbench.Output;
 
 namespace Codalus.Workbench.Testing;
 
@@ -216,6 +217,9 @@ public enum TestRunKind
     Coverage,
 }
 
+/// <summary>Output a run reported (<see cref="TestService.RunOutput"/>).</summary>
+public sealed record TestRunOutput(TestRunRecord Run, string Text);
+
 /// <summary>One test run, as the controller reported it.</summary>
 public sealed class TestRunRecord
 {
@@ -246,9 +250,13 @@ public sealed class TestRunRecord
 
     public DateTimeOffset? Ended { get; internal set; }
 
+    /// <summary>Whether no other run was in progress when this one started (its output starts the Tests channel afresh).</summary>
+    public bool StartedAlone { get; internal init; }
+
     /// <summary>Final results by node key.</summary>
     public Dictionary<string, TestResult> Results { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>What the run wrote: the end of it, at most an output channel's <see cref="OutputChannel.MaxLength"/>.</summary>
     public string Output
     {
         get
@@ -275,7 +283,12 @@ public sealed class TestRunRecord
     {
         lock (_output)
         {
+            // The end of it, as an output channel keeps (M56: a verbose run kept everything it wrote while the record lived).
             _output.Append(text);
+            if (_output.Length > OutputChannel.MaxLength)
+            {
+                _output.Remove(0, _output.Length - (OutputChannel.MaxLength * 3 / 4));
+            }
         }
     }
 
