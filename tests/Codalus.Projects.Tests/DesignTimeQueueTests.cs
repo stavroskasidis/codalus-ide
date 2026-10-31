@@ -120,4 +120,32 @@ public sealed class DesignTimeQueueTests : IAsyncLifetime
         Assert.True(_queue.Add(interrupted));
         await WaitUntilAsync(() => Built("A") && Built("B"), "The paused projects never built after they were queued again.");
     }
+
+    [Fact]
+    public async Task A_project_queued_while_pausing_is_built()
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _build = async (batch, cancellationToken) =>
+        {
+            if (batch is ["A"])
+            {
+                started.TrySetResult();
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            }
+        };
+        _queue.Add(["A"]);
+        await started.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        // A framework switch queues X while a reload pauses the queue (the old pause cleared it after taking what it
+        // returned); the reload then queues what the pause returned again, as SolutionSession's does.
+        _queue.Paused = () =>
+        {
+            _build = (_, _) => Task.CompletedTask;
+            Assert.True(_queue.Add(["X"]));
+        };
+        var interrupted = await _queue.PauseAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Contains("A", interrupted);
+        _queue.Add(interrupted);
+        await WaitUntilAsync(() => Built("A") && Built("X"), "X was queued while the queue paused, and never built.");
+    }
 }

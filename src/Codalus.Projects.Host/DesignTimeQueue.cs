@@ -51,17 +51,25 @@ internal sealed class DesignTimeQueue(IEqualityComparer<string> comparer, Func<s
         }
     }
 
+    /// <summary>For tests: runs in <see cref="PauseAsync"/> once it has cancelled, before it waits for the worker.</summary>
+    internal Action? Paused { get; set; }
+
     /// <summary>Cancels the running batch and forgets the queued projects.</summary>
     public void Cancel()
     {
         lock (_gate)
         {
-            _pending.Clear();
-            var previous = _batch;
-            _batch = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
-            previous.Cancel();
-            previous.Dispose();
+            CancelLocked();
         }
+    }
+
+    private void CancelLocked()
+    {
+        _pending.Clear();
+        var previous = _batch;
+        _batch = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        previous.Cancel();
+        previous.Dispose();
     }
 
     /// <summary>Cancels the running batch and the queued projects, waits for the worker to end, and returns their projects, to queue them again later.</summary>
@@ -71,11 +79,14 @@ internal sealed class DesignTimeQueue(IEqualityComparer<string> comparer, Func<s
         Task worker;
         lock (_gate)
         {
+            // Taken and cleared at once: a project queued between the two (a framework switch while a reload paused) was
+            // cleared without being returned, and never built. One queued after goes to the next worker.
             interrupted = [.. _pending, .. _inFlight];
             worker = _worker;
+            CancelLocked();
         }
 
-        Cancel();
+        Paused?.Invoke();
         try
         {
             await worker.ConfigureAwait(false);

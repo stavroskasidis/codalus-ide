@@ -826,6 +826,101 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         await WaitUntilAsync(() => Defines(project, "AFTER"));
     }
 
+    /// <summary>
+    /// An import that changed unseen into XML MSBuild can't read: its reload threw, it stayed in MSBuild's cache as read, and
+    /// every evaluation of its projects threw before evaluating anything (the callers' filters let it go), so the project
+    /// kept its old state, and a restore's reload of the files after it in the list never ran.
+    /// </summary>
+    [Fact]
+    public async Task An_import_changed_unseen_into_bad_XML_fails_its_project_with_the_error_until_it_is_fixed()
+    {
+        var props = Path.Combine(_root, "Directory.Build.props"); // above the solution's folder: not watched
+        void Define(string symbol) =>
+            File.WriteAllText(props, $"<Project><PropertyGroup><DefineConstants>$(DefineConstants);{symbol}</DefineConstants></PropertyGroup></Project>");
+        Define("BEFORE");
+        var folder = Path.Combine(_root, "Malformed");
+        var project = Path.Combine(folder, "Lib", "Lib.csproj");
+        Directory.CreateDirectory(Path.GetDirectoryName(project)!);
+        File.WriteAllText(project, """<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>""");
+        File.WriteAllText(Path.Combine(folder, "Lib", "Class1.cs"), "public class Class1 { }");
+        var slnx = Path.Combine(folder, "Malformed.slnx");
+        File.WriteAllText(slnx, """<Solution><Project Path="Lib/Lib.csproj" /></Solution>""");
+        bool Compiles(string file) => _service.CompilerInputs.TryGetValue(project, out var i) && i.Arguments.Any(a => a.EndsWith(file, StringComparison.Ordinal));
+        bool Defines(string symbol) => _service.CompilerInputs.TryGetValue(project, out var i)
+                                       && i.Arguments.Any(a => a.StartsWith("/define:", StringComparison.Ordinal) && a["/define:".Length..].Split(';').Contains(symbol));
+        await _service.OpenAsync(slnx, trusted: true, restore: false, Timeout());
+        await WaitUntilAsync(() => Compiles("Class1.cs") && Defines("BEFORE"));
+
+        // Half written where the watcher doesn't look; then a change it reports evaluates the project again: its
+        // design-time build fails with the import's error, rather than keeping it as it was.
+        var written = File.GetLastWriteTimeUtc(props);
+        File.WriteAllText(props, "<Project><PropertyGroup>");
+        File.SetLastWriteTimeUtc(props, written.AddSeconds(2)); // a date of its own, however coarse the file system's
+        File.WriteAllText(Path.Combine(folder, "Lib", "Class2.cs"), "public class Class2 { }");
+        await WaitUntilAsync(() => _service.CompilerInputs.TryGetValue(project, out var i) && i.State == CompilerInputStates.Failed);
+        Assert.Contains(props, _service.CompilerInputs[project].Error, StringComparison.Ordinal);
+
+        // Fixed, the next evaluation reads it again.
+        Define("AFTER");
+        File.SetLastWriteTimeUtc(props, written.AddSeconds(4));
+        File.WriteAllText(Path.Combine(folder, "Lib", "Class3.cs"), "public class Class3 { }");
+        await WaitUntilAsync(() => Compiles("Class2.cs") && Compiles("Class3.cs") && Defines("AFTER"));
+    }
+
+    /// <summary>
+    /// An import a project's evaluation took from MSBuild's cache as it was before it changed unseen: one the project didn't
+    /// import before (so the check for its files changed since read didn't know of it), read before by another project. Its
+    /// result came from the old content and was cached under the key of the new file, whose date the fingerprint stamped:
+    /// the next open, reading the new file, was served the old result.
+    /// </summary>
+    [Fact]
+    public async Task A_result_built_from_an_import_cached_before_it_changed_is_not_served_for_the_new_file()
+    {
+        var shared = Path.Combine(_root, "Shared.props"); // above the solution's folder: not watched
+        void Define(string symbol) =>
+            File.WriteAllText(shared, $"<Project><PropertyGroup><DefineConstants>$(DefineConstants);{symbol}</DefineConstants></PropertyGroup></Project>");
+        string Csproj(string import) =>
+            $"""<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>{import}</Project>""";
+        Define("BEFORE");
+        var folder = Path.Combine(_root, "Shared");
+        var a = Path.Combine(folder, "A", "A.csproj");
+        var b = Path.Combine(folder, "B", "B.csproj");
+        foreach (var path in new[] { a, b })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(Path.Combine(Path.GetDirectoryName(path)!, "Class1.cs"), "class Class1 { }");
+        }
+
+        File.WriteAllText(a, Csproj($"""<Import Project="{shared}" />"""));
+        File.WriteAllText(b, Csproj(""));
+        var slnx = Path.Combine(folder, "Shared.slnx");
+        File.WriteAllText(slnx, """<Solution><Project Path="A/A.csproj" /><Project Path="B/B.csproj" /></Solution>""");
+        bool Defines(string project, string symbol) => _service.CompilerInputs.TryGetValue(project, out var i)
+                                                       && i.Arguments.Any(x => x.StartsWith("/define:", StringComparison.Ordinal) && x["/define:".Length..].Split(';').Contains(symbol));
+        var log = new List<string>();
+        _service.Log += (_, line) => { lock (log) { log.Add(line); } };
+        await _service.OpenAsync(slnx, trusted: true, restore: false, Timeout());
+        await WaitUntilAsync(() => Defines(a, "BEFORE") && _service.CompilerInputs.ContainsKey(b) && _service.DesignTimeProgress is { Completed: true });
+
+        // Changed where the watcher doesn't look; then B imports it (B's project file is watched): its evaluation takes it
+        // from the cache as A's read it, and so does its design-time build.
+        var written = File.GetLastWriteTimeUtc(shared);
+        Define("AFTER");
+        File.SetLastWriteTimeUtc(shared, written.AddSeconds(2)); // a date of its own, however coarse the file system's
+        File.WriteAllText(b, Csproj($"""<Import Project="{shared}" />"""));
+        await WaitUntilAsync(() => Defines(b, "BEFORE") && _service.DesignTimeProgress is { Completed: true });
+        lock (log)
+        {
+            Assert.Contains(log, l => l.Contains("with imports MSBuild had cached before they changed on disk", StringComparison.Ordinal) && l.Contains(shared, StringComparison.Ordinal));
+        }
+
+        // The next open reads the new file: B's result from the old one isn't served for it.
+        await _service.OpenAsync(slnx, trusted: true, restore: false, Timeout());
+        await WaitUntilAsync(() => _service.DesignTimeProgress is { Completed: true } && _service.CompilerInputs.ContainsKey(a) && _service.CompilerInputs.ContainsKey(b));
+        Assert.True(Defines(a, "AFTER"));
+        Assert.True(Defines(b, "AFTER"), "B was served its result built from the import as it was before it changed.");
+    }
+
     [Fact]
     public async Task Untrusted_solutions_get_no_design_time_builds()
     {

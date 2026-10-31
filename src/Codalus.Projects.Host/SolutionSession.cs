@@ -335,7 +335,23 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 {
                     foreach (var file in files)
                     {
-                        ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                        try
+                        {
+                            // (TryOpen reads the file itself when the cache holds it without its formatting, as an evaluation reads it.)
+                            ProjectRootElement.TryOpen(file, _collection, preserveFormatting: true)?.Reload(throwIfUnsavedChanges: false, preserveFormatting: true);
+                        }
+                        catch (Microsoft.Build.Exceptions.InvalidProjectFileException)
+                        {
+                            // Not XML MSBuild can read (being edited): out of the cache, so the evaluation reads the file (an
+                            // import it skips, and the design-time build fails with its error). Kept, it stayed as read, older
+                            // than the disk: every evaluation of a project importing it tried again and threw before evaluating
+                            // anything, and so did the files after it here. (One a loaded project still holds stays as read,
+                            // which the fingerprint says.)
+                            if (ProjectRootElement.TryOpen(file, _collection) is { } cached)
+                            {
+                                _collection.TryUnloadProject(cached);
+                            }
+                        }
                     }
                 }
             }
