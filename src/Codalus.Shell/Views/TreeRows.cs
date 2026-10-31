@@ -14,8 +14,8 @@ namespace Codalus.Shell.Views;
 /// activates it; and in the tunnel (a list takes Enter itself, to select, before a handler added to it hears it) Left and
 /// Right collapse and expand a folder or go to its parent, with Ctrl every folder under it too, as Ctrl+Enter does; + and
 /// - expand and collapse, * and / everything under it; Enter toggles a folder or activates the row. A row's hover button
-/// that has the focus (it keeps it after a click) takes its own keys and clicks. The rows stay <see cref="ListBoxItem"/>s:
-/// a tree item's automation peer for them hooks in at their container.
+/// that has the focus (it keeps it after a click) takes its own keys and clicks. The list is a <see cref="TreeRowsList"/>:
+/// a screen reader's Expand and Collapse on a row (its tree item's peer) do what Left and Right do.
 /// </summary>
 internal static class TreeRows
 {
@@ -23,8 +23,9 @@ internal static class TreeRows
     /// Gives <paramref name="list"/> a tree's mouse and keys over the rows of <paramref name="owner"/>; <paramref name="activate"/>
     /// is Enter and the double-click on a row that isn't a folder (true when it did something).
     /// </summary>
-    public static void Attach(ListBox list, Func<ITreeRowsOwner?> owner, Func<ITreeRow, bool>? activate = null)
+    public static void Attach(TreeRowsList list, Func<ITreeRowsOwner?> owner, Func<ITreeRow, bool>? activate = null)
     {
+        list.ExpandRow = (row, expanded) => owner()?.SetExpanded(row, expanded);
         list.Tapped += (_, e) =>
         {
             if (IsChevron(e.Source) && RowAt(e.Source) is { } row && owner() is { } tree)

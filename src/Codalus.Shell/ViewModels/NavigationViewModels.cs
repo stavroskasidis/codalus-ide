@@ -10,7 +10,7 @@ namespace Codalus.Shell.ViewModels;
 /// children (or, in a filtered list, a match with its containing symbol). Its icon and kind names serve the navigation bar
 /// and the other symbol lists too.
 /// </summary>
-public sealed class SymbolNodeViewModel : ObservableObject
+public sealed class SymbolNodeViewModel : ObservableObject, ITreeRow
 {
     private DocumentSymbol _symbol;
     private bool _hasChildren;
@@ -49,7 +49,6 @@ public sealed class SymbolNodeViewModel : ObservableObject
             if (SetField(ref _isExpanded, value))
             {
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
@@ -65,7 +64,8 @@ public sealed class SymbolNodeViewModel : ObservableObject
 
     public string Icon => IconFor(_symbol.Kind);
 
-    public string AccessibleName => $"{KindName(_symbol.Kind)} {Name}" + (_hasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty);
+    /// <summary>Its kind and name: a screen reader hears its expansion, level and place from its tree item (M57).</summary>
+    public string AccessibleName => $"{KindName(_symbol.Kind)} {Name}";
 
     public override string ToString() => Name;
 
@@ -85,7 +85,6 @@ public sealed class SymbolNodeViewModel : ObservableObject
             _hasChildren = hasChildren;
             OnPropertyChanged(nameof(HasChildren));
             OnPropertyChanged(nameof(Chevron));
-            OnPropertyChanged(nameof(AccessibleName));
         }
     }
 

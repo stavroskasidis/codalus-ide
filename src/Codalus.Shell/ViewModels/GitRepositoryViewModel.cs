@@ -249,10 +249,8 @@ public sealed class GitRepositoryRow(GitRepositoryNode node, int depth) : Observ
     /// <summary>The tooltip: the node's name, the current branch, its tracking and its detail.</summary>
     public string Tip => _node.AccessibleName;
 
-    /// <summary>The node's name, and a folder's state: a list's row has no expander for a screen reader to read.</summary>
-    public string AccessibleName => !HasChildren ? _node.AccessibleName
-        : _node.IsExpanded ? Localizer.Format("msg.gitChanges.expandedAccessibleName", "{0}, expanded", _node.AccessibleName)
-        : Localizer.Format("msg.gitChanges.collapsedAccessibleName", "{0}, collapsed", _node.AccessibleName);
+    /// <summary>The node's name: a folder's state, level and place are its tree item's (<see cref="Views.TreeRowsList"/>, M57).</summary>
+    public string AccessibleName => _node.AccessibleName;
 
     /// <summary>Its node was expanded or collapsed (its owner shows or hides the rows under it).</summary>
     internal void ExpandedChanged()
@@ -260,7 +258,6 @@ public sealed class GitRepositoryRow(GitRepositoryNode node, int depth) : Observ
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(Chevron));
         OnPropertyChanged(nameof(Icon));
-        OnPropertyChanged(nameof(AccessibleName));
     }
 }
 

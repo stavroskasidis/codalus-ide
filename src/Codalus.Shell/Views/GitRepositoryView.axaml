@@ -15,9 +15,9 @@
       <TextBlock DockPanel.Dock="Top" Margin="8,4" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Error.Foreground}" Text="{Binding Error}" IsVisible="{Binding HasError}" />
       <!-- The tree's rows (M57): a virtualized list of the expanded nodes' rows, each indented by its level, as Git Changes'.
            Only a reveal scrolls: Avalonia's scroll to the selected row ran after every change to the rows (M56). -->
-      <ListBox x:Name="Tree" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoScrollToSelectedItem="False" Background="Transparent"
-               ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T gitRepository.branchesAndTags}">
-        <ListBox.Styles>
+      <views:TreeRowsList x:Name="Tree" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" AutoScrollToSelectedItem="False" Background="Transparent"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T gitRepository.branchesAndTags}">
+        <views:TreeRowsList.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:GitRepositoryRow">
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
@@ -28,8 +28,8 @@
           <Style Selector="TextBlock.current">
             <Setter Property="FontWeight" Value="Bold" />
           </Style>
-        </ListBox.Styles>
-        <ListBox.ItemTemplate>
+        </views:TreeRowsList.Styles>
+        <views:TreeRowsList.ItemTemplate>
           <DataTemplate x:DataType="vm:GitRepositoryRow">
             <StackPanel Orientation="Horizontal" Margin="{Binding Indent}" Background="Transparent" ToolTip.Tip="{Binding Tip}">
               <Border Classes="chevron" Width="16" Height="18" Background="Transparent" VerticalAlignment="Center">
@@ -46,8 +46,8 @@
               </StackPanel>
             </StackPanel>
           </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+        </views:TreeRowsList.ItemTemplate>
+      </views:TreeRowsList>
     </DockPanel>
 
     <GridSplitter Grid.Column="1" ResizeDirection="Columns" Background="{DynamicResource Shell.Border}" />

@@ -13,8 +13,8 @@ namespace Codalus.Shell.Views;
 
 /// <summary>
 /// The Document Outline (M12a): click or Enter moves the caret to a symbol; the caret's symbol is selected. Its rows expand
-/// and collapse as a tree view's: the chevron, Left and Right (Left on a child goes to its parent). It tells its view model
-/// whether it's shown (the rows follow the editor only then).
+/// and collapse as a tree view's: the chevron, Left and Right (Left on a child goes to its parent), and a screen reader's
+/// Expand and Collapse (a tree item's, M57). It tells its view model whether it's shown (the rows follow the editor only then).
 /// </summary>
 public sealed partial class DocumentOutlineView : UserControl, IPaneView
 {
@@ -26,6 +26,7 @@ public sealed partial class DocumentOutlineView : UserControl, IPaneView
         List.Tapped += OnTapped;
         List.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        List.ExpandRow = (row, expanded) => _model?.SetExpanded((SymbolNodeViewModel)row, expanded);
         FilterBox.AddHandler(KeyDownEvent, OnFilterKeyDown, RoutingStrategies.Tunnel);
         ShownTracker.Track(this);
     }

@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.SolutionExplorerView"
              x:DataType="vm:SolutionExplorerViewModel">
@@ -42,15 +43,15 @@
       <Button Classes="iconText" controls:ButtonIcon.Kind="folder-open" Content="{l:T solutionExplorer.openSolution}" HorizontalAlignment="Left" Command="{Binding OpenSolutionCommand}" />
     </StackPanel>
     <!-- Only reveals scroll (M56): Avalonia's scroll to the selected row ran after every change to the rows. -->
-    <ListBox x:Name="List"
-             ItemsSource="{Binding Rows}"
-             SelectedItem="{Binding Selected}"
-             AutoScrollToSelectedItem="False"
-             IsVisible="{Binding HasSolution}"
-             Background="Transparent"
-             DragDrop.AllowDrop="True"
-             AutomationProperties.Name="{l:T solutionExplorer.solutionExplorer}">
-      <ListBox.Styles>
+    <views:TreeRowsList x:Name="List"
+                        ItemsSource="{Binding Rows}"
+                        SelectedItem="{Binding Selected}"
+                        AutoScrollToSelectedItem="False"
+                        IsVisible="{Binding HasSolution}"
+                        Background="Transparent"
+                        DragDrop.AllowDrop="True"
+                        AutomationProperties.Name="{l:T solutionExplorer.solutionExplorer}">
+      <views:TreeRowsList.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:ExplorerRowViewModel">
           <Setter Property="Padding" Value="0" />
           <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
@@ -70,8 +71,8 @@
         <Style Selector="TextBlock.unloaded">
           <Setter Property="Opacity" Value="0.6" />
         </Style>
-      </ListBox.Styles>
-      <ListBox.ItemTemplate>
+      </views:TreeRowsList.Styles>
+      <views:TreeRowsList.ItemTemplate>
         <DataTemplate x:DataType="vm:ExplorerRowViewModel">
           <!-- The name trims with an ellipsis in a narrow pane (the root's was cut off, M29); the tooltip has the path (M34d). -->
           <!-- The selected row's pill at its left edge, before the indentation (D46: Classic's; transparent in the families). -->
@@ -89,8 +90,8 @@
           </DockPanel>
           </Panel>
         </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+      </views:TreeRowsList.ItemTemplate>
+    </views:TreeRowsList>
   </Grid>
   </DockPanel>
 </UserControl>

@@ -175,7 +175,7 @@ public sealed class GitTreesRowsTests
         Assert.True(Row(vm, "team19").IsExpanded);
         Assert.Equal("main", vm.Rows[2 + (20 * 101)].Text); // after the 20 folders of 100 branches
         Assert.False(Row(vm, "tags").IsExpanded);
-        Assert.EndsWith(", collapsed", Row(vm, "tags").AccessibleName, StringComparison.Ordinal);
+        Assert.Equal(Row(vm, "tags").Node.AccessibleName, Row(vm, "tags").AccessibleName); // its state is its tree item's (M57)
 
         // The current branch's history: its one commit has all 7,001 refs, of which the Branch / Tag column makes 8 chips
         // (it made one for each, 0.5 to 1 s for 320 at each selection), every name in the tooltip.
@@ -354,10 +354,21 @@ public sealed class GitTreesRowsTests
         Assert.True(Row(vm, "team02").IsExpanded);
         Click(f.Window, team02.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "team02"), clicks: 2);
         Assert.False(Row(vm, "team02").IsExpanded);
-        Assert.EndsWith(", collapsed", AutomationProperties.GetName(team02), StringComparison.Ordinal);
+        Assert.Equal(ExpandCollapseState.Collapsed, TreeRowsAutomationTests.PeerOf(tree, Row(vm, "team02")).ExpandCollapseState);
         Click(f.Window, chevron);
         Assert.True(Row(vm, "team02").IsExpanded);
-        Assert.EndsWith(", expanded", AutomationProperties.GetName(team02), StringComparison.Ordinal);
+
+        // Its tree item (M57): the third of the repository's branch folders and branches, at level 3; a screen reader's
+        // Collapse and Expand do what the chevron does.
+        var siblings = vm.Rows.Skip(2).TakeWhile(r => r.Depth > 1).Count(r => r.Depth == 2);
+        TreeRowsAutomationTests.AssertTreeItem(tree, Row(vm, "team02"), level: 3, position: 3, size: siblings, ExpandCollapseState.Expanded);
+        TreeRowsAutomationTests.Invoke(tree, Row(vm, "team02"), expand: false);
+        Assert.False(Row(vm, "team02").IsExpanded);
+        Assert.Equal(ExpandCollapseState.Collapsed, TreeRowsAutomationTests.PeerOf(tree, Row(vm, "team02")).ExpandCollapseState);
+        TreeRowsAutomationTests.Invoke(tree, Row(vm, "team02"), expand: true);
+        Assert.True(Row(vm, "team02").IsExpanded);
+        await ItemAsync(tree, Row(vm, "b0201"));
+        TreeRowsAutomationTests.AssertTreeItem(tree, Row(vm, "b0201"), level: 4, position: 2, size: 100, ExpandCollapseState.LeafNode);
 
         // F2 on a branch renames it; Delete on a tag deletes it (each asks first).
         await FocusAsync(tree, Row(vm, "b0150"));
@@ -429,6 +440,15 @@ public sealed class GitTreesRowsTests
         f.Press(Key.Right, RawInputModifiers.Control);
         Assert.Equal(11_001, vm.Rows.Count);
 
+        // Its tree items (M57): D000's files at level 3, ten of them; Collapse and Expand on D000 as Left and Right.
+        await ItemAsync(list, vm.Rows[3]);
+        TreeRowsAutomationTests.AssertTreeItem(list, vm.Rows[3], level: 3, position: 2, size: 10, ExpandCollapseState.LeafNode);
+        TreeRowsAutomationTests.AssertTreeItem(list, vm.Rows[1], level: 2, position: 1, size: 1000, ExpandCollapseState.Expanded);
+        TreeRowsAutomationTests.Invoke(list, vm.Rows[1], expand: false);
+        Assert.Equal(1 + 1000 + 9990, vm.Rows.Count);
+        TreeRowsAutomationTests.Invoke(list, vm.Rows[1], expand: true);
+        Assert.Equal(11_001, vm.Rows.Count);
+
         // A file far down selected; another tab, then back: the same row selected, brought into view.
         Assert.True(vm.SelectFile("src/D700/F05.cs"));
         var selected = vm.SelectedRow!;
@@ -471,6 +491,15 @@ public sealed class GitTreesRowsTests
         GitChangeRow Row(string path) => vm.Rows.Single(r => r.Node.RelativePath == path);
         await FocusAsync(tree, Row("src/D001"));
         f.Press(Key.Left);
+        Assert.False(Row("src/D001").IsExpanded);
+
+        // Its tree item (M57): src's second folder of 1,000, at level 3; Expand and Collapse as Right and Left.
+        TreeRowsAutomationTests.AssertTreeItem(tree, Row("src/D001"), level: 3, position: 2, size: 1000, ExpandCollapseState.Collapsed);
+        TreeRowsAutomationTests.Invoke(tree, Row("src/D001"), expand: true);
+        Assert.True(Row("src/D001").IsExpanded);
+        await ItemAsync(tree, Row("src/D001/F09.cs"));
+        TreeRowsAutomationTests.AssertTreeItem(tree, Row("src/D001/F09.cs"), level: 4, position: 10, size: 10, ExpandCollapseState.LeafNode);
+        TreeRowsAutomationTests.Invoke(tree, Row("src/D001"), expand: false);
         Assert.False(Row("src/D001").IsExpanded);
         var file = Row("src/D002/F03.cs");
         await FocusAsync(tree, file);

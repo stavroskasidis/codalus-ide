@@ -9,7 +9,7 @@ using Codalus.Workbench.Localization;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>One visible line of the Solution Explorer (the tree is flattened so the list can virtualize).</summary>
-public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject
+public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject, ITreeRow
 {
     private readonly Func<string, ProjectInfo?> _project = project ?? (_ => null);
     private ExplorerNode _node = node;
@@ -86,7 +86,6 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
             {
                 OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
@@ -100,15 +99,18 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     public string? Chevron => HasChildren ? (_isExpanded ? "chevron-down" : "chevron-right") : null;
 
+    /// <summary>
+    /// The row's name for a screen reader: its expansion, level and place are its tree item's (<see cref="Views.TreeRowsList"/>,
+    /// M57), not words in its name.
+    /// </summary>
     public string AccessibleName
     {
         get
         {
-            var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
             var detail = _node.Detail is { } d ? " " + d : string.Empty;
             var warning = _node.IsWarning ? ", warning" : string.Empty;
             var excluded = _node.IsExcluded ? ", not in the project" : string.Empty;
-            return $"{_node.Name}{detail}{warning}{excluded}{state}";
+            return $"{_node.Name}{detail}{warning}{excluded}";
         }
     }
 }

@@ -241,7 +241,7 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
                 OnPropertyChanged(nameof(HasCountText));
             }
 
-            if (file || counts || expanded || !string.Equals(old.Text, value.Text, StringComparison.Ordinal))
+            if (file || counts || !string.Equals(old.Text, value.Text, StringComparison.Ordinal))
             {
                 OnPropertyChanged(nameof(AccessibleName));
             }
@@ -297,10 +297,8 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
     /// <summary>A file's path from the repository's folder; a folder's name.</summary>
     public string Tip => _node.Row?.Status.RelativePath ?? _node.Text;
 
-    /// <summary>The node's name, and a folder's state: a list's row has no expander for a screen reader to read.</summary>
-    public string AccessibleName => !HasChildren ? _node.AccessibleName
-        : _node.IsExpanded ? Localizer.Format("msg.gitChanges.expandedAccessibleName", "{0}, expanded", _node.AccessibleName)
-        : Localizer.Format("msg.gitChanges.collapsedAccessibleName", "{0}, collapsed", _node.AccessibleName);
+    /// <summary>The node's name: a folder's state, level and place are its tree item's (<see cref="Views.TreeRowsList"/>, M57).</summary>
+    public string AccessibleName => _node.AccessibleName;
 
     /// <summary>Expands or collapses its node (its owner then shows or hides the rows under it).</summary>
     internal void SetExpanded(bool expanded)
@@ -320,7 +318,6 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(Chevron));
         OnPropertyChanged(nameof(Icon));
-        OnPropertyChanged(nameof(AccessibleName));
     }
 }
 
