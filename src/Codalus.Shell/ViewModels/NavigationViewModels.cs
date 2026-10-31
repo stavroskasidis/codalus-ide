@@ -257,6 +257,17 @@ public sealed class DocumentOutlineViewModel : ObservableObject, IShownAware
 
         _stale = false;
         var generation = ++_generation;
+        if (!ReferenceEquals(_editor, _shownEditor) && Rows.Count > 0)
+        {
+            // Another document's: its rows go at once, not when the new ones are flattened (they went to the old
+            // document's symbols in the new one meanwhile). The same document's stay until then, so edits don't flicker.
+            _shownEditor = null;
+            Message = string.Empty;
+            Rows.Reset([]);
+            OnPropertyChanged(nameof(HasMessage));
+            Current = null;
+        }
+
         if (_editor is null || _editor.Insights.Symbols.Count == 0)
         {
             _building = false;
@@ -440,10 +451,10 @@ public sealed class DocumentOutlineViewModel : ObservableObject, IShownAware
         Current = node;
     }
 
-    /// <summary>Moves the caret to a symbol (Enter or double-click).</summary>
+    /// <summary>Moves the caret to a symbol (Enter or a click), one of the current document's rows.</summary>
     public void Navigate(SymbolNodeViewModel node)
     {
-        if (_editor is { } editor)
+        if (_editor is { } editor && ReferenceEquals(editor, _shownEditor))
         {
             editor.Navigate(node.Symbol.SelectionRange.Start);
         }

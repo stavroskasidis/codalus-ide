@@ -24,6 +24,7 @@ public sealed partial class DocumentOutlineView : UserControl, IPaneView
     {
         InitializeComponent();
         List.Tapped += OnTapped;
+        List.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         FilterBox.AddHandler(KeyDownEvent, OnFilterKeyDown, RoutingStrategies.Tunnel);
         ShownTracker.Track(this);
@@ -62,18 +63,23 @@ public sealed partial class DocumentOutlineView : UserControl, IPaneView
     private static bool IsChevron(object? source) =>
         (source as Visual)?.FindAncestorOfType<Border>(includeSelf: true) is { } border && border.Classes.Contains("chevron");
 
-    private void OnTapped(object? sender, TappedEventArgs e)
+    /// <summary>
+    /// The chevron collapses and expands its row at each press: on a tap, a second click soon after the first was a double
+    /// tap, and the row stayed as the first click left it.
+    /// </summary>
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (RowAt(e.Source) is not { } row || _model is not { } vm)
-        {
-            return;
-        }
-
-        if (IsChevron(e.Source))
+        if (IsChevron(e.Source) && RowAt(e.Source) is { } row && _model is { } vm && e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
         {
             vm.Toggle(row);
+            e.Handled = true;
         }
-        else
+    }
+
+    /// <summary>A click on a row (not its chevron) goes to its symbol.</summary>
+    private void OnTapped(object? sender, TappedEventArgs e)
+    {
+        if (RowAt(e.Source) is { } row && _model is { } vm && !IsChevron(e.Source))
         {
             vm.Navigate(row);
         }

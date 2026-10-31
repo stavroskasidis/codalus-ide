@@ -1,5 +1,8 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
@@ -177,5 +180,132 @@ public sealed class DocumentOutlineTests
         monitor.Reset();
         await FlowAsync();
         monitor.AssertResponsive("the outline of 10,000 symbols at each pause in typing", 1000);
+    }
+
+    private static ListBox ListOf(ShellFixture f) =>
+        f.Window.GetVisualDescendants().OfType<DocumentOutlineView>().First(v => v.IsEffectivelyVisible).FindControl<ListBox>("List")!;
+
+    /// <summary>Clicks a control as the user does: the pointer down and up at its middle.</summary>
+    private static void Click(ShellFixture f, Control control)
+    {
+        var center = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), f.Window)!.Value;
+        f.Window.MouseDown(center, MouseButton.Left);
+        f.Window.MouseUp(center, MouseButton.Left);
+        ShellFixture.Pump();
+    }
+
+    private static void Press(ShellFixture f, Key key, PhysicalKey physical)
+    {
+        f.Window.KeyPress(key, RawInputModifiers.None, physical, null);
+        ShellFixture.Pump();
+    }
+
+    [AvaloniaFact]
+    public async Task The_chevron_toggles_a_row_a_click_or_enter_goes_to_its_symbol_and_left_and_right_fold()
+    {
+        var (f, editor) = await OpenAsync();
+        await using var fixture = f;
+        await ShowOutlineAsync(f);
+        var outline = f.Shell.DocumentOutline;
+        editor.Insights.ShowSymbols(Symbols(3, 3));
+        await ShellFixture.PumpUntil(() => outline.Rows.Count == 13 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
+        ShellFixture.Pump();
+        var list = ListOf(f);
+        SymbolNodeViewModel Row(string name, int which = 0) => outline.Rows.Where(r => r.Name == name).ElementAt(which);
+        Control Part(SymbolNodeViewModel row, Func<Control, bool> part)
+        {
+            list.ScrollIntoView(row);
+            ShellFixture.Pump();
+            return list.ContainerFromItem(row)!.GetVisualDescendants().OfType<Control>().First(part);
+        }
+
+        Position Caret() => editor.Model.PositionAt(editor.Editor.CaretOffset);
+
+        // The chevron collapses and expands its row at each click (the second, soon after, was a double tap) and leaves
+        // the caret; a click on the row's name goes to its symbol.
+        var caret = Caret();
+        var class1 = Row("Class1");
+        Click(f, Part(class1, c => c is Border b && b.Classes.Contains("chevron")));
+        Assert.False(class1.IsExpanded);
+        Assert.Equal(10, outline.Rows.Count);
+        Assert.Equal(caret, Caret());
+        Click(f, Part(class1, c => c is Border b && b.Classes.Contains("chevron")));
+        Assert.True(class1.IsExpanded);
+        Assert.Equal(13, outline.Rows.Count);
+        Assert.Equal(caret, Caret());
+        var method = Row("Method2", 1); // Class1's
+        Click(f, Part(method, c => c is TextBlock { Text: "Method2" }));
+        Assert.Equal(method.Symbol.SelectionRange.Start, Caret());
+        Assert.Equal(13, outline.Rows.Count);
+
+        // From the keyboard: Left collapses a row, Right expands it, Left on a child goes to its parent, Enter to the symbol.
+        void Select(SymbolNodeViewModel row)
+        {
+            list.SelectedItem = row;
+            list.ScrollIntoView(row);
+            ShellFixture.Pump();
+            list.ContainerFromItem(row)!.Focus(NavigationMethod.Directional);
+            ShellFixture.Pump();
+        }
+
+        var class2 = Row("Class2");
+        Select(class2);
+        Press(f, Key.Left, PhysicalKey.ArrowLeft);
+        Assert.False(class2.IsExpanded);
+        Assert.Equal(10, outline.Rows.Count);
+        Press(f, Key.Right, PhysicalKey.ArrowRight);
+        Assert.True(class2.IsExpanded);
+        Assert.Equal(13, outline.Rows.Count);
+        Select(Row("Overload", 2)); // Class1's first
+        Press(f, Key.Left, PhysicalKey.ArrowLeft);
+        Assert.Same(class1, list.SelectedItem);
+        Assert.True(class1.IsExpanded);
+        Press(f, Key.Left, PhysicalKey.ArrowLeft);
+        Assert.False(class1.IsExpanded);
+        Press(f, Key.Left, PhysicalKey.ArrowLeft); // collapsed: to its parent, the namespace
+        Assert.Same(Row("App"), list.SelectedItem);
+        Select(class2);
+        Press(f, Key.Enter, PhysicalKey.Enter);
+        Assert.Equal(class2.Symbol.SelectionRange.Start, Caret());
+
+        // The collapsed row stays collapsed when the next pause's symbols come, a member added to another class.
+        var builds = outline.Builds;
+        editor.Insights.ShowSymbols(Symbols(3, 3, extra: 1));
+        await ShellFixture.PumpUntil(() => outline.Builds == builds + 1 && !outline.IsBuilding, describe: () => Describe(outline, builds));
+        Assert.Same(class1, Row("Class1"));
+        Assert.False(class1.IsExpanded);
+        Assert.Equal(11, outline.Rows.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task Another_documents_rows_go_at_once_and_never_go_to_their_symbols_in_the_new_one()
+    {
+        var (f, large) = await OpenAsync();
+        await using var fixture = f;
+        await ShowOutlineAsync(f);
+        var outline = f.Shell.DocumentOutline;
+        large.Insights.ShowSymbols(Symbols(10, 10));
+        await ShellFixture.PumpUntil(() => outline.Rows.Count == 111 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
+
+        var file = Path.Combine(f.UserData, "Small.txt");
+        await File.WriteAllTextAsync(file, string.Join('\n', Enumerable.Range(0, 100).Select(i => $"small {i}")));
+        var document = await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null && f.Shell.ActiveEditor == document);
+        var small = document!.Controller!;
+        small.Insights.ShowSymbols(Symbols(2, 2));
+        await ShellFixture.PumpUntil(() => outline.Rows.Count == 7 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
+
+        // Back to the large document: its rows are flattened on the pool, and the small one's showed meanwhile and went to
+        // their symbols' positions in the large one. They go at once; the same document's stay (they patch, no flicker).
+        var old = outline.Rows[^1];
+        var caret = large.Editor.CaretOffset;
+        outline.SetEditor(large);
+        Assert.Empty(outline.Rows);
+        Assert.True(outline.HasMessage);
+        Assert.Null(outline.Current);
+        outline.Navigate(old);
+        Assert.Equal(caret, large.Editor.CaretOffset);
+        await ShellFixture.PumpUntil(() => outline.Rows.Count == 111 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
+        Assert.False(outline.HasMessage);
     }
 }
