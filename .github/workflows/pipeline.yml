@@ -592,7 +592,8 @@ jobs:
           bench --scenarios editor-100k,self-driven,binary-size --runs 3 || status=$?
           # The everyday flows' UI-thread stalls are informative until CI's first measurements set their budgets
           # (informativeScenarios in benchmarks/budgets.json), and so is a run of them that fails: a warning, never the
-          # release. TODO(issue): count its status with the others once it has budgets.
+          # release (the harness also annotates a run that timed out, measured fewer flows or noted a problem).
+          # TODO(issue): count its status with the others once it has budgets.
           bench --scenarios everyday --runs 3 \
             || echo "::warning title=Benchmarks (${RUNNER_OS})::the everyday scenario failed; it's informative until it has budgets"
           exit "$status"

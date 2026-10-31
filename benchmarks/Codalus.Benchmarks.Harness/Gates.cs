@@ -395,6 +395,26 @@ internal static class Gates
         return values.Count % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
     }
 
+    /// <summary>
+    /// The regression gate's warnings as GitHub Actions annotations, which show only the first few of a step: each warning of
+    /// a gated scenario, then the <see cref="RegressionPolicy.InformativeScenarios"/>' as one per OS (noisy, and many), so
+    /// they can't push the gated ones off the run's page. The table lists every one.
+    /// </summary>
+    public static IEnumerable<string> Annotations(RegressionPolicy policy, IReadOnlyList<GateFinding> findings)
+    {
+        bool Informative(GateFinding f) => policy.InformativeScenarios.Contains(f.Scenario, StringComparer.Ordinal);
+        foreach (var f in findings.Where(f => f.Warning && !Informative(f)))
+        {
+            yield return string.Create(CultureInfo.InvariantCulture, $"::warning title=Benchmarks ({f.Os})::{f.Target} {f.Scenario} {f.Metric} {f.Stat}: {f.Value:F1} over {f.Limit:F1} ({f.Rule})");
+        }
+
+        foreach (var os in findings.Where(f => f.Warning && Informative(f)).GroupBy(f => f.Os))
+        {
+            yield return $"::warning title=Benchmarks ({os.Key})::{os.Count()} informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): "
+                         + string.Join(", ", os.Select(f => $"{f.Scenario} {f.Metric} {f.Stat}"));
+        }
+    }
+
     public static string Format(string title, IReadOnlyList<GateFinding> findings, IEnumerable<string>? preamble = null)
     {
         var sb = new StringBuilder();

@@ -161,12 +161,13 @@ switch (command)
         var report = Gates.Format("Regression gate", findings, preamble);
         Console.WriteLine(report);
 
-        // In GitHub Actions, warnings also show as annotations on the run.
+        // In GitHub Actions, warnings also show as annotations on the run. GitHub shows only the first few of a step, so the
+        // informative scenarios' (noisy, and many) go last, as one per OS: the table lists each.
         if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
         {
-            foreach (var f in findings.Where(f => f.Warning))
+            foreach (var line in Gates.Annotations(policy, findings))
             {
-                Console.WriteLine($"::warning title=Benchmarks ({f.Os})::{f.Target} {f.Scenario} {f.Metric} {f.Stat}: {f.Value:F1} over {f.Limit:F1} ({f.Rule})");
+                Console.WriteLine(line);
             }
         }
 

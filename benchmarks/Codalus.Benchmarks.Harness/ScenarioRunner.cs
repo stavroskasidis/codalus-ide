@@ -497,7 +497,8 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
         RequireFixture(source);
         result.Notes.Add("In-app: once the solution has loaded and the C# service is ready, each everyday flow runs once to warm up and once measured, while a probe "
                          + "posted at input priority every 10 ms times its wait for the UI thread (the GC's pauses left out); everyday_<flow>_stall_max_ms is the "
-                         + "longest wait, everyday_<flow>_stall_total_ms the sum of the waits over 50 ms. Informative until CI's measurements set budgets.");
+                         + "longest wait, everyday_<flow>_stall_total_ms the sum of the waits over 50 ms, everyday_<flow>_gc_pause_ms the GC's pauses during the flow "
+                         + "(which also hold the UI thread). Informative until CI's measurements set budgets.");
         for (var run = 0; run < runs; run++)
         {
             var work = NewWorkDir();
@@ -513,23 +514,66 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
             Machine.Run("dotnet", $"restore \"{solution}\" -v q");
             await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution, Bench: "everyday", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+            var timedOut = false;
             try
             {
                 await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(12), cancellationToken).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
+                timedOut = true;
                 result.Notes.Add($"run {run}: the scenario did not finish within 12 minutes");
             }
 
-            Log($"  {target.Name} everyday run {run}: {AddEverydayFlows(result, BenchEventLog.Read(session.EventsFile), run)}");
+            var events = BenchEventLog.Read(session.EventsFile);
+            Log($"  {target.Name} everyday run {run}: {AddEverydayFlows(result, events, run)}");
+
+            // The run's numbers are kept (the result is written once every run is done); on CI what went wrong is an
+            // annotation on the run too, not only a note in the report.
+            if (EverydayProblem(events, timedOut) is { } problem)
+            {
+                Log($"  {target.Name} everyday run {run}: {problem}");
+                if (Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true")
+                {
+                    Console.WriteLine($"::warning title=Benchmarks ({result.Machine.Os})::everyday run {run}: {problem}");
+                }
+            }
         }
     }
 
     /// <summary>
-    /// One run's <c>everyday_flow</c> events as <c>everyday_&lt;flow&gt;_stall_max_ms</c> and <c>_stall_total_ms</c>, with a
-    /// note naming each flow's longest wait, the posted job the UI thread ran then and how long the flow took (what explains
-    /// a CI number), and the run's <c>everyday_note</c>s. Returns the note's text.
+    /// What went wrong in an everyday run, or null: it didn't finish in time, measured fewer than
+    /// <see cref="BenchEventNames.EverydayFlows"/> (the shell crashed, or the driver stopped), or a flow didn't do its work.
+    /// </summary>
+    internal static string? EverydayProblem(IReadOnlyList<BenchEvent> events, bool timedOut)
+    {
+        var measured = events.Where(e => e.Name == BenchEventNames.EverydayFlow).Select(e => e.Text.GetValueOrDefault("flow")).ToHashSet(StringComparer.Ordinal);
+        var missing = BenchEventNames.EverydayFlows.Where(flow => !measured.Contains(flow)).ToList();
+        var notes = events.Count(e => e.Name == BenchEventNames.EverydayNote);
+        List<string> problems = [];
+        if (timedOut)
+        {
+            problems.Add("it didn't finish within 12 minutes");
+        }
+
+        if (missing.Count > 0)
+        {
+            problems.Add($"{missing.Count} of {BenchEventNames.EverydayFlows.Count} flows not measured ({string.Join(", ", missing)})");
+        }
+
+        if (notes > 0)
+        {
+            problems.Add($"{notes} note(s) from the driver, in the report");
+        }
+
+        return problems.Count == 0 ? null : string.Join("; ", problems);
+    }
+
+    /// <summary>
+    /// One run's <c>everyday_flow</c> events as <c>everyday_&lt;flow&gt;_stall_max_ms</c>, <c>_stall_total_ms</c> and
+    /// <c>_gc_pause_ms</c>, with a note naming each flow's longest wait, the step it was spent in (and the job posted from
+    /// another thread the UI thread ran then, when it was one) and how long the flow took (what explains a CI number), and
+    /// the run's <c>everyday_note</c>s. Returns the note's text.
     /// </summary>
     internal static string AddEverydayFlows(ScenarioResult result, IReadOnlyList<BenchEvent> events, int run)
     {
@@ -544,8 +588,10 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
             var longest = flow.Field("stall_max_us") / 1000.0;
             result.Add($"everyday_{name}_stall_max_ms", longest);
             result.Add($"everyday_{name}_stall_total_ms", flow.Field("stall_total_us") / 1000.0);
+            result.Add($"everyday_{name}_gc_pause_ms", flow.Field("gc_pause_us") / 1000.0);
+            var step = flow.Text.TryGetValue("step", out var at) ? $" at {at}" : string.Empty;
             var job = flow.Text.TryGetValue("job", out var posted) ? $" in {posted}" : string.Empty;
-            flows.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name} {longest:F0} ms{job} ({flow.Field("elapsed_us") / 1e6:F1} s)"));
+            flows.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name} {longest:F0} ms{step}{job} ({flow.Field("elapsed_us") / 1e6:F1} s)"));
         }
 
         foreach (var note in events.Where(e => e.Name == BenchEventNames.EverydayNote))

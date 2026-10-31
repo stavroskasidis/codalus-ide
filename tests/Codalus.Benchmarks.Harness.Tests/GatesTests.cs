@@ -77,6 +77,28 @@ public class GatesTests
     }
 
     [Fact]
+    public void Informative_warnings_are_annotated_last_as_one_per_os()
+    {
+        var policy = new RegressionPolicy { InformativeScenarios = ["everyday"] };
+        GateFinding Warning(string os, string scenario, string metric) => new(os, "shell", scenario, metric, "p50", 200, 100, false, "rule") { Warning = true };
+        var findings = new[]
+        {
+            Warning("windows", "everyday", "everyday_typing_stall_max_ms"),
+            Warning("windows", "everyday", "everyday_build_stall_max_ms"),
+            Warning("windows", "cold-start", "startup_interactive_ms"),
+            Warning("linux", "everyday", "everyday_typing_stall_total_ms"),
+            new GateFinding("linux", "shell", "cold-start", "startup_interactive_ms", "p50", 90, 100, false, "rule"),
+        };
+
+        Assert.Equal(
+        [
+            "::warning title=Benchmarks (windows)::shell cold-start startup_interactive_ms p50: 200.0 over 100.0 (rule)",
+            "::warning title=Benchmarks (windows)::2 informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): everyday everyday_typing_stall_max_ms p50, everyday everyday_build_stall_max_ms p50",
+            "::warning title=Benchmarks (linux)::1 informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): everyday everyday_typing_stall_total_ms p50",
+        ], Gates.Annotations(policy, findings));
+    }
+
+    [Fact]
     public void Check_flags_values_over_budget()
     {
         var budgets = new BudgetFile([new Budget("shell", "cold-start", "startup_interactive_ms", "p50", 800)], new RegressionPolicy());
