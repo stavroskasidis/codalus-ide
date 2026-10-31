@@ -127,6 +127,19 @@ public sealed class FSharpShellTests
         Assert.Contains("val describe", scriptInfo, StringComparison.Ordinal);
         Assert.Contains("Describes a list of numbers.", scriptInfo, StringComparison.Ordinal);
 
+        // The navigation bar and the CodeLens rows from an editor's first frame, where FsAutoComplete will list types and
+        // lenses: Shapes.fs declares a union and has a lens on area (line 7); Geometry.fs, a module, has a lens on
+        // totalArea (line 7) and no bar. Nothing moves when the answers come (NavigationBarFirstFrameTests).
+        foreach (var (file, types) in new[] { ("Shapes.fs", true), ("Geometry.fs", false) })
+        {
+            var (frames, bar, editor, rows) = await NavigationBarFirstFrameTests.OpenRecordingBarAsync(f, Path.Combine(folder, "FsLibrary", file), seconds: 240,
+                rows: e => e.Insights.LensRowAbove(7) is not null);
+            Assert.True(bar.HasTypes == types, $"{file}: {bar.Types.Count} types listed");
+            Assert.True(frames.Count > 0 && frames.TrueForAll(shown => shown == types), $"{file}: the bar showed in {frames.Count(s => s)} of {frames.Count} frames");
+            Assert.True(rows.TrueForAll(r => r), $"{file}: the lens row was there in {rows.Count(r => r)} of {rows.Count} frames; {editor.Insights.DescribeLenses()}");
+            Assert.NotNull(editor.Insights.LensRowAbove(7));
+        }
+
         // A type provider: JsonProvider's provided property (once the package is restored, and FsAutoComplete has
         // reloaded the project and run the provider: minutes on a hosted macOS runner).
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects[Path.Combine(folder, "FsData", "FsData.fsproj")].Restored, seconds: 300);

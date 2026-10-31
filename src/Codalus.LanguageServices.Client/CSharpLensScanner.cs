@@ -21,6 +21,18 @@ public static class CSharpLensScanner
         return parser.Lenses;
     }
 
+    /// <summary>
+    /// Whether the text declares a class, struct, interface, enum, record or union, as <see cref="Scan"/> finds them: the
+    /// editor keeps the navigation bar's room (its types and members) from the first frame when the host's document
+    /// symbols will list a type. It stops at the first one.
+    /// </summary>
+    public static bool DeclaresType(string text)
+    {
+        var parser = new Parser(text) { StopAtType = true };
+        parser.Container(Level.File);
+        return parser.FoundType;
+    }
+
     private enum Level
     {
         File,
@@ -44,6 +56,11 @@ public static class CSharpLensScanner
 
         public List<int> Lenses { get; } = [];
 
+        /// <summary>Whether the walk ends at the first type declaration (<see cref="DeclaresType"/>).</summary>
+        public bool StopAtType { get; init; }
+
+        public bool FoundType { get; private set; }
+
         private Token Peek(int ahead = 0) => _lexer.Peek(ahead);
 
         private Token Take() => _lexer.Take();
@@ -64,7 +81,7 @@ public static class CSharpLensScanner
         /// <summary>Declarations until the container's closing brace (taken) or the end of the text.</summary>
         public void Container(Level level)
         {
-            while (Peek() is { Kind: not Kind.End } token)
+            while (!FoundType && Peek() is { Kind: not Kind.End } token)
             {
                 if (IsPunct(token, '}'))
                 {
@@ -161,6 +178,12 @@ public static class CSharpLensScanner
         /// <summary>A class, struct, interface, enum, record or union (C# 15): its name, its header up to the body, then its members.</summary>
         private void TypeDeclaration()
         {
+            if (StopAtType)
+            {
+                FoundType = true;
+                return;
+            }
+
             var isEnum = IsWord(Take(), "enum");
             if (IsWord(Peek(), "struct") || IsWord(Peek(), "class"))
             {
@@ -890,7 +913,7 @@ public static class CSharpLensScanner
             switch (name)
             {
                 case "if":
-                    var taken = PreprocessorCondition.Evaluate(rest);
+                    var taken = PreprocessorCondition.Evaluate(rest, PreprocessorCondition.DotNetDebug);
                     _conditions.Push(taken);
                     if (!taken)
                     {
@@ -899,7 +922,7 @@ public static class CSharpLensScanner
 
                     break;
                 case "elif" or "else" when _conditions.Count > 0:
-                    if (_conditions.Peek() || name is "elif" && !PreprocessorCondition.Evaluate(rest))
+                    if (_conditions.Peek() || name is "elif" && !PreprocessorCondition.Evaluate(rest, PreprocessorCondition.DotNetDebug))
                     {
                         SkipBranch();
                     }
@@ -963,118 +986,5 @@ public static class CSharpLensScanner
                 _position = lineEnd;
             }
         }
-    }
-
-    /// <summary>
-    /// A <c>#if</c> condition (<c>!</c>, <c>&amp;&amp;</c>, <c>||</c>, <c>==</c>, <c>!=</c>, parentheses, <c>true</c>,
-    /// <c>false</c>) over the symbols a project on current .NET in Debug defines.
-    /// </summary>
-    private ref struct PreprocessorCondition(ReadOnlySpan<char> text)
-    {
-        private readonly ReadOnlySpan<char> _text = text;
-        private int _position;
-
-        public static bool Evaluate(ReadOnlySpan<char> condition)
-        {
-            var comment = condition.IndexOf("//");
-            var parser = new PreprocessorCondition(comment < 0 ? condition : condition[..comment]);
-            return parser.Or();
-        }
-
-        private bool Or()
-        {
-            var value = And();
-            while (Accept("||"))
-            {
-                value |= And();
-            }
-
-            return value;
-        }
-
-        private bool And()
-        {
-            var value = Equality();
-            while (Accept("&&"))
-            {
-                value &= Equality();
-            }
-
-            return value;
-        }
-
-        private bool Equality()
-        {
-            var value = Unary();
-            while (true)
-            {
-                if (Accept("=="))
-                {
-                    value = value == Unary();
-                }
-                else if (Accept("!="))
-                {
-                    value = value != Unary();
-                }
-                else
-                {
-                    return value;
-                }
-            }
-        }
-
-        private bool Unary()
-        {
-            if (Accept("!"))
-            {
-                return !Unary();
-            }
-
-            if (Accept("("))
-            {
-                var value = Or();
-                Accept(")");
-                return value;
-            }
-
-            SkipSpaces();
-            var start = _position;
-            while (_position < _text.Length && (char.IsLetterOrDigit(_text[_position]) || _text[_position] == '_'))
-            {
-                _position++;
-            }
-
-            if (_position == start)
-            {
-                _position = _text.Length; // something else: the rest can't be read
-                return false;
-            }
-
-            return IsDefined(_text[start.._position]);
-        }
-
-        private bool Accept(string symbol)
-        {
-            SkipSpaces();
-            if (_text[_position..].StartsWith(symbol) && !(symbol == "!" && _text[_position..].StartsWith("!=")))
-            {
-                _position += symbol.Length;
-                return true;
-            }
-
-            return false;
-        }
-
-        private void SkipSpaces()
-        {
-            while (_position < _text.Length && char.IsWhiteSpace(_text[_position]))
-            {
-                _position++;
-            }
-        }
-
-        private static bool IsDefined(ReadOnlySpan<char> symbol) =>
-            symbol is "true" or "DEBUG" or "TRACE" or "NET" or "NETCOREAPP"
-            || symbol.EndsWith("_OR_GREATER") && (symbol.StartsWith("NETCOREAPP") || symbol.StartsWith("NET") && symbol.Length > 3 && char.IsAsciiDigit(symbol[3]));
     }
 }

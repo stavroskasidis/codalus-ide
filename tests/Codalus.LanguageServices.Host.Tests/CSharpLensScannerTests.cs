@@ -218,6 +218,21 @@ public sealed class CSharpLensScannerTests
             """);
     }
 
+    [Theory]
+    [InlineData("namespace N;\npublic sealed class A { }", true)]
+    [InlineData("namespace N { [Flags] internal enum E { A, B } }", true)]
+    [InlineData("public readonly record struct P(int X);", true)]
+    [InlineData("file static partial class F { }", true)]
+    [InlineData("using System;\nConsole.WriteLine(\"class A { }\");\nvoid Local() { }", false)] // top-level statements
+    [InlineData("// class A { }\n/* struct B */\n#if NEVER\nclass C { }\n#endif\n", false)]
+    [InlineData("namespace N;\npublic delegate void D(int x);", false)] // a delegate isn't a type the navigation bar lists
+    [InlineData("", false)]
+    public void Whether_the_text_declares_a_type(string code, bool declares)
+    {
+        // The navigation bar keeps its room from the first frame when the C# host's symbols will list a type.
+        Assert.Equal(declares, CSharpLensScanner.DeclaresType(code));
+    }
+
     [Fact]
     public async Task Code_that_doesnt_compile_yet()
     {
