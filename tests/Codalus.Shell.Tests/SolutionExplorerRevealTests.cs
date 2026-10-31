@@ -23,24 +23,32 @@ public class SolutionExplorerRevealTests
     private static async Task<(ShellFixture F, string Folder)> OpenAsync()
     {
         var f = ShellFixture.Create();
-        var solution = f.CopyFixture();
-        var folder = Path.GetDirectoryName(solution)!;
-        var many = Path.Combine(folder, "src", "App", "Many");
-        Directory.CreateDirectory(many);
-        for (var i = 0; i < 200; i++)
+        try
         {
-            await File.WriteAllTextAsync(Path.Combine(many, $"F{i:000}.cs"), $"namespace App.Many;\n\ninternal static class F{i:000};\n", TestContext.Current.CancellationToken);
-        }
+            var solution = f.CopyFixture();
+            var folder = Path.GetDirectoryName(solution)!;
+            var many = Path.Combine(folder, "src", "App", "Many");
+            Directory.CreateDirectory(many);
+            for (var i = 0; i < 200; i++)
+            {
+                await File.WriteAllTextAsync(Path.Combine(many, $"F{i:000}.cs"), $"namespace App.Many;\n\ninternal static class F{i:000};\n", TestContext.Current.CancellationToken);
+            }
 
-        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
-        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
-        f.Window.Height = 500;
-        await f.Shell.OpenSolutionAsync(solution);
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
-        await ShellFixture.PumpUntil(() => f.Shell.Explorer.Rows.FirstOrDefault(r => r.Name == "App") is { HasChildren: true });
-        f.Shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
-        await ShellFixture.PumpUntil(() => View(f) is { IsEffectivelyVisible: true });
-        return (f, folder);
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+            f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+            f.Window.Height = 500;
+            await f.Shell.OpenSolutionAsync(solution);
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
+            await ShellFixture.PumpUntil(() => f.Shell.Explorer.Rows.FirstOrDefault(r => r.Name == "App") is { HasChildren: true });
+            f.Shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
+            await ShellFixture.PumpUntil(() => View(f) is { IsEffectivelyVisible: true });
+            return (f, folder);
+        }
+        catch
+        {
+            await f.DisposeAsync(); // the test's own disposal never comes: its window and hosts would stay for the tests after it
+            throw;
+        }
     }
 
     private static SolutionExplorerView? View(ShellFixture f) => f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().FirstOrDefault(v => v.IsEffectivelyVisible);

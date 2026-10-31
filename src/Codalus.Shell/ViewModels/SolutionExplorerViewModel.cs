@@ -532,8 +532,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         var listings = new System.Collections.Concurrent.ConcurrentBag<ProjectListing>();
         try
         {
-            await Parallel.ForEachAsync(requests, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = _diskCancellation.Token }, async (r, cancellationToken) =>
-                listings.Add(await ListProjectAsync(r.Project, r.Info, r.Old, expanded, cancellationToken).ConfigureAwait(false))).ConfigureAwait(true);
+            ListingsOnTheirWay = Parallel.ForEachAsync(requests, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = _diskCancellation.Token }, async (r, cancellationToken) =>
+                listings.Add(await ListProjectAsync(r.Project, r.Info, r.Old, expanded, cancellationToken).ConfigureAwait(false)));
+            await ListingsOnTheirWay.ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -615,6 +616,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>The projects' listings taken so far, failed ones too (tests).</summary>
     internal int Listings { get; private set; }
 
+    /// <summary>The last batch's listings, which end on the thread pool before the batch takes them (tests).</summary>
+    internal Task? ListingsOnTheirWay { get; private set; }
+
     /// <summary>
     /// Show All Files: a folder that isn't in its project, whose contents aren't listed until it's expanded (it has a
     /// "Loading…" row, so it can be).
@@ -685,6 +689,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>Home: back to the solution node, collapsed to its projects.</summary>
     public void Home()
     {
+        _syncWhenListed = null;
         ClearFilter();
         CollapseAll();
         Selected = Rows.FirstOrDefault();
@@ -697,8 +702,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>Sync with Active Document: selects the active document's file in the tree, at once.</summary>
     public void SyncWithActiveDocument()
     {
+        _syncWhenListed = null; // before the refresh below, which would reveal an earlier Sync's file first
         RefreshIfQueued(); // a project that just loaded is in the tree to find
-        _syncWhenListed = null;
         if (_shell.ActiveEditor?.Model.Path is not { } path || FindByPath(path) is not { } node)
         {
             if (_shell.ActiveEditor?.Model.Path is { } unlisted && ListDownTo(unlisted))
@@ -749,25 +754,30 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Sync with Active Document's file, once no listing that can bring it is queued or on its way: selected when it came,
-    /// else the usual message. It waited as a node id, which never came for a file no listing has (in a folder the build
-    /// host leaves out, a listing cut short or failed), with no message, and a refresh minutes later could jump to it (M56).
+    /// Sync with Active Document's file, once a listing brought it: selected as soon as it's in the tree, else the usual
+    /// message once no listing that can bring it is queued or on its way. It waited as a node id, which never came for a
+    /// file no listing has (in a folder the build host leaves out, a listing cut short or failed), with no message, and a
+    /// refresh minutes later could jump to it (M56). Dropped once another document is active, or another reveal, Home or
+    /// Collapse All came meanwhile: the user moved on.
     /// </summary>
     private void ResolveSyncWhenListed()
     {
-        if (_syncWhenListed is not { } path
-            || (System.IO.Path.GetDirectoryName(path) is { } folder && ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]).Any(IsListing)))
+        if (_syncWhenListed is not { } path)
         {
             return;
         }
 
-        _syncWhenListed = null;
-        if (FindByPath(path) is { } node)
+        if (!SolutionService.PathComparer.Equals(_shell.ActiveEditor?.Model.Path, path))
         {
-            Reveal(node.Id);
+            _syncWhenListed = null;
         }
-        else
+        else if (FindByPath(path) is { } node)
         {
+            Reveal(node.Id); // (which drops it)
+        }
+        else if (System.IO.Path.GetDirectoryName(path) is not { } folder || !ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]).Any(IsListing))
+        {
+            _syncWhenListed = null;
             ShowNotInSolution();
         }
     }
@@ -1299,6 +1309,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     public void CollapseAll()
     {
+        _syncWhenListed = null;
         _expanded.RemoveWhere(id => id != "solution");
         Refresh();
     }
@@ -1343,6 +1354,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
+        _syncWhenListed = null; // a newer reveal (Track, a command, a new file) wins over a Sync still waiting for its listing
         if (_pendingReveal == id)
         {
             _pendingReveal = null;
@@ -1423,6 +1435,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         if (IsUnlisted(node))
         {
+            if (_expanded.Contains(node.Id) && !IsListing(node.ProjectPath!))
+            {
+                // Expanded with another project's copy of a shared folder (one id for both), or by a reveal: its listing
+                // goes into it now, as an expansion of this row would. It showed "Loading…" until something else listed it.
+                QueueDiskRefresh([node.ProjectPath!]);
+            }
+
             return With(node, LoadingRow(node, "|listing"));
         }
 
@@ -1623,38 +1642,36 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private readonly Dictionary<string, (CompilerInputsInfo Sent, CompilerInputsInfo Inputs)> _analyzersFound = new(SolutionService.PathComparer);
 
     /// <summary>
-    /// After a build, the analyzers marked missing are looked for again, off the UI thread and through the file system of
-    /// the build host's paths. A build doesn't run design-time builds again, so a source generator built from the
-    /// solution (on a fresh clone, an analyzer another project of it outputs) kept its warning until the project's next
-    /// one (M56).
+    /// After a build, the analyzers the build host marked missing are looked for again, off the UI thread and through the
+    /// file system of the build host's paths. A build doesn't run design-time builds again, so a source generator built
+    /// from the solution (on a fresh clone, an analyzer another project of it outputs) kept its warning until the project's
+    /// next one (M56). Each look starts from the build host's list, not the last one's result, so a Clean that deletes what
+    /// a build made shows it missing again.
     /// </summary>
     private void FindMissingAnalyzers()
     {
-        var marked = _shell.Solutions.CompilerInputs.Values
-            .Select(sent => (Sent: sent, Inputs: _analyzersFound.TryGetValue(sent.Path, out var found) && ReferenceEquals(found.Sent, sent) ? found.Inputs : sent))
-            .Where(i => i.Inputs.MissingAnalyzers is { Length: > 0 })
-            .ToList();
+        var marked = _shell.Solutions.CompilerInputs.Values.Where(sent => sent.MissingAnalyzers is { Length: > 0 }).ToList();
         if (marked.Count > 0)
         {
             _ = FindMissingAnalyzersAsync(marked);
         }
     }
 
-    private async Task FindMissingAnalyzersAsync(List<(CompilerInputsInfo Sent, CompilerInputsInfo Inputs)> marked)
+    private async Task FindMissingAnalyzersAsync(List<CompilerInputsInfo> marked)
     {
         var found = await Task.Run(async () =>
         {
-            var results = new List<(CompilerInputsInfo Sent, CompilerInputsInfo Inputs)>();
-            foreach (var (sent, inputs) in marked)
+            var results = new List<(CompilerInputsInfo Sent, string[]? Missing)>();
+            foreach (var sent in marked)
             {
                 var missing = new List<string>();
-                foreach (var analyzer in inputs.MissingAnalyzers!)
+                foreach (var analyzer in sent.MissingAnalyzers!)
                 {
                     // A relative path (an Analyzer item's own) is the project folder's, as the build host takes it; one that
                     // can't be looked at (a remote window's connection lost) stays missing.
                     try
                     {
-                        var path = System.IO.Path.GetFullPath(analyzer, System.IO.Path.GetDirectoryName(inputs.Path)!);
+                        var path = System.IO.Path.GetFullPath(analyzer, System.IO.Path.GetDirectoryName(sent.Path)!);
                         if (!await Codalus.Workbench.FileSystem.FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(false))
                         {
                             missing.Add(analyzer);
@@ -1666,22 +1683,28 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                     }
                 }
 
-                if (missing.Count < inputs.MissingAnalyzers!.Length)
-                {
-                    results.Add((sent, inputs with { MissingAnalyzers = missing.Count == 0 ? null : [.. missing] }));
-                }
+                results.Add((sent, missing.Count == 0 ? null : [.. missing]));
             }
 
             return results;
         }).ConfigureAwait(true);
 
         var changed = false;
-        foreach (var (sent, inputs) in found)
+        foreach (var (sent, missing) in found)
         {
-            // Not when the build host sent newer inputs meanwhile: it marked them itself.
-            if (ReferenceEquals(_shell.Solutions.CompilerInputs.GetValueOrDefault(sent.Path), sent))
+            if (!ReferenceEquals(_shell.Solutions.CompilerInputs.GetValueOrDefault(sent.Path), sent))
             {
-                _analyzersFound[sent.Path] = (sent, inputs);
+                continue; // the build host sent newer inputs meanwhile: it marked them itself
+            }
+
+            if (missing?.Length == sent.MissingAnalyzers!.Length)
+            {
+                changed |= _analyzersFound.Remove(sent.Path); // all still missing, or again: the build host's marks stand
+            }
+            else if (!_analyzersFound.TryGetValue(sent.Path, out var known) || !ReferenceEquals(known.Sent, sent)
+                     || !(known.Inputs.MissingAnalyzers ?? []).SequenceEqual(missing ?? []))
+            {
+                _analyzersFound[sent.Path] = (sent, sent with { MissingAnalyzers = missing }); // a new instance only when it changed, for the tree's cache
                 changed = true;
             }
         }

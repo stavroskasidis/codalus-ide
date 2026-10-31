@@ -77,7 +77,7 @@ internal static class ExplorerFiles
     /// on its UI thread for every build of its tree (6,000 checks in a 300-project solution), and on its own disk when the
     /// host runs on another machine. Cached inputs needn't be marked: they are taken only while their analyzers are there
     /// (<see cref="DesignTimeCache.TryRead(string?, string, string, string)"/>). A relative path (an <c>Analyzer</c> item's
-    /// own) is the project folder's, where the compiler runs: taken as the host's working folder's, it was always missing.
+    /// own) is the project folder's, where the compiler runs, whatever the host's working folder is when this runs.
     /// </summary>
     public static CompilerInputsInfo WithMissingAnalyzers(CompilerInputsInfo inputs) =>
         inputs.State == CompilerInputStates.Ok && CompilerInputsInfo.AnalyzerPaths(inputs.Arguments)

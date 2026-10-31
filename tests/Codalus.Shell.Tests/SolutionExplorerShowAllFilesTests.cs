@@ -56,23 +56,31 @@ public class SolutionExplorerShowAllFilesTests
     private static async Task<(ShellFixture F, string Folder)> OpenAsync(Action<string>? prepare = null, int projects = 3)
     {
         var f = ShellFixture.Create();
-        var solution = f.CopyFixture();
-        var folder = Path.GetDirectoryName(solution)!;
-        foreach (var output in new[] { Path.Combine(folder, "src", "App", "bin", "Debug", "App.dll"), Path.Combine(folder, "src", "Core", "bin", "Debug", "Core.dll") })
+        try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-            await File.WriteAllTextAsync(output, string.Empty, TestContext.Current.CancellationToken);
-        }
+            var solution = f.CopyFixture();
+            var folder = Path.GetDirectoryName(solution)!;
+            foreach (var output in new[] { Path.Combine(folder, "src", "App", "bin", "Debug", "App.dll"), Path.Combine(folder, "src", "Core", "bin", "Debug", "Core.dll") })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(output)!);
+                await File.WriteAllTextAsync(output, string.Empty, TestContext.Current.CancellationToken);
+            }
 
-        prepare?.Invoke(folder);
-        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, SettingScope.User, TestContext.Current.CancellationToken);
-        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
-        await f.Shell.OpenSolutionAsync(solution);
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == projects && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true }, seconds: 120);
-        f.Shell.Explorer.ShowAllFiles = true;
-        await SettledAsync(f.Shell.Explorer);
-        Assert.Equal(projects, f.Shell.Explorer.Listings);
-        return (f, folder);
+            prepare?.Invoke(folder);
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, SettingScope.User, TestContext.Current.CancellationToken);
+            f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+            await f.Shell.OpenSolutionAsync(solution);
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == projects && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true }, seconds: 120);
+            f.Shell.Explorer.ShowAllFiles = true;
+            await SettledAsync(f.Shell.Explorer);
+            Assert.Equal(projects, f.Shell.Explorer.Listings);
+            return (f, folder);
+        }
+        catch
+        {
+            await f.DisposeAsync(); // the test's own disposal never comes: its window and hosts would stay for the tests after it
+            throw;
+        }
     }
 
     /// <summary>Until no listing is queued or on its way, and the refresh it queued has run.</summary>
@@ -177,6 +185,14 @@ public class SolutionExplorerShowAllFilesTests
         }
     }
 
+    /// <summary>
+    /// Until the batch's listings are back from the build host, without running the UI thread, so the batch hasn't taken
+    /// them yet: turned off then, only the batch's check that Show All Files went off keeps them out. Turned off before
+    /// they came back, they were cancelled, and the batch had nothing to keep out.
+    /// </summary>
+    private static void ListingsCame(SolutionExplorerViewModel explorer) =>
+        Assert.True(SpinWait.SpinUntil(() => explorer.ListingsOnTheirWay!.IsCompleted, TimeSpan.FromSeconds(60)), "The build host didn't answer the listings.");
+
     [AvaloniaFact]
     public async Task A_listing_that_comes_after_show_all_files_went_off_takes_nothing()
     {
@@ -187,8 +203,9 @@ public class SolutionExplorerShowAllFilesTests
         explorer.ShowAllFiles = false;
         await SettledAsync(explorer);
 
-        // On, its batch sent, and off before anything came back.
+        // On, its batch's listings back, and off before the batch took them.
         var (batch, listings) = await BatchOnItsWayAsync(explorer);
+        ListingsCame(explorer);
         explorer.ShowAllFiles = false;
         var builds = explorer.Builds;
         await ShellFixture.PumpUntil(() => batch.IsCompleted);
@@ -196,8 +213,10 @@ public class SolutionExplorerShowAllFilesTests
         Assert.Equal((listings, builds), (explorer.Listings, explorer.Builds));
         Assert.Null(Find(explorer.Root!, "d:" + bin));
 
-        // On, off and on again while the first batch is on its way: only the last one's listings are taken.
+        // On, off and on again while the first batch is on its way: only the last one's listings are taken. Without the
+        // check, the first batch took its listings too, and cleared the mark of the batch after it.
         (batch, listings) = await BatchOnItsWayAsync(explorer);
+        ListingsCame(explorer);
         explorer.ShowAllFiles = false;
         explorer.ShowAllFiles = true;
         await ShellFixture.PumpUntil(() => batch.IsCompleted);
@@ -256,6 +275,66 @@ public class SolutionExplorerShowAllFilesTests
         Assert.All(new[] { core, twin }, project => Assert.NotNull(Find(Find(explorer.Root!, "p:" + project)!, "d:" + Path.Combine(bin, "Debug"))));
         Assert.Equal(2, explorer.Rows.Count(r => r.Id == "d:" + Path.Combine(bin, "Debug")));
         Assert.DoesNotContain(explorer.Rows, r => r.Id.EndsWith("|listing", StringComparison.Ordinal)); // no "Loading…" left in either
+    }
+
+    [AvaloniaFact]
+    public async Task A_shared_folder_expanded_from_its_listed_copy_lists_the_other_projects_copy()
+    {
+        // Models is an item folder of Core (listed) and outside Core.Twin, which has no items (unlisted): expanding Core's
+        // copy expands Twin's too, one id for both, and Twin's showed "Loading…" with no listing on its way.
+        var (f, folder) = await OpenAsync(folder =>
+        {
+            Directory.CreateDirectory(Path.Combine(folder, "src", "Core", "Models"));
+            File.WriteAllText(Path.Combine(folder, "src", "Core", "Models", "Person.cs"), "namespace Core.Models;\n\npublic sealed class Person;\n");
+            File.WriteAllText(Path.Combine(folder, "src", "Core", "Core.Twin.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n    <EnableDefaultItems>false</EnableDefaultItems>\n  </PropertyGroup>\n</Project>\n");
+            var slnx = Path.Combine(folder, "ProjectSystem.slnx");
+            File.WriteAllText(slnx, File.ReadAllText(slnx).Replace("<Project Path=\"src/Core/Core.csproj\" />", "<Project Path=\"src/Core/Core.csproj\" />\n    <Project Path=\"src/Core/Core.Twin.csproj\" />", StringComparison.Ordinal));
+        }, projects: 4);
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var core = Path.Combine(folder, "src", "Core", "Core.csproj");
+        var twin = Path.Combine(folder, "src", "Core", "Core.Twin.csproj");
+        var models = Path.Combine(folder, "src", "Core", "Models");
+        foreach (var project in new[] { core, twin })
+        {
+            explorer.Reveal("p:" + project);
+            explorer.SetExpanded(explorer.Selected!, true);
+        }
+
+        var row = explorer.Rows.First(r => r.Id == "d:" + models && r.Node.ProjectPath == core);
+        Assert.False(row.IsDimmed); // Core's own folder, listed
+        var listings = explorer.Listings;
+        explorer.SetExpanded(row, true);
+        explorer.Refresh(); // the next build of the tree (an evaluation's, a design-time build's) shows Twin's copy expanded
+        await SettledAsync(explorer);
+        Assert.Equal(listings + 1, explorer.Listings); // Twin's
+        Assert.NotNull(Find(Find(explorer.Root!, "p:" + twin)!, "f:" + Path.Combine(models, "Person.cs")));
+        Assert.DoesNotContain(explorer.Rows, r => r.Id.EndsWith("|listing", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
+    public async Task A_sync_waiting_for_its_listing_gives_way_once_another_document_is_active()
+    {
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var program = Path.Combine(folder, "src", "App", "Program.cs");
+        var ignored = Path.Combine(folder, "src", "App", "Excluded", "Ignored.cs");
+        await f.Shell.OpenFileAsync(program);
+        await f.Shell.OpenFileAsync(ignored);
+        await SettledAsync(explorer);
+        explorer.Reveal("f:" + program);
+        f.Shell.StatusBar.ClearMessage();
+
+        // Sync on a file in a folder not listed yet waits for the listing; Program.cs is active before it comes. It was
+        // selected when the listing came, the user's row and the active document's left behind.
+        explorer.SyncWithActiveDocument();
+        f.Shell.Layout.OpenDocument(f.Shell.Editors.Single(e => e.Model.Path == program));
+        Assert.Equal(program, f.Shell.ActiveEditor?.Model.Path);
+        await SettledAsync(explorer);
+        Assert.NotNull(Find(explorer.Root!, "f:" + ignored)); // the listing came
+        Assert.Equal(program, explorer.Selected?.Node.Path);
+        Assert.Null(f.Shell.StatusBar.Message);
     }
 
     [AvaloniaFact]
@@ -322,7 +401,7 @@ public class SolutionExplorerShowAllFilesTests
     }
 
     [AvaloniaFact]
-    public async Task A_source_generator_built_from_the_solution_loses_its_warning()
+    public async Task A_source_generator_built_from_the_solution_loses_its_warning_and_a_clean_brings_it_back()
     {
         // On a fresh clone, a generator the solution's build makes isn't there yet: the build host marks it missing. A build
         // doesn't run design-time builds again, so it kept its warning until the project's next one. (One project, restored
@@ -348,8 +427,7 @@ public class SolutionExplorerShowAllFilesTests
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Generator.slnx"));
         await ShellFixture.PumpUntil(Built, seconds: 180);
 
-        // The Analyzer item's path is relative, the project folder's: taken as the build host's working folder's, it was
-        // missing even once there.
+        // The Analyzer item's path is relative, the project folder's.
         Assert.Equal([generator], (f.Shell.Solutions.CompilerInputs[app].MissingAnalyzers ?? []).Select(a => Path.GetFullPath(a, Path.GetDirectoryName(app)!)));
         var explorer = f.Shell.Explorer;
         ExplorerNode? Analyzer() => explorer.Root is { } root && Find(root, "p:" + app) is { } project
@@ -365,5 +443,20 @@ public class SolutionExplorerShowAllFilesTests
         explorer.OnBuildFinished(app);
         await ShellFixture.PumpUntil(() => Analyzer() is { IsWarning: false }, seconds: 60);
         Assert.Same(inputs, f.Shell.Solutions.CompilerInputs[app]);
+
+        // A Clean deletes it, then finishes: it's missing again. The look started from the last one's result, which had
+        // nothing missing, so it looked for nothing and showed the generator as there.
+        File.Delete(generator);
+        explorer.OnBuildFinished(app);
+        await ShellFixture.PumpUntil(() => Analyzer() is { IsWarning: true }, seconds: 60);
+        Assert.Same(inputs, f.Shell.Solutions.CompilerInputs[app]);
+
+        // Built again, then App's next design-time build: the build host's own look finds it too, and the warning stays
+        // away.
+        File.Copy(typeof(SolutionExplorerShowAllFilesTests).Assembly.Location, generator);
+        await f.Shell.Solutions.DesignTimeBuildAsync(app, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => !ReferenceEquals(inputs, f.Shell.Solutions.CompilerInputs[app]) && Built(), seconds: 120);
+        Assert.Null(f.Shell.Solutions.CompilerInputs[app].MissingAnalyzers);
+        await ShellFixture.PumpUntil(() => Analyzer() is { IsWarning: false }, seconds: 60);
     }
 }
