@@ -28,7 +28,9 @@ internal sealed partial class SmokeTest
         Check(current.IsCurrent && current.Text == "branch", "the current branch is in the smoke folder, in bold");
         Check(vm.Roots.Select(r => r.Text).SequenceEqual(["Branches / Tags", "Pull Requests", "Submodules"]), "the tree's groups are the classic IDE's");
 
-        vm.Selected = vm.Find("refs/heads/smoke/theirs");
+        // On the tree as git has it now (read again first when stale), its row brought into view (M57).
+        Check(await vm.SelectAsync("refs/heads/smoke/theirs").ConfigureAwait(true), "the branch is in the tree");
+        Check(vm.SelectedRow?.Node == vm.Selected, "the branch's row is selected");
         await WaitAsync(() => vm.History is { IsLoading: false } history && history.Rows.Any(r => r.Subject == "theirs"), "selecting a branch shows its history").ConfigureAwait(true);
         Check(vm.Header == "Branch / Tag: smoke/theirs", "the history says whose it is");
         await RenderedAsync().ConfigureAwait(true);

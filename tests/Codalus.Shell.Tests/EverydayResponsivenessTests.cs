@@ -40,6 +40,7 @@ public class EverydayResponsivenessTests
         monitor.Reset();
         await flow();
         await WaitAsync(300);
+        TestContext.Current.TestOutputHelper?.WriteLine($"{name}: {monitor.Report().Describe()}");
         monitor.AssertResponsive(name, Budget);
     }
 
@@ -470,6 +471,119 @@ public class EverydayResponsivenessTests
             }
 
             await ShellFixture.PumpUntil(() => !vm.IsRefreshing && vm.ChangesRows.Count > 10_000, seconds: 60);
+        });
+    }
+
+    /// <summary>
+    /// The Git Repository document with 5,000 tags and 2,000 branches: typing in its filter, status reads with the tags
+    /// expanded, expanding and collapsing. Each keystroke and status read built a tree view item per ref on the UI thread,
+    /// and a filter expanded every match at each keystroke (M57).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_repository_flows_on_seven_thousand_refs()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Height = 700;
+        var (vm, _, folder) = await GitTreesRowsTests.ShowRepositoryAsync(f, tags: 5000, branches: 2000);
+        GitRepositoryRow Row(string text) => vm.Rows.Single(r => r.Text == text);
+        vm.SetExpanded(Row("tags"), true);
+        var readme = Path.Combine(folder, "README.md");
+
+        using var monitor = new UiStallMonitor();
+        await FlowAsync(monitor, "typing in the Git Repository's filter and clearing it", async () =>
+        {
+            foreach (var text in new[] { "t", "t0", "t01", "t012", "b", "b01", string.Empty })
+            {
+                vm.Filter = text;
+                await WaitAsync(60);
+            }
+
+            await ShellFixture.PumpUntil(() => !vm.IsRebuilding && vm.Rows.Count > 7000, seconds: 60);
+        });
+
+        var deleted = 0;
+        await FlowAsync(monitor, "status reads with the tags expanded, one with a tag deleted", async () =>
+        {
+            for (var i = 0; i < 3; i++)
+            {
+                await File.AppendAllTextAsync(readme, "saved\n", TestContext.Current.CancellationToken);
+                if (i == 1)
+                {
+                    GitTreesRowsTests.DeleteTag(folder, $"t{deleted++:00000}");
+                }
+
+                var reads = vm.RefsReads;
+                await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+                await ShellFixture.PumpUntil(() => vm.RefsReads > reads && !vm.IsReading, seconds: 60);
+            }
+        });
+
+        await FlowAsync(monitor, "expanding and collapsing the tags and everything under the repository", async () =>
+        {
+            for (var i = 0; i < 2; i++)
+            {
+                vm.SetExpanded(Row("tags"), false);
+                await WaitAsync(50);
+                vm.SetExpanded(Row("tags"), true);
+                await WaitAsync(50);
+                vm.SetExpandedUnder(vm.Rows[1], expanded: false);
+                await WaitAsync(50);
+                vm.SetExpandedUnder(vm.Rows[1], expanded: true);
+                await WaitAsync(50);
+            }
+        });
+    }
+
+    /// <summary>
+    /// A commit of 10,000 files, and a branch 10,000 files apart compared: opening the commit's tab and switching tabs;
+    /// Compare's open, Refresh, and Tree and List. Each built a tree view item per file on the UI thread, every folder
+    /// expanded, and Compare built its tree and its list at each open and Refresh (M57).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Commit_details_and_compare_flows_on_ten_thousand_files()
+    {
+        await using var f = ShellFixture.Create();
+        var (folder, hash) = GitTreesRowsTests.CreateLargeCommit(Path.Combine(f.UserData, "Large"), folders: 1000, files: 10, branch: "many");
+        f.Shell.Trust.Trust(folder);
+        f.Window.Height = 700;
+        await f.Shell.OpenFolderAsync(folder);
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" });
+        var readme = Path.Combine(folder, "README.md");
+        await f.Shell.OpenFileAsync(readme);
+        var editor = f.Shell.Layout.ActiveDocument!;
+
+        using var monitor = new UiStallMonitor();
+        await FlowAsync(monitor, "opening a commit of 10,000 files, then switching tabs", async () =>
+        {
+            var commit = (await f.Shell.ShowCommitAsync(hash))!;
+            await ShellFixture.PumpUntil(() => commit.ViewModel is { HasDiff: true, Rows.Count: 11_001 }, seconds: 60);
+            Assert.True(commit.ViewModel.SelectFile("src/D900/F09.cs"));
+            for (var i = 0; i < 4; i++)
+            {
+                f.Shell.Layout.OpenDocument(editor, focus: true);
+                await WaitAsync(100);
+                f.Shell.Layout.OpenDocument(commit, focus: true);
+                await WaitAsync(100);
+            }
+
+            f.Shell.Layout.CloseDocument(commit);
+            await WaitAsync(50);
+        });
+
+        await FlowAsync(monitor, "Compare: opening it, Refresh, the list and back", async () =>
+        {
+            var compare = (await f.Shell.OpenBranchCompareAsync("refs/heads/many"))!;
+            var vm = compare.ViewModel;
+            Assert.Equal(1 + 1 + 1000 + 10_000, vm.Rows.Count);
+            vm.Changes.SetExpanded(vm.Rows.Single(r => r.Text == "D010"), false);
+            await vm.LoadAsync();
+            vm.IsTreeView = false;
+            await ShellFixture.PumpUntil(() => vm.Items.Count == 10_000, seconds: 60);
+            await WaitAsync(100);
+            vm.IsTreeView = true;
+            await WaitAsync(100);
+            f.Shell.Layout.CloseDocument(compare);
+            await WaitAsync(50);
         });
     }
 }

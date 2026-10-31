@@ -68,7 +68,10 @@ public sealed class GitFileRow(GitFileStatus status, bool staged, GitLfsStatus? 
 
     public bool HasOldName => Status.OriginalPath is not null;
 
-    public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
+    /// <summary>A file a commit changed or a comparison found (M57): its status letter is <see cref="GitFileStatus.Index"/>'s, and it isn't "staged".</summary>
+    public bool Committed { get; init; }
+
+    public string AccessibleName => $"{Name} in {Folder}, {Description}{(Staged && !Committed ? ", staged" : string.Empty)}{(Badge is { } badge ? ", " + badge : string.Empty)}";
 
     /// <summary>The same file shown the same way: its status, section, repository and LFS badge (a refresh keeps such a row).</summary>
     internal bool IsSameAs(GitFileRow other) =>
@@ -182,7 +185,7 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
 /// can virtualize (M56: a tree view made controls for every file, seconds for 10,000). A refresh keeps the row of a node
 /// that's still in its place, with its new node, so its controls, the selection and the scroll position stay.
 /// </summary>
-public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObject
+public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObject, ITreeRow
 {
     private GitChangeNode _node = node;
     private bool _shownExpanded = node.IsExpanded; // what its chevron, icon and name last said
@@ -226,7 +229,7 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
 
             if (file)
             {
-                foreach (var name in new[] { nameof(Letter), nameof(Description), nameof(Badge), nameof(HasBadge), nameof(BadgeTooltip), nameof(CanDiscard) })
+                foreach (var name in new[] { nameof(Letter), nameof(Description), nameof(Badge), nameof(HasBadge), nameof(BadgeTooltip), nameof(CanDiscard), nameof(OldName), nameof(HasOldName), nameof(Tip) })
                 {
                     OnPropertyChanged(name);
                 }
@@ -285,6 +288,14 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
     public bool CanUnstage => _node.CanUnstage;
 
     public bool CanDiscard => _node.CanDiscard;
+
+    /// <summary>A rename's old name ("← Tokens.cs"), or null (a commit's changes and Compare show it, M57).</summary>
+    public string? OldName => _node.Row?.OldName;
+
+    public bool HasOldName => _node.Row?.HasOldName ?? false;
+
+    /// <summary>A file's path from the repository's folder; a folder's name.</summary>
+    public string Tip => _node.Row?.Status.RelativePath ?? _node.Text;
 
     /// <summary>The node's name, and a folder's state: a list's row has no expander for a screen reader to read.</summary>
     public string AccessibleName => !HasChildren ? _node.AccessibleName
@@ -385,7 +396,7 @@ public sealed class GitProgress : IDisposable
     }
 }
 
-public sealed partial class GitChangesViewModel : ObservableObject
+public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwner
 {
     public const string ToolWindowId = "git.changes";
 
@@ -666,31 +677,26 @@ public sealed partial class GitChangesViewModel : ObservableObject
         Remember(row.Key, expanded);
         KeepExpansion();
         row.SetExpanded(expanded);
-        var rows = RowsOf(row.Node.Section);
-        var index = rows.IndexOf(row);
-        if (index < 0)
-        {
-            return;
-        }
-
-        if (expanded)
-        {
-            var below = new List<(GitChangeNode Node, int Depth)>();
-            Flatten(row.Node.Children, row.Depth + 1, below);
-            rows.InsertRange(index + 1, [.. below.Select(r => new GitChangeRow(r.Node, r.Depth))]);
-            return;
-        }
-
-        var end = index + 1;
-        while (end < rows.Count && rows[end].Depth > row.Depth)
-        {
-            end++;
-        }
-
-        rows.RemoveRange(index + 1, end - index - 1);
+        GitChangeTree.ShowChildren(RowsOf(row.Node.Section), row, expanded);
     }
 
     public void Toggle(GitChangeRow row) => SetExpanded(row, !row.IsExpanded);
+
+    void ITreeRowsOwner.SetExpanded(ITreeRow row, bool expanded)
+    {
+        if (row is GitChangeRow change)
+        {
+            SetExpanded(change, expanded);
+        }
+    }
+
+    void ITreeRowsOwner.SetExpandedUnder(ITreeRow row, bool expanded)
+    {
+        if (row is GitChangeRow change)
+        {
+            SetExpandedUnder(change.Node.Section, change.Node.FullPath, expanded);
+        }
+    }
 
     /// <summary>The staged section has files, but the filter shows none of them.</summary>
     public bool StagedFilteredOut => IsFiltered && Staged.Count > 0 && _stagedShown == 0;
@@ -769,7 +775,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
 
     /// <summary>Shows a section's new rows: the rows of the same nodes in the same places stay, with their new nodes.</summary>
     private static void PatchRows(ResettableCollection<GitChangeRow> target, IReadOnlyList<(GitChangeNode Node, int Depth)> rows) =>
-        Patch(target, rows, (row, r) => row.Depth == r.Depth && string.Equals(row.Key, r.Node.Key, StringComparison.Ordinal), r => new GitChangeRow(r.Node, r.Depth), (row, r) => row.Node = r.Node);
+        GitChangeTree.PatchRows(target, rows);
 
     /// <summary>
     /// Updates <paramref name="target"/> to <paramref name="items"/> in place: the rows alike at its start and at its end

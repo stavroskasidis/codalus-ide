@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Git;
@@ -20,6 +19,14 @@ public sealed class GitCompareViewModel : ObservableObject
     private bool _isLoading;
     private bool _isTreeView = true;
     private IReadOnlyList<GitFileRow> _rows = [];
+    private bool _treeStale = true;
+    private bool _listStale = true;
+    private int _version;
+    private bool _showing;
+    private GitChangeRow? _selectedRow;
+    private GitFileRow? _selectedItem;
+    private string? _selectedKey;
+    private string? _selectedPath;
 
     public GitCompareViewModel(GitService git, string from, string fromName, string to, string toName)
     {
@@ -45,12 +52,49 @@ public sealed class GitCompareViewModel : ObservableObject
     public string Title => Localizer.Format("msg.gitCompare.title", "{0} → {1}", FromName, ToName);
 
     /// <summary>
-    /// The compared files' tree. TODO(issue): built on the UI thread into a tree view that isn't virtualized, an item per
-    /// file: seconds for two branches 10,000 files apart (M56; Git Changes' flattened rows are the way).
+    /// The compared files' tree, as Git Changes shows its sections (M57): built off the UI thread, only while the Tree view
+    /// is shown, into a virtualized list of rows updated in place, so Refresh keeps the collapsed folders and the selection.
+    /// A tree view built on the UI thread, with the list beside it, took seconds for two branches 10,000 files apart.
     /// </summary>
-    public ObservableCollection<GitChangeNode> Tree { get; } = [];
+    public GitChangeTree Changes { get; } = new();
 
-    public ObservableCollection<GitFileRow> Items { get; } = [];
+    /// <summary>The rows of <see cref="Changes"/>.</summary>
+    public ResettableCollection<GitChangeRow> Rows => Changes.Rows;
+
+    /// <summary>The List view's files by path, filled (with one reset) only while it's shown.</summary>
+    public ResettableCollection<GitFileRow> Items { get; } = [];
+
+    /// <summary>Every compared file, by path, whichever view is shown.</summary>
+    public IReadOnlyList<GitFileRow> Files => _rows;
+
+    /// <summary>How many times the tree and the list were built (tests: only the shown view's).</summary>
+    internal (int Tree, int List) ViewsBuilt { get; private set; }
+
+    /// <summary>The Tree view's selection; Refresh selects the same node again.</summary>
+    public GitChangeRow? SelectedRow
+    {
+        get => _selectedRow;
+        set
+        {
+            if (!_showing && SetField(ref _selectedRow, value))
+            {
+                _selectedKey = value?.Key;
+            }
+        }
+    }
+
+    /// <summary>The List view's selection; Refresh selects the same file again.</summary>
+    public GitFileRow? SelectedItem
+    {
+        get => _selectedItem;
+        set
+        {
+            if (!_showing && SetField(ref _selectedItem, value))
+            {
+                _selectedPath = value?.Status.Path;
+            }
+        }
+    }
 
     /// <summary>Opens a file's diff (set by the shell).</summary>
     public Func<GitChangedFile, Task>? OpenFile { get; set; }
@@ -72,6 +116,7 @@ public sealed class GitCompareViewModel : ObservableObject
         }
     }
 
+    /// <summary>The Tree view (or the List view): the one shown is built when it's out of date.</summary>
     public bool IsTreeView
     {
         get => _isTreeView;
@@ -80,6 +125,10 @@ public sealed class GitCompareViewModel : ObservableObject
             if (SetField(ref _isTreeView, value))
             {
                 OnPropertyChanged(nameof(IsListView));
+                if (!_isLoading)
+                {
+                    _ = ShowViewAsync(_version);
+                }
             }
         }
     }
@@ -118,37 +167,88 @@ public sealed class GitCompareViewModel : ObservableObject
         ? Localizer.Format("msg.gitCompare.hintCommits", "Letters say what {1} changes from {0}. Enter or double-click opens a file's diff: {0} on the left, {1} on the right.", FromName, ToName)
         : Localizer.Format("msg.gitCompare.hint", "Letters say what {1} changes from {0}, tip to tip. Enter or double-click opens a file's diff: {0} on the left, {1} on the right.", FromName, ToName);
 
-    /// <summary>Reads the files again (on open and Refresh), off the UI thread.</summary>
+    /// <summary>Reads the files again (on open and Refresh), off the UI thread, then builds the view shown.</summary>
     public async Task LoadAsync()
     {
+        var version = ++_version;
         IsLoading = true;
         try
         {
             var files = await _git.CompareBranchesAsync(From, To).ConfigureAwait(true);
             var root = _git.Root ?? string.Empty;
-            _rows = [.. files.Select(f => new GitFileRow(
+            var rows = await Task.Run(() => (IReadOnlyList<GitFileRow>)[.. files.Select(f => new GitFileRow(
                 new GitFileStatus(f.Path, System.IO.Path.GetRelativePath(root, f.Path).Replace('\\', '/'), f.Status, '.', f.OldPath),
                 staged: true)
             {
+                Committed = true,
                 Location = System.IO.Path.GetDirectoryName(System.IO.Path.GetRelativePath(root, f.Path)) ?? string.Empty,
-            })];
+            }).OrderBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase)]).ConfigureAwait(true);
+            if (version == _version)
+            {
+                _rows = rows;
+            }
         }
         finally
         {
-            Tree.Clear();
-            foreach (var node in GitChangesViewModel.BuildTree(_git.Root ?? string.Empty, _rows, "compare", staged: true, new HashSet<string>()))
+            if (version == _version)
             {
-                Tree.Add(node);
+                (_treeStale, _listStale) = (true, true);
+                await ShowViewAsync(version).ConfigureAwait(true);
+                IsLoading = false;
+                Notify();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Builds the view shown when it's out of date: the tree off the UI thread, shown in place with the folders the user
+    /// collapsed still collapsed, or the list with one reset; then the same selection.
+    /// </summary>
+    private async Task ShowViewAsync(int version)
+    {
+        if (_isTreeView && _treeStale)
+        {
+            var rows = _rows;
+            var root = _git.Root ?? string.Empty;
+            var collapsed = Changes.Collapsed;
+            var expandedChanged = Changes.ExpandedChanged;
+            var (tree, flat) = await Task.Run(() =>
+            {
+                var built = GitChangesViewModel.BuildTree(root, rows, "compare", staged: true, collapsed, expandedChanged);
+                return (built, GitChangeTree.Flatten(built));
+            }).ConfigureAwait(true);
+            if (version != _version || !_isTreeView || !ReferenceEquals(rows, _rows))
+            {
+                return;
             }
 
-            Items.Clear();
-            foreach (var row in _rows.OrderBy(r => r.Status.RelativePath, StringComparer.OrdinalIgnoreCase))
-            {
-                Items.Add(row);
-            }
+            _treeStale = false;
+            ViewsBuilt = (ViewsBuilt.Tree + 1, ViewsBuilt.List);
+            Shown(() => Changes.Show(tree, flat));
+            _selectedRow = _selectedKey is null ? null : Changes.RowOf(_selectedKey);
+            OnPropertyChanged(nameof(SelectedRow));
+        }
+        else if (!_isTreeView && _listStale)
+        {
+            _listStale = false;
+            ViewsBuilt = (ViewsBuilt.Tree, ViewsBuilt.List + 1);
+            Shown(() => Items.Reset(_rows));
+            _selectedItem = _selectedPath is null ? null : _rows.FirstOrDefault(r => string.Equals(r.Status.Path, _selectedPath, StringComparison.Ordinal));
+            OnPropertyChanged(nameof(SelectedItem));
+        }
+    }
 
-            IsLoading = false;
-            Notify();
+    /// <summary>Shows new rows: the list's selection, which goes as they're replaced, is set again after.</summary>
+    private void Shown(Action show)
+    {
+        _showing = true;
+        try
+        {
+            show();
+        }
+        finally
+        {
+            _showing = false;
         }
     }
 

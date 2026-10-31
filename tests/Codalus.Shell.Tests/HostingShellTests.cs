@@ -214,8 +214,9 @@ public sealed class HostingShellTests
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any() && vm.HasMessage || vm.HasHistory);
         GitRepositoryShellTests.Snapshots(f.Window, "git-repository-pull-requests");
 
-        // The tree's filter keeps the folders with a match.
+        // The tree's filter keeps the folders with a match (after its pause, M57).
         vm.Filter = "docs";
+        await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
         Assert.Equal(["Mine (1)", "All open (2)"], vm.Roots[1].Children.Select(c => c.Text));
     }
 
