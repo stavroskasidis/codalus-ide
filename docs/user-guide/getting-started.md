@@ -89,11 +89,18 @@ The setup doesn't ask about AI: it stays off until you turn it on ([AI assistanc
   - Search them with `Alt+S`; `Enter` opens the first match.
   - Pin one with its pin button.
   - Right-click for Open in New Window, Copy Path and Remove from List (`Delete` removes the selected entry).
-  - An entry whose files are gone offers to leave the list.
+  - The list shows at once, each entry's icon taken from its name. Whether each entry is still there is checked in the background, a second at most each, so an entry on a network share that doesn't answer never holds up the window: it shows as missing until it answers. Nothing leaves the list by itself.
+  - An entry whose files are gone, or that doesn't answer, offers to leave the list when you open it (from here or File → Open Recent).
 - **Actions**: on the right, Create a new project (New Project, [New projects and solutions](solutions.md#new-projects-and-solutions); Back on its first page returns here), Open a project or solution, Open a folder, and Clone a repository.
 - **Continue without code** (or `Esc`) opens the empty IDE.
 
-File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.
+File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead (the first recent entry that's there).
+
+**Started from the Dock, Finder or a desktop menu** on macOS and Linux, Codalus IDE reads your login shell's `PATH` and other variables (Homebrew's tools, `DOTNET_ROOT`, proxies), as a terminal has them. The window shows at once; what starts tools waits for those variables, up to 6 seconds: the environment check, the helper processes, git and the start window.
+
+**Several files at once** (Open with on a selection of files, files dropped on the window, or several `codalus <file>` within a moment) open as tabs behind the active one, and only the last becomes active.
+
+**Closing the IDE** hides its windows at once, and the helper processes shut down in parallel in the background, for up to 3 seconds. A `codalus` started meanwhile opens a window of its own.
 
 The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Set Up Codalus IDE opens it.)
 
