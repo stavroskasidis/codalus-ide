@@ -185,24 +185,32 @@ public sealed class GitChangeNode(string key, string text, GitFileRow? row, bool
 public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObject
 {
     private GitChangeNode _node = node;
+    private bool _shownExpanded = node.IsExpanded; // what its chevron, icon and name last said
 
     public GitChangeNode Node
     {
         get => _node;
         set
         {
+            // The expansion it shows against its node's, not the old node's: Expand All and Collapse All set the nodes of the
+            // rows they keep (which tells the rows nothing), and the next refresh's nodes have the state they left.
             var old = _node;
+            _node = value;
+            var expanded = _shownExpanded != value.IsExpanded;
+            _shownExpanded = value.IsExpanded;
             if (ReferenceEquals(old, value))
             {
+                if (expanded)
+                {
+                    ExpandedChanged();
+                }
+
                 return;
             }
-
-            _node = value;
 
             // Only what differs: unchanged rows raise nothing, and formatting every row's texts again took the UI thread's time.
             var file = old.Row is { } before && value.Row is { } after ? !before.IsSameAs(after) : !ReferenceEquals(old.Row, value.Row);
             var counts = old.TotalFiles != value.TotalFiles || old.ShownFiles != value.ShownFiles;
-            var expanded = old.IsExpanded != value.IsExpanded;
             if (!string.Equals(old.Text, value.Text, StringComparison.Ordinal))
             {
                 OnPropertyChanged(nameof(Text));
@@ -292,6 +300,12 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
         }
 
         _node.SetExpanded(expanded);
+        _shownExpanded = expanded;
+        ExpandedChanged();
+    }
+
+    private void ExpandedChanged()
+    {
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(Chevron));
         OnPropertyChanged(nameof(Icon));
@@ -911,7 +925,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
     private bool _computeAgain;
     private int _refreshPosted;
     private bool _stashesStale;
-    private bool _viewShown;
+    private readonly ShownViews _views = new();
     private bool _viewsStale = true;
     private int _stagedShown;
     private int _changesShown;
@@ -923,18 +937,19 @@ public sealed partial class GitChangesViewModel : ObservableObject
     /// <summary>Whether a refresh is waiting or running (tests).</summary>
     internal bool IsRefreshing => _computing || Volatile.Read(ref _refreshPosted) == 1 || _filterRefresh?.IsPending == true;
 
-    /// <summary>Whether the view said the window is shown (tests).</summary>
-    internal bool IsViewShown => _viewShown;
+    /// <summary>Whether a view said the window is shown (tests).</summary>
+    internal bool IsViewShown => _views.Any;
 
     /// <summary>
-    /// The view tells whether the window is shown (attached and visible). While it isn't, refreshes keep the files current
+    /// A view tells whether it shows the window (attached and visible). While none does, refreshes keep the files current
     /// (<see cref="Staged"/>, <see cref="Changes"/>, <see cref="Conflicts"/>: the commands read them) but build no tree or
-    /// list; showing it builds them once. The window lives for the whole session, and every status read rebuilt them all.
+    /// list; one showing it builds them once. The window lives for the whole session, and every status read rebuilt them
+    /// all. Each view speaks for itself (<see cref="ShownViews"/>): Dock builds a view again for a new layout while the old
+    /// one still shows the window.
     /// </summary>
-    public void SetViewShown(bool shown)
+    public void SetViewShown(object view, bool shown)
     {
-        _viewShown = shown;
-        if (shown && _viewsStale)
+        if (_views.Set(view, shown) && shown && _viewsStale)
         {
             Refresh();
         }
@@ -1044,7 +1059,7 @@ public sealed partial class GitChangesViewModel : ObservableObject
         _isAllRepositories,
         _git.Root ?? string.Empty,
         _collapsed.ToHashSet(StringComparer.Ordinal),
-        _viewShown,
+        _views.Any,
         _isTreeView,
         [.. Staged],
         [.. Changes],
@@ -1143,7 +1158,12 @@ public sealed partial class GitChangesViewModel : ObservableObject
         }
         else
         {
+            // Computed while hidden. A view that showed the window meanwhile found the views current: build them now.
             _viewsStale = true;
+            if (_views.Any)
+            {
+                Refresh();
+            }
         }
 
         foreach (var name in new[]
