@@ -316,6 +316,67 @@ public sealed class LanguageTests
     }
 
     [AvaloniaFact]
+    public async Task A_markdown_editor_shows_its_preview_beside_the_text_collapsible_and_remembered()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var text = "# Title\n\nSome *text*.\n" + string.Concat(Enumerable.Range(1, 200).Select(i => $"\nParagraph {i}.\n"));
+        var readme = await OpenAsync(f, "README.md", text);
+        var view = f.Shell.ActiveEditor!.View!;
+
+        // Half and half, the preview rendered and following edits.
+        await ShellFixture.PumpUntil(() => view.MarkdownSplit is { Preview.Rendered.Length: > 0 });
+        var split = view.MarkdownSplit!;
+        Assert.False(split.IsCollapsed);
+        Assert.StartsWith("# Title", split.Preview.Rendered, StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => split.Preview.Bounds.Width > 0);
+        Assert.InRange(readme.Editor.Bounds.Width / (readme.Editor.Bounds.Width + split.Preview.Bounds.Width), 0.4, 0.6);
+        readme.Model.Text.Insert(readme.Model.Text.TextLength, "\n## Added\n");
+        await ShellFixture.PumpUntil(() => split.Preview.Rendered.Contains("## Added", StringComparison.Ordinal), seconds: 10);
+
+        // Two-way scroll sync, by proportion.
+        var editorScroll = readme.Editor.GetVisualDescendants().OfType<ScrollViewer>().First();
+        await ShellFixture.PumpUntil(() => split.Preview.Scroll.Extent.Height > split.Preview.Scroll.Viewport.Height);
+        editorScroll.Offset = new Vector(0, (editorScroll.Extent.Height - editorScroll.Viewport.Height) / 2);
+        await ShellFixture.PumpUntil(() => MarkdownSplit.Proportion(split.Preview.Scroll) is > 0.4 and < 0.6, describe: () => $"preview at {MarkdownSplit.Proportion(split.Preview.Scroll):F2}");
+        split.Preview.Scroll.Offset = new Vector(0, 0);
+        await ShellFixture.PumpUntil(() => MarkdownSplit.Proportion(editorScroll) < 0.05, describe: () => $"editor at {MarkdownSplit.Proportion(editorScroll):F2}");
+
+        // Toggle Preview collapses it to the strip; edits wait until it shows again.
+        var half = readme.Editor.Bounds.Width;
+        await f.RunAsync("markdown.togglePreview");
+        Assert.True(split.IsCollapsed);
+        Assert.False(split.Preview.IsVisible);
+        await ShellFixture.PumpUntil(() => readme.Editor.Bounds.Width > half * 1.8, describe: () => $"the editor is {readme.Editor.Bounds.Width} wide, {half} beside the preview");
+        readme.Model.Text.Insert(readme.Model.Text.TextLength, "\n## Collapsed\n");
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        ShellFixture.Pump();
+        Assert.DoesNotContain("## Collapsed", split.Preview.Rendered, StringComparison.Ordinal);
+
+        // The next Markdown file opens the same way, and so does the next session.
+        await OpenAsync(f, "CHANGELOG.md", "# Changes\n");
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor!.View?.MarkdownSplit is not null);
+        Assert.True(f.Shell.ActiveEditor!.View!.MarkdownSplit!.IsCollapsed);
+        f.Shell.SaveState(null);
+        await using (var second = ShellFixture.Create(f.UserData))
+        {
+            Assert.True(second.Shell.MarkdownSplit.Collapsed);
+        }
+
+        // Shown again in one, it shows in every open one, rendering what changed meanwhile.
+        f.Shell.ActiveEditor!.View!.MarkdownSplit!.Toggle();
+        Assert.False(f.Shell.MarkdownSplit.Collapsed);
+        Assert.False(split.IsCollapsed);
+        await f.Shell.OpenFileAsync(readme.Model.Path, preview: false, null);
+        await ShellFixture.PumpUntil(() => split.Preview.Rendered.Contains("## Collapsed", StringComparison.Ordinal), seconds: 10);
+
+        // Not Markdown: no preview.
+        _ = await OpenAsync(f, "notes.txt", "plain\n");
+        Assert.Null(f.Shell.ActiveEditor!.View!.MarkdownSplit);
+    }
+
+    [AvaloniaFact]
     public async Task Language_configurations_drive_comments_brackets_folding_and_word_completion()
     {
         await using var f = ShellFixture.Create();

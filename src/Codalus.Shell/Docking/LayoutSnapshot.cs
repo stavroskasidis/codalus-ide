@@ -187,4 +187,7 @@ public sealed record ShellState
 
     /// <summary>Code Search's window: its size, position, pin, preview and whether it is docked (M47).</summary>
     public ViewModels.CodeSearchWindowState? CodeSearch { get; init; }
+
+    /// <summary>Whether Markdown editors' preview is collapsed, and its width.</summary>
+    public Editor.MarkdownSplitState? MarkdownSplit { get; init; }
 }
