@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.VisualTree;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Folding;
+using AvaloniaEdit.Rendering;
 using Codalus.Shell.Editor;
 using Codalus.Workbench.FileSystem;
 
@@ -18,6 +19,19 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class EditorLargeTextTests
 {
+    private const string Chunk = "f(a[1],{b:2});";
+
+    /// <summary>A minified script's text of exactly <paramref name="length"/> characters.</summary>
+    private static string Filler(int length) => string.Concat(Enumerable.Repeat(Chunk, (length / Chunk.Length) + 1))[..length];
+
+    /// <summary>The first line as the editor draws it now.</summary>
+    private static VisualLine FirstLine(CodeEditorController editor)
+    {
+        var view = editor.Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        return view.GetOrConstructVisualLine(editor.Model.Text.GetLineByNumber(1));
+    }
+
     private static async Task<CodeEditorController> OpenAsync(ShellFixture f, string name, string text)
     {
         var path = Path.Combine(f.UserData, name);
@@ -36,7 +50,7 @@ public sealed class EditorLargeTextTests
         var line = string.Concat(Enumerable.Repeat("f(a[1],{b:2});", 15_000)); // 210,000 characters, a minified script's
         var editor = await OpenAsync(f, "bundle.min.js", line + "\nvar second = 2;\n");
         var view = editor.Editor.TextArea.TextView;
-        await ShellFixture.PumpUntil(() => editor.LongLinesCut > 0);
+        await ShellFixture.PumpUntil(() => editor.LongLineCuts > 0);
 
         view.EnsureVisualLines();
         var visual = view.GetVisualLine(1)!;
@@ -61,12 +75,138 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => editor.Editor.CaretOffset != line.Length);
         Assert.Equal(LongLineCutter.MaxRendered, editor.Editor.CaretOffset);
 
-        // Typing at the start keeps the cut where it is: the marker hides one more character.
+        // Typing at the start keeps the cut where it is: the marker hides one more character (with the caret elsewhere; one
+        // pushed into the hidden part has the line drawn up to it, as the caret test shows).
+        editor.Editor.CaretOffset = editor.Model.Text.GetLineByNumber(2).Offset;
         editor.Editor.Document.Insert(0, "x");
         view.EnsureVisualLines();
         Assert.Equal(line.Length + 1 - LongLineCutter.MaxRendered, view.GetVisualLine(1)!.Elements[^1].DocumentLength);
         await editor.Model.SaveAsync(TestContext.Current.CancellationToken);
         Assert.Equal("x" + line + "\nvar second = 2;\n", await File.ReadAllTextAsync(editor.Model.Path, TestContext.Current.CancellationToken));
+    }
+
+    [AvaloniaFact]
+    public async Task The_caret_never_stays_in_the_hidden_part_of_a_long_line()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var line = Filler(210_000);
+        var editor = await OpenAsync(f, "app.min.js", line + "\nvar second = 2;\n");
+        var document = editor.Model.Text;
+        var textArea = editor.Editor.TextArea;
+        textArea.Focus();
+
+        // Put far into the hidden part going forward (Go To, a diagnostic): it goes on to the line's end, and what's typed
+        // lands there, not in the text nobody sees.
+        editor.Editor.CaretOffset = 50_000;
+        Assert.Equal(line.Length, editor.Editor.CaretOffset);
+        textArea.PerformTextInput("x");
+        Assert.Equal(line + "x", document.GetText(document.GetLineByNumber(1)));
+        Assert.Equal(line.Length + 1, editor.Editor.CaretOffset);
+
+        // Going back: to the furthest the line is drawn to, and the line is drawn up to it, the caret at the marker.
+        editor.Editor.CaretOffset = 50_000;
+        Assert.Equal(LongLineCutter.MaxDrawnToCaret, editor.Editor.CaretOffset);
+        var drawn = FirstLine(editor);
+        Assert.Equal(LongLineCutter.MaxDrawnToCaret + 1, drawn.VisualLength);
+        Assert.Equal(line.Length + 1 - LongLineCutter.MaxDrawnToCaret, Assert.IsType<LongLineCutter.Marker>(drawn.Elements[^1]).DocumentLength);
+
+        // Away from the line, it's cut where it usually is; typing at the marker shows what's typed, in order.
+        editor.Editor.CaretOffset = document.GetLineByNumber(2).Offset;
+        Assert.Equal(LongLineCutter.MaxRendered + 1, FirstLine(editor).VisualLength);
+        editor.Editor.CaretOffset = LongLineCutter.MaxRendered;
+        textArea.PerformTextInput("a");
+        textArea.PerformTextInput("b");
+        Assert.Equal("ab", document.GetText(LongLineCutter.MaxRendered, 2));
+        Assert.Equal(LongLineCutter.MaxRendered + 2, editor.Editor.CaretOffset);
+        drawn = FirstLine(editor);
+        Assert.Equal(LongLineCutter.MaxRendered + 3, drawn.VisualLength);
+        Assert.Equal(document.GetLineByNumber(1).Length - LongLineCutter.MaxRendered - 2, drawn.Elements[^1].DocumentLength);
+
+        // Back on the line's start, the line stays drawn that far while the caret is on it, then the usual cut again.
+        editor.Editor.CaretOffset = 0;
+        Assert.Equal(LongLineCutter.MaxRendered + 3, FirstLine(editor).VisualLength);
+        editor.Editor.CaretOffset = document.GetLineByNumber(2).Offset;
+        Assert.Equal(LongLineCutter.MaxRendered + 1, FirstLine(editor).VisualLength);
+    }
+
+    [AvaloniaFact]
+    public async Task Find_shows_a_match_just_past_the_cut_and_passes_the_far_ones_both_ways()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var line = Filler(15_000) + "MARK" + Filler(34_996) + "MARK" + Filler(159_996); // at 15,000 and at 50,000
+        var editor = await OpenAsync(f, "find.min.js", line + "\nvar second = 2;\n");
+        editor.Editor.CaretOffset = 0;
+
+        // Just past the cut: the line is drawn up to the match, which is selected as anywhere else.
+        editor.Search.Open();
+        editor.Search.SearchPattern = "MARK";
+        ShellFixture.Pump();
+        Assert.Equal((15_000, 4), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        Assert.Equal(15_004, editor.Editor.CaretOffset);
+        Assert.Equal(15_005, FirstLine(editor).VisualLength);
+
+        // Far past it: Find Next goes on to the line's end, with nothing selected in the hidden text.
+        editor.Search.FindNext();
+        ShellFixture.Pump();
+        Assert.Equal(line.Length, editor.Editor.CaretOffset);
+        Assert.Equal(0, editor.Editor.SelectionLength);
+
+        // Find Previous from there: back to where the line can be drawn to, then on to the match before.
+        editor.Search.FindPrevious();
+        ShellFixture.Pump();
+        Assert.Equal(LongLineCutter.MaxDrawnToCaret, editor.Editor.CaretOffset);
+        Assert.Equal(0, editor.Editor.SelectionLength);
+        Assert.Equal(LongLineCutter.MaxDrawnToCaret + 1, FirstLine(editor).VisualLength);
+        editor.Search.FindPrevious();
+        ShellFixture.Pump();
+        Assert.Equal((15_000, 4), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        editor.Search.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_surrogate_pair_at_the_cut_is_kept_whole_where_another_colorizer_split_the_line()
+    {
+        await using var f = ShellFixture.Create();
+        var line = Filler(LongLineCutter.MaxRendered - 1) + "\U0001F600" + Filler(200_000); // the pair at 9,999 and 10,000
+        var editor = await OpenAsync(f, "emoji.txt", line + "\n");
+        var view = editor.Editor.TextArea.TextView;
+
+        // A colorizer before the cut ends an element at the pair (as a squiggle, a selection or a token can).
+        view.LineTransformers.Insert(view.LineTransformers.IndexOf(view.LineTransformers.OfType<LongLineCutter>().Single()), new ColorFrom(LongLineCutter.MaxRendered - 1));
+        view.Redraw();
+        var drawn = FirstLine(editor);
+        Assert.Equal(LongLineCutter.MaxRendered, drawn.VisualLength); // cut before the pair, not drawn whole
+        Assert.Equal(line.Length - LongLineCutter.MaxRendered + 1, Assert.IsType<LongLineCutter.Marker>(drawn.Elements[^1]).DocumentLength);
+    }
+
+    [AvaloniaFact]
+    public async Task A_surrogate_pair_across_an_element_boundary_at_the_cut_is_kept_whole()
+    {
+        await using var f = ShellFixture.Create();
+        var line = Filler(LongLineCutter.MaxRendered - 1) + "\U0001F600" + Filler(200_000);
+        var editor = await OpenAsync(f, "emoji.txt", line + "\n");
+        var view = editor.Editor.TextArea.TextView;
+        view.LineTransformers.Insert(view.LineTransformers.IndexOf(view.LineTransformers.OfType<LongLineCutter>().Single()), new ColorFrom(LongLineCutter.MaxRendered));
+        view.Redraw();
+        var drawn = FirstLine(editor);
+        Assert.Equal(LongLineCutter.MaxRendered, drawn.VisualLength);
+        Assert.False(char.IsHighSurrogate(editor.Model.Text.GetCharAt(drawn.Elements[^2].RelativeTextOffset + drawn.Elements[^2].DocumentLength - 1)));
+    }
+
+    /// <summary>Colors each line from a column on, which splits its text there.</summary>
+    private sealed class ColorFrom(int column) : DocumentColorizingTransformer
+    {
+        protected override void ColorizeLine(DocumentLine line)
+        {
+            if (line.Length > column)
+            {
+                ChangeLinePart(line.Offset + column, line.EndOffset, e => e.TextRunProperties.SetForegroundBrush(Brushes.Red));
+            }
+        }
     }
 
     [AvaloniaFact]

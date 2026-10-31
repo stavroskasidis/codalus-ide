@@ -168,7 +168,7 @@ public sealed partial class CodeEditorController : IDisposable
         _gitTimer.Start();
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
-        _longLines = new LongLineCutter(() => ResourceBrush("Shell.Editor.InlayHint.Foreground"));
+        _longLines = new LongLineCutter(editor.TextArea, () => ResourceBrush("Shell.Editor.InlayHint.Foreground"));
         view.LineTransformers.Add(_longLines);
         _folding = FoldingManager.Install(editor.TextArea);
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
@@ -531,8 +531,8 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    /// <summary>The long lines cut short so far (tests).</summary>
-    internal int LongLinesCut => _longLines.LinesCut;
+    /// <summary>The cuts of long lines made so far, one each time such a line is built (tests).</summary>
+    internal int LongLineCuts => _longLines.Cuts;
 
     private void ApplyTheme()
     {
@@ -2451,6 +2451,8 @@ public sealed partial class CodeEditorController : IDisposable
         view.LineTransformers.Remove(_colorizer);
         view.LineTransformers.Remove(_markers);
         view.LineTransformers.Remove(_link);
+        view.LineTransformers.Remove(_longLines);
+        _longLines.Detach();
         _link.Dispose();
         view.BackgroundRenderers.Remove(_highlights);
         view.BackgroundRenderers.Remove(_markers);
