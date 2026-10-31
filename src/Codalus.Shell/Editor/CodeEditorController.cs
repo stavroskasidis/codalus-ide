@@ -675,7 +675,7 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Requests everything again now if the editor shows, else the next time it does (its visual lines are built again).</summary>
     public void RefreshWhenShown()
     {
-        if (Editor.TextArea.TextView is { IsEffectivelyVisible: true } view && TopLevel.GetTopLevel(view) is not null)
+        if (IsShown)
         {
             _refreshWhenShown = false;
             RefreshAll();
@@ -735,7 +735,7 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
-        if (_refreshWhenShown && Editor.TextArea.TextView is { IsEffectivelyVisible: true } shown && TopLevel.GetTopLevel(shown) is not null)
+        if (_refreshWhenShown && IsShown)
         {
             _refreshWhenShown = false;
             RefreshAll();
