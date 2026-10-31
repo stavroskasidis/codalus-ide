@@ -519,7 +519,12 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>An open document was edited or saved (for consumers that follow source, like test discovery).</summary>
     public event EventHandler<string>? DocumentChanged;
 
-    public async Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
+    /// <summary>
+    /// An open document was edited to <paramref name="version"/>. <paramref name="text"/> makes that version's whole text
+    /// (the editor passes its snapshot of this change, M57), read on the writer loop for a server that syncs whole
+    /// documents; without it the text is read now, from the document.
+    /// </summary>
+    public async Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes, Func<string>? text = null)
     {
         DocumentChanged?.Invoke(this, path);
         if (!_documents.TryGetValue(path, out var document))
@@ -533,18 +538,22 @@ public sealed class LanguageService : IAsyncDisposable
         var queued = new List<Task>();
         foreach (var (server, client) in ClientsOf(document).ToList())
         {
-            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits: read from
-            // the document's snapshot when written, off the caller's thread, and replaced by a newer one while queued.
+            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits: this
+            // change's own text, made when written, off the caller's thread, and replaced by a newer one while queued.
+            // Never the document's latest text: that could carry a later edit past a request queued before it (M57
+            // review: a completion's position read against the next key's text).
             queued.Add(client.Capabilities?.TextDocumentSync switch
             {
                 TextDocumentSyncKind.None => Task.CompletedTask,
-                TextDocumentSyncKind.Full => client.DidChangeTextAsync(uri, version, document.Text, _lifetime.Token),
+                TextDocumentSyncKind.Full => client.DidChangeTextAsync(uri, version, text ??= Now(document.Text().Text), _lifetime.Token),
                 _ => client.DidChangeAsync(uri, version, changes, _lifetime.Token),
             });
             SchedulePull(server, client, path);
         }
 
         await Task.WhenAll(queued).ConfigureAwait(false);
+
+        static Func<string> Now(string text) => () => text;
     }
 
     public async Task SavedAsync(string path)

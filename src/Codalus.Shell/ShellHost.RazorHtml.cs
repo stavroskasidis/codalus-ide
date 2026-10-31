@@ -27,16 +27,19 @@ public sealed partial class ShellHost
         var snapshot = document.Text.CreateSnapshot();
         var version = document.Version;
         var previous = _razorHtml.TryGetValue(document.Path, out var known) ? known.Text : null;
+        var project = ProjectRazorHtml;
         var (html, unchanged) = await Task.Run(() =>
         {
             var razor = snapshot.Text;
-            var projected = RazorHtmlProjection.Project(razor);
+            var projected = project(razor);
             return RazorHtmlProjection.IsMarkup(razor, projected, offset)
                 ? (projected, string.Equals(previous, projected, StringComparison.Ordinal))
                 : ((string?)null, false);
         }).ConfigureAwait(true);
-        if (html is null || await Languages.ClientAsync("html").ConfigureAwait(true) is not { } client)
+        if (html is null || !IsTracked(document) || await Languages.ClientAsync("html").ConfigureAwait(true) is not { } client || !IsTracked(document))
         {
+            // Or the file closed meanwhile (M57 review): its HTML closed with it, and a late open would leave the server
+            // the closed file's HTML at a version a reopened file's (from 1 again) would stay below.
             return null;
         }
 
@@ -57,13 +60,19 @@ public sealed partial class ShellHost
             else
             {
                 _razorHtml[document.Path] = (client, version, html);
-                await client.DidChangeTextAsync(uri, version, () => (html, version), CancellationToken.None).ConfigureAwait(true);
+                await client.DidChangeTextAsync(uri, version, () => html, CancellationToken.None).ConfigureAwait(true);
             }
         }
 
         // Otherwise a projection of a newer version went first: this one is dropped, and the server has the newer HTML.
         return new EmbeddedRequest(client, uri);
     }
+
+    /// <summary>Projects a Razor file's HTML, on a pool thread; tests hold a projection here to make two overlap.</summary>
+    internal Func<string, string> ProjectRazorHtml { get; set; } = RazorHtmlProjection.Project;
+
+    /// <summary>Whether this model is still the open one of its file (not closed, nor closed and opened again).</summary>
+    private bool IsTracked(CodeDocument document) => _models.TryGetValue(document.Path, out var tracked) && tracked == document;
 
     /// <summary>A Razor file closed: so does its HTML.</summary>
     private void CloseRazorHtml(string path)

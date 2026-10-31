@@ -692,14 +692,16 @@ public sealed partial class ShellHost : IEditorServices
         model.ContentChanged += (_, e) =>
         {
             _editedSinceReady.Add(model.Path);
+            var snapshot = model.Text.CreateSnapshot();
             lock (_snapshots)
             {
-                _snapshots[model] = new EditorSnapshot(model.Text.CreateSnapshot(), e.Version);
+                _snapshots[model] = new EditorSnapshot(snapshot, e.Version);
             }
 
-            // Only queued here (M57): a whole text for a server that syncs whole documents is read from the snapshot
-            // and encoded on the connection's writer loop, and an update's changes are encoded there too.
-            _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
+            // Only queued here (M57): a whole text for a server that syncs whole documents is made from this change's
+            // snapshot (not a later one, which could pass a request queued before it) and encoded on the connection's
+            // writer loop, and an update's changes are encoded there too.
+            _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes, () => snapshot.Text);
             ClearXamlBuildDiagnostics(model.Path);
         };
         model.Saved += (_, _) => _ = Languages.SavedAsync(model.Path);

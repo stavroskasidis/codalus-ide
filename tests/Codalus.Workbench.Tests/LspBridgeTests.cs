@@ -346,6 +346,71 @@ public sealed class LspBridgeTests : IAsyncLifetime
         TestContext.Current.TestOutputHelper?.WriteLine($"{versions.Count} whole texts sent for 199 changes");
     }
 
+    /// <summary>
+    /// A whole text carries its own change's text, never a later one: a request queued between two changes reads the first
+    /// change's text (M57 review: it read the document's latest snapshot when written, so the next key's text, sent as its
+    /// version, reached the server before a completion computed on the change before it).
+    /// </summary>
+    [Fact]
+    public async Task A_request_between_two_changes_reads_the_whole_text_of_the_change_before_it()
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "between.log");
+        await using var service = LoggingService(log, incremental: false);
+        var path = Path.Combine(_root, "between.conf");
+        var uri = DocumentUris.FromPath(path);
+        using var gate = new ManualResetEventSlim(initialState: true);
+        var current = ("a = 1\n", 1);
+        var currentGate = new object();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        (string, int) Latest()
+        {
+            if (!gate.IsSet)
+            {
+                entered.TrySetResult(); // the writer reads the document's latest text (what this test guards against)
+            }
+
+            gate.Wait(TimeSpan.FromSeconds(30));
+            lock (currentGate)
+            {
+                return current;
+            }
+        }
+
+        void Edit(string text, int version)
+        {
+            lock (currentGate)
+            {
+                current = (text, version);
+            }
+        }
+
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", Latest)));
+        var client = (await service.ClientAsync("conf"))!;
+
+        // The writer is held in the v2 text, so the hover and v3 are queued behind it, and the document has moved to v3.
+        gate.Reset();
+        Edit("b = 2\n", 2);
+        var change2 = service.ChangeAsync(path, 2, [new TextDocumentContentChangeEvent(null, "b = 2\n")], () =>
+        {
+            entered.TrySetResult();
+            gate.Wait(TimeSpan.FromSeconds(30));
+            return "b = 2\n";
+        });
+        await entered.Task.WaitAsync(ct);
+        var hover = client.HoverAsync(uri, new Position(0, 0), ct);
+        Edit("c = 3\n", 3);
+        var change3 = service.ChangeAsync(path, 3, [new TextDocumentContentChangeEvent(null, "c = 3\n")], () => "c = 3\n");
+        gate.Set();
+
+        await hover;
+        await Task.WhenAll(change2, change3);
+        Assert.Equal("b = 2\n", await File.ReadAllTextAsync(log + ".text", ct)); // what the hover read
+        var lines = await LogAsync(service, path, log, ct);
+        Assert.Equal(["didOpen 1 6", "didChange 2 6 1", "hover", "didChange 3 6 1", "hover"], lines);
+        Assert.Equal("c = 3\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
     /// <summary>An incremental server gets each version's edits, one change notification per version, before the next request.</summary>
     [Fact]
     public async Task An_incremental_server_gets_one_change_per_version_before_the_next_request()

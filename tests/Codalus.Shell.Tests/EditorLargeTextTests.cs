@@ -366,6 +366,21 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until, seconds: 120);
     }
 
+    /// <summary>The LSP conformance server (tests/Codalus.LspConformance.Server), which logs what it gets to a file.</summary>
+    internal static string ConformanceServer => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.LspConformance.Server", "bin",
+        typeof(EditorLargeTextTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+            .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
+
+    /// <summary>The conformance server as the language service of <c>.conf</c> files, logging to <paramref name="log"/>.</summary>
+    private static void RegisterConformanceServer(ShellFixture f, string log, params string[] options)
+    {
+        f.Shell.Workbench.LanguageDefinitions.Register(new Workbench.Languages.LanguageDefinition("conf", "Conformance") { Extensions = [".conf"] });
+        f.Shell.Workbench.LanguageServers.Register(new Workbench.Languages.LanguageServiceDescriptor("conformance", "Conformance", [], null, () => Rpc.ProcessLaunchInfo.FromPath(ConformanceServer, ["--log", log, .. options]))
+        {
+            Languages = ["conf"],
+        });
+    }
+
     [AvaloniaFact]
     public async Task A_document_just_under_the_limits_goes_to_the_markup_service_without_holding_the_ui_thread()
     {
@@ -404,14 +419,7 @@ public sealed class EditorLargeTextTests
         await using var f = ShellFixture.Create();
         SmallWindow(f);
         var log = Path.Combine(f.UserData, "conformance.log");
-        var server = Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.LspConformance.Server", "bin",
-            typeof(EditorLargeTextTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
-                .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
-        f.Shell.Workbench.LanguageDefinitions.Register(new Workbench.Languages.LanguageDefinition("conf", "Conformance") { Extensions = [".conf"] });
-        f.Shell.Workbench.LanguageServers.Register(new Workbench.Languages.LanguageServiceDescriptor("conformance", "Conformance", [], null, () => Rpc.ProcessLaunchInfo.FromPath(server, "--log", log))
-        {
-            Languages = ["conf"],
-        });
+        RegisterConformanceServer(f, log);
 
         var line = "key = " + new string('v', 54) + "\n";
         var text = string.Concat(Enumerable.Repeat(line, 250_000)); // 15 MB, under both limits
@@ -447,6 +455,56 @@ public sealed class EditorLargeTextTests
         Assert.Equal(versions.Order().Distinct(), versions);
         Assert.Equal(editor.Model.Version, versions[^1]);
         TestContext.Current.TestOutputHelper?.WriteLine($"{versions.Count} whole texts for 40 keys; the longest wait {monitor.Report().Describe()}");
+    }
+
+    /// <summary>
+    /// A document edited while its didOpen is still queued: the didOpen, read when written, carries the editor's snapshot
+    /// with that snapshot's own version (taken together under the lock), and the edits queued before it was written are
+    /// skipped, so an incremental server neither applies them twice nor goes back (M57 review).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Edits_made_while_a_didopen_is_queued_reach_an_incremental_server_once_at_their_versions()
+    {
+        await using var f = ShellFixture.Create();
+        var log = Path.Combine(f.UserData, "conformance.log");
+        RegisterConformanceServer(f, log, "--incremental");
+        var services = (IEditorServices)f.Shell;
+        var warm = await OpenAsync(f, "warm.conf", "warm = 1\n");
+        await ShellFixture.PumpUntil(() => services.Client(warm.Model) is not null, seconds: 60);
+
+        // The connection's writer is held in another document's didOpen, so the editor's didOpen and its edits queue.
+        using var gate = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var holder = Path.Combine(f.UserData, "holder.conf");
+        var held = f.Shell.Languages.OpenAsync(new Workbench.Languages.LanguageDocument(holder, "conf", () =>
+        {
+            entered.TrySetResult();
+            gate.Wait(TimeSpan.FromSeconds(30));
+            return ("holder = 1\n", 1);
+        }));
+        await ShellFixture.PumpUntil(() => entered.Task.IsCompleted);
+
+        var editor = await OpenAsync(f, "edited.conf", "a = 1\n");
+        editor.Editor.CaretOffset = 0;
+        foreach (var key in "xyz")
+        {
+            editor.Editor.TextArea.PerformTextInput(key.ToString());
+        }
+
+        Assert.Equal(4, editor.Model.Version);
+        gate.Set();
+        await ShellFixture.PumpUntil(() => held.IsCompleted);
+        Assert.True(await held);
+
+        // One more edit after the didOpen went out: the server applies it to the text the didOpen carried.
+        editor.Editor.TextArea.PerformTextInput("!");
+        var client = services.Client(editor.Model)!;
+        var hover = client.HoverAsync(editor.Model.Uri, new LanguageServices.Protocol.Position(0, 0), TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => hover.IsCompleted);
+        await hover;
+        Assert.Equal(editor.Model.Text.Text, await File.ReadAllTextAsync(log + ".text", TestContext.Current.CancellationToken));
+        var lines = File.ReadAllLines(log).SkipWhile(l => l != "didOpen 1 11").Skip(1).ToList(); // after the holder's
+        Assert.Equal(["didOpen 4 9", "didChange 5 10 1", "hover"], lines);
     }
 
     [AvaloniaFact]

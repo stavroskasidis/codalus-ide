@@ -354,11 +354,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
     }
 
     /// <summary>
-    /// The whole text, for a server that syncs whole documents (LSP's <c>TextDocumentSyncKind.Full</c>), read when written
-    /// on the writer loop (M57): the newer of <paramref name="version"/> and the snapshot's goes with it. A whole text still
-    /// queued is replaced by this one (LSP allows the versions' gaps), and one at or below what the server has is skipped.
+    /// The whole text at <paramref name="version"/>, for a server that syncs whole documents (LSP's
+    /// <c>TextDocumentSyncKind.Full</c>), made by <paramref name="text"/> when written on the writer loop (M57): it reads
+    /// that version's immutable snapshot, never a later one, so a request queued after this change and before the next
+    /// still reads this text. A whole text still queued is replaced by this one (LSP allows the versions' gaps), and one at
+    /// or below what the server has is skipped.
     /// </summary>
-    public Task DidChangeTextAsync(string uri, int version, Func<(string Text, int Version)> snapshot, CancellationToken cancellationToken)
+    public Task DidChangeTextAsync(string uri, int version, Func<string> text, CancellationToken cancellationToken)
     {
         if (!_process.IsRunning)
         {
@@ -373,13 +375,12 @@ public sealed class LanguageHostClient : IAsyncDisposable
             {
                 if (!sent.TryGetValue(uri, out var at) || version <= at)
                 {
-                    return null; // not open there, or a later text went first (each newer version comes with its own change)
+                    return null; // not open there, or a newer text went first (its didOpen carried it)
                 }
 
-                var (text, current) = snapshot();
-                var newest = Math.Max(version, current);
-                sent[uri] = newest;
-                return new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, newest), [new TextDocumentContentChangeEvent(null, text)]);
+                var whole = text(); // before the version moves: a text that can't be made leaves the server's as it was
+                sent[uri] = version;
+                return new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), [new TextDocumentContentChangeEvent(null, whole)]);
             },
             ProtocolJsonContext.Default.DidChangeTextDocumentParams,
             "didChange " + uri,

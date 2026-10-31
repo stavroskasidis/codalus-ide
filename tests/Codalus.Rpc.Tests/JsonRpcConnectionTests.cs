@@ -679,6 +679,29 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         Assert.False(disconnected);
     }
 
+    /// <summary>
+    /// A stream that fails with something other than an I/O error (a remote window's path rewrite throws
+    /// InvalidDataException or FormatException) ends the writes with a lost connection: the failed message, those queued
+    /// behind it and later ones fail rather than wait forever (M57 review: the loop stopped, and nothing drained its queue).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_stream_failing_with_any_exception_fails_the_messages_instead_of_leaving_them_waiting(bool inFlush)
+    {
+        var stream = new FailingStream(new InvalidDataException("A message has no Content-Length."), inFlush);
+        await using var a = new JsonRpcConnection(_bToA.Reader.AsStream(), stream);
+        a.Start();
+
+        var first = a.InvokeAsync("first", CancellationToken.None);
+        var note = a.NotifyAsync("note", new Ping("queued"), TestJsonContext.Default.Ping, CancellationToken.None);
+        var lost = await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => first.WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+        Assert.IsType<InvalidDataException>(lost.InnerException);
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => note.WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => a.InvokeAsync("second", CancellationToken.None).WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => a.NotifyAsync("note", new Ping("later"), TestJsonContext.Default.Ping, CancellationToken.None).WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+    }
+
     /// <summary>Records what is written through it.</summary>
     private sealed class RecordingStream(Stream inner) : Stream
     {
@@ -771,6 +794,35 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
             await Task.Run(() => stuck.Wait(TimeSpan.FromSeconds(30)), CancellationToken.None);
             await inner.WriteAsync(buffer, cancellationToken);
         }
+    }
+
+    /// <summary>A stream whose writes (or flushes) throw <paramref name="failure"/>.</summary>
+    private sealed class FailingStream(Exception failure, bool inFlush) : Stream
+    {
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => FlushAsync(CancellationToken.None).GetAwaiter().GetResult();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inFlush ? Task.FromException(failure) : Task.CompletedTask;
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inFlush ? ValueTask.CompletedTask : ValueTask.FromException(failure);
     }
 
     private static async Task WriteFrameAsync(Stream stream, string json)

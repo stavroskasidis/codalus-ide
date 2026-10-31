@@ -687,8 +687,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
                 await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is IOException or ObjectDisposedException or NotSupportedException or InvalidOperationException)
+            catch (Exception ex) when (ex is not OutOfMemoryException)
             {
+                // Any failure of the stream ends the writes visibly, whatever its type (a remote window's path rewrite
+                // throws InvalidDataException or FormatException): part of a frame may be out, and a loop that stopped
+                // quietly would leave this message, the queued ones and every later one waiting forever.
                 await EndWritesAsync(unflushed, ex).ConfigureAwait(false);
                 return;
             }
@@ -701,9 +704,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             await _writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or NotSupportedException or InvalidOperationException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            await EndWritesAsync(written, ex).ConfigureAwait(false);
+            await EndWritesAsync(written, ex).ConfigureAwait(false); // as a failed write, whatever its type
             return false;
         }
 
