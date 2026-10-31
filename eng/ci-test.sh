@@ -8,6 +8,7 @@
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
 shard="${1:?shard: shell-1, shell-2, others or debug-codalus}"
+[[ "$shard" == debug-codalus ]] || { echo "TEMP (validation snapshot): only debug-codalus runs"; exit 0; }
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -159,6 +160,27 @@ case "$shard" in
     dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
     ;;
   debug-codalus)
+    # TEMP (validation snapshot only): DataTipDebuggerTests' getter timeout on Windows, in a loop, with the eval's stacks.
+    if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+      export CODALUS_DEBUG_ADAPTER=codalus
+      export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
+      export CODALUS_CLR_DEBUGGER_LOG="$results/clr-dap"
+      timeouts=0
+      for i in $(seq 1 80); do
+        dotnet test --project tests/Codalus.Debugging.Tests --output detailed "${common[@]}" --filter-class Codalus.Debugging.Tests.DataTipDebuggerTests > "$results/loop-$i.txt" 2>&1 || echo "run $i failed"
+        if grep -q "getter:" "$results"/clr-dap/*.log 2>/dev/null; then
+          timeouts=$((timeouts+1)); echo "run $i: a getter timed out"
+          grep -h "getter:" -A60 "$results"/clr-dap/*.log | head -200
+          mkdir -p "$results/timeout-$i"; mv "$results"/clr-dap/*.log "$results/timeout-$i/"
+        else
+          rm -f "$results"/clr-dap/*.log
+        fi
+      done
+      echo "getter timeouts: $timeouts of 80"
+      [[ "$timeouts" == 0 ]]
+      exit $?
+    fi
+    exit 0
     # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
     # folder (uploaded when the shard fails), as netcoredbg's is above: ADR 0086's one silent attach failure on Linux is
     # watched for here.

@@ -1073,6 +1073,25 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return dispatcher && skip < frames.Count ? [.. frames.Skip(skip)] : frames;
     }
 
+    /// <summary>A timed-out func-eval's threads for the log: each one's state and its innermost frames.</summary>
+    private string DescribeThreads(IReadOnlyList<ClrThreadSnapshot> threads)
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var thread in threads)
+        {
+            text.Append(CultureInfo.InvariantCulture, $"\n  thread {thread.Id}{(thread.Evaluating ? " (evaluating)" : string.Empty)}, {thread.State}:");
+            foreach (var frame in thread.Frames.Take(16))
+            {
+                var name = frame.Module is { } module
+                    ? (Types.Info(module)?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] 0x{frame.MethodToken:X8}") + $" +IL_{frame.IlOffset:X4}"
+                    : frame.Description ?? "[?]";
+                text.Append("\n    ").Append(name);
+            }
+        }
+
+        return text.ToString();
+    }
+
     private bool IsExceptionDispatch(IClrFrame frame) =>
         frame.Module is { } module && Types.Info(module)?.MethodDisplayName(frame.MethodToken) is { } name && name.StartsWith("System.Runtime.EH.", StringComparison.Ordinal);
 
@@ -1391,7 +1410,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 catch (TimeoutException ex)
                 {
                     timedOut = true;
-                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException timeout ? timeout.Diagnostic : ex.Message));
+                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException timeout ? timeout.Diagnostic + DescribeThreads(timeout.Threads) : ex.Message));
                     result.Add(new Variable(property.Name, "(the getter timed out)", null, 0, path));
                 }
                 catch (InvalidOperationException ex)

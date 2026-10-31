@@ -396,8 +396,16 @@ internal sealed class ClrEvalException(IClrValue exception, string message) : Cl
     public IClrValue Exception { get; } = exception;
 }
 
-/// <summary>A func-eval that didn't return in time; <see cref="Diagnostic"/> says what the debugger saw while it waited (the log).</summary>
-internal sealed class ClrEvalTimeoutException(string diagnostic) : TimeoutException("The evaluation timed out.")
+/// <summary>
+/// A func-eval that didn't return in time; <see cref="Diagnostic"/> says what the debugger saw while it waited, and
+/// <see cref="Threads"/> where every thread was before the abort (the log).
+/// </summary>
+internal sealed class ClrEvalTimeoutException(string diagnostic, IReadOnlyList<ClrThreadSnapshot> threads) : TimeoutException("The evaluation timed out.")
 {
     public string Diagnostic { get; } = diagnostic;
+
+    public IReadOnlyList<ClrThreadSnapshot> Threads { get; } = threads;
 }
+
+/// <summary>A thread's state (ICorDebug's user state: a wait, a sleep, a suspension) and frames, innermost first.</summary>
+internal sealed record ClrThreadSnapshot(int Id, bool Evaluating, string State, IReadOnlyList<IClrFrame> Frames);
