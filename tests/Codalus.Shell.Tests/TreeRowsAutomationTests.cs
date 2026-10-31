@@ -271,6 +271,11 @@ public sealed class TreeRowsAutomationTests
         }
 
         await File.WriteAllTextAsync(Path.Combine(folder, "notes.txt"), "notes\n", TestContext.Current.CancellationToken);
+
+        // The workspace writes its state in .codalus at some point after it opens; made now, the folder is in the first
+        // listing, so the root's children (and each row's place among them) don't change under the assertions below
+        // (local run 4 of 5, M57: .codalus came in mid-test and every place after it moved by one).
+        Directory.CreateDirectory(Path.Combine(folder, ".codalus"));
         f.Shell.Trust.Trust(folder);
         await f.Shell.OpenFolderWorkspaceAsync(folder);
         var explorer = f.Shell.Explorer;
