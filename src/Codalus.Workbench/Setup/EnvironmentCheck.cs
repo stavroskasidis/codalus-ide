@@ -607,10 +607,13 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         {
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Out of time, or no longer wanted (the window that asked closed): the program stops either way. A cancelled
+            // run kept its program, and its caller with it, until the program ended by itself.
             ProcessTree.Kill(process);
             await reading.CancelAsync().ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return (-1, $"{program} didn't answer within {limit.TotalSeconds:0} seconds.");
         }
 

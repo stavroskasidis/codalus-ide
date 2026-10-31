@@ -395,3 +395,9 @@ internal sealed class ClrEvalException(IClrValue exception, string message) : Cl
 {
     public IClrValue Exception { get; } = exception;
 }
+
+/// <summary>A func-eval that didn't return in time; <see cref="Diagnostic"/> says what the debugger saw while it waited (the log).</summary>
+internal sealed class ClrEvalTimeoutException(string diagnostic) : TimeoutException("The evaluation timed out.")
+{
+    public string Diagnostic { get; } = diagnostic;
+}

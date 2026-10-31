@@ -125,8 +125,7 @@ public sealed partial class ShellHost
             };
         }
 
-        _gitRepositoryTimer.Stop();
-        _gitRepositoryTimer.Start();
+        StartTimer(_gitRepositoryTimer);
     }
 
     /// <summary>

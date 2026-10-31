@@ -191,6 +191,8 @@ internal sealed class CorDebugTarget : IClrProcess
     private System.Diagnostics.Process? _os;
     private CorDebugStepper? _stepper;
     private TaskCompletionSource<bool>? _eval;
+    private readonly List<string> _evalCallbacks = [];
+    private long _evalStarted;
     private bool _exited;
 
     public CorDebugTarget(CorDebug corDebug, string version, bool justMyCode)
@@ -388,6 +390,11 @@ internal sealed class CorDebugTarget : IClrProcess
     private void Dispatch(CorDebugManagedCallbackEventArgs e)
     {
         var evaluating = _eval is not null;
+        if (evaluating)
+        {
+            RecordEvalCallback(e);
+        }
+
         switch (e)
         {
             case CreateProcessCorDebugManagedCallbackEventArgs created:
@@ -829,6 +836,12 @@ internal sealed class CorDebugTarget : IClrProcess
             throw new ClrException(EvalProblem(ex), ex);
         }
 
+        lock (_gate)
+        {
+            _evalCallbacks.Clear();
+        }
+
+        _evalStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         _eval = completion;
         try
         {
@@ -844,8 +857,8 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 if (!completion.Task.Wait(timeout))
                 {
-                    TryAbort(eval, completion);
-                    throw new TimeoutException();
+                    var abort = TryAbort(eval, completion);
+                    throw new ClrEvalTimeoutException(EvalTimeoutDiagnostic(thread, timeout, abort));
                 }
 
                 completed = completion.Task.Result;
@@ -879,20 +892,54 @@ internal sealed class CorDebugTarget : IClrProcess
         }
     }
 
-    private static void TryAbort(CorDebugEval eval, TaskCompletionSource<bool> completion)
+    /// <summary>Aborts a func-eval that ran too long, and says how that went (the timeout's diagnostic).</summary>
+    private static string TryAbort(CorDebugEval eval, TaskCompletionSource<bool> completion)
     {
         try
         {
             eval.Abort();
-            if (!completion.Task.Wait(TimeSpan.FromSeconds(3)))
+            if (completion.Task.Wait(TimeSpan.FromSeconds(3)))
             {
-                eval.RudeAbort();
-                completion.Task.Wait(TimeSpan.FromSeconds(3));
+                return "aborted";
             }
+
+            eval.RudeAbort();
+            return completion.Task.Wait(TimeSpan.FromSeconds(3)) ? "rudely aborted" : "still running after a rude abort";
         }
         catch (Exception ex) when (ex is COMException or AggregateException)
         {
+            return "the abort failed: " + ex.Message;
         }
+    }
+
+    // TODO(issue): DataTipDebuggerTests' throwing getter once timed out on Windows (docs/ci-flakes.md); this says what
+    // the debugger saw meanwhile, in the CLR DAP log CI keeps.
+    private void RecordEvalCallback(CorDebugManagedCallbackEventArgs e)
+    {
+        var name = e.GetType().Name.Replace("CorDebugManagedCallbackEventArgs", "", StringComparison.Ordinal);
+        if (e is Exception2CorDebugManagedCallbackEventArgs exception)
+        {
+            name += "(" + exception.EventType + ")";
+        }
+
+        lock (_gate)
+        {
+            if (_evalCallbacks.Count < 50)
+            {
+                _evalCallbacks.Add(name + " at " + System.Diagnostics.Stopwatch.GetElapsedTime(_evalStarted).TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture) + " ms");
+            }
+        }
+    }
+
+    private string EvalTimeoutDiagnostic(IClrThread thread, TimeSpan timeout, string abort)
+    {
+        string callbacks;
+        lock (_gate)
+        {
+            callbacks = _evalCallbacks.Count == 0 ? "none" : string.Join(", ", _evalCallbacks);
+        }
+
+        return $"A func-eval on thread {thread.Id.ToString(CultureInfo.InvariantCulture)} didn't return in {timeout.TotalSeconds.ToString("0.#", CultureInfo.InvariantCulture)} s ({abort}, {System.Diagnostics.Stopwatch.GetElapsedTime(_evalStarted).TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture)} s in all). Callbacks meanwhile: {callbacks}.";
     }
 
     private static string EvalProblem(COMException ex) => (HRESULT)ex.HResult switch
