@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Projects;
 
@@ -275,6 +276,103 @@ public class SolutionExplorerFolderViewTests
         await SettledAsync(explorer);
         Assert.Equal(listings + 2, explorer.FolderListings); // the workspace folder and docs
         Assert.NotNull(Row(explorer, "f:" + Path.Combine(docs, "guide.md")));
+    }
+
+    [AvaloniaFact]
+    public async Task A_change_while_a_folders_first_listing_is_on_its_way_lists_it_again()
+    {
+        // The watcher's report, or a build, for a folder whose first listing was on its way was dropped: not listed yet, the
+        // folder didn't count, the batch kept a listing that could be older than the change, and nothing listed it again
+        // (M57). A listed folder goes with the next batch; so does one on its way now.
+        const int Folders = 20;
+        var (f, folder) = await OpenAsync(folder => Write(folder, [.. Enumerable.Range(0, Folders).Select(i => $"many/f{i:00}/bin/Debug/A.dll")]));
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var many = Path.Combine(folder, "many");
+        await ExpandAsync(explorer, many);
+
+        // Expands the folder and starts its first listing's batch, then changes it while the batch is on its way: listed
+        // twice. Unless the build host answered before the batch even awaited it: then false, and the test takes another.
+        async Task<bool> ChangedWhileOnItsWayAsync(string expand, Action change)
+        {
+            await ShellFixture.PumpUntil(() => Row(explorer, "d:" + expand) is not null, seconds: 60);
+            var listings = explorer.FolderListings;
+            explorer.SetExpanded(Row(explorer, "d:" + expand)!, true);
+            var batch = explorer.LoadDiskAsync();
+            if (batch.IsCompleted)
+            {
+                await SettledAsync(explorer);
+                return false;
+            }
+
+            Assert.True(Find(explorer.Root!, "d:" + expand) is { IsUnlisted: true }); // its first listing
+            change();
+            await ShellFixture.PumpUntil(() => batch.IsCompleted, seconds: 60);
+            await SettledAsync(explorer);
+            Assert.Equal(listings + 2, explorer.FolderListings);
+            return true;
+        }
+
+        // The watcher reports the folder.
+        var i = 0;
+        for (; ; i++)
+        {
+            Assert.True(i < Folders, "Every batch was answered before it awaited its listings.");
+            var expand = Path.Combine(many, $"f{i:00}");
+            if (await ChangedWhileOnItsWayAsync(expand, () => explorer.OnFilesChanged([expand])))
+            {
+                break;
+            }
+        }
+
+        // A build, for a bin folder (the watcher leaves it out).
+        for (i++; ; i++)
+        {
+            Assert.True(i < Folders, "Every batch was answered before it awaited its listings.");
+            await ExpandAsync(explorer, Path.Combine(many, $"f{i:00}"));
+            if (await ChangedWhileOnItsWayAsync(Path.Combine(many, $"f{i:00}", "bin"), () => explorer.OnBuildFinished(null)))
+            {
+                break;
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Show_All_Files_left_on_leaves_the_folder_views_node_modules_alone()
+    {
+        // Show All Files stays on in the folder view (its button is hidden, its command isn't). A node_modules of a loaded
+        // project counted as one of its folders Show All Files hadn't gone into: expanding it in the folder view listed the
+        // project, and it had a "Loading…" row after its packages until that listing came, for good if none came (M57).
+        var (f, folder) = await OpenAsync(folder =>
+        {
+            File.WriteAllText(Path.Combine(folder, "src", "App", "App.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
+            Write(folder, "src/App/node_modules/left-pad/index.js");
+        });
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var app = Path.Combine(folder, "src", "App");
+        var project = Path.Combine(app, "App.csproj");
+        var modules = Path.Combine(app, "node_modules");
+        await f.Shell.LoadFolderProjectsAsync([project]);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.TryGetValue(project, out var info) && info.State == ProjectStates.Loaded
+                                           && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true }, seconds: 120);
+        explorer.SetFolderView(false);
+        explorer.ShowAllFiles = true;
+        await ShellFixture.PumpUntil(() => explorer.Listings > 0, seconds: 60);
+        await SettledAsync(explorer);
+        explorer.SetFolderView(true);
+        await SettledAsync(explorer);
+        foreach (var expand in new[] { Path.Combine(folder, "src"), app })
+        {
+            await ExpandAsync(explorer, expand);
+        }
+
+        var listings = explorer.Listings;
+        await ListedAsync(explorer, () => explorer.SetExpanded(Row(explorer, "d:" + modules)!, true), folders: 1);
+        Assert.Equal(listings, explorer.Listings);
+        Assert.True(Row(explorer, "d:" + Path.Combine(modules, "left-pad")) is { IsDimmed: true });
+        Assert.DoesNotContain(explorer.Rows, IsLoadingRow);
+        Assert.Equal(["left-pad"], Find(explorer.Root!, "d:" + modules)!.Children.Select(c => c.Name));
     }
 
     [AvaloniaFact]

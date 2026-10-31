@@ -60,8 +60,8 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     public bool IsUnlisted { get; init; }
 
     /// <summary>
-    /// Shown dimmed: in the folder view, a folder listed only when it's expanded (<c>node_modules</c>, <c>.vs</c>,
-    /// <c>.idea</c>) and what is in it; a listing's cut row (M57).
+    /// Shown dimmed: in the folder view and in Show All Files, a folder listed only when it's expanded
+    /// (<c>node_modules</c>, <c>.vs</c>, <c>.idea</c>) and what is in it; a listing's cut row (M57).
     /// </summary>
     public bool IsMuted { get; init; }
 
@@ -504,8 +504,7 @@ public static class SolutionTree
 
         foreach (var segment in folder[below.Length..].Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))
         {
-            if (segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase) || segment.Equals(".vs", StringComparison.OrdinalIgnoreCase)
-                || segment.Equals(".idea", StringComparison.OrdinalIgnoreCase))
+            if (IsOnDemandName(segment))
             {
                 return true;
             }
@@ -513,6 +512,11 @@ public static class SolutionTree
 
         return false;
     }
+
+    /// <summary>A folder's name the build host lists only when asked: <c>node_modules</c>, <c>.vs</c>, <c>.idea</c>.</summary>
+    private static bool IsOnDemandName(string name) =>
+        name.Equals("node_modules", StringComparison.OrdinalIgnoreCase) || name.Equals(".vs", StringComparison.OrdinalIgnoreCase)
+        || name.Equals(".idea", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The folders of a project's tree that hold its items, with the project's own folder: Show All Files lists what is
@@ -625,10 +629,15 @@ public static class SolutionTree
             }
         }
 
-        return Build(root, projectPath);
+        return Build(root, projectPath, mutesOnDemand: disk is not null, muted: false);
     }
 
-    private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath)
+    /// <summary>
+    /// A folder's nodes. With <paramref name="mutesOnDemand"/> (Show All Files), <c>node_modules</c>, <c>.vs</c> and
+    /// <c>.idea</c> show dimmed with what is in them, as in the folder view, even when they hold items: a plain SDK
+    /// project's default globs take all of <c>node_modules</c>, which showed at full strength (M57).
+    /// </summary>
+    private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath, bool mutesOnDemand, bool muted)
     {
         var nodes = new List<(int Order, ExplorerNode Node)>();
         // At the project's root, Properties (My Project) and wwwroot come first, then the other folders by name.
@@ -636,13 +645,15 @@ public static class SolutionTree
         int First(FolderBuilder f) => atRoot && Array.FindIndex(s_projectFoldersFirst, n => s_names.Equals(n, f.Name)) is >= 0 and var at ? at : s_projectFoldersFirst.Length;
         foreach (var child in folder.Folders.Values.OrderBy(First).ThenBy(f => f.Name, Order))
         {
+            var childMuted = muted || (mutesOnDemand && IsOnDemandName(child.Name));
             nodes.Add((child.Order, new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
             {
                 Path = child.Path,
                 ProjectPath = projectPath,
                 Icon = "folder",
                 IsExcluded = child.Excluded,
-                Children = Build(child, projectPath),
+                IsMuted = childMuted,
+                Children = Build(child, projectPath, mutesOnDemand, childMuted),
             }));
         }
 
@@ -662,6 +673,7 @@ public static class SolutionTree
                 Icon = FileIcon(file.Name),
                 IsLinked = file.Linked,
                 IsExcluded = file.Excluded,
+                IsMuted = muted,
                 Children = nested.TryGetValue(file.Name, out var children) ? [.. children.Select(File)] : [],
             };
 

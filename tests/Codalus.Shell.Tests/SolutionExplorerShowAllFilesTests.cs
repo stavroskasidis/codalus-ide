@@ -304,12 +304,13 @@ public class SolutionExplorerShowAllFilesTests
 
         explorer.Reveal("d:" + modules);
         var row = explorer.Selected!;
-        Assert.True(row is { IsExcluded: false, HasChildren: true } && row.Id == "d:" + modules);
+        Assert.True(row is { IsExcluded: false, IsDimmed: true, HasChildren: true } && row.Id == "d:" + modules); // dimmed, as in the folder view
         var listings = explorer.Listings;
         explorer.SetExpanded(row, true);
         await SettledAsync(explorer);
         Assert.Equal(listings + 1, explorer.Listings);
         Assert.True(Find(explorer.Root!, "d:" + bin) is { IsExcluded: true, Kind: ExplorerNodeKind.Folder });
+        Assert.True(explorer.Rows.Single(r => r.Id == "d:" + Path.Combine(modules, "left-pad")) is { IsExcluded: false, IsDimmed: true });
         Assert.DoesNotContain(explorer.Rows, r => r.Id.EndsWith("|listing", StringComparison.Ordinal));
     }
 

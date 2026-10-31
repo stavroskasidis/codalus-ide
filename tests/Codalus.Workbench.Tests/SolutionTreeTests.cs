@@ -252,6 +252,33 @@ public sealed class SolutionTreeTests
     }
 
     [Fact]
+    public void Show_All_Files_dims_node_modules_vs_and_idea_with_what_is_in_them_even_when_they_hold_items()
+    {
+        // A plain SDK project's default globs take all of node_modules as items: in Show All Files it showed at full
+        // strength, while the folder view dims it and Show All Files dims the same folder when it holds no items (M57).
+        var project = P("Web", "Web.csproj");
+        var info = new ProjectInfo(project, "Web", ProjectStates.Loaded, null, ["net10.0"], "Library",
+        [
+            new("Compile", P("Web", "Program.cs"), null, null),
+            new("None", P("Web", "node_modules", "left-pad", "index.js"), null, null),
+            new("None", P("Web", ".idea", "workspace.xml"), null, null),
+            new("Compile", P("Web", "Models", "M.cs"), null, null),
+        ], [], [], Restored: true);
+        DirectoryEntry[] disk = [Dir("Web", "node_modules") with { Skipped = true }, Dir("Web", ".idea") with { Skipped = true }, Dir("Web", ".vs") with { Skipped = true }, Dir("Web", "Models")];
+
+        var contents = SolutionTree.Contents(project, info, disk);
+        var modules = contents.Single(n => n.Name == "node_modules");
+        Assert.True(modules is { IsExcluded: false, IsMuted: true });
+        Assert.True(Child(modules, "left-pad") is { IsMuted: true } leftPad && Child(leftPad, "index.js").IsMuted);
+        Assert.True(contents.Single(n => n.Name == ".idea") is { IsExcluded: false, IsMuted: true } idea && Child(idea, "workspace.xml").IsMuted);
+        Assert.True(contents.Single(n => n.Name == ".vs").IsExcluded);
+        Assert.DoesNotContain(contents.Where(n => n.Name is "Models" or "Program.cs").SelectMany(n => n.Children.Prepend(n)), n => n.IsMuted);
+
+        // Without Show All Files, the project's items show as they are.
+        Assert.DoesNotContain(SolutionTree.Contents(project, info), n => n.IsMuted);
+    }
+
+    [Fact]
     public void A_projects_item_folders_are_the_folders_its_tree_has_for_items()
     {
         var project = P("Items", "Items.csproj");

@@ -70,8 +70,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     public bool IsExcluded => _node.IsExcluded;
 
     /// <summary>
-    /// Shown dimmed: an unloaded project, a file that isn't in the project, or in the folder view a folder listed only when
-    /// it's expanded (node_modules, .vs, .idea) with what is in it, and a listing's cut row (M57).
+    /// Shown dimmed: an unloaded project, a file that isn't in the project, or in the folder view and Show All Files a folder
+    /// listed only when it's expanded (node_modules, .vs, .idea) with what is in it, and a listing's cut row (M57).
     /// </summary>
     public bool IsDimmed => _node.IsUnloaded || _node.IsExcluded || _node.IsMuted;
 
@@ -345,10 +345,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         if (IsFolderView)
         {
-            // A folder not listed, or collapsed, isn't listed again: it is once it's expanded.
+            // A folder not listed, or collapsed, isn't listed again: it is once it's expanded. One whose first listing is on
+            // its way is, with the next batch: that listing may be older than the change (M57).
             QueueFolderListings(rescan
-                ? [.. _folders.Keys.Where(IsShownFolder)]
-                : [.. directories.Select(System.IO.Path.TrimEndingDirectorySeparator).Where(d => _folders.ContainsKey(d) && IsShownFolder(d))]);
+                ? [.. ListedOrListingFolders().Where(IsShownFolder)]
+                : [.. directories.Select(System.IO.Path.TrimEndingDirectorySeparator).Where(d => (_folders.ContainsKey(d) || IsFolderListing(d)) && IsShownFolder(d))]);
         }
 
         if (_showAllFiles)
@@ -380,7 +381,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             IEnumerable<string> projects = project is null ? _shell.Solutions.Projects.Keys : WithReferences(_shell.Solutions.Projects, project);
             var built = projects.Select(p => System.IO.Path.GetDirectoryName(p)!).ToHashSet(SolutionService.PathComparer);
-            QueueFolderListings([.. _folders.Keys.Where(f => IsShownFolder(f) && (built.Contains(f) || IsUnwatched(f)))]);
+            QueueFolderListings([.. ListedOrListingFolders().Where(f => IsShownFolder(f) && (built.Contains(f) || IsUnwatched(f)))]);
         }
 
         if (_showAllFiles)
@@ -612,6 +613,14 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private bool IsFolderListing(string folder) => _folderQueue.Contains(folder) || _folderBatch?.Contains(folder) == true;
 
     /// <summary>
+    /// The folders listed, and those whose first listing is on its way: a change of one of those, or a build, lists it again
+    /// with the next batch. Dropped, the batch kept a listing that could be older than the change, and nothing listed the
+    /// folder again until its next change (M57).
+    /// </summary>
+    private IEnumerable<string> ListedOrListingFolders() =>
+        _folderBatch is { } batch ? _folders.Keys.Union(batch, SolutionService.PathComparer) : _folders.Keys;
+
+    /// <summary>
     /// The folder view's listings of the queued folders, through the build host and off the UI thread, each folder alone,
     /// one level (M57): one batch at a time, four listings at a time in it, and what is queued meanwhile goes with the next
     /// batch. A listing equal to the folder's last keeps its instance; the tree is built again once, with the refreshes
@@ -674,7 +683,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             if (error is not null)
             {
                 // The build host restarting, its two minutes up: the folder keeps its last listing, or counts as listed with
-                // nothing, so no "Loading…" stays for good; the next expansion lists it again.
+                // nothing, so no "Loading…" stays for good. Empty, it has no chevron: it's listed again by a change in it,
+                // a rescan, its parent's next expansion, the folder view's return (the workspace folder) or the restart.
                 failed.Add(error);
                 var standIn = new FolderListing([], false);
                 if (_folders.TryAdd(folder, standIn))
@@ -952,10 +962,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>
     /// Show All Files: a folder that isn't in its project, or is or is in node_modules, .vs or .idea (M57), whose contents
-    /// on disk aren't listed until it's expanded (it has a "Loading…" row, so it can be).
+    /// on disk aren't listed until it's expanded (it has a "Loading…" row, so it can be). Not in the folder view, which
+    /// Show All Files can stay on in: its folders carry their projects too, and its node_modules had a "Loading…" row
+    /// after its packages, and listed its project when expanded (M57).
     /// </summary>
     private bool IsUnlisted(ExplorerNode node) =>
-        node is { Kind: ExplorerNodeKind.Folder, Path: { } path, ProjectPath: { } project }
+        !_rootIsFolderView && node is { Kind: ExplorerNodeKind.Folder, Path: { } path, ProjectPath: { } project }
         && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path)
         && (node.IsExcluded || SolutionTree.IsInOnDemandFolder(path, System.IO.Path.GetDirectoryName(project)!));
 
