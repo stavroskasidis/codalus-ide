@@ -2,7 +2,7 @@
 @inject Releases Releases
 @inject SiteOptions Site
 
-<PageMeta Image="setup.png" ImageAlt="The first-run setup of Codalus IDE" Title="Download" Software="true" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, apt and dnf repositories, the AUR, and an AppImage for any Linux distribution." />
+<PageMeta Image="setup.png" ImageAlt="The first-run setup of Codalus IDE" Title="Download" Software="true" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, apt and dnf repositories, an install command for Arch Linux, and an AppImage for any Linux distribution." />
 
 <div class="container">
     <div class="intro-split rise">
@@ -112,10 +112,11 @@
                 </div>
                 <div class="distro" role="tabpanel" id="arch-panel" aria-labelledby="tab-arch">
                     <div class="distro-repo">
-                        <h2 id="aur">Arch Linux and Manjaro: the AUR <span class="badge">Recommended</span></h2>
-                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. An AUR helper updates it with everything else.</p>
-                        <Commands Text="@Aur" />
-                        <p>Or with an AUR helper: <code>yay -S codalus-bin</code>.</p>
+                        <h2 id="aur">Arch Linux, Manjaro and EndeavourOS: the install command <span class="badge">Recommended</span></h2>
+                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. Run it again to update.</p>
+                        <Commands Text="@ArchInstall" />
+                        <p>Run it as yourself: pacman asks before it installs, and sudo for your password. It builds the newest release's package, <code>codalus-bin</code>, with makepkg, which checks the download's SHA-256, and installs it with pacman. <code>sudo pacman -R codalus-bin</code> removes it. <a href="install-arch.sh">Read the script</a>.</p>
+                        <p>Or by hand: unzip the release's <a href="@Releases.ArchPackageUrl">PKGBUILD</a>, and run <code>makepkg -si</code> in its folder. The package isn't on the AUR yet, while the AUR's registrations are closed.</p>
                     </div>
                 </div>
                 <div class="distro" role="tabpanel" id="other-panel" aria-labelledby="tab-other">
@@ -217,10 +218,8 @@
         ./{Releases.FileName("linux-x64.AppImage")}
         """;
 
-    private const string Aur = """
-        git clone https://aur.archlinux.org/codalus-bin.git
-        cd codalus-bin && makepkg -si
-        """;
+    /// <summary>The same command as <c>InstallInfo.ArchInstallCommand</c>, which the IDE shows when it's out of date.</summary>
+    private string ArchInstall => $"curl -fsSL {Site.BaseUrl}install-arch.sh | bash";
 
     private string Source => $"""
         git clone {Site.GitHub}

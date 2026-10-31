@@ -49,6 +49,10 @@ public sealed class WebsiteTests : IDisposable
         Assert.Contains("assets/fonts/schibsted-grotesk.woff2", files);
         Assert.Contains("assets/fonts/OFL-schibsted-grotesk.txt", files);
         Assert.True(File.Exists(Path.Combine(outDir, ".nojekyll")));
+
+        // The Arch Linux install script, as `curl … | bash` downloads it: the same bytes (line endings too).
+        Assert.Contains("install-arch.sh", files);
+        Assert.Equal(File.ReadAllBytes(Path.Combine(s_repoRoot, "website", "wwwroot", "install-arch.sh")), File.ReadAllBytes(Path.Combine(outDir, "install-arch.sh")));
         Assert.Contains("<base href=\"/codalus/\"", File.ReadAllText(Path.Combine(outDir, "docs", "git", "index.html")), StringComparison.Ordinal);
     }
 
@@ -127,6 +131,13 @@ public sealed class WebsiteTests : IDisposable
         Assert.DoesNotContain("AppImage", linux[..otherAt], StringComparison.Ordinal);
         var other = WebUtility.HtmlDecode(linux[otherAt..]); // commands are encoded ("chmod &#x2B;x")
         Assert.Contains("releases/download/v0.2.0/codalus-0.2.0-linux-arm64.AppImage", other, StringComparison.Ordinal);
+
+        // Arch Linux: the install command (the one the IDE gives to update), the script it runs, and the PKGBUILD by hand.
+        var arch = WebUtility.HtmlDecode(linux[linux.IndexOf("id=\"arch-panel\"", StringComparison.Ordinal)..otherAt]);
+        Assert.Contains("curl -fsSL https://codalus.dev/install-arch.sh | bash", arch, StringComparison.Ordinal);
+        Assert.Contains("href=\"install-arch.sh\"", arch, StringComparison.Ordinal);
+        Assert.Contains("releases/download/v0.2.0/aur-codalus-bin-0.2.0.zip", arch, StringComparison.Ordinal);
+        Assert.DoesNotContain("aur.archlinux.org", arch, StringComparison.Ordinal);
 
         // How to run it: a file manager's switch, the terminal's commands, and what to do without FUSE.
         Assert.Contains("Executable as Program", other, StringComparison.Ordinal);
