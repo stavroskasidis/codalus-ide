@@ -344,6 +344,8 @@ public sealed class EditorLargeTextTests
         Assert.True(largeCs.IsLarge);
         Assert.False(services.ExpectsCodeLens(largeCs));
         Assert.True(services.ExpectsCodeLens(smallCs));
+        Assert.False(services.ExpectsDocumentSymbols(largeCs)); // nor its symbols: the navigation bar keeps no room for it
+        Assert.True(services.ExpectsDocumentSymbols(smallCs));
     }
 
     [AvaloniaFact]

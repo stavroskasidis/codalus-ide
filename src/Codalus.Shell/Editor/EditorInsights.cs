@@ -55,6 +55,10 @@ public sealed class EditorInsights : IDisposable
     private bool _lensesListed;
     private CancellationTokenSource? _estimateCts;
 
+    // Whether the service has listed the document's symbols, and the check of the text for a type before it has.
+    private bool _symbolsListed;
+    private CancellationTokenSource? _typesCts;
+
     // Our own CodeLens entries (deferred from M12a): Git history from blame and test outcomes, by one-based line.
     private GitLensIndex? _blame;
     private int _blameVersion = -1;
@@ -118,6 +122,76 @@ public sealed class EditorInsights : IDisposable
         LoadReviewThreads();
         UpdateTestLenses();
         EstimateLenses();
+        EstimateTypes();
+    }
+
+    // ------------------------------------------------------------------ the navigation bar before the service answers
+
+    /// <summary>
+    /// Whether the document's types are expected but not listed yet: its language service will list its symbols and its
+    /// text declares a type (<see cref="CSharpLensScanner.DeclaresType"/>). The navigation bar shows from the first
+    /// frame, empty, instead of moving the code down when the symbols arrive. False once the service has listed them.
+    /// Changes raise <see cref="SymbolsChanged"/>.
+    /// </summary>
+    public bool TypesExpected { get; private set; }
+
+    private void EstimateTypes()
+    {
+        _typesCts?.Cancel();
+        if (_symbolsListed || !_services.ExpectsDocumentSymbols(Model))
+        {
+            SetTypesExpected(false);
+            return;
+        }
+
+        if (TypesExpected)
+        {
+            return;
+        }
+
+        var document = _editor.Document;
+        if (document.TextLength <= EstimateOnUiThreadLength)
+        {
+            SetTypesExpected(CSharpLensScanner.DeclaresType(document.Text));
+            return;
+        }
+
+        _ = EstimateTypesOffThreadAsync(document.CreateSnapshot(), Model.Version, Restart(ref _typesCts).Token);
+    }
+
+    private async Task EstimateTypesOffThreadAsync(AvaloniaEdit.Document.ITextSource snapshot, int version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var declares = await Task.Run(() => CSharpLensScanner.DeclaresType(snapshot.Text), cancellationToken).ConfigureAwait(true);
+            if (!cancellationToken.IsCancellationRequested && !_disposed && !_symbolsListed && Model.Version == version)
+            {
+                SetTypesExpected(declares);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SetTypesExpected(bool expected)
+    {
+        if (TypesExpected != expected)
+        {
+            TypesExpected = expected;
+            SymbolsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The service listed the symbols for the current text: they replace the estimate.</summary>
+    private void SymbolsListed(IReadOnlyList<DocumentSymbol> symbols, int version)
+    {
+        _symbolsListed = true;
+        _typesCts?.Cancel();
+        TypesExpected = false;
+        Symbols = symbols;
+        SymbolsVersion = version;
+        SymbolsChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ------------------------------------------------------------------ CodeLens rows before the service answers
@@ -512,12 +586,7 @@ public sealed class EditorInsights : IDisposable
     public event EventHandler? SymbolsChanged;
 
     /// <summary>Takes <paramref name="symbols"/> as the language service's for the current text (tests: thousands of members without a service).</summary>
-    internal void ShowSymbols(IReadOnlyList<DocumentSymbol> symbols)
-    {
-        Symbols = symbols;
-        SymbolsVersion = Model.Version;
-        SymbolsChanged?.Invoke(this, EventArgs.Empty);
-    }
+    internal void ShowSymbols(IReadOnlyList<DocumentSymbol> symbols) => SymbolsListed(symbols, Model.Version);
 
     /// <summary>The innermost symbols containing a position, outermost first (navigation bar, sticky scroll, outline).</summary>
     public IReadOnlyList<DocumentSymbol> SymbolPath(Position position)
@@ -555,9 +624,7 @@ public sealed class EditorInsights : IDisposable
                 return;
             }
 
-            Symbols = symbols;
-            SymbolsVersion = version;
-            SymbolsChanged?.Invoke(this, EventArgs.Empty);
+            SymbolsListed(symbols, version);
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
@@ -597,6 +664,11 @@ public sealed class EditorInsights : IDisposable
         if (!_lensesListed)
         {
             EstimateLenses();
+        }
+
+        if (!_symbolsListed)
+        {
+            EstimateTypes(); // the service started, or couldn't
         }
 
         Restart(_hintTimer);
@@ -1041,7 +1113,7 @@ public sealed class EditorInsights : IDisposable
         }
 
         _pending.Clear();
-        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts, _estimateCts })
+        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts, _estimateCts, _typesCts })
         {
             cts?.Cancel();
             cts?.Dispose();

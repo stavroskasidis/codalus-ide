@@ -241,6 +241,13 @@ public interface IEditorServices
     bool ExpectsCodeLens(CodeDocument document) => false;
 
     /// <summary>
+    /// Whether a document's language service will list its symbols, before it answers (a C# file, unless the C# service
+    /// couldn't start or has no document symbols): the navigation bar keeps its room from the first frame when the text
+    /// declares a type.
+    /// </summary>
+    bool ExpectsDocumentSymbols(CodeDocument document) => false;
+
+    /// <summary>
     /// The language embedded at <paramref name="offset"/> (a caret) of <paramref name="document"/>, to ask too: HTML at
     /// a Razor file's markup. Null elsewhere, and when its server isn't running.
     /// </summary>

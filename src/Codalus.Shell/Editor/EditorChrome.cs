@@ -24,6 +24,12 @@ public interface INavigationSource
 {
     IReadOnlyList<DocumentSymbol> Symbols { get; }
 
+    /// <summary>
+    /// Whether the document's types will be listed but aren't yet: the bar keeps its room, empty, until they are, so
+    /// the code doesn't move down when they arrive. Changes raise <see cref="SymbolsChanged"/>.
+    /// </summary>
+    bool TypesExpected => false;
+
     event EventHandler? SymbolsChanged;
 
     event EventHandler? CaretChanged;
@@ -52,6 +58,8 @@ public sealed class NavigationBar : Border
         public CodeEditorController Controller => controller;
 
         public IReadOnlyList<DocumentSymbol> Symbols => controller.Insights.Symbols;
+
+        public bool TypesExpected => controller.Insights.TypesExpected;
 
         public event EventHandler? SymbolsChanged
         {
@@ -135,7 +143,7 @@ public sealed class NavigationBar : Border
         }
     }
 
-    /// <summary>Whether it lists a document's types (it is hidden otherwise).</summary>
+    /// <summary>Whether it lists a document's types (it is hidden otherwise, unless they're expected).</summary>
     public bool HasTypes => Types.Count > 0;
 
     public bool Enabled { get; set; } = true;
@@ -185,7 +193,9 @@ public sealed class NavigationBar : Border
         }
 
         Collect(symbols, null);
-        IsVisible = Enabled && types.Count > 0;
+        // Before the service lists the types of a text that declares some, the bar shows empty: it doesn't push the code
+        // down when they arrive (the maintainer's report, as CodeLens rows in M56).
+        IsVisible = Enabled && (types.Count > 0 || _controller?.TypesExpected == true);
         _updating = true;
         _types.ItemsSource = types;
         _updating = false;

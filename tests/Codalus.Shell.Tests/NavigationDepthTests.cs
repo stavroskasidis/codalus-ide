@@ -168,8 +168,9 @@ public class NavigationDepthTests
         const string probe = "class Geometry";
         var frames = new List<(double Top, bool Rows)>();
         var seen = new List<string>();
+        var bars = new List<bool>(); // whether the navigation bar showed, in every frame: it mustn't push the code down either
         CodeEditorController? hooked = null;
-        void Hook(CodeEditorController controller)
+        void Hook(CodeEditorController controller, CodeEditorDocument document)
         {
             hooked = controller;
             var text = controller.Editor.TextArea.TextView;
@@ -179,6 +180,7 @@ public class NavigationDepthTests
                 int Line(string code) => controller.Model.Text.GetLineByOffset(source.IndexOf(code, StringComparison.Ordinal)).LineNumber;
                 var shown = text.VisualLinesValid && text.VisualLines.Count > 0 ? text.VisualLines[^1].LastDocumentLine.LineNumber : 0;
                 seen.Add(shown.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                bars.Add(document.View?.NavigationBar.IsVisible == true);
                 if (shown >= Line(probe))
                 {
                     frames.Add((text.GetVisualTopByDocumentLine(Line(probe)), declarations.All(code => controller.Insights.LensRowAbove(Line(code)) is not null)));
@@ -192,7 +194,7 @@ public class NavigationDepthTests
             {
                 if (opened.Controller is { } controller)
                 {
-                    Hook(controller);
+                    Hook(controller, opened);
                 }
                 else
                 {
@@ -200,7 +202,7 @@ public class NavigationDepthTests
                     {
                         if (hooked is null)
                         {
-                            Hook(opened.Controller!);
+                            Hook(opened.Controller!, opened);
                         }
                     };
                 }
@@ -224,6 +226,14 @@ public class NavigationDepthTests
         Assert.All(frames, frame => Assert.Equal(frames[0].Top, frame.Top, 1));
         Assert.Equal(frames[0].Top, view.GetVisualTopByDocumentLine(LineOf(probe)), 1);
 
+        // The navigation bar too (the maintainer's report): it showed, empty, from the first frame, until the types came.
+        var bar = f.Shell.ActiveEditor!.View!.NavigationBar;
+        await ShellFixture.PumpUntil(() => bar.Types.Count == 5, seconds: 60);
+        Assert.False(shapes.Insights.TypesExpected);
+        Assert.True(bar.IsVisible);
+        Assert.NotEmpty(bars);
+        Assert.All(bars, Assert.True);
+
         // The file changed outside the editor: its text is replaced, and the new text's rows are kept at once.
         await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken)).Replace(
             "public static class Geometry\n{", "public static class Geometry\n{\n    public static double Half(double value) => value / 2;\n", StringComparison.Ordinal),
@@ -237,6 +247,14 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(LineOf("double Half(")) is { Length: > 0 }, seconds: 60);
         view.EnsureVisualLines();
         Assert.Equal(top, view.GetVisualTopByDocumentLine(LineOf(probe)), 1);
+
+        // A file of top-level statements declares no type: no empty bar shows before its symbols, nor after them.
+        var program = await OpenAsync(f, Path.Combine(folder, "src", "App", "Program.cs"));
+        var programBar = f.Shell.ActiveEditor!.View!.NavigationBar;
+        Assert.False(program.Insights.TypesExpected);
+        Assert.False(programBar.IsVisible);
+        await ShellFixture.PumpUntil(() => program.Insights.SymbolsVersion == program.Model.Version, seconds: 60);
+        Assert.False(programBar.IsVisible);
     }
 
     [AvaloniaFact]

@@ -21,6 +21,18 @@ public static class CSharpLensScanner
         return parser.Lenses;
     }
 
+    /// <summary>
+    /// Whether the text declares a class, struct, interface, enum, record or union, as <see cref="Scan"/> finds them: the
+    /// editor keeps the navigation bar's room (its types and members) from the first frame when the host's document
+    /// symbols will list a type. It stops at the first one.
+    /// </summary>
+    public static bool DeclaresType(string text)
+    {
+        var parser = new Parser(text) { StopAtType = true };
+        parser.Container(Level.File);
+        return parser.FoundType;
+    }
+
     private enum Level
     {
         File,
@@ -44,6 +56,11 @@ public static class CSharpLensScanner
 
         public List<int> Lenses { get; } = [];
 
+        /// <summary>Whether the walk ends at the first type declaration (<see cref="DeclaresType"/>).</summary>
+        public bool StopAtType { get; init; }
+
+        public bool FoundType { get; private set; }
+
         private Token Peek(int ahead = 0) => _lexer.Peek(ahead);
 
         private Token Take() => _lexer.Take();
@@ -64,7 +81,7 @@ public static class CSharpLensScanner
         /// <summary>Declarations until the container's closing brace (taken) or the end of the text.</summary>
         public void Container(Level level)
         {
-            while (Peek() is { Kind: not Kind.End } token)
+            while (!FoundType && Peek() is { Kind: not Kind.End } token)
             {
                 if (IsPunct(token, '}'))
                 {
@@ -161,6 +178,12 @@ public static class CSharpLensScanner
         /// <summary>A class, struct, interface, enum, record or union (C# 15): its name, its header up to the body, then its members.</summary>
         private void TypeDeclaration()
         {
+            if (StopAtType)
+            {
+                FoundType = true;
+                return;
+            }
+
             var isEnum = IsWord(Take(), "enum");
             if (IsWord(Peek(), "struct") || IsWord(Peek(), "class"))
             {

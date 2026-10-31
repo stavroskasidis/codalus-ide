@@ -862,6 +862,10 @@ public sealed partial class ShellHost : IEditorServices
         document is { IsReadOnly: false, IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
         && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.CodeLensProvider: null };
 
+    bool IEditorServices.ExpectsDocumentSymbols(CodeDocument document) =>
+        document is { IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.DocumentSymbolProvider: false };
+
     public void OpenLocations(IReadOnlyList<Location> locations, string title) => _ = OpenLocationsAsync(locations, title);
 
     private async Task OpenLocationsAsync(IReadOnlyList<Location> locations, string title)
