@@ -105,6 +105,42 @@ public sealed class StartWindowTests
     }
 
     /// <summary>
+    /// Opening a recent entry on a share that doesn't answer (the start window's, File → Open Recent's) asks whether to leave
+    /// it in the list once its check's time is up, and removes nothing unasked: the check, on the thread pool and with no
+    /// time limit, held the click for the network's timeout, or for good on a dead mount, with nothing shown.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Opening_a_recent_entry_that_doesnt_answer_asks_once_its_checks_time_is_up()
+    {
+        await using var f = ShellFixture.Create();
+        var offline = Path.Combine(f.UserData, "offline", "Offline.slnx");
+        using var release = new ManualResetEventSlim();
+        var probes = 0;
+        f.Shell.RecentProbe = new PathProbe(path =>
+        {
+            Interlocked.Increment(ref probes);
+            release.Wait(TimeSpan.FromSeconds(30));
+            return PathProbe.Kind(path);
+        });
+        f.Shell.Recent.Add(offline);
+        try
+        {
+            var opening = f.Shell.OpenRecentEntryAsync(offline);
+            await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, seconds: 10);
+            Assert.Equal(1, probes);
+            Assert.Contains(offline, f.Shell.Dialogs.Message, StringComparison.Ordinal);
+
+            f.Shell.Dialogs.Cancel();
+            await ShellFixture.PumpUntil(() => opening.IsCompleted);
+            Assert.Contains(offline, f.Shell.Recent.Items);
+        }
+        finally
+        {
+            release.Set();
+        }
+    }
+
+    /// <summary>
     /// The last-solution startup opens the first recent entry that is there, in order: one that doesn't answer counts as not
     /// there once its check's time is up, and so does one that's gone.
     /// </summary>

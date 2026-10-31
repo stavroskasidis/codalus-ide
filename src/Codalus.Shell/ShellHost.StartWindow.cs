@@ -45,7 +45,7 @@ public sealed partial class ShellHost
     /// </summary>
     private void ContinueStartup()
     {
-        if (!Options.StartWindow)
+        if (!Options.StartWindow || OpenedSomething)
         {
             return;
         }
@@ -56,10 +56,23 @@ public sealed partial class ShellHost
                 _ = OpenLastSolutionAsync();
                 break;
             case "startWindow":
-                Infrastructure.Ui.Post(ShowStartWindow);
+                Infrastructure.Ui.Post(() =>
+                {
+                    if (!IsClosing && !OpenedSomething)
+                    {
+                        ShowStartWindow();
+                    }
+                });
                 break;
         }
     }
+
+    /// <summary>
+    /// Whether a solution, project or folder opened, or started to, since the IDE started: the OS's open-documents event
+    /// that started it, a drop, File → Open. The startup waits for the login shell's environment (M56), seconds in which
+    /// the user can open something: the start window, the first-run setup and the last solution then stay away.
+    /// </summary>
+    private bool OpenedSomething => _openRequests > 0 || Solutions.IsOpen;
 
     /// <summary>
     /// The last-solution startup: the first recent entry that is there, in the list's order, each checked off the UI thread
@@ -113,11 +126,15 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Opens a recent entry: a folder, or a solution or project; a missing one offers to leave the list.</summary>
+    /// <summary>
+    /// Opens a recent entry (the start window's, File → Open Recent's): a folder, or a solution or project; a missing one
+    /// offers to leave the list. Checked as the start window's rows are (M56): off the UI thread, on a thread of its own,
+    /// and one that doesn't answer within <see cref="PathProbe.Timeout"/> (a share that is offline) counts as missing, so
+    /// the click says so instead of waiting for the network's timeout, or for good on a dead mount.
+    /// </summary>
     internal async Task OpenRecentEntryAsync(string path)
     {
-        // Off the UI thread (M56): on a share that is offline, the check waits for the network's timeout.
-        var kind = await Task.Run(() => PathProbe.Kind(path)).ConfigureAwait(true);
+        var kind = await RecentProbe.KindAsync(path).ConfigureAwait(true);
         if (kind == PathState.Folder)
         {
             await OpenFolderAsync(path).ConfigureAwait(true);

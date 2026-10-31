@@ -387,6 +387,13 @@ public sealed class LayoutManager : ObservableObject
             Factory.SetFocusedDockable(owner, existing);
         }
 
+        // Its group is the active one, also while the active document is worked out later (DeferActiveDocument): the tab
+        // made active last in another split group is the active document then, not the first group's.
+        if (existing.Owner is IDocumentDock group)
+        {
+            _lastDocumentDock = group;
+        }
+
         UpdateActiveDocument();
     }
 
@@ -442,8 +449,10 @@ public sealed class LayoutManager : ObservableObject
 
     /// <summary>
     /// Until disposed, tabs that open, close or become active don't change <see cref="ActiveDocument"/>: it's worked out
-    /// once, after (M56). Tabs opened or closed one by one each became the active one in turn (a group's first tab, the
-    /// neighbor of a closed active one), and each activation ran every reaction to a tab switch.
+    /// once, after (M56), in the group of the tab <see cref="OpenDocument"/> made active last (Dock's own activations of a
+    /// closed tab's neighbor don't move it). Tabs opened or closed one by one each became the active one in turn (a
+    /// group's first tab, the neighbor of a closed active one), and each activation ran every reaction to a tab switch.
+    /// For synchronous work only: the user's own tab switches meanwhile would go unseen.
     /// </summary>
     public IDisposable DeferActiveDocument()
     {

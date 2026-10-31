@@ -222,6 +222,7 @@ public sealed partial class GitService : IDisposable
     private async Task<(int ExitCode, byte[] Output, string Error)> RunBytesOnceAsync(IReadOnlyList<string> arguments, byte[]? input, bool readOnly, CancellationToken cancellationToken)
     {
         var root = Root ?? throw new InvalidOperationException("No git repository is open.");
+        await Codalus.Rpc.ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false); // the login shell's PATH and proxies (M56)
         var process = await Task.Run(() => Start(root, arguments, input is not null, readOnly, null), CancellationToken.None).ConfigureAwait(false);
         using (process)
         {

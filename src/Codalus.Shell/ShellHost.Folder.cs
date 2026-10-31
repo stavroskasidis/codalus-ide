@@ -35,6 +35,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        _openRequests++; // File → Open Folder: the last-solution startup and the start window stay away (M56)
         var remote = IsRemotePath(folder);
         folder = Path.TrimEndingDirectorySeparator(remote ? Path.GetFullPath(folder) : Codalus.Platform.RealPath.Resolve(Path.GetFullPath(folder)));
         if (!(remote ? await Codalus.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(folder, CancellationToken.None).ConfigureAwait(true) : Directory.Exists(folder)))

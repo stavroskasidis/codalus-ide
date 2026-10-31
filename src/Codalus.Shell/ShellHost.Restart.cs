@@ -14,6 +14,9 @@ public sealed partial class ShellHost
 {
     private bool _restartRequested;
 
+    /// <summary>Tests: what starts the restarted IDE, instead of a process.</summary>
+    internal Action<ProcessStartInfo>? RestartStarter { get; set; }
+
     /// <summary>Closes the window; once the IDE has exited, it starts again.</summary>
     public void Restart()
     {
@@ -50,6 +53,12 @@ public sealed partial class ShellHost
         if (Options.EnableProposedApi)
         {
             start.ArgumentList.Add("--enable-proposed-api");
+        }
+
+        if (RestartStarter is { } starter)
+        {
+            starter(start);
+            return;
         }
 
         try

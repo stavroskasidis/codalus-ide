@@ -447,12 +447,16 @@ internal sealed class ShellFixture : IAsyncDisposable
         }
 
         Pump();
-        await Shell.DisposeAsync();
         if (Shell.IsShuttingDown)
         {
-            // The window hides as it closes and goes for good once the shell has shut down (M56); with unsaved changes it
-            // asked instead, and stays.
+            // The window hides as it closes and goes for good once the shell has shut down, within the shutdown's limit
+            // (M56); then the rest of the disposal, whose failures the shutdown logs.
             await PumpUntil(() => _closed);
+            await Shell.DisposeAsync().AsTask().ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+        else
+        {
+            await Shell.DisposeAsync(); // with unsaved changes the window asked instead, and stays
         }
 
         try

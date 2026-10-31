@@ -333,8 +333,14 @@ public sealed partial class MainWindow : Window, IShellWindow
                 BenchEvents.Emit(BenchEventNames.Interactive);
 
                 // Started from the Finder or a desktop launcher, the startup's work (which starts processes and goes online)
-                // waits for the login shell's PATH and network settings; the window didn't (M56). At once otherwise.
+                // waits for the login shell's PATH and network settings; the window didn't (M56). At once otherwise. The
+                // user may have closed the window meanwhile: then the startup has nothing left to do.
                 await _shell.EnvironmentReady.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+                if (_shuttingDown || _shell.IsClosing)
+                {
+                    return;
+                }
+
                 _shell.OnInteractive();
                 StartBenchDriver();
                 if (_shell.Options.Screenshot is { } screenshot && _shell.Options.Remote is not null)
@@ -411,24 +417,39 @@ public sealed partial class MainWindow : Window, IShellWindow
 
     private bool _shuttingDown;
 
+    /// <summary>
+    /// Hides the windows, shuts the shell down behind them and ends the app, whatever the shutdown did: with the windows
+    /// gone and the listener closed, a process left running couldn't be reached any more (M56). It doesn't throw, so
+    /// <see cref="OnClosing"/> needn't wait for it.
+    /// </summary>
     private async Task ShutDownAsync()
     {
         _shuttingDown = true;
-        _shell.StopListening(); // a codalus started now opens its own window, not one in this closing process
         var desktop = Application.Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime;
-        foreach (var window in desktop?.Windows.ToList() ?? [this])
+        try
         {
-            window.Hide(); // the floating tool windows and the start window too
-        }
+            _shell.StopListening(); // a codalus started now opens its own window, not one in this closing process
+            foreach (var window in desktop?.Windows.ToList() ?? [this])
+            {
+                window.Hide(); // the floating tool windows and the start window too
+            }
 
-        await _shell.ShutDownAsync(ShellHost.ShutdownLimit).ConfigureAwait(true);
-        if (desktop is not null)
-        {
-            desktop.Shutdown();
+            await _shell.ShutDownAsync(ShellHost.ShutdownLimit).ConfigureAwait(true);
         }
-        else
+        catch (Exception ex)
         {
-            Close();
+            _shell.Workbench.Log.AppendLine($"[exit] The shutdown failed: {ex}");
+        }
+        finally
+        {
+            if (desktop is not null)
+            {
+                desktop.Shutdown();
+            }
+            else
+            {
+                Close();
+            }
         }
     }
 
@@ -523,8 +544,8 @@ public sealed partial class MainWindow : Window, IShellWindow
     }
 
     /// <summary>
-    /// Dropping a solution, project or folder from the file manager opens it; dropped files open in editors together, the
-    /// last one active (M56).
+    /// Dropping a solution, project or folder from the file manager opens it (the first item decides); dropped files open in
+    /// editors together, the last one active (M56), and the folders among them are left out.
     /// </summary>
     private void OnFileDrop(object? sender, DragEventArgs e)
     {
@@ -540,7 +561,7 @@ public sealed partial class MainWindow : Window, IShellWindow
             return;
         }
 
-        _shell.OpenFromOs([.. items.Select(i => i.TryGetLocalPath()).OfType<string>()]);
+        _ = _shell.OpenFilesAsync([.. items.OfType<IStorageFile>().Select(i => i.TryGetLocalPath()).OfType<string>().Select(p => (p, (Codalus.LanguageServices.Protocol.Position?)null))]);
     }
 
     private void SaveScreenshot(string path)

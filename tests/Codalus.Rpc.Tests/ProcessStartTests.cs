@@ -77,6 +77,85 @@ public sealed class ProcessStartTests
         }
     }
 
+    /// <summary>
+    /// A start waits in its launcher (for the environment, M56) while its owner shuts down: the process the launcher then
+    /// returns is stopped, and the start ends as disposed. It ran on, unowned: the disposal had found nothing to stop, and
+    /// the start released a lock the disposal had disposed.
+    /// </summary>
+    [Fact]
+    public async Task A_process_started_once_its_supervisor_was_disposed_is_stopped()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var launcher = new GatedLauncher(entered, release);
+        var process = new SupervisedProcess("test host", new ProcessLaunchInfo("anything", []) { Launcher = launcher }, new SupervisionPolicy { ShutdownRequest = null, ExitNotification = null });
+        var start = process.StartAsync(TestContext.Current.CancellationToken);
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+
+        await process.DisposeAsync();
+        release.Set();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => start);
+        Assert.NotNull(launcher.Started);
+        Assert.True(launcher.Started.Killed);
+        Assert.True(launcher.Started.Disposed);
+        Assert.False(process.IsRunning);
+    }
+
+    /// <summary>Returns a process once released, from the thread pool (where the supervisor runs its launcher).</summary>
+    private sealed class GatedLauncher(ManualResetEventSlim entered, ManualResetEventSlim release) : IProcessLauncher
+    {
+        public StoppableProcess? Started { get; private set; }
+
+        public Task<IHostProcess> StartAsync(ProcessLaunchInfo launch, CancellationToken cancellationToken)
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(30), cancellationToken);
+            Started = new StoppableProcess();
+            return Task.FromResult<IHostProcess>(Started);
+        }
+    }
+
+    /// <summary>A process that says whether it was killed and disposed.</summary>
+    private sealed class StoppableProcess : IHostProcess
+    {
+        private readonly TaskCompletionSource<int?> _exited = new();
+
+        public Stream Output => Stream.Null;
+
+        public Stream Input => Stream.Null;
+
+        public int? Id => 42;
+
+        public Task<int?> Exited => _exited.Task;
+
+        public bool Killed { get; private set; }
+
+        public bool Disposed { get; private set; }
+
+        public event Action<string>? ErrorLine
+        {
+            add { }
+            remove { }
+        }
+
+        public void BeginErrorRead()
+        {
+        }
+
+        public void Kill()
+        {
+            Killed = true;
+            _exited.TrySetResult(-1);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     /// <summary>Blocks in its start until released (at most 5 s, so a start on the caller's thread fails the test, not hangs it).</summary>
     private sealed class BlockingLauncher(ManualResetEventSlim entered, ManualResetEventSlim release) : IProcessLauncher
     {

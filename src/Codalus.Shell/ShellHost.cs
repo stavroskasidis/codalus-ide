@@ -351,9 +351,15 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// Completes once this process's environment is complete: the login shell's <c>PATH</c> and network settings taken
     /// (<see cref="App.LoginShellImport"/>, started from the Finder or a desktop launcher) and the .NET root chosen with them.
     /// The window doesn't wait for it (M56): <see cref="OnInteractive"/> does, and so does every process started
-    /// meanwhile (<see cref="Rpc.ProcessEnvironment"/>), at most as long as the import (5 s).
+    /// meanwhile (<see cref="Rpc.ProcessEnvironment"/>), at most <see cref="EnvironmentLimit"/>.
     /// </summary>
     public Task EnvironmentReady { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// How long <see cref="EnvironmentReady"/> waits for the login shell: its own 5 s, and a second to read what it printed.
+    /// Past that (an import that hangs), processes start with the environment the IDE was started with.
+    /// </summary>
+    internal static readonly TimeSpan EnvironmentLimit = TimeSpan.FromSeconds(6);
 
     /// <summary>
     /// The .NET root (<see cref="UseUserDotnet"/>) at once when the environment is complete, else once the login shell's
@@ -370,27 +376,62 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _ = EnvironmentCheck; // made here, not on the thread that chooses the root
-        EnvironmentReady = import.ContinueWith(_ => UseUserDotnet(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        EnvironmentReady = import.WaitAsync(EnvironmentLimit).ContinueWith(
+            waited =>
+            {
+                if (waited.Exception?.InnerException is TimeoutException)
+                {
+                    Workbench.Log.AppendLine($"[setup] The login shell's environment didn't come in within {EnvironmentLimit.TotalSeconds:0} s: the processes start with the one the IDE was started with.");
+                }
+
+                UseUserDotnet();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
         Rpc.ProcessEnvironment.WaitFor(EnvironmentReady);
         _ = EnvironmentReady.ContinueWith(
             _ => Ui.Post(() =>
             {
+                if (IsClosing)
+                {
+                    return; // the window closed meanwhile: its settings are being disposed
+                }
+
+                // The shells the login shell's PATH has: the Terminal window's list too, which copied the first ones.
                 Terminals.Profiles = Codalus.Workbench.Terminal.TerminalProfiles.Detect(PlatformInfo.Current);
                 Workbench.Settings.Register(TerminalSettings(Terminals.Profiles));
+                TerminalWindow.RefreshProfiles();
             }),
             CancellationToken.None,
             TaskContinuationOptions.None,
             TaskScheduler.Default);
     }
 
-    /// <summary>Called once the window is interactive and <see cref="EnvironmentReady"/>: deferred work that must not delay the first frame.</summary>
+    /// <summary>
+    /// Called once the window is interactive and <see cref="EnvironmentReady"/>: deferred work that must not delay the first
+    /// frame. Nothing once the shell is closing (M56): the environment can come in after the user closed the window, and the
+    /// listener, the start window and the startup plugins' hosts started then would outlive the shutdown.
+    /// </summary>
     public void OnInteractive()
     {
+        if (IsClosing)
+        {
+            return;
+        }
+
         _ = OfferRecoveryAsync();
         StartUpdates();
 
-        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here.
+        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here. Something
+        // opened while the startup waited for the environment (M56): the setup waits for a start that opens nothing, as it
+        // does for a command line that opens something.
         var setup = FirstRunDecision;
+        if (setup == SetupDecision.Show && OpenedSomething)
+        {
+            setup = SetupDecision.OpensSomething;
+        }
+
         Workbench.Log.AppendLine($"[setup] First-run setup: {setup}.");
         if (Options.SmokeTest is null && Options.Bench is null)
         {
@@ -448,7 +489,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         _ = ResumePluginBisectAsync();
         if (setup == SetupDecision.Show)
         {
-            Ui.Post(() => ShowSetup(firstStart: true));
+            Ui.Post(() =>
+            {
+                if (!IsClosing && !OpenedSomething)
+                {
+                    ShowSetup(firstStart: true);
+                }
+            });
         }
         else
         {
@@ -464,6 +511,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Ui.Post(async () =>
         {
+            if (IsClosing)
+            {
+                // Taken just before the listener closed (M56): unanswered, a waiting request's process (a solution's open,
+                // a merge) does the work in a window of its own, as one started a moment later does.
+                done.TrySetCanceled();
+                return;
+            }
+
             try
             {
                 if (request.Command != "openPath")
@@ -1070,6 +1125,12 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>Whether <see cref="ShutDownAsync"/> has started.</summary>
     public bool IsShuttingDown => _shuttingDown is not null;
 
+    /// <summary>
+    /// Whether the shell is shutting down or disposed (M56): the startup's work, the OS's and other processes' requests
+    /// aren't taken any more, as the window is gone and the services they'd use are being disposed.
+    /// </summary>
+    internal bool IsClosing => _shuttingDown is not null || _disposing is not null;
+
     private async Task ShutDownCoreAsync(TimeSpan limit)
     {
         var openSolution = Solutions.Solution?.Path;
@@ -1082,12 +1143,22 @@ public sealed partial class ShellHost : IAsyncDisposable
         {
             Workbench.Log.AppendLine($"[exit] The shutdown took longer than {limit.TotalSeconds:0} s: what is left ends with the process.");
         }
+        catch (Exception ex)
+        {
+            // A service that failed to stop: the process still ends, and a requested restart still starts (M56). The
+            // lifetime's Exit threw this before, which ended the process; now nothing would, with the window gone.
+            Workbench.Log.AppendLine($"[exit] The shutdown failed: {ex}");
+            Infrastructure.CrashReporter.Write("error", ex.ToString());
+        }
 
         RestartIfRequested(openSolution);
     }
 
     /// <summary>Disposes the shell (once; a later call waits for the first). <see cref="ShutDownAsync"/> is the exit's.</summary>
     public ValueTask DisposeAsync() => new(_disposing ??= DisposeCoreAsync());
+
+    /// <summary>Tests: more work the shutdown waits for with the hosts' (one that is slow to stop, or fails to).</summary>
+    internal Func<Task>? ShutdownWork { get; set; }
 
     private async Task DisposeCoreAsync()
     {
@@ -1102,7 +1173,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _updateHttp.Dispose();
         await DisposeCompanionAsync().ConfigureAwait(false);
-        _instance?.Dispose();
+        StopListening();
         _mcpBridge?.Dispose();
         await McpServers.DisposeAsync().ConfigureAwait(false);
         await ExternalAgents.DisposeAsync().ConfigureAwait(false);
@@ -1126,7 +1197,8 @@ public sealed partial class ShellHost : IAsyncDisposable
             DisposeXamlAsync().AsTask(),
             Languages.DisposeAsync().AsTask(),
             Solutions.DisposeAsync().AsTask(),
-            DisposePluginsAsync()).ConfigureAwait(false);
+            DisposePluginsAsync(),
+            ShutdownWork?.Invoke() ?? Task.CompletedTask).ConfigureAwait(false);
         if (Remote is { } remote)
         {
             Remote = null;

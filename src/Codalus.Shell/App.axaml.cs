@@ -60,6 +60,16 @@ public sealed class App : Application
             return;
         }
 
+        if (Shell is { IsClosing: true } closing)
+        {
+            // The window is gone and the shell shuts down behind it with the UI thread free (M56): a reaction posted by the
+            // disposal's own events (a solution closing) can find its service disposed. The lifetime's Exit held the UI
+            // thread before, so such reactions never ran; a crash report for one would say the IDE crashed when it didn't.
+            closing.Workbench.Log.AppendLine($"[unhandled] During the shutdown: {e.Exception}");
+            e.Handled = true;
+            return;
+        }
+
         if (Shell is { } shell)
         {
             shell.Workbench.Log.AppendLine($"[unhandled] {e.Exception}");

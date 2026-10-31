@@ -115,16 +115,20 @@ public sealed partial class ShellHost
     /// <inheritdoc cref="OpenSolutionAsync(string?)"/>
     public async Task<bool> OpenSolutionAsync(string? path, bool? trusted)
     {
-        _openRequests++;
         path ??= Window is { } window ? await window.PickSolutionAsync().ConfigureAwait(true) : null;
         if (path is null)
         {
             return false;
         }
 
-        // A local path's checks run off the UI thread (M56): on a share that is offline, each waits for the network's timeout.
+        _openRequests++; // once a path is chosen: a picker cancelled meanwhile opened nothing
+
+        // A local path's checks run off the UI thread (M56): on a share that is offline, each waits for the network's
+        // timeout, and for good on a dead mount, so on a thread of their own rather than the pool's. The paths given here
+        // come from a picker, the OS or the command line, just looked at; recent entries are checked first, within
+        // PathProbe's time (OpenRecentEntryAsync).
         var remote = IsRemotePath(path);
-        var local = remote ? default : await Task.Run(() => LocalSolutionPath(path)).ConfigureAwait(true);
+        var local = remote ? default : await Task.Factory.StartNew(() => LocalSolutionPath(path), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(true);
         if (remote ? await Codalus.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : local.IsFolder)
         {
             await OpenFolderWorkspaceAsync(path).ConfigureAwait(true); // a recent folder (folder mode, ADR 0033)
@@ -250,18 +254,31 @@ public sealed partial class ShellHost
     /// Opens <paramref name="folder"/> from the command line or a drop: its solution (.slnx first, then .sln, then a single
     /// project), or the folder itself (folder mode, ADR 0033) when it has none.
     /// </summary>
-    public Task OpenFolderAsync(string folder)
+    public async Task OpenFolderAsync(string folder)
     {
         _openRequests++;
-        var candidates = s_openPatterns
-            .Select(pattern => Directory.EnumerateFiles(folder, pattern).Order(StringComparer.OrdinalIgnoreCase).ToList())
-            .FirstOrDefault(found => found.Count > 0);
+
+        // Listed off the UI thread (M56): a folder on a share that is slow, or the last solution's at startup.
+        var candidates = await Task.Run(() =>
+        {
+            try
+            {
+                return s_openPatterns
+                    .Select(pattern => Directory.EnumerateFiles(folder, pattern).Order(StringComparer.OrdinalIgnoreCase).ToList())
+                    .FirstOrDefault(found => found.Count > 0);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null; // the folder's own open says what's wrong
+            }
+        }).ConfigureAwait(true);
         if (candidates is not [var single, ..] || candidates.Count > 1 && !single.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) && !single.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
         {
-            return OpenFolderWorkspaceAsync(folder);
+            await OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
+            return;
         }
 
-        return OpenSolutionAsync(single);
+        await OpenSolutionAsync(single).ConfigureAwait(true);
     }
 
     public async Task CloseSolutionAsync()
@@ -302,7 +319,7 @@ public sealed partial class ShellHost
 
         if (await Palette.ShowAsync(items, "Open a recent solution").ConfigureAwait(true) is { Tag: string path })
         {
-            await OpenSolutionAsync(path).ConfigureAwait(true);
+            await OpenRecentEntryAsync(path).ConfigureAwait(true); // checked as the start window's entries are (M56)
         }
     }
 

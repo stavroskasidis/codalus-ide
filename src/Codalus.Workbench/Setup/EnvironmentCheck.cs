@@ -591,6 +591,9 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <summary>Runs a program to its end within <paramref name="limit"/> (installs that download take minutes).</summary>
     public static async Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, TimeSpan limit, CancellationToken cancellationToken)
     {
+        // With the login shell's PATH, DOTNET_ROOT and proxies (M56): before the start info's Environment, which copies
+        // this process's environment when it's first read.
+        await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
         var start = new ProcessStartInfo(program)
         {
             RedirectStandardOutput = true,
@@ -612,9 +615,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         start.Environment["DOTNET_NOLOGO"] = "1";
 
-        // Started on the thread pool, with the login shell's PATH (M56): callers on the UI thread (a solution's global.json
-        // check) waited for the start.
-        await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
+        // Started on the thread pool (M56): callers on the UI thread (a solution's global.json check) waited for the start.
         using var process = await Task.Run(() => Process.Start(start), cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException($"{program} didn't start.");
         var output = new StringBuilder();
         var error = new StringBuilder();

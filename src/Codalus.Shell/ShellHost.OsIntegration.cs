@@ -62,6 +62,11 @@ public sealed partial class ShellHost
     /// </summary>
     internal bool TakeOpenPath(string path)
     {
+        if (IsClosing)
+        {
+            return false; // the window is closing (M56): the other process opens its own
+        }
+
         if (Solutions.IsOpen)
         {
             if (!IsOpenNow(path))
@@ -114,11 +119,19 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// Paths the OS handed over (or a drop): solutions, projects and folders (here, or in a new window when one is open),
-    /// and files in the editor, together: the last one is the active tab (M56).
+    /// Paths the OS handed over: solutions, projects and folders (here, or in a new window when one is open), and files in
+    /// the editor, together: the last one is the active tab (M56).
     /// </summary>
     internal void OpenFromOs(IReadOnlyList<string> paths)
     {
+        if (IsClosing)
+        {
+            // The Finder's open-documents event reaches the app while it shuts down (M56): its window is gone and its
+            // services are being disposed, so nothing would show what opened. The lifetime's Exit dropped these too.
+            Workbench.Log.AppendLine($"[os] Not opened, the IDE is closing: {string.Join(", ", paths)}");
+            return;
+        }
+
         var files = new List<(string, LanguageServices.Protocol.Position?)>();
         foreach (var path in paths)
         {

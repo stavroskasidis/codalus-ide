@@ -187,27 +187,28 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// View Designer: opens a form's code file (or its designer file's form) in the designer. Off Windows it says the
-    /// designer is Windows only and opens the code instead.
+    /// designer is Windows only and opens the code instead. <paramref name="activate"/> false adds the tab behind the
+    /// active one (files opened together, M56).
     /// </summary>
-    public async Task OpenWinFormsDesignerAsync(string path, bool preview = false)
+    public async Task OpenWinFormsDesignerAsync(string path, bool preview = false, bool activate = true)
     {
         var code = WinFormsDesignerService.CodeFileOf(Path.GetFullPath(path)) ?? Path.GetFullPath(path);
         if (!WinFormsDesigner.IsWindows() || Remote is not null)
         {
             Workbench.Notifications.Warning(Localizer.Get("msg.winFormsDesigner.windowsOnly", "The Windows Forms designer runs on Windows only: Windows Forms draws only there. On this OS the form opens as code, which edits, completes and builds."));
-            await OpenFileAsync(code, preview, at: null, initialContent: null, textEditor: true).ConfigureAwait(true);
+            await OpenFileAsync(code, preview, at: null, initialContent: null, textEditor: true, activate).ConfigureAwait(true);
             return;
         }
 
         if (Layout.FindDocument<WinFormsDesignerDocument>(WinFormsDesignerDocument.IdFor(code)) is { } open)
         {
-            Layout.OpenDocument(open, preview, focus: !preview);
+            Layout.OpenDocument(open, preview, focus: !preview, activate);
             return;
         }
 
         var document = new WinFormsDesignerDocument(this, code);
         document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
-        Layout.OpenDocument(document, preview, focus: !preview);
+        Layout.OpenDocument(document, preview, focus: !preview, activate);
         await document.LoadAsync().ConfigureAwait(true);
     }
 

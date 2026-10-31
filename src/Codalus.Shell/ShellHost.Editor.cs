@@ -298,28 +298,28 @@ public sealed partial class ShellHost : IEditorServices
         path = Path.GetFullPath(path);
         if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
         {
-            OpenImage(path, preview);
+            OpenImage(path, preview, activate);
             return null;
         }
 
         // A binary file opens in the hex viewer, unless the text editor was asked for.
         if (initialContent is null && !textEditor && !_models.ContainsKey(path) && File.Exists(path) && Views.HexDocument.LooksBinary(path))
         {
-            OpenHex(path, preview);
+            OpenHex(path, preview, activate);
             return null;
         }
 
         // A .resx file opens in the resource editor, unless the text editor was asked for or has it open.
         if (initialContent is null && !textEditor && at is null && Views.ResxEditorDocument.IsResx(path) && !_models.ContainsKey(path) && File.Exists(path))
         {
-            OpenResx(path, preview);
+            OpenResx(path, preview, activate);
             return null;
         }
 
         // A form's code file opens in the Windows Forms designer on Windows (M41a), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && File.Exists(path) && OpensInWinFormsDesigner(path))
         {
-            await OpenWinFormsDesignerAsync(path, preview).ConfigureAwait(true);
+            await OpenWinFormsDesignerAsync(path, preview, activate).ConfigureAwait(true);
             return null;
         }
 
@@ -330,7 +330,7 @@ public sealed partial class ShellHost : IEditorServices
 
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
-            && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
+            && await OpenInCustomEditorAsync(path, custom, preview, activate).ConfigureAwait(true))
         {
             return null;
         }
@@ -396,9 +396,12 @@ public sealed partial class ShellHost : IEditorServices
     public async Task<IReadOnlyList<bool>> OpenFilesAsync(IReadOnlyList<(string Path, Position? At)> files)
     {
         var opened = new bool[files.Count];
-        // The text editors' files are read first, together, so their tabs then open in one go: a layout pass between two of
+        var paths = files.Select(f => Path.GetFullPath(f.Path)).ToList();
+        var openings = await OpeningsAsync(paths, files.Select(f => f.At).ToList()).ConfigureAwait(true);
+
+        // The text editors' files are read first, together, so the tabs then open in one go: a layout pass between two of
         // them made the first tab of an empty group active, and built its editor, before the last one was.
-        var reads = files.Select(f => Path.GetFullPath(f.Path)).Distinct(SolutionPaths.Comparer).Where(OpensAsText).ToList();
+        var reads = paths.Where((_, i) => openings[i].Kind == FileOpening.Text).Distinct(SolutionPaths.Comparer).ToList();
         foreach (var path in reads)
         {
             BeginModelRequest(path);
@@ -406,18 +409,51 @@ public sealed partial class ShellHost : IEditorServices
 
         try
         {
-            foreach (var read in reads.Select(ModelAsync).ToList())
+            var models = reads.ToDictionary(path => path, ModelAsync, SolutionPaths.Comparer);
+            foreach (var read in models.Values)
             {
                 await ((Task)read).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext); // a failed read: the open says why
             }
 
-            // Adding a tab to an empty group made it active (its tab strip selects it), before the last one was.
+            // Nothing awaits in here: tabs added to an empty group made the first one active (its tab strip selects it)
+            // before the last one was, and the user's own tab switches meanwhile must count.
+            var later = new List<int>();
             using (Layout.DeferActiveDocument())
             {
                 for (var i = 0; i < files.Count; i++)
                 {
-                    opened[i] = await OpenFileAsync(files[i].Path, at: files[i].At, activate: i == files.Count - 1).ConfigureAwait(true) is not null;
+                    var activate = i == files.Count - 1;
+                    switch (openings[i].Kind)
+                    {
+                        case FileOpening.Text when models[paths[i]] is { IsCompletedSuccessfully: true } read:
+                            if (openings[i].Form)
+                            {
+                                TellWinFormsWindowsOnly(paths[i]);
+                            }
+
+                            ShowInEditor(read.Result, files[i].At, activate);
+                            opened[i] = true;
+                            break;
+                        case FileOpening.Image:
+                            OpenImage(paths[i], activate: activate);
+                            break;
+                        case FileOpening.Binary:
+                            OpenHex(paths[i], activate: activate);
+                            break;
+                        case FileOpening.Resources:
+                            OpenResx(paths[i], activate: activate);
+                            break;
+                        default:
+                            later.Add(i);
+                            break;
+                    }
                 }
+            }
+
+            // A form's designer, a plugin's editor, and a file that couldn't be read (the open says why) open as one file does.
+            foreach (var i in later)
+            {
+                opened[i] = await OpenFileAsync(paths[i], at: files[i].At, activate: i == files.Count - 1).ConfigureAwait(true) is not null;
             }
         }
         finally
@@ -425,17 +461,87 @@ public sealed partial class ShellHost : IEditorServices
             foreach (var path in reads)
             {
                 EndModelRequest(path);
+                ForgetUnshown(path); // read for a tab that didn't open: an open that threw on the way
             }
         }
 
         return opened;
     }
 
-    /// <summary>Whether <see cref="OpenFileAsync"/> opens the file in a text editor: not an image, a binary, resources, a form or a plugin's editor.</summary>
-    private bool OpensAsText(string path) =>
-        _models.ContainsKey(path)
-        || (File.Exists(path) && !Views.ImageDocument.IsImage(path) && !Views.ResxEditorDocument.IsResx(path) && !OpensInWinFormsDesigner(path)
-            && Plugins.CustomEditorFor(path) is null && !Views.HexDocument.LooksBinary(path));
+    /// <summary>How <see cref="OpenFileAsync"/> opens a file, as far as its name and the disk tell (<see cref="OpenFilesAsync"/>).</summary>
+    private enum FileOpening
+    {
+        Text,
+        Image,
+        Binary,
+        Resources,
+
+        /// <summary>A form's designer, a plugin's editor, or a file that isn't there.</summary>
+        Other,
+    }
+
+    /// <summary>
+    /// How each file opens, as <see cref="OpenFileAsync"/> decides, with its disk checks (whether it's there, a binary's
+    /// first bytes, a form's designer file) on the thread pool (M56): on the UI thread they held it for every file of the
+    /// batch before any read began. <c>Form</c>: a form that opens as code off Windows (it says why, once).
+    /// </summary>
+    private async Task<List<(FileOpening Kind, bool Form)>> OpeningsAsync(List<string> paths, List<Position?> at)
+    {
+        var tracked = paths.Select(_models.ContainsKey).ToList();
+        var custom = paths.Select((path, i) => at[i] is null && Plugins.CustomEditorFor(path) is not null).ToList();
+        var designer = Workbench.Settings.GetBoolean(OpenFormsInDesignerSetting, true) && WinFormsDesigner.IsWindows() && Remote is null;
+        var tellForms = !_toldWindowsOnly && !WinFormsDesigner.IsWindows();
+        var forms = WinFormsDesigner;
+        return await Task.Run(() => paths.Select((path, i) =>
+        {
+            var exists = File.Exists(path);
+            if (Views.ImageDocument.IsImage(path) && exists)
+            {
+                return (FileOpening.Image, false);
+            }
+
+            if (!tracked[i] && exists && Views.HexDocument.LooksBinary(path))
+            {
+                return (FileOpening.Binary, false);
+            }
+
+            if (at[i] is null && Views.ResxEditorDocument.IsResx(path) && !tracked[i] && exists)
+            {
+                return (FileOpening.Resources, false);
+            }
+
+            if (exists && ((at[i] is null && designer && forms.HasDesigner(path)) || custom[i]))
+            {
+                return (FileOpening.Other, false);
+            }
+
+            return tracked[i] || exists ? (FileOpening.Text, tellForms && exists && forms.HasDesigner(path)) : (FileOpening.Other, false);
+        }).ToList()).ConfigureAwait(true);
+    }
+
+    /// <summary>Shows <paramref name="model"/> in its editor's tab, or a new editor's; <paramref name="at"/> moves the caret there.</summary>
+    private void ShowInEditor(CodeDocument model, Position? at, bool activate)
+    {
+        if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, model.Path) && e.Owner is not null) is not { } view)
+        {
+            view = CreateView(model, primary: true);
+        }
+
+        Layout.OpenDocument(view, preview: false, focus: true, activate);
+        if (at is { } caret)
+        {
+            view.Navigate(caret);
+        }
+    }
+
+    /// <summary>Forgets the model of <paramref name="path"/> when no editor shows it and nothing holds it (a tab that didn't open).</summary>
+    private void ForgetUnshown(string path)
+    {
+        if (_models.TryGetValue(path, out var model) && !model.IsReadOnly && !Editors.Any(e => e.Model == model) && !IsHeld(model))
+        {
+            Forget(model);
+        }
+    }
 
     /// <summary>
     /// The text model of a file that editors, designers and Code Search's preview share: the tracked one, or the one
@@ -647,8 +753,12 @@ public sealed partial class ShellHost : IEditorServices
             return;
         }
 
-        // The last view of the file: forget the model.
-        var model = closed.Model;
+        Forget(closed.Model); // the last view of the file
+    }
+
+    /// <summary>Forgets a model no editor shows: the language service closes its file, and its watcher stops.</summary>
+    private void Forget(CodeDocument model)
+    {
         _models.Remove(model.IsReadOnly ? model.Uri : model.Path);
         lock (_snapshots)
         {
