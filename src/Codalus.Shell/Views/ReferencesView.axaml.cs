@@ -131,7 +131,8 @@ public sealed partial class ReferencesView : UserControl, IPaneView
     /// <summary>
     /// The filter's flyout: Select All and Clear, then the column's values with their check boxes, in a list box that
     /// creates only the rows in view (a check box for each of thousands of files or members took a second to open, M56).
-    /// The check boxes follow the values, Select All's and Clear's too; Space checks or unchecks the selected value.
+    /// The check boxes follow the values, Select All's and Clear's too. The keyboard works as with the check boxes before:
+    /// Tab reaches a selected row, the arrow keys move, Space checks or unchecks (<see cref="ReferenceFilterList"/>).
     /// </summary>
     private void ShowFilter(Button button, ReferenceColumnFilter filter)
     {
@@ -145,7 +146,7 @@ public sealed partial class ReferencesView : UserControl, IPaneView
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 0, 0, 4) };
         actions.Children.Add(Action(Localizer.Get("references.selectAll", "Select All"), true));
         actions.Children.Add(Action(Localizer.Get("references.clearSelection", "Clear"), false));
-        var list = new ListBox
+        var list = new ReferenceFilterList
         {
             ItemsSource = filter.Values,
             ItemTemplate = (IDataTemplate)Resources["FilterValueTemplate"]!,
@@ -154,15 +155,6 @@ public sealed partial class ReferencesView : UserControl, IPaneView
             Classes = { "filterValues" },
         };
         AutomationProperties.SetName(list, ToolTip.GetTip(button) as string ?? string.Empty);
-        list.AddHandler(KeyDownEvent, (_, e) =>
-        {
-            // The focused row's, or its check box's (a list box takes Space to select).
-            if (e.Key == Key.Space && e.KeyModifiers == KeyModifiers.None && (e.Source as StyledElement)?.DataContext is ReferenceFilterValue value)
-            {
-                value.IsChecked = !value.IsChecked;
-                e.Handled = true;
-            }
-        }, RoutingStrategies.Tunnel);
         var content = new DockPanel { MinWidth = 180 };
         DockPanel.SetDock(actions, Avalonia.Controls.Dock.Top);
         content.Children.Add(actions);
