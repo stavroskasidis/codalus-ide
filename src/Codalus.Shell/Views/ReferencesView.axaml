@@ -79,7 +79,8 @@
     <!-- A column filter's value (the filter's flyout lists them in a list box, which creates only the rows in view: a
          check box for each of thousands of files or members took a second to open, M56). -->
     <DataTemplate x:Key="FilterValueTemplate" x:DataType="vm:ReferenceFilterValue">
-      <CheckBox Content="{Binding Display}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Display}" />
+      <!-- The row (ReferenceFilterListItem) is what screen readers hear, with its name and its toggle: the box would be heard again under it. -->
+      <CheckBox Content="{Binding Display}" IsChecked="{Binding IsChecked}" AutomationProperties.AccessibilityView="Raw" />
     </DataTemplate>
   </UserControl.Resources>
 
