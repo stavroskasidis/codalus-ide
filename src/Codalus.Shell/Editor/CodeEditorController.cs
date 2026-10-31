@@ -70,6 +70,9 @@ public sealed partial class CodeEditorController : IDisposable
     private BlameMargin? _blameMargin;
     private string? _indexText;
     private bool _indexLoaded;
+    private string? _indexKey; // what the status knew the index version read by (IndexKey)
+    private bool _indexMayHaveChanged; // the repository's index changed since it was read
+    private bool _gitMarkersWhenShown; // the change markers' refresh waits for the editor to be shown
     private CancellationTokenSource? _gitCts;
     private CancellationTokenSource? _tokensCts;
     private CancellationTokenSource? _foldingCts;
@@ -736,6 +739,14 @@ public sealed partial class CodeEditorController : IDisposable
         {
             _refreshWhenShown = false;
             RefreshAll();
+        }
+
+        if (_gitMarkersWhenShown && IsShown)
+        {
+            // Shown again: the change markers asked for meanwhile, once (after this layout pass, by the timer).
+            _gitMarkersWhenShown = false;
+            _gitTimer.Stop();
+            _gitTimer.Start();
         }
 
         LightbulbChanged?.Invoke(this, EventArgs.Empty);
@@ -2158,7 +2169,7 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnGitIndexChanged(object? sender, EventArgs e) => Ui.Post(() =>
     {
-        _indexLoaded = false;
+        _indexMayHaveChanged = true;
         if (!_disposed)
         {
             _gitTimer.Stop();
@@ -2172,18 +2183,52 @@ public sealed partial class CodeEditorController : IDisposable
         _gitTimer.Start();
     }
 
+    /// <summary>
+    /// The change markers follow while the editor shows; a hidden one's wait until it's shown, and are worked out once
+    /// then. Every editor, every tab behind another too, read its file's index version (a git process each) after every
+    /// status refresh (M56).
+    /// </summary>
     private void OnGitTimer(object? sender, EventArgs e)
     {
         _gitTimer.Stop();
+        if (!IsShown)
+        {
+            _gitMarkersWhenShown = true;
+            return;
+        }
+
         _ = UpdateGitMarkersAsync();
     }
 
-    /// <summary>Compares the editor's text with the file's index version and updates the change markers.</summary>
+    /// <summary>Whether the editor shows: its view is visible in a window (not a tab behind another, nor a closed window).</summary>
+    private bool IsShown => Editor.TextArea.TextView is { IsEffectivelyVisible: true } view && TopLevel.GetTopLevel(view) is not null;
+
+    /// <summary>How many times the change markers were worked out, and the file's index version read (tests).</summary>
+    internal (int Updates, int IndexReads) GitMarkerWork { get; private set; }
+
+    /// <summary>
+    /// What the file's index version is known by in its repository's status: the object id the status lists for it, HEAD's
+    /// commit when the status doesn't list it (the index has HEAD's version), or null when the status can't tell (a
+    /// conflict, or no status).
+    /// </summary>
+    internal static string? IndexKey(string path, GitStatus? status, GitFileStatus? file) => status is null ? null : file switch
+    {
+        null => $"{path}\nHEAD {status.Head}",
+        { IsUntracked: true } => $"{path}\nuntracked",
+        { IndexObject: { } blob } => $"{path}\n{blob}",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Compares the editor's text with the file's index version and updates the change markers. The index version is read
+    /// again only when the status says it's another (or can't tell, after the index changed): a save, a refresh after a
+    /// command or a build's churn left it as it was, and each status refresh read it again in every editor.
+    /// </summary>
     public async Task UpdateGitMarkersAsync()
     {
         var git = _services.Git;
 
-        // The file's own repository: a solution can span several (M13b); only the open one has a status.
+        // The file's own repository: a solution can span several (M13b); only the open ones have a status.
         if (_disposed || Model.IsReadOnly || git.RepositoryFor(Model.Path) is not { } root)
         {
             _gitMargin.Changes = [];
@@ -2193,13 +2238,27 @@ public sealed partial class CodeEditorController : IDisposable
         var cancellationToken = Restart(ref _gitCts).Token;
         try
         {
-            if (!_indexLoaded)
+            var comparer = Workbench.Projects.SolutionService.PathComparer;
+            var service = git.ServiceFor(Model.Path);
+            var repository = service.Root is { } open && comparer.Equals(open, root) ? service.Status : null;
+            var status = repository?.Files.FirstOrDefault(f => comparer.Equals(f.Path, Model.Path));
+            var key = IndexKey(Model.Path, repository, status);
+            var work = GitMarkerWork;
+            if (!_indexLoaded || (key is null ? _indexMayHaveChanged : key != _indexKey))
             {
+                _indexLoaded = false;
+                _indexMayHaveChanged = false;
+                GitMarkerWork = (work.Updates + 1, work.IndexReads + 1);
                 _indexText = await git.ShowInRepositoryAsync(Model.Path, ":", cancellationToken).ConfigureAwait(true);
                 _indexLoaded = true;
+                _indexKey = key;
+            }
+            else
+            {
+                _indexMayHaveChanged = false;
+                GitMarkerWork = (work.Updates + 1, work.IndexReads);
             }
 
-            var status = root == git.Root ? git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path)) : null;
             var current = Model.Text.CreateSnapshot(); // made a string off the UI thread, with the diff
             var baseline = _indexText ?? (status is { IsUntracked: true } ? string.Empty : null);
             if (baseline is null)
