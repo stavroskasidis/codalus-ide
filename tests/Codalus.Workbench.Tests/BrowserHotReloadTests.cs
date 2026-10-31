@@ -137,6 +137,13 @@ public sealed class BrowserHotReloadTests
     private static Task SendAsync(ClientWebSocket socket, string text) =>
         socket.SendAsync(Encoding.UTF8.GetBytes(text), WebSocketMessageType.Text, endOfMessage: true, Ct);
 
+    /// <summary>The server asks a new page what its runtime can apply until it answers: a page whose runtime has started does at once.</summary>
+    private static async Task StartedAsync(ClientWebSocket page)
+    {
+        Assert.Equal("GetApplyUpdateCapabilities", (await ReceiveAsync(page)).GetProperty("type").GetString());
+        await SendAsync(page, "Baseline AddMethodToExistingType");
+    }
+
     [Fact]
     public async Task A_page_with_the_servers_secret_gets_an_edits_deltas_and_its_answer_is_the_result()
     {
@@ -146,6 +153,7 @@ public sealed class BrowserHotReloadTests
         var (page, secret) = await ConnectPageAsync(server);
         using var _ = page;
         await ShellLikeWait(() => server.Pages == 1);
+        await StartedAsync(page);
 
         var module = Guid.NewGuid();
         var applying = server.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromSeconds(30), Ct);
@@ -184,6 +192,67 @@ public sealed class BrowserHotReloadTests
         Assert.Equal("GetApplyUpdateCapabilities", (await ReceiveAsync(page)).GetProperty("type").GetString());
         await SendAsync(page, "Baseline AddMethodToExistingType");
         Assert.Equal("Baseline AddMethodToExistingType", await capabilities);
+
+        // The script answers each message as it comes: a question asked while a page applies an edit (its answer waits
+        // for a fetch) is answered first, and each answer still goes to its own question.
+        applying = server.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromSeconds(30), Ct);
+        Assert.Equal("ApplyManagedCodeUpdates", (await ReceiveAsync(page)).GetProperty("type").GetString());
+        capabilities = server.CapabilitiesAsync(TimeSpan.FromSeconds(30), Ct);
+        await ReceiveAsync(page);
+        await SendAsync(page, "Baseline");
+        await SendAsync(page, """{"success":false,"log":[{"message":"after the question","severity":2}]}""");
+        Assert.Equal("Baseline", await capabilities);
+        Assert.Equal(["after the question"], (await applying).Errors);
+    }
+
+    [Fact]
+    public async Task An_edit_waits_for_the_pages_runtime_to_start_and_goes_to_a_page_without_one_after_the_grace()
+    {
+        // The script skips an edit that comes before the runtime's agent is ready and still answers that it applied it;
+        // the agent fetches the edits the pages posted before then as it starts, so an edit in between was lost
+        // (Ubuntu CI, run 41157169266: the page ran the old code after "(server and browser)").
+        await using var server = BrowserRefreshServer.Start();
+        var (page, _) = await ConnectPageAsync(server);
+        using var __ = page;
+        Assert.Equal("GetApplyUpdateCapabilities", (await ReceiveAsync(page)).GetProperty("type").GetString());
+
+        var module = Guid.NewGuid();
+        var first = await server.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromMilliseconds(200), Ct);
+        Assert.Equal(1, first.Unanswered);
+        var late = new TaskCompletionSource<BrowserLateAnswer>(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.LateAnswer += answer => late.TrySetResult(answer);
+        var second = server.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromSeconds(30), Ct);
+        await SendAsync(page, "!TypeError: window.Blazor._internal.getApplyUpdateCapabilities is not a function");
+
+        // Still starting: asked again, not sent the edits; once it has started, it gets both, in order.
+        Assert.Equal("GetApplyUpdateCapabilities", (await ReceiveAsync(page)).GetProperty("type").GetString());
+        await SendAsync(page, "Baseline");
+        var firstId = (await ReceiveAsync(page)).GetProperty("updateId").GetInt32();
+        var secondId = (await ReceiveAsync(page)).GetProperty("updateId").GetInt32();
+        Assert.True(secondId > firstId);
+        await SendAsync(page, """{"success":true,"log":[]}""");
+        await SendAsync(page, """{"success":true,"log":[]}""");
+        Assert.Equal(new BrowserLateAnswer(firstId, null), await late.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct));
+        Assert.Equal(0, (await second).Unanswered);
+
+        // A page whose runtime never starts (rendered on the server only) gets edits once the grace has passed, for
+        // the middleware to keep for a runtime that starts later.
+        await using var serverOnly = BrowserRefreshServer.Start(startupGrace: TimeSpan.FromSeconds(1));
+        var (still, ___) = await ConnectPageAsync(serverOnly);
+        using var ____ = still;
+        await ShellLikeWait(() => serverOnly.Pages == 1); // the handshake completes before the server lists the page
+        var noRuntime =serverOnly.ApplyAsync([Update(module, "/c.csproj")], TimeSpan.FromSeconds(30), Ct);
+        JsonElement message;
+        while ((message = await ReceiveAsync(still)).GetProperty("type").GetString() == "GetApplyUpdateCapabilities")
+        {
+            await SendAsync(still, "!TypeError: not a function");
+        }
+
+        Assert.Equal("ApplyManagedCodeUpdates", message.GetProperty("type").GetString());
+        await SendAsync(still, """{"success":true,"log":[]}""");
+        var result = await noRuntime;
+        Assert.Equal(1, result.Pages);
+        Assert.Equal(0, result.Unanswered);
     }
 
     [Fact]

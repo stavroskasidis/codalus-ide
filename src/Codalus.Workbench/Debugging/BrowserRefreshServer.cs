@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
@@ -51,6 +52,14 @@ internal sealed partial class BrowserRefreshJsonContext : JsonSerializerContext;
 /// which the server sends back with each update, as <c>dotnet watch</c> does. <see cref="ApplyAsync"/> sends every
 /// page an edit's deltas (<c>ApplyManagedCodeUpdates</c>) and waits for each answer; the script also posts them to the
 /// middleware, so a page opened or reloaded later gets them. Plain HTTP on the loopback interface.
+/// <para>
+/// A page connects before its WebAssembly runtime has started, and the script skips an edit that comes before the
+/// runtime's agent is ready while still answering that it applied it. The agent fetches the edits the middleware keeps
+/// as it starts, but an edit that comes after that fetch and before the agent is ready was lost (Ubuntu CI, run
+/// 41157169266). So the server asks each new page what its runtime can apply until it answers, and holds the page's
+/// edits until then. A page whose runtime never starts (rendered on the server only) is asked no more after the
+/// startup grace, and gets edits at once from then on.
+/// </para>
 /// </summary>
 public sealed class BrowserRefreshServer : IAsyncDisposable
 {
@@ -59,20 +68,30 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
 
     private static readonly TimeSpan s_teardownLimit = TimeSpan.FromSeconds(15);
 
+    /// <summary>How long a new page is given for its runtime to start before it is taken for one without a runtime.</summary>
+    private static readonly TimeSpan s_startupGrace = TimeSpan.FromSeconds(60);
+
+    /// <summary>How often a starting page is asked whether its runtime has started.</summary>
+    private static readonly TimeSpan s_startupPoll = TimeSpan.FromMilliseconds(250);
+
+    private static readonly byte[] s_capabilitiesMessage = JsonSerializer.SerializeToUtf8Bytes(new BrowserMessage("GetApplyUpdateCapabilities"), BrowserRefreshJsonContext.Default.BrowserMessage);
+
     /// <summary>How many free ports <see cref="Start"/> tries when another listener took the one it chose first.</summary>
     private const int PortAttempts = 5;
 
     private readonly RSA _key = RSA.Create(2048);
     private readonly ConcurrentDictionary<WebSocket, Page> _pages = new();
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly TimeSpan _startupGrace;
     private HttpListener _listener = new();
     private Task _loop = Task.CompletedTask;
     private int _nextUpdate;
     private int _connections;
     private int _disposed;
 
-    private BrowserRefreshServer()
+    private BrowserRefreshServer(TimeSpan startupGrace)
     {
+        _startupGrace = startupGrace;
         Port = Containers.ContainerLaunch.FreePort();
         _listener.Prefixes.Add(Prefix(Port));
     }
@@ -94,9 +113,12 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     public event Action<BrowserLateAnswer>? LateAnswer;
 
     /// <summary>Listens on a free loopback port.</summary>
-    public static BrowserRefreshServer Start()
+    public static BrowserRefreshServer Start() => Start(s_startupGrace);
+
+    /// <summary>Listens on a free loopback port, giving a new page <paramref name="startupGrace"/> to start its runtime (tests).</summary>
+    internal static BrowserRefreshServer Start(TimeSpan startupGrace)
     {
-        var server = new BrowserRefreshServer();
+        var server = new BrowserRefreshServer(startupGrace);
         for (var attempt = 1; ; attempt++)
         {
             try
@@ -162,6 +184,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             _pages[socket] = page;
             var connection = Interlocked.Increment(ref _connections);
             Log?.Invoke(string.Create(CultureInfo.InvariantCulture, $"Hot Reload: a page connected (connection {connection}, {_pages.Count} open)."));
+            _ = page.WatchStartAsync(_startupGrace, cancellationToken);
             try
             {
                 await page.ReadAsync(cancellationToken).ConfigureAwait(false);
@@ -199,9 +222,9 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
 
     /// <summary>
     /// Sends every open page an edit's deltas and waits up to <paramref name="timeout"/> for each to apply them. A page
-    /// whose Blazor hasn't started yet applies them as it starts (the script posted them to the middleware) and says so
-    /// as a success. A page that doesn't answer in time is counted, not taken for a failure, and its answer comes as a
-    /// <see cref="LateAnswer"/>: under load, applying took a page more than ten seconds (Windows, a CPU-bound run).
+    /// whose runtime is still starting gets them once it has started, after the edits before them. A page that doesn't
+    /// answer in time is counted, not taken for a failure, and its answer comes as a <see cref="LateAnswer"/>: under
+    /// load, applying took a page more than ten seconds (Windows, a CPU-bound run).
     /// </summary>
     public async Task<BrowserApplyResult> ApplyAsync(IReadOnlyList<HotReloadModuleUpdate> updates, TimeSpan timeout, CancellationToken cancellationToken)
     {
@@ -215,11 +238,16 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
         var deltas = updates.Select(u => new BrowserDelta(u.ModuleId, u.MetadataDelta, u.IlDelta, u.PdbDelta, u.UpdatedTypes)).ToArray();
         var answers = await Task.WhenAll(pages.Select(async Task<(bool Answered, string? Error)> (page) =>
         {
+            // Sent with the server's lifetime: a page still starting gets the edit after this call has stopped waiting.
             var message = new BrowserApplyMessage("ApplyManagedCodeUpdates", page.Secret, id, deltas, ResponseLoggingLevel: 0);
-            var answer = await page.RequestAsync(JsonSerializer.SerializeToUtf8Bytes(message, BrowserRefreshJsonContext.Default.BrowserApplyMessage), cancellationToken).ConfigureAwait(false);
+            var answer = page.ApplyAsync(JsonSerializer.SerializeToUtf8Bytes(message, BrowserRefreshJsonContext.Default.BrowserApplyMessage), _lifetime.Token);
             try
             {
                 return await answer.WaitAsync(timeout, cancellationToken).ConfigureAwait(false) is { } text ? (true, Error(text)) : (false, null);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                return (false, null); // the server is closing
             }
             catch (TimeoutException)
             {
@@ -271,8 +299,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             return null;
         }
 
-        var message = JsonSerializer.SerializeToUtf8Bytes(new BrowserMessage("GetApplyUpdateCapabilities"), BrowserRefreshJsonContext.Default.BrowserMessage);
-        var answer = await page.RequestAsync(message, cancellationToken).ConfigureAwait(false);
+        var answer = await page.RequestAsync(s_capabilitiesMessage, Answer.Capabilities, cancellationToken).ConfigureAwait(false);
         try
         {
             return await answer.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
@@ -340,13 +367,75 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
         _key.Dispose();
     }
 
-    /// <summary>One connected page: messages out, its answers back in order (each request has one).</summary>
+    /// <summary>
+    /// Which answers a request waits for. The script answers each message as it comes, so an edit's answer, which waits
+    /// for a fetch, can come after a later question's: answers are matched in order within each kind. An edit's is JSON.
+    /// </summary>
+    private enum Answer
+    {
+        Apply,
+        Capabilities,
+    }
+
+    /// <summary>One connected page: messages out, its answers back in order of each kind (each request has one).</summary>
     private sealed class Page(WebSocket socket, HttpListenerContext context, string secret) : IDisposable
     {
         private readonly SemaphoreSlim _sending = new(1, 1);
-        private readonly ConcurrentQueue<TaskCompletionSource<string?>> _waiting = new();
+        private readonly ConcurrentQueue<TaskCompletionSource<string?>> _applies = new();
+        private readonly ConcurrentQueue<TaskCompletionSource<string?>> _questions = new();
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Lock _gate = new();
+        private Task _lastSent = Task.CompletedTask;
 
         public string Secret { get; } = secret;
+
+        /// <summary>
+        /// Asks the page what its runtime can apply until it answers (it has started), the page leaves, or
+        /// <paramref name="grace"/> has passed (a page without a runtime): edits wait for this.
+        /// </summary>
+        public async Task WatchStartAsync(TimeSpan grace, CancellationToken cancellationToken)
+        {
+            var elapsed = Stopwatch.StartNew();
+            try
+            {
+                while (elapsed.Elapsed < grace)
+                {
+                    var answer = await RequestAsync(s_capabilitiesMessage, Answer.Capabilities, cancellationToken).ConfigureAwait(false);
+                    var text = await answer.WaitAsync(TimeSpan.FromTicks(Math.Max(0, (grace - elapsed.Elapsed).Ticks)), cancellationToken).ConfigureAwait(false);
+                    if (text is null || !text.StartsWith('!'))
+                    {
+                        return;
+                    }
+
+                    await Task.Delay(s_startupPoll, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
+            {
+            }
+            finally
+            {
+                _started.TrySetResult();
+            }
+        }
+
+        /// <summary>Sends an edit once the page has started, after the edits before it; completes with its answer (null when the page left first).</summary>
+        public Task<string?> ApplyAsync(byte[] message, CancellationToken cancellationToken)
+        {
+            lock (_gate)
+            {
+                var sent = SendWhenStartedAsync(_lastSent, message, cancellationToken);
+                _lastSent = sent;
+                return sent.Unwrap();
+            }
+        }
+
+        private async Task<Task<string?>> SendWhenStartedAsync(Task previous, byte[] message, CancellationToken cancellationToken)
+        {
+            await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            await _started.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return await RequestAsync(message, Answer.Apply, cancellationToken).ConfigureAwait(false);
+        }
 
         public async Task ReadAsync(CancellationToken cancellationToken)
         {
@@ -368,26 +457,39 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
 
                 var text = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                 message.SetLength(0);
-                if (_waiting.TryDequeue(out var answer))
+                if ((text.StartsWith('{') ? _applies : _questions).TryDequeue(out var answer))
                 {
                     answer.TrySetResult(text);
                 }
             }
 
-            while (_waiting.TryDequeue(out var answer))
+            foreach (var waiting in (ConcurrentQueue<TaskCompletionSource<string?>>[])[_applies, _questions])
             {
-                answer.TrySetResult(null);
+                while (waiting.TryDequeue(out var answer))
+                {
+                    answer.TrySetResult(null);
+                }
             }
+
+            _started.TrySetResult();
         }
 
         /// <summary>Sends <paramref name="message"/>; the task it returns completes with the page's answer (null when the page closed first).</summary>
-        public async Task<Task<string?>> RequestAsync(byte[] message, CancellationToken cancellationToken)
+        public async Task<Task<string?>> RequestAsync(byte[] message, Answer kind, CancellationToken cancellationToken)
         {
             var answer = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            await _sending.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                _waiting.Enqueue(answer);
+                await _sending.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (ObjectDisposedException)
+            {
+                return Task.FromResult<string?>(null); // the page left while an edit waited for it to start
+            }
+
+            try
+            {
+                (kind == Answer.Apply ? _applies : _questions).Enqueue(answer);
                 await socket.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
