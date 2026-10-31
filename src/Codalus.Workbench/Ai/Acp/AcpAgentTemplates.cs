@@ -325,8 +325,8 @@ public static class AcpNodeInstall
 {
     public const string Page = "https://nodejs.org/en/download";
 
-    /// <summary>The snap channel offered on Ubuntu (Node.js 24, the current LTS).</summary>
-    public const string SnapChannel = "24/stable";
+    /// <summary>The snap channel offered on Ubuntu (Node.js 26, the current LTS).</summary>
+    public const string SnapChannel = "26/stable";
 
     /// <summary>The options for <paramref name="facts"/> when Node.js <paramref name="major"/> or later is needed (null: any), and why a package manager isn't offered.</summary>
     public static (IReadOnlyList<AcpInstallOption> Options, string? Note) Options(AcpNodeFacts facts, int? major)
@@ -361,7 +361,7 @@ public static class AcpNodeInstall
                 if (ids.Contains("ubuntu") && facts.HasSnap)
                 {
                     var snap = $"sudo snap install node --classic --channel={SnapChannel}";
-                    options.Add(new("snap", "Snap", "Node.js 24 from the Snap Store.", InstallKind.Terminal, snap) { Program = "sudo", Arguments = ["snap", "install", "node", "--classic", "--channel=" + SnapChannel] });
+                    options.Add(new("snap", "Snap", "Node.js 26 from the Snap Store.", InstallKind.Terminal, snap) { Program = "sudo", Arguments = ["snap", "install", "node", "--classic", "--channel=" + SnapChannel] });
                 }
 
                 if (debian && facts.AptCandidate >= needed)

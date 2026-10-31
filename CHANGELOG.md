@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.11.0
+
+- **Codalus's Node.js is 26.13.0**, the current LTS (it was 24.22.2): the checksum-verified Node.js it downloads for the web language servers, npm scripts and browser debugging, and offers for agents in **Connect an Agent**, whose Ubuntu option installs Node.js 26 from the Snap Store too. Downloaded once, on first use after the update.
+
 ## 0.10.0
 
 - **Sign in to the repository's host from Git Changes** ([user guide](docs/user-guide/git.md#signing-in-from-git-changes), [ADR 0088](docs/adr/0088-signing-in-from-git-changes.md)): when the repository is on GitHub, Azure DevOps or GitLab and you aren't signed in there, Git Changes says so and signs you in in place, with that host's ways in only: your Windows account on an Azure DevOps Server, the browser where the host's OAuth app is set up, or a personal access token, with **Create a token** opening the host's page for one. **×** hides the suggestion for that repository for good. The pull request button and the Pull Requests and Work Items windows' **Sign in** open the same panel instead of Git Hosting Accounts, and the pull request form opens once you're signed in.
