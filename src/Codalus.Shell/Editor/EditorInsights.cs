@@ -55,7 +55,7 @@ public sealed class EditorInsights : IDisposable
     private CancellationTokenSource? _estimateCts;
 
     // Our own CodeLens entries (deferred from M12a): Git history from blame and test outcomes, by one-based line.
-    private IReadOnlyList<Codalus.Workbench.Git.BlameRange> _blame = [];
+    private GitLensIndex? _blame;
     private int _blameVersion = -1;
     private long _blameAt;
     private CancellationTokenSource? _blameCts;
@@ -349,37 +349,50 @@ public sealed class EditorInsights : IDisposable
             var snapshot = model.IsModified ? model.Text.CreateSnapshot() : null;
             var text = snapshot is null ? null : await Task.Run(() => snapshot.Text, token).ConfigureAwait(true);
             var blame = await _services.Git.BlameInRepositoryAsync(model.Path, text, token).ConfigureAwait(true);
+            var index = await Task.Run(() => new GitLensIndex(blame), token).ConfigureAwait(true);
             if (token.IsCancellationRequested || _disposed || model.Version != version)
             {
                 return;
             }
 
-            _blame = blame;
+            _blame = index;
             _blameVersion = version;
             UpdateGitLenses();
         }
         catch (Exception ex) when (ex is Codalus.Workbench.Git.GitException or OperationCanceledException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            _blame = [];
+            _blame = null;
         }
     }
 
     /// <summary>
     /// The history of each member with a CodeLens: its lines are its document symbol's range. Redraws only when they
     /// changed, or when <paramref name="lensesChanged"/> (new CodeLens entries to show): the document symbols of every
-    /// open arrive while the first semantic tokens are being computed, and a file outside a repository has none.
+    /// open arrive while the first semantic tokens are being computed, and a file outside a repository has none. Each lens
+    /// finds its symbol in one index of them and its ranges by a search of the blame's (<see cref="GitLensIndex"/>): a pass
+    /// over every symbol and every range for each lens took seconds after each pause in typing in a file with thousands of
+    /// members (M56).
     /// </summary>
     private void UpdateGitLenses(bool lensesChanged = false)
     {
         var lenses = new Dictionary<int, string>();
-        if (Options.CodeLens && Options.GitCodeLens && _blame.Count > 0)
+        if (Options.CodeLens && Options.GitCodeLens && _blame is { Blame.Count: > 0 } blame)
         {
-            var symbols = Flatten(Symbols).ToList();
+            // The symbol each line names: the innermost (the first of them, as a search of every symbol picked it).
+            var named = new Dictionary<int, DocumentSymbol>();
+            foreach (var symbol in Flatten(Symbols))
+            {
+                var at = symbol.SelectionRange.Start.Line;
+                if (!named.TryGetValue(at, out var known) || Lines(symbol) < Lines(known))
+                {
+                    named[at] = symbol;
+                }
+            }
+
             var now = DateTimeOffset.Now;
             foreach (var line in _lenses.Select(l => _editor.Document.GetLineByOffset(l.StartOffset).LineNumber).Distinct())
             {
-                var symbol = symbols.Where(s => s.SelectionRange.Start.Line == line - 1).MinBy(s => s.Range.End.Line - s.Range.Start.Line);
-                if (symbol is not null && LensDetails.Git(_blame, symbol.Range.Start.Line + 1, symbol.Range.End.Line + 1, now) is { } text)
+                if (named.TryGetValue(line - 1, out var symbol) && blame.Text(symbol.Range.Start.Line + 1, symbol.Range.End.Line + 1, now) is { } text)
                 {
                     lenses[line] = text;
                 }
@@ -397,6 +410,8 @@ public sealed class EditorInsights : IDisposable
 
         static IEnumerable<DocumentSymbol> Flatten(IEnumerable<DocumentSymbol> level) =>
             level.SelectMany(s => Flatten(s.Children ?? []).Prepend(s));
+
+        static int Lines(DocumentSymbol symbol) => symbol.Range.End.Line - symbol.Range.Start.Line;
     }
 
     // ------------------------------------------------------------------ review comments (M13b)
