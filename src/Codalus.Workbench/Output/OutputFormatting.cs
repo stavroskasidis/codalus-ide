@@ -134,6 +134,12 @@ public sealed class AnsiDecoder
     }
 
     /// <summary>
+    /// Counts the next run's offset from 0 again, keeping the colors and an unfinished sequence: each chunk's runs from
+    /// the chunk's start (a view that drops its own oldest text never reads the channel again, so the length only grew).
+    /// </summary>
+    public void Rebase() => Length = 0;
+
+    /// <summary>
     /// Decodes <paramref name="text"/>: its visible characters are appended to <paramref name="output"/>, and runs for its
     /// styled parts to <paramref name="runs"/> (offsets counted as <see cref="Length"/>). <paramref name="isError"/> marks
     /// the whole text as standard error's.

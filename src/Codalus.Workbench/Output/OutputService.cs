@@ -2,18 +2,35 @@ using System.Text;
 
 namespace Codalus.Workbench.Output;
 
-/// <summary>Text appended to an <see cref="OutputChannel"/>: <see cref="Text"/> is null when the channel must be re-read.</summary>
+/// <summary>Text appended to an <see cref="OutputChannel"/>: <see cref="Text"/> is null when the channel was cleared.</summary>
 public sealed class OutputAppendedEventArgs(string? text, bool isError) : EventArgs
 {
-    /// <summary>The text appended, or null when the channel was cleared or trimmed and must be re-read.</summary>
+    /// <summary>The text appended, or null when the channel was cleared.</summary>
     public string? Text { get; } = text;
 
     /// <summary>Whether the text came from a process's standard error (M34h: the Output window colors it as an error).</summary>
     public bool IsError { get; } = isError;
+
+    /// <summary>
+    /// The channel's <see cref="OutputChannel.Version"/> after this change: a view that read a snapshot of this version or
+    /// a later one has the text already.
+    /// </summary>
+    public long Version { get; init; }
+
+    /// <summary>
+    /// How many characters the channel dropped from its start with this append, to stay within
+    /// <see cref="OutputChannel.MaxLength"/> (0: none). The text appended still follows what a view has: one that keeps
+    /// its own text drops its own oldest lines instead of reading the channel again.
+    /// </summary>
+    public int Trimmed { get; init; }
 }
 
 /// <summary>A channel's text and the ranges of it that came from standard error, read together.</summary>
-public sealed record OutputSnapshot(string Text, IReadOnlyList<(int Start, int Length)> ErrorRanges);
+public sealed record OutputSnapshot(string Text, IReadOnlyList<(int Start, int Length)> ErrorRanges)
+{
+    /// <summary>The channel's <see cref="OutputChannel.Version"/> when it was read.</summary>
+    public long Version { get; init; }
+}
 
 /// <summary>
 /// A named, append-only text channel in the Output window. Appends are thread-safe; the view polls
@@ -42,7 +59,11 @@ public sealed class OutputChannel(string id, string name)
     /// <summary>Text appended (or null when the channel was cleared or trimmed and must be re-read).</summary>
     public event EventHandler<string?>? Appended;
 
-    /// <summary>As <see cref="Appended"/>, with whether the text came from standard error (M34h).</summary>
+    /// <summary>
+    /// As <see cref="Appended"/>, with whether the text came from standard error (M34h) and the version it made; a trim
+    /// comes with the text appended (M56: re-reading the whole channel at each trim reloaded 3M characters into the
+    /// Output window for each 1M appended).
+    /// </summary>
     public event EventHandler<OutputAppendedEventArgs>? TextAppended;
 
     public void Append(string text) => Append(text, isError: false);
@@ -57,7 +78,8 @@ public sealed class OutputChannel(string id, string name)
 
     private void Append(string text, bool isError)
     {
-        bool trimmed;
+        var removed = 0;
+        long version;
         lock (_gate)
         {
             if (isError && text.Length > 0)
@@ -75,36 +97,36 @@ public sealed class OutputChannel(string id, string name)
             }
 
             _text.Append(text);
-            trimmed = _text.Length > MaxLength;
-            if (trimmed)
+            if (_text.Length > MaxLength)
             {
                 var cut = _text.Length - (MaxLength * 3 / 4);
                 var newline = _text.ToString(cut, Math.Min(4096, _text.Length - cut)).IndexOf('\n', StringComparison.Ordinal);
-                var removed = cut + Math.Max(0, newline + 1);
+                removed = cut + Math.Max(0, newline + 1);
                 _text.Remove(0, removed);
                 _trimmed += removed;
                 _errors.RemoveAll(r => r.End <= _trimmed);
             }
 
-            Version++;
+            version = ++Version;
         }
 
-        Appended?.Invoke(this, trimmed ? null : text);
-        TextAppended?.Invoke(this, new OutputAppendedEventArgs(trimmed ? null : text, isError));
+        Appended?.Invoke(this, removed > 0 ? null : text);
+        TextAppended?.Invoke(this, new OutputAppendedEventArgs(text, isError) { Version = version, Trimmed = removed });
     }
 
     public void Clear()
     {
+        long version;
         lock (_gate)
         {
             _trimmed += _text.Length;
             _text.Clear();
             _errors.Clear();
-            Version++;
+            version = ++Version;
         }
 
         Appended?.Invoke(this, null);
-        TextAppended?.Invoke(this, new OutputAppendedEventArgs(null, isError: false));
+        TextAppended?.Invoke(this, new OutputAppendedEventArgs(null, isError: false) { Version = version });
     }
 
     public string GetText()
@@ -127,7 +149,7 @@ public sealed class OutputChannel(string id, string name)
                 ranges.Add((from, (int)(end - _trimmed) - from));
             }
 
-            return new OutputSnapshot(_text.ToString(), ranges);
+            return new OutputSnapshot(_text.ToString(), ranges) { Version = Version };
         }
     }
 }

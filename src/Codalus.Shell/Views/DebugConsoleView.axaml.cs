@@ -62,7 +62,7 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        Show(null);
+        _presenter.Pause(); // shown again unchanged, the console isn't read again (M56)
     }
 
     private void Show(OutputChannel? channel)

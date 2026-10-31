@@ -55,7 +55,8 @@ public sealed partial class OutputView : UserControl, IPaneView
             _viewModel.PropertyChanged -= OnViewModelChanged;
         }
 
-        Show(null);
+        // The text stays: shown again with the same channel, unchanged, it isn't read again (M56).
+        _presenter.Pause();
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
