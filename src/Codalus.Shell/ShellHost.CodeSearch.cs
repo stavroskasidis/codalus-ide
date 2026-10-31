@@ -695,7 +695,7 @@ public sealed partial class ShellHost : ICodeSearchHost
             await ReleasePreviewAsync().ConfigureAwait(true);
             _previewModel = model;
             _previewDocument = CreateView(model, primary: false);
-            _previewView = new CodeEditorView(_previewDocument, this, EditorFont);
+            _previewView = new CodeEditorView(_previewDocument, this, EditorFont, markdownPreview: false);
             var area = _previewView.Editor.TextArea;
             area.Caret.PositionChanged += OnCodeSearchPreviewCaretChanged;
             area.SelectionChanged += OnCodeSearchPreviewCaretChanged;

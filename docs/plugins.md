@@ -370,6 +370,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 
 ## Changelog
 
+### Markdown preview in the editor (Codalus IDE 0.11, no API version change)
+
+Additive: the shell command `markdown.togglePreview` collapses the active Markdown editor's preview, or shows it again ([ADR 0016](adr/0016-language-platform.md#decision)). `PublicAPI.txt` doesn't change.
+
 ### 1.2.0 (Codalus IDE 0.10)
 
 Added, for Azure DevOps Server ([ADR 0087](adr/0087-azure-devops-server.md)):

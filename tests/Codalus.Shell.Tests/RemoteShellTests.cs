@@ -101,7 +101,9 @@ public sealed class RemoteShellTests
         Assert.Contains(completion.Items, i => i.Label == "WriteLine");
 
         // Budget (M21): completion ≤ local + RTT + 20 ms at a simulated 50 and 150 ms (asserted off CI).
-        async Task<double> CompletionMilliseconds()
+        // Each median comes with its samples: one slow sample or all of them tells a busy machine from a slower path
+        // (a local full run over the budget by 5 ms at 150 ms, 2026-10-31; docs/ci-flakes.md).
+        async Task<(double Median, string Samples)> CompletionMilliseconds()
         {
             var times = new List<double>();
             for (var i = 0; i < 5; i++)
@@ -111,16 +113,16 @@ public sealed class RemoteShellTests
                 times.Add(watch.Elapsed.TotalMilliseconds);
             }
 
-            return times.Order().ElementAt(times.Count / 2);
+            return (times.Order().ElementAt(times.Count / 2), string.Join(", ", times.Select(t => t.ToString("F0", CultureInfo.InvariantCulture))));
         }
 
-        var baseline = await CompletionMilliseconds();
-        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms"));
+        var (baseline, baselineSamples) = await CompletionMilliseconds();
+        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms [{baselineSamples}]"));
         foreach (var rtt in (int[])[50, 150])
         {
             remote.Connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
-            var slower = await CompletionMilliseconds();
-            report.Append(CultureInfo.InvariantCulture, $"; {slower:F0} ms at {rtt} ms RTT");
+            var (slower, samples) = await CompletionMilliseconds();
+            report.Append(CultureInfo.InvariantCulture, $"; {slower:F0} ms at {rtt} ms RTT [{samples}]");
             if (Environment.GetEnvironmentVariable("CI") != "true")
             {
                 Assert.True(slower <= baseline + rtt + 20, $"Completion took {slower:F0} ms at {rtt} ms RTT: over the budget of {baseline + rtt + 20:F0} ms ({report}).");

@@ -398,9 +398,12 @@ public sealed partial class ShellHost : IEditorServices
     /// tab behind the active one, its view made when it's first shown, and the last one active (M56). Opening each as the
     /// active tab built every one's editor in turn on the UI thread, with its language requests, for tabs not looked at.
     /// </summary>
+    /// <param name="active">The index of the file to make active (the last by default); a session restored makes its own active one.</param>
+    /// <param name="focus">Whether the active file's editor takes the keyboard focus.</param>
     /// <returns>For each file, whether it opened in a text editor.</returns>
-    public async Task<IReadOnlyList<bool>> OpenFilesAsync(IReadOnlyList<(string Path, Position? At)> files)
+    public async Task<IReadOnlyList<bool>> OpenFilesAsync(IReadOnlyList<(string Path, Position? At)> files, int? active = null, bool focus = true)
     {
+        var activeIndex = active ?? files.Count - 1;
         var opened = new bool[files.Count];
         var paths = files.Select(f => Path.GetFullPath(f.Path)).ToList();
         var openings = await OpeningsAsync(paths, files.Select(f => f.At).ToList()).ConfigureAwait(true);
@@ -428,7 +431,7 @@ public sealed partial class ShellHost : IEditorServices
             {
                 for (var i = 0; i < files.Count; i++)
                 {
-                    var activate = i == files.Count - 1;
+                    var activate = i == activeIndex;
                     switch (openings[i].Kind)
                     {
                         case FileOpening.Text when models[paths[i]] is { IsCompletedSuccessfully: true } read:
@@ -437,7 +440,7 @@ public sealed partial class ShellHost : IEditorServices
                                 TellWinFormsWindowsOnly(paths[i]);
                             }
 
-                            ShowInEditor(read.Result, files[i].At, activate);
+                            ShowInEditor(read.Result, files[i].At, activate, focus);
                             opened[i] = true;
                             break;
                         case FileOpening.Image:
@@ -459,7 +462,7 @@ public sealed partial class ShellHost : IEditorServices
             // A form's designer, a plugin's editor, and a file that couldn't be read (the open says why) open as one file does.
             foreach (var i in later)
             {
-                opened[i] = await OpenFileAsync(paths[i], at: files[i].At, activate: i == files.Count - 1).ConfigureAwait(true) is not null;
+                opened[i] = await OpenFileAsync(paths[i], at: files[i].At, activate: i == activeIndex).ConfigureAwait(true) is not null;
             }
         }
         finally
@@ -526,14 +529,14 @@ public sealed partial class ShellHost : IEditorServices
     }
 
     /// <summary>Shows <paramref name="model"/> in its editor's tab, or a new editor's; <paramref name="at"/> moves the caret there.</summary>
-    private void ShowInEditor(CodeDocument model, Position? at, bool activate)
+    private void ShowInEditor(CodeDocument model, Position? at, bool activate, bool focus = true)
     {
         if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, model.Path) && e.Owner is not null) is not { } view)
         {
             view = CreateView(model, primary: true);
         }
 
-        Layout.OpenDocument(view, preview: false, focus: true, activate);
+        Layout.OpenDocument(view, preview: false, focus, activate);
         if (at is { } caret)
         {
             view.Navigate(caret);
@@ -1317,6 +1320,23 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>How Markdown editors show their preview: collapsed or not, and its width (kept in <c>state.json</c>).</summary>
+    public MarkdownSplitState MarkdownSplit { get; } = new();
+
+    MarkdownSplitState? IEditorServices.MarkdownSplit => MarkdownSplit;
+
+    /// <summary>Collapses the active Markdown editor's preview, or shows it again (Markdown: Toggle Preview, Ctrl+K Ctrl+V).</summary>
+    public void ToggleMarkdownPreview()
+    {
+        if (ActiveEditor?.View?.MarkdownSplit is not { } split)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.editor.openAMarkdownFileToPreview", "Open a Markdown file to preview it."), TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        split.Toggle();
+    }
+
     /// <summary>Opens a live preview of the active Markdown document beside it (Ctrl+K V).</summary>
     public MarkdownPreviewDocument? ShowMarkdownPreview()
     {
@@ -1332,17 +1352,7 @@ public sealed partial class ShellHost : IEditorServices
             return open;
         }
 
-        var preview = new MarkdownPreviewDocument(model, link =>
-        {
-            if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
-            {
-                OpenExternalUrl(uri);
-            }
-            else if (link.StartsWith("command:", StringComparison.Ordinal))
-            {
-                Run(link["command:".Length..]);
-            }
-        });
+        var preview = new MarkdownPreviewDocument(model, OpenLink);
         Layout.OpenInNewGroup(preview, below: false);
         return preview;
     }
