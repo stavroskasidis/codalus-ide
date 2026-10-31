@@ -19,8 +19,8 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
     public DebugConsoleView()
     {
         InitializeComponent();
-        _presenter = new OutputPresenter(Editor);
         _tail = Controls.FollowTail.Attach(Editor);
+        _presenter = new OutputPresenter(Editor, _tail);
         Input.KeyDown += (_, e) =>
         {
             if (DataContext is not DebugConsoleViewModel vm)

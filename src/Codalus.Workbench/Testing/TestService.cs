@@ -1,5 +1,6 @@
 using System.Globalization;
 using Codalus.Plugins.Protocol;
+using Codalus.Workbench.Output;
 using Codalus.Workbench.Plugins;
 
 namespace Codalus.Workbench.Testing;
@@ -493,6 +494,7 @@ public sealed class TestService : ITestSink, IDisposable
                 return;
             }
 
+            Dictionary<string, TestNode>? late = null;
             foreach (var output in update.Output)
             {
                 run.AppendOutput(output.Text);
@@ -501,11 +503,16 @@ public sealed class TestService : ITestSink, IDisposable
                     var key = TestNode.KeyOf(controller.Id, itemId);
                     if (run.Results.TryGetValue(key, out var finished) && controller.Index.TryGetValue(itemId, out var finishedNode))
                     {
-                        // Output reported after the test's result belongs to that result.
-                        var updated = finished with { Output = KeptOutput(finished.Output + output.Text) };
-                        run.Results[key] = updated;
-                        finishedNode.Result = updated;
-                        ReplaceHistory(key, finished, updated);
+                        // Output reported after the test's result belongs to that result: it goes on from what the result
+                        // kept and how much went before, and the result's text is made once per update, not per chunk.
+                        if (!_resultOutput.TryGetValue((run.RunId, key), out var kept))
+                        {
+                            _resultOutput[(run.RunId, key)] = kept = new PendingOutput();
+                            kept.Append(finished.Output); // all of it: a result whose output was cut kept its own, with the count
+                        }
+
+                        kept.Append(output.Text);
+                        (late ??= new Dictionary<string, TestNode>(StringComparer.Ordinal))[key] = finishedNode;
                     }
                     else
                     {
@@ -518,6 +525,15 @@ public sealed class TestService : ITestSink, IDisposable
                         pending.Append(output.Text);
                     }
                 }
+            }
+
+            foreach (var (key, node) in late ?? [])
+            {
+                var finished = run.Results[key];
+                var updated = finished with { Output = _resultOutput[(run.RunId, key)].ToString() };
+                run.Results[key] = updated;
+                node.Result = updated;
+                ReplaceHistory(key, finished, updated);
             }
 
             if (update.Output.Length > 0)
@@ -549,6 +565,12 @@ public sealed class TestService : ITestSink, IDisposable
 
                 var key = node.Key;
                 _pendingOutput.Remove(key, out var testOutput);
+                _resultOutput.Remove((run.RunId, key));
+                if (testOutput is { IsCut: true })
+                {
+                    _resultOutput[(run.RunId, key)] = testOutput; // output after the result goes on from it, its count kept
+                }
+
                 var result = new TestResult(
                     outcome,
                     state.DurationMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null,
@@ -573,18 +595,24 @@ public sealed class TestService : ITestSink, IDisposable
 
     private readonly Dictionary<string, PendingOutput> _pendingOutput = new(StringComparer.Ordinal);
 
-    /// <summary>The end of a test's output, at most <see cref="MaxTestOutputLength"/> characters, saying how much went before.</summary>
-    private static string KeptOutput(string output) =>
-        output.Length <= MaxTestOutputLength ? output : NotKept(output.Length - MaxTestOutputLength) + output[^MaxTestOutputLength..];
+    // The output of the results that more may follow while their run lasts, by run and test: only those that were cut or
+    // got output after them, so the line saying how much went before counts all of it.
+    private readonly Dictionary<(string RunId, string Key), PendingOutput> _resultOutput = [];
 
     private static string NotKept(long characters) =>
         Localization.Localizer.Format("msg.testing.earlierOutputNotKept", "[{0} earlier characters of output not kept]", characters.ToString("N0", CultureInfo.CurrentCulture)) + "\n";
 
-    /// <summary>A test's output while it runs: its last <see cref="MaxTestOutputLength"/> characters, and how many went before.</summary>
+    /// <summary>
+    /// A test's output while it runs: its last <see cref="MaxTestOutputLength"/> characters, from a line's start where one
+    /// is near, and how many went before.
+    /// </summary>
     private sealed class PendingOutput
     {
         private readonly System.Text.StringBuilder _text = new();
         private long _dropped;
+
+        /// <summary>Whether a result keeps only part of it.</summary>
+        public bool IsCut => _dropped > 0 || _text.Length > MaxTestOutputLength;
 
         public void Append(string text)
         {
@@ -593,7 +621,7 @@ public sealed class TestService : ITestSink, IDisposable
             // Dropped in large steps: a little at each chunk moved the whole megabyte each time.
             if (_text.Length > 2 * MaxTestOutputLength)
             {
-                var drop = _text.Length - MaxTestOutputLength;
+                var drop = OutputChannel.LineStart(_text, _text.Length - MaxTestOutputLength);
                 _text.Remove(0, drop);
                 _dropped += drop;
             }
@@ -601,7 +629,7 @@ public sealed class TestService : ITestSink, IDisposable
 
         public override string ToString()
         {
-            var drop = Math.Max(0, _text.Length - MaxTestOutputLength);
+            var drop = _text.Length > MaxTestOutputLength ? OutputChannel.LineStart(_text, _text.Length - MaxTestOutputLength) : 0;
             return drop + _dropped == 0 ? _text.ToString() : NotKept(drop + _dropped) + _text.ToString(drop, _text.Length - drop);
         }
     }
@@ -645,6 +673,11 @@ public sealed class TestService : ITestSink, IDisposable
             }
 
             run.Ended = DateTimeOffset.Now;
+            foreach (var kept in _resultOutput.Keys.Where(k => k.RunId == runId).ToList())
+            {
+                _resultOutput.Remove(kept);
+            }
+
             if (_controllers.TryGetValue(run.ControllerId, out var controller))
             {
                 // Tests still queued or running when the run ended did not run.

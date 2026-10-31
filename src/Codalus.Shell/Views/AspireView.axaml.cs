@@ -21,8 +21,8 @@ public sealed partial class AspireView : UserControl, IPaneView
     public AspireView()
     {
         InitializeComponent();
-        _console = new OutputPresenter(LogText);
         _tail = Controls.FollowTail.Attach(LogText); // the console output follows new lines (M34a)
+        _console = new OutputPresenter(LogText, _tail);
         AspireViewModel? Vm() => DataContext as AspireViewModel;
         Dashboard.Click += (_, _) => Vm()?.OpenDashboard();
         Start.Click += (_, _) => _ = Vm()?.StartAsync();

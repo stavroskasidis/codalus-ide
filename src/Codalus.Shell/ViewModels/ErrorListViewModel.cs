@@ -327,10 +327,10 @@ public sealed class ErrorListViewModel : ObservableObject
             }
 
             // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a
-            // second for the whole build, losing its selection each time (M56). Its end shows at once (OnBuildFinished).
+            // second for the whole build (M56). Its end shows at once (OnBuildFinished).
             if (_buildRefresh is null)
             {
-                _buildRefresh = new DispatcherTimer { Interval = BuildRefreshInterval };
+                _buildRefresh = new DispatcherTimer();
                 _buildRefresh.Tick += (_, _) =>
                 {
                     _buildRefresh.Stop();
@@ -340,13 +340,14 @@ public sealed class ErrorListViewModel : ObservableObject
 
             if (!_buildRefresh.IsEnabled)
             {
+                _buildRefresh.Interval = BuildRefreshInterval;
                 _buildRefresh.Start();
             }
         }, DispatcherPriority.Background);
     }
 
-    /// <summary>How often, at most, the list shows the diagnostics coming in while a build runs.</summary>
-    internal static readonly TimeSpan BuildRefreshInterval = TimeSpan.FromMilliseconds(250);
+    /// <summary>How often, at most, the list shows the diagnostics coming in while a build runs (tests change it).</summary>
+    internal TimeSpan BuildRefreshInterval { get; set; } = TimeSpan.FromMilliseconds(250);
 
     private DispatcherTimer? _buildRefresh;
 

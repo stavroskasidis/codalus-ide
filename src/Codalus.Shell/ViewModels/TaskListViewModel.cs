@@ -63,34 +63,58 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
         }
     }
 
+    /// <summary>
+    /// Scans the solution's files again, in place of a scan still running: a newer refresh cancels this one, whose results
+    /// are then dropped. Each call owns its token source and disposes it when it ends (disposed by the next call, a scan
+    /// whose listing ended later threw reading its token).
+    /// </summary>
     public async Task RefreshAsync()
     {
         _scanned = true;
         _scan?.Cancel();
-        _scan?.Dispose();
-        var cts = _scan = new CancellationTokenSource();
-        var words = tokens().Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => Regex.Escape(t.Trim())).ToList();
-        if (words.Count == 0)
-        {
-            _all.Clear();
-            Apply();
-            return;
-        }
-
-        // A comment marker, then a token as a whole word: // TODO: x, /* HACK x, # UNDONE x, <!-- TODO x, ' TODO x.
-        var regex = new Regex(@"(?://+|/\*+|#|<!--|'|\*)\s*(" + string.Join('|', words) + @")\b[:\s-]*(.*)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        using var cts = new CancellationTokenSource();
+        _scan = cts;
+        var token = cts.Token;
         try
         {
-            var (all, texts) = await files(cts.Token).ConfigureAwait(true);
-            var paths = await Task.Run(() => all.Where(f => s_textExtensions.Contains(System.IO.Path.GetExtension(f))).ToList(), cts.Token).ConfigureAwait(true);
+            var words = tokens().Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => Regex.Escape(t.Trim())).ToList();
+            if (words.Count == 0)
+            {
+                _all.Clear();
+                Apply();
+                return;
+            }
+
+            // A comment marker, then a token as a whole word: // TODO: x, /* HACK x, # UNDONE x, <!-- TODO x, ' TODO x.
+            var regex = new Regex(@"(?://+|/\*+|#|<!--|'|\*)\s*(" + string.Join('|', words) + @")\b[:\s-]*(.*)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+            Summary = "Listing the solution's files…";
+            var (all, texts) = await files(token).ConfigureAwait(true);
+            var paths = await Task.Run(() => all.Where(f => s_textExtensions.Contains(System.IO.Path.GetExtension(f))).ToList(), token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                return; // a newer refresh shows its own
+            }
+
             Summary = $"Scanning {paths.Count} files…";
-            var found = await Task.Run(() => Scan(paths, texts, regex, cts.Token), cts.Token).ConfigureAwait(true);
+            var found = await Task.Run(() => Scan(paths, texts, regex, token), token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
             _all.Clear();
             _all.AddRange(found);
             Apply();
         }
         catch (OperationCanceledException)
         {
+        }
+        finally
+        {
+            if (_scan == cts)
+            {
+                _scan = null;
+            }
         }
     }
 
@@ -139,9 +163,5 @@ public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch
 
     public Task OpenAsync(TaskRow row) => open(row.Path, new Position(row.Line - 1, 0));
 
-    public void Dispose()
-    {
-        _scan?.Cancel();
-        _scan?.Dispose();
-    }
+    public void Dispose() => _scan?.Cancel(); // the refresh it belongs to disposes it
 }

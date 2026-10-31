@@ -528,18 +528,35 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     private void ShowFullOutput()
     {
-        if (_selected?.Group.Node is { } selected && _shell.Tests.Find(selected.Key) is { IsLeaf: true, Result: { } result } node)
+        if (_selected?.Group.Node is { } selected && _shell.Tests.Find(selected.Key) is { } node)
         {
-            _shell.OpenTestDetails(node.FullLabel, DetailsText(node, result));
+            _shell.OpenTestDetails(node.FullLabel, DetailsText(node, node.IsLeaf ? node.Result : null));
         }
     }
 
-    /// <summary>A result as text: the test, its outcome, its messages (expected and actual values, stack traces) and its output.</summary>
-    internal static string DetailsText(TestNode node, TestResult result)
+    /// <summary>
+    /// What the details pane shows of a test, as text: the test, its outcome, its messages (expected and actual values,
+    /// stack traces) and its output; where the pane shows the node's error (a discovery or build error, a group's), that.
+    /// </summary>
+    internal static string DetailsText(TestNode node, TestResult? result)
     {
         var text = new System.Text.StringBuilder();
         text.AppendLine(node.FullLabel);
-        text.AppendLine(OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + Format(d) : string.Empty));
+        if (result is not null)
+        {
+            text.AppendLine(OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + Format(d) : string.Empty));
+        }
+
+        if (result is not { Messages: [{ Message.Length: > 0 }, ..] } && node.Error is { Length: > 0 } error)
+        {
+            text.AppendLine(error);
+        }
+
+        if (result is null)
+        {
+            return text.ToString();
+        }
+
         foreach (var message in result.Messages)
         {
             text.AppendLine(message.Message);

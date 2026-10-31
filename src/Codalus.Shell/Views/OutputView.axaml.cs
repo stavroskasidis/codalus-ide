@@ -21,8 +21,8 @@ public sealed partial class OutputView : UserControl, IPaneView
     public OutputView()
     {
         InitializeComponent();
-        _presenter = new OutputPresenter(Editor);
         _tail = FollowTail.Attach(Editor);
+        _presenter = new OutputPresenter(Editor, _tail);
     }
 
     /// <summary>Whether the view sticks to the end of the output (tests).</summary>

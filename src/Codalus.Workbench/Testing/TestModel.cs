@@ -283,11 +283,12 @@ public sealed class TestRunRecord
     {
         lock (_output)
         {
-            // The end of it, as an output channel keeps (M56: a verbose run kept everything it wrote while the record lived).
+            // The end of it from a line's start, as an output channel keeps (M56: a verbose run kept everything it wrote while
+            // the record lived).
             _output.Append(text);
             if (_output.Length > OutputChannel.MaxLength)
             {
-                _output.Remove(0, _output.Length - (OutputChannel.MaxLength * 3 / 4));
+                _output.Remove(0, OutputChannel.LineStart(_output, _output.Length - (OutputChannel.MaxLength * 3 / 4)));
             }
         }
     }

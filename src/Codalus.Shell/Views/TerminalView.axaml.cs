@@ -71,9 +71,16 @@ public sealed partial class TerminalView : UserControl, IPaneView
         {
             Bind();
         }
-        else if (e.PropertyName is nameof(TerminalViewModel.FindVisible) && _viewModel?.FindVisible == true)
+        else if (e.PropertyName is nameof(TerminalViewModel.FindVisible))
         {
-            FindBox.Focus();
+            if (_viewModel?.FindVisible == true)
+            {
+                FindBox.Focus();
+            }
+            else
+            {
+                StopFind(); // closed: a find still looking selects nothing
+            }
         }
     }
 
@@ -96,6 +103,9 @@ public sealed partial class TerminalView : UserControl, IPaneView
 
     private void Bind()
     {
+        // Another terminal: a find still looking was the last one's, and so was its last match.
+        StopFind();
+        _lastMatch = null;
         var tab = _viewModel?.Selected;
         if (tab is not null)
         {
@@ -150,6 +160,7 @@ public sealed partial class TerminalView : UserControl, IPaneView
     private (int Row, int Column)? _lastMatch;
     private int _findGeneration;
     private bool _finding;
+    private (TerminalControl Control, string Query, bool Backwards) _search; // the find still looking, while _finding
 
     /// <summary>How many rows a find looks through per dispatcher pass, holding the terminal for that long.</summary>
     internal const int FindSliceRows = 2000;
@@ -165,12 +176,19 @@ public sealed partial class TerminalView : UserControl, IPaneView
     private void OnFind(object? sender, bool backwards)
     {
         var control = Active;
-        var generation = ++_findGeneration;
-        _finding = false;
+        if (_finding && _search == (control, _viewModel?.FindText, backwards))
+        {
+            return; // Find Next while the same find is still looking: it goes on (starting it again lost the rows looked at)
+        }
+
+        StopFind();
         if (control.Session is not { } session || _viewModel?.FindText is not { Length: > 0 } query)
         {
             return;
         }
+
+        var generation = _findGeneration;
+        _search = (control, query, backwards);
 
         var terminal = session.Terminal;
         int startRow, startColumn;
@@ -181,6 +199,13 @@ public sealed partial class TerminalView : UserControl, IPaneView
 
         _finding = true;
         FindFrom(control, terminal, query, backwards, startRow, startColumn, 0, generation);
+    }
+
+    /// <summary>Drops the find still looking, if any: its next slice does nothing.</summary>
+    private void StopFind()
+    {
+        _findGeneration++;
+        _finding = false;
     }
 
     private void FindFrom(TerminalControl control, Codalus.Terminal.VirtualTerminal terminal, string query, bool backwards, int startRow, int startColumn, int step, int generation)

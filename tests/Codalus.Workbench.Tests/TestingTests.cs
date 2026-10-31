@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Xml.Linq;
 using Codalus.Plugins.Protocol;
 using Codalus.Workbench.Plugins;
@@ -495,30 +496,51 @@ public sealed class TestingTests : IDisposable
     }
 
     [Fact]
-    public void A_tests_output_keeps_its_last_megabyte_and_the_runs_output_is_reported_as_it_comes()
+    public void A_tests_output_keeps_its_last_megabyte_from_a_lines_start_and_the_runs_output_is_reported_as_it_comes()
     {
         // M56: a test's output and a run's were kept whole (and concatenated per chunk under the service's lock); the run's
-        // was read whole at its end, on the UI thread.
+        // was read whole at its end, on the UI thread. Output reported after the test's result goes on from what the result
+        // kept: the line saying how much went before counts all of it (it counted only the last chunk's overflow).
         var reported = new List<string>();
         _service.RunOutput += (_, output) => reported.Add(output.Text);
         _service.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
-        var chunk = new string('o', 9_999) + "\n";
-        for (var i = 0; i < 300; i++)
+        var chunk = new string('o', 999) + "\n";
+        for (var i = 0; i < 3000; i++)
         {
             _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", chunk)], []));
         }
 
         _service.RunUpdated(new TestRunUpdateParams("r1", [new TestStateDto("P|m:Adds", TestStates.Passed, 1, null)], [], []));
-        _service.RunEnded("r1");
+        AssertKept(3000L * chunk.Length, chunk);
 
-        var output = Node("P|m:Adds").Result!.Output;
-        Assert.StartsWith("[", output, StringComparison.Ordinal); // how much went before
-        Assert.EndsWith(chunk, output, StringComparison.Ordinal);
-        Assert.Equal(TestService.MaxTestOutputLength, output.Length - output.IndexOf('\n', StringComparison.Ordinal) - 1);
-        Assert.Equal(300, reported.Count);
-        Assert.All(reported, text => Assert.Equal(chunk, text));
-        var run = Assert.Single(_service.History(Node("P|m:Adds").Key)).RunId;
-        Assert.Equal("r1", run);
+        // After the result: a chunk at a time, then two in one update.
+        var late = "late " + new string('l', 994) + "\n";
+        for (var i = 0; i < 500; i++)
+        {
+            _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", late)], []));
+        }
+
+        _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", late), new TestOutputDto("P|m:Adds", late)], []));
+        _service.RunEnded("r1");
+        AssertKept((3000L * chunk.Length) + (502L * late.Length), late);
+        Assert.Equal(3501, reported.Count);
+        Assert.All(reported.Take(3000), text => Assert.Equal(chunk, text));
+        Assert.Equal(late + late, reported[^1]);
+        Assert.Equal(Node("P|m:Adds").Result, Assert.Single(_service.History(Node("P|m:Adds").Key)));
+        Assert.Equal("r1", Node("P|m:Adds").Result!.RunId);
+
+        void AssertKept(long written, string last)
+        {
+            var output = Node("P|m:Adds").Result!.Output;
+            var marker = output.IndexOf('\n', StringComparison.Ordinal);
+            Assert.StartsWith("[", output, StringComparison.Ordinal);
+            var dropped = long.Parse(new string([.. output[..marker].Where(char.IsAsciiDigit)]), CultureInfo.InvariantCulture);
+            var kept = output[(marker + 1)..];
+            Assert.Equal(written, dropped + kept.Length);
+            Assert.InRange(kept.Length, TestService.MaxTestOutputLength - chunk.Length, TestService.MaxTestOutputLength);
+            Assert.Equal(0, kept.Length % chunk.Length); // whole lines: from a line's start
+            Assert.EndsWith(last, kept, StringComparison.Ordinal);
+        }
     }
 
     private sealed class FakeConnection : ITestControllerConnection

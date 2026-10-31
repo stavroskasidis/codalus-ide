@@ -323,8 +323,9 @@ public sealed partial class ShellHost
     /// <summary>
     /// What a search reads, gathered on the thread pool (M56: on the UI thread, 50,000 existence checks and two sorts froze
     /// the window before Find All, Replace All or the Task List showed anything): <paramref name="candidates"/> once each,
-    /// through <paramref name="filter"/>, those that exist when <paramref name="mustExist"/>, a folder's files together
-    /// (by folder, then name), and the texts of those open, from snapshots taken here at no cost.
+    /// through <paramref name="filter"/>, those that exist when <paramref name="mustExist"/> (an open document does, on
+    /// disk or not: its text is what's read), a folder's files together (by folder, then name), and the texts of those
+    /// open, from snapshots taken here at no cost.
     /// </summary>
     private Task<FilesToSearch> GatherAsync(Func<IEnumerable<string>> candidates, Func<string, bool>? filter, bool mustExist, CancellationToken cancellationToken)
     {
@@ -336,7 +337,7 @@ public sealed partial class ShellHost
             foreach (var path in candidates())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (seen.Add(path) && (filter is null || filter(path)) && (!mustExist || FileExists(path)))
+                if (seen.Add(path) && (filter is null || filter(path)) && (!mustExist || snapshots.ContainsKey(path) || FileExists(path)))
                 {
                     files.Add(path);
                 }

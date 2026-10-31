@@ -104,12 +104,16 @@ public sealed class AspireShellTests
             Assert.StartsWith("Frontend: Sunny, from the api", page, StringComparison.Ordinal);
             f.Shell.AspireWindow.Selected = f.Shell.AspireWindow.Resources.Single(r => r.Name == "api");
             await ShellFixture.PumpUntil(() => f.Shell.AspireWindow.Logs.Contains("Now listening on", StringComparison.Ordinal), seconds: 60);
-            Assert.DoesNotContain('\u001b', f.Shell.AspireWindow.Logs); // the console's colors are left out
             Assert.Contains(f.Shell.AspireWindow.Environment, e => e.Name == "OTEL_SERVICE_NAME");
 
-            // Stop the api through its command: the IDE ends its program.
+            // The window shows the console as the Output window shows a channel: the process's colors drawn, not escapes.
             f.Shell.ShowAspire();
             await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<AspireView>().Any());
+            var view = f.Window.GetVisualDescendants().OfType<AspireView>().First();
+            await ShellFixture.PumpUntil(() => view.ConsoleText.Contains("Now listening on", StringComparison.Ordinal), seconds: 60);
+            Assert.DoesNotContain('\u001b', view.ConsoleText);
+
+            // Stop the api through its command: the IDE ends its program.
             Assert.Null(await f.Shell.AspireWindow.StopAsync());
             await ShellFixture.PumpUntil(() => !f.Shell.Runs.Running.Any(r => r.Name == "Api"), seconds: 60);
             await ShellFixture.PumpUntil(() => f.Shell.AspireWindow.Resources.Single(r => r.Name == "api").Resource.State != "Running", seconds: 60);

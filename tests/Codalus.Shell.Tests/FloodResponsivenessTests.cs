@@ -2,10 +2,12 @@ using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using AvaloniaEdit;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Plugins.Protocol;
 using Codalus.Projects.Protocol;
@@ -87,12 +89,110 @@ public sealed class FloodResponsivenessTests
     }
 
     [AvaloniaFact]
+    public async Task A_reader_scrolled_up_or_with_scroll_lock_on_keeps_its_lines_while_the_oldest_are_dropped()
+    {
+        // Past the cap each batch drops about as many of the oldest lines as it adds. The lines in view stay put unless the
+        // view follows the end: with Scroll Lock on at the end (the extent the same after each batch), they moved up at
+        // every batch.
+        await using var f = ShellFixture.Create();
+        var channel = f.Shell.Workbench.Output.GetOrCreate("test.reader", "Reader");
+        var view = new OutputView { DataContext = f.Shell.Output };
+        f.Shell.Output.WordWrap = false;
+        f.Shell.Output.Selected = channel;
+        var host = new Window { Width = 700, Height = 300, Content = view };
+        host.Show();
+        await ShellFixture.PumpUntil(() => view.Coloring.Channel == channel);
+        var editor = view.GetVisualDescendants().OfType<TextEditor>().Single();
+        var textView = editor.TextArea.TextView;
+        var viewer = editor.GetVisualDescendants().OfType<ScrollViewer>().First();
+        string LastLine() => editor.Document.LineCount < 2 ? string.Empty : editor.Document.GetText(editor.Document.GetLineByNumber(editor.Document.LineCount - 1));
+        string TopLine()
+        {
+            ShellFixture.Pump(); // laid out
+            return editor.Document.GetText(textView.GetDocumentLineByVisualTop(textView.VerticalOffset));
+        }
+
+        var next = 0;
+        async Task AppendAsync(int lines)
+        {
+            var text = new StringBuilder();
+            for (var i = 0; i < lines; i++)
+            {
+                text.Append("line ").Append((next++).ToString("D7", CultureInfo.InvariantCulture)).Append('.', 87).Append('\n');
+            }
+
+            var chunk = text.ToString();
+            var last = chunk[^100..^1];
+            await Task.Run(() => channel.Append(chunk), TestContext.Current.CancellationToken);
+            await ShellFixture.PumpUntil(() => LastLine() == last, seconds: 60);
+        }
+
+        for (var i = 0; i < 50; i++)
+        {
+            await AppendAsync(1000); // 5M characters: past the cap, at the end
+        }
+
+        Assert.True(view.IsFollowing);
+
+        // Scrolled up: the lines in view stay as the oldest go.
+        viewer.Offset = new Vector(0, viewer.Offset.Y / 2);
+        var top = TopLine();
+        Assert.False(view.IsFollowing);
+        for (var i = 0; i < 10; i++)
+        {
+            await AppendAsync(1000);
+            Assert.Equal(top, TopLine());
+        }
+
+        // At the end with Scroll Lock on: the same.
+        viewer.Offset = new Vector(0, viewer.Extent.Height - viewer.Viewport.Height);
+        ShellFixture.Pump();
+        Assert.True(view.IsFollowing);
+        f.Shell.Output.ScrollLock = true;
+        top = TopLine();
+        for (var i = 0; i < 10; i++)
+        {
+            await AppendAsync(1000);
+            Assert.Equal(top, TopLine());
+        }
+
+        Assert.InRange(editor.Document.TextLength, OutputPresenter.MaxLength - 100, OutputPresenter.MaxLength);
+
+        // More than the editor keeps in one batch: its end replaces the text, once, from a line's start, its runs in place.
+        f.Shell.Output.ScrollLock = false;
+        var loads = view.Coloring.Loads;
+        var big = new StringBuilder();
+        for (var i = 0; i < 50_000; i++)
+        {
+            big.Append("big ").Append(i.ToString("D7", CultureInfo.InvariantCulture)).Append('.', 88).Append('\n');
+        }
+
+        var flood = big.ToString();
+        await Task.Run(() =>
+        {
+            channel.Append(flood);
+            channel.AppendErrorLine("the end");
+        }, TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => LastLine() == "the end", seconds: 60);
+        Assert.Equal(loads + 1, view.Coloring.Loads);
+        Assert.InRange(editor.Document.TextLength, OutputPresenter.MaxLength / 2, OutputPresenter.MaxLength);
+        var first = editor.Document.GetText(editor.Document.GetLineByNumber(1));
+        Assert.True(first.StartsWith("big ", StringComparison.Ordinal) && first.Length == 99, first);
+        var error = editor.Document.TextLength - "the end\n".Length;
+        Assert.Contains(view.Coloring.Runs, r => r.Start == error && (r.Style.Attributes & OutputAttributes.Error) != 0);
+        host.Close();
+    }
+
+    [AvaloniaFact]
     public async Task The_error_list_shows_a_builds_diagnostics_at_most_every_quarter_second_and_at_once_when_it_ends()
     {
         // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a second
-        // for the whole build, losing its selection each time.
+        // for the whole build.
         await using var f = ShellFixture.Create();
         var list = f.Shell.ErrorList;
+        f.Shell.Layout.ShowToolWindow(ErrorListViewModel.ToolWindowId, focus: false);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ErrorListView>().Any());
+        var listBox = f.Window.GetVisualDescendants().OfType<ErrorListView>().First().GetVisualDescendants().OfType<ListBox>().First(l => l.Name == "List");
         var build = new TaskCompletionSource<BuildResultInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         f.Shell.Builds.Runner = (_, _) => build.Task;
         var building = f.Shell.Builds.BuildAsync("Build", null, CancellationToken.None);
@@ -102,21 +202,48 @@ public sealed class FloodResponsivenessTests
         var resets = 0;
         list.Items.CollectionChanged += (_, e) => resets += e.Action == NotifyCollectionChangedAction.Reset ? 1 : 0;
         var root = Path.Combine(Path.GetTempPath(), "codalus-build-" + Guid.NewGuid().ToString("N"));
+        void Report(string file) => f.Shell.Languages.Diagnostics.Set(Path.Combine(root, file), "csharp", null,
+            [new Diagnostic(new Range(new Position(0, 0), new Position(0, 4)), DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name could not be found")]);
         var watch = Stopwatch.StartNew();
-        for (var i = 0; i < 40; i++)
+        for (var i = 20; i < 40; i++)
         {
-            f.Shell.Languages.Diagnostics.Set(Path.Combine(root, $"File{i:00}.cs"), "csharp", null,
-                [new Diagnostic(new Range(new Position(0, 0), new Position(0, 4)), DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name could not be found")]);
+            Report($"File{i}.cs");
+            await WaitAsync(25);
+        }
+
+        // A row selected meanwhile stays selected as rows come before it: each reset selects the same row again.
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 20 && !list.IsRefreshing);
+        var selected = list.Rows.Single(r => r.File == "File30.cs");
+        listBox.SelectedItem = selected;
+        for (var i = 0; i < 20; i++)
+        {
+            Report($"File{i:00}.cs");
             await WaitAsync(25);
         }
 
         var elapsed = watch.Elapsed;
-        Assert.InRange(resets, 1, (int)(elapsed.TotalMilliseconds / ErrorListViewModel.BuildRefreshInterval.TotalMilliseconds) + 2);
+        Assert.InRange(resets, 2, (int)(elapsed.TotalMilliseconds / list.BuildRefreshInterval.TotalMilliseconds) + 3);
 
-        // The build's end shows the rest at once.
+        // The build's end shows the rest.
         build.SetResult(new BuildResultInfo(false, false, 40, 0, 1000));
         await building;
         await ShellFixture.PumpUntil(() => list.Rows.Count == 40 && !list.IsRefreshing);
+        Assert.Equal(selected, listBox.SelectedItem);
+        Assert.Equal(30, listBox.SelectedIndex);
+
+        // At once: a diagnostic waits for the next turn while the build runs (here, one too far off to wait for), and shows
+        // when the build ends.
+        list.BuildRefreshInterval = TimeSpan.FromMinutes(10);
+        build = new TaskCompletionSource<BuildResultInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+        building = f.Shell.Builds.BuildAsync("Build", null, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Builds.IsBuilding);
+        Report("File40.cs");
+        await WaitAsync(300);
+        Assert.Equal(40, list.Rows.Count);
+        build.SetResult(new BuildResultInfo(false, false, 41, 0, 1000));
+        await building;
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 41 && !list.IsRefreshing, seconds: 60);
+        Assert.Equal(selected, listBox.SelectedItem);
     }
 
     [AvaloniaFact]
@@ -162,8 +289,73 @@ public sealed class FloodResponsivenessTests
 
         await f.Shell.TaskList.RefreshAsync();
         Assert.Contains(f.Shell.TaskList.Rows, r => r is { Token: "TODO", Text: "zzflood unsaved", Line: 1 } && r.Path == file);
-        Assert.True(checks > 10, $"{checks} files checked");
+
+        // Replace All lists the same files: the open document's text changes.
+        var checksBefore = checks;
+        find.LookIn = FindScopes.EntireSolution;
+        find.ReplaceWith = "zzflooded";
+        var replacing = find.ReplaceAllAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        f.Shell.Dialogs.Accept();
+        await replacing;
+        Assert.StartsWith("// TODO: zzflooded unsaved\n", editor.Model.Text.Text, StringComparison.Ordinal);
+        Assert.True(checks > checksBefore, $"{checks - checksBefore} files checked by Replace All");
         Assert.Equal(0, onUiThread);
+    }
+
+    [AvaloniaFact]
+    public async Task Without_a_solution_find_all_and_the_task_list_read_the_open_documents_on_disk_or_not()
+    {
+        // Without a solution the open documents are what Find All (Entire solution) and the Task List read: one deleted on
+        // disk but still open was left out once its existence was checked on the thread pool.
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "loose");
+        Directory.CreateDirectory(folder);
+        var kept = Path.Combine(folder, "Kept.cs");
+        var gone = Path.Combine(folder, "Gone.cs");
+        await File.WriteAllTextAsync(kept, "// TODO: zzloose kept\n", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(gone, "// TODO: zzloose gone\n", TestContext.Current.CancellationToken);
+        Assert.NotNull(await f.Shell.OpenFileAsync(kept));
+        Assert.NotNull(await f.Shell.OpenFileAsync(gone));
+        File.Delete(gone);
+
+        var find = f.Shell.FindReplace;
+        var results = f.Shell.FindResults;
+        find.Query = "zzloose";
+        find.LookIn = FindScopes.EntireSolution;
+        await find.FindAllAsync();
+        await ShellFixture.PumpUntil(() => !results.CurrentPage.IsSearching);
+        Assert.Contains(results.CurrentPage.Rows, r => !r.IsHeader && r.Path == kept);
+        Assert.Contains(results.CurrentPage.Rows, r => !r.IsHeader && r.Path == gone);
+
+        await f.Shell.TaskList.RefreshAsync();
+        Assert.Contains(f.Shell.TaskList.Rows, r => r.Text == "zzloose kept" && r.Path == kept);
+        Assert.Contains(f.Shell.TaskList.Rows, r => r.Text == "zzloose gone" && r.Path == gone);
+    }
+
+    [Fact]
+    public async Task A_task_list_refresh_replaced_while_it_lists_the_files_ends_quietly_and_shows_the_newer_rows()
+    {
+        // The listing moved off the UI thread and can take seconds: a refresh replaced meanwhile read its token source
+        // after the newer refresh had disposed it, and its task faulted unobserved. Its rows must not replace the newer ones.
+        var listings = new List<TaskCompletionSource<FilesToSearch>>();
+        using var list = new TaskListViewModel(
+            _ =>
+            {
+                var listing = new TaskCompletionSource<FilesToSearch>(TaskCreationOptions.RunContinuationsAsynchronously);
+                listings.Add(listing);
+                return listing.Task;
+            },
+            () => ["TODO"],
+            (_, _) => Task.CompletedTask);
+        var older = list.RefreshAsync();
+        var newer = list.RefreshAsync();
+        var file = Path.Combine(Path.GetTempPath(), "Tasks.cs");
+        listings[1].SetResult(new FilesToSearch([file], new Dictionary<string, string> { [file] = "// TODO: newer\n" }));
+        await newer;
+        listings[0].SetResult(new FilesToSearch([file], new Dictionary<string, string> { [file] = "// TODO: older\n" }));
+        await older;
+        Assert.Equal("newer", Assert.Single(list.Rows).Text);
     }
 
     [AvaloniaFact]
@@ -195,6 +387,14 @@ public sealed class FloodResponsivenessTests
         // Few enough match: all show, and nothing says there are more.
         Assert.InRange(pick.Rows.Count, 1, 100);
         Assert.False(pick.HasMore);
+
+        // The active item (the current branch) shows, selected, even past the first thousand.
+        QuickPickItem[] items = [.. Enumerable.Range(0, 50_000).Select(i => new QuickPickItem($"origin/feature/branch-{i:00000}"))];
+        _ = pick.ShowAsync(items, "Switch branch", activeIndex: 30_000);
+        Assert.Equal(QuickPickViewModel.MaxRows + 1, pick.Rows.Count);
+        Assert.Same(items[30_000], pick.Rows[^1].Item);
+        Assert.Equal(QuickPickViewModel.MaxRows, pick.SelectedIndex);
+        Assert.Contains((50_000 - QuickPickViewModel.MaxRows - 1).ToString("N0", CultureInfo.CurrentCulture), pick.MoreText, StringComparison.Ordinal);
         pick.Cancel();
     }
 
@@ -213,9 +413,20 @@ public sealed class FloodResponsivenessTests
             new TestItemDto("p|n", "p", "Tests", null, null, null, null, null, null),
             new TestItemDto("p|c", "p|n", "Calc", null, null, null, null, null, null),
             new TestItemDto("p|m", "p|c", "Logs", null, null, null, null, null, null),
+            new TestItemDto("p|b", "p|n", "Broken", null, null, null, null, null, "error CS1002: " + new string('b', 40_000)),
         ], []));
         var chunk = new string('o', 4999) + "\n";
+
+        // A run that starts with no other in progress starts Output > Tests afresh; one that starts during it doesn't.
+        var channel = f.Shell.Workbench.Output.GetOrCreate("codalus.tests", "Tests");
+        channel.AppendLine("an earlier run");
         tests.RunStarted(new TestRunStartedParams(controller, "r1", "Run", null, "run"));
+        Assert.Equal(string.Empty, channel.GetText());
+        tests.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto(null, "the first run\n")], []));
+        tests.RunStarted(new TestRunStartedParams(controller, "r2", "Run", null, "run"));
+        tests.RunUpdated(new TestRunUpdateParams("r2", [], [new TestOutputDto(null, "the second run\n")], []));
+        tests.RunEnded("r2");
+        Assert.Equal("the first run\nthe second run\n", channel.GetText());
         for (var i = 0; i < 1000; i++)
         {
             tests.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("p|m", chunk)], []));
@@ -224,15 +435,17 @@ public sealed class FloodResponsivenessTests
         tests.RunUpdated(new TestRunUpdateParams("r1", [new TestStateDto("p|m", TestStates.Failed, 5, [new TestMessageDto(new string('e', 100_000), null, null, null, null, null)])], [], []));
         tests.RunEnded("r1");
 
-        // The test keeps the end of its output; the run's output went to Output > Tests as it came, capped.
+        // The test keeps the end of its output, from a line's start; the run's output went to Output > Tests as it came,
+        // capped.
         var node = tests.Find(TestNode.KeyOf(controller, "p|m"))!;
         var output = node.Result!.Output;
-        Assert.InRange(output.Length, TestService.MaxTestOutputLength, TestService.MaxTestOutputLength + 100);
+        Assert.InRange(output.Length, TestService.MaxTestOutputLength - 4096, TestService.MaxTestOutputLength + 100);
         Assert.StartsWith("[", output, StringComparison.Ordinal);
         Assert.EndsWith(chunk, output, StringComparison.Ordinal);
-        var channel = f.Shell.Workbench.Output.GetOrCreate("codalus.tests", "Tests").GetText();
-        Assert.InRange(channel.Length, OutputChannel.MaxLength / 2, OutputChannel.MaxLength);
-        Assert.EndsWith(chunk, channel, StringComparison.Ordinal);
+        Assert.Equal(chunk, output[(output.IndexOf('\n', StringComparison.Ordinal) + 1)..][..chunk.Length]);
+        var text = channel.GetText();
+        Assert.InRange(text.Length, OutputChannel.MaxLength / 2, OutputChannel.MaxLength);
+        Assert.EndsWith(chunk, text, StringComparison.Ordinal);
 
         // The details pane shows the end of the output and the start of the message, and opens all of it.
         // The Start page takes the left column once the Welcome plugin runs: the Test Explorer shows after it.
@@ -248,10 +461,80 @@ public sealed class FloodResponsivenessTests
         Assert.InRange(explorer.DetailsMessage!.Length, 1, TestExplorerViewModel.DetailsTextLength + 2);
         explorer.ShowFullOutputCommand.Execute(null);
         await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Uri.StartsWith("codalus-test-result:", StringComparison.Ordinal) == true);
-        var text = f.Shell.ActiveEditor!.Model.Text.Text;
+        text = f.Shell.ActiveEditor!.Model.Text.Text;
         Assert.Contains(new string('e', 100_000), text, StringComparison.Ordinal);
         Assert.EndsWith(output + Environment.NewLine, text, StringComparison.Ordinal);
         Assert.True(f.Shell.ActiveEditor.Model.IsReadOnly);
+
+        // A test that only has an error (a discovery or build error, as a group can have): the pane shows its start, and
+        // Show Full Output opens all of it.
+        var broken = tests.Find(TestNode.KeyOf(controller, "p|b"))!;
+        explorer.Reveal(broken.Key);
+        Assert.True(explorer.IsDetailsCut);
+        Assert.InRange(explorer.DetailsMessage!.Length, 1, TestExplorerViewModel.DetailsTextLength + 2);
+        explorer.ShowFullOutputCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Text.Text.Contains(broken.Error!, StringComparison.Ordinal) == true);
+    }
+
+    [AvaloniaFact]
+    public async Task Import_trx_import_playlist_and_export_trx_leave_the_ui_thread_while_the_test_model_is_busy()
+    {
+        // They read the file, matched every result against every test (or built the document) on the UI thread, under the
+        // test model's lock: for the seconds the matching took, or while a controller held the model, the window froze.
+        // Now each returns to the window while a controller holds the model, and finishes once it's free.
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        var folder = Path.GetDirectoryName(solution)!;
+        Assert.True(await f.Shell.OpenSolutionAsync(solution, trusted: false)); // a solution to keep playlists with; no build needed
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Solution is not null);
+        const string controller = "codalus.synthetic:tests";
+        var tests = f.Shell.Tests;
+        tests.ControllerCreated(new TestControllerParams("codalus.synthetic", controller, "Synthetic"), new TestRefreshTests.Connection());
+        tests.ItemsUpdated(new TestItemsUpdateParams(controller,
+        [
+            new TestItemDto("p", null, "P", null, null, null, null, null, null),
+            new TestItemDto("p|n", "p", "Tests", null, null, null, null, null, null),
+            new TestItemDto("p|c", "p|n", "Calc", null, null, null, null, null, null),
+            new TestItemDto("p|a", "p|c", "Adds", null, null, null, null, null, null),
+        ], []));
+        var trx = Path.Combine(folder, "results.trx");
+        await File.WriteAllTextAsync(trx, """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results><UnitTestResult testName="Tests.Calc.Adds" outcome="Failed" /></Results>
+            </TestRun>
+            """, TestContext.Current.CancellationToken);
+        var playlist = Path.Combine(folder, "smoke.playlist");
+        await File.WriteAllTextAsync(playlist, "<Playlist Version=\"1.0\"><Add Test=\"Tests.Calc.Adds\" /></Playlist>", TestContext.Current.CancellationToken);
+        var exported = Path.Combine(folder, "exported.trx");
+        f.Shell.Window = new PickingWindow(playlist, exported);
+
+        async Task WhileHeldAsync(Func<Task> start)
+        {
+            using var held = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            var holder = Task.Run(() => tests.Read(_ =>
+            {
+                held.Set();
+                return release.Wait(TimeSpan.FromSeconds(30));
+            }), TestContext.Current.CancellationToken);
+            Assert.True(held.Wait(TimeSpan.FromSeconds(30)));
+
+            // No dispatcher pass in between: what's measured is the command alone (the Test Explorer's refresh reads the
+            // model on the UI thread too, briefly).
+            var started = start();
+            var returned = !holder.IsCompleted; // it didn't wait for the model on the UI thread
+            release.Set();
+            Assert.True(await holder, "the model was held until it was released");
+            await started;
+            Assert.True(returned, "returned while the model was held");
+        }
+
+        await WhileHeldAsync(() => f.Shell.ImportTrxAsync(trx));
+        Assert.Equal(TestOutcome.Failed, tests.Find(TestNode.KeyOf(controller, "p|a"))!.Outcome);
+        await WhileHeldAsync(f.Shell.ImportVisualStudioPlaylistAsync);
+        await ShellFixture.PumpUntil(() => f.Shell.TestExplorer.Playlist?.Name == "smoke");
+        await WhileHeldAsync(f.Shell.ExportTrxAsync);
+        Assert.Contains("Tests.Calc.Adds", await File.ReadAllTextAsync(exported, TestContext.Current.CancellationToken), StringComparison.Ordinal);
     }
 
     [AvaloniaFact]
@@ -285,10 +568,62 @@ public sealed class FloodResponsivenessTests
         await ShellFixture.PumpUntil(() => !view.IsFinding);
         Assert.False(control.HasSelection);
 
-        // A match far from the view is found and selected; a newer find replaces one still looking.
-        vm.FindText = "row 1234";
-        vm.FindText = "row 12345";
+        // A newer find replaces one still looking: the older one, whose match is farther, selects nothing.
+        vm.FindText = "row 30000";
+        Assert.True(view.IsFinding);
+        vm.FindText = "row 7777";
         await ShellFixture.PumpUntil(() => !view.IsFinding);
-        Assert.Equal("row 12345", control.SelectedText());
+        Assert.Equal("row 7777", control.SelectedText());
+
+        // Find Next while a find is still looking goes on with it; closing the find bar drops it. (Rows from 6000 on are
+        // the only ones to start with their number.)
+        vm.FindText = "row 9999";
+        vm.FindNext(backwards: false);
+        vm.FindNext(backwards: false);
+        Assert.True(view.IsFinding);
+        await ShellFixture.PumpUntil(() => !view.IsFinding);
+        Assert.Equal("row 9999", control.SelectedText());
+        vm.FindText = "row 20000";
+        Assert.True(view.IsFinding);
+        vm.FindVisible = false;
+        Assert.False(view.IsFinding);
+        await WaitAsync(500);
+        Assert.Equal("row 9999", control.SelectedText());
+    }
+
+    /// <summary>The window, with Open answering <paramref name="pick"/> and Save As <paramref name="save"/> instead of native dialogs.</summary>
+    private sealed class PickingWindow(string pick, string save) : IShellWindow
+    {
+        public Avalonia.Input.Platform.IClipboard? Clipboard => null;
+
+        public bool IsFullScreen
+        {
+            get => false;
+            set { }
+        }
+
+        public void FocusPane(bool backwards)
+        {
+        }
+
+        public void RequestClose()
+        {
+        }
+
+        public void BringToFront()
+        {
+        }
+
+        public Task<string?> PickSolutionAsync() => Task.FromResult<string?>(null);
+
+        public Task<string?> PickProjectAsync() => Task.FromResult<string?>(null);
+
+        public Task<string?> PickFileAsync(string title, string filterName, string[] patterns) => Task.FromResult<string?>(pick);
+
+        public Task<string?> SaveFileAsync(string title, string suggestedName, string filterName, string[] patterns) => Task.FromResult<string?>(save);
+
+        public Task<IReadOnlyList<string>> PickFilesAsync(string title) => Task.FromResult<IReadOnlyList<string>>([]);
+
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
     }
 }

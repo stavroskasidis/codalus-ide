@@ -11,6 +11,7 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Codalus.Shell.Terminal;
 using Codalus.Shell.Theming;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Output;
 
 namespace Codalus.Shell.Controls;
@@ -27,7 +28,8 @@ namespace Codalus.Shell.Controls;
 /// <para>
 /// The editor keeps at most <see cref="MaxLength"/> characters: a batch that goes past it drops as many of the oldest
 /// lines (M56: each trim of a flooded channel decoded it again and reloaded the editor, 3M characters for each 1M
-/// appended). A view that goes away pauses (<see cref="Pause"/>); shown again, it reloads only if its channel changed.
+/// appended), and unless the view follows the end (its <see cref="FollowTail"/>), the lines in view stay where they are.
+/// A view that goes away pauses (<see cref="Pause"/>); shown again, it reloads only if its channel changed.
 /// </para>
 /// </summary>
 public sealed class OutputPresenter
@@ -36,6 +38,7 @@ public sealed class OutputPresenter
     internal const int MaxLength = OutputChannel.MaxLength;
 
     private readonly TextEditor _editor;
+    private readonly FollowTail _tail;
     private readonly Lock _decoding = new(); // the decoder and the channel followed: what a producer holds while it decodes
     private readonly Lock _gate = new(); // the queue: all the UI thread's flush takes
     private readonly AnsiDecoder _decoder = new();
@@ -52,9 +55,11 @@ public sealed class OutputPresenter
     // Styled runs of the document, sorted by offset; the UI thread's (the decoder's runs are moved here on flush).
     private List<OutputRun> _runs = [];
 
-    public OutputPresenter(TextEditor editor)
+    /// <summary>Shows channels in <paramref name="editor"/>, whose view follows the end with <paramref name="tail"/>.</summary>
+    public OutputPresenter(TextEditor editor, FollowTail tail)
     {
         _editor = editor;
+        _tail = tail;
         _colorizer = new OutputColorizer(this);
         editor.TextArea.TextView.LineTransformers.Add(_colorizer);
         editor.ActualThemeVariantChanged += (_, _) => ThemeChanged();
@@ -62,6 +67,16 @@ public sealed class OutputPresenter
 
         // Read-only output has nothing to undo: the stack kept each append, and each line dropped, until a reload.
         editor.Document.UndoStack.SizeLimit = 0;
+
+        // Copy and Select All on a right-click too (the Aspire console's text box had them; Ctrl+C and Ctrl+A work anyway).
+        editor.ContextMenu = new ContextMenu
+        {
+            ItemsSource = new Control[]
+            {
+                MenuEntry.Create(Localizer.Get("output.copy", "Copy"), "copy", click: editor.Copy),
+                MenuEntry.Create(Localizer.Get("output.selectAll", "Select All"), null, click: editor.SelectAll),
+            },
+        };
     }
 
     /// <summary>The channel shown, or null.</summary>
@@ -92,17 +107,19 @@ public sealed class OutputPresenter
                 _channel.TextAppended -= OnAppended;
             }
 
-            var resume = channel is not null && ReferenceEquals(channel, _paused) && channel.Version == _pausedVersion;
+            var paused = _paused;
             _paused = null;
             _channel = channel;
 
-            // Followed before the snapshot is read, and its appends wait for this lock: those in it are dropped, the rest applied.
+            // Followed before its version or its snapshot is read, and its appends wait for this lock: those already in
+            // what shows are dropped (by version), the rest applied. Read before following, a version could miss an append
+            // that came in between: its event went to the handlers it found, without this one.
             if (channel is not null)
             {
                 channel.TextAppended += OnAppended;
             }
 
-            if (resume)
+            if (channel is not null && ReferenceEquals(channel, paused) && channel.Version == _pausedVersion)
             {
                 _loaded = _pausedVersion; // what's shown (and still queued) is the channel's
             }
@@ -290,7 +307,7 @@ public sealed class OutputPresenter
             document.EndUpdate();
         }
 
-        // A reader scrolled up keeps the lines in view: they'd move up by what was dropped.
+        // A reader scrolled up, or with Scroll Lock on, keeps the lines in view: they'd move up by what was dropped.
         if (removedHeight > 0 && _viewer is { } viewer)
         {
             viewer.Offset = new Vector(viewer.Offset.X, Math.Max(0, viewer.Offset.Y - removedHeight));
@@ -299,8 +316,9 @@ public sealed class OutputPresenter
 
     /// <summary>
     /// Drops the oldest lines past <see cref="MaxLength"/>, about as many as each batch adds, so the editor never reloads
-    /// (its line tree loses the lines dropped). Returns their height when the view isn't at its end (0 when it is: it
-    /// follows the end, and moving it would stop that).
+    /// (its line tree loses the lines dropped). Returns their height when the view doesn't follow the end (0 when it does:
+    /// it stays at the end, and moving it would stop that). Whether it follows is its <see cref="FollowTail"/>'s, not
+    /// where it is: a view with Scroll Lock on at the end, its extent the same after each batch, moved with every batch.
     /// </summary>
     private double Trim()
     {
@@ -319,7 +337,7 @@ public sealed class OutputPresenter
         }
 
         _viewer ??= _editor.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
-        var height = _viewer is { } viewer && viewer.Offset.Y + viewer.Viewport.Height < viewer.Extent.Height - 2
+        var height = _viewer is not null && _tail is not { Enabled: true, IsFollowing: true }
             ? _editor.TextArea.TextView.GetVisualTopByDocumentLine(document.GetLineByOffset(cut).LineNumber)
             : 0;
         document.Remove(0, cut);
@@ -356,7 +374,6 @@ public sealed class OutputPresenter
         _runs = decoded.Runs;
         _editor.Text = decoded.Text;
     }
-
 
     private void ThemeChanged()
     {

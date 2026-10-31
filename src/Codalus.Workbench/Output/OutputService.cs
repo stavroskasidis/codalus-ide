@@ -19,8 +19,8 @@ public sealed class OutputAppendedEventArgs(string? text, bool isError) : EventA
 
     /// <summary>
     /// How many characters the channel dropped from its start with this append, to stay within
-    /// <see cref="OutputChannel.MaxLength"/> (0: none). The text appended still follows what a view has: one that keeps
-    /// its own text drops its own oldest lines instead of reading the channel again.
+    /// <see cref="OutputChannel.MaxLength"/> (0: none). Informational: the text appended still follows what a view has,
+    /// and a view that keeps its own text drops its own oldest lines instead of reading the channel again.
     /// </summary>
     public int Trimmed { get; init; }
 }
@@ -48,13 +48,27 @@ public sealed class OutputChannel(string id, string name)
     // only drops the ones before the new start); adjacent ranges merge, so a stream of error lines is one range.
     private readonly List<(long Start, long End)> _errors = [];
     private long _trimmed;
+    private long _version;
 
     public string Id { get; } = id;
 
     public string Name { get; } = name;
 
-    /// <summary>Incremented on every change, so views can cheaply detect staleness.</summary>
-    public long Version { get; private set; }
+    /// <summary>
+    /// Incremented on every change, so views can cheaply detect staleness. Read under the channel's lock: a view that
+    /// follows <see cref="TextAppended"/> and then reads this either sees a change's version or gets its event (a change
+    /// raises its event after it leaves the lock).
+    /// </summary>
+    public long Version
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _version;
+            }
+        }
+    }
 
     /// <summary>Text appended (or null when the channel was cleared or trimmed and must be re-read).</summary>
     public event EventHandler<string?>? Appended;
@@ -99,15 +113,13 @@ public sealed class OutputChannel(string id, string name)
             _text.Append(text);
             if (_text.Length > MaxLength)
             {
-                var cut = _text.Length - (MaxLength * 3 / 4);
-                var newline = _text.ToString(cut, Math.Min(4096, _text.Length - cut)).IndexOf('\n', StringComparison.Ordinal);
-                removed = cut + Math.Max(0, newline + 1);
+                removed = LineStart(_text, _text.Length - (MaxLength * 3 / 4));
                 _text.Remove(0, removed);
                 _trimmed += removed;
                 _errors.RemoveAll(r => r.End <= _trimmed);
             }
 
-            version = ++Version;
+            version = ++_version;
         }
 
         Appended?.Invoke(this, removed > 0 ? null : text);
@@ -122,7 +134,7 @@ public sealed class OutputChannel(string id, string name)
             _trimmed += _text.Length;
             _text.Clear();
             _errors.Clear();
-            version = ++Version;
+            version = ++_version;
         }
 
         Appended?.Invoke(this, null);
@@ -149,8 +161,19 @@ public sealed class OutputChannel(string id, string name)
                 ranges.Add((from, (int)(end - _trimmed) - from));
             }
 
-            return new OutputSnapshot(_text.ToString(), ranges) { Version = Version };
+            return new OutputSnapshot(_text.ToString(), ranges) { Version = _version };
         }
+    }
+
+    /// <summary>
+    /// Where to cut <paramref name="text"/> to drop what comes before <paramref name="at"/>: the start of the next line
+    /// when one starts within 4K characters, else <paramref name="at"/>; never between the halves of a surrogate pair.
+    /// </summary>
+    internal static int LineStart(StringBuilder text, int at)
+    {
+        var newline = text.ToString(at, Math.Min(4096, text.Length - at)).IndexOf('\n', StringComparison.Ordinal);
+        var cut = newline < 0 ? at : at + newline + 1;
+        return cut < text.Length && char.IsLowSurrogate(text[cut]) ? cut + 1 : cut;
     }
 }
 
