@@ -272,9 +272,8 @@ public sealed class TreeRowsAutomationTests
 
         await File.WriteAllTextAsync(Path.Combine(folder, "notes.txt"), "notes\n", TestContext.Current.CancellationToken);
 
-        // The workspace writes its state in .codalus at some point after it opens; made now, the folder is in the first
-        // listing, so the root's children (and each row's place among them) don't change under the assertions below
-        // (local run 4 of 5, M57: .codalus came in mid-test and every place after it moved by one).
+        // The workspace may write its state in .codalus after it opens; made now, the folder is in the first listing, so
+        // the root's children (and each row's place among them) can't change under the assertions below.
         Directory.CreateDirectory(Path.Combine(folder, ".codalus"));
         f.Shell.Trust.Trust(folder);
         await f.Shell.OpenFolderWorkspaceAsync(folder);
@@ -297,7 +296,11 @@ public sealed class TreeRowsAutomationTests
         // Expand shows src's rows, as Right does; Collapse hides them, as Left does.
         Invoke(list, Row("src"), expand: true);
         Assert.True(Row("src").IsExpanded);
-        await ShellFixture.PumpUntil(() => list.ContainerFromItem(Row("F1.cs")) is not null);
+        // src is listed once it's expanded ("Loading…" until then, M57): wait for its row to come, not throw while it hasn't
+        // (local runs, 6 of 12 under CPU load: Row's First threw inside the wait).
+        await ShellFixture.PumpUntil(
+            () => explorer.Rows.FirstOrDefault(r => r.Name == "F1.cs") is { } f1 && list.ContainerFromItem(f1) is not null,
+            describe: () => string.Join(", ", explorer.Rows.Select(r => r.Name)));
         AssertTreeItem(list, Row("src"), level: 2, position: children.IndexOf(Row("src")) + 1, size: children.Count, ExpandCollapseState.Expanded);
         AssertTreeItem(list, Row("F1.cs"), level: 3, position: 2, size: 4, ExpandCollapseState.LeafNode); // F0, F1, F2, README.md
         Invoke(list, Row("src"), expand: false);
