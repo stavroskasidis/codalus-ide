@@ -72,7 +72,7 @@
                 <ul>
                     <li>Tabs with preview and split views, pinned tabs on a row of their own, multiple carets, folding and a minimap</li>
                     <li>Semantic highlighting, and IntelliSense like a classic IDE's: a completion list with an icon per kind, filters (Alt+C classes, Alt+M methods…, Alt+J target type matches), commit characters (Con then . gives Console.), the expected type preselected, and a description beside the selection; parameter info above the line with overloads and the active parameter in bold; Quick Info with fixes for the errors under the pointer. Signatures in your editor's colors, generics as you use them</li>
-                    <li>Live diagnostics and an Error List, grouped by project, file, severity or code, with background analysis of open documents, the current project or the solution</li>
+                    <li>Live diagnostics and an Error List, grouped by project, file, severity or code, with background analysis of open documents, the current project or the solution; filtering and grouping 100,000 diagnostics doesn't make you wait</li>
                     <li>Rename, code fixes and refactorings, all with previews</li>
                     <li>Snippets, Code Cleanup, format on save and local history</li>
                     <li>Pasted code brings its usings along; editor settings per language, and an EditorConfig settings page</li>
@@ -103,6 +103,7 @@
                     <li>nuget.org's verified owners: a badge after a package whose ID prefix nuget.org reserved for one of its owners, shown only when it can be nobody else's copy (never from a mirror), and search that leaves out what package source mapping wouldn't restore</li>
                     <li>New Project as the classic IDE's three-page wizard: recent templates, search and filters, each template's own options, and the framework with its support</li>
                     <li>The Properties window, Show All Files, Sync with Active Document and Track Active Item, Add New Item, templates and External Tools</li>
+                    <li>Show All Files as in the classic IDE: bin, obj and the other folders outside a project shown dimmed and listed when you expand them; Sync with Active Document and Track Active Item jump straight to the file, in solutions of hundreds of projects</li>
                     <li>Folder mode for a folder without a solution</li>
                     <li>A solution reopens as you left it: documents, breakpoints, bookmarks, configuration and the Solution Explorer's expansion, kept in a self-ignoring .codalus/state next to it</li>
                     <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
@@ -118,7 +119,7 @@
                     <li>A fast up-to-date check, binary logs and build timings</li>
                     <li>Batch Build, build events, and custom tools for ResX and T4, with a resource editor for .resx files</li>
                     <li>Run with Ctrl+F5, and multiple startup projects</li>
-                    <li>A Test Explorer for xUnit, NUnit, MSTest and TUnit</li>
+                    <li>A Test Explorer for xUnit, NUnit, MSTest and TUnit that keeps up with runs of tens of thousands of tests</li>
                     <li>Code coverage with Coverlet</li>
                 </ul>
             </div>
@@ -131,6 +132,7 @@
                     <li>Data tips like a classic IDE's: the header over the hovered expression, each expanded level a tip of its own, members grouped with their icons, List, Dictionary, HashSet, Queue and Stack as their elements, View drop-downs for visualizers, values edited in place and red when they changed, any row pinned, and Ctrl to see through them</li>
                     <li>Pinned data tips that expand like the data tip, PerfTips and Run to Click</li>
                     <li>Locals, Autos, Watch and QuickWatch with the data tip's rows: Name, Value and Type in aligned columns at every depth, expansion kept across steps, values edited in place</li>
+                    <li>Long arrays in ranges of 1,000, each read as you expand it, and debugger windows behind other tabs that wait until you show them</li>
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
@@ -141,6 +143,7 @@
                 <h3>Git and hosting</h3>
                 <ul>
                     <li>Per-file, per-change and per-line staging, from Git Changes or the diff, and blame</li>
+                    <li>Git Changes with thousands of changed files: only the rows on screen are built, and a refresh keeps your selection, scroll position and collapsed folders</li>
                     <li>Diffs and the merge editor in the editor's colors</li>
                     <li>A branch drop-down in Git Changes: search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
                     <li>Update a branch from its remote without checking it out</li>
