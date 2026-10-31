@@ -18,7 +18,7 @@ public sealed class DotNetTestTreeTests
         // through every runner test of the solution, for each project (M56).
         var controller = new Controller();
         var tree = new TestTree(controller);
-        var projects = Enumerable.Range(0, 3).Select(i => new ProjectTests($"/src/P{i}/P{i}.csproj", $"P{i}")).ToList();
+        var projects = Enumerable.Range(0, 3).Select(i => new ProjectTests(Path.GetFullPath($"/src/P{i}/P{i}.csproj"), $"P{i}")).ToList(); // a full path on Windows too: the project's item takes its URI (Windows CI, run 41196321194)
         foreach (var project in projects)
         {
             project.RunnerTests[string.Empty] = [Test(project.Path, "Adds"), Test(project.Path, "Fails")];
@@ -31,7 +31,7 @@ public sealed class DotNetTestTreeTests
         // reports for the runner test. The other projects' Fails still have theirs.
         var p1 = projects[1];
         var range = new TestRange(9, 4, 12, 5);
-        p1.Candidates["file:///src/P1/Calc.cs"] = [new TestCandidate(TestCandidate.MethodKind, "Fails", "Tests.Calc", "Tests", range, range, Parameterized: false)];
+        p1.Candidates[new Uri(Path.GetFullPath("/src/P1/Calc.cs")).AbsoluteUri] = [new TestCandidate(TestCandidate.MethodKind, "Fails", "Tests.Calc", "Tests", range, range, Parameterized: false)];
         var fails = p1.RunnerTests[string.Empty][1];
         p1.RunnerTests[string.Empty] = [p1.RunnerTests[string.Empty][0]];
         tree.Update(projects);
