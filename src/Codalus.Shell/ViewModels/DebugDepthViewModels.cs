@@ -49,7 +49,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
         Roots.Clear();
     }
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public string Expression
     {
@@ -304,7 +304,7 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
 
     public ResettableCollection<ThreadRow> Rows { get; } = [];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -412,7 +412,7 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
 
     public ResettableCollection<ModuleRow> Rows { get; } = [];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
 

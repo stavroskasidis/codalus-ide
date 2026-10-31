@@ -604,9 +604,10 @@ public sealed partial class ShellHost
         Window?.BringToFront();
         if (!_debugWindowsShown)
         {
+            // Locals last, in front of the tabs they share: a debugger window behind another reads nothing at a stop (M56).
             _debugWindowsShown = true;
-            Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
             Layout.ShowToolWindow(CallStackViewModel.ToolWindowId, focus: false);
+            Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
         }
 
         if (stop.Reason == "exception")

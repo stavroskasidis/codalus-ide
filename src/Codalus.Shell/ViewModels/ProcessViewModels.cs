@@ -19,9 +19,10 @@ public sealed record ProcessRow(int Id, string Name, string Path, string Title, 
 /// Attach to Process. A session debugs one .NET process (with a browser page in a compound session).
 /// </summary>
 /// <remarks>
-/// Each process is described once for the session (its name, path and window title, from the OS), off the UI thread
-/// (M56): every step described it five times on the UI thread, for this window and the Debug Location toolbar, shown or
-/// not. The rows are built only while the window is shown, and once when it's shown.
+/// Each process is described once for the session (its name and path, from the OS), off the UI thread (M56): every step
+/// described it five times on the UI thread, for this window and the Debug Location toolbar, shown or not. The rows are
+/// built only while the window is shown, and once when it's shown; each time, the window titles (which change) are read
+/// again, off the UI thread.
 /// </remarks>
 public sealed class ProcessesViewModel : ObservableObject, IShownAware
 {
@@ -32,7 +33,9 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
     private readonly ShownRefresh _refresh;
     private readonly Dictionary<int, ProcessRow> _described = [];
     private readonly HashSet<int> _describing = [];
+    private readonly Dictionary<int, string> _titles = [];
     private int _session;
+    private int _titlesRead;
 
     public ProcessesViewModel(DebugService debugger, Action<string> run)
     {
@@ -56,10 +59,13 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
     /// <summary>Describes a process from the OS (tests count it); run off the UI thread, once per process for the session.</summary>
     internal Func<int, ProcessRow> Describer { get; set; } = pid => Describe(pid, string.Empty, string.Empty);
 
+    /// <summary>Reads a process's main window title (tests count it); run off the UI thread each time the shown window refreshes.</summary>
+    internal Func<int, string> TitleReader { get; set; } = pid => OperatingSystem.IsWindows() ? TitleOf(pid) : string.Empty;
+
     /// <summary>A process was described: the Debug Location toolbar shows its name.</summary>
     public event EventHandler? Described;
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     /// <summary>Runs one of the window's commands (attach, detach all, terminate all).</summary>
     public void Run(string commandId) => _run(commandId);
@@ -72,6 +78,7 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
             _session++;
             _described.Clear();
             _describing.Clear();
+            _titles.Clear();
         }
 
         _refresh.Request();
@@ -80,6 +87,12 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
     public void Refresh()
     {
         _refresh.Fresh();
+        Build();
+        ReadTitles();
+    }
+
+    private void Build()
+    {
         var rows = new List<ProcessRow>();
         if (_debugger.State != DebugState.Idle)
         {
@@ -104,7 +117,7 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
                 }
                 else if (Known(pid) is { } described)
                 {
-                    rows.Add(described with { Name = process.Ended ? process.Name : described.Name, State = process.Ended ? "Exited" : state, Kind = kind });
+                    rows.Add(described with { Name = process.Ended ? process.Name : described.Name, Title = _titles.GetValueOrDefault(pid, described.Title), State = process.Ended ? "Exited" : state, Kind = kind });
                 }
                 else
                 {
@@ -117,6 +130,45 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
         Rows.Reset(rows);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(CanDetach));
+    }
+
+    /// <summary>
+    /// The described processes' window titles, read again off the UI thread (a title changes, and a program's window may
+    /// not exist yet when it's first described): the rows follow when one changed.
+    /// </summary>
+    private void ReadTitles()
+    {
+        int[] pids = [.. Rows.Where(r => _described.ContainsKey(r.Id) && r.State != "Exited").Select(r => r.Id)];
+        if (pids.Length == 0)
+        {
+            return;
+        }
+
+        var (read, session, asked) = (TitleReader, _session, ++_titlesRead);
+        _ = Task.Run(() => pids.Select(pid => (Pid: pid, Title: read(pid))).ToList()).ContinueWith(task =>
+        {
+            var titles = task.IsCompletedSuccessfully ? task.Result : null;
+            _ = task.Exception; // observed: the titles stay, and are read again at the next refresh
+            Ui.Post(() =>
+            {
+                if (titles is null || session != _session || asked != _titlesRead)
+                {
+                    return;
+                }
+
+                var changed = false;
+                foreach (var (pid, title) in titles)
+                {
+                    changed |= _titles.GetValueOrDefault(pid) != title;
+                    _titles[pid] = title;
+                }
+
+                if (changed)
+                {
+                    Build();
+                }
+            });
+        }, TaskScheduler.Default);
     }
 
     /// <summary>The process's name: the OS's once it's described, what the session calls it until then.</summary>
@@ -135,21 +187,45 @@ public sealed class ProcessesViewModel : ObservableObject, IShownAware
         {
             var session = _session;
             var describe = Describer;
-            _ = Task.Run(() => describe(pid)).ContinueWith(task => Ui.Post(() =>
+            _ = Task.Run(() => describe(pid)).ContinueWith(task =>
             {
-                if (session != _session || !task.IsCompletedSuccessfully)
+                var described = task.IsCompletedSuccessfully ? task.Result : null;
+                _ = task.Exception; // observed: a description that failed is asked for again at the next refresh
+                Ui.Post(() =>
                 {
-                    return;
-                }
+                    if (session != _session)
+                    {
+                        return;
+                    }
 
-                _describing.Remove(pid);
-                _described[pid] = task.Result;
-                _refresh.Request();
-                Described?.Invoke(this, EventArgs.Empty);
-            }), TaskScheduler.Default);
+                    _describing.Remove(pid);
+                    if (described is null)
+                    {
+                        return;
+                    }
+
+                    _described[pid] = described;
+                    _refresh.Request();
+                    Described?.Invoke(this, EventArgs.Empty);
+                });
+            }, TaskScheduler.Default);
         }
 
         return null;
+    }
+
+    /// <summary>The process's main window title (Windows: other systems have none to tell).</summary>
+    public static string TitleOf(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return process.MainWindowTitle;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return string.Empty;
+        }
     }
 
     /// <summary>The process's name, path and window title, as far as the OS tells them.</summary>

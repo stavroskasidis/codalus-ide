@@ -31,6 +31,11 @@ public sealed class ParallelStackNodeViewModel(ParallelStackNode node, IReadOnly
 /// refreshed at every stop while the window is shown, and once when it's shown (M56: a request per thread). The node
 /// with the active thread is marked.
 /// </summary>
+/// <remarks>
+/// TODO(issue): shown, the tree is built again at each stop on the UI thread, every node expanded and none of it
+/// virtualized (Avalonia's TreeView): up to a TextBlock per frame, 64 frames a thread. Flatten it into a virtualized list,
+/// as the Solution Explorer's rows, or cap the frames per node and the nodes with a "more" row.
+/// </remarks>
 public sealed class ParallelStacksViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.parallelStacks";
@@ -58,7 +63,7 @@ public sealed class ParallelStacksViewModel : ObservableObject, IShownAware
 
     public ResettableCollection<ParallelStackNodeViewModel> Roots { get; } = [];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Roots.Count == 0;
 
@@ -129,7 +134,7 @@ public sealed class ParallelWatchViewModel : ObservableObject, IShownAware
 
     public ObservableCollection<ParallelWatchRow> Rows { get; } = [];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public async Task RefreshAsync()
     {
@@ -147,6 +152,7 @@ public sealed class ParallelWatchViewModel : ObservableObject, IShownAware
         {
             return; // a newer refresh (the next stop, another expression) reads its own
         }
+
         var names = _debugger.Threads.ToDictionary(t => t.Id, t => t.Name);
         foreach (var (thread, frames) in stacks.OrderBy(s => s.Key))
         {

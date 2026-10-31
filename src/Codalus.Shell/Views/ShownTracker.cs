@@ -5,10 +5,11 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// Tells a tool window view's view model (<see cref="IShownAware"/>) whether the window is shown: attached and visible
+/// Tells a tool window view's view model (<see cref="IShownAware"/>) whether the view shows it: attached and visible
 /// (M56, as the Solution Explorer tells its own). A closed tool window clears its view's data context before the view
 /// leaves the tree, so the view model it told hears it's hidden then; a detaching view still reports itself attached;
-/// and a closed or auto-hidden window keeps its view attached, invisible, which only the next layout pass tells.
+/// and a closed or auto-hidden window keeps its view attached, invisible, which only the next layout pass tells. The
+/// view speaks for itself: Dock builds a window's view again for a new layout while the old one still shows it.
 /// </summary>
 internal sealed class ShownTracker
 {
@@ -34,7 +35,7 @@ internal sealed class ShownTracker
         {
             if (_shown)
             {
-                old.SetViewShown(false);
+                old.SetViewShown(_view, false);
             }
 
             _reported = null;
@@ -58,6 +59,6 @@ internal sealed class ShownTracker
         }
 
         _shown = shown;
-        _reported?.SetViewShown(shown);
+        _reported?.SetViewShown(_view, shown);
     }
 }

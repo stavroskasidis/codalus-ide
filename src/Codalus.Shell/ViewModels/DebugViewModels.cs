@@ -679,13 +679,10 @@ public sealed class VariableNode : ObservableObject
 }
 
 /// <summary>
-/// Locals or Autos: the selected frame's variables, refreshed on every stop and frame change. Autos, often the tab
-/// behind Locals, reads them only while it's shown, and once when it's shown (M56).
+/// Locals or Autos: the selected frame's variables, refreshed on every stop and frame change while the window is shown,
+/// and once when it's shown (M56): a tab behind another read the frame's scopes at each stop and opened again what was
+/// expanded, one variables request per node (an expanded Dictionary, a thousand), ahead of the shown windows' requests.
 /// </summary>
-/// <remarks>
-/// TODO(issue): Locals only while shown too: the shell shows it at a session's first stop, and later sessions' stops
-/// (the smoke test's, DebugSessionsTests') read it while another window is in front of it.
-/// </remarks>
 public sealed class VariablesViewModel : ObservableObject, IShownAware
 {
     public const string LocalsWindowId = "debug.locals";
@@ -705,8 +702,8 @@ public sealed class VariablesViewModel : ObservableObject, IShownAware
         IsAutos = autos;
         _lineText = lineText;
         _refresh = new ShownRefresh(() => _ = RefreshAsync());
-        debugger.Stopped += (_, _) => Ui.Post(Refresh);
-        debugger.FrameChanged += (_, _) => Ui.Post(Refresh);
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
+        debugger.FrameChanged += (_, _) => Ui.Post(_refresh.Request);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
@@ -718,25 +715,7 @@ public sealed class VariablesViewModel : ObservableObject, IShownAware
 
     public bool IsAutos { get; }
 
-    private void Refresh()
-    {
-        if (IsAutos)
-        {
-            _refresh.Request();
-        }
-        else
-        {
-            _ = RefreshAsync();
-        }
-    }
-
-    void IShownAware.SetViewShown(bool shown)
-    {
-        if (IsAutos)
-        {
-            _refresh.SetShown(shown);
-        }
-    }
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     /// <summary>The frame's variables, replaced at once at each stop (M56).</summary>
     public ResettableCollection<VariableNode> Roots { get; } = [];
@@ -903,7 +882,7 @@ public sealed class WatchViewModel : ObservableObject, IShownAware
 
     public IReadOnlyList<string> Expressions => [.. Roots.Select(r => r.Name)];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     /// <summary>What's expanded, by evaluate name: opened again when a watch's value changes (D44, decision 9).</summary>
     public ExpansionMemory Expansion { get; } = new();
@@ -1326,7 +1305,7 @@ public sealed class BreakpointsViewModel : ObservableObject, IShownAware
 
     public ResettableCollection<BreakpointRow> Rows { get; } = [];
 
-    void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
