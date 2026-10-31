@@ -254,7 +254,7 @@ public sealed class ReferencesWindowTests
     [Fact]
     public void Find_results_of_a_large_replace_all_show_and_filter_with_a_change_or_two_each()
     {
-        var results = new FindResultsViewModel(_ => Task.FromResult<IReadOnlyList<string>>([]), _ => null, (_, _, _) => Task.CompletedTask);
+        var results = new FindResultsViewModel((_, _) => Task.FromResult(new FilesToSearch([], new Dictionary<string, string>())), (_, _, _) => Task.CompletedTask);
         var page = results.CurrentPage;
         var changes = 0;
         page.Rows.CollectionChanged += (_, _) => changes++;
