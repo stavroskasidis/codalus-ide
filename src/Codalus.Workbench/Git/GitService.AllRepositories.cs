@@ -77,7 +77,7 @@ public sealed partial class GitService
                     }
                 }
 
-                var sibling = new GitService(_git, _watch) { AskpassEnvironment = AskpassEnvironment, Repositories = _repositories, IsBuildRunning = _isBuildRunning };
+                var sibling = new GitService(_git, _watch) { AskpassEnvironment = AskpassEnvironment, Repositories = _repositories, IsBuilding = BuildRunning };
                 var name = Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                 sibling.Log += (_, line) => Log?.Invoke(this, $"[{name}] {line}");
                 sibling.StatusChanged += OnSiblingStatusChanged;

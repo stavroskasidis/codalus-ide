@@ -49,13 +49,13 @@ public sealed class GitServiceTests : IAsyncLifetime
     public async Task Git_starts_off_the_callers_thread()
     {
         using var returned = new ManualResetEventSlim();
-        var probe = new StartProbe(returned);
-        var run = _git.RunAsync(Repo, ["--version"], Ct, environment: probe);
+        var callerHadReturned = false;
+        var run = _git.RunAsync(Repo, ["--version"], Ct, environment: new StartProbe(() => callerHadReturned = returned.Wait(TimeSpan.FromSeconds(5))));
         returned.Set();
         var (code, output, _) = await run;
         Assert.Equal(0, code);
         Assert.StartsWith("git version", output, StringComparison.Ordinal);
-        Assert.True(probe.CallerHadReturned, "git started on the caller's thread, before RunAsync returned");
+        Assert.True(callerHadReturned, "git started on the caller's thread, before RunAsync returned");
     }
 
     /// <summary>
@@ -166,25 +166,11 @@ public sealed class GitServiceTests : IAsyncLifetime
         // Runs a change and waits for the read it asks for; returns how many StatusChanged and IndexChanged it raised.
         async Task<(int Status, int Index)> Read(Func<Task> change)
         {
-            // The last change's reads are done: none for a second.
-            for (var quiet = git.StatusReads; ; quiet = git.StatusReads)
-            {
-                await Task.Delay(1000, Ct);
-                if (git.StatusReads == quiet)
-                {
-                    break;
-                }
-            }
-
+            // The last change's reads are done: one still running or due would be counted for this one.
+            await SettledAsync(git);
             var (reads, statusBefore, indexBefore) = (git.StatusReads, Volatile.Read(ref status), Volatile.Read(ref index));
             await change();
-            var until = DateTime.UtcNow.AddSeconds(15);
-            while (git.StatusReads == reads && DateTime.UtcNow < until)
-            {
-                await Task.Delay(50, Ct);
-            }
-
-            Assert.True(git.StatusReads > reads, "the watcher asked for no status read");
+            await WaitUntil(() => git.StatusReads > reads, "the watcher asked for no status read");
             return (Volatile.Read(ref status) - statusBefore, Volatile.Read(ref index) - indexBefore);
         }
 
@@ -204,16 +190,19 @@ public sealed class GitServiceTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// While a build runs, the watcher reads the status at most every 2 s, and once when it ends (M56): each quiet moment of
-    /// 400 ms in its writes was a read of a large repository's whole status.
+    /// While a build runs, the watcher reads the status at most every 2 s, and the read it put off comes when the build ends,
+    /// after the usual 400 ms (M56): each quiet moment of 400 ms in a build's writes was a read of a large repository's whole
+    /// status. The build is asked about at each write, so one that ends without saying so leaves no throttle behind.
     /// </summary>
     [Fact]
-    public async Task While_a_build_runs_the_watcher_reads_the_status_at_most_every_two_seconds_and_once_when_it_ends()
+    public async Task While_a_build_runs_the_watcher_reads_the_status_at_most_every_two_seconds_and_when_it_ends()
     {
         using var git = new GitService();
         Assert.True(await git.OpenAsync(Repo, Ct));
         Directory.CreateDirectory(Path.Combine(Repo, "bin"));
-        git.IsBuildRunning = true;
+        var building = 1;
+        git.IsBuilding = () => Volatile.Read(ref building) == 1;
+        await SettledAsync(git);
         var reads = git.StatusReads;
         var started = Stopwatch.StartNew();
 
@@ -224,18 +213,60 @@ public sealed class GitServiceTests : IAsyncLifetime
             await Task.Delay(500, Ct);
         }
 
-        var during = git.StatusReads - reads;
-        Assert.InRange(during, 1, (int)(started.Elapsed.TotalSeconds / 2) + 1);
+        Assert.InRange(git.StatusReads - reads, 1, (int)(started.Elapsed.TotalSeconds / 2) + 1);
 
-        git.IsBuildRunning = false;
-        var until = DateTime.UtcNow.AddSeconds(15);
-        while (git.StatusReads == reads + during && DateTime.UtcNow < until)
-        {
-            await Task.Delay(50, Ct);
-        }
+        // A write just after a read waits out the 2 s; the build's end brings its read forward, to the usual 400 ms.
+        await SettledAsync(git);
+        await git.RefreshAsync(Ct);
+        var due = git.ReadDue;
+        await File.WriteAllTextAsync(Path.Combine(Repo, "bin", "App8.dll"), "build output", Ct);
+        await WaitUntil(() => git.ReadDue != due, "the watcher saw no write");
+        var throttled = git.ReadDue;
+        var ended = Stopwatch.GetTimestamp();
+        Volatile.Write(ref building, 0);
+        git.OnBuildEnded();
+        Assert.True(git.ReadDue < throttled, $"the build's end left the read {Stopwatch.GetElapsedTime(ended, throttled).TotalMilliseconds:0} ms away");
+        Assert.InRange(Stopwatch.GetElapsedTime(ended, git.ReadDue).TotalMilliseconds, 400, 1000);
+        reads = git.StatusReads;
+        await WaitUntil(() => git.StatusReads > reads, "the build's end asked for no status read");
+        Assert.Equal(9, git.Status!.Files.Count(f => f.IsUntracked));
 
-        Assert.True(git.StatusReads > reads + during, "the build's end asked for no status read");
-        Assert.Equal(8, git.Status!.Files.Count(f => f.IsUntracked));
+        // No build: a write just after a read is read once writes pause, as usual.
+        await SettledAsync(git);
+        await git.RefreshAsync(Ct);
+        due = git.ReadDue;
+        var written = Stopwatch.GetTimestamp();
+        await File.WriteAllTextAsync(Path.Combine(Repo, "bin", "App9.dll"), "build output", Ct);
+        await WaitUntil(() => git.ReadDue != due, "the watcher saw no write");
+        Assert.InRange(Stopwatch.GetElapsedTime(written, git.ReadDue).TotalMilliseconds, 400, 1000);
+    }
+
+    /// <summary>
+    /// A status read that fails or is canceled (a command's refresh, stopped by its token) leaves what the watcher saw to the
+    /// next read (M56): a tag changes no status, and the watcher's read that found the status as it was raised nothing for
+    /// it, so the Git Repository document and the stash list missed it.
+    /// </summary>
+    [Fact]
+    public async Task A_canceled_status_read_leaves_what_the_watcher_saw_to_the_next()
+    {
+        using var git = new GitService();
+        Assert.True(await git.OpenAsync(Repo, Ct));
+        var status = 0;
+        git.StatusChanged += (_, _) => Interlocked.Increment(ref status);
+        await SettledAsync(git);
+        var due = git.ReadDue;
+        await Git(Repo, "tag", "v1");
+        await WaitUntil(() => git.ReadDue != due, "the watcher didn't see the tag");
+        var (reads, before) = (git.StatusReads, Volatile.Read(ref status));
+
+        // A read canceled as git starts takes what the watcher saw, before the watcher's own read (400 ms after the tag).
+        using var cancel = new CancellationTokenSource();
+        git.AskpassEnvironment = new StartProbe(cancel.Cancel);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => git.RefreshAsync(cancel.Token));
+        git.AskpassEnvironment = null;
+
+        await WaitUntil(() => git.StatusReads > reads, "the watcher asked for no status read");
+        Assert.Equal(before + 1, Volatile.Read(ref status));
     }
 
     /// <summary>
@@ -320,11 +351,110 @@ public sealed class GitServiceTests : IAsyncLifetime
         Assert.False(lfs.IsSameAs(lfs with { IsInstalled = false }));
     }
 
-    /// <summary>Variables for a git process that, when read, wait for the caller of RunAsync to have returned (5 s at most).</summary>
-    private sealed class StartProbe(ManualResetEventSlim returned) : IReadOnlyDictionary<string, string>
+    /// <summary>
+    /// Git LFS lookups by path read each list once, to index it (M56): Git Changes looks up every changed file, and a scan of
+    /// the LFS files for each, most of which find none, was 200 million comparisons for 10,000 changes among 20,000 assets.
+    /// </summary>
+    [Fact]
+    public void Lfs_lookups_read_each_list_once_whatever_the_number_of_lookups()
     {
-        public bool CallerHadReturned { get; private set; }
+        var files = new CountingList<GitLfsFile>([.. Enumerable.Range(0, 20_000).Select(i => new GitLfsFile($"/repo/assets/{i}.png", $"assets/{i}.png", IsPointer: false, Size: i))]);
+        var locks = new CountingList<GitLfsLock>([.. Enumerable.Range(0, 1_000).Select(i => new GitLfsLock($"{i}", $"/repo/assets/{i}.png", $"assets/{i}.png", "ada", null))]);
+        var lfs = new GitLfsStatus(true, true, files, locks, null);
+        var (found, locked) = (0, 0);
+        for (var i = 0; i < 10_000; i++)
+        {
+            // Changed sources, and an asset among each hundred.
+            var path = i % 100 == 0 ? $"/repo/assets/{i}.png" : $"/repo/src/{i}.cs";
+            found += lfs.FileOf(path) is null ? 0 : 1;
+            locked += lfs.LockOf(path) is null ? 0 : 1;
+        }
 
+        Assert.Equal((100, 10), (found, locked));
+        Assert.Equal(20_000, files.Reads);
+        Assert.Equal(1_000, locks.Reads);
+    }
+
+    /// <summary>A list that counts the items read from it.</summary>
+    private sealed class CountingList<T>(IReadOnlyList<T> items) : IReadOnlyList<T>
+    {
+        public int Reads { get; private set; }
+
+        public int Count => items.Count;
+
+        public T this[int index]
+        {
+            get
+            {
+                Reads++;
+                return items[index];
+            }
+        }
+
+        public IEnumerator<T> GetEnumerator()
+        {
+            foreach (var item in items)
+            {
+                Reads++;
+                yield return item;
+            }
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    /// <summary>
+    /// A partial stash too long for Windows' command line is refused there before git runs: git stash gives its paths to the
+    /// commands it starts on their command lines, with 12 characters of magic each, and past the limit it stored the stash,
+    /// then couldn't start them (an error, a new stash, and the changes still there). Elsewhere it takes only its files.
+    /// </summary>
+    [Fact]
+    public async Task A_partial_stash_too_long_for_a_windows_command_line_is_refused_there_before_git_runs()
+    {
+        var names = Enumerable.Range(0, 1500).Select(i => $"generated files/a file with a long name, spaces and ünïcødé {i:0000}.txt").ToList();
+        Directory.CreateDirectory(Path.Combine(Repo, "generated files"));
+        foreach (var name in names)
+        {
+            await File.WriteAllTextAsync(Path.Combine(Repo, name), name, Ct);
+        }
+
+        await File.AppendAllTextAsync(File1, "thirteen\n", Ct);
+        await _git.RefreshAsync(Ct);
+        Assert.True(GitService.StashFitsCommandLine([.. names.Take(300)]));
+        Assert.False(GitService.StashFitsCommandLine(names));
+
+        List<string> paths = [.. names.Select(n => Path.Combine(Repo, n))];
+        if (OperatingSystem.IsWindows())
+        {
+            var refused = await Assert.ThrowsAsync<GitException>(() => _git.StashAsync("generated", includeUntracked: true, paths, Ct));
+            Assert.StartsWith("1500 files are too many to stash on their own on Windows", refused.Message, StringComparison.Ordinal);
+            Assert.Empty(await _git.StashesAsync(Ct));
+            Assert.Equal(1501, _git.Status!.Files.Count);
+            return;
+        }
+
+        await _git.StashAsync("generated", includeUntracked: true, paths, Ct);
+        Assert.Single(await _git.StashesAsync(Ct));
+        Assert.DoesNotContain(paths, File.Exists);
+        Assert.Equal(["a.txt"], _git.Status!.Files.Select(f => f.RelativePath));
+    }
+
+    /// <summary>Waits until no status read is running, or due for writes the watcher saw.</summary>
+    private static Task SettledAsync(GitService git) => WaitUntil(() => !git.IsReadPending, "the status reads didn't settle");
+
+    private static async Task WaitUntil(Func<bool> condition, string failure)
+    {
+        var until = DateTime.UtcNow.AddSeconds(15);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < until, failure);
+            await Task.Delay(20, Ct);
+        }
+    }
+
+    /// <summary>Variables for a git process that, when read as git starts, run <paramref name="started"/> first.</summary>
+    private sealed class StartProbe(Action started) : IReadOnlyDictionary<string, string>
+    {
         public int Count => 0;
 
         public IEnumerable<string> Keys => [];
@@ -343,7 +473,7 @@ public sealed class GitServiceTests : IAsyncLifetime
 
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
         {
-            CallerHadReturned = returned.Wait(TimeSpan.FromSeconds(5));
+            started();
             return Enumerable.Empty<KeyValuePair<string, string>>().GetEnumerator();
         }
 

@@ -29,7 +29,12 @@ public sealed partial class GitService : IDisposable
     private int _sawChangedFile;
     private volatile HashSet<string> _changedPaths = [];
     private long _lastRead;
-    private volatile bool _isBuildRunning;
+
+    // The writes the watcher saw, and how many of them its last read covered; the reads running; when the next is due.
+    private int _watcherEvents;
+    private int _watcherEventsRead;
+    private int _readsRunning;
+    private long _readDueAt;
 
     public GitService(string? gitPath = null, bool watch = true)
     {
@@ -54,25 +59,28 @@ public sealed partial class GitService : IDisposable
     public event EventHandler? IndexChanged;
 
     /// <summary>
-    /// A build is running: its outputs churn, so the watcher reads the status at most every 2 s, and once more when it
-    /// ends. Set by the shell from any thread; the siblings follow (All Repositories, ADR 0085).
+    /// Whether a build is running, asked at each write the watcher sees (set by the shell; the siblings ask this one, All
+    /// Repositories, ADR 0085): its outputs churn, so while one runs the watcher reads the status at most every 2 s. Asked
+    /// rather than told, so a build that ends without saying so leaves no throttle behind.
     /// </summary>
-    public bool IsBuildRunning
-    {
-        get => _isBuildRunning;
-        set
-        {
-            var ended = _isBuildRunning && !value;
-            _isBuildRunning = value;
-            foreach (var sibling in Siblings)
-            {
-                sibling.IsBuildRunning = value;
-            }
+    public Func<bool>? IsBuilding { get; set; }
 
-            if (ended && _watcher is not null)
-            {
-                _debounce?.Change(WatcherDelay, Timeout.Infinite);
-            }
+    private bool BuildRunning() => IsBuilding?.Invoke() == true;
+
+    /// <summary>
+    /// A build ended (from any thread): the status read the throttle put off comes after the watcher's usual wait, here and
+    /// in the siblings. None when the watcher saw nothing since its last read.
+    /// </summary>
+    public void OnBuildEnded()
+    {
+        foreach (var sibling in Siblings)
+        {
+            sibling.OnBuildEnded();
+        }
+
+        if (Volatile.Read(ref _watcherEvents) != Volatile.Read(ref _watcherEventsRead))
+        {
+            ArmRead(WatcherDelay);
         }
     }
 
@@ -279,6 +287,9 @@ public sealed partial class GitService : IDisposable
             RedirectStandardError = true,
             StandardOutputEncoding = new UTF8Encoding(false),
             StandardErrorEncoding = new UTF8Encoding(false),
+
+            // Paths, messages and patches reach git as UTF-8: Windows' default is the console's code page.
+            StandardInputEncoding = redirectInput ? new UTF8Encoding(false) : null,
         };
         // A read takes no lock. GIT_OPTIONAL_LOCKS keeps status from writing the index, but not a working-tree diff: git
         // diff refreshes the index's stat data under index.lock whenever a file's timestamps changed but not its content
@@ -380,15 +391,33 @@ public sealed partial class GitService : IDisposable
             return;
         }
 
+        Interlocked.Increment(ref _readsRunning);
+        try
+        {
+            await ReadStatusOnceAsync(root, fromWatcher, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _readsRunning);
+        }
+    }
+
+    private async Task ReadStatusOnceAsync(string root, bool fromWatcher, CancellationToken cancellationToken)
+    {
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        bool statusChanged, indexChanged;
+        bool statusChanged, indexChanged, refs = false, index = false, changedFile = false, read = false;
         try
         {
             // Taken before git runs: what the watcher sees meanwhile is for the next read.
-            Volatile.Write(ref _lastRead, System.Diagnostics.Stopwatch.GetTimestamp());
-            var refs = Interlocked.Exchange(ref _sawRefs, 0) == 1;
-            var index = Interlocked.Exchange(ref _sawIndex, 0) == 1;
-            var changedFile = Interlocked.Exchange(ref _sawChangedFile, 0) == 1;
+            Volatile.Write(ref _lastRead, Stopwatch.GetTimestamp());
+            if (fromWatcher)
+            {
+                Volatile.Write(ref _watcherEventsRead, Volatile.Read(ref _watcherEvents));
+            }
+
+            refs = Interlocked.Exchange(ref _sawRefs, 0) == 1;
+            index = Interlocked.Exchange(ref _sawIndex, 0) == 1;
+            changedFile = Interlocked.Exchange(ref _sawChangedFile, 0) == 1;
             var (_, output, _) = await RunAsync(root, ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], cancellationToken, readOnly: true).ConfigureAwait(false);
             var (gitDirCode, gitDir, _) = await RunAsync(root, ["rev-parse", "--absolute-git-dir"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
             var merging = gitDirCode == 0 && File.Exists(Path.Combine(gitDir.Trim(), "MERGE_HEAD"));
@@ -408,6 +437,7 @@ public sealed partial class GitService : IDisposable
             GitDirectory = gitDirCode == 0 ? gitDir.Trim() : null;
             statusChanged = !fromWatcher || differs || refs || index || changedFile;
             indexChanged = !fromWatcher || differs || index;
+            read = true;
         }
         catch (GitException ex)
         {
@@ -416,6 +446,15 @@ public sealed partial class GitService : IDisposable
         }
         finally
         {
+            // A read that failed or was canceled (a command's refresh, stopped by its token) leaves what the watcher saw to
+            // the next one: a tag, a stash dropped or the index written changes no status, and would raise nothing then.
+            if (!read)
+            {
+                Interlocked.Or(ref _sawRefs, refs ? 1 : 0);
+                Interlocked.Or(ref _sawIndex, index ? 1 : 0);
+                Interlocked.Or(ref _sawChangedFile, changedFile ? 1 : 0);
+            }
+
             _refreshGate.Release();
         }
 
@@ -479,16 +518,38 @@ public sealed partial class GitService : IDisposable
             Volatile.Write(ref _sawChangedFile, 1);
         }
 
+        Interlocked.Increment(ref _watcherEvents);
+
         // While a build runs, a read at most every 2 s; otherwise once writes pause.
         var delay = WatcherDelay;
-        if (_isBuildRunning)
+        if (BuildRunning())
         {
-            var since = System.Diagnostics.Stopwatch.GetElapsedTime(Volatile.Read(ref _lastRead)).TotalMilliseconds;
+            var since = Stopwatch.GetElapsedTime(Volatile.Read(ref _lastRead)).TotalMilliseconds;
             delay = (int)Math.Max(WatcherDelay, BuildReadInterval - since);
         }
 
-        _debounce?.Change(delay, Timeout.Infinite);
+        ArmRead(delay);
     }
+
+    /// <summary>The watcher's status read, in <paramref name="delay"/> ms (asking again moves it); none once closed.</summary>
+    private void ArmRead(int delay)
+    {
+        Volatile.Write(ref _readDueAt, Stopwatch.GetTimestamp() + (delay * Stopwatch.Frequency / 1000));
+        try
+        {
+            _debounce?.Change(delay, Timeout.Infinite);
+        }
+        catch (ObjectDisposedException)
+        {
+            // Closed meanwhile: Close and a sibling's disposal run on other threads than the watcher and a build's end.
+        }
+    }
+
+    /// <summary>Whether a status read is running, or due for writes the watcher saw (tests wait for it to settle).</summary>
+    internal bool IsReadPending => Volatile.Read(ref _readsRunning) > 0 || Volatile.Read(ref _watcherEvents) != Volatile.Read(ref _watcherEventsRead);
+
+    /// <summary>When the watcher's next status read is due, as a <see cref="Stopwatch"/> timestamp (tests).</summary>
+    internal long ReadDue => Volatile.Read(ref _readDueAt);
 
     /// <summary>Whether a change to a path (relative to the worktree, with <c>/</c>) can change the repository's status.</summary>
     internal static bool ChangesStatus(string relative)
