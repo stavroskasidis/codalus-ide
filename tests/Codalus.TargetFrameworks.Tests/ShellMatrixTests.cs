@@ -46,7 +46,7 @@ public sealed class ShellMatrixTests
         string Project(string path)
         {
             var inputs = f.Shell.Solutions.CompilerInputs.TryGetValue(path, out var i)
-                ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : "")}, {i.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))} references, at {Time(arrived.TryGetValue(path, out var at) ? at : null)}"
+                ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : "")}, {i.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))} references, {i.TargetFramework}, at {Time(arrived.TryGetValue(path, out var at) ? at : null)}"
                 : "no compiler inputs";
             var assets = Path.Combine(Path.GetDirectoryName(path)!, "obj", "project.assets.json");
             return $"{Path.GetFileNameWithoutExtension(path)} ({inputs}; assets {(File.Exists(assets) ? "written at " + Time(File.GetLastWriteTimeUtc(assets)) : "missing")})";
