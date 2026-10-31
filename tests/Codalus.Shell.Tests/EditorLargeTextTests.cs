@@ -458,9 +458,9 @@ public sealed class EditorLargeTextTests
     }
 
     /// <summary>
-    /// A document edited while its didOpen is still queued: the didOpen, read when written, carries the editor's snapshot
-    /// with that snapshot's own version (taken together under the lock), and the edits queued before it was written are
-    /// skipped, so an incremental server neither applies them twice nor goes back (M57 review).
+    /// A document edited while its didOpen is still queued: the didOpen carries a snapshot with that snapshot's own version
+    /// (taken together under the lock), and an edit at or below it is skipped, so an incremental server neither applies an
+    /// edit twice nor goes back (M57 review).
     /// </summary>
     [AvaloniaFact]
     public async Task Edits_made_while_a_didopen_is_queued_reach_an_incremental_server_once_at_their_versions()
@@ -503,8 +503,17 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => hover.IsCompleted);
         await hover;
         Assert.Equal(editor.Model.Text.Text, await File.ReadAllTextAsync(log + ".text", TestContext.Current.CancellationToken));
+        // The didOpen carries the snapshot taken when it was queued (v1, with each key's change after it), or the latest one
+        // (v4) when the keys' changes were queued first and skipped as not open: either way each version reaches the server
+        // once, in order, up to the last key's (M57 integration: the didOpen read the latest snapshot when written).
         var lines = File.ReadAllLines(log).SkipWhile(l => l != "didOpen 1 11").Skip(1).ToList(); // after the holder's
-        Assert.Equal(["didOpen 4 9", "didChange 5 10 1", "hover"], lines);
+        var opened = lines[0].Split(' ');
+        Assert.Equal("didOpen", opened[0]);
+        var version = int.Parse(opened[1], System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(version is 1 or 4, string.Join(" | ", lines));
+        Assert.Equal(
+            [$"didOpen {version} {5 + version}", .. Enumerable.Range(version + 1, 5 - version).Select(v => $"didChange {v} {5 + v} 1"), "hover"],
+            lines);
     }
 
     [AvaloniaFact]
