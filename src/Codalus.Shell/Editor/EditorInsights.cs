@@ -50,7 +50,7 @@ public sealed class EditorInsights : IDisposable
     private int _lensVersion = -1;
 
     // The CodeLens rows kept before the service has listed the document's lenses: where its declarations are, from the
-    // text alone (CSharpLensScanner). Null once it has, or when none are expected.
+    // text alone (DeclarationScanners: C#'s and F#'s). Null once it has, or when none are expected.
     private TextSegmentCollection<TextSegment>? _estimates;
     private bool _lensesListed;
     private CancellationTokenSource? _estimateCts;
@@ -129,7 +129,7 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>
     /// Whether the document's types are expected but not listed yet: its language service will list its symbols and its
-    /// text declares a type (<see cref="CSharpLensScanner.DeclaresType"/>). The navigation bar shows from the first
+    /// text declares a type it lists (<see cref="DeclarationScanners.DeclaresType"/>). The navigation bar shows from the first
     /// frame, empty, instead of moving the code down when the symbols arrive. False once the service has listed them.
     /// Changes raise <see cref="SymbolsChanged"/>.
     /// </summary>
@@ -152,18 +152,18 @@ public sealed class EditorInsights : IDisposable
         var document = _editor.Document;
         if (document.TextLength <= EstimateOnUiThreadLength)
         {
-            SetTypesExpected(CSharpLensScanner.DeclaresType(document.Text));
+            SetTypesExpected(DeclarationScanners.DeclaresType(Model.LanguageId, Model.Path, document.Text));
             return;
         }
 
-        _ = EstimateTypesOffThreadAsync(document.CreateSnapshot(), Model.Version, Restart(ref _typesCts).Token);
+        _ = EstimateTypesOffThreadAsync(document.CreateSnapshot(), Model.LanguageId, Model.Path, Model.Version, Restart(ref _typesCts).Token);
     }
 
-    private async Task EstimateTypesOffThreadAsync(AvaloniaEdit.Document.ITextSource snapshot, int version, CancellationToken cancellationToken)
+    private async Task EstimateTypesOffThreadAsync(AvaloniaEdit.Document.ITextSource snapshot, string? languageId, string path, int version, CancellationToken cancellationToken)
     {
         try
         {
-            var declares = await Task.Run(() => CSharpLensScanner.DeclaresType(snapshot.Text), cancellationToken).ConfigureAwait(true);
+            var declares = await Task.Run(() => DeclarationScanners.DeclaresType(languageId, path, snapshot.Text), cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed && !_symbolsListed && Model.Version == version)
             {
                 SetTypesExpected(declares);
@@ -206,7 +206,7 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>
     /// Keeps the room of the CodeLens rows the service will list until it does: the declarations
-    /// <see cref="CSharpLensScanner"/> finds in the text, as the classic IDE does from its syntax tree. Opening a file
+    /// <see cref="DeclarationScanners.Lenses"/> finds in the text (C#'s and F#'s), as the classic IDE does from its syntax tree. Opening a file
     /// (or restoring it at startup, before the service has loaded the solution), the code doesn't move down when the
     /// lenses arrive; their rows stay empty until the counts do. A long text is scanned off the UI thread.
     /// </summary>
@@ -227,7 +227,7 @@ public sealed class EditorInsights : IDisposable
         var document = _editor.Document;
         if (document.TextLength <= EstimateOnUiThreadLength)
         {
-            SetEstimates(CSharpLensScanner.Scan(document.Text));
+            SetEstimates(DeclarationScanners.Lenses(Model.LanguageId, Model.Path, document.Text));
             return;
         }
 
@@ -238,7 +238,8 @@ public sealed class EditorInsights : IDisposable
     {
         try
         {
-            var offsets = await Task.Run(() => CSharpLensScanner.Scan(snapshot.Text), cancellationToken).ConfigureAwait(true);
+            var (languageId, path) = (Model.LanguageId, Model.Path);
+            var offsets = await Task.Run(() => DeclarationScanners.Lenses(languageId, path, snapshot.Text), cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed && !_lensesListed && Model.Version == version)
             {
                 SetEstimates(offsets);

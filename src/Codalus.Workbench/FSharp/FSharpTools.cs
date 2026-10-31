@@ -33,6 +33,9 @@ public sealed class FSharpTools(string cacheFolder, string dotnet, ProcessRunner
 
     public bool IsInstalled => FsAutoCompleteDll is not null && File.Exists(Path.Combine(FantomasFolder, Marker));
 
+    /// <summary>Whether both tools' install markers are there: <see cref="IsInstalled"/> without looking for the tool's files (the editor asks it as a file opens).</summary>
+    public bool HasInstallMarkers => File.Exists(Path.Combine(FsAutoCompleteFolder, Marker)) && File.Exists(Path.Combine(FantomasFolder, Marker));
+
     /// <summary><c>fsautocomplete.dll</c> of the installed tool (of the framework <c>dotnet tool install</c> chose), or null.</summary>
     public string? FsAutoCompleteDll =>
         File.Exists(Path.Combine(FsAutoCompleteFolder, Marker)) && Directory.Exists(Path.Combine(FsAutoCompleteFolder, ".store"))

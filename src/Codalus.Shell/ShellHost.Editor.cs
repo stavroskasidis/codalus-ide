@@ -859,12 +859,38 @@ public sealed partial class ShellHost : IEditorServices
         document is { LanguageId: { } languageId, IsLarge: false } ? Languages.RunningClient(languageId) : null;
 
     bool IEditorServices.ExpectsCodeLens(CodeDocument document) =>
-        document is { IsReadOnly: false, IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-        && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.CodeLensProvider: null };
+        document is { IsReadOnly: false, IsLarge: false, LanguageId: { } languageId }
+        && (languageId == CSharpLanguageId && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+            || languageId == FSharpLanguageId && FSharpWillServe(document)
+                && (Workbench.Settings.GetBoolean("fsharp.signatureCodeLens", true) || Workbench.Settings.GetBoolean("fsharp.referencesCodeLens", true)))
+        && !Languages.HasFailed(languageId) && Languages.RunningClient(languageId) is not { Capabilities.CodeLensProvider: null };
 
-    bool IEditorServices.ExpectsDocumentSymbols(CodeDocument document) =>
-        document is { IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
-        && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.DocumentSymbolProvider: false };
+    /// <summary>
+    /// Whether a document's language service will list its symbols, before it answers: the C# host's languages (C#,
+    /// Visual Basic, XAML), F# once FsAutoComplete is installed and the folder trusted, and the web servers' JavaScript,
+    /// TypeScript and style sheets once they're installed; not after its service failed or if it has none.
+    /// </summary>
+    bool IEditorServices.ExpectsDocumentSymbols(CodeDocument document)
+    {
+        if (document is not { IsLarge: false, LanguageId: { } languageId })
+        {
+            return false;
+        }
+
+        var served = languageId switch
+        {
+            CSharpLanguageId => document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || document.Path.EndsWith(".csx", StringComparison.OrdinalIgnoreCase),
+            VisualBasicLanguageId or XamlLanguageId or AxamlLanguageId => true,
+            FSharpLanguageId => FSharpWillServe(document),
+            "javascript" or "typescript" or "javascriptreact" or "typescriptreact" or "css" or "scss" or "less" => WebServers.IsInstalled,
+            _ => false,
+        };
+        return served && !Languages.HasFailed(languageId) && Languages.RunningClient(languageId) is not { Capabilities.DocumentSymbolProvider: false };
+    }
+
+    /// <summary>Whether FsAutoComplete will serve an F# file: installed, the folder trusted, and not a signature file (it lists nothing for those).</summary>
+    private bool FSharpWillServe(CodeDocument document) =>
+        !document.Path.EndsWith(".fsi", StringComparison.OrdinalIgnoreCase) && Solutions.Solution is not { Trusted: false } && FSharp.HasInstallMarkers;
 
     public void OpenLocations(IReadOnlyList<Location> locations, string title) => _ = OpenLocationsAsync(locations, title);
 
