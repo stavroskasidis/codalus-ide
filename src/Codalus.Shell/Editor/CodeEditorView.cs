@@ -238,8 +238,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
         Ui.Post(() =>
         {
-            _primary?.Ruler.Invalidate();
-            _split?.Ruler.Invalidate();
+            _primary?.Ruler.InvalidateProblems();
+            _split?.Ruler.InvalidateProblems();
         });
     }
 
@@ -277,6 +277,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
         sticky.LinesPinned += (_, lines) => controller.KeepTokens(lines);
         var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = Options.OverviewRuler };
+        controller.Search.ResultsChanged += (_, _) => ruler.Invalidate();
         return new EditorParts(editor, controller, minimap, sticky, ruler);
     }
 
@@ -290,6 +291,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
         {
             grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });
         }
+
+        // Quick Find in the editor's top right corner, over the text and its sticky lines.
+        grid.Children.Add(parts.Controller.Search);
 
         Grid.SetColumn(parts.Ruler, 1);
         grid.Children.Add(parts.Ruler);

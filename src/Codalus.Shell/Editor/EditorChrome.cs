@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -544,7 +543,9 @@ public sealed class StickyScroll : Border
 /// <summary>
 /// The overview ruler beside the scroll bar (the classic IDE's map mode, M12a): errors, warnings, Git changes,
 /// breakpoints, find results and the caret, positioned by line over the whole document, with the document's health at
-/// the top (click: next problem). Clicking elsewhere scrolls there.
+/// the top (click: next problem). Clicking elsewhere scrolls there. It draws on every keystroke and caret move, so the
+/// marks are worked out only when what they show changes, one per pixel row, and each brush is looked up once a frame
+/// (M56: thousands of diagnostics were sorted, and their brushes looked up, on every frame).
 /// </summary>
 public sealed class OverviewRuler : Control
 {
@@ -554,18 +555,20 @@ public sealed class OverviewRuler : Control
     private readonly IEditorServices _services;
     private readonly Func<string> _path;
     private readonly Func<IReadOnlyList<Workbench.Git.LineChange>> _gitChanges;
-    private readonly Func<AvaloniaEdit.Search.SearchPanel?> _search;
-    private (string Pattern, bool Case, bool Words, bool Regex, int Version) _searchKey;
-    private IReadOnlyList<int> _searchLines = [];
+    private readonly Func<FindWidget?> _find;
+    private RulerMarks.ProblemMarks? _problems;
+    private (int Lines, double Height) _problemsKey;
+    private (FindWidget? Widget, int Results, int Lines, double Height) _findKey;
+    private IReadOnlyList<double> _findRows = [];
     private bool _queued;
 
-    public OverviewRuler(TextEditor editor, IEditorServices services, Func<string> path, Func<IReadOnlyList<Workbench.Git.LineChange>> gitChanges, Func<AvaloniaEdit.Search.SearchPanel?> search)
+    public OverviewRuler(TextEditor editor, IEditorServices services, Func<string> path, Func<IReadOnlyList<Workbench.Git.LineChange>> gitChanges, Func<FindWidget?> find)
     {
         _editor = editor;
         _services = services;
         _path = path;
         _gitChanges = gitChanges;
-        _search = search;
+        _find = find;
         Width = RulerWidth;
         Cursor = new Cursor(StandardCursorType.Arrow);
         AutomationProperties.SetName(this, "Overview ruler");
@@ -583,6 +586,9 @@ public sealed class OverviewRuler : Control
         }
     }
 
+    /// <summary>How many times the diagnostics' marks were worked out (tests: not once a frame).</summary>
+    internal int ProblemMarksBuilt { get; private set; }
+
     /// <summary>Redraws once per frame at most.</summary>
     public void Invalidate()
     {
@@ -599,6 +605,13 @@ public sealed class OverviewRuler : Control
         }, DispatcherPriority.Render);
     }
 
+    /// <summary>The file's diagnostics changed: their marks are worked out again for the next frame.</summary>
+    public void InvalidateProblems()
+    {
+        _problems = null;
+        Invalidate();
+    }
+
     private IBrush Brush(string key) =>
         this.TryFindResource(key, ActualThemeVariant, out var resource) && resource is IBrush brush ? brush : Brushes.Gray;
 
@@ -612,11 +625,21 @@ public sealed class OverviewRuler : Control
         var top = HealthHeight + 2;
         var height = Math.Max(1, bounds.Height - top - 2);
         double Y(int line) => top + ((line - 1) * height / lines);
+        var error = Brush("Shell.Error");
+        var warning = Brush("Shell.Warning");
+        var added = Brush("Shell.Diff.Added");
+
+        // The diagnostics' marks and counts, worked out again only when they, the line count or the height change.
+        if (_problems is null || _problemsKey != (lines, height))
+        {
+            _problems = RulerMarks.ForProblems(_services.Diagnostics.For(_path()), lines, top, height);
+            _problemsKey = (lines, height);
+            ProblemMarksBuilt++;
+        }
 
         // Health: a red, yellow or green square.
-        var (errors, warnings) = Health;
-        var health = errors > 0 ? Brush("Shell.Error") : warnings > 0 ? Brush("Shell.Warning") : Brush("Shell.Diff.Added");
-        context.FillRectangle(health, new Rect(3, 3, RulerWidth - 5, HealthHeight - 5), 2);
+        var (errors, warnings) = (_problems.Errors, _problems.Warnings);
+        context.FillRectangle(errors > 0 ? error : warnings > 0 ? warning : added, new Rect(3, 3, RulerWidth - 5, HealthHeight - 5), 2);
         ToolTip.SetTip(this, errors + warnings == 0 ? "No problems" : $"{errors} errors, {warnings} warnings (F8: next problem)");
 
         // The visible area.
@@ -629,72 +652,48 @@ public sealed class OverviewRuler : Control
         }
 
         // Git changes on the left third.
+        var removed = Brush("Shell.Diff.Removed");
+        var modified = Brush("Shell.Modified");
         foreach (var change in _gitChanges())
         {
             var brush = change.Kind switch
             {
-                Workbench.Git.LineChangeKind.Added => Brush("Shell.Diff.Added"),
-                Workbench.Git.LineChangeKind.Deleted => Brush("Shell.Diff.Removed"),
-                _ => Brush("Shell.Modified"),
+                Workbench.Git.LineChangeKind.Added => added,
+                Workbench.Git.LineChangeKind.Deleted => removed,
+                _ => modified,
             };
             context.FillRectangle(brush, new Rect(1, Y(change.Line), 3, Math.Max(2, change.Count * height / lines)));
         }
 
-        // Find results in the middle.
-        foreach (var line in SearchLines())
+        // Find results in the middle: the lines of the find widget's matches, one mark per pixel row.
+        var find = _find() is { IsOpen: true } widget ? widget : null;
+        var findKey = (find, find?.ResultsVersion ?? 0, lines, height);
+        if (findKey != _findKey)
         {
-            context.FillRectangle(Brush("Shell.Match"), new Rect(4, Y(line), 4, 2));
+            _findKey = findKey;
+            _findRows = find is null ? [] : RulerMarks.Rows(find.MatchLines, lines, top, height);
+        }
+
+        var match = Brush("Shell.Match");
+        foreach (var row in _findRows)
+        {
+            context.FillRectangle(match, new Rect(4, row, 4, 2));
         }
 
         // Breakpoints.
         foreach (var breakpoint in _services.Debugger.Breakpoints.For(_path()))
         {
-            context.DrawEllipse(Brush("Shell.Error"), null, new Point(6, Y(breakpoint.Line) + 1), 2, 2);
+            context.DrawEllipse(error, null, new Point(6, Y(breakpoint.Line) + 1), 2, 2);
         }
 
         // Diagnostics on the right, errors over warnings.
-        foreach (var diagnostic in _services.Diagnostics.For(_path()).Where(d => d.Severity <= DiagnosticSeverity.Warning).OrderByDescending(d => d.Severity))
+        foreach (var (row, isError) in _problems.Marks)
         {
-            var brush = diagnostic.Severity == DiagnosticSeverity.Error ? Brush("Shell.Error") : Brush("Shell.Warning");
-            context.FillRectangle(brush, new Rect(7, Y(diagnostic.Range.Start.Line + 1), RulerWidth - 7, 3));
+            context.FillRectangle(isError ? error : warning, new Rect(7, row, RulerWidth - 7, 3));
         }
 
         // The caret.
         context.FillRectangle(Brush("Shell.Foreground"), new Rect(1, Y(_editor.TextArea.Caret.Line), RulerWidth - 1, 1.5));
-    }
-
-    private IReadOnlyList<int> SearchLines()
-    {
-        if (_search() is not { IsClosed: false } panel || string.IsNullOrEmpty(panel.SearchPattern) || _editor.Document.TextLength > 4_000_000)
-        {
-            return [];
-        }
-
-        var key = (panel.SearchPattern, panel.MatchCase, panel.WholeWords, panel.UseRegex, _editor.Document.Version?.GetHashCode() ?? 0);
-        if (key == _searchKey)
-        {
-            return _searchLines;
-        }
-
-        _searchKey = key;
-        try
-        {
-            var pattern = panel.UseRegex ? panel.SearchPattern : Regex.Escape(panel.SearchPattern);
-            if (panel.WholeWords)
-            {
-                pattern = @"\b" + pattern + @"\b";
-            }
-
-            var regex = new Regex(pattern, (panel.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase) | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(200));
-            var document = _editor.Document;
-            _searchLines = [.. regex.Matches(document.Text).Take(5000).Select(m => document.GetLineByOffset(m.Index).LineNumber).Distinct()];
-        }
-        catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException)
-        {
-            _searchLines = [];
-        }
-
-        return _searchLines;
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -715,4 +714,70 @@ public sealed class OverviewRuler : Control
         _editor.TextArea.Caret.Line = line;
         e.Handled = true;
     }
+}
+
+/// <summary>
+/// The overview ruler's marks (M56): one per pixel row however many lines land on it, so a frame draws at most the
+/// ruler's height of them.
+/// </summary>
+internal static class RulerMarks
+{
+    /// <summary>The diagnostics' marks (an error over a warning on a row) and the counts of each.</summary>
+    internal sealed record ProblemMarks(IReadOnlyList<(double Row, bool Error)> Marks, int Errors, int Warnings);
+
+    /// <summary>The marks of errors and warnings over <paramref name="lines"/> lines drawn from <paramref name="top"/> down <paramref name="height"/>.</summary>
+    public static ProblemMarks ForProblems(IReadOnlyList<Diagnostic> diagnostics, int lines, double top, double height)
+    {
+        // 0: no mark, 1: a warning, 2: an error.
+        var rows = new byte[(int)Math.Ceiling(height) + 1];
+        int errors = 0, warnings = 0;
+        foreach (var diagnostic in diagnostics)
+        {
+            var isError = diagnostic.Severity == DiagnosticSeverity.Error;
+            if (!isError && diagnostic.Severity != DiagnosticSeverity.Warning)
+            {
+                continue;
+            }
+
+            errors += isError ? 1 : 0;
+            warnings += isError ? 0 : 1;
+            var row = RowOf(diagnostic.Range.Start.Line + 1, lines, height, rows.Length);
+            rows[row] = Math.Max(rows[row], isError ? (byte)2 : (byte)1);
+        }
+
+        var marks = new List<(double, bool)>();
+        for (var row = 0; row < rows.Length; row++)
+        {
+            if (rows[row] != 0)
+            {
+                marks.Add((top + row, rows[row] == 2));
+            }
+        }
+
+        return new ProblemMarks(marks, errors, warnings);
+    }
+
+    /// <summary>The rows of <paramref name="marked"/> (one-based line numbers), each once.</summary>
+    public static IReadOnlyList<double> Rows(IEnumerable<int> marked, int lines, double top, double height)
+    {
+        var rows = new bool[(int)Math.Ceiling(height) + 1];
+        foreach (var line in marked)
+        {
+            rows[RowOf(line, lines, height, rows.Length)] = true;
+        }
+
+        var result = new List<double>();
+        for (var row = 0; row < rows.Length; row++)
+        {
+            if (rows[row])
+            {
+                result.Add(top + row);
+            }
+        }
+
+        return result;
+    }
+
+    private static int RowOf(int line, int lines, double height, int rows) =>
+        Math.Clamp((int)((line - 1) * height / Math.Max(1, lines)), 0, rows - 1);
 }

@@ -187,7 +187,7 @@ public sealed class LanguageTests
         ShellFixture.RenderFrame(f.Window);
         var widget = BoundsInWindow(editor.Search.GetVisualDescendants().OfType<Border>().First(b => b.IsEffectivelyVisible && b.Bounds.Height > 0)).Intersect(band);
         Assert.True(widget.Width > 0 && widget.Height > 0, $"the find widget {editor.Search.Bounds} doesn't overlap the band {band}");
-        Assert.True(Within<AvaloniaEdit.Search.SearchPanel>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {Describe(HitAt(widget.Center))}");
+        Assert.True(Within<FindWidget>(HitAt(widget.Center)), $"the find widget at {widget.Center}: {Describe(HitAt(widget.Center))}");
         editor.Search.Close();
         ShellFixture.Pump();
 

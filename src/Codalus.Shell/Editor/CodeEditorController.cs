@@ -10,7 +10,6 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
-using AvaloniaEdit.Search;
 using Codalus.LanguageServices.Client;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Rpc;
@@ -50,7 +49,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DefinitionLink _link;
     private readonly HighlightRenderer _highlights;
     private readonly FoldingManager _folding;
-    private readonly SearchPanel _search;
+    private readonly FindWidget _search;
     private readonly MultiCaretController _multiCaret;
     private readonly DispatcherTimer _hoverTimer;
     private readonly BreakpointMargin _breakpointMargin;
@@ -172,7 +171,7 @@ public sealed partial class CodeEditorController : IDisposable
         view.LineTransformers.Add(_longLines);
         _folding = FoldingManager.Install(editor.TextArea);
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
-        _search = SearchPanel.Install(editor);
+        _search = new FindWidget(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
         _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
@@ -289,7 +288,8 @@ public sealed partial class CodeEditorController : IDisposable
 
     public MultiCaretController MultiCaret => _multiCaret;
 
-    public SearchPanel Search => _search;
+    /// <summary>Quick Find and Quick Replace; the view places it over the editor.</summary>
+    public FindWidget Search => _search;
 
     public bool IsCompletionOpen => _completion is not null;
 
@@ -1079,12 +1079,11 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
-        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed, unless
-        // the item's edit typed it already.
+        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed.
         if (_completion is { } completion && e.Text is { Length: 1 } committing && !e.Handled && Editor.SelectionLength == 0
-            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]) && completion.CommitWith(committing[0]))
+            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]))
         {
-            e.Handled = true;
+            completion.CommitWith(committing[0]);
             return;
         }
 
@@ -1258,6 +1257,11 @@ public sealed partial class CodeEditorController : IDisposable
         if (e.Text is { Length: 1 } entered)
         {
             AutoClose(entered);
+            if (_lateResolve is { ByCharacter: true, Version: null } late)
+            {
+                late.Version = Model.Version; // the character that committed an item is typed (and its pair closed)
+            }
+
             if (entered == "/" && AtDocCommentStart())
             {
                 _ = DocCommentAsync();
@@ -1483,7 +1487,6 @@ public sealed partial class CodeEditorController : IDisposable
                 window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit)
                 {
                     CommitCharacters = ours ? new HashSet<char>() : item.CommitCharacters is { } own ? CommitCharacterSet(own) : fromEmbedded ? new HashSet<char>() : allCommitCharacters,
-                    ResolveForCommit = ours || fromEmbedded || item.Data is null ? null : i => client.ResolveCompletionAsync(i, CancellationToken.None),
                 });
             }
 
@@ -1578,10 +1581,43 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>A server's commit characters (single characters only) as a set.</summary>
     private static HashSet<char> CommitCharacterSet(string[]? characters) => [.. (characters ?? []).Where(c => c.Length == 1).Select(c => c[0])];
 
+    /// <summary>A completion item for this editor (tests: committing it as the list does).</summary>
+    internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve) =>
+        new(item, resolve, Commit);
+
+    /// <summary>
+    /// A commit made before its item's resolve arrived: the text it inserted, and the document's version once the commit
+    /// was done (by a commit character: once the editor typed it).
+    /// </summary>
+    private sealed class LateResolve(CompletionData data, int start, int length, int typedFrom, bool byCharacter)
+    {
+        public CompletionData Data { get; } = data;
+
+        public int Start { get; } = start;
+
+        public int Length { get; } = length;
+
+        /// <summary>Where the typed text started: additional edits (usings) apply only before it.</summary>
+        public int TypedFrom { get; } = typedFrom;
+
+        public bool ByCharacter { get; } = byCharacter;
+
+        public int? Version { get; set; }
+    }
+
+    private LateResolve? _lateResolve;
+
+    /// <summary>
+    /// Commits a completion item without waiting for the language service (M56: the UI thread waited up to 300 ms for a
+    /// resolve on every commit character): with the resolve prefetched while the item was selected if it has arrived, else
+    /// with the item's own text; a resolve that arrives later applies its edits only while the document is as the commit
+    /// left it.
+    /// </summary>
     private void Commit(CompletionData data, ISegment segment)
     {
-        var resolved = data.ResolvedWithin(TimeSpan.FromMilliseconds(300));
-        data.IncludedCommitCharacter = data.CommitCharacter is not null && resolved?.IncludesCommitCharacter == true;
+        _lateResolve = null;
+        _ = data.Resolve(); // prefetched when the item was selected; started now at the latest
+        var resolved = data.Resolved;
         if ((resolved ?? data.Item) is { InsertTextFormat: InsertTextFormat.Snippet } snippet)
         {
             // A snippet (ours, or a server's): its text goes through the snippet engine, with tab stops (M12b).
@@ -1614,22 +1650,86 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             document.Replace(replaceStart, replaceLength, text);
-            var caretAfter = replaceStart + text.Length;
-
-            // Additional edits refer to the text when completion was requested; they sit before the completed span
-            // (usings at the top), so applying them last-first from the end keeps their positions valid.
-            foreach (var edit in (resolved?.AdditionalTextEdits ?? []).OrderByDescending(e => e.Range.Start.Line).ThenByDescending(e => e.Range.Start.Character))
+            var caretAfter = replaceStart + text.Length + ApplyAdditionalEdits(resolved, segment.Offset);
+            Editor.CaretOffset = Math.Clamp(caretAfter, 0, document.TextLength);
+            if (resolved is null && data.Item.Data is not null)
             {
-                var start = Model.OffsetAt(edit.Range.Start);
-                var end = Model.OffsetAt(edit.Range.End);
-                if (end <= segment.Offset)
-                {
-                    document.Replace(start, end - start, edit.NewText);
-                    caretAfter += edit.NewText.Length - (end - start);
-                }
+                _lateResolve = new LateResolve(data, replaceStart, text.Length, segment.Offset, byCharacter: data.CommitCharacter is not null);
+            }
+        }
+
+        if (_lateResolve is { } late)
+        {
+            if (!late.ByCharacter)
+            {
+                late.Version = Model.Version; // committed by Enter or Tab: done
             }
 
-            Editor.CaretOffset = Math.Clamp(caretAfter, 0, document.TextLength);
+            _ = ApplyLateResolveAsync(late);
+        }
+    }
+
+    /// <summary>
+    /// Applies a resolved item's additional edits (usings): they refer to the text when completion was requested and sit
+    /// before the typed text, so applying them last-first keeps their positions valid. Returns how far they moved it.
+    /// </summary>
+    private int ApplyAdditionalEdits(LanguageServices.Protocol.CompletionItem? resolved, int typedFrom)
+    {
+        var moved = 0;
+        foreach (var edit in (resolved?.AdditionalTextEdits ?? []).OrderByDescending(e => e.Range.Start.Line).ThenByDescending(e => e.Range.Start.Character))
+        {
+            var start = Model.OffsetAt(edit.Range.Start);
+            var end = Model.OffsetAt(edit.Range.End);
+            if (end <= typedFrom)
+            {
+                Model.Text.Replace(start, end - start, edit.NewText);
+                moved += edit.NewText.Length - (end - start);
+            }
+        }
+
+        return moved;
+    }
+
+    /// <summary>
+    /// Applies the resolve of an item committed without it, if the document is still as the commit left it: its edit in
+    /// place of the item's text, and its additional edits, in the commit's undo step. Typed on meanwhile, they're dropped.
+    /// </summary>
+    private async Task ApplyLateResolveAsync(LateResolve late)
+    {
+        LanguageServices.Protocol.CompletionItem resolved;
+        try
+        {
+            resolved = await late.Data.Resolve().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (IsTransient(ex))
+        {
+            return;
+        }
+
+        if (_disposed || _lateResolve != late || late.Version != Model.Version || resolved.InsertTextFormat == InsertTextFormat.Snippet)
+        {
+            return;
+        }
+
+        _lateResolve = null;
+        var document = Model.Text;
+        var text = resolved.TextEdit?.NewText ?? resolved.InsertText ?? resolved.Label;
+        document.UndoStack.StartContinuedUndoGroup();
+        try
+        {
+            using (document.RunUpdate())
+            {
+                if (document.GetText(late.Start, late.Length) != text)
+                {
+                    document.Replace(late.Start, late.Length, text);
+                }
+
+                ApplyAdditionalEdits(resolved, late.TypedFrom);
+            }
+        }
+        finally
+        {
+            document.UndoStack.EndUndoGroup();
         }
     }
 
@@ -1735,6 +1835,11 @@ public sealed partial class CodeEditorController : IDisposable
             else if (_multiCaret.ExtraCarets.Count > 0)
             {
                 _multiCaret.Clear();
+                e.Handled = true;
+            }
+            else if (_search.IsOpen)
+            {
+                _search.Close(); // as AvaloniaEdit's search panel closed on Escape in the text
                 e.Handled = true;
             }
         }
@@ -2506,7 +2611,7 @@ public sealed partial class CodeEditorController : IDisposable
         Model.PropertyChanged -= OnModelPropertyChanged;
         Model.Text.Changing -= OnDocumentChanging;
         FoldingManager.Uninstall(_folding);
-        _search.Uninstall();
+        _search.Detach();
         _multiCaret.Dispose();
         var view = Editor.TextArea.TextView;
         view.LineTransformers.Remove(_colorizer);
