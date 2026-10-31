@@ -7,6 +7,7 @@ using Avalonia.VisualTree;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Folding;
 using Codalus.Shell.Editor;
+using Codalus.Workbench.FileSystem;
 
 namespace Codalus.Shell.Tests;
 
@@ -143,41 +144,204 @@ public sealed class EditorLargeTextTests
     }
 
     [AvaloniaFact]
-    public async Task A_reload_replaces_only_what_changed_on_disk()
+    public async Task A_reload_replaces_only_what_changed_on_disk_one_read_at_a_time()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "codalus-reload-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(folder);
-        try
+        // A file system whose reads can be held and whose changes are announced by the test, not a watcher's timing.
+        var files = new HeldFile("line 1\nline 2\n");
+        var root = Path.Combine(Path.GetTempPath(), "codalus-reload-" + Guid.NewGuid().ToString("N"));
+        using var mount = FileSystems.Mount(root, files);
+        var path = Path.Combine(root, "app.log");
+        using var document = await CodeDocument.OpenAsync(path, TestContext.Current.CancellationToken); // built off the UI thread, used on it
+        await ShellFixture.PumpUntil(() => files.Stats > 0); // the state it opened with
+        var changes = new List<CodeDocumentChangedEventArgs>();
+        document.ContentChanged += (_, e) => changes.Add(e);
+
+        // A log written to: the reload is what was appended.
+        files.Write("line 1\nline 2\nline 3\n");
+        files.Notify(path);
+        await ShellFixture.PumpUntil(() => changes.Count == 1);
+        var appended = Assert.Single(changes[0].Changes);
+        Assert.Equal("line 3\n", appended.Text);
+        Assert.Equal((2, 0, 2, 0), RangeOf(appended));
+
+        // Written again while that file is read: no second read meanwhile, then one for what the first didn't have.
+        files.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        files.Write("line 1\nLINE 2\nline 3\n");
+        files.Notify(path);
+        await ShellFixture.PumpUntil(() => files.Reading == 1);
+        var stats = files.Stats;
+        files.Write("line 1\nLINE 2\nline 3\nline 4\n");
+        files.Notify(path);
+        await ShellFixture.PumpUntil(() => files.Stats > stats); // the watcher's check came
+        ShellFixture.Pump();
+        Assert.Equal(1, files.Reading);
+        var hold = files.Hold;
+        files.Hold = null;
+        hold.SetResult();
+        await ShellFixture.PumpUntil(() => changes.Count == 3);
+        Assert.Equal(1, files.MostReading);
+        var middle = Assert.Single(changes[1].Changes);
+        Assert.Equal(("LINE", (1, 0, 1, 4)), (middle.Text, RangeOf(middle)));
+        var fourth = Assert.Single(changes[2].Changes);
+        Assert.Equal(("line 4\n", (3, 0, 3, 0)), (fourth.Text, RangeOf(fourth)));
+        Assert.Equal("line 1\nLINE 2\nline 3\nline 4\n", document.Text.Text);
+        Assert.False(document.IsModified);
+
+        // The same text: no change at all.
+        await document.ReloadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3, changes.Count);
+
+        // Typed into while a change on disk is read: that's a conflict, and what was typed stays.
+        var conflicts = 0;
+        document.ConflictDetected += (_, _) => conflicts++;
+        files.Hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        files.Write("line 1\nLINE 2\nline 3\nline 4\nline 5\n");
+        files.Notify(path);
+        await ShellFixture.PumpUntil(() => files.Reading == 1);
+        document.Text.Insert(0, "// mine\n");
+        hold = files.Hold;
+        files.Hold = null;
+        hold.SetResult();
+        await ShellFixture.PumpUntil(() => conflicts == 1);
+        Assert.Equal("// mine\nline 1\nLINE 2\nline 3\nline 4\n", document.Text.Text);
+        Assert.True(document.IsModified);
+    }
+
+    [AvaloniaFact]
+    public async Task A_reload_of_new_line_endings_never_splits_a_line_break()
+    {
+        var files = new HeldFile("a\r\nb\r\nc\r\n");
+        var root = Path.Combine(Path.GetTempPath(), "codalus-reload-" + Guid.NewGuid().ToString("N"));
+        using var mount = FileSystems.Mount(root, files);
+        var path = Path.Combine(root, "crlf.txt");
+        using var document = await CodeDocument.OpenAsync(path, TestContext.Current.CancellationToken);
+        var changes = new List<CodeDocumentChangedEventArgs>();
+        document.ContentChanged += (_, e) => changes.Add(e);
+
+        // CRLF to LF (git's autocrlf, a formatter): the change ends after a line's "\r\n", never between its two characters,
+        // which a language service would take as the line's end and keep the "\r".
+        files.Write("a\nb\nc\n");
+        await document.ReloadAsync(TestContext.Current.CancellationToken);
+        var change = Assert.Single(Assert.Single(changes).Changes);
+        Assert.Equal(("\nb\nc\n", (0, 1, 3, 0)), (change.Text, RangeOf(change)));
+        Assert.Equal("a\nb\nc\n", document.Text.Text);
+    }
+
+    [Theory]
+    [InlineData("a\r\nb\r\n", "a\nb\n", 1, 5, "\nb\n")] // ends after the "\r\n", not between
+    [InlineData("a\nb", "a\r\nb", 1, 0, "\r")] // an insertion before a "\n" splits nothing
+    [InlineData("x\U0001F600y", "x\U0001F601y", 1, 2, "\U0001F601")] // starts before the pair, not inside it
+    [InlineData("line 1\n", "line 1\nline 2\n", 7, 0, "line 2\n")]
+    public void A_difference_never_starts_or_ends_inside_a_line_break_or_a_surrogate_pair(string before, string after, int start, int removed, string inserted)
+    {
+        Assert.Equal((start, removed, inserted), CodeDocument.Difference(before, after));
+        Assert.Equal(after, before[..start] + inserted + before[(start + removed)..]);
+    }
+
+    private static (int, int, int, int) RangeOf(LanguageServices.Protocol.TextDocumentContentChangeEvent change) =>
+        (change.Range!.Start.Line, change.Range.Start.Character, change.Range.End.Line, change.Range.End.Character);
+
+    /// <summary>
+    /// A remote file system of one file: reads can be held (<see cref="Hold"/>) and return what the file had when they
+    /// began, and changes are announced by <see cref="Notify"/>.
+    /// </summary>
+    private sealed class HeldFile(string initial) : IFileSystemProvider
+    {
+        private readonly Lock _gate = new();
+        private byte[] _content = Encoding.UTF8.GetBytes(initial);
+        private DateTime _modified = new(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private Action<IReadOnlyList<FileChangeEvent>>? _changed;
+        private int _stats;
+        private int _reading;
+        private int _mostReading;
+
+        public TaskCompletionSource? Hold { get; set; }
+
+        public int Stats => Volatile.Read(ref _stats);
+
+        /// <summary>The reads under way now, and the most there were at once.</summary>
+        public int Reading => Volatile.Read(ref _reading);
+
+        public int MostReading => Volatile.Read(ref _mostReading);
+
+        public bool IsRemote => true;
+
+        public void Write(string text)
         {
-            var path = Path.Combine(folder, "app.log");
-            await File.WriteAllTextAsync(path, "line 1\nline 2\n", TestContext.Current.CancellationToken);
-            using var document = await CodeDocument.OpenAsync(path, TestContext.Current.CancellationToken); // built off the UI thread, used on it
-            var changes = new List<CodeDocumentChangedEventArgs>();
-            document.ContentChanged += (_, e) => changes.Add(e);
-
-            // A log written to: the reload is what was appended.
-            await File.AppendAllTextAsync(path, "line 3\n", TestContext.Current.CancellationToken);
-            await document.ReloadAsync(TestContext.Current.CancellationToken);
-            var appended = Assert.Single(Assert.Single(changes).Changes);
-            Assert.Equal("line 3\n", appended.Text);
-            Assert.Equal((2, 0, 2, 0), (appended.Range!.Start.Line, appended.Range.Start.Character, appended.Range.End.Line, appended.Range.End.Character));
-
-            // A change in the middle: the part between what stayed.
-            await File.WriteAllTextAsync(path, "line 1\nLINE 2\nline 3\n", TestContext.Current.CancellationToken);
-            await document.ReloadAsync(TestContext.Current.CancellationToken);
-            var middle = Assert.Single(changes[1].Changes);
-            Assert.Equal("LINE", middle.Text);
-            Assert.Equal((1, 0, 1, 4), (middle.Range!.Start.Line, middle.Range.Start.Character, middle.Range.End.Line, middle.Range.End.Character));
-            Assert.Equal("line 1\nLINE 2\nline 3\n", document.Text.Text);
-            Assert.False(document.IsModified);
-
-            // The same text: no change at all.
-            await document.ReloadAsync(TestContext.Current.CancellationToken);
-            Assert.Equal(2, changes.Count);
+            lock (_gate)
+            {
+                (_content, _modified) = (Encoding.UTF8.GetBytes(text), _modified.AddSeconds(1));
+            }
         }
-        finally
+
+        public void Notify(string path) => _changed?.Invoke([new(path, "changed")]);
+
+        public Task<FileEntryInfo> StatAsync(string path, CancellationToken cancellationToken)
         {
-            Directory.Delete(folder, recursive: true);
+            Interlocked.Increment(ref _stats);
+            lock (_gate)
+            {
+                return Task.FromResult(new FileEntryInfo(true, false, _content.Length, _modified));
+            }
+        }
+
+        public async Task<byte[]> ReadAllBytesAsync(string path, CancellationToken cancellationToken)
+        {
+            byte[] content;
+            lock (_gate)
+            {
+                content = _content;
+            }
+
+            var reading = Interlocked.Increment(ref _reading);
+            InterlockedMax(ref _mostReading, reading);
+            try
+            {
+                if (Hold is { } hold)
+                {
+                    await hold.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                return content;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _reading);
+            }
+        }
+
+        public Task WriteAllBytesAsync(string path, byte[] content, CancellationToken cancellationToken)
+        {
+            Write(Encoding.UTF8.GetString(content));
+            return Task.CompletedTask;
+        }
+
+        public IDisposable Watch(string path, bool recursive, Action<IReadOnlyList<FileChangeEvent>> changed)
+        {
+            _changed = changed;
+            return new Unwatch(this);
+        }
+
+        public Task<IReadOnlyList<FileSystemEntry>> ReadDirectoryAsync(string path, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task DeleteAsync(string path, bool recursive, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task RenameAsync(string source, string target, bool overwrite, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        private static void InterlockedMax(ref int location, int value)
+        {
+            var current = Volatile.Read(ref location);
+            while (value > current && Interlocked.CompareExchange(ref location, value, current) is var seen && seen != current)
+            {
+                current = seen;
+            }
+        }
+
+        private sealed class Unwatch(HeldFile files) : IDisposable
+        {
+            public void Dispose() => files._changed = null;
         }
     }
 
