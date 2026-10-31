@@ -281,6 +281,39 @@ public class SolutionExplorerShowAllFilesTests
     }
 
     [AvaloniaFact]
+    public async Task A_node_modules_that_holds_items_is_gone_into_only_once_its_expanded()
+    {
+        // A plain SDK project's default globs take all of node_modules as items, so it was in the folders each listing went
+        // into: every listing walked its thousands of files, up to the limit, after which the project's other files went
+        // missing (M57). .bin, a dot folder, isn't an item: it shows only once node_modules is listed.
+        var (f, folder) = await OpenAsync(folder =>
+        {
+            foreach (var file in new[] { Path.Combine(folder, "src", "App", "node_modules", "left-pad", "index.js"), Path.Combine(folder, "src", "App", "node_modules", ".bin", "left-pad") })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllText(file, string.Empty);
+            }
+        });
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var modules = Path.Combine(folder, "src", "App", "node_modules");
+        var bin = Path.Combine(modules, ".bin");
+
+        Assert.True(Find(explorer.Root!, "f:" + Path.Combine(modules, "left-pad", "index.js")) is { IsExcluded: false }); // an item
+        Assert.Null(Find(explorer.Root!, "d:" + bin));
+
+        explorer.Reveal("d:" + modules);
+        var row = explorer.Selected!;
+        Assert.True(row is { IsExcluded: false, HasChildren: true } && row.Id == "d:" + modules);
+        var listings = explorer.Listings;
+        explorer.SetExpanded(row, true);
+        await SettledAsync(explorer);
+        Assert.Equal(listings + 1, explorer.Listings);
+        Assert.True(Find(explorer.Root!, "d:" + bin) is { IsExcluded: true, Kind: ExplorerNodeKind.Folder });
+        Assert.DoesNotContain(explorer.Rows, r => r.Id.EndsWith("|listing", StringComparison.Ordinal));
+    }
+
+    [AvaloniaFact]
     public async Task Expanding_a_folder_that_two_projects_share_lists_both()
     {
         // Core's folder gets a second project: both have its bin, under one id, and it expands in both.

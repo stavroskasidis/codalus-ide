@@ -88,13 +88,19 @@ public sealed record ExplorerOptions
 /// The folder view's listing of one folder (ADR 0033, M57): what is directly in it, and whether the build host cut it at
 /// its limit. Each expanded folder is listed alone, so a change lists again only the folders it names.
 /// </summary>
-public sealed class FolderListing(IReadOnlyList<DirectoryEntry> entries, bool truncated)
+public sealed class FolderListing(IReadOnlyList<DirectoryEntry> entries, bool truncated, int? listed = null)
 {
     private HashSet<string>? _folders;
 
     public IReadOnlyList<DirectoryEntry> Entries { get; } = entries;
 
     public bool Truncated { get; } = truncated;
+
+    /// <summary>
+    /// The entries the build host's listing took, which a cut row counts: this folder's own, or for a folder of the search
+    /// box's listing of the whole workspace folder, that listing's.
+    /// </summary>
+    public int Listed { get; } = listed ?? entries.Count;
 
     /// <summary>Whether <paramref name="path"/> is a folder in this one (built on the first call: one thread at a time).</summary>
     public bool HasFolder(string path)
@@ -119,7 +125,10 @@ public sealed class FolderListing(IReadOnlyList<DirectoryEntry> entries, bool tr
     /// <summary>
     /// A listing of the whole of <paramref name="root"/> (the search box's) as listings of each folder: every folder it
     /// went into has one, empty or not; a folder it didn't go into (<see cref="DirectoryEntry.Skipped"/>) has none. A cut
-    /// listing's root says so.
+    /// listing says so at the workspace folder and in the folder it stopped in (its last entry's), counting the whole
+    /// listing's entries; and the folders in it that have nothing in it have none, since it may have stopped before going
+    /// into them (they show unlisted, not empty). The workspace folder's row counted its own entries, and those folders
+    /// showed as empty ones (M57).
     /// </summary>
     public static Dictionary<string, FolderListing> FromTree(string root, IReadOnlyList<DirectoryEntry> entries, bool truncated)
     {
@@ -141,7 +150,21 @@ public sealed class FolderListing(IReadOnlyList<DirectoryEntry> entries, bool tr
             }
         }
 
-        return children.ToDictionary(c => c.Key, c => new FolderListing(c.Value, truncated && SolutionService.PathComparer.Equals(c.Key, root)), SolutionService.PathComparer);
+        var stoppedIn = truncated && entries.Count > 0 ? System.IO.Path.GetDirectoryName(entries[^1].Path) : null;
+        var listings = new Dictionary<string, FolderListing>(SolutionService.PathComparer);
+        foreach (var (folder, list) in children)
+        {
+            var isRoot = SolutionService.PathComparer.Equals(folder, root);
+            if (truncated && list.Count == 0 && !isRoot)
+            {
+                continue;
+            }
+
+            var cut = truncated && (isRoot || SolutionService.PathComparer.Equals(folder, stoppedIn));
+            listings[folder] = new FolderListing(list, cut, cut ? entries.Count : null);
+        }
+
+        return listings;
     }
 }
 
@@ -354,7 +377,7 @@ public static class SolutionTree
                         IsMuted = muted,
                     };
                 }),
-            .. listing.Truncated ? [CutRow(id, listing.Entries.Count)] : Array.Empty<ExplorerNode>(),
+            .. listing.Truncated ? [CutRow(id, listing.Listed)] : Array.Empty<ExplorerNode>(),
         ];
 
         var count = solution.Projects.Length;
@@ -464,6 +487,32 @@ public static class SolutionTree
 
     /// <summary>Whether a project's items show in their compile order rather than by name (F#, M36).</summary>
     public static bool IsOrdered(string projectPath) => projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether <paramref name="folder"/>, below <paramref name="root"/>, is or is in a folder the build host lists only
+    /// when asked (<see cref="DirectoryEntry.Skipped"/>: <c>node_modules</c>, <c>.vs</c>, <c>.idea</c>): Show All Files
+    /// goes into one only once it's expanded, even when it holds items (a plain SDK project's default globs take all of
+    /// node_modules), as the folder view does (M57).
+    /// </summary>
+    public static bool IsInOnDemandFolder(string folder, string root)
+    {
+        var below = Below(root);
+        if (!IsBelow(folder, below))
+        {
+            return false;
+        }
+
+        foreach (var segment in folder[below.Length..].Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))
+        {
+            if (segment.Equals("node_modules", StringComparison.OrdinalIgnoreCase) || segment.Equals(".vs", StringComparison.OrdinalIgnoreCase)
+                || segment.Equals(".idea", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// The folders of a project's tree that hold its items, with the project's own folder: Show All Files lists what is

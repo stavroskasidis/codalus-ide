@@ -299,6 +299,49 @@ public class SolutionExplorerFolderViewTests
     }
 
     [AvaloniaFact]
+    public async Task After_the_build_host_restarts_the_folders_shown_are_listed_again_and_a_failed_one_with_them()
+    {
+        // The build host reopens the same folder after its restart, whose change listed nothing: a file added while it was
+        // down never showed in the expanded folder, and a folder whose listing failed meanwhile stayed empty, with no chevron
+        // to expand it again by (M57).
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var docs = Path.Combine(folder, "docs");
+        var src = Path.Combine(folder, "src");
+        var added = Path.Combine(docs, "while-down.md");
+        await ExpandAsync(explorer, docs);
+
+        // Held down: the supervisor restarts it once its crash's handlers have run. The file comes then, with no watcher.
+        using var crashed = new ManualResetEventSlim();
+        using var resume = new ManualResetEventSlim();
+        var restarted = false;
+        f.Shell.Solutions.HostCrashed += (_, _) =>
+        {
+            File.WriteAllText(added, string.Empty);
+            crashed.Set();
+            resume.Wait(TimeSpan.FromSeconds(60));
+        };
+        f.Shell.Solutions.HostRestarted += (_, _) => Volatile.Write(ref restarted, true);
+        using (var host = System.Diagnostics.Process.GetProcessById(f.Shell.Solutions.HostProcessId!.Value))
+        {
+            host.Kill();
+        }
+
+        await ShellFixture.PumpUntil(() => crashed.IsSet, seconds: 60);
+        await ListedAsync(explorer, () => explorer.SetExpanded(Row(explorer, "d:" + src)!, true), folders: 1);
+        Assert.True(Find(explorer.Root!, "d:" + src) is { IsUnlisted: false, Children.Count: 0 }); // failed: empty, nothing waits
+        Assert.DoesNotContain(explorer.Rows, IsLoadingRow);
+
+        resume.Set();
+        await ShellFixture.PumpUntil(() => Volatile.Read(ref restarted), seconds: 120);
+        await ShellFixture.PumpUntil(() => Row(explorer, "f:" + added) is not null && Row(explorer, "d:" + Path.Combine(src, "App")) is not null, seconds: 60,
+            describe: () => string.Join(", ", explorer.Rows.Select(r => r.Name)));
+        await SettledAsync(explorer);
+        Assert.DoesNotContain(explorer.Rows, IsLoadingRow);
+    }
+
+    [AvaloniaFact]
     public async Task A_build_lists_again_the_bin_and_obj_folders_listed_which_the_watcher_leaves_out()
     {
         var (f, folder) = await OpenAsync();
@@ -377,28 +420,66 @@ public class SolutionExplorerFolderViewTests
     }
 
     [AvaloniaFact]
+    public async Task Sync_in_folder_modes_solution_view_names_the_folder_or_the_loaded_projects_not_a_solution()
+    {
+        // Folder mode has no solution: its solution view said "isn't in the solution" (M57).
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        explorer.SetFolderView(false);
+        await SettledAsync(explorer);
+
+        await f.Shell.OpenFileAsync(Path.Combine(folder, "README.md"));
+        f.Shell.StatusBar.ClearMessage();
+        explorer.SyncWithActiveDocument();
+        Assert.Equal("The active document isn't in a loaded project.", f.Shell.StatusBar.Message);
+
+        var outside = Path.Combine(f.UserData, "outside.txt");
+        await File.WriteAllTextAsync(outside, string.Empty, TestContext.Current.CancellationToken);
+        await f.Shell.OpenFileAsync(outside);
+        f.Shell.StatusBar.ClearMessage();
+        explorer.SyncWithActiveDocument();
+        Assert.Equal(NotInFolder, f.Shell.StatusBar.Message);
+    }
+
+    [AvaloniaFact]
     public async Task A_sync_waits_for_the_tree_built_with_its_listings_while_another_folder_is_listed()
     {
         // Another listed folder (docs) changes while the listings Sync waits for are on their way: its batch started before
         // the tree was built with theirs, found the file in the old tree nowhere and no listing of its folders on its way,
         // and said it wasn't in the folder (the Everyday flow's flake, M57).
-        var (f, folder) = await OpenAsync();
+        const int Chains = 20;
+        var (f, folder) = await OpenAsync(folder => Write(folder, [.. Enumerable.Range(0, Chains).Select(i => $"chains/c{i:00}/a/b/File.cs")]));
         await using var _ = f;
         var explorer = f.Shell.Explorer;
         var docs = Path.Combine(folder, "docs");
-        var person = Path.Combine(folder, "src", "App", "Models", "Person.cs");
         await ExpandAsync(explorer, docs);
-        await f.Shell.OpenFileAsync(person);
-        await SettledAsync(explorer);
-        f.Shell.StatusBar.ClearMessage();
 
-        explorer.SyncWithActiveDocument();
-        var chain = explorer.LoadDiskAsync(); // src, App and Models, on their way
-        Assert.False(chain.IsCompleted);
-        explorer.OnFilesChanged([docs]);
-        await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == person || f.Shell.StatusBar.Message is not null, seconds: 60);
-        Assert.Null(f.Shell.StatusBar.Message);
-        Assert.Equal(person, explorer.Selected?.Node.Path);
+        // The chain's batch has to be on its way when docs changes. The build host can answer it before the batch even
+        // awaited it (the UI thread held up on a loaded machine): then that chain's folders are listed, and the next chain's
+        // file is synced instead. The test assumed it never did, and failed 1 run in 9 beside another class.
+        for (var i = 0; ; i++)
+        {
+            Assert.True(i < Chains, "Every chain's batch was answered before it awaited its listings.");
+            var file = Path.Combine(folder, "chains", $"c{i:00}", "a", "b", "File.cs");
+            await f.Shell.OpenFileAsync(file);
+            await SettledAsync(explorer);
+            f.Shell.StatusBar.ClearMessage();
+
+            explorer.SyncWithActiveDocument();
+            var chain = explorer.LoadDiskAsync(); // chains, c<i>, a and b, on their way
+            if (chain.IsCompleted)
+            {
+                await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == file || f.Shell.StatusBar.Message is not null, seconds: 60);
+                continue;
+            }
+
+            explorer.OnFilesChanged([docs]);
+            await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == file || f.Shell.StatusBar.Message is not null, seconds: 60);
+            Assert.Null(f.Shell.StatusBar.Message);
+            Assert.Equal(file, explorer.Selected?.Node.Path);
+            return;
+        }
     }
 
     [AvaloniaFact]
@@ -461,6 +542,19 @@ public class SolutionExplorerFolderViewTests
         await using var _ = f;
         var explorer = f.Shell.Explorer;
         var big = Path.Combine(folder, "big");
+        var limit = 20_000.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+
+        // The search box's listing of the whole folder is cut too, in big: big and the workspace folder say so, counting the
+        // listing's entries (the workspace folder's row counted its own six), and node_modules, which the listing doesn't
+        // go into, says it wasn't searched (it showed as an empty folder, as did the folders the listing stopped before).
+        explorer.Filter = "node_modules";
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering && Row(explorer, "d:" + Path.Combine(folder, "node_modules")) is not null, seconds: 60);
+        var cutText = $"Only the first {limit} entries are shown. Find the others with Find in Files or the terminal.";
+        Assert.Equal(
+            [("Folder 'ws'", 0), ("big", 1), (cutText, 2), ("node_modules", 1), ("Not searched. Clear the search box and expand the folder to see what is in it.", 2), (cutText, 1)],
+            explorer.Rows.Select(r => (r.Name, r.Depth)));
+        Assert.True(explorer.Rows.Where(r => r.Node.Kind == ExplorerNodeKind.Message).All(r => r.IsDimmed));
+        explorer.Filter = string.Empty;
 
         await ExpandAsync(explorer, big);
         var node = Find(explorer.Root!, "d:" + big)!;

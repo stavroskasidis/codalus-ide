@@ -187,17 +187,45 @@ public sealed class SolutionTreeTests
     public void A_whole_listing_becomes_each_folders_listing_for_the_search_box()
     {
         // The search box lists the workspace folder in one go: every folder it went into has a listing, an empty one too;
-        // node_modules, which it doesn't go into, has none, and a cut listing says so at the workspace folder.
+        // node_modules, which it doesn't go into, has none.
         var entries = new[] { Dir("ws", "src"), Dir("ws", "src", "Empty"), Doc("ws", "src", "A.cs"), Dir("ws", "node_modules") with { Skipped = true }, Doc("ws", "README.md") };
 
-        var listings = FolderListing.FromTree(P("ws") + Path.DirectorySeparatorChar, entries, truncated: true);
+        var listings = FolderListing.FromTree(P("ws") + Path.DirectorySeparatorChar, entries, truncated: false);
 
         Assert.Equal(new[] { P("ws"), P("ws", "src"), P("ws", "src", "Empty") }.Order(StringComparer.Ordinal), listings.Keys.Order(StringComparer.Ordinal));
         Assert.Equal([P("ws", "src"), P("ws", "node_modules"), P("ws", "README.md")], listings[P("ws")].Entries.Select(e => e.Path));
         Assert.Equal([P("ws", "src", "Empty"), P("ws", "src", "A.cs")], listings[P("ws", "src")].Entries.Select(e => e.Path));
         Assert.Empty(listings[P("ws", "src", "Empty")].Entries);
-        Assert.Equal([true, false, false], new[] { P("ws"), P("ws", "src"), P("ws", "src", "Empty") }.Select(f => listings[f].Truncated));
+        Assert.DoesNotContain(listings.Values, l => l.Truncated);
         Assert.True(listings[P("ws")].HasFolder(P("ws", "src")) && !listings[P("ws")].HasFolder(P("ws", "README.md")));
+    }
+
+    [Fact]
+    public void A_whole_listing_cut_at_the_limit_counts_its_entries_and_leaves_the_folders_it_didnt_reach_unlisted()
+    {
+        // The build host walked the workspace folder, then src, and stopped in src at its limit: other and src/Later, listed
+        // in their parents, were never gone into. They showed as listed, empty folders, and the workspace folder's row
+        // counted its own three entries, not the listing's six (M57).
+        var entries = new[]
+        {
+            Dir("ws", "other"), Dir("ws", "src"), Doc("ws", "README.md"),
+            Dir("ws", "src", "Later"), Doc("ws", "src", "A.cs"), Doc("ws", "src", "B.cs"),
+        };
+        var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+
+        var listings = FolderListing.FromTree(P("ws"), entries, truncated: true);
+        var root = SolutionTree.FolderView(solution, listings);
+
+        Assert.Equal(new[] { P("ws"), P("ws", "src") }.Order(StringComparer.Ordinal), listings.Keys.Order(StringComparer.Ordinal));
+        Assert.True(Child(root, "other") is { IsUnlisted: true, Children.Count: 0 });
+        var src = Child(root, "src");
+        Assert.True(Child(src, "Later") is { IsUnlisted: true });
+        var six = 6.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        foreach (var cut in new[] { root.Children[^1], src.Children[^1] })
+        {
+            Assert.True(cut is { Kind: ExplorerNodeKind.Message, IsMuted: true }, cut.Id);
+            Assert.Equal($"Only the first {six} entries are shown. Find the others with Find in Files or the terminal.", cut.Name);
+        }
     }
 
     [Fact]

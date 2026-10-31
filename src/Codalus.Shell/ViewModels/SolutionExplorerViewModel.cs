@@ -159,6 +159,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private int _folderGeneration; // the workspace closed or the solution view shown: the batch on its way is stale
     private CancellationTokenSource _folderCancellation = new();
     private string? _folderRoot; // the workspace folder the listings are of
+    private readonly HashSet<FolderListing> _folderStandIns = new(ReferenceEqualityComparer.Instance); // a failed listing's empty one
     private bool _rootIsFolderView;
 
     // The search box's listing of the whole workspace folder, kept while the box has text (see LoadFolderSearchAsync).
@@ -193,6 +194,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         };
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
+        solutions.HostRestarted += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnHostRestarted);
         solutions.ProjectChanged += (_, project) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             // An evaluation can change the folders that hold the project's items: its folder is listed again (and only its).
@@ -304,6 +306,29 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         // build the solution's change queues; another workspace folder starts over.
         if (IsFolderView && !SolutionService.PathComparer.Equals(_folderRoot, System.IO.Path.TrimEndingDirectorySeparator(solution.Directory)))
         {
+            QueueShownFolders();
+        }
+    }
+
+    /// <summary>
+    /// The build host restarted and opened the workspace folder again: the same folder, so its change lists nothing. What
+    /// changed on disk while the build host was down went unseen, and a listing that failed meanwhile left its folder empty,
+    /// with no chevron to expand it again by. The failed listings' stand-ins go (their folders show "Loading…" and are
+    /// listed once they're shown), and every folder listed and shown is listed again, as for a rescan. Nothing listed the
+    /// folder view again until a file changed in the folder concerned (M57). (Show All Files lists each project again as it
+    /// loads.)
+    /// </summary>
+    private void OnHostRestarted()
+    {
+        foreach (var folder in _folders.Where(f => _folderStandIns.Contains(f.Value)).Select(f => f.Key).ToList())
+        {
+            _folders.Remove(folder);
+        }
+
+        _folderStandIns.Clear();
+        if (IsFolderView)
+        {
+            QueueFolderListings([.. _folders.Keys.Where(IsShownFolder)]);
             QueueShownFolders();
         }
     }
@@ -530,6 +555,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         StopFolderListings();
         _folders.Clear();
+        _folderStandIns.Clear();
         _folderRoot = null;
     }
 
@@ -648,10 +674,20 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 // The build host restarting, its two minutes up: the folder keeps its last listing, or counts as listed with
                 // nothing, so no "Loading…" stays for good; the next expansion lists it again.
                 failed.Add(error);
-                changed |= _folders.TryAdd(folder, new FolderListing([], false));
+                var standIn = new FolderListing([], false);
+                if (_folders.TryAdd(folder, standIn))
+                {
+                    _folderStandIns.Add(standIn); // listed again once the build host restarts (OnHostRestarted)
+                    changed = true;
+                }
             }
             else if (!_folders.TryGetValue(folder, out var old) || !ReferenceEquals(old, listing))
             {
+                if (old is not null)
+                {
+                    _folderStandIns.Remove(old);
+                }
+
                 _folders[folder] = listing!;
                 changed = true;
             }
@@ -881,13 +917,18 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     private sealed record ProjectListing(string Project, IReadOnlyList<DirectoryEntry> Entries, IReadOnlySet<string> Folders, string? Error = null);
 
-    /// <summary>A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread).</summary>
+    /// <summary>
+    /// A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread); into
+    /// node_modules, .vs and .idea only once they're expanded, items or not: a plain SDK project's default globs take all of
+    /// node_modules, and each listing went through its thousands of files, up to the limit, after which the project's other
+    /// files went missing (M57).
+    /// </summary>
     private async Task<ProjectListing> ListProjectAsync(string project, ProjectInfo info, IReadOnlyList<DirectoryEntry>? old, IReadOnlyList<string> expanded, CancellationToken cancellationToken)
     {
         var directory = System.IO.Path.GetDirectoryName(project)!;
         var below = System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar;
         var comparison = SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        var folders = new HashSet<string>(SolutionTree.ItemFolders(project, info), SolutionService.PathComparer);
+        var folders = new HashSet<string>(SolutionTree.ItemFolders(project, info).Where(f => !SolutionTree.IsInOnDemandFolder(f, directory)), SolutionService.PathComparer);
         folders.UnionWith(expanded.Where(f => f.StartsWith(below, comparison)));
         try
         {
@@ -908,12 +949,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     internal Task? ListingsOnTheirWay { get; private set; }
 
     /// <summary>
-    /// Show All Files: a folder that isn't in its project, whose contents aren't listed until it's expanded (it has a
-    /// "Loading…" row, so it can be).
+    /// Show All Files: a folder that isn't in its project, or is or is in node_modules, .vs or .idea (M57), whose contents
+    /// on disk aren't listed until it's expanded (it has a "Loading…" row, so it can be).
     /// </summary>
     private bool IsUnlisted(ExplorerNode node) =>
-        node is { Kind: ExplorerNodeKind.Folder, IsExcluded: true, Path: { } path, ProjectPath: { } project }
-        && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path);
+        node is { Kind: ExplorerNodeKind.Folder, Path: { } path, ProjectPath: { } project }
+        && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path)
+        && (node.IsExcluded || SolutionTree.IsInOnDemandFolder(path, System.IO.Path.GetDirectoryName(project)!));
 
     /// <summary>A disk listing arrived (tests wait for it).</summary>
     public event EventHandler? DiskLoaded;
@@ -1018,14 +1060,22 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        ShowNotInSolution();
+        ShowNotInSolution(path);
     }
 
-    /// <summary>The active document isn't in the tree: the solution's, or in the folder view the folder's (M57).</summary>
-    private void ShowNotInSolution() =>
-        _shell.StatusBar.ShowMessage(IsFolderView
-            ? Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInTheFolder", "The active document isn't in the folder.")
-            : Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
+    /// <summary>
+    /// The active document (<paramref name="path"/>, if any) isn't in the tree: the solution's; in folder mode, which has no
+    /// solution (M57), the folder's in the folder view or for a file outside the folder, else the loaded projects'.
+    /// </summary>
+    private void ShowNotInSolution(string? path = null)
+    {
+        var message = _shell.Solutions.Solution is not { IsFolder: true } folder
+            ? Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution.")
+            : IsFolderView || path is null || !IsInFolder(path, System.IO.Path.TrimEndingDirectorySeparator(folder.Directory))
+                ? Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInTheFolder", "The active document isn't in the folder.")
+                : Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInALoadedProject", "The active document isn't in a loaded project.");
+        _shell.StatusBar.ShowMessage(message, TimeSpan.FromSeconds(4));
+    }
 
     /// <summary>
     /// Show All Files: a file in a folder that isn't in its project shows once the folder is expanded and listed. This
@@ -1141,7 +1191,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         else if (!IsListingFor(path))
         {
             _syncWhenListed = null;
-            ShowNotInSolution();
+            ShowNotInSolution(path);
         }
     }
 
@@ -1596,6 +1646,14 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             || (node.Kind == ExplorerNodeKind.Message && node.Id.EndsWith(SolutionTree.CutSuffix, StringComparison.Ordinal)))
         {
             rows.Insert(at, (node, depth));
+            if (node is { Kind: ExplorerNodeKind.Folder, IsUnlisted: true })
+            {
+                // The folder view: a folder the search's listing didn't go into (node_modules, or one past its limit) has
+                // nothing to show, and showed as an empty folder (M57).
+                rows.Add((new ExplorerNode(node.Id + "|unsearched", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorerViewModel.notSearched",
+                    "Not searched. Clear the search box and expand the folder to see what is in it.")) { Icon = "dot", IsMuted = true }, depth + 1));
+            }
+
             return true;
         }
 
