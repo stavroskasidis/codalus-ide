@@ -24,6 +24,32 @@ public sealed class EditorEditingAtScaleTests
     /// <summary>A word typed into Quick Find, a key at a time, then partly erased and typed again.</summary>
     private static readonly string[] s_typedQueries = ["i", "it", "ite", "item", "items", "item", "ite", "it", "i", "it", "ite", "item"];
 
+    /// <summary>
+    /// The searches some typing may start: one when it pauses, one for each real pause between keys (a key on a loaded
+    /// machine can take longer than the search's delay), and one for each of the search's longest waits it lasted. The
+    /// test allowed a fixed 5 for 20 keys, which assumed they took about 2 s: during the whole suite, three test projects
+    /// at a time, they took longer and the search ran 12 times, as it should.
+    /// </summary>
+    private sealed class Typing
+    {
+        private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
+        private TimeSpan _last;
+        private int _pauses;
+
+        public void Key()
+        {
+            var now = _clock.Elapsed;
+            if (_last > TimeSpan.Zero && now - _last >= FindWidget.SearchDelay)
+            {
+                _pauses++;
+            }
+
+            _last = now;
+        }
+
+        public int MostSearches => 1 + _pauses + (int)(_clock.Elapsed / FindWidget.SearchMaxDelay);
+    }
+
     private static async Task<CodeEditorController> OpenAsync(ShellFixture f, string name, string text)
     {
         var path = Path.Combine(f.UserData, name);
@@ -282,8 +308,10 @@ public sealed class EditorEditingAtScaleTests
             await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount == 0);
             editor.Editor.CaretOffset = 0;
             var searches = find.SearchesRun;
+            var typing = new Typing();
             foreach (var typed in s_typedQueries)
             {
+                typing.Key();
                 find.SearchPattern = typed;
                 ShellFixture.Pump();
             }
@@ -291,7 +319,7 @@ public sealed class EditorEditingAtScaleTests
             await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount > 0, seconds: 60);
             Assert.Equal(FindWidget.MaxMatches, find.MatchCount);
             Assert.True(find.IsCapped);
-            Assert.InRange(find.SearchesRun - searches, 1, 3); // once per pause in typing, not once per key
+            Assert.InRange(find.SearchesRun - searches, 1, typing.MostSearches); // once per pause in typing, not once per key
             Assert.Equal((4, 4), (editor.Editor.SelectionStart, editor.Editor.SelectionLength)); // the first match is selected
             Assert.EndsWith("+", find.Status);
             Assert.NotEmpty(find.MatchLines);
@@ -300,14 +328,16 @@ public sealed class EditorEditingAtScaleTests
             searches = find.SearchesRun;
             editor.Editor.TextArea.ClearSelection();
             editor.Editor.CaretOffset = editor.Model.Text.GetLineByNumber(10).Offset;
+            typing = new Typing();
             for (var i = 0; i < 20; i++)
             {
+                typing.Key();
                 editor.Editor.TextArea.PerformTextInput("z");
                 ShellFixture.Pump();
             }
 
             await ShellFixture.PumpUntil(() => !find.IsSearching, seconds: 60);
-            Assert.InRange(find.SearchesRun - searches, 1, 5);
+            Assert.InRange(find.SearchesRun - searches, 1, typing.MostSearches);
             Assert.Equal(FindWidget.MaxMatches, find.MatchCount);
             for (var undo = 0; undo < 20 && editor.Model.Text.Text != text; undo++)
             {

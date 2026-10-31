@@ -142,7 +142,7 @@ public sealed class FindWidget : Border, IBackgroundRenderer
     {
         _editor = editor;
         _results = new TextSegmentCollection<TextSegment>();
-        _searchSoon = new UiDebouncer(StartSearch, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500));
+        _searchSoon = new UiDebouncer(StartSearch, SearchDelay, SearchMaxDelay);
         Classes.Add("overlay");
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Top;
@@ -273,6 +273,9 @@ public sealed class FindWidget : Border, IBackgroundRenderer
     internal bool IsSearching => _searchSoon.IsPending || _searching;
 
     /// <summary>The searches run (tests: one per pause in typing, not one per key or edit).</summary>
+    /// <summary>A search starts this long after the last key or edit, and at least this often while they keep coming.</summary>
+    internal static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(100), SearchMaxDelay = TimeSpan.FromMilliseconds(500);
+
     internal int SearchesRun { get; private set; }
 
     /// <summary>The matches found by steps past the counted ones (tests: a step back finds those near the caret, not all).</summary>
