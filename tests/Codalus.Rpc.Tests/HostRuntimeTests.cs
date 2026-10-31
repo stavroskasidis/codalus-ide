@@ -372,6 +372,30 @@ public sealed class HostRuntimeTests : IDisposable
         Assert.IsType<HostExitedException>(Assert.ThrowsAny<JsonRpcConnectionLostException>(() => process.Connection));
     }
 
+    /// <summary>
+    /// The connection to a host that exited stops its watchdog: the timer ticked every five seconds for the rest of the
+    /// process and held the connection, its handlers and all they reach (a full run of the shell tests kept every shell
+    /// whose build host had exited).
+    /// </summary>
+    [Fact]
+    public async Task The_connection_to_a_host_that_exited_stops_its_watchdog()
+    {
+        var launch = OperatingSystem.IsWindows()
+            ? new ProcessLaunchInfo("cmd.exe", ["/c", "exit /b 3"])
+            : new ProcessLaunchInfo("/bin/sh", ["-c", "exit 3"]);
+        JsonRpcConnection? connection = null;
+        await using var process = new SupervisedProcess("fake host", launch, new SupervisionPolicy { MaxRestarts = 0, ShutdownRequest = null, ExitNotification = null })
+        {
+            ConfigureConnection = c => connection = c,
+        };
+        var crashed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        process.Crashed += (_, _) => crashed.TrySetResult();
+
+        await process.StartAsync(TestContext.Current.CancellationToken);
+        await crashed.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        await WaitUntilAsync(() => connection is { IsWatching: false });
+    }
+
     [Fact]
     public async Task A_policy_can_still_restart_after_a_startup_exit()
     {

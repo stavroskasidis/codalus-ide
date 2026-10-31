@@ -175,6 +175,40 @@ public sealed partial class EnvironmentCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task A_cancelled_run_ends_its_program()
+    {
+        // A shell's environment check, cancelled when its window closes: its probes kept running, and held the shell,
+        // until they ended by themselves.
+        var file = Path.Combine(_dir, "pid");
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? ("powershell.exe", new[] { "-NoProfile", "-Command", $"$PID | Set-Content -Path '{file}'; Start-Sleep -Seconds 300" })
+            : ("/bin/sh", ["-c", $"echo $$ > '{file}'; exec sleep 300"]);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var run = EnvironmentCheck.RunProcessAsync(program, arguments, _dir, TimeSpan.FromSeconds(120), cancel.Token);
+        var id = 0;
+        for (var i = 0; i < 300 && !(File.Exists(file) && int.TryParse(File.ReadAllText(file).Trim(), System.Globalization.CultureInfo.InvariantCulture, out id)); i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.NotEqual(0, id);
+        using var process = System.Diagnostics.Process.GetProcessById(id);
+        try
+        {
+            await cancel.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            Assert.True(process.WaitForExit(TimeSpan.FromSeconds(10)), "The program still runs after its run was cancelled.");
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+        }
+    }
+
+    [Fact]
     public async Task A_program_whose_child_keeps_its_output_open_still_returns_once_it_has_ended()
     {
         // A stand-in that prints, then leaves a process holding its standard output, as a tool that forks a daemon

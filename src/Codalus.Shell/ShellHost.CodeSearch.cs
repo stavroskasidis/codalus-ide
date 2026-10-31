@@ -979,8 +979,7 @@ public sealed partial class ShellHost : ICodeSearchHost
             };
         }
 
-        _indexTimer.Stop();
-        _indexTimer.Start();
+        StartTimer(_indexTimer);
     }
 
     private async Task UpdateCodeSearchIndexAsync()
@@ -1028,7 +1027,7 @@ public sealed partial class ShellHost : ICodeSearchHost
 
         if (!_codeSearchRefresh.IsEnabled)
         {
-            _codeSearchRefresh.Start();
+            StartTimer(_codeSearchRefresh);
         }
     }
 }

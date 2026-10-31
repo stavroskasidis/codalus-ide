@@ -8,7 +8,8 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// M55 in the shell (ADR 0086's phase 2), on samples/Debugging/HotReload.slnx under the Codalus debugger: Continue
-/// applies an edit made while stopped, Apply Code Changes one made while the program runs, and so does a save; a rude
+/// applies an edit made while stopped, Apply Code Changes one made while the program runs (and the program's update
+/// handler runs, ADR 0090), and so does a save; a rude
 /// edit asks (Restart, or go on with the old code) and its diagnostic is in the Error List. Under netcoredbg nothing
 /// takes edits.
 /// </summary>
@@ -39,7 +40,9 @@ public sealed class DebugHotReloadTests
     }
 
     private static string Diagnostics(ShellFixture f) =>
-        $"\nState: {f.Shell.Debugger.State}, edits: {f.Shell.DebugEdits.IsActive}; {f.Shell.Debugger.Describe()}\nDebug log:\n" + f.Shell.DebugLog.GetText() + "\nNotifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
+        $"\nState: {f.Shell.Debugger.State}, edits: {f.Shell.DebugEdits.IsActive}; {f.Shell.Debugger.Describe()}\n"
+        + $"Startup hook: {f.Shell.Debugger.StartupHook ?? "none"}; Hot Reload agents connected: {f.Shell.Debugger.HotReloadAgents?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no pipe"}\n"
+        + "Debug log:\n" + f.Shell.DebugLog.GetText() + "\nNotifications:\n" + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
 
     [AvaloniaFact]
     public async Task Continue_applies_an_edit_made_while_stopped_and_Apply_Code_Changes_one_made_while_running()
@@ -61,8 +64,13 @@ public sealed class DebugHotReloadTests
         await EditAsync(f, program, "\" from the shell\"", "\" applied\"");
         await f.RunAsync("run.applyCodeChanges");
         await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains(" applied\n", StringComparison.Ordinal) || f.Shell.DebugLog.GetText().Contains(" applied\r\n", StringComparison.Ordinal), seconds: 60, describe: () => Diagnostics(f));
-        var status = f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text;
-        Assert.Contains("Hot Reload: applied at", status, StringComparison.Ordinal);
+        // The program runs the edit as soon as the debugger applied it; the status says so once its update handlers have
+        // run too (ADR 0090), which can be later (Ubuntu CI, run 41165324579: "applying…" when the output came).
+        string Status() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text;
+        await ShellFixture.PumpUntil(() => Status().Contains("Hot Reload: applied at", StringComparison.Ordinal), seconds: 30, describe: () => "status: " + Status() + Diagnostics(f));
+
+        // The program's [MetadataUpdateHandler] ran with the updated type, through the startup hook's agent (ADR 0090).
+        await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("updated: Greeter", StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
 
         await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && !f.Shell.DebugEdits.IsActive, seconds: 60);

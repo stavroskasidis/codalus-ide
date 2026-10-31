@@ -250,10 +250,15 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
             Assert.Equal(DebugState.Stopped, _debug.State);
             Assert.NotEmpty(_debug.Frames);
 
+            var detach = Stopwatch.StartNew();
             await _debug.DetachAsync();
+            var detached = detach.Elapsed;
             await File.WriteAllTextAsync(signal, "go", TestContext.Current.CancellationToken);
             await process.WaitForExitAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
-            Assert.Equal(15, process.ExitCode);
+
+            // TODO(issue): on Windows the program once ended with 0xC0000354 (the debugger left while attached): the detach's
+            // evaluate went unanswered and its disconnect too (docs/ci-flakes.md). The Debug Console says what the detach did.
+            Assert.True(process.ExitCode == 15, $"Exit code {process.ExitCode} (0x{process.ExitCode:X8}); the detach took {detached.TotalSeconds:0.0} s. Debug Console:\n{Output}");
         }
         finally
         {

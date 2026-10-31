@@ -11,14 +11,26 @@ using System.Threading;
 /// <c>$CODALUS_DEBUG_WAIT/pid</c> and waits for <c>$CODALUS_DEBUG_WAIT/go</c>, which the IDE writes once the debugger
 /// has attached and set the breakpoints. After <c>CODALUS_DEBUG_WAIT_SECONDS</c> (120) it goes on without it.
 /// The variables are cleared, so the program's own child processes don't wait.
+/// Programs the Codalus debugger launches get it too, for <see cref="HotReloadAgent"/> (ADR 0090).
 /// </summary>
 internal static class StartupHook
 {
     public const string WaitVariable = "CODALUS_DEBUG_WAIT";
     public const string TimeoutVariable = "CODALUS_DEBUG_WAIT_SECONDS";
 
+    /// <summary>The Codalus debugger's host, whose launch mode starts the program (ADR 0086).</summary>
+    private const string DebugHost = "codalus-debughost";
+
     public static void Initialize()
     {
+        // The Codalus debugger's launcher runs with the program's environment, and its runtime runs DOTNET_STARTUP_HOOKS
+        // although its runtimeconfig turns them off: the variables are the program's, left for it.
+        if (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == DebugHost)
+        {
+            return;
+        }
+
+        HotReloadAgent.Start();
         var folder = Environment.GetEnvironmentVariable(WaitVariable);
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder))
         {

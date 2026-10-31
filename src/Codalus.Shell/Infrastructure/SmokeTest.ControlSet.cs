@@ -36,7 +36,7 @@ internal sealed partial class SmokeTest
             foreach (var (theme, _) in ThemeService.Themes)
             {
                 await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
-                await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+                await WaitAsync(() => shell.Theme.ActiveTheme == theme, () => ThemeWait(theme)).ConfigureAwait(true);
                 await Task.Delay(100).ConfigureAwait(true);
                 await RenderedAsync(page).ConfigureAwait(true);
                 GalleryShot("controls", "set", theme, null, page);

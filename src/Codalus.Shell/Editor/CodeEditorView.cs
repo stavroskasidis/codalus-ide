@@ -213,6 +213,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
             return;
         }
 
+        AvaloniaEditFocus.Release(this);
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
         _services.Diagnostics.Changed -= OnDiagnosticsChanged;

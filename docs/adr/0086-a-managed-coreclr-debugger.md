@@ -4,6 +4,7 @@
 - **Date:** 2026-10-28
 - **Deciders:** maintainer (D48: accepted as proposed)
 - **Amends, as each phase lands:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
+- **Amended by:** [ADR 0090](0090-blazor-web-app-edits-under-the-codalus-debugger.md) (2026-10-30: a Blazor Web App's server is launched, not run under `dotnet watch`, and its pages take WebAssembly edits from the IDE; the program's update handlers run after each edit)
 
 ## Context
 

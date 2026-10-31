@@ -1416,9 +1416,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     // As netcoredbg shows it: the exception, typed (the data tip marks the getter as having thrown) and expandable.
                     result.Add(VariableOf(property.Name, ex.Exception, path));
                 }
-                catch (TimeoutException)
+                catch (TimeoutException ex)
                 {
                     timedOut = true;
+                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException timeout ? timeout.Diagnostic : ex.Message));
                     result.Add(new Variable(property.Name, "(the getter timed out)", null, 0, path));
                 }
                 catch (InvalidOperationException ex)

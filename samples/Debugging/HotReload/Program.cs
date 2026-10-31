@@ -1,5 +1,7 @@
 // Hot Reload while debugging (M55): the tests edit Greeter.Message while the program runs or is stopped, and read
 // what it prints. With an argument, it waits for that file before its loop (attach tests).
+[assembly: System.Reflection.Metadata.MetadataUpdateHandler(typeof(UpdateHandler))]
+
 if (args.Length > 0)
 {
     Console.WriteLine("waiting");
@@ -32,4 +34,10 @@ static class Greeter
         var text = "hello " + i; // [message]
         return text;
     }
+}
+
+// Called after each edit the debugger applies, through the startup hook's agent (ADR 0090), as dotnet watch's calls it.
+static class UpdateHandler
+{
+    public static void UpdateApplication(Type[]? types) => Console.WriteLine("updated: " + string.Join(",", types?.Select(t => t.Name) ?? []));
 }

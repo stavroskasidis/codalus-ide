@@ -121,6 +121,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     /// <summary>Whether a message has arrived from the peer (a host that got this far started).</summary>
     public bool HasReceived => Volatile.Read(ref _received) != 0;
 
+    /// <summary>Whether the watchdog runs (tests): from <see cref="Start"/> until the peer is gone.</summary>
+    internal bool IsWatching => Volatile.Read(ref _watchdog) is not null;
+
     /// <summary>
     /// Says why the connection was lost (M49): called once, when reading stops or a write finds the peer gone (not on
     /// <see cref="DisposeAsync"/>), with the failure if there was one. The exception it returns is what pending and later
@@ -164,9 +167,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             throw new InvalidOperationException("The connection is already started.");
         }
 
+        // Before the read loop, which stops it when the peer is gone (a host that exits at once).
+        _watchdog = new Timer(_ => ReportSlowRequests(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         _dispatchLoop = Task.Run(DispatchLoopAsync);
         _readLoop = Task.Run(ReadLoopAsync);
-        _watchdog = new Timer(_ => ReportSlowRequests(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
     }
 
     private void ReportSlowRequests()
@@ -516,6 +520,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         Disconnected?.Invoke(this, failure);
+
+        // Nothing is left to watch, and the timer, ticking for the rest of the process, held the connection, its handlers
+        // and all they reach (a supervisor keeps no lost connection, but a full run of the shell tests kept every shell
+        // whose build host had exited).
+        Interlocked.Exchange(ref _watchdog, null)?.Dispose();
     }
 
     /// <summary>Responses are completed directly on the read loop so they never wait behind slow handlers.</summary>
@@ -717,7 +726,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         await _shutdown.CancelAsync().ConfigureAwait(false);
-        if (_watchdog is { } watchdog)
+        if (Interlocked.Exchange(ref _watchdog, null) is { } watchdog)
         {
             await watchdog.DisposeAsync().ConfigureAwait(false);
         }

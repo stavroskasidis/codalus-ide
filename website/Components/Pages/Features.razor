@@ -137,7 +137,7 @@
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
-                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, a Blazor Web App's server included), exit codes on macOS, casts and C#'s operators in expressions</li>
+                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included), exit codes on macOS, casts and C#'s operators in expressions</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="git-and-hosting">
@@ -168,7 +168,7 @@
                     <li>.http files, the HTTP Response window (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
-                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server under dotnet watch with the debugger attached)</li>
+                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server under dotnet watch with netcoredbg attached, or launched under the Codalus debugger, which sends the page its edits)</li>
                     <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
@@ -315,7 +315,7 @@
             </div>
         </div>
         <div class="rule-note">
-            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging server-side code, and translations of the interface.</p>
+            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging server-side code under netcoredbg (the Codalus debugger, a preview, has it), and translations of the interface.</p>
             <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap <Icon Name="arrow" Size="16" /></a>
         </div>
     </section>

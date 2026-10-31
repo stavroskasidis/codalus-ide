@@ -66,6 +66,18 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private readonly HashSet<string> _viewCommands = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The shell's dispose has begun: its timers stay stopped. Set first thing in it, before <c>_disposing</c> holds its
+    /// task, so events its dispose raises (the solution closing) see it too.
+    /// </summary>
+    private bool _disposeStarted;
+
+    /// <summary><see cref="OnInteractive"/> has run.</summary>
+    private bool _interactive;
+
+    /// <summary>Cancelled when the shell is disposed: work it started for itself (the environment check) stops with it.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
     public ShellHost(Application app, ShellOptions options)
     {
         Options = options;
@@ -411,15 +423,17 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>
     /// Called once the window is interactive and <see cref="EnvironmentReady"/>: deferred work that must not delay the first
     /// frame. Nothing once the shell is closing (M56): the environment can come in after the user closed the window, and the
-    /// listener, the start window and the startup plugins' hosts started then would outlive the shutdown.
+    /// listener, the start window and the startup plugins' hosts started then would outlive the shutdown. Nothing the second
+    /// time either: a second listener for other <c>codalus</c> processes replaced the first, which was never disposed.
     /// </summary>
     public void OnInteractive()
     {
-        if (IsClosing)
+        if (IsClosing || _disposeStarted || _interactive)
         {
             return;
         }
 
+        _interactive = true;
         _ = OfferRecoveryAsync();
         StartUpdates();
 
@@ -1160,11 +1174,36 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>Tests: more work the shutdown waits for with the hosts' (one that is slow to stop, or fails to).</summary>
     internal Func<Task>? ShutdownWork { get; set; }
 
+    /// <summary>The debugger, then its Hot Reload agents' pipe (ADR 0090).</summary>
+    private async Task DisposeDebuggingAsync()
+    {
+        await Debugger.DisposeAsync().ConfigureAwait(false);
+        if (DebugEdits is not null)
+        {
+            await DebugEdits.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
     private async Task DisposeCoreAsync()
     {
+        _disposeStarted = true;
+        StopTimers();
+        Interlocked.Exchange(ref _syncDebounce, null)?.Cancel(); // a change's sync, due in 5 s: it held the shell, then synced a closed window
+        _proposedApi?.Dispose(); // its debounce of edited documents (500 ms) held the shell, then told the plugins
+        CloseEditors();
+        SyntaxVisualizer.Dispose();
+        CodeMetrics.Dispose();
+        StatusBar.Dispose();
+        Notifications.Dispose();
+        Theme.Dispose();
+        Editor.CodeColors.Release(Languages.LanguageIdOf);
+        ReleaseViewCallbacks();
+        Views.MenuBuilder.Release(this);
+        CrashReporter.Release(this);
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var designers = StopWinFormsDesignersAsync();
         ApplyUpdateOnExit();
+        _lifetime.Cancel(); // not awaited: the dispose stays on the UI thread until its first await below
         await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {
@@ -1191,7 +1230,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         // answers after the design-time build it's running), a few slow ones outlasted the exit's time, and a requested
         // restart was lost with the rest. The remote server goes after them: the remote window's hosts run through it.
         await Task.WhenAll(
-            Debugger.DisposeAsync().AsTask(),
+            DisposeDebuggingAsync(),
             Data.DisposeAsync().AsTask(),
             DisposeProfilingAsync(),
             DisposeXamlAsync().AsTask(),
@@ -1212,6 +1251,80 @@ public sealed partial class ShellHost : IAsyncDisposable
         {
             await Plugins.DisposeAsync().ConfigureAwait(false);
             Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
+        }
+    }
+
+    /// <summary>
+    /// Tears the open editors and their models down as closing their documents does: each editor's timers (inlay hints, CodeLens, symbols)
+    /// keep running until then, and hold the editor and this shell.
+    /// </summary>
+    private void CloseEditors()
+    {
+        foreach (var editor in Editors)
+        {
+            editor.View?.Close();
+        }
+
+        _previewView?.Close();
+
+        // The documents' models too, as closing the last editor of each does: their file watchers keep them, and they
+        // hold this shell's handlers.
+        foreach (var model in _models.Values)
+        {
+            model.Dispose();
+        }
+
+        _models.Clear();
+    }
+
+    /// <summary>
+    /// Takes back the views' static callbacks that call this shell, unless another shell set them since: a static would
+    /// hold this shell, with all it reaches, once it's disposed.
+    /// </summary>
+    private void ReleaseViewCallbacks()
+    {
+        Views.GitChangesView.ReportError = Unless(Views.GitChangesView.ReportError);
+        Views.DiffView.ReportError = Unless(Views.DiffView.ReportError);
+        Views.MergeEditorView.ReportError = Unless(Views.MergeEditorView.ReportError);
+        Views.BreakpointsView.RunCommand = Unless(Views.BreakpointsView.RunCommand);
+        Views.BreakpointsView.AskLabels = Unless(Views.BreakpointsView.AskLabels);
+        Views.VariableActions.AddWatch = Unless(Views.VariableActions.AddWatch);
+        Views.VariableActions.QuickWatch = Unless(Views.VariableActions.QuickWatch);
+        Views.VariableActions.Visualize = Unless(Views.VariableActions.Visualize);
+        Views.VariableActions.PluginVisualizers = Unless(Views.VariableActions.PluginVisualizers);
+        Views.VariableActions.VisualizeWithPlugin = Unless(Views.VariableActions.VisualizeWithPlugin);
+        Views.VariableActions.CopyText = Unless(Views.VariableActions.CopyText);
+        Views.VariableActions.AskAi = Unless(Views.VariableActions.AskAi);
+        Views.VariableActions.CanAskAi = Unless(Views.VariableActions.CanAskAi);
+    }
+
+    /// <summary>The callback, or null when it calls this shell.</summary>
+    private T? Unless<T>(T? callback)
+        where T : Delegate => callback?.Target == this ? null : callback;
+
+    /// <summary>
+    /// (Re)starts one of the shell's timers, unless the shell is being disposed: its dispose raises events (the solution
+    /// closing) whose handlers, posted to run later, would start them again after <see cref="StopTimers"/>.
+    /// </summary>
+    private void StartTimer(Avalonia.Threading.DispatcherTimer timer)
+    {
+        timer.Stop();
+        if (!_disposeStarted)
+        {
+            timer.Start();
+        }
+    }
+
+    /// <summary>
+    /// Stops the shell's timers. The dispatcher holds every enabled timer and the shell its tick calls, and a pending
+    /// one-shot timer of a dispatcher that no longer runs never ticks: the hosting status timer (every two minutes) kept
+    /// each disposed shell of the shell tests reachable, with all it reached, until a full run ran out of memory.
+    /// </summary>
+    private void StopTimers()
+    {
+        foreach (var timer in new[] { _statusTimer, _repositoryTimer, _autoRecoverTimer, _indexTimer, _codeSearchRefresh, _gitRepositoryTimer, _endpointsRefresh })
+        {
+            timer?.Stop();
         }
     }
 }

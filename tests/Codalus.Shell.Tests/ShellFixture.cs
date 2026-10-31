@@ -453,7 +453,7 @@ internal sealed class ShellFixture : IAsyncDisposable
     {
         if (!_closed)
         {
-            Window.Close();
+            Window.CloseWithoutConfirming(); // a window with unsaved documents would ask, and stay open with its shell
         }
 
         Pump();

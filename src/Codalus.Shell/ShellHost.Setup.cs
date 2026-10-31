@@ -117,10 +117,16 @@ public sealed partial class ShellHost
     {
         try
         {
+            // Off with the shell: a closed window's check kept its probes (git, dotnet) running, and the shell with them.
+            var lifetime = _lifetime.Token;
             Tools = requiredOnly
-                ? await EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true)
-                : [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true), .. NetFrameworkTools()];
+                ? await EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true)
+                : [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true), .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
             ToolsComplete = !requiredOnly;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return Tools;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -334,7 +340,7 @@ public sealed partial class ShellHost
     /// What the solution's mobile projects need (M20a): their workloads, and the Android SDK and a JDK when one targets
     /// Android. Nothing when the solution has no mobile project.
     /// </summary>
-    private async Task<IReadOnlyList<ToolStatus>> MobileToolsAsync()
+    private async Task<IReadOnlyList<ToolStatus>> MobileToolsAsync(CancellationToken cancellationToken)
     {
         var projects = MobileProjects();
         if (projects.Count == 0)
@@ -344,7 +350,7 @@ public sealed partial class ShellHost
 
         var rows = new List<ToolStatus>();
         var dotnet = EnvironmentCheck.FindDotnet() ?? "dotnet";
-        var installed = await Mobile.InstalledWorkloadsAsync(dotnet, Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true) ?? [];
+        var installed = await Mobile.InstalledWorkloadsAsync(dotnet, Solutions.Solution?.Directory, cancellationToken).ConfigureAwait(true) ?? [];
         var needed = projects.SelectMany(p => p.TargetFrameworks.Select(MobileTargets.PlatformOf)
                 .Where(f => MobileTargets.RunsOn(f, Workbench.Platform))
                 .Select(f => MobileTargets.Workload(f, p.UsesMaui)))

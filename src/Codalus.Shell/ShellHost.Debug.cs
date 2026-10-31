@@ -329,6 +329,13 @@ public sealed partial class ShellHost
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             if (plan.Wsl is null && LaunchPlanner.PageDebugTarget(profile, Workbench.Settings.GetBoolean(JavaScriptDebugSetting, true)) is { } page)
             {
+                // A Blazor Web App under the Codalus debugger: it launches the server, and the IDE takes edits to the browser
+                // (ADR 0090).
+                if (await TryStartBrowserHotReloadDebuggingAsync(project, plan, page).ConfigureAwait(true))
+                {
+                    return;
+                }
+
                 // A Blazor Web App with Hot Reload (#75): the server under dotnet watch, the debugger attached to it.
                 var decision = await HotReloadDebugDecisionAsync(project).ConfigureAwait(true);
                 if (decision.Mode is HotReloadDebugMode.Watched or HotReloadDebugMode.PageOnly)

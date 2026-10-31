@@ -512,9 +512,17 @@ public static class IconSet
         ["template-install"] = "arrow_download_16_regular",
     };
 
-    private static readonly Dictionary<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
+    private static readonly DispatcherCache<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, FilledIcon> s_vectors = new(StringComparer.Ordinal);
+    /// <summary>Icon themes' converted SVG icons, as data: each dispatcher builds its own (<see cref="s_builtVectors"/>).</summary>
+    private static readonly Dictionary<string, VectorIcon> s_vectors = new(StringComparer.Ordinal);
+
+    private static readonly DispatcherCache<VectorIcon, FilledIcon> s_builtVectors = new();
+
+    private sealed class VectorIcon(string ops, float[] numbers, uint[] colors, double designSize)
+    {
+        public FilledIcon Build() => new(CompiledIcons.Build(ops, numbers, colors), designSize);
+    }
 
     /// <summary>The prefix of icon themes' converted SVG icons (<c>vec:&lt;path&gt;</c>, M22b).</summary>
     public const string VectorPrefix = "vec:";
@@ -534,10 +542,9 @@ public static class IconSet
     /// </summary>
     internal static void RegisterVector(string svgPath, string ops, float[] numbers, uint[] colors, double designSize)
     {
-        var icon = new FilledIcon(CompiledIcons.Build(ops, numbers, colors), designSize);
         lock (s_vectors)
         {
-            s_vectors[VectorPrefix + svgPath] = icon;
+            s_vectors[VectorPrefix + svgPath] = new VectorIcon(ops, numbers, colors, designSize);
         }
     }
 
@@ -576,9 +583,26 @@ public static class IconSet
     {
         if (name is not null && name.StartsWith(VectorPrefix, StringComparison.Ordinal))
         {
+            VectorIcon? vector;
             lock (s_vectors)
             {
-                return s_vectors.GetValueOrDefault(name);
+                vector = s_vectors.GetValueOrDefault(name);
+            }
+
+            if (vector is null)
+            {
+                return null;
+            }
+
+            var built = s_builtVectors.Current;
+            lock (built)
+            {
+                if (!built.TryGetValue(vector, out var icon))
+                {
+                    built[vector] = icon = vector.Build();
+                }
+
+                return icon;
             }
         }
 
@@ -601,12 +625,13 @@ public static class IconSet
             return null;
         }
 
-        lock (s_filled)
+        var filled = s_filled.Current;
+        lock (filled)
         {
-            if (!s_filled.TryGetValue(name, out var icon))
+            if (!filled.TryGetValue(name, out var icon))
             {
                 icon = CompiledIcons.Create(file) is { } layers ? new FilledIcon(layers, CompiledIcons.DesignSize(file)) : null;
-                s_filled[name] = icon;
+                filled[name] = icon;
             }
 
             return icon;
@@ -741,7 +766,7 @@ public static class IconSet
         ["plan"] = "M2.5,2 H7.5 V5 H2.5 Z M8.5,11 H13.5 V14 H8.5 Z M2.5,11 H7.5 V14 H2.5 Z M5,5 V11 M5,8 H11 V11",
     };
 
-    private static readonly Dictionary<string, Geometry> s_cache = new(StringComparer.Ordinal);
+    private static readonly DispatcherCache<string, Geometry> s_cache = new(StringComparer.Ordinal);
 
     private static string Bell => "M3.5,11.5 V7 C3.5,4.5 5.5,2.5 8,2.5 C10.5,2.5 12.5,4.5 12.5,7 V11.5 L13.5,12.5 H2.5 Z M6.5,14.25 H9.5 ";
 
@@ -755,13 +780,17 @@ public static class IconSet
             return null;
         }
 
-        if (!s_cache.TryGetValue(name, out var geometry))
+        var cache = s_cache.Current;
+        lock (cache)
         {
-            geometry = StreamGeometry.Parse(path);
-            s_cache[name] = geometry;
-        }
+            if (!cache.TryGetValue(name, out var geometry))
+            {
+                geometry = StreamGeometry.Parse(path);
+                cache[name] = geometry;
+            }
 
-        return geometry;
+            return geometry;
+        }
     }
 
     private static string Circle(double cx, double cy, double r) =>

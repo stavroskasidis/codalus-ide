@@ -217,14 +217,18 @@ The status bar's Hot Reload item says when the edits last applied, and the Debug
 
 Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too.
 
-Edits apply to programs started in the Debug Console, the integrated terminal or a console window, to tests you debug, and to a library the program hasn't loaded yet (they apply as it loads). A **Blazor Web App**'s server, which `dotnet watch` runs, takes them in place too, while `dotnet watch` updates its WebAssembly components in the browser; an edit that needs a restart restarts the app, and debugging follows it. A program you **attach** to takes edits only if it was started with `DOTNET_MODIFIABLE_ASSEMBLIES=debug` (as `dotnet watch` starts programs); Apply Code Changes says so when it wasn't. F# and XAML edits run after a restart.
+Edits apply to programs started in the Debug Console, the integrated terminal or a console window, to tests you debug, and to a library the program hasn't loaded yet (they apply as it loads). After each one, the program's `[MetadataUpdateHandler]`s run, as under `dotnet watch`: Blazor components re-render with the new code, and other frameworks that refresh on Hot Reload do too.
+
+A **Blazor Web App** takes edits in its server and in the browser ([ADR 0090](../adr/0090-blazor-web-app-edits-under-the-codalus-debugger.md)): `F5` starts the server under the Codalus debugger (no `dotnet watch`, so breakpoints in its startup code stop), and Codalus IDE sends edits to code that runs in the browser, its WebAssembly components and the projects they use, to every open page. The status bar says where the edit went: *(server and browser)*, *(no page open)* (a page opened later gets it), or that the browser couldn't apply it, with **Restart** offered. This needs WebAssembly components that target .NET 10 or later, and a .NET 10 SDK (SDK 11's browser tools aren't supported yet). Otherwise, edits to the server still apply, and edits to code that runs in the browser say they need a restart.
+
+A program you **attach** to takes edits only if it was started with `DOTNET_MODIFIABLE_ASSEMBLIES=debug` (as `dotnet watch` starts programs); Apply Code Changes says so when it wasn't. F# and XAML edits run after a restart.
 
 Under netcoredbg, the first edit you save while debugging offers the Codalus debugger, once; **Don't Show Again** turns the offer off (`debug.codalusOffer`).
 
 ## Settings
 
 - `debug.adapter`: the debugger for .NET programs, `netcoredbg` (the default) or `codalus` ([the Codalus debugger](#the-codalus-debugger-preview), a preview).
-- `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger).
+- `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger). Off, a Blazor Web App's WebAssembly edits wait for a restart.
 - `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
