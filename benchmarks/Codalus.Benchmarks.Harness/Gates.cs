@@ -70,6 +70,13 @@ public sealed record RegressionPolicy
     /// </summary>
     public bool FailNormalized { get; init; }
 
+    /// <summary>
+    /// Scenarios whose numbers are compared and reported, a regression as a warning, but never fail: a scenario CI hasn't
+    /// measured has no budget yet (benchmarks/README.md), so it gates nothing until CI's measurements set its budgets
+    /// (the everyday flows' UI-thread stalls, M56).
+    /// </summary>
+    public IReadOnlyList<string> InformativeScenarios { get; init; } = [];
+
     /// <summary>The reference application, measured in the same run: its numbers are reported but never fail.</summary>
     public string ReferenceTarget { get; init; } = "vscode";
 
@@ -174,6 +181,7 @@ internal static class Gates
     /// only over its threshold and <see cref="RegressionPolicy.LatencyNoiseSigmas"/> standard deviations of those runs
     /// (amendment 2026-10-27): a hosted runner's latency varies more between runs than the threshold.</item>
     /// <item>The reference application's own numbers measure the runner and its latest release: reported, never failed.</item>
+    /// <item>So are the numbers of the <see cref="RegressionPolicy.InformativeScenarios"/>, until they have budgets.</item>
     /// </list>
     /// </summary>
     public static IReadOnlyList<GateFinding> Compare(
@@ -189,6 +197,7 @@ internal static class Gates
                 .OrderByDescending(b => b.StartedAt)
                 .ToList();
             var isReference = result.Target == policy.ReferenceTarget;
+            var informative = policy.InformativeScenarios.Contains(result.Scenario, StringComparer.Ordinal);
             var currentReference = isReference ? null : ReferenceTime(policy, current, result.Machine.Os, run: null, anyRun: true);
 
             foreach (var (metric, distribution) in result.Summary)
@@ -288,10 +297,16 @@ internal static class Gates
                         {
                             rule += "; the reference application: never fails";
                         }
-                        else if (!gating)
+                        else if (!gating && !informative)
                         {
                             rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {needed} runs on this CPU: a warning only");
                         }
+                    }
+
+                    if (informative && !isReference)
+                    {
+                        gating = false;
+                        rule += "; informative until it has budgets: never fails";
                     }
 
                     var limit = Math.Max(reference * (1 + threshold), reference + band);

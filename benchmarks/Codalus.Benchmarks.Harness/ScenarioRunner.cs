@@ -14,7 +14,7 @@ internal sealed record RunOptions(int? Runs, bool AllowInput, TextWriter Log, bo
 /// </summary>
 internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 {
-    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "completion-50", "self-driven", "test-explorer", "packages", "terminal", "markup-100k", "binary-size"];
+    public static readonly string[] Scenarios = ["cold-start", "editor-100k", "open-solution-50", "completion-50", "self-driven", "test-explorer", "everyday", "packages", "terminal", "markup-100k", "binary-size"];
 
     /// <summary>The tests in samples/Tests5k (FixtureGen <c>tests</c>) as found in source: 20 projects × 250 (a theory is one test until a runner lists its cases).</summary>
     private const int Tests5kLeaves = 20 * 10 * 25;
@@ -33,7 +33,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     public static bool Applies(Target target, string scenario) => target.SupportedScenarios?.Contains(scenario) != false && scenario switch
     {
         "self-driven" => target.IsPrototype,
-        "test-explorer" or "packages" or "terminal" or "markup-100k" or "completion-50" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
+        "test-explorer" or "everyday" or "packages" or "terminal" or "markup-100k" or "completion-50" => target.Name == "shell", // in-app events only; reference IDEs are measured by hand (benchmarks/README.md)
         "open-solution-50" => target.Name != "vscode", // VS Code has no solution explorer without proprietary C# Dev Kit.
         "cold-start" or "editor-100k" => target.IsPrototype || OperatingSystem.IsWindows() || target.Name == "vscode",
         _ => true,
@@ -73,6 +73,9 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 break;
             case "test-explorer":
                 await TestExplorerAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
+                break;
+            case "everyday":
+                await EverydayAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
                 break;
             case "packages":
                 await PackagesAsync(target, result, options.Runs ?? 3, cancellationToken).ConfigureAwait(false);
@@ -479,6 +482,83 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
 
             Log($"  {target.Name} test-explorer run {run}: tree {Last(result, "test_tree_ms")} ms, filter max {Max(result, "test_filter_frame_ms")} ms, first result {Last(result, "test_first_result_ms")} ms");
         }
+    }
+
+    // ------------------------------------------------------------------ everyday flows (M56)
+
+    /// <summary>
+    /// The everyday flows in the real app (<c>--bench everyday</c>) on a restored copy of samples/Solution50, once it has
+    /// loaded: how long input waited for the UI thread in each flow's measured run, its longest wait and the sum of its waits
+    /// over 50 ms. The stall-budget tests (EverydayResponsivenessTests) catch hangs on every pull request with the same probe.
+    /// </summary>
+    private async Task EverydayAsync(Target target, ScenarioResult result, int runs, CancellationToken cancellationToken)
+    {
+        var source = Path.Combine(repoRoot, "samples", "Solution50");
+        RequireFixture(source);
+        result.Notes.Add("In-app: once the solution has loaded and the C# service is ready, each everyday flow runs once to warm up and once measured, while a probe "
+                         + "posted at input priority every 10 ms times its wait for the UI thread (the GC's pauses left out); everyday_<flow>_stall_max_ms is the "
+                         + "longest wait, everyday_<flow>_stall_total_ms the sum of the waits over 50 ms. Informative until CI's measurements set budgets.");
+        for (var run = 0; run < runs; run++)
+        {
+            var work = NewWorkDir();
+            var copy = CopyDirectory(source, Path.Combine(work, "Solution50"));
+            var solution = Path.Combine(copy, "Solution50.sln");
+
+            // Standalone as under samples/: the copy is inside the repository, whose build settings (warnings as errors,
+            // analyzers) failed the flows' rebuild on the fixture's unused fields and events.
+            foreach (var standalone in new[] { "Directory.Build.props", "Directory.Packages.props" })
+            {
+                File.Copy(Path.Combine(repoRoot, "samples", standalone), Path.Combine(work, standalone));
+            }
+
+            Machine.Run("dotnet", $"restore \"{solution}\" -v q");
+            await using var session = await LaunchAsync(target, new LaunchRequest(work, Solution: solution, Bench: "everyday", ExitOn: "done"), cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await session.Process.WaitForExitAsync(cancellationToken).WaitAsync(TimeSpan.FromMinutes(12), cancellationToken).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                result.Notes.Add($"run {run}: the scenario did not finish within 12 minutes");
+            }
+
+            Log($"  {target.Name} everyday run {run}: {AddEverydayFlows(result, BenchEventLog.Read(session.EventsFile), run)}");
+        }
+    }
+
+    /// <summary>
+    /// One run's <c>everyday_flow</c> events as <c>everyday_&lt;flow&gt;_stall_max_ms</c> and <c>_stall_total_ms</c>, with a
+    /// note naming each flow's longest wait, the posted job the UI thread ran then and how long the flow took (what explains
+    /// a CI number), and the run's <c>everyday_note</c>s. Returns the note's text.
+    /// </summary>
+    internal static string AddEverydayFlows(ScenarioResult result, IReadOnlyList<BenchEvent> events, int run)
+    {
+        var flows = new List<string>();
+        foreach (var flow in events.Where(e => e.Name == BenchEventNames.EverydayFlow))
+        {
+            if (!flow.Text.TryGetValue("flow", out var name) || name.Length == 0)
+            {
+                continue;
+            }
+
+            var longest = flow.Field("stall_max_us") / 1000.0;
+            result.Add($"everyday_{name}_stall_max_ms", longest);
+            result.Add($"everyday_{name}_stall_total_ms", flow.Field("stall_total_us") / 1000.0);
+            var job = flow.Text.TryGetValue("job", out var posted) ? $" in {posted}" : string.Empty;
+            flows.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{name} {longest:F0} ms{job} ({flow.Field("elapsed_us") / 1e6:F1} s)"));
+        }
+
+        foreach (var note in events.Where(e => e.Name == BenchEventNames.EverydayNote))
+        {
+            if (note.Text.TryGetValue("note", out var text))
+            {
+                result.Notes.Add($"run {run}: {text}");
+            }
+        }
+
+        var summary = flows.Count == 0 ? "no flow measured" : "the longest waits: " + string.Join(", ", flows);
+        result.Notes.Add($"Run {run}: {summary}");
+        return summary;
     }
 
     /// <summary>

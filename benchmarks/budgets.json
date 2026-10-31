@@ -42,6 +42,9 @@
     { "target": "shell", "scenario": "markup-100k", "metric": "xml_highlight_ms", "stat": "p50", "max": 1800, "source": "ADR 0002 #3a (M11, in-app)" },
     { "target": "shell", "scenario": "markup-100k", "metric": "json_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b (M11)" },
     { "target": "shell", "scenario": "markup-100k", "metric": "xml_typing_ms", "stat": "p99", "max": 16, "source": "ADR 0002 #2b (M11)" }
+    // everyday (M56): no budgets until CI has measured it (benchmarks/README.md). TODO(issue): set the flows'
+    // everyday_<flow>_stall_max_ms and _stall_total_ms budgets from CI's first runs, then take "everyday" off
+    // informativeScenarios below.
   ],
   "regression": {
     "latencyP50": 0.10,
@@ -61,6 +64,9 @@
     "minComparableLatencyRuns": 5,
     "latencyNoiseSigmas": 3,
     "failNormalized": false,
+    // Compared and reported, a regression as a warning, never failed: the everyday flows' UI-thread stalls (M56), until
+    // CI's first measurements set their budgets (above).
+    "informativeScenarios": ["everyday"],
     "referenceTarget": "vscode",
     "referenceScenario": "cold-start",
     "referenceMetric": "startup_selfreported_ms"
