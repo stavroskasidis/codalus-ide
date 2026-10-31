@@ -22,9 +22,20 @@ public sealed partial class ShellHost
             return null;
         }
 
-        var razor = document.Text.Text;
-        var html = RazorHtmlProjection.Project(razor);
-        if (!RazorHtmlProjection.IsMarkup(razor, html, offset) || await Languages.ClientAsync("html").ConfigureAwait(true) is not { } client)
+        // Projected off the UI thread from an immutable snapshot at the document's version (M57, the pattern of ADR 0078):
+        // the UI thread made the whole text a string, projected it and compared it at each request in markup.
+        var snapshot = document.Text.CreateSnapshot();
+        var version = document.Version;
+        var previous = _razorHtml.TryGetValue(document.Path, out var known) ? known.Text : null;
+        var (html, unchanged) = await Task.Run(() =>
+        {
+            var razor = snapshot.Text;
+            var projected = RazorHtmlProjection.Project(razor);
+            return RazorHtmlProjection.IsMarkup(razor, projected, offset)
+                ? (projected, string.Equals(previous, projected, StringComparison.Ordinal))
+                : ((string?)null, false);
+        }).ConfigureAwait(true);
+        if (html is null || await Languages.ClientAsync("html").ConfigureAwait(true) is not { } client)
         {
             return null;
         }
@@ -32,17 +43,25 @@ public sealed partial class ShellHost
         var uri = DocumentUris.FromPath(document.Path + RazorHtmlProjection.VirtualSuffix);
         if (!_razorHtml.TryGetValue(document.Path, out var state) || state.Client != client)
         {
-            // New, or the server restarted.
-            await client.DidOpenAsync(new OpenDocumentState(uri, "html", 1, html), CancellationToken.None).ConfigureAwait(true);
-            _razorHtml[document.Path] = (client, 1, html);
-        }
-        else if (!string.Equals(state.Text, html, StringComparison.Ordinal))
-        {
-            var version = state.Version + 1;
-            await client.DidChangeAsync(uri, version, [new TextDocumentContentChangeEvent(null, html)], CancellationToken.None).ConfigureAwait(true);
+            // New, or the server restarted: queued with the Razor file's version, and encoded on the writer loop.
             _razorHtml[document.Path] = (client, version, html);
+            await client.DidOpenAsync(uri, "html", () => (html, version), CancellationToken.None).ConfigureAwait(true);
+        }
+        else if (version > state.Version)
+        {
+            // Compared off the UI thread with the text known then; another request may have sent a newer one meanwhile.
+            if (unchanged && ReferenceEquals(state.Text, previous))
+            {
+                _razorHtml[document.Path] = (client, version, state.Text); // so an older projection coming late is dropped
+            }
+            else
+            {
+                _razorHtml[document.Path] = (client, version, html);
+                await client.DidChangeTextAsync(uri, version, () => (html, version), CancellationToken.None).ConfigureAwait(true);
+            }
         }
 
+        // Otherwise a projection of a newer version went first: this one is dropped, and the server has the newer HTML.
         return new EmbeddedRequest(client, uri);
     }
 

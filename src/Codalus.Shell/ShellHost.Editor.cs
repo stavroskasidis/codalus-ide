@@ -40,7 +40,13 @@ public sealed partial class ShellHost : IEditorServices
     private readonly Dictionary<string, CodeDocument> _models = new(SolutionPaths.Comparer);
     private readonly Dictionary<string, Task<CodeDocument>> _modelReads = new(SolutionPaths.Comparer);
     private readonly Dictionary<string, int> _modelRequests = new(SolutionPaths.Comparer);
-    private readonly Dictionary<CodeDocument, ITextSource> _snapshots = [];
+    /// <summary>
+    /// Each tracked document's latest snapshot with its version, taken together on the UI thread and read under the lock
+    /// from the language service's writer loops (M57): a didOpen sends a text with the version it is.
+    /// </summary>
+    private readonly Dictionary<CodeDocument, EditorSnapshot> _snapshots = [];
+
+    private readonly record struct EditorSnapshot(ITextSource Source, int Version);
     private readonly List<(string Path, Position Position)> _back = [];
     private readonly List<(string Path, Position Position)> _forward = [];
     private int _nextViewId = 1;
@@ -678,16 +684,21 @@ public sealed partial class ShellHost : IEditorServices
     {
         _models[model.Path] = model;
         model.LanguageId = Languages.LanguageIdOf(model.Path);
-        _snapshots[model] = model.Text.CreateSnapshot();
+        lock (_snapshots)
+        {
+            _snapshots[model] = new EditorSnapshot(model.Text.CreateSnapshot(), model.Version);
+        }
+
         model.ContentChanged += (_, e) =>
         {
             _editedSinceReady.Add(model.Path);
-            _snapshots[model] = model.Text.CreateSnapshot();
+            lock (_snapshots)
+            {
+                _snapshots[model] = new EditorSnapshot(model.Text.CreateSnapshot(), e.Version);
+            }
 
-            // TODO(issue): didChange is JSON-encoded on the UI thread before its first await: the whole text at each
-            // keystroke for a server that syncs whole documents, every change of an update of thousands (Format
-            // Document, Replace All). An ordered writer in JsonRpcConnection, carrying every outgoing message and fed
-            // the snapshot rather than the text, would move it off without reordering.
+            // Only queued here (M57): a whole text for a server that syncs whole documents is read from the snapshot
+            // and encoded on the connection's writer loop, and an update's changes are encoded there too.
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
             ClearXamlBuildDiagnostics(model.Path);
         };
@@ -710,16 +721,22 @@ public sealed partial class ShellHost : IEditorServices
     {
         (string, int) Text()
         {
-            // Called from the language service's threads (replay after a restart): read the immutable snapshot.
+            // Called from the language service's writer loops (M57) and its restart: the snapshot and its version are
+            // taken together, and the text is made from the immutable snapshot outside the lock.
+            EditorSnapshot snapshot;
             lock (_snapshots)
             {
-                return (_snapshots.TryGetValue(model, out var snapshot) ? snapshot.Text : string.Empty, model.Version);
+                if (!_snapshots.TryGetValue(model, out snapshot))
+                {
+                    return (string.Empty, model.Version); // closed: a didClose follows
+                }
             }
+
+            return (snapshot.Source.Text, snapshot.Version);
         }
 
-        // TODO(issue): didOpen makes the whole text a string and JSON-encodes it on the UI thread (0.1-0.3 s for a file
-        // just under the large-file limits, more for XML with the default escaping); the ordered writer of didChange's
-        // TODO, with relaxed escaping, would move it off too.
+        // The didOpen is only queued; its text is made and encoded on the connection's writer loop (M57: 0.7-0.8 s of the
+        // UI thread for 19 MB of XML just under the large-file limits, each '<' six bytes of JSON).
         if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
         {
             foreach (var editor in LanguageViews.Where(e => e.Model == model))

@@ -205,7 +205,7 @@ public sealed class LanguageService : IAsyncDisposable
         var descriptor = _registry.Get(server);
         foreach (var document in _documents.Values.Where(d => descriptor is { IsLinter: true } ? Takes(descriptor, d) : ServerOf(d.LanguageId) == server))
         {
-            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+            await Open(client, document).ConfigureAwait(false);
         }
 
         return true;
@@ -379,6 +379,13 @@ public sealed class LanguageService : IAsyncDisposable
         return new OpenDocumentState(DocumentUris.FromPath(document.Path), document.LanguageId, version, text);
     }
 
+    /// <summary>
+    /// Queues a document's <c>didOpen</c>, its text and version read when it is written, off the caller's thread (M57: the
+    /// UI thread built and encoded the whole text of each file it opened).
+    /// </summary>
+    private Task Open(LanguageHostClient client, LanguageDocument document) =>
+        client.DidOpenAsync(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, _lifetime.Token);
+
     // ------------------------------------------------------------------ documents
 
     /// <summary>An editor opened a document of a registered language. Returns false when no service owns it.</summary>
@@ -425,6 +432,7 @@ public sealed class LanguageService : IAsyncDisposable
     /// </summary>
     private async Task<bool> SendOpenAsync(LanguageHostClient client, LanguageDocument document)
     {
+        Task opened;
         await _documentNotifications.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         try
         {
@@ -433,13 +441,16 @@ public sealed class LanguageService : IAsyncDisposable
                 return false;
             }
 
-            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
-            return true;
+            // Queued in order here, its text read when it is written (M57); a close queued after it follows it.
+            opened = Open(client, document);
         }
         finally
         {
             _documentNotifications.Release();
         }
+
+        await opened.ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>The running clients a document is open in: its language's service and its linters, with their ids.</summary>
@@ -516,17 +527,24 @@ public sealed class LanguageService : IAsyncDisposable
             return;
         }
 
+        // Every client's change is queued before anything is awaited (M57): two changes in a row reach a linter in their
+        // order too (each awaited its write before the next client's was queued, so a later change could overtake).
+        var uri = DocumentUris.FromPath(path);
+        var queued = new List<Task>();
         foreach (var (server, client) in ClientsOf(document).ToList())
         {
-            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits.
-            await (client.Capabilities?.TextDocumentSync switch
+            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits: read from
+            // the document's snapshot when written, off the caller's thread, and replaced by a newer one while queued.
+            queued.Add(client.Capabilities?.TextDocumentSync switch
             {
                 TextDocumentSyncKind.None => Task.CompletedTask,
-                TextDocumentSyncKind.Full => client.DidChangeAsync(DocumentUris.FromPath(path), version, [new TextDocumentContentChangeEvent(null, document.Text().Text)], _lifetime.Token),
-                _ => client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token),
-            }).ConfigureAwait(false);
+                TextDocumentSyncKind.Full => client.DidChangeTextAsync(uri, version, document.Text, _lifetime.Token),
+                _ => client.DidChangeAsync(uri, version, changes, _lifetime.Token),
+            });
             SchedulePull(server, client, path);
         }
+
+        await Task.WhenAll(queued).ConfigureAwait(false);
     }
 
     public async Task SavedAsync(string path)

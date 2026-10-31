@@ -32,6 +32,43 @@ if (args.Contains("--dap") || args.Contains("--interpreter=vscode"))
 
 var connection = new JsonRpcConnection(Console.OpenStandardInput(), Console.OpenStandardOutput());
 var documents = new Dictionary<string, string>(StringComparer.Ordinal);
+
+// With --incremental the server syncs edits (textDocumentSync 2) instead of whole texts (M57's tests of the writer loop).
+// With --log <file> it appends each document notification ("didOpen <version> <length>", "didChange <version> <length>
+// <changes>") and each hover ("hover") to the file, and writes the hovered document's text next to it (<file>.text).
+var incremental = args.Contains("--incremental");
+var log = Array.IndexOf(args, "--log") is var logAt and >= 0 && logAt + 1 < args.Length ? args[logAt + 1] : null;
+void Log(string line)
+{
+    if (log is not null)
+    {
+        File.AppendAllText(log, line + "\n");
+    }
+}
+
+static string Apply(string text, JsonElement change)
+{
+    if (!change.TryGetProperty("range", out var range) || range.ValueKind != JsonValueKind.Object)
+    {
+        return change.GetProperty("text").GetString()!;
+    }
+
+    int Offset(JsonElement position)
+    {
+        var (line, character) = (position.GetProperty("line").GetInt32(), position.GetProperty("character").GetInt32());
+        var offset = 0;
+        for (var i = 0; i < line; i++)
+        {
+            offset = text.IndexOf('\n', offset) + 1;
+        }
+
+        return offset + character;
+    }
+
+    var start = Offset(range.GetProperty("start"));
+    var end = Offset(range.GetProperty("end"));
+    return string.Concat(text.AsSpan(0, start), change.GetProperty("text").GetString(), text.AsSpan(end));
+}
 var exit = new TaskCompletionSource();
 JsonElement? configuration = null;
 
@@ -87,7 +124,7 @@ connection.OnRequest("initialize", async (_, cancellationToken) =>
 JsonElement InitializeResult() => Json("""
     {
       "capabilities": {
-        "textDocumentSync": { "openClose": true, "change": 1, "save": { "includeText": false } },
+        "textDocumentSync": { "openClose": true, "change": CHANGE, "save": { "includeText": false } },
         "hoverProvider": { "workDoneProgress": false },
         "completionProvider": { "resolveProvider": false },
         "signatureHelpProvider": { "triggerCharacters": ["("] },
@@ -102,7 +139,7 @@ JsonElement InitializeResult() => Json("""
       },
       "serverInfo": { "name": "conformance", "version": "1.0" }
     }
-    """);
+    """.Replace("CHANGE", incremental ? "2" : "1", StringComparison.Ordinal));
 connection.OnNotification("initialized", ConformanceJson.Default.JsonElement, initialized =>
 {
     // Ask the client for settings, as many servers do right after initialization.
@@ -117,12 +154,17 @@ connection.OnNotification("textDocument/didOpen", ConformanceJson.Default.JsonEl
 {
     var item = p.GetProperty("textDocument");
     documents[item.GetProperty("uri").GetString()!] = item.GetProperty("text").GetString()!;
+    Log($"didOpen {item.GetProperty("version").GetInt32()} {item.GetProperty("text").GetString()!.Length}");
     await PublishAsync(item.GetProperty("uri").GetString()!).ConfigureAwait(false);
 });
 connection.OnNotification("textDocument/didChange", ConformanceJson.Default.JsonElement, async p =>
 {
     var uri = Uri(p);
-    documents[uri] = p.GetProperty("contentChanges")[0].GetProperty("text").GetString()!; // full sync
+    var changes = p.GetProperty("contentChanges");
+    documents[uri] = incremental
+        ? changes.EnumerateArray().Aggregate(documents.TryGetValue(uri, out var known) ? known : string.Empty, Apply)
+        : changes[0].GetProperty("text").GetString()!; // full sync
+    Log($"didChange {p.GetProperty("textDocument").GetProperty("version").GetInt32()} {documents[uri].Length} {changes.GetArrayLength()}");
     await PublishAsync(uri).ConfigureAwait(false);
 });
 connection.OnNotification("textDocument/didClose", ConformanceJson.Default.JsonElement, p =>
@@ -150,9 +192,18 @@ connection.OnRequest("textDocument/completion", (p, _) =>
     };
     return Task.FromResult<JsonElement?>(ToElement(items)); // an array, not a CompletionList
 });
-connection.OnRequest("textDocument/hover", (_, _) => Task.FromResult<JsonElement?>(Json("""
+connection.OnRequest("textDocument/hover", (p, _) =>
+{
+    if (log is not null)
+    {
+        File.WriteAllText(log + ".text", documents.TryGetValue(Uri(p), out var hovered) ? hovered : string.Empty);
+        Log("hover");
+    }
+
+    return Task.FromResult<JsonElement?>(Json("""
     { "contents": [ { "language": "conf", "value": "alpha = 1" }, "A **marked** string." ] }
-    """)));
+    """));
+});
 connection.OnRequest("textDocument/signatureHelp", (_, _) => Task.FromResult<JsonElement?>(Json("""
     { "signatures": [ { "label": "f(first, second)", "documentation": "Two parameters.", "parameters": [ { "label": [2, 7] }, { "label": [9, 15], "documentation": "The second." } ] } ] }
     """)));

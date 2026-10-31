@@ -1,6 +1,6 @@
 # 0005. Editor and language services
 
-- **Status:** accepted (M3 plan approval, 2026-10-09)
+- **Status:** accepted (M3 plan approval, 2026-10-09), amended 2026-10-31 ([document sync off the UI thread](#amendment-2026-10-31-document-sync-off-the-ui-thread-m57))
 - **Date:** 2026-10-09
 - **Deciders:** maintainer
 
@@ -51,3 +51,13 @@ What exists:
 - Positions are converted between offsets and UTF-16 line/character in the shell; AvaloniaEdit's line tree makes it cheap, and it is unit-tested.
 - Some of the classic IDE's features rely on internal Roslyn services (inline rename's conflict UI, metadata-as-source, signature help). We implement our own where needed; each one is a maintenance cost when Roslyn changes.
 - A third helper process runs while C# is being edited. Memory with a solution open is measured in M3a.
+
+## Amendment (2026-10-31): document sync off the UI thread (M57)
+
+The decision's incremental `didChange` and its open documents went out from the UI thread: each `didOpen` made the whole text a string and encoded it there (0.7–0.8 s for a 19 MB XML file just under the large-file limits, every `<` six bytes of JSON), and so did each key's whole text for a server that syncs whole documents (`TextDocumentSyncKind.Full`; about 0.3 s a key at 15 MB). Measured in the stall tests, in a 4-core container; they decide nothing.
+- **One writer per connection.** Every outgoing message of a `JsonRpcConnection` (requests, notifications, responses, cancellations), in every host, is queued in call order and serialized, written and flushed by one loop. Queueing is synchronous in the caller, so the ordering contract holds: a request always follows the edits queued before it, from any thread. A remote window's path rewrite (`MappedJsonStream`) runs on that loop too. Frames are never cut, the stuck-write reports stay, and disposal fails what is still queued.
+- **A snapshot, not the text.** The editor keeps each document's latest AvaloniaEdit snapshot with its version, taken together under a lock; `didOpen` and a whole-text `didChange` read it when they are written, on the loop. The UI thread's cost is O(1), and the wire format is unchanged.
+- **Versions.** The client tracks, per connection, the version each server has: a `didOpen` sets it (it may carry edits queued after it, read later), a change at or below it is skipped, a change for a document not open there is skipped, and `didClose` forgets it. A whole text still queued is replaced by a newer one (LSP allows the gaps); incremental changes go one by one.
+- **Cancellation.** A request cancelled while queued is never written and sends no `$/cancelRequest`; one written sends it, as before. A queued notification is never dropped: its token stops only the caller's wait.
+- **Razor's HTML** (ADR 0027) is projected off the UI thread from a snapshot at the Razor file's version, sent with that version, and dropped when a newer projection went first.
+- `TODO(issue)`: Code Search still makes every open snapshot a string on the UI thread for its text results; streaming the snapshot's chunks to the stream without one big string.

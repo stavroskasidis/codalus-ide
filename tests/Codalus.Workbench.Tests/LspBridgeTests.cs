@@ -278,6 +278,167 @@ public sealed class LspBridgeTests : IAsyncLifetime
         await WaitUntil(() => _service.Diagnostics.For(path).Count == 0, ct);
     }
 
+    // ------------------------------------------------------------------ document sync through the writer loop (M57)
+
+    /// <summary>A service whose conformance server logs each document notification to <paramref name="log"/>.</summary>
+    private LanguageService LoggingService(string log, bool incremental)
+    {
+        var servers = new LanguageServiceRegistry();
+        string[] args = incremental ? ["--log", log, "--incremental"] : ["--log", log];
+        servers.Register(new LanguageServiceDescriptor("conformance", "Conformance", [], null, () => ProcessLaunchInfo.FromPath(ServerPath, args))
+        {
+            Languages = ["conf"],
+        });
+        return new LanguageService(servers, _solutions, languages: _languages);
+    }
+
+    /// <summary>The log's lines up to the last hover, once the hover request came back (the server handles notifications first).</summary>
+    private static async Task<string[]> LogAsync(LanguageService service, string path, string log, CancellationToken ct)
+    {
+        var client = (await service.ClientAsync("conf"))!;
+        await client.HoverAsync(DocumentUris.FromPath(path), new Position(0, 0), ct);
+        return await File.ReadAllLinesAsync(log, ct);
+    }
+
+    /// <summary>
+    /// A server that syncs whole texts gets them read from the document's snapshot when written, and a text still queued
+    /// is replaced by a newer one: it ends on the final text, the versions only increase, and all of it comes before the
+    /// request that follows the edits.
+    /// </summary>
+    [Fact]
+    public async Task Whole_texts_end_on_the_final_text_with_increasing_versions_before_the_next_request()
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "full.log");
+        await using var service = LoggingService(log, incremental: false);
+        var path = Path.Combine(_root, "big.conf");
+        var line = "key = " + new string('v', 50) + "\n";
+        var current = (Text: string.Concat(Enumerable.Repeat(line, 10_000)), Version: 1);
+        var gate = new object();
+        (string, int) Snapshot()
+        {
+            lock (gate)
+            {
+                return current;
+            }
+        }
+
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", Snapshot)));
+        var changes = new List<Task>();
+        for (var version = 2; version <= 200; version++)
+        {
+            lock (gate)
+            {
+                current = ("v" + version + " = 1\n" + current.Text, version);
+            }
+
+            // As the editor does: queued, not awaited, one after another.
+            changes.Add(service.ChangeAsync(path, version, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "v" + version + " = 1\n")]));
+        }
+
+        var lines = await LogAsync(service, path, log, ct);
+        await Task.WhenAll(changes);
+        var versions = lines.TakeWhile(l => l != "hover").Where(l => l.StartsWith("didChange ", StringComparison.Ordinal)).Select(l => int.Parse(l.Split(' ')[1], System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.NotEmpty(versions);
+        Assert.Equal(versions.Order().Distinct(), versions); // strictly increasing
+        Assert.Equal(200, versions[^1]);
+        Assert.Equal(current.Text, await File.ReadAllTextAsync(log + ".text", ct));
+        TestContext.Current.TestOutputHelper?.WriteLine($"{versions.Count} whole texts sent for 199 changes");
+    }
+
+    /// <summary>An incremental server gets each version's edits, one change notification per version, before the next request.</summary>
+    [Fact]
+    public async Task An_incremental_server_gets_one_change_per_version_before_the_next_request()
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "incremental.log");
+        await using var service = LoggingService(log, incremental: true);
+        var path = Path.Combine(_root, "edits.conf");
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", () => ("a = 1\n", 1))));
+        for (var version = 2; version <= 101; version++)
+        {
+            _ = service.ChangeAsync(path, version, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "x")]);
+        }
+
+        var lines = await LogAsync(service, path, log, ct);
+        var changes = lines.TakeWhile(l => l != "hover").Where(l => l.StartsWith("didChange ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(Enumerable.Range(2, 100).Select(v => $"didChange {v} {6 + v - 1} 1"), changes);
+        Assert.Equal(new string('x', 100) + "a = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
+    /// <summary>
+    /// A document's server and its linter (ADR 0027) each get every change in order: all of a change's notifications are
+    /// queued before any is awaited (M57: the linter's waited for the server's write, so the next change could overtake
+    /// it, and a version skipped as already sent would leave the linter with the wrong text).
+    /// </summary>
+    [Fact]
+    public async Task A_server_and_its_linter_each_get_every_change_in_order()
+    {
+        var ct = Timeout();
+        var serverLog = Path.Combine(_root, "server.log");
+        var linterLog = Path.Combine(_root, "linter.log");
+        var servers = new LanguageServiceRegistry();
+        servers.Register(new LanguageServiceDescriptor("conformance", "Conformance", [], null, () => ProcessLaunchInfo.FromPath(ServerPath, "--log", serverLog, "--incremental"))
+        {
+            Languages = ["conf"],
+        });
+        servers.Register(new LanguageServiceDescriptor("conformance-lint", "Conformance linter", [], null, () => ProcessLaunchInfo.FromPath(ServerPath, "--log", linterLog, "--incremental"))
+        {
+            Languages = ["conf"],
+            IsLinter = true,
+        });
+        await using var service = new LanguageService(servers, _solutions, languages: _languages);
+        var path = Path.Combine(_root, "linted.conf");
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", () => ("a = 1\n", 1))));
+        await WaitUntil(() => service.RunningLinters(path).Count == 1 && File.Exists(linterLog), ct);
+
+        var changes = new List<Task>();
+        for (var version = 2; version <= 101; version++)
+        {
+            changes.Add(service.ChangeAsync(path, version, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "x")]));
+        }
+
+        await Task.WhenAll(changes);
+        var uri = DocumentUris.FromPath(path);
+        await (await service.ClientAsync("conf"))!.HoverAsync(uri, new Position(0, 0), ct);
+        await service.RunningLinters(path)[0].HoverAsync(uri, new Position(0, 0), ct);
+        var expected = Enumerable.Range(2, 100).Select(v => $"didChange {v} {6 + v - 1} 1").ToList();
+        foreach (var log in new[] { serverLog, linterLog })
+        {
+            var lines = await File.ReadAllLinesAsync(log, ct);
+            Assert.Equal(expected, lines.TakeWhile(l => l != "hover").Where(l => l.StartsWith("didChange ", StringComparison.Ordinal)));
+            Assert.Equal(new string('x', 100) + "a = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+        }
+    }
+
+    /// <summary>
+    /// A didOpen reads the document when it is written, so it can carry edits queued after it: those, at or below the
+    /// version it sent, are skipped, whatever the server syncs (M57: the server applied them twice, or went back).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task No_change_at_or_below_the_opened_version_reaches_the_server(bool incremental)
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "open.log");
+        await using var service = LoggingService(log, incremental);
+        var path = Path.Combine(_root, "opened.conf");
+        var current = ("abc = 1\n", 5); // the editor's snapshot when the didOpen was written: edits 2 to 5 were in it
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", () => current)));
+        for (var version = 3; version <= 5; version++)
+        {
+            await service.ChangeAsync(path, version, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "stale")]);
+        }
+
+        current = ("!abc = 1\n", 6);
+        await service.ChangeAsync(path, 6, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "!")]);
+
+        var lines = await LogAsync(service, path, log, ct);
+        Assert.Equal(["didOpen 5 8", "didChange 6 9 1", "hover"], lines);
+        Assert.Equal("!abc = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
     /// <summary>
     /// A document closed while its server starts is never opened there: its editor has let go of the text by then, and
     /// a late open would leave the server with text that no edit or close corrects (M47: the C# host got an empty

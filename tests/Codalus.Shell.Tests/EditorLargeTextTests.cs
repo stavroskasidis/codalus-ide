@@ -346,6 +346,109 @@ public sealed class EditorLargeTextTests
         Assert.True(services.ExpectsCodeLens(smallCs));
     }
 
+    /// <summary>The longest any input may wait while a large document goes to its language service (M57's tight budget).</summary>
+    private const double LanguageServiceBudget = 100;
+
+    /// <summary>
+    /// The smallest window: each frame the headless renderer draws costs the UI thread what the frame's pixels cost (35 ms
+    /// at 1280 by 800 in a 4-core container), which a budget for the language service's work shouldn't measure.
+    /// </summary>
+    private static void SmallWindow(ShellFixture f)
+    {
+        f.Window.Width = f.Window.MinWidth;
+        f.Window.Height = f.Window.MinHeight;
+        ShellFixture.Pump();
+    }
+
+    private static async Task PumpForAsync(int milliseconds)
+    {
+        var until = DateTime.UtcNow.AddMilliseconds(milliseconds);
+        await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until, seconds: 120);
+    }
+
+    [AvaloniaFact]
+    public async Task A_document_just_under_the_limits_goes_to_the_markup_service_without_holding_the_ui_thread()
+    {
+        // 19 MB of XML that is mostly '<' (each one six bytes of JSON): the didOpen made the whole text a string and
+        // encoded it on the UI thread (M56's TODO); now the UI thread only queues it (M57).
+        await using var f = ShellFixture.Create();
+        SmallWindow(f);
+        var services = (IEditorServices)f.Shell;
+        var small = await OpenAsync(f, "warm.xml", "<root><item/></root>\n");
+        await ShellFixture.PumpUntil(() => services.Client(small.Model) is not null, seconds: 60); // the markup service runs
+
+        // The '<'s in character data: one element, so the service's own answers (symbols, foldings) stay small.
+        const string Line = "<<a <b <c <d <e <f <g <h <i <j <k <l <m <n <o <p <q <r <s <t <u <v <w <x <y <z <<<<<<<<<<\n";
+        var text = "<root><![CDATA[\n" + string.Concat(Enumerable.Repeat(Line, 19_000_000 / Line.Length)) + "]]></root>\n";
+        Assert.InRange(text.Length, 18_000_000, CodeDocument.LargeFileCharacters - 1);
+        var path = Path.Combine(f.UserData, "big.xml");
+        var document = new TextDocument(text);
+        var snapshot = document.CreateSnapshot();
+
+        // The language service's part of the editor's open, as Track does it: from the UI thread, with the service
+        // running, so nothing before the didOpen yields (the rest of the open is M56's, measured there).
+        using var monitor = new UiStallMonitor();
+        Assert.True(await f.Shell.Languages.OpenAsync(new Workbench.Languages.LanguageDocument(path, "xml", () => (snapshot.Text, 1))));
+        var client = services.Client(small.Model)!;
+        await client.HoverAsync(LanguageServices.Protocol.DocumentUris.FromPath(path), new LanguageServices.Protocol.Position(0, 1), TestContext.Current.CancellationToken); // after the didOpen
+        await PumpForAsync(1000);
+        monitor.AssertResponsive("a 19 MB XML document's didOpen", LanguageServiceBudget);
+        await f.Shell.Languages.CloseAsync(path);
+    }
+
+    [AvaloniaFact]
+    public async Task Typing_in_a_large_file_under_a_server_that_syncs_whole_texts_never_holds_the_ui_thread()
+    {
+        // A server that syncs whole documents (TextDocumentSyncKind.Full) gets the text at each key: it was made a string
+        // and encoded on the UI thread, about 15 MB per key here; now it is read from the snapshot on the writer loop.
+        await using var f = ShellFixture.Create();
+        SmallWindow(f);
+        var log = Path.Combine(f.UserData, "conformance.log");
+        var server = Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.LspConformance.Server", "bin",
+            typeof(EditorLargeTextTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyMetadataAttribute), false)
+                .Cast<System.Reflection.AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusConfiguration").Value!, Codalus.Tests.RepoBuild.TargetFramework, "codalus-lsp-conformance.dll");
+        f.Shell.Workbench.LanguageDefinitions.Register(new Workbench.Languages.LanguageDefinition("conf", "Conformance") { Extensions = [".conf"] });
+        f.Shell.Workbench.LanguageServers.Register(new Workbench.Languages.LanguageServiceDescriptor("conformance", "Conformance", [], null, () => Rpc.ProcessLaunchInfo.FromPath(server, "--log", log))
+        {
+            Languages = ["conf"],
+        });
+
+        var line = "key = " + new string('v', 54) + "\n";
+        var text = string.Concat(Enumerable.Repeat(line, 250_000)); // 15 MB, under both limits
+        var editor = await OpenAsync(f, "big.conf", text);
+        Assert.False(editor.Model.IsLarge);
+        var services = (IEditorServices)f.Shell;
+        await ShellFixture.PumpUntil(() => services.Client(editor.Model) is not null, seconds: 60);
+        Assert.Equal(LanguageServices.Protocol.TextDocumentSyncKind.Full, services.Client(editor.Model)!.Capabilities!.TextDocumentSync);
+
+        using var monitor = new UiStallMonitor();
+        async Task TypeAsync()
+        {
+            editor.Editor.CaretOffset = 0;
+            for (var i = 0; i < 20; i++)
+            {
+                editor.Editor.TextArea.PerformTextInput("z");
+                ShellFixture.Pump();
+            }
+
+            await PumpForAsync(300);
+        }
+
+        await TypeAsync(); // for the JIT
+        monitor.Reset();
+        await TypeAsync();
+        monitor.AssertResponsive("typing 20 keys in a 15 MB file under a whole-text server", LanguageServiceBudget);
+
+        // The server ends on the editor's text, at its version, whatever was replaced on the way.
+        var client = services.Client(editor.Model)!;
+        await client.HoverAsync(editor.Model.Uri, new LanguageServices.Protocol.Position(0, 0), TestContext.Current.CancellationToken);
+        Assert.Equal(editor.Model.Text.Text, await File.ReadAllTextAsync(log + ".text", TestContext.Current.CancellationToken));
+        var versions = File.ReadAllLines(log).Where(l => l.StartsWith("didChange ", StringComparison.Ordinal)).Select(l => int.Parse(l.Split(' ')[1], System.Globalization.CultureInfo.InvariantCulture)).ToList();
+        Assert.Equal(versions.Order().Distinct(), versions);
+        Assert.Equal(editor.Model.Version, versions[^1]);
+        TestContext.Current.TestOutputHelper?.WriteLine($"{versions.Count} whole texts for 40 keys; the longest wait {monitor.Report().Describe()}");
+    }
+
     [AvaloniaFact]
     public async Task Bracket_colors_lex_far_lines_off_the_ui_thread_and_edits_keep_the_states_after_them()
     {

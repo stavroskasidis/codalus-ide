@@ -8,9 +8,31 @@ public sealed record Ping(string Text, int Delay = 0);
 
 public sealed record Pong(string Text);
 
+/// <summary>Parameters whose serialization waits for <see cref="Gate"/> (a big text being encoded), and says when it started.</summary>
+[JsonConverter(typeof(GatedConverter))]
+public sealed record Gated(string Text)
+{
+    public ManualResetEventSlim? Gate { get; init; }
+
+    public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+}
+
+public sealed class GatedConverter : JsonConverter<Gated>
+{
+    public override Gated Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) => new(reader.GetString()!);
+
+    public override void Write(Utf8JsonWriter writer, Gated value, JsonSerializerOptions options)
+    {
+        value.Entered.TrySetResult();
+        value.Gate?.Wait(TimeSpan.FromSeconds(30));
+        writer.WriteStringValue(value.Text);
+    }
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(Ping))]
 [JsonSerializable(typeof(Pong))]
+[JsonSerializable(typeof(Gated))]
 internal sealed partial class TestJsonContext : JsonSerializerContext;
 
 public sealed class JsonRpcConnectionTests : IAsyncLifetime
@@ -368,6 +390,387 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
 
         await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => pending);
         Assert.NotNull(await disconnected.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken));
+    }
+
+    // ------------------------------------------------------------------ the writer loop (M57)
+
+    /// <summary>A gated message the writer loop is stuck encoding: everything queued after it waits.</summary>
+    private static async Task<(Gated Gated, Task Sent, ManualResetEventSlim Gate)> HoldWriterAsync(JsonRpcConnection connection)
+    {
+        var gate = new ManualResetEventSlim();
+        var gated = new Gated("gate") { Gate = gate };
+        var sent = Task.Run(() => connection.NotifyAsync("gated", gated, TestJsonContext.Default.Gated, CancellationToken.None), TestContext.Current.CancellationToken);
+        await gated.Entered.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        return (gated, sent, gate);
+    }
+
+    [Fact]
+    public async Task A_notification_is_queued_before_its_parameters_are_serialized_and_a_request_after_it_follows_it()
+    {
+        // The didOpen of a large file: the caller (the UI thread) must not encode its text, and a request queued after it
+        // still reaches the peer after it.
+        var received = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _b.OnNotification("gated", TestJsonContext.Default.Gated, g => received.Enqueue("gated " + g.Text));
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) =>
+        {
+            received.Enqueue("echo " + p.Text);
+            return Task.FromResult(new Pong(p.Text));
+        });
+        _a.Start();
+        _b.Start();
+
+        using var gate = new ManualResetEventSlim();
+        var gated = new Gated("big") { Gate = gate };
+        var queueing = Task.Run(() =>
+        {
+            var sent = _a.NotifyAsync("gated", gated, TestJsonContext.Default.Gated, Timeout());
+            var echo = _a.InvokeAsync("echo", new Ping("after"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+            return (sent, echo);
+        }, TestContext.Current.CancellationToken);
+
+        // Both calls return while the notification's parameters are still being serialized, elsewhere.
+        var (sent, echo) = await queueing.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await gated.Entered.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.False(sent.IsCompleted);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        Assert.False(echo.IsCompleted);
+
+        gate.Set();
+        await sent.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal("after", (await echo.WaitAsync(s_timeout, TestContext.Current.CancellationToken)).Text);
+        Assert.Equal(["gated big", "echo after"], received);
+    }
+
+    [Fact]
+    public async Task A_lazy_notification_whose_parameters_are_null_sends_nothing()
+    {
+        var received = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _b.OnNotification("note", TestJsonContext.Default.Ping, p => received.Enqueue(p.Text));
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        _a.Start();
+        _b.Start();
+
+        await _a.NotifyAsync("note", () => (Ping?)null, TestJsonContext.Default.Ping, null, Timeout());
+        await _a.NotifyAsync("note", () => new Ping("made"), TestJsonContext.Default.Ping, null, Timeout());
+        await _a.InvokeAsync("echo", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        await _b.WhenDispatchedAsync();
+
+        Assert.Equal(["made"], received);
+    }
+
+    [Fact]
+    public async Task Messages_go_out_in_the_order_they_were_queued_from_many_threads()
+    {
+        const int Threads = 8;
+        const int Each = 250;
+        var received = new List<int>();
+        var done = new TaskCompletionSource();
+        _b.OnNotification("note", TestJsonContext.Default.Ping, p =>
+        {
+            received.Add(int.Parse(p.Text, System.Globalization.CultureInfo.InvariantCulture));
+            if (received.Count == Threads * Each)
+            {
+                done.TrySetResult();
+            }
+        });
+        _a.Start();
+        _b.Start();
+
+        // The order is the order of the calls: each number is taken and queued under one lock, from eight threads.
+        var order = 0;
+        var gate = new object();
+        var sent = new System.Collections.Concurrent.ConcurrentBag<Task>();
+        await Task.WhenAll(Enumerable.Range(0, Threads).Select(_ => Task.Run(() =>
+        {
+            for (var i = 0; i < Each; i++)
+            {
+                lock (gate)
+                {
+                    var text = (order++).ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    sent.Add(i % 2 == 0
+                        ? _a.NotifyAsync("note", new Ping(text), TestJsonContext.Default.Ping, Timeout())
+                        : _a.NotifyAsync("note", () => new Ping(text), TestJsonContext.Default.Ping, null, Timeout()));
+                }
+            }
+        }, TestContext.Current.CancellationToken)));
+        await Task.WhenAll(sent).WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await done.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Enumerable.Range(0, Threads * Each), received);
+    }
+
+    [Fact]
+    public async Task A_request_cancelled_while_queued_sends_nothing_not_even_its_cancellation()
+    {
+        var recording = new RecordingStream(_aToB.Writer.AsStream());
+        await using var a = new JsonRpcConnection(_bToA.Reader.AsStream(), recording);
+        var slowCalled = false;
+        _b.OnRequest("slow", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) =>
+        {
+            slowCalled = true;
+            return Task.FromResult(new Pong(p.Text));
+        });
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        _b.OnNotification("gated", TestJsonContext.Default.Gated, _ => { });
+        a.Start();
+        _b.Start();
+
+        var (_, held, gate) = await HoldWriterAsync(a);
+        using var cts = new CancellationTokenSource();
+        var slow = a.InvokeAsync("slow", new Ping("never"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token);
+        await cts.CancelAsync();
+
+        // Cancelled at once, while the writer is still busy before it.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => slow.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        gate.Set();
+        await held.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal("after", (await a.InvokeAsync("echo", new Ping("after"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout())).Text);
+
+        var written = recording.Text;
+        Assert.DoesNotContain("\"slow\"", written, StringComparison.Ordinal);
+        Assert.DoesNotContain("$/cancelRequest", written, StringComparison.Ordinal);
+        Assert.False(slowCalled);
+        gate.Dispose();
+    }
+
+    [Fact]
+    public async Task A_queued_notification_is_never_dropped_even_when_its_caller_stops_waiting()
+    {
+        var received = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _b.OnNotification("note", TestJsonContext.Default.Ping, p => received.Enqueue(p.Text));
+        _b.OnNotification("gated", TestJsonContext.Default.Gated, _ => { });
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        _a.Start();
+        _b.Start();
+
+        var (_, held, gate) = await HoldWriterAsync(_a);
+        using var cts = new CancellationTokenSource();
+        var kept = _a.NotifyAsync("note", new Ping("kept"), TestJsonContext.Default.Ping, cts.Token);
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => kept.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+
+        gate.Set();
+        await held.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await _a.InvokeAsync("echo", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        await _b.WhenDispatchedAsync();
+        Assert.Equal(["kept"], received);
+        gate.Dispose();
+    }
+
+    [Fact]
+    public async Task A_newer_whole_text_replaces_one_still_queued_but_never_moves_past_a_request()
+    {
+        var received = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _b.OnNotification("note", TestJsonContext.Default.Ping, p => received.Enqueue(p.Text));
+        _b.OnNotification("gated", TestJsonContext.Default.Gated, g => received.Enqueue(g.Text));
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) =>
+        {
+            received.Enqueue("echo");
+            return Task.FromResult(new Pong(p.Text));
+        });
+        _a.Start();
+        _b.Start();
+
+        var (_, held, gate) = await HoldWriterAsync(_a);
+        Task Text(string text) => _a.NotifyAsync("note", () => new Ping(text), TestJsonContext.Default.Ping, "doc", Timeout());
+        var first = Text("v1");
+        var second = Text("v2");
+        var third = Text("v3");
+        var echo = _a.InvokeAsync("echo", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        var fourth = Text("v4");
+        var other = _a.NotifyAsync("note", () => new Ping("other"), TestJsonContext.Default.Ping, "another doc", Timeout());
+        var fifth = Text("v5");
+
+        // Replaced ones complete as written.
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        gate.Set();
+        await Task.WhenAll(held, third, echo, fourth, other, fifth).WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        await _b.WhenDispatchedAsync();
+
+        // v3 stays before the request that followed it; past "another doc"'s text, v5 can't replace v4.
+        Assert.Equal(["gate", "v3", "echo", "v4", "other", "v5"], received);
+        gate.Dispose();
+    }
+
+    [Fact]
+    public async Task Disposing_fails_every_queued_message_with_a_lost_connection()
+    {
+        _b.OnNotification("gated", TestJsonContext.Default.Gated, _ => { });
+        _a.Start();
+        _b.Start();
+
+        var (_, held, gate) = await HoldWriterAsync(_a);
+        var note = _a.NotifyAsync("note", new Ping("queued"), TestJsonContext.Default.Ping, CancellationToken.None);
+        var lazy = _a.NotifyAsync("note", () => new Ping("queued"), TestJsonContext.Default.Ping, "doc", CancellationToken.None);
+        var request = _a.InvokeAsync("echo", new Ping("queued"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+
+        // Disposing doesn't wait for the message stuck being written.
+        await _a.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => note);
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => lazy);
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => request);
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => _a.NotifyAsync("note", new Ping("later"), TestJsonContext.Default.Ping, CancellationToken.None));
+
+        gate.Set();
+        await Assert.ThrowsAnyAsync<Exception>(() => held.WaitAsync(s_timeout, TestContext.Current.CancellationToken)); // its stream is gone
+        gate.Dispose();
+    }
+
+    [Fact]
+    public async Task A_write_stuck_in_the_stream_and_the_messages_behind_it_are_reported_slow_and_then_finished()
+    {
+        using var stuck = new ManualResetEventSlim();
+        var stream = new StuckStream(_aToB.Writer.AsStream(), stuck);
+        await using var a = new JsonRpcConnection(_bToA.Reader.AsStream(), stream);
+        var reports = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        a.Slow += (_, message) => reports.Enqueue(message);
+        _b.OnNotification("note", TestJsonContext.Default.Ping, _ => { });
+        _b.Start();
+
+        var first = a.NotifyAsync("note", new Ping("first"), TestJsonContext.Default.Ping, CancellationToken.None);
+        await stream.Entered.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        var second = a.NotifyAsync("note", new Ping("second"), TestJsonContext.Default.Ping, CancellationToken.None);
+        a.ReportSlow(TimeSpan.Zero);
+
+        Assert.Contains(reports, r => r.StartsWith("Writing notification note has been in progress", StringComparison.Ordinal));
+        Assert.Contains(reports, r => r.StartsWith("Writing notification note has waited", StringComparison.Ordinal) && r.Contains("2 write(s) pending", StringComparison.Ordinal));
+        Assert.Contains("2 write(s) pending", a.Describe(), StringComparison.Ordinal);
+
+        stuck.Set();
+        await Task.WhenAll(first, second).WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal(2, reports.Count(r => r == "Writing notification note finished."));
+    }
+
+    [Fact]
+    public async Task Requests_cancelled_at_any_point_leave_the_stream_intact()
+    {
+        var failures = new System.Collections.Concurrent.ConcurrentQueue<Exception>();
+        _b.HandlerFailed += (_, ex) => failures.Enqueue(ex);
+        var disconnected = false;
+        _b.Disconnected += (_, _) => disconnected = true;
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, async (p, _) =>
+        {
+            await Task.Yield();
+            return new Pong(p.Text);
+        });
+        _b.OnNotification("note", TestJsonContext.Default.Ping, _ => { });
+        _a.Start();
+        _b.Start();
+
+        // Cancellations land while requests are queued, being written, or waiting for their answer; big notifications
+        // between them keep the writer busy.
+        var big = new string('<', 64 * 1024);
+        var calls = new List<Task>();
+        for (var i = 0; i < 300; i++)
+        {
+            var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromMilliseconds(i % 4));
+            calls.Add(_a.InvokeAsync("echo", new Ping(i.ToString(System.Globalization.CultureInfo.InvariantCulture)), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token)
+                .ContinueWith(_ => cts.Dispose(), TaskScheduler.Default));
+            if (i % 10 == 0)
+            {
+                calls.Add(_a.NotifyAsync("note", new Ping(big), TestJsonContext.Default.Ping, CancellationToken.None));
+            }
+        }
+
+        await Task.WhenAll(calls).WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal("after", (await _a.InvokeAsync("echo", new Ping("after"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout())).Text);
+        Assert.Empty(failures);
+        Assert.False(disconnected);
+    }
+
+    /// <summary>Records what is written through it.</summary>
+    private sealed class RecordingStream(Stream inner) : Stream
+    {
+        private readonly MemoryStream _written = new();
+
+        public string Text
+        {
+            get
+            {
+                lock (_written)
+                {
+                    return System.Text.Encoding.UTF8.GetString(_written.ToArray());
+                }
+            }
+        }
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            lock (_written)
+            {
+                _written.Write(buffer.Span);
+            }
+
+            return inner.WriteAsync(buffer, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
+    /// <summary>A stream whose first write blocks until <paramref name="stuck"/> is set (a peer that stopped reading).</summary>
+    private sealed class StuckStream(Stream inner, ManualResetEventSlim stuck) : Stream
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            Entered.TrySetResult();
+            await Task.Run(() => stuck.Wait(TimeSpan.FromSeconds(30)), CancellationToken.None);
+            await inner.WriteAsync(buffer, cancellationToken);
+        }
     }
 
     private static async Task WriteFrameAsync(Stream stream, string json)
