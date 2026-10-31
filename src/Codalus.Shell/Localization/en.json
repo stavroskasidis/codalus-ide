@@ -3254,6 +3254,8 @@
   "msg.toolbox.pointerHelp": "Click it, or press Enter or Space, to cancel the armed item: a click on the form then selects.",
   "msg.toolbox.printing": "Printing",
   "msg.toolbox.projectComponents": "{0} Components",
+  "msg.treeRows.collapsedName": "{0}, collapsed",
+  "msg.treeRows.expandedName": "{0}, expanded",
   "msg.updates.codalusStudioIsUpToDate": "Codalus IDE {0} is up to date.",
   "msg.updates.couldntCheckForUpdates": "Couldn't check for updates: {0}",
   "msg.updates.couldntSwitchTo": "Couldn't switch to {0}: {1}",

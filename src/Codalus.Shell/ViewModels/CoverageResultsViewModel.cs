@@ -8,7 +8,7 @@ using Codalus.Workbench.Testing;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>One visible line of the Coverage Results tree (flattened so the list can virtualize).</summary>
-public sealed class CoverageRowViewModel(CoverageNode node, int depth, bool expanded) : ObservableObject
+public sealed class CoverageRowViewModel(CoverageNode node, int depth, bool expanded) : ObservableObject, ITreeRow
 {
     private bool _isExpanded = expanded;
 
@@ -49,21 +49,18 @@ public sealed class CoverageRowViewModel(CoverageNode node, int depth, bool expa
             if (SetField(ref _isExpanded, value))
             {
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
 
     public string? Chevron => HasChildren ? (_isExpanded ? "chevron-down" : "chevron-right") : null;
 
-    public string AccessibleName
-    {
-        get
-        {
-            var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
-            return string.Format(CultureInfo.CurrentCulture, "{0}, {1} lines covered ({2}), {3} branches covered{4}", Label, LinePercent, Lines, BranchPercent, state);
-        }
-    }
+    /// <summary>
+    /// The row's name for a screen reader: a node's expansion, level and place are its tree item's
+    /// (<see cref="Views.TreeRowsList"/>, M57), not words in its name.
+    /// </summary>
+    public string AccessibleName =>
+        string.Format(CultureInfo.CurrentCulture, "{0}, {1} lines covered ({2}), {3} branches covered", Label, LinePercent, Lines, BranchPercent);
 }
 
 /// <summary>

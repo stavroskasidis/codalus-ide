@@ -9,7 +9,10 @@ using Avalonia.Data;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Codalus.LanguageServices.Protocol;
+using Codalus.Plugins.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 
@@ -19,8 +22,9 @@ namespace Codalus.Shell.Tests;
 /// The virtualized trees as a screen reader sees them (M57, the maintainer's "proper peer for all trees"): each list of a
 /// flattened tree's rows (<see cref="TreeRowsList"/>) is a tree, each row a tree item whose folder has the ExpandCollapse
 /// pattern (its Expand and Collapse are the view's own), with its level and its place among its siblings, and a name
-/// without ", expanded" or ", collapsed" in it (M56 put the state there). The Solution Explorer and the Document Outline
-/// here; Git Changes, the Git Repository tree, a commit's changes and Compare in their own tests.
+/// without ", expanded" or ", collapsed" in it (M56 put the state there; macOS keeps it, for VoiceOver). The shared piece
+/// as the list scrolls, the Solution Explorer, the Document Outline, the Test Explorer and Coverage Results here; Git
+/// Changes, the Git Repository tree, a commit's changes and Compare in their own tests.
 /// </summary>
 public sealed class TreeRowsAutomationTests
 {
@@ -39,9 +43,30 @@ public sealed class TreeRowsAutomationTests
         Assert.Equal(state != ExpandCollapseState.LeafNode, peer.GetProvider<IExpandCollapseProvider>() is not null);
         var name = peer.GetName();
         Assert.False(string.IsNullOrEmpty(name));
-        Assert.DoesNotContain(", expanded", name, StringComparison.Ordinal);
-        Assert.DoesNotContain(", collapsed", name, StringComparison.Ordinal);
+        if (list is TreeRowsList { NamesCarryState: true } && state != ExpandCollapseState.LeafNode)
+        {
+            Assert.EndsWith(state == ExpandCollapseState.Expanded ? ", expanded" : ", collapsed", name, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.DoesNotContain(", expanded", name, StringComparison.Ordinal);
+            Assert.DoesNotContain(", collapsed", name, StringComparison.Ordinal);
+        }
     }
+
+    /// <summary>A row's tree item's name: its name, and on macOS a folder's state (<see cref="TreeRowsList.NamesCarryState"/>).</summary>
+    internal static string NameOf(ListBox list, string name, ExpandCollapseState state) =>
+        list is not TreeRowsList { NamesCarryState: true } ? name
+        : state switch
+        {
+            ExpandCollapseState.Expanded => name + ", expanded",
+            ExpandCollapseState.Collapsed => name + ", collapsed",
+            _ => name,
+        };
+
+    /// <summary>The place a row's control carries for AT-SPI (<c>posinset</c>, <c>setsize</c>).</summary>
+    private static void AssertPlace(Control item, int position, int size) =>
+        Assert.Equal((position, size), (AutomationProperties.GetPositionInSet(item), AutomationProperties.GetSizeOfSet(item)));
 
     /// <summary>A screen reader's Expand or Collapse on a row's tree item, as UI Automation, NSAccessibility and AT-SPI call it.</summary>
     internal static void Invoke(ListBox list, object row, bool expand)
@@ -173,12 +198,10 @@ public sealed class TreeRowsAutomationTests
             AssertTreeItem(list, At("a3"), level: 2, position: 3, size: 3, ExpandCollapseState.LeafNode);
             AssertTreeItem(list, At("B"), level: 1, position: 2, size: 3, ExpandCollapseState.LeafNode);
             AssertTreeItem(list, At("C"), level: 1, position: 3, size: 3, ExpandCollapseState.Collapsed);
-            Assert.Equal("a2", PeerOf(list, At("a2")).GetName());
+            Assert.Equal(NameOf(list, "a2", ExpandCollapseState.Collapsed), PeerOf(list, At("a2")).GetName());
 
-            // AT-SPI reads a row's place from its control: the rows a screen reader knows carry it once the list is idle.
-            ShellFixture.Pump();
-            var a3 = list.ContainerFromItem(At("a3"))!;
-            Assert.Equal((3, 3), (AutomationProperties.GetPositionInSet(a3), AutomationProperties.GetSizeOfSet(a3)));
+            // AT-SPI reads a row's place from its control: once a screen reader has asked for a row, the rows in view carry it.
+            AssertPlace(list.ContainerFromItem(At("a3"))!, 3, 3);
 
             // Expand goes to the owner, as the keys' command does; the new state is announced.
             var announced = new List<(ExpandCollapseState Old, ExpandCollapseState New)>();
@@ -205,13 +228,21 @@ public sealed class TreeRowsAutomationTests
             Assert.Equal((ExpandCollapseState.Expanded, ExpandCollapseState.Collapsed), announced[^1]);
             AssertTreeItem(list, a2, level: 2, position: 2, size: 3, ExpandCollapseState.Collapsed);
 
-            // A sibling removed: the places move, on the peers and on the controls.
+            // A sibling removed: the places move, on the peers and on the controls, before a screen reader's next call
+            // (Avalonia's AT-SPI answers at Default priority: the jobs run here are what runs before it). The rows after it
+            // move up; the rows before it stay where they are, but their siblings are fewer.
+            ShellFixture.Pump();
             a.Children.RemoveAt(0);
             rows.Remove(At("a1"));
-            ShellFixture.Pump();
+            Dispatcher.UIThread.RunJobs(DispatcherPriority.Input);
             AssertTreeItem(list, At("a3"), level: 2, position: 2, size: 2, ExpandCollapseState.LeafNode);
-            a3 = list.ContainerFromItem(At("a3"))!;
-            Assert.Equal((2, 2), (AutomationProperties.GetPositionInSet(a3), AutomationProperties.GetSizeOfSet(a3)));
+            AssertPlace(list.ContainerFromItem(a2)!, 1, 2);
+            AssertPlace(list.ContainerFromItem(At("a3"))!, 2, 2);
+            a.Children.RemoveAt(1);
+            rows.Remove(At("a3"));
+            Dispatcher.UIThread.RunJobs(DispatcherPriority.Input);
+            AssertPlace(list.ContainerFromItem(a2)!, 1, 1);
+            AssertPlace(list.ContainerFromItem(At("B"))!, 2, 3);
         }
         finally
         {
@@ -256,7 +287,7 @@ public sealed class TreeRowsAutomationTests
         AssertTreeItem(list, explorer.Rows[0], level: 1, position: 1, size: 1, ExpandCollapseState.Expanded);
         AssertTreeItem(list, Row("src"), level: 2, position: children.IndexOf(Row("src")) + 1, size: children.Count, ExpandCollapseState.Collapsed);
         AssertTreeItem(list, Row("notes.txt"), level: 2, position: children.Count, size: children.Count, ExpandCollapseState.LeafNode);
-        Assert.Equal("src", PeerOf(list, Row("src")).GetName());
+        Assert.Equal(NameOf(list, "src", ExpandCollapseState.Collapsed), PeerOf(list, Row("src")).GetName());
 
         // Expand shows src's rows, as Right does; Collapse hides them, as Left does.
         Invoke(list, Row("src"), expand: true);
@@ -289,7 +320,7 @@ public sealed class TreeRowsAutomationTests
         AssertTreeItem(list, class1, level: 2, position: 2, size: 3, ExpandCollapseState.Expanded);
         var method = outline.Rows[outline.Rows.IndexOf(class1) + 3];
         AssertTreeItem(list, method, level: 3, position: 3, size: 4, ExpandCollapseState.LeafNode);
-        Assert.Equal("Class Class1", PeerOf(list, class1).GetName());
+        Assert.Equal(NameOf(list, "Class Class1", ExpandCollapseState.Expanded), PeerOf(list, class1).GetName());
 
         Invoke(list, class1, expand: false);
         Assert.False(class1.IsExpanded);
@@ -298,5 +329,251 @@ public sealed class TreeRowsAutomationTests
         Invoke(list, class1, expand: true);
         Assert.True(class1.IsExpanded);
         Assert.Equal(16, outline.Rows.Count);
+    }
+
+    /// <summary>A list of <paramref name="rows"/> in a window of <paramref name="height"/>, each row's name its tree item's.</summary>
+    private static (TreeRowsList List, Window Window) Show(ObservableCollection<Row> rows, double height)
+    {
+        var list = new TreeRowsList
+        {
+            ItemsSource = rows,
+            ItemTemplate = new FuncDataTemplate<Row>((row, _) => new TextBlock { Text = row?.Name }),
+        };
+        list.Styles.Add(new Style(x => x.OfType<ListBoxItem>())
+        {
+            Setters =
+            {
+                new Setter(Layoutable.MinHeightProperty, 20.0),
+                new Setter(AutomationProperties.NameProperty, new Binding(nameof(Row.Name))),
+            },
+        });
+        var window = new Window { Content = list, Width = 300, Height = height };
+        window.Show();
+        ShellFixture.Pump();
+        return (list, window);
+    }
+
+    /// <summary>
+    /// The list scrolls under a screen reader (M57 review): a recycled container shows another row, and carries that row's
+    /// place for AT-SPI before anything a screen reader's call could read (Avalonia's AT-SPI answers at Default priority;
+    /// the place was set at Background, and Orca could say "4 of 9" for a root 5 of 40), and its peer announces no change
+    /// of expansion for it (no row was expanded or collapsed); the row it shows now is still followed.
+    /// </summary>
+    [AvaloniaFact]
+    public void Recycled_rows_carry_their_own_place_and_announce_no_expansion_as_the_list_scrolls()
+    {
+        // 40 roots, expanded, with 9 or 4 children each, every other one a collapsed folder: 300 rows, about 20 in view.
+        var rows = new ObservableCollection<Row>();
+        for (var g = 0; g < 40; g++)
+        {
+            var children = Enumerable.Range(0, g % 2 == 0 ? 9 : 4)
+                .Select(c => c % 2 == 0 ? new Row($"G{g}c{c}", 1, new Row($"G{g}c{c}x", 2)) : new Row($"G{g}c{c}", 1))
+                .ToArray();
+            rows.Add(new Row($"G{g}", 0, children) { IsExpanded = true });
+            foreach (var child in children)
+            {
+                rows.Add(child);
+            }
+        }
+
+        var (list, window) = Show(rows, height: 400);
+        try
+        {
+            // A screen reader reads the rows in view: each container gets its peer, which follows its row.
+            var announced = new List<string>();
+            var peers = new HashSet<TreeRowItemAutomationPeer>();
+            void Read()
+            {
+                foreach (var container in list.GetRealizedContainers())
+                {
+                    var peer = Assert.IsType<TreeRowItemAutomationPeer>(ControlAutomationPeer.CreatePeerForElement(container));
+                    if (peers.Add(peer))
+                    {
+                        peer.PropertyChanged += (_, e) =>
+                        {
+                            if (e.Property == ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty)
+                            {
+                                announced.Add($"{(container.DataContext as Row)?.Name}: {e.OldValue} -> {e.NewValue}");
+                            }
+                        };
+                    }
+                }
+            }
+
+            Read();
+            ShellFixture.Pump();
+            var recycled = 0;
+            for (var step = 1; step * 12 < rows.Count; step++)
+            {
+                var before = list.GetRealizedContainers().ToDictionary(c => c, c => c.DataContext);
+                list.ScrollIntoView(step * 12);
+                Dispatcher.UIThread.RunJobs(DispatcherPriority.Input); // layout, and what runs before a screen reader's call
+                foreach (var container in list.GetRealizedContainers())
+                {
+                    var index = list.IndexFromContainer(container);
+                    var (_, position, size) = list.PlaceOf(index);
+                    var carried = (AutomationProperties.GetPositionInSet(container), AutomationProperties.GetSizeOfSet(container));
+                    Assert.True((position, size) == carried, $"step {step}: {rows[index].Name} is {position} of {size}, its control says {carried.Item1} of {carried.Item2}");
+                    if (before.TryGetValue(container, out var old) && !ReferenceEquals(old, container.DataContext))
+                    {
+                        recycled++;
+                    }
+                }
+
+                Read();
+            }
+
+            Assert.True(recycled > 20, $"{recycled} containers recycled");
+            Assert.Empty(announced);
+
+            // A recycled container's peer follows the row it shows now: that row's expansion is announced.
+            var folder = list.GetRealizedContainers()
+                .Where(c => c.DataContext is Row { HasChildren: true, IsExpanded: false } && peers.Contains((TreeRowItemAutomationPeer)ControlAutomationPeer.CreatePeerForElement(c)))
+                .Select(c => (Row)c.DataContext!)
+                .First();
+            folder.IsExpanded = true;
+            Assert.Equal([$"{folder.Name}: Collapsed -> Expanded"], announced);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// On macOS a folder's tree item says its state after its name too (M57 review): Avalonia 12.1's native peer passes
+    /// <c>AXExpanded</c>, not the <c>AXDisclosing</c> VoiceOver reads on an outline's row. Its name changes, and says so,
+    /// as the row expands; a file's name is its name alone.
+    /// </summary>
+    [AvaloniaFact]
+    public void On_macOS_a_folder_s_tree_item_also_says_its_state_in_its_name()
+    {
+        Assert.Equal(OperatingSystem.IsMacOS(), new TreeRowsList().NamesCarryState);
+        var b = new Row("B", 0, new Row("b1", 1));
+        var rows = new ObservableCollection<Row> { new("A", 0, new Row("a1", 1)) { IsExpanded = true }, new("a1", 1), b, new("C", 0) };
+        var (list, window) = Show(rows, height: 300);
+        try
+        {
+            list.NamesCarryState = true;
+            Assert.Equal("A, expanded", PeerOf(list, rows[0]).GetName());
+            Assert.Equal("B, collapsed", PeerOf(list, b).GetName());
+            Assert.Equal("C", PeerOf(list, rows[3]).GetName());
+            Assert.Equal("a1", PeerOf(list, rows[1]).GetName());
+
+            var names = new List<(object? Old, object? New)>();
+            PeerOf(list, b).PropertyChanged += (_, e) =>
+            {
+                if (e.Property == AutomationElementIdentifiers.NameProperty)
+                {
+                    names.Add((e.OldValue, e.NewValue));
+                }
+            };
+            b.IsExpanded = true;
+            Assert.Equal([("B, collapsed", "B, expanded")], names);
+            Assert.Equal("B, expanded", PeerOf(list, b).GetName());
+
+            list.NamesCarryState = false; // Windows and Linux: the state is the tree item's alone
+            Assert.Equal("B", PeerOf(list, b).GetName());
+            b.IsExpanded = false;
+            Assert.Single(names);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// The Test Explorer's rows (tests fed to the model by hand, as <c>TestRefreshTests</c>): tree items whose Expand and
+    /// Collapse are the explorer's own (its <c>SetExpanded</c>, as Right and Left), named without their state.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Test_explorer_rows_are_tree_items_that_expand_and_collapse_as_its_keys_do()
+    {
+        await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync();
+        const string Controller = "codalus.synthetic:tests";
+        var uri = DocumentUris.FromPath(Path.Combine(f.UserData, "CalcTests.cs"));
+        f.Shell.Tests.ControllerCreated(new TestControllerParams("codalus.synthetic", Controller, "Synthetic"), new TestRefreshTests.Connection());
+        f.Shell.Tests.ItemsUpdated(new TestItemsUpdateParams(Controller,
+        [
+            new("P", null, "P", null, null, null, null, null, null),
+            new("P|c", "P", "Calc", null, uri, new(0, 0, 9, 0), null, null, null),
+            .. Enumerable.Range(0, 4).Select(i => new TestItemDto($"P|m{i}", "P|c", "Test" + i, null, uri, new((2 * i) + 1, 0, (2 * i) + 2, 0), null, null, null)),
+        ], []));
+        f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
+        var explorer = f.Shell.TestExplorer;
+        await ShellFixture.PumpUntil(() => explorer.IsViewShown && explorer.Rows.Any(r => r.Label == "Calc"), describe: () => string.Join(", ", explorer.Rows.Select(r => r.Label)));
+        var list = f.Window.GetVisualDescendants().OfType<TestExplorerView>().First(v => v.IsEffectivelyVisible).FindControl<TreeRowsList>("List")!;
+        TestRowViewModel Row(string label) => explorer.Rows.First(r => r.Label == label);
+        await ShellFixture.PumpUntil(() => list.ContainerFromItem(Row("Calc")) is not null);
+
+        // P, then its class Calc, collapsed or expanded as the explorer starts it.
+        var calc = Row("Calc");
+        var state = calc.IsExpanded ? ExpandCollapseState.Expanded : ExpandCollapseState.Collapsed;
+        AssertTreeItem(list, explorer.Rows[0], level: 1, position: 1, size: 1, ExpandCollapseState.Expanded);
+        AssertTreeItem(list, calc, level: 2, position: 1, size: 1, state);
+        Assert.Equal(NameOf(list, calc.AccessibleName, state), PeerOf(list, calc).GetName());
+        Assert.DoesNotContain("expanded", calc.AccessibleName, StringComparison.Ordinal);
+        Assert.DoesNotContain("collapsed", calc.AccessibleName, StringComparison.Ordinal);
+
+        // Expand shows its tests, as Right does; Collapse hides them, as Left does.
+        if (calc.IsExpanded)
+        {
+            Invoke(list, calc, expand: false);
+        }
+
+        Assert.DoesNotContain(explorer.Rows, r => r.Label == "Test2");
+        Invoke(list, Row("Calc"), expand: true);
+        Assert.True(Row("Calc").IsExpanded);
+        await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Label == "Test2") && list.ContainerFromItem(Row("Test2")) is not null);
+        AssertTreeItem(list, Row("Calc"), level: 2, position: 1, size: 1, ExpandCollapseState.Expanded);
+        AssertTreeItem(list, Row("Test2"), level: 3, position: 3, size: 4, ExpandCollapseState.LeafNode);
+        Invoke(list, Row("Calc"), expand: false);
+        Assert.False(Row("Calc").IsExpanded);
+        Assert.DoesNotContain(explorer.Rows, r => r.Label == "Test2");
+    }
+
+    /// <summary>
+    /// The Coverage Results' rows (a coverage report fed to it, as <c>CoverageTests</c>): tree items whose Expand and Collapse
+    /// are its own (its <c>SetExpanded</c>, as Right and Left), named without their state.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Coverage_results_rows_are_tree_items_that_expand_and_collapse_as_its_keys_do()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1400;
+        f.Window.Height = 900;
+        var uri = DocumentUris.FromPath(Path.Combine(f.UserData, "Calculator.cs"));
+        f.Shell.Tests.RunCoverage(new TestRunCoverageParams(
+            "run-1",
+            [new(uri, [new(4, 3, 0, 0), new(7, 2, 0, 0), new(8, 2, 1, 2)])],
+            [
+                new("Calc", "Calc", "Arithmetic", "Add(int, int)", uri, 4, 1, 1, 0, 0),
+                new("Calc", "Calc", "Arithmetic", "Divide(int, int)", uri, 7, 3, 4, 1, 2),
+                new("Calc", "Calc", "Geometry", "Area(int)", uri, 9, 1, 1, 0, 0),
+            ]));
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<CoverageResultsView>().Any(v => v.IsEffectivelyVisible));
+        var results = f.Shell.CoverageResults;
+        var list = f.Window.GetVisualDescendants().OfType<CoverageResultsView>().First(v => v.IsEffectivelyVisible).FindControl<TreeRowsList>("List")!;
+        CoverageRowViewModel Row(string label) => results.Rows.First(r => r.Label == label);
+        await ShellFixture.PumpUntil(() => results.Rows.Any(r => r.Label == "Geometry") && list.ContainerFromItem(Row("Geometry")) is not null);
+
+        // The assembly, its namespace, its two classes (collapsed: the first results open down to the classes).
+        AssertTreeItem(list, results.Rows[0], level: 1, position: 1, size: 1, ExpandCollapseState.Expanded);
+        AssertTreeItem(list, Row("Arithmetic"), level: 3, position: 1, size: 2, ExpandCollapseState.Collapsed);
+        AssertTreeItem(list, Row("Geometry"), level: 3, position: 2, size: 2, ExpandCollapseState.Collapsed);
+        Assert.Equal(NameOf(list, Row("Arithmetic").AccessibleName, ExpandCollapseState.Collapsed), PeerOf(list, Row("Arithmetic")).GetName());
+
+        Invoke(list, Row("Arithmetic"), expand: true);
+        Assert.True(Row("Arithmetic").IsExpanded);
+        list.ScrollIntoView(Row("Divide(int, int)"));
+        await ShellFixture.PumpUntil(() => list.ContainerFromItem(Row("Divide(int, int)")) is not null, describe: () => $"{list.Bounds}, {string.Join(", ", results.Rows.Select(r => r.Label))}");
+        AssertTreeItem(list, Row("Arithmetic"), level: 3, position: 1, size: 2, ExpandCollapseState.Expanded);
+        AssertTreeItem(list, Row("Divide(int, int)"), level: 4, position: 2, size: 2, ExpandCollapseState.LeafNode);
+        Assert.Equal((3, 2, 2), list.PlaceOf(results.Rows.IndexOf(Row("Geometry")))); // below the pane's few rows in view
+        Invoke(list, Row("Arithmetic"), expand: false);
+        Assert.False(Row("Arithmetic").IsExpanded);
+        Assert.DoesNotContain(results.Rows, r => r.Label == "Divide(int, int)");
     }
 }

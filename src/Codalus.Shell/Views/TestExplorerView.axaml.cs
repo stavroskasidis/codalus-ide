@@ -12,7 +12,7 @@ namespace Codalus.Shell.Views;
 /// <summary>
 /// The Test Explorer: Enter runs the selection (Ctrl+Enter debugs), double-click opens the test's source,
 /// Left/Right collapse and expand, Ctrl+F focuses the filter; the context menu runs, debugs, measures coverage and adds
-/// tests to playlists.
+/// tests to playlists. The list is a <see cref="TreeRowsList"/>: a tree to a screen reader (M57).
 /// </summary>
 public sealed partial class TestExplorerView : UserControl, IPaneView
 {
@@ -50,6 +50,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
         LayoutUpdated += (_, _) => UpdateShown();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        List.ExpandRow = (row, expanded) => ViewModel?.SetExpanded((TestRowViewModel)row, expanded); // a screen reader's, as Left and Right
         Filter.KeyDown += (_, e) =>
         {
             if (e.Key == Key.Enter)

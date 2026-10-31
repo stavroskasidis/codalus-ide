@@ -23,7 +23,7 @@ public sealed record OutcomeStyle(TestOutcome Outcome)
 }
 
 /// <summary>One visible line of the Test Explorer (the arranged tree is flattened so the list can virtualize).</summary>
-public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) : ObservableObject
+public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) : ObservableObject, ITreeRow
 {
     private TestGroup _group = group;
     private bool _isExpanded = expanded;
@@ -84,7 +84,6 @@ public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) 
             if (SetField(ref _isExpanded, value))
             {
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
@@ -93,14 +92,11 @@ public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) 
 
     public string? Tooltip => _group.Node?.FullLabel;
 
-    public string AccessibleName
-    {
-        get
-        {
-            var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
-            return $"{Label}, {TestExplorerViewModel.OutcomeText(_group.Outcome)}{(HasDetail ? ", " + Detail : string.Empty)}{state}";
-        }
-    }
+    /// <summary>
+    /// The row's name for a screen reader: a group's expansion, level and place are its tree item's
+    /// (<see cref="Views.TreeRowsList"/>, M57), not words in its name.
+    /// </summary>
+    public string AccessibleName => $"{Label}, {TestExplorerViewModel.OutcomeText(_group.Outcome)}{(HasDetail ? ", " + Detail : string.Empty)}";
 
     internal static string Icons(TestOutcome outcome) => outcome switch
     {

@@ -6,19 +6,23 @@ using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Views;
 
 /// <summary>
 /// A virtualized list of a flattened tree's rows (<see cref="ITreeRow"/>) that a screen reader reads as a tree (M57, the
 /// maintainer's "proper peer for all trees"): the Solution Explorer, Git Changes' sections, the Document Outline, the Git
-/// Repository tree, a commit's changes and Compare. The list is a <c>Tree</c> and each row a <c>TreeItem</c>
-/// (<see cref="TreeRowItemAutomationPeer"/>) with the ExpandCollapse pattern on a folder, its level and its place among its
-/// siblings, so a row's name is its name alone (the rows said ", expanded" or ", collapsed" in it, M56). It looks and
-/// behaves as the <see cref="ListBox"/> it is: the theme and every <c>ListBoxItem</c> style apply to its rows. Avalonia 12.1
-/// passes the role and the expansion to UI Automation, NSAccessibility and AT-SPI, but of the level and the place only
-/// AT-SPI's position and size (its <c>level</c> is a heading's). TODO(issue): the level and the place on UI Automation and
-/// NSAccessibility once Avalonia's peers carry them; Narrator, VoiceOver and Orca tried on these trees by hand.
+/// Repository tree, a commit's changes, Compare, the Test Explorer and Coverage Results. The list is a <c>Tree</c> and each
+/// row a <c>TreeItem</c> (<see cref="TreeRowItemAutomationPeer"/>) with the ExpandCollapse pattern on a folder, its level
+/// and its place among its siblings, so a row's name is its name alone (the rows said ", expanded" or ", collapsed" in it,
+/// M56). It looks and behaves as the <see cref="ListBox"/> it is: the theme and every <c>ListBoxItem</c> style apply to its
+/// rows. Avalonia 12.1
+/// passes the role and the expansion to UI Automation and AT-SPI, but of the level and the place only AT-SPI's position
+/// and size (its <c>level</c> is a heading's); to NSAccessibility it passes <c>AXExpanded</c> without the disclosure
+/// VoiceOver reads on an outline's row, so there a folder's name says its state too (<see cref="NamesCarryState"/>).
+/// TODO(issue): the level and the place on UI Automation and NSAccessibility once Avalonia's peers carry them; Narrator,
+/// VoiceOver and Orca tried on these trees by hand.
 /// </summary>
 public sealed class TreeRowsList : ListBox
 {
@@ -36,6 +40,14 @@ public sealed class TreeRowsList : ListBox
     /// </summary>
     public Action<ITreeRow, bool>? ExpandRow { get; set; }
 
+    /// <summary>
+    /// Whether a folder's tree item also says ", expanded" or ", collapsed" after its name: on macOS, where Avalonia 12.1's
+    /// native peer passes <c>AXExpanded</c> but neither <c>AXDisclosing</c> nor <c>AXDisclosureLevel</c>, which VoiceOver
+    /// reads on an outline's row (M57 review: the state would go unsaid there). TODO(issue): drop it once VoiceOver is
+    /// heard reading the state, or Avalonia's native peer passes the disclosure.
+    /// </summary>
+    public bool NamesCarryState { get; set; } = OperatingSystem.IsMacOS();
+
     protected override Control CreateContainerForItemOverride(object? item, int index, object? recycleKey) => new TreeRowItem();
 
     protected override bool NeedsContainerOverride(object? item, int index, out object? recycleKey) =>
@@ -44,10 +56,33 @@ public sealed class TreeRowsList : ListBox
     protected override void PrepareContainerForItemOverride(Control container, object? item, int index)
     {
         base.PrepareContainerForItemOverride(container, item, index);
+
+        // Right away, not deferred: a recycled container still carries its last row's place, and Avalonia's AT-SPI answers
+        // a screen reader at Default priority, before anything posted at Background (M57 review: Orca said "4 of 9" for a
+        // root 5 of 40 after a scroll). PlaceOf is a lookup once the rows' places are worked out.
         if (_hasPeers)
         {
-            QueueRefresh();
+            WritePlace(container, index);
         }
+    }
+
+    protected override void ContainerIndexChangedOverride(Control container, int oldIndex, int newIndex)
+    {
+        base.ContainerIndexChangedOverride(container, oldIndex, newIndex);
+
+        // A row added or removed above moves the rows in view without preparing them again (after the rows' change: the
+        // panel hears it after this list does).
+        if (_hasPeers)
+        {
+            WritePlace(container, newIndex);
+        }
+    }
+
+    protected override void ClearContainerForItemOverride(Control element)
+    {
+        base.ClearContainerForItemOverride(element);
+        element.ClearValue(AutomationProperties.PositionInSetProperty);
+        element.ClearValue(AutomationProperties.SizeOfSetProperty);
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TreeRowsListAutomationPeer(this);
@@ -64,15 +99,25 @@ public sealed class TreeRowsList : ListBox
             return default;
         }
 
-        var (positions, sizes) = _places ??= Places(rows);
-        return (row.Depth + 1, positions[index], sizes[index]);
+        if (_places is not { } places || places.Positions.Length != rows.Count)
+        {
+            _places = places = Places(rows);
+        }
+
+        return (row.Depth + 1, places.Positions[index], places.Sizes[index]);
     }
 
-    /// <summary>A row's container got its peer: from now on the rows in view carry their place (AT-SPI reads it there).</summary>
+    /// <summary>
+    /// A row's container got its peer: from now on the rows in view carry their place (AT-SPI reads it there), from this
+    /// one on, which a screen reader is about to ask for.
+    /// </summary>
     internal void PeerCreated()
     {
-        _hasPeers = true;
-        QueueRefresh();
+        if (!_hasPeers)
+        {
+            _hasPeers = true;
+            RefreshPlaces();
+        }
     }
 
     /// <summary>
@@ -114,42 +159,42 @@ public sealed class TreeRowsList : ListBox
 
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // A row added or removed changes its siblings' places, whose containers aren't prepared again.
+        // A row added or removed changes its siblings' places, also those whose containers neither move nor are prepared
+        // again (the rows above it). Above Default, where Avalonia's AT-SPI answers a screen reader: it reads them next.
         _places = null;
-        if (_hasPeers)
+        if (_hasPeers && !_refreshQueued)
         {
-            QueueRefresh();
+            _refreshQueued = true;
+            Dispatcher.UIThread.Post(RefreshPlaces, DispatcherPriority.Loaded);
         }
-    }
-
-    private void QueueRefresh()
-    {
-        if (_refreshQueued)
-        {
-            return;
-        }
-
-        _refreshQueued = true;
-        Dispatcher.UIThread.Post(RefreshPlaces, DispatcherPriority.Background);
     }
 
     /// <summary>
-    /// Gives each row in view that a screen reader knows its place (<see cref="AutomationProperties.PositionInSetProperty"/>,
-    /// <see cref="AutomationProperties.SizeOfSetProperty"/>), after the rows' changes: Avalonia 12's AT-SPI reads them from
-    /// the control, not from its peer.
+    /// Gives each row in view its place (<see cref="AutomationProperties.PositionInSetProperty"/>,
+    /// <see cref="AutomationProperties.SizeOfSetProperty"/>): Avalonia 12's AT-SPI reads them from the control, not from its
+    /// peer.
     /// </summary>
     private void RefreshPlaces()
     {
         _refreshQueued = false;
         foreach (var container in GetRealizedContainers())
         {
-            if (container is TreeRowItem item && ControlAutomationPeer.FromElement(item) is not null)
-            {
-                var (_, position, size) = PlaceOf(IndexFromContainer(item));
-                AutomationProperties.SetPositionInSet(item, position);
-                AutomationProperties.SetSizeOfSet(item, size);
-            }
+            WritePlace(container, IndexFromContainer(container));
         }
+    }
+
+    private void WritePlace(Control container, int index)
+    {
+        var (_, position, size) = PlaceOf(index);
+        if (position == 0)
+        {
+            container.ClearValue(AutomationProperties.PositionInSetProperty);
+            container.ClearValue(AutomationProperties.SizeOfSetProperty);
+            return;
+        }
+
+        AutomationProperties.SetPositionInSet(container, position);
+        AutomationProperties.SetSizeOfSet(container, size);
     }
 }
 
@@ -173,11 +218,12 @@ public sealed class TreeRowsListAutomationPeer(TreeRowsList owner) : ListBoxAuto
 }
 
 /// <summary>
-/// A tree item for a row of a <see cref="TreeRowsList"/> (M57). Its name is the row's (<c>AutomationProperties.Name</c>);
-/// a folder has the ExpandCollapse pattern, whose Expand and Collapse are the list's <see cref="TreeRowsList.ExpandRow"/>,
-/// and whose state follows the row (a file has none: Avalonia's AT-SPI calls anything with the pattern expandable). Its
-/// <see cref="Level"/>, <see cref="PositionInSet"/> and <see cref="SizeOfSet"/> come from the flattened rows; the container
-/// is recycled as the list scrolls, so it reads the row it shows now.
+/// A tree item for a row of a <see cref="TreeRowsList"/> (M57). Its name is the row's (<c>AutomationProperties.Name</c>;
+/// on macOS a folder's says its state too, <see cref="TreeRowsList.NamesCarryState"/>); a folder has the ExpandCollapse
+/// pattern, whose Expand and Collapse are the list's <see cref="TreeRowsList.ExpandRow"/>, and whose state follows the row
+/// (a file has none: Avalonia's AT-SPI calls anything with the pattern expandable). Its <see cref="Level"/>,
+/// <see cref="PositionInSet"/> and <see cref="SizeOfSet"/> come from the flattened rows; the container is recycled as the
+/// list scrolls, so it reads the row it shows now.
 /// </summary>
 public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandCollapseProvider
 {
@@ -187,7 +233,6 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
     public TreeRowItemAutomationPeer(TreeRowItem owner)
         : base(owner)
     {
-        _reported = StateOf(Row);
         Watch();
         owner.DataContextChanged += (_, _) => Watch();
     }
@@ -217,6 +262,8 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
 
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.TreeItem;
 
+    protected override string? GetNameCore() => NameOf(base.GetNameCore(), StateOf(Row));
+
     protected override object? GetProviderCore(Type providerType) =>
         providerType == typeof(IExpandCollapseProvider) && Row is not { HasChildren: true } ? null : base.GetProviderCore(providerType);
 
@@ -224,6 +271,16 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
         row is not { HasChildren: true } ? ExpandCollapseState.LeafNode
         : row.IsExpanded ? ExpandCollapseState.Expanded
         : ExpandCollapseState.Collapsed;
+
+    /// <summary>The row's name, and on macOS a folder's state after it (<see cref="TreeRowsList.NamesCarryState"/>).</summary>
+    private string? NameOf(string? name, ExpandCollapseState state) =>
+        List is not { NamesCarryState: true } || string.IsNullOrEmpty(name) ? name
+        : state switch
+        {
+            ExpandCollapseState.Expanded => Localizer.Format("msg.treeRows.expandedName", "{0}, expanded", name),
+            ExpandCollapseState.Collapsed => Localizer.Format("msg.treeRows.collapsedName", "{0}, collapsed", name),
+            _ => name,
+        };
 
     private void SetExpanded(bool expanded)
     {
@@ -234,7 +291,10 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
         }
     }
 
-    /// <summary>Follows the row the container shows: its expansion is announced as it changes, whichever way it changed.</summary>
+    /// <summary>
+    /// Follows the row the container shows. Another row in a recycled container isn't a change of state (M57 review: a
+    /// scroll announced "expanded" and "collapsed" for rows nobody touched): only the same row's expansion is announced.
+    /// </summary>
     private void Watch()
     {
         if (_watched is not null)
@@ -248,7 +308,7 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
             _watched.PropertyChanged += OnRowChanged;
         }
 
-        Report();
+        _reported = StateOf(Row);
     }
 
     private void OnRowChanged(object? sender, PropertyChangedEventArgs e)
@@ -267,6 +327,11 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
             var old = _reported;
             _reported = state;
             RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty, old, state);
+            if (List is { NamesCarryState: true })
+            {
+                var name = base.GetNameCore();
+                RaisePropertyChangedEvent(AutomationElementIdentifiers.NameProperty, NameOf(name, old), NameOf(name, state));
+            }
         }
     }
 }
