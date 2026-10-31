@@ -64,8 +64,10 @@ public sealed class DebugHotReloadTests
         await EditAsync(f, program, "\" from the shell\"", "\" applied\"");
         await f.RunAsync("run.applyCodeChanges");
         await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains(" applied\n", StringComparison.Ordinal) || f.Shell.DebugLog.GetText().Contains(" applied\r\n", StringComparison.Ordinal), seconds: 60, describe: () => Diagnostics(f));
-        var status = f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text;
-        Assert.Contains("Hot Reload: applied at", status, StringComparison.Ordinal);
+        // The program runs the edit as soon as the debugger applied it; the status says so once its update handlers have
+        // run too (ADR 0090), which can be later (Ubuntu CI, run 41165324579: "applying…" when the output came).
+        string Status() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text;
+        await ShellFixture.PumpUntil(() => Status().Contains("Hot Reload: applied at", StringComparison.Ordinal), seconds: 30, describe: () => "status: " + Status() + Diagnostics(f));
 
         // The program's [MetadataUpdateHandler] ran with the updated type, through the startup hook's agent (ADR 0090).
         await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("updated: Greeter", StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
