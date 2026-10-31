@@ -32,4 +32,28 @@ public sealed class UserCodeTests
         Assert.True(debug.IsUserCode("/src/App/bin/App.dll"));
         Assert.Equal(3, asked);
     }
+
+    [Fact]
+    public async Task An_answer_made_while_the_projects_change_is_not_kept()
+    {
+        // Asked off the UI thread while the projects change: the answer made from the old ones would have been kept until
+        // the next change, written after the change had cleared what was known.
+        await using var debug = new DebugService(() => null);
+        var asked = 0;
+        debug.IsUserModule = _ =>
+        {
+            if (Interlocked.Increment(ref asked) == 1)
+            {
+                debug.UserCodeChanged(); // the solution's projects change while this answer is made
+            }
+
+            return true;
+        };
+
+        Assert.True(debug.IsUserCode("/src/App/bin/App.dll"));
+        Assert.True(debug.IsUserCode("/src/App/bin/App.dll"));
+        Assert.Equal(2, asked); // asked again: the first answer wasn't kept
+        Assert.True(debug.IsUserCode("/src/App/bin/App.dll"));
+        Assert.Equal(2, asked);
+    }
 }

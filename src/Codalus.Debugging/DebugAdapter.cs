@@ -213,7 +213,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
         {
             adapter.Capabilities = await adapter._connection.RequestAsync(
                 "initialize",
-                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsRunInTerminalRequest: terminal is not null),
+                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsVariablePaging: true, SupportsRunInTerminalRequest: terminal is not null),
                 DapJsonContext.Default.InitializeArguments,
                 DapJsonContext.Default.Capabilities,
                 cancellationToken).ConfigureAwait(false);

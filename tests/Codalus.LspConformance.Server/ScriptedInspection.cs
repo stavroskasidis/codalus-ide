@@ -22,6 +22,9 @@ namespace Codalus.LspConformance.Server;
 /// An expression <c>evaluate</c> doesn't list is answered from the variable with that <c>evaluateName</c>, else with
 /// netcoredbg's error for an unknown name. A step (<c>next</c>, <c>stepIn</c>, <c>stepOut</c>) or <c>continue</c> goes
 /// to the next stop; after the last, the program exits. An edit changes the stop's value, as the program's would.
+/// Optional, beside <c>stops</c>: <c>"threads": 40</c> (the program's threads, the first stopped; each a frame of its
+/// own), <c>"stackTraceDelay": 50</c> (milliseconds each stack takes, as a busy netcoredbg's), and <c>"ignoresPaging":
+/// true</c> (every child of a reference, whatever start and count a request has, as an adapter that doesn't page).
 /// </summary>
 internal sealed class ScriptedInspection
 {
@@ -29,21 +32,30 @@ internal sealed class ScriptedInspection
     private readonly int _line;
     private readonly JsonArray _stops;
     private readonly int? _processId;
+    private readonly int _threads;
+    private readonly int _stackTraceDelay;
+    private readonly bool _ignoresPaging;
     private int _stop;
 
-    private ScriptedInspection(string path, int line, JsonArray stops, int? processId)
+    private ScriptedInspection(string path, int line, JsonArray stops, int? processId, int threads, int stackTraceDelay, bool ignoresPaging)
     {
         _path = path;
         _line = line;
         _stops = stops;
         _processId = processId;
+        _threads = Math.Max(1, threads);
+        _stackTraceDelay = stackTraceDelay;
+        _ignoresPaging = ignoresPaging;
     }
 
     /// <summary>The script's <c>inspect</c>; its <c>processId</c> (optional) is reported as the program's, as netcoredbg's process event does.</summary>
     public static ScriptedInspection? From(JsonElement? launch) =>
         launch is { ValueKind: JsonValueKind.Object } arguments && arguments.TryGetProperty("inspect", out var inspect)
             ? new ScriptedInspection(inspect.GetProperty("path").GetString()!, inspect.GetProperty("line").GetInt32(), JsonNode.Parse(inspect.GetProperty("stops").GetRawText())!.AsArray(),
-                inspect.TryGetProperty("processId", out var processId) ? processId.GetInt32() : null)
+                inspect.TryGetProperty("processId", out var processId) ? processId.GetInt32() : null,
+                inspect.TryGetProperty("threads", out var threads) ? threads.GetInt32() : 1,
+                inspect.TryGetProperty("stackTraceDelay", out var delay) ? delay.GetInt32() : 0,
+                inspect.TryGetProperty("ignoresPaging", out var ignores) && ignores.GetBoolean())
             : null;
 
     private JsonObject Stop => _stops[_stop]!.AsObject();
@@ -65,16 +77,31 @@ internal sealed class ScriptedInspection
                 await ScriptedDap.EventAsync(output, "stopped", new JsonObject { ["reason"] = "breakpoint", ["threadId"] = 1, ["allThreadsStopped"] = true });
                 return true;
             case "threads":
-                await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject { ["threads"] = new JsonArray(new JsonObject { ["id"] = 1, ["name"] = "Main Thread" }) });
-                return true;
-            case "stackTrace":
-                var line = Stop["line"]?.GetValue<int>() ?? _line;
                 await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject
                 {
-                    ["stackFrames"] = new JsonArray(new JsonObject { ["id"] = 1, ["name"] = "Program.Main()", ["source"] = new JsonObject { ["path"] = _path }, ["line"] = line, ["column"] = 1 }),
-                    ["totalFrames"] = 1,
+                    ["threads"] = new JsonArray([.. Enumerable.Range(1, _threads).Select(id => (JsonNode)new JsonObject { ["id"] = id, ["name"] = id == 1 ? "Main Thread" : $"Worker {id}" })]),
                 });
                 return true;
+            case "stackTrace":
+                {
+                    if (_stackTraceDelay > 0)
+                    {
+                        await Task.Delay(_stackTraceDelay);
+                    }
+
+                    // The stopped thread's frame at the stop's line; another thread's, a worker's of its own.
+                    var thread = arguments.TryGetProperty("threadId", out var t) ? t.GetInt32() : 1;
+                    var line = Stop["line"]?.GetValue<int>() ?? _line;
+                    await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject
+                    {
+                        ["stackFrames"] = new JsonArray(thread == 1
+                            ? new JsonObject { ["id"] = 1, ["name"] = "Program.Main()", ["source"] = new JsonObject { ["path"] = _path }, ["line"] = line, ["column"] = 1 }
+                            : new JsonObject { ["id"] = thread * 1000, ["name"] = $"Program.Work{thread}()", ["source"] = new JsonObject { ["path"] = _path }, ["line"] = 1, ["column"] = 1 }),
+                        ["totalFrames"] = 1,
+                    });
+                    return true;
+                }
+
             case "scopes":
                 await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject
                 {
@@ -84,8 +111,8 @@ internal sealed class ScriptedInspection
             case "variables":
                 {
                     var reference = arguments.GetProperty("variablesReference").GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    var start = arguments.TryGetProperty("start", out var s) ? s.GetInt32() : 0;
-                    int? count = arguments.TryGetProperty("count", out var c) && c.GetInt32() > 0 ? c.GetInt32() : null;
+                    var start = !_ignoresPaging && arguments.TryGetProperty("start", out var s) ? s.GetInt32() : 0;
+                    int? count = !_ignoresPaging && arguments.TryGetProperty("count", out var c) && c.GetInt32() > 0 ? c.GetInt32() : null;
                     await ScriptedDap.RespondAsync(output, requestSeq, command, new JsonObject { ["variables"] = Variables(Stop["variables"]?[reference], start, count) });
                     return true;
                 }

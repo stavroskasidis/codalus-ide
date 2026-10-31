@@ -158,7 +158,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     private static DapJsonContext Json => DapJsonContext.Default;
 
     private InitializeArguments InitializeArguments() =>
-        new("codalus", "Codalus IDE", _adapterId, SupportsStartDebuggingRequest: true);
+        new("codalus", "Codalus IDE", _adapterId, SupportsVariablePaging: true, SupportsStartDebuggingRequest: true);
 
     private void OnServerOutput(string? line)
     {

@@ -45,7 +45,8 @@ internal sealed class DataTipScenario : IAsyncDisposable
     /// </summary>
     /// <param name="requestLog">A file the scripted adapter writes each request to, a line each: its command and arguments.</param>
     /// <param name="processId">The process id the scripted adapter reports as the program's.</param>
-    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null, string? requestLog = null, int? processId = null)
+    /// <param name="options">More of the script's <c>inspect</c>: <c>threads</c>, <c>stackTraceDelay</c>, <c>ignoresPaging</c>.</param>
+    public static async Task<DataTipScenario> StartAsync(string code, int line, object[] stops, Action<ShellFixture>? before = null, string? requestLog = null, int? processId = null, IReadOnlyDictionary<string, object>? options = null)
     {
         var f = ShellFixture.Create();
         try
@@ -68,6 +69,11 @@ internal sealed class DataTipScenario : IAsyncDisposable
             if (processId is not null)
             {
                 inspect["processId"] = processId;
+            }
+
+            foreach (var (key, value) in options ?? new Dictionary<string, object>())
+            {
+                inspect[key] = value;
             }
 
             var configuration = new Dictionary<string, object> { ["inspect"] = inspect };
@@ -137,11 +143,26 @@ internal sealed class DataTipScenario : IAsyncDisposable
         ["evaluateName"] = evaluateName + "[{0}]",
     };
 
-    /// <summary>The requests in a request log (<see cref="StartAsync"/>'s): each command and its arguments.</summary>
-    public static IReadOnlyList<(string Command, JsonElement Arguments)> Requests(string log) =>
-        File.Exists(log)
-            ? [.. File.ReadAllLines(log).Where(l => l.Length > 0).Select(l => (l[..l.IndexOf(' ', StringComparison.Ordinal)], JsonElement.Parse(l[(l.IndexOf(' ', StringComparison.Ordinal) + 1)..])))]
-            : [];
+    /// <summary>
+    /// The requests in a request log (<see cref="StartAsync"/>'s): each command and its arguments. The adapter goes on
+    /// writing it: it's read as shared, and a line it hasn't finished is left for the next read.
+    /// </summary>
+    public static IReadOnlyList<(string Command, JsonElement Arguments)> Requests(string log)
+    {
+        if (!File.Exists(log))
+        {
+            return [];
+        }
+
+        string text;
+        using (var reader = new StreamReader(new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete)))
+        {
+            text = reader.ReadToEnd();
+        }
+
+        return [.. text[..(text.LastIndexOf('\n') + 1)].Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => (l[..l.IndexOf(' ', StringComparison.Ordinal)], JsonElement.Parse(l[(l.IndexOf(' ', StringComparison.Ordinal) + 1)..])))];
+    }
 
     /// <summary>Waits until the text stays put (the tool windows can still be arriving).</summary>
     public async Task SettleAsync()

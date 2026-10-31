@@ -32,10 +32,21 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
         {
             if (debugger.State != DebugState.Stopped)
             {
-                Roots.Clear();
+                ClearRoots();
             }
         });
         debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
+    }
+
+    /// <summary>Clears the tree; what's still loading under it stops (M56).</summary>
+    private void ClearRoots()
+    {
+        foreach (var old in Roots)
+        {
+            old.CancelLoads();
+        }
+
+        Roots.Clear();
     }
 
     void IShownAware.SetViewShown(bool shown) => _refresh.SetShown(shown);
@@ -83,7 +94,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
         var expression = Expression.Trim();
         if (expression.Length == 0)
         {
-            Roots.Clear();
+            ClearRoots();
             Error = null;
             return;
         }
@@ -91,7 +102,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
         if (_debugger.State != DebugState.Stopped)
         {
             Error = "Expressions can be evaluated only while the program is paused.";
-            Roots.Clear();
+            ClearRoots();
             return;
         }
 
@@ -103,12 +114,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
                 return; // an answer for an earlier stop, or expression
             }
 
-            foreach (var old in Roots)
-            {
-                old.CancelLoads();
-            }
-
-            Roots.Clear();
+            ClearRoots();
             var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression)
             {
                 Icon = WatchViewModel.IconOf(expression),
@@ -126,7 +132,7 @@ public sealed class QuickWatchViewModel : ObservableObject, IShownAware
                 return;
             }
 
-            Roots.Clear();
+            ClearRoots();
             Error = ex.Message;
         }
     }

@@ -122,6 +122,96 @@ public sealed class CollectionViewsTests
     [InlineData(null, null)]
     public void The_views_are_chosen_by_the_type_name(string? type, CollectionKind? expected) => Assert.Equal(expected, CollectionViews.KindOf(type));
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_dictionary_past_a_page_of_slots_reads_page_after_page_until_a_thousand_entries(bool adapterSendsWholeArray)
+    {
+        // 1,800 slots, every third free: the first 1,000 entries are in the first 1,500 slots, two pages (M56). An adapter
+        // that sends the whole array whatever the page gives each page its own slots.
+        var adapter = new PagedArrays(adapterSendsWholeArray);
+        adapter.Array(2, 1800, i => new Variable($"[{i}]", "{Entry}", "System.Collections.Generic.Dictionary<string, int>.Entry", 10_000 + i, $"d._entries[{i}]"));
+        for (var i = 0; i < 1800; i++)
+        {
+            adapter.Members[10_000 + i] = [new("hashCode", "1", "int"), new("next", i % 3 == 2 ? "-3" : "-1", "int"), new("key", $"\"k{i}\"", "string"), new("value", i.ToString(System.Globalization.CultureInfo.InvariantCulture), "int")];
+        }
+
+        IReadOnlyList<Variable> raw = [new("_entries", "{Entry[1800]}", "Entry[]", 2, "d._entries", NamedVariables: 1800), new("_count", "1800", "int")];
+        var view = await CollectionViews.ReadAsync(CollectionKind.Dictionary, raw, adapter.VariablesAsync, adapter.PageAsync, TestContext.Current.CancellationToken);
+        Assert.NotNull(view);
+        Assert.Equal(1000, view.Elements.Count);
+        Assert.Equal(("[\"k0\"]", "[\"k1\"]", "[\"k3\"]", "[\"k1498\"]"), (view.Elements[0].Variable.Name, view.Elements[1].Variable.Name, view.Elements[2].Variable.Name, view.Elements[^1].Variable.Name));
+        Assert.Equal([(0, 1000), (1000, 800)], adapter.Pages);
+        Assert.DoesNotContain(2, adapter.Whole); // never the whole array
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_stack_past_a_page_reads_its_top_page_and_a_set_its_used_slots(bool adapterSendsWholeArray)
+    {
+        // A stack of 1,500 in 2,048 slots: its top 1,000, slots 500 to 1,499, top first, in one page.
+        var adapter = new PagedArrays(adapterSendsWholeArray);
+        adapter.Array(3, 2048, i => new Variable($"[{i}]", i.ToString(System.Globalization.CultureInfo.InvariantCulture), "int", 0, $"s._array[{i}]"));
+        IReadOnlyList<Variable> stack = [new("_array", "{int[2048]}", "int[]", 3, "s._array", NamedVariables: 2048), new("_size", "1500", "int")];
+        var view = await CollectionViews.ReadAsync(CollectionKind.Stack, stack, adapter.VariablesAsync, adapter.PageAsync, TestContext.Current.CancellationToken);
+        Assert.NotNull(view);
+        Assert.Equal((1000, 1500, true), (view.Elements.Count, view.Count, view.Truncated));
+        Assert.Equal(("1499", "500"), (view.Elements[0].Variable.Value, view.Elements[^1].Variable.Value));
+        Assert.Equal([(500, 1000)], adapter.Pages);
+
+        // A set of 1,200 slots, the first 300 free: 900 used ones, read in two pages.
+        adapter = new PagedArrays(adapterSendsWholeArray);
+        adapter.Array(4, 1200, i => new Variable($"[{i}]", "{Entry}", "System.Collections.Generic.HashSet<int>.Entry", 20_000 + i, $"h._entries[{i}]"));
+        for (var i = 0; i < 1200; i++)
+        {
+            adapter.Members[20_000 + i] = [new("HashCode", "1", "int"), new("Next", i < 300 ? "-3" : "-1", "int"), new("Value", i.ToString(System.Globalization.CultureInfo.InvariantCulture), "int")];
+        }
+
+        IReadOnlyList<Variable> set = [new("_entries", "{Entry[1200]}", "Entry[]", 4, "h._entries", NamedVariables: 1200), new("_count", "1200", "int")];
+        view = await CollectionViews.ReadAsync(CollectionKind.HashSet, set, adapter.VariablesAsync, adapter.PageAsync, TestContext.Current.CancellationToken);
+        Assert.NotNull(view);
+        Assert.Equal((900, "300", "1199"), (view.Elements.Count, view.Elements[0].Variable.Value, view.Elements[^1].Variable.Value));
+        Assert.Equal([(0, 1000), (1000, 200)], adapter.Pages);
+    }
+
     /// <summary>The field table each runtime's collections match.</summary>
     private static string TableOf(RecordedVariables recorded) => recorded.Runtime is "net48" or "mono" ? ".NET Framework" : ".NET Core";
+
+    /// <summary>
+    /// An adapter's arrays, made up as they're asked for, paged by start and count as netcoredbg pages them, or sent whole
+    /// whatever the page (an adapter that doesn't page); and each one's members.
+    /// </summary>
+    private sealed class PagedArrays(bool sendsWholeArray)
+    {
+        private readonly Dictionary<int, Variable[]> _arrays = [];
+
+        public Dictionary<int, IReadOnlyList<Variable>> Members { get; } = [];
+
+        /// <summary>The pages asked for: each one's first slot and count.</summary>
+        public List<(int Start, int Count)> Pages { get; } = [];
+
+        /// <summary>The arrays read whole (no page).</summary>
+        public List<int> Whole { get; } = [];
+
+        public void Array(int reference, int length, Func<int, Variable> slot) => _arrays[reference] = [.. Enumerable.Range(0, length).Select(slot)];
+
+        public Task<IReadOnlyList<Variable>> VariablesAsync(int reference)
+        {
+            if (_arrays.TryGetValue(reference, out var array))
+            {
+                Whole.Add(reference);
+                return Task.FromResult<IReadOnlyList<Variable>>(array);
+            }
+
+            return Task.FromResult(Members.TryGetValue(reference, out var members) ? members : []);
+        }
+
+        public Task<IReadOnlyList<Variable>> PageAsync(int reference, int start, int count)
+        {
+            Pages.Add((start, count));
+            var array = _arrays[reference];
+            return Task.FromResult<IReadOnlyList<Variable>>(sendsWholeArray ? array : [.. array.Skip(start).Take(count)]);
+        }
+    }
 }

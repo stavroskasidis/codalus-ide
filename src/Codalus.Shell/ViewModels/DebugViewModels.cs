@@ -102,11 +102,14 @@ public class VariableSource
     {
         if (count > PageSize)
         {
+            // By the range's index: an array near Array.MaxLength elements has more than int.MaxValue - 1,000,000 of them.
             var size = count > NestedPageSize ? NestedPageSize : PageSize;
-            var ranges = new List<VariableNode>((count + size - 1) / size);
-            for (var at = start; at < start + count; at += size)
+            var number = (int)(((long)count + size - 1) / size);
+            var ranges = new List<VariableNode>(number);
+            for (var i = 0; i < number; i++)
             {
-                var length = Math.Min(size, start + count - at);
+                var at = start + (i * size);
+                var length = Math.Min(size, count - (i * size));
                 ranges.Add(new VariableNode(string.Create(CultureInfo.InvariantCulture, $"[{at}..{at + length - 1}]"), string.Empty, null, parent.Reference, this)
                 {
                     Kind = MemberKind.Range,
@@ -147,6 +150,7 @@ public class VariableSource
         var nodes = new List<VariableNode>(rows.Count);
         foreach (var row in rows)
         {
+            cancellationToken.ThrowIfCancellationRequested(); // a load nobody waits for anymore builds no more nodes, nor asks what threw
             nodes.Add(await NodeAsync(row, parent, container, nodes.Count, cancellationToken).ConfigureAwait(false));
         }
 
@@ -603,6 +607,11 @@ public sealed class VariableNode : ObservableObject
         _loaded = false;
         _loading?.Cancel();
         _loading = null;
+        foreach (var child in Children)
+        {
+            child.CancelLoads(); // what's still loading under the children this value replaces
+        }
+
         Children.Reset(reference > 0 && _source is not null ? [Placeholder()] : []);
         OnPropertyChanged(nameof(HasChildren));
         if (reference > 0 && _source is not null && _isExpanded)

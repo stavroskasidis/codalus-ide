@@ -61,6 +61,9 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     private IReadOnlyList<DebugModule>? _moduleList;
     private readonly Dictionary<string, bool> _userCode = new(SolutionService.PathComparer);
+
+    /// <summary>Counts the changes to the modules and projects <see cref="_userCode"/>'s answers come from (under <see cref="_gate"/>).</summary>
+    private int _userCodeGeneration;
     private readonly List<DebugProcess> _processes = [];
     private readonly List<int> _terminalProcesses = [];
     private RunTarget? _runTo;
@@ -243,14 +246,21 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
-    /// <summary>The modules changed: their list is sorted again when next read, and what's user code is asked again.</summary>
+    /// <summary>
+    /// The modules changed, under <see cref="_gate"/> with the change itself: their list is sorted again when next read,
+    /// and what's user code is asked again (an answer being made from the list before is dropped).
+    /// </summary>
     private void ModulesUpdated()
     {
-        lock (_gate)
-        {
-            _moduleList = null;
-            _userCode.Clear();
-        }
+        _moduleList = null;
+        UserCodeUpdated();
+    }
+
+    /// <summary>What's user code is asked again, under <see cref="_gate"/>: an answer being made meanwhile isn't kept.</summary>
+    private void UserCodeUpdated()
+    {
+        _userCode.Clear();
+        _userCodeGeneration++;
     }
 
     /// <summary>The solution's projects changed (<see cref="IsUserModule"/>'s answers may have): user code is asked again.</summary>
@@ -258,7 +268,7 @@ public sealed class DebugService : IAsyncDisposable
     {
         lock (_gate)
         {
-            _userCode.Clear();
+            UserCodeUpdated();
         }
     }
 
@@ -1034,10 +1044,10 @@ public sealed class DebugService : IAsyncDisposable
             _runToIds.Clear();
             _hitLocations.Clear();
             _modules.Clear();
+            ModulesUpdated();
             _runTo = null;
         }
 
-        ModulesUpdated();
         ModulesChanged?.Invoke(this, EventArgs.Empty);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         for (var attempt = 1; ; attempt++)
@@ -1229,10 +1239,10 @@ public sealed class DebugService : IAsyncDisposable
             _runToIds.Clear();
             _hitLocations.Clear();
             _modules.Clear();
+            ModulesUpdated();
             _runTo = null;
         }
 
-        ModulesUpdated();
         Breakpoints.ClearStates();
         ProcessesChanged?.Invoke(this, EventArgs.Empty);
         ModulesChanged?.Invoke(this, EventArgs.Empty);
@@ -1644,19 +1654,28 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
+        int generation;
+        IReadOnlyList<DebugModule> modules;
         lock (_gate)
         {
             if (_userCode.TryGetValue(path, out var known))
             {
                 return known;
             }
+
+            generation = _userCodeGeneration;
+            modules = _moduleList ??= [.. _modules.Values.OrderBy(m => m.Order)];
         }
 
-        var module = Modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
+        var module = modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
         var mine = module?.IsUserCode ?? IsUserModule(path);
         lock (_gate)
         {
-            _userCode[path] = mine;
+            // Kept only if the modules and projects it was made from haven't changed meanwhile (asked off the UI thread).
+            if (generation == _userCodeGeneration)
+            {
+                _userCode[path] = mine;
+            }
         }
 
         return mine;
@@ -2016,9 +2035,10 @@ public sealed class DebugService : IAsyncDisposable
                 var order = _modules.TryGetValue(id, out var existing) ? existing.Order : _modules.Count;
                 _modules[id] = new DebugModule(id, e.Module.Name, e.Module.Path, e.Module.SymbolStatus, e.Module.IsOptimized, e.Module.IsUserCode, order);
             }
+
+            ModulesUpdated();
         }
 
-        ModulesUpdated();
         ModulesChanged?.Invoke(this, EventArgs.Empty);
     }
 

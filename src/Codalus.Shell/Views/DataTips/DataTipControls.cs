@@ -12,6 +12,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
@@ -602,6 +603,7 @@ public sealed class DataTipRow : Border
         {
             _value.Text = Node.Value;
             AutomationProperties.SetName(this, Accessible(Node));
+            Panel.FitValue(Node);
         }
         else if (e.PropertyName is nameof(VariableNode.IsError) or nameof(VariableNode.IsChanged))
         {
@@ -664,6 +666,7 @@ public sealed class DataTipRow : Border
         _value.Classes.Set("changed", Node.IsChanged && !Node.IsError);
         _value.Classes.Set("muted", Node.IsDisplayPending);
         _chevron.IsVisible = Node.HasChildren;
+        Panel.FitValue(Node); // its value may have changed since the columns were measured
         SetColumns(Panel.NameColumn, Panel.ViewColumn, Panel.ValueColumn, Panel.ValueMaxWidth);
     }
 
@@ -688,6 +691,10 @@ public sealed class DataTipRow : Border
 /// The rows are virtualized (M56): only those in view, and a few around them, are built. The name, View and value columns
 /// are measured from every member's text, so each row has them as wide, and they stay put as the tip scrolls.
 /// </summary>
+/// <remarks>
+/// TODO(issue): the keyboard's selection is a class only: give the rows selection-item automation (or automation focus)
+/// so a screen reader says what Up and Down selected, now that only the rows in view are in the automation tree.
+/// </remarks>
 public sealed class DataTipPanel : Border
 {
     /// <summary>The space after a name, before the separator.</summary>
@@ -718,6 +725,7 @@ public sealed class DataTipPanel : Border
     private double _values;
     private double _view;
     private bool _reevaluates;
+    private bool _refitQueued;
 
     public DataTipPanel(VariableNode parent, IDataTipHost host, int level)
     {
@@ -828,40 +836,86 @@ public sealed class DataTipPanel : Border
 
     /// <summary>
     /// The columns' widths, from every member's name and value as text in the tip's font (M56, the maintainer's choice):
-    /// the same for each row, built or not, so they don't change as the tip scrolls.
+    /// the same for each row, built or not, so they don't change as the tip scrolls. Measured once the tip is in its
+    /// window (in its font: before, the text was measured twice, once in the default font).
     /// </summary>
     private void MeasureColumns()
     {
-        var typeface = new Typeface(TextElement.GetFontFamily(this), TextElement.GetFontStyle(this), TextElement.GetFontWeight(this), TextElement.GetFontStretch(this));
-        var size = TextElement.GetFontSize(this);
-        double Width(string text)
+        if (!this.IsAttachedToVisualTree())
         {
-            if (text.Length == 0)
-            {
-                return 0;
-            }
-
-            using var layout = new TextLayout(text.Length > MeasuredValueLength ? text[..MeasuredValueLength] : text, typeface, size, null);
-            return Math.Ceiling(layout.WidthIncludingTrailingWhitespace) + 1;
+            return;
         }
 
+        var typeface = FontTypeface();
+        var size = TextElement.GetFontSize(this);
         double names = 0, values = 0;
         bool views = false, reevaluates = false;
         foreach (var node in Parent.Children)
         {
-            names = Math.Max(names, Width(node.IsPlaceholder ? node.Value : node.Name));
+            names = Math.Max(names, TextWidth(node.IsPlaceholder ? node.Value : node.Name, typeface, size));
             if (!node.IsPlaceholder)
             {
-                values = Math.Max(values, Width(node.Value));
-                views |= VariableTreeSupport.HasVisualizers(node);
+                values = Math.Max(values, TextWidth(node.Value, typeface, size));
+                views = views || VariableTreeSupport.HasVisualizers(node);
             }
 
             reevaluates |= node.CanReevaluate;
         }
 
         (_names, _values, _reevaluates) = (names, values, reevaluates);
-        _view = views ? ViewMargin + Width(Localizer.Get("dataTip.view", "View")) + ViewChrome : 0;
+        _view = views ? ViewMargin + TextWidth(Localizer.Get("dataTip.view", "View"), typeface, size) + ViewChrome : 0;
         ApplyColumns();
+    }
+
+    private Typeface FontTypeface() => new(TextElement.GetFontFamily(this), TextElement.GetFontStyle(this), TextElement.GetFontWeight(this), TextElement.GetFontStretch(this));
+
+    private static double TextWidth(string text, Typeface typeface, double size)
+    {
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        using var layout = new TextLayout(text.Length > MeasuredValueLength ? text[..MeasuredValueLength] : text, typeface, size, null);
+        return Math.Ceiling(layout.WidthIncludingTrailingWhitespace) + 1;
+    }
+
+    /// <summary>
+    /// A member's value changed after the columns were measured (its [DebuggerDisplay] applied as it scrolled into view,
+    /// Re-evaluate's answer), or its row was built: a wider value widens the value column for every row, so the rows keep
+    /// one width as the tip scrolls, and only a value's box widens its own row.
+    /// </summary>
+    internal void FitValue(VariableNode node)
+    {
+        if (node.IsPlaceholder || !this.IsAttachedToVisualTree())
+        {
+            return;
+        }
+
+        var width = TextWidth(node.Value, FontTypeface(), TextElement.GetFontSize(this));
+        if (width <= _values)
+        {
+            return;
+        }
+
+        _values = width;
+        ApplyColumns();
+        if (_refitQueued)
+        {
+            return;
+        }
+
+        // Once the rows built in this layout pass are in: theirs too, and the tip, wider, is placed again.
+        _refitQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _refitQueued = false;
+            if (this.IsAttachedToVisualTree())
+            {
+                ApplyColumns();
+                RowsChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }, DispatcherPriority.Background);
     }
 
     private void ApplyColumns()
@@ -913,6 +967,13 @@ public sealed class DataTipPanel : Border
         RowOf(node)?.Classes.Add("selected");
     }
 
+    /// <summary>The selected member's row, brought into view first: the wheel may have scrolled it out, and only the rows in view are built.</summary>
+    private DataTipRow? SelectedRowInView()
+    {
+        Select(_selected);
+        return SelectedRow;
+    }
+
     /// <summary>Takes the keyboard focus with a row selected (the first, unless one is).</summary>
     public void FocusRows()
     {
@@ -956,12 +1017,12 @@ public sealed class DataTipPanel : Border
             case Key.Left:
                 _host.FocusParent(this);
                 break;
-            case Key.F2 or Key.Enter when SelectedRow is { } row && row.Editor.Begin():
+            case Key.F2 or Key.Enter when SelectedRowInView() is { } row && row.Editor.Begin():
                 break;
             case Key.C when e.KeyModifiers.HasFlag(KeyModifiers.Control) && _selected is { } node:
                 _ = VariableActions.CopyText?.Invoke(node.Value);
                 break;
-            case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && SelectedRow is { } row:
+            case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && SelectedRowInView() is { } row:
                 row.OpenMenu();
                 break;
             case Key.Escape:

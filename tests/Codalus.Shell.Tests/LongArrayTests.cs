@@ -97,6 +97,7 @@ public sealed class LongArrayTests
             monitor.AssertResponsive("opening a range of 1,000 elements", 1000);
 
             // Scrolled to the end, the last element shows; the name column stays as wide, measured from every name.
+            elements.FocusRows(); // the first element selected
             var names = elements.NameColumn;
             var host = HostOf(elements);
             for (var i = 0; i < 400 && elements.ScrollOffset < (1000 - DataTipMetrics.MaxRows) * DataTipMetrics.Row - 1; i++)
@@ -109,6 +110,36 @@ public sealed class LongArrayTests
             await ShellFixture.PumpUntil(() => elements.Rows.Any(r => r.Node.Name == "[1999]"), describe: () => $"scrolled to {elements.ScrollOffset}, rows {string.Join(", ", elements.Rows.Select(r => r.Node.Name))}");
             Assert.Equal(names, elements.NameColumn);
             Assert.InRange(elements.Rows.Count, 1, 40);
+
+            // F2 edits the selected element, though the wheel scrolled its row out (and it wasn't built): back in view first.
+            Assert.Null(elements.RowOf(elements.Nodes[0]));
+            s.F.Press(Avalonia.Input.Key.F2);
+            await ShellFixture.PumpUntil(() => elements.RowOf(elements.Nodes[0]) is { Editor.IsEditing: true });
+            s.F.Press(Avalonia.Input.Key.Escape);
+        }
+        finally
+        {
+            File.Delete(log);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_pinned_long_array_opens_in_ranges_without_asking_for_its_elements()
+    {
+        // The pinned tip's root kept no count, so it read the array the old way: one variables request for every element.
+        var log = NewLog();
+        try
+        {
+            await using var s = await StartAsync(Code, Line, Stops(), requestLog: log);
+            var tip = await s.HoverAsync(s.OffsetOf(Line, "numbers", 1));
+            tip.Header.PinButton!.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            await ShellFixture.PumpUntil(() => s.Editor.PinLayer.Cascades.SingleOrDefault(c => c.Root.Name == "numbers") is { Root.HasChildren: true });
+            var pinned = s.Editor.PinLayer.Cascades.Single(c => c.Root.Name == "numbers");
+            pinned.SetOpen(null, pinned.Header, pinned.Root, true);
+            await ShellFixture.PumpUntil(() => pinned.Panels is [{ Nodes.Count: 100 }], describe: () => $"{pinned.Panels.Count} tips, {(pinned.Panels.Count > 0 ? pinned.Panels[0].Nodes.Count : 0)} members");
+            Assert.All(pinned.Panels[0].Nodes, n => Assert.Equal(MemberKind.Range, n.Kind));
+            Assert.Equal(("[0..999]", "[99000..99999]"), (pinned.Panels[0].Nodes[0].Name, pinned.Panels[0].Nodes[^1].Name));
+            Assert.Empty(VariablesOf(log, 5));
         }
         finally
         {
@@ -152,6 +183,55 @@ public sealed class LongArrayTests
         {
             File.Delete(log);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task A_range_of_an_adapter_that_sends_every_element_anyway_shows_its_own_page()
+    {
+        // An adapter that doesn't page answers a range's request with the whole array: the range keeps its own elements.
+        var log = NewLog();
+        try
+        {
+            object[] stops =
+            [
+                new Dictionary<string, object>
+                {
+                    ["evaluate"] = new Dictionary<string, object> { ["numbers"] = Result("{int[2500]}", "int[]", 5, named: 2_500) },
+                    ["variables"] = new Dictionary<string, object> { ["5"] = Generated(2_500, "numbers") },
+                },
+            ];
+            await using var s = await StartAsync(Code, Line, stops, requestLog: log, options: new Dictionary<string, object> { ["ignoresPaging"] = true });
+            var tip = await s.HoverAsync(s.OffsetOf(Line, "numbers", 1));
+            tip.SetOpen(null, tip.Header, tip.Root, true);
+            await ShellFixture.PumpUntil(() => tip.Panels is [{ Nodes.Count: 3 }] && tip.Panels[0].Rows.Count == 3);
+            tip.SetOpen(tip.Panels[0], tip.Panels[0].Rows[1], tip.Panels[0].Nodes[1], true);
+            await ShellFixture.PumpUntil(() => tip.Panels.Count == 2 && tip.Panels[1].Nodes.Count == 1000);
+            Assert.Equal(("[1000]", "[1999]"), (tip.Panels[1].Nodes[0].Name, tip.Panels[1].Nodes[^1].Name));
+            Assert.Equal([(1000, 1000)], VariablesOf(log, 5).Select(r => (r.Start ?? -1, r.Count ?? -1)));
+            tip.SetOpen(tip.Panels[0], tip.Panels[0].Rows[2], tip.Panels[0].Nodes[2], true);
+            await ShellFixture.PumpUntil(() => tip.Panels.Count == 2 && tip.Panels[1].Nodes.Count == 500);
+            Assert.Equal(("[2000]", "[2499]"), (tip.Panels[1].Nodes[0].Name, tip.Panels[1].Nodes[^1].Name));
+        }
+        finally
+        {
+            File.Delete(log);
+        }
+    }
+
+    [Fact]
+    public async Task The_longest_array_makes_its_ranges_without_overflowing()
+    {
+        // Near Array.MaxLength elements, the ranges' arithmetic passed int.MaxValue: a negative capacity threw, and a
+        // range's last page looped for good.
+        var source = new VariableSource(_ => Task.FromResult<IReadOnlyList<Codalus.Debugging.Variable>>([]));
+        var bytes = new VariableNode("bytes", "{byte[2147483591]}", "byte[]", 5, source) { Counts = ChildCounts.Of("byte[]", Array.MaxLength, null) };
+        var ranges = await source.ChildrenAsync(bytes, TestContext.Current.CancellationToken);
+        Assert.Equal(2148, ranges.Count);
+        Assert.Equal(("[0..999999]", "[2147000000..2147483590]"), (ranges[0].Name, ranges[^1].Name));
+
+        var last = await source.ChildrenAsync(ranges[^1], TestContext.Current.CancellationToken);
+        Assert.Equal(484, last.Count);
+        Assert.Equal(("[2147000000..2147000999]", "[2147483000..2147483590]"), (last[0].Name, last[^1].Name));
     }
 
     [AvaloniaFact]

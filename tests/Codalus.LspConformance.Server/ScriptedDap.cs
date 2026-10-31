@@ -74,8 +74,12 @@ internal static class ScriptedDap
 
             if (s_requestLog is { } logging)
             {
-                await File.AppendAllTextAsync(logging, command + " " + (message.TryGetProperty("arguments", out var logged) ? logged.GetRawText() : "{}") + "\n");
+                // Shared with the test, which reads it as it's written (Windows refuses a write while a reader denies it).
+                var entry = Encoding.UTF8.GetBytes(command + " " + (message.TryGetProperty("arguments", out var logged) ? logged.GetRawText() : "{}") + "\n");
+                await using var file = new FileStream(logging, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+                await file.WriteAsync(entry);
             }
+
             JsonNode? body = null;
             if (inspection is not null && await inspection.HandleAsync(output, message, command!, requestSeq))
             {
