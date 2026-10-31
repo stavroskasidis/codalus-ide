@@ -588,6 +588,141 @@ public sealed class LspBridgeTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// After a crash, each open document is opened again as a document opened now is: an edit made while the replay runs
+    /// (the editor's thread typing while earlier documents are written), skipped because the document wasn't open on the
+    /// new server yet, still reaches it (M57 review: the replay read every text when it began and sent that, so the server
+    /// went on applying incremental edits to a text one edit behind the editor's).
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task An_edit_made_while_a_restarted_server_reopens_documents_reaches_it(bool snapshot)
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "replay.log");
+        await using var service = LoggingService(log, incremental: true);
+        var path = Path.Combine(_root, "replayed.conf");
+        var current = ("b = 1\n", 1);
+        var currentGate = new object();
+        var armed = false;
+        Task? edit = null;
+        var bang = new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "!");
+
+        // The replay's first read of the document is followed at once by the next key, on the replay's thread: its change
+        // is queued before anything the replay queues after the read.
+        (string, int) Read()
+        {
+            (string, int) read;
+            lock (currentGate)
+            {
+                read = current;
+                if (!armed)
+                {
+                    return read;
+                }
+
+                armed = false;
+                current = ("!b = 1\n", 2);
+            }
+
+            edit = service.ChangeAsync(path, 2, [bang]);
+            return read;
+        }
+
+        var document = snapshot
+            ? new LanguageDocument(path, "conf", Read, () =>
+            {
+                var (text, version) = Read();
+                return (() => text, version);
+            })
+            : new LanguageDocument(path, "conf", Read);
+        Assert.True(await service.OpenAsync(document));
+        Assert.Equal(["didOpen 1 6", "hover"], await LogAsync(service, path, log, ct));
+
+        await RestartAsync(service, () =>
+        {
+            lock (currentGate)
+            {
+                armed = true;
+            }
+        }, ct);
+        Assert.NotNull(edit);
+        await edit;
+        lock (currentGate)
+        {
+            current = ("!!b = 1\n", 3);
+        }
+
+        await service.ChangeAsync(path, 3, [bang]);
+        await LogAsync(service, path, log, ct);
+        Assert.Equal("!!b = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
+    /// <summary>
+    /// A document closed while a restarted server reopens documents isn't opened there: the replay began with it open,
+    /// but its close went out first, and an open after it would leave the server with a document no edit or close reaches.
+    /// </summary>
+    [Fact]
+    public async Task A_document_closed_while_a_restarted_server_reopens_documents_is_not_opened_there()
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "replay-closed.log");
+        await using var service = LoggingService(log, incremental: true);
+        var path = Path.Combine(_root, "closed-in-replay.conf");
+        var armed = 0;
+        Task? close = null;
+        (string, int) Read()
+        {
+            if (Interlocked.Exchange(ref armed, 0) == 1)
+            {
+                close = service.CloseAsync(path); // its didClose is queued before anything the replay queues after the read
+            }
+
+            return ("b = 1\n", 1);
+        }
+
+        Assert.True(await service.OpenAsync(new LanguageDocument(path, "conf", Read, () =>
+        {
+            var (text, version) = Read();
+            return (() => text, version);
+        })));
+        var other = Path.Combine(_root, "open-in-replay.conf");
+        Assert.True(await service.OpenAsync(new LanguageDocument(other, "conf", () => ("o = 1\n", 1))));
+        await RestartAsync(service, () => Volatile.Write(ref armed, 1), ct);
+        Assert.NotNull(close);
+        await close;
+
+        await LogAsync(service, other, log, ct); // the server has handled everything the replay sent
+        Assert.Equal("o = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+        await LogAsync(service, path, log, ct);
+        Assert.Equal(string.Empty, await File.ReadAllTextAsync(log + ".text", ct)); // the server doesn't have it
+        Assert.False(service.IsOpen(path));
+    }
+
+    /// <summary>Kills a service's host after <paramref name="before"/>, and returns once it has restarted and reopened its documents.</summary>
+    private static async Task RestartAsync(LanguageService service, Action before, CancellationToken ct)
+    {
+        var restarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnRestarted(object? sender, string language) => restarted.TrySetResult();
+        service.HostRestarted += OnRestarted;
+        try
+        {
+            var pid = (await service.ClientAsync("conf"))!.ProcessId!.Value;
+            before();
+            using (var host = System.Diagnostics.Process.GetProcessById(pid))
+            {
+                host.Kill();
+            }
+
+            await restarted.Task.WaitAsync(ct);
+        }
+        finally
+        {
+            service.HostRestarted -= OnRestarted;
+        }
+    }
+
+    /// <summary>
     /// A document closed while its server starts is never opened there: its editor has let go of the text by then, and
     /// a late open would leave the server with text that no edit or close corrects (M47: the C# host got an empty
     /// Shapes.cs from Code Search's preview, so the file's types were in neither the index nor workspace symbols).

@@ -276,7 +276,7 @@ public sealed class LanguageService : IAsyncDisposable
         {
             ProjectsProvider = () => [.. _projects.Values.Where(p => descriptor.TakesProjects(p.Language))],
             LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
-            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(State)],
+            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(Reopened)],
             InitializationOptions = descriptor.InitializationOptions,
             ScopedConfigurationProvider = descriptor.ScopedConfiguration,
             AcceptedRequests = descriptor.AcceptedRequests,
@@ -378,11 +378,13 @@ public sealed class LanguageService : IAsyncDisposable
         }
     }
 
-    private static OpenDocumentState State(LanguageDocument document)
-    {
-        var (text, version) = document.Text();
-        return new OpenDocumentState(DocumentUris.FromPath(document.Path), document.LanguageId, version, text);
-    }
+    /// <summary>
+    /// A document to open again after its server restarted, read as a document opened now is (M57 review: its text was
+    /// read when the replay began, so an edit made while earlier documents were written was lost), and not sent once closed.
+    /// </summary>
+    private ReopenedDocument Reopened(LanguageDocument document) =>
+        new(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, document.Snapshot,
+            () => _documents.TryGetValue(document.Path, out var current) && ReferenceEquals(current, document));
 
     /// <summary>
     /// Queues a document's <c>didOpen</c>, its text made and encoded when it is written, off the caller's thread (M57: the

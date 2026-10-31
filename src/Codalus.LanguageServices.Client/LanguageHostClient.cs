@@ -28,8 +28,16 @@ public static class HostLaunchInfo
     }
 }
 
-/// <summary>An open document as the client knows it, for replay after a server restart.</summary>
+/// <summary>An open document as the client knows it.</summary>
 public sealed record OpenDocumentState(string Uri, string LanguageId, int Version, string Text);
+
+/// <summary>
+/// An open document, opened again after a server restart as a document opened now is (M57 review): <see cref="Snapshot"/>
+/// is taken when its <c>didOpen</c> is queued and <see cref="Latest"/> read when it is written, not both read when the
+/// replay starts (an edit made meanwhile, skipped because the document wasn't open there yet, was lost). It isn't sent
+/// when <see cref="IsOpen"/> says it was closed by then.
+/// </summary>
+public sealed record ReopenedDocument(string Uri, string LanguageId, Func<(string Text, int Version)> Latest, Func<(Func<string> Text, int Version)>? Snapshot, Func<bool> IsOpen);
 
 /// <summary>
 /// A supervised LSP client (ADR 0005), AOT-safe. It speaks standard LSP plus the <c>codalus/</c> extensions that a
@@ -77,8 +85,8 @@ public sealed class LanguageHostClient : IAsyncDisposable
         }
     }
 
-    /// <summary>Open documents with their current text, replayed after a restart.</summary>
-    public Func<IReadOnlyList<OpenDocumentState>>? OpenDocumentsProvider { get; set; }
+    /// <summary>The open documents, opened again after a restart.</summary>
+    public Func<IReadOnlyList<ReopenedDocument>>? OpenDocumentsProvider { get; set; }
 
     /// <summary>The current project data, replayed after a restart.</summary>
     public Func<IReadOnlyList<ProjectData>>? ProjectsProvider { get; set; }
@@ -296,7 +304,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
         foreach (var document in OpenDocumentsProvider?.Invoke() ?? [])
         {
-            await Open(connection, document.Uri, document.LanguageId, () => (document.Text, document.Version), cancellationToken).ConfigureAwait(false);
+            await Open(connection, document.Uri, document.LanguageId, document.Latest, cancellationToken, document.Snapshot?.Invoke(), document.IsOpen).ConfigureAwait(false);
         }
     }
 
@@ -323,11 +331,17 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task DidOpenAsync(string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null) =>
         _process.IsRunning ? Open(_process.Connection, uri, languageId, latest, cancellationToken, queued) : Task.CompletedTask;
 
-    private static Task Open(JsonRpcConnection connection, string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null)
+    /// <param name="isOpen">Whether the document is still open when the <c>didOpen</c> is written: nothing is sent when it isn't.</param>
+    private static Task Open(JsonRpcConnection connection, string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null, Func<bool>? isOpen = null)
     {
         var versions = Versions(connection);
-        return connection.NotifyAsync(Methods.DidOpen, () =>
+        return connection.NotifyAsync<DidOpenTextDocumentParams>(Methods.DidOpen, () =>
         {
+            if (isOpen?.Invoke() == false)
+            {
+                return null; // closed since the replay began: its didClose is queued, or already went out
+            }
+
             // TODO(issue): write the snapshot's chunks into the JSON as they are, without making one big string of it.
             var (text, version) = queued is { } snapshot && !versions.SkippedPast(uri, snapshot.Version) ? (snapshot.Text(), snapshot.Version) : latest();
             versions.Opened(uri, version);
