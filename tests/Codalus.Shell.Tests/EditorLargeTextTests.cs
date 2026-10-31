@@ -170,6 +170,94 @@ public sealed class EditorLargeTextTests
     }
 
     [AvaloniaFact]
+    public async Task The_line_drawn_to_the_caret_stays_drawn_after_a_change_that_rebuilds_it()
+    {
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var text = new StringBuilder();
+        for (var i = 1; i <= 6_000; i++)
+        {
+            text.Append(i == 10 ? Filler(15_000) : $"var v{i} = {i};").Append('\n');
+        }
+
+        var editor = await OpenAsync(f, "rebuilt.js", text.ToString());
+        var document = editor.Model.Text;
+        var view = editor.Editor.TextArea.TextView;
+        editor.Editor.TextArea.Focus();
+        editor.Editor.CaretOffset = document.GetLineByNumber(10).Offset + 12_000;
+        DrawnToCaret();
+        var caret = CaretX();
+
+        // A group from line 9 into line 10 (a format, a rename): AvaloniaEdit replaces the span, which deletes line 10's
+        // DocumentLine for a new one. The caret's line and column stay (what's before it keeps its length), so it doesn't move.
+        var lineTen = document.GetLineByNumber(10);
+        DocumentEdits.Apply(document, [(document.GetLineByNumber(9).Offset, 0, "/**/"), .. LineTenEdits()]);
+        Assert.True(lineTen.IsDeleted);
+        DrawnToCaret();
+        Assert.Equal(caret, CaretX());
+
+        // A group from line 1 to the end replaces all of the text, which rebuilds every line but the first; and its undo.
+        var edits = new List<(int Offset, int Length, string Text)>();
+        for (var i = 1; i <= 6_000; i++)
+        {
+            if (i == 10)
+            {
+                edits.AddRange(LineTenEdits());
+            }
+            else
+            {
+                edits.Add((document.GetLineByNumber(i).Offset, 0, "/**/"));
+            }
+        }
+
+        var last = document.GetLineByNumber(document.LineCount);
+        DocumentEdits.Apply(document, edits);
+        Assert.NotSame(last, document.GetLineByNumber(document.LineCount)); // the whole text replaced, not the edits' span
+        DrawnToCaret();
+        Assert.Equal(caret, CaretX());
+        document.UndoStack.Undo();
+        DrawnToCaret();
+        Assert.Equal(caret, CaretX());
+
+        // Away from line 10, the usual cut again.
+        editor.Editor.CaretOffset = document.GetLineByNumber(11).Offset;
+        view.EnsureVisualLines();
+        Assert.Equal(LongLineCutter.MaxRendered + 1, view.GetOrConstructVisualLine(document.GetLineByNumber(10)).VisualLength);
+
+        // Every 500 characters of line 10 up to the caret, one replaced by another (the caret's column stays), then inserts
+        // after it to the line's end.
+        List<(int Offset, int Length, string Text)> LineTenEdits()
+        {
+            var line = document.GetLineByNumber(10);
+            var list = new List<(int Offset, int Length, string Text)>();
+            for (var column = 0; column < 12_000; column += 500)
+            {
+                list.Add((line.Offset + column, 1, "x"));
+            }
+
+            for (var column = 12_500; column < line.Length; column += 500)
+            {
+                list.Add((line.Offset + column, 0, "/**/"));
+            }
+
+            return list;
+        }
+
+        // Line 10 is drawn up to the caret at column 12,000: no marker before it.
+        void DrawnToCaret()
+        {
+            Assert.Equal(new TextLocation(10, 12_001), editor.Editor.TextArea.Caret.Location);
+            view.EnsureVisualLines();
+            var drawn = view.GetOrConstructVisualLine(document.GetLineByNumber(10));
+            Assert.Equal(12_001, drawn.VisualLength);
+            Assert.IsType<LongLineCutter.Marker>(drawn.Elements[^1]);
+        }
+
+        double CaretX() => view.GetVisualPosition(editor.Editor.TextArea.Caret.Position, VisualYPosition.LineMiddle).X;
+    }
+
+    [AvaloniaFact]
     public async Task A_surrogate_pair_at_the_cut_is_kept_whole_where_another_colorizer_split_the_line()
     {
         await using var f = ShellFixture.Create();

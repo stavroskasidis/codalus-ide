@@ -37,21 +37,38 @@ internal sealed class LongLineCutter : IVisualLineTransformer
     /// <summary>The line drawn up to the caret and where it's cut: further while the caret stays on it, back to the usual cut when it leaves.</summary>
     private (TextDocument Document, DocumentLine Line, int Cut)? _drawnToCaret;
 
-    /// <summary>Where the caret was at its last move, and the document's version then: which way a placement went.</summary>
-    private (int Offset, ITextSourceVersion? Version) _caret;
+    /// <summary>
+    /// Where the caret was at its last move (its line and column too, which a move changes), and the document's version
+    /// then: which way a placement went.
+    /// </summary>
+    private (int Offset, TextLocation Location, ITextSourceVersion? Version) _caret;
+
+    /// <summary>The document whose updates are followed (<see cref="OnDocumentUpdated"/>).</summary>
+    private TextDocument? _document;
 
     public LongLineCutter(TextArea textArea, Func<IBrush> brush)
     {
         _textArea = textArea;
         _brush = brush;
         textArea.Caret.PositionChanged += OnCaretMoved;
+        textArea.DocumentChanged += OnDocumentReplaced;
+        OnDocumentReplaced(null, EventArgs.Empty);
     }
 
     /// <summary>The cuts made so far, one each time a long line is built (tests).</summary>
     public int Cuts { get; private set; }
 
     /// <summary>Stops following the caret (its view closed).</summary>
-    public void Detach() => _textArea.Caret.PositionChanged -= OnCaretMoved;
+    public void Detach()
+    {
+        _textArea.Caret.PositionChanged -= OnCaretMoved;
+        _textArea.DocumentChanged -= OnDocumentReplaced;
+        if (_document is not null)
+        {
+            _document.UpdateFinished -= OnDocumentUpdated;
+            _document = null;
+        }
+    }
 
     public void Transform(ITextRunConstructionContext context, IList<VisualLineElement> elements)
     {
@@ -111,7 +128,7 @@ internal sealed class LongLineCutter : IVisualLineTransformer
 
         var offset = _textArea.Caret.Offset;
         var back = ReferenceEquals(_caret.Version, document.Version) && offset < _caret.Offset; // put there, not moved by an edit
-        _caret = (offset, document.Version);
+        _caret = (offset, _textArea.Caret.Location, document.Version);
         var line = document.GetLineByOffset(offset);
         var column = offset - line.Offset;
         if (column > MaxDrawnToCaret && column < line.Length)
@@ -143,6 +160,48 @@ internal sealed class LongLineCutter : IVisualLineTransformer
             _drawnToCaret = (document, line, cut);
             _textArea.TextView.Redraw(line);
         }
+    }
+
+    private void OnDocumentReplaced(object? sender, EventArgs e)
+    {
+        if (_document is not null)
+        {
+            _document.UpdateFinished -= OnDocumentUpdated;
+        }
+
+        _document = _textArea.Document;
+        if (_document is not null)
+        {
+            _document.UpdateFinished += OnDocumentUpdated;
+        }
+    }
+
+    /// <summary>
+    /// Keeps the line drawn up to the caret the caret's line through a change that replaces its DocumentLine with a new
+    /// one and leaves the caret at the same line and column, so the caret doesn't move: AvaloniaEdit's replace of a span
+    /// over several lines makes new lines of all of them but the first, and of the whole text (a group over nearly all of
+    /// a long document, <see cref="DocumentEdits"/>) of every line but the first. The line the user is working on was cut
+    /// again, the caret past the cut. Once the update's done the caret's line takes the cut over (at most
+    /// <see cref="MaxDrawnToCaret"/>, as before). A caret the change moved is <see cref="OnCaretMoved"/>'s, as before.
+    /// Only while a line is drawn further, one lookup per update: Transform's check per line stays one comparison.
+    /// </summary>
+    private void OnDocumentUpdated(object? sender, EventArgs e)
+    {
+        if (_drawnToCaret is not { } drawn || drawn.Document != _textArea.Document)
+        {
+            return;
+        }
+
+        // By the caret's line, not the old line's IsDeleted: the whole text's rebuild leaves most old lines unmarked.
+        var caret = _textArea.Caret;
+        var line = drawn.Document.GetLineByOffset(caret.Offset);
+        if (line == drawn.Line || caret.Location != _caret.Location)
+        {
+            return; // still its line, or the caret moved: OnCaretMoved takes it (now, or when the caret's update ends)
+        }
+
+        _drawnToCaret = (drawn.Document, line, drawn.Cut);
+        _textArea.TextView.Redraw(line);
     }
 
     private static bool GiveTextRunProperties(VisualLineElement element, VisualLineElementTextRunProperties properties)
