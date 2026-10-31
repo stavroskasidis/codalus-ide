@@ -11,6 +11,7 @@
     <!-- Host code without MSBuild types, tested on its own. -->
     <Compile Include="..\..\src\Codalus.Projects.Host\SdkSelection.cs" Link="Host\SdkSelection.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeCache.cs" Link="Host\DesignTimeCache.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\DesignTimeQueue.cs" Link="Host\DesignTimeQueue.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\ExplorerFiles.cs" Link="Host\ExplorerFiles.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\WindowsDesktop.cs" Link="Host\WindowsDesktop.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\NetFramework.cs" Link="Host\NetFramework.cs" />

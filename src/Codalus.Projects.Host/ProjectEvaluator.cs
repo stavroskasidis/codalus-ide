@@ -18,6 +18,9 @@ internal sealed record EvaluatedProject(ProjectInfo Info, IReadOnlyList<string> 
     /// </summary>
     public string? Fingerprint { get; init; }
 
+    /// <summary>Imports the evaluation took from MSBuild's cache as they were before they changed on disk (they weren't read again since).</summary>
+    public IReadOnlyList<string> StaleImports { get; init; } = [];
+
     /// <summary>The project's <c>obj</c> folder (<c>BaseIntermediateOutputPath</c>).</summary>
     public string? IntermediateDirectory { get; init; }
 
@@ -193,6 +196,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
             {
                 AssetsStamp = assetsStamp,
                 Fingerprint = fingerprint.Finish(distinctImports, assetsFile),
+                StaleImports = fingerprint.Stale,
                 IntermediateDirectory = NullIfEmpty(outer.GetPropertyValue("BaseIntermediateOutputPath")) is { } obj
                     ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(outer.DirectoryPath, FixSeparators(obj))))
                     : null,
@@ -282,6 +286,7 @@ internal sealed class ProjectEvaluator(ProjectCollection collection)
         return new EvaluatedProject(info, imports)
         {
             Fingerprint = fingerprint.Finish(imports, null, restored),
+            StaleImports = fingerprint.Stale,
             IntermediateDirectory = NullIfEmpty(outer.GetPropertyValue("BaseIntermediateOutputPath")) is { } obj
                 ? Path.TrimEndingDirectorySeparator(Path.GetFullPath(Path.Combine(directory, FixSeparators(obj))))
                 : null,

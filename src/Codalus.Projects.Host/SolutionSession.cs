@@ -63,13 +63,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private readonly ProjectFileEditor _editor;
     private readonly DesignTimeBuilder _designTime;
     private readonly SolutionBuilder _builder = new();
-    private string[] _designTimeInFlight = [];
+    private readonly DesignTimeQueue _designTimeQueue;
     private CancellationTokenSource? _buildCancellation;
     private readonly ConcurrentDictionary<string, string> _activeFrameworks = new(s_pathComparer);
     private readonly ConcurrentDictionary<string, DateTime> _builtAssets = new(s_pathComparer);
-    private readonly HashSet<string> _designTimePending = new(s_pathComparer);
-    private Task _designTimeWorker = Task.CompletedTask;
-    private CancellationTokenSource _designTimeBatch = new();
     private readonly ConcurrentDictionary<string, EvaluatedProject> _evaluated = new(s_pathComparer);
     private readonly SemaphoreSlim _solutionLock = new(1, 1);
 
@@ -98,6 +95,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         _evaluator = new ProjectEvaluator(_collection);
         _editor = new ProjectFileEditor(_editCollection);
         _designTime = new DesignTimeBuilder(_collection, _builder.Gate);
+        _designTimeQueue = new DesignTimeQueue(s_pathComparer, BuildBatchAsync, _lifetime.Token);
 
         // The SDK's tasks (Csc among them) and RunCommand find the dotnet host through this, as under `dotnet build`.
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH")) && System.IO.Path.IsPathRooted(dotnet))
@@ -289,7 +287,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     /// <summary>
     /// Evaluates <paramref name="projects"/> in parallel, reporting each one as soon as it is done, then queues
     /// their design-time builds. With <paramref name="reload"/>, their project files are read from disk again first, and
-    /// so are <paramref name="reloadFiles"/> (imports a restore rewrote).
+    /// so are <paramref name="reloadFiles"/> (imports a restore rewrote) and the files of theirs that changed on disk since
+    /// MSBuild read them (<see cref="ChangedSinceRead"/>).
     /// </summary>
     private async Task EvaluateAsync(IReadOnlyList<string> projects, CancellationToken cancellationToken, DesignTimeMode designTime = DesignTimeMode.Always, bool reload = false,
         IReadOnlyCollection<string>? reloadFiles = null)
@@ -302,9 +301,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 await ReloadAsync(projects, cancellationToken).ConfigureAwait(false);
             }
 
-            if (reloadFiles is { Count: > 0 })
+            IReadOnlyCollection<string> files = [.. (reloadFiles ?? []).Union(ChangedSinceRead(projects), s_pathComparer)];
+            if (files.Count > 0)
             {
-                await ReloadAsync(reloadFiles, cancellationToken).ConfigureAwait(false);
+                await ReloadAsync(files, cancellationToken).ConfigureAwait(false);
             }
 
             await EvaluateLockedAsync(projects, designTime, cancellationToken).ConfigureAwait(false);
@@ -350,6 +350,19 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// The files of <paramref name="projects"/> (the project files and the imports of their last evaluation) that MSBuild's
+    /// cache holds as they were before they changed on disk unreported: an import outside the folders the watcher watches
+    /// (a <c>Directory.Build.props</c> above the solution's folder), or one whose events the OS dropped. Evaluated from the
+    /// cache, a project kept the old content, and its design-time build, run from the same cache, was cached under the key
+    /// of the new file (the fingerprint stamped the file's date).
+    /// </summary>
+    private List<string> ChangedSinceRead(IReadOnlyList<string> projects) =>
+        [.. projects.SelectMany(p => _evaluated.TryGetValue(p, out var evaluated) ? evaluated.Imports.Prepend(p) : [])
+            .Distinct(s_pathComparer)
+            .Where(file => ProjectRootElement.TryOpen(file, _collection) is { } cached && cached.LastWriteTimeWhenRead != DateTime.MinValue
+                           && File.Exists(file) && cached.LastWriteTimeWhenRead.ToUniversalTime() != File.GetLastWriteTimeUtc(file))];
+
     private async Task EvaluateLockedAsync(IReadOnlyList<string> projects, DesignTimeMode designTime, CancellationToken cancellationToken)
     {
         var started = Stopwatch.GetTimestamp();
@@ -394,6 +407,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             }).ConfigureAwait(false);
         _watcher?.SetImports(_evaluated.Values.SelectMany(e => e.Imports));
         await _events.LogAsync("info", $"Evaluated {projects.Count} project(s) in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms ({Active.Name}).").ConfigureAwait(false);
+
+        // An import that changed on disk while it was evaluated, or one the check before couldn't know of (a project's new
+        // import, read before by another project): its key says so, and the next evaluation reads it again.
+        if (projects.Where(p => _evaluated.TryGetValue(p, out var e) && e.StaleImports.Count > 0).ToList() is { Count: > 0 } stale)
+        {
+            await _events.LogAsync("info", $"Evaluated {string.Join(", ", stale.Take(3).Select(System.IO.Path.GetFileName))}{(stale.Count > 3 ? ", …" : "")} with imports MSBuild had cached "
+                                           + $"before they changed on disk: {string.Join(", ", stale.SelectMany(p => _evaluated[p].StaleImports).Distinct(s_pathComparer).Take(3))}.").ConfigureAwait(false);
+        }
         IReadOnlyCollection<string> changed = designTime == DesignTimeMode.Always
             ? projects
             : WithDependents([.. projects.Where(p => !_builtAssets.TryGetValue(p, out var built) || built != AssetsStamp(p))]);
@@ -517,7 +538,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
 
         IReadOnlyCollection<string> projects = path is null ? [.. ProjectPaths] : [System.IO.Path.GetFullPath(path)];
-        lock (_designTimePending)
+        lock (_forcedDesignTime)
         {
             _forcedDesignTime.UnionWith(projects); // asked for: never from the cache
         }
@@ -532,73 +553,16 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             return;
         }
 
-        lock (_designTimePending)
+        // SQL database projects (.sqlproj, ADR 0038) have no compiler command line: they build, but get no design-time build.
+        // Compose projects (.dcproj, ADR 0042) aren't MSBuild projects to us at all.
+        if (!_designTimeQueue.Add([.. projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase) && !ComposeProject.Is(p))]))
         {
-            // SQL database projects (.sqlproj, ADR 0038) have no compiler command line: they build, but get no design-time build.
-            // Compose projects (.dcproj, ADR 0042) aren't MSBuild projects to us at all.
-            _designTimePending.UnionWith(projects.Where(p => !IsUnloaded(p) && !p.EndsWith(".sqlproj", StringComparison.OrdinalIgnoreCase) && !ComposeProject.Is(p)));
-            if (_designTimePending.Count == 0 && _designTimeWorker.IsCompleted)
-            {
-                // Nothing to build: say so, or the shell would wait for design-time builds that never come (M34b).
-                _ = _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, 0, true));
-                return;
-            }
-
-            if (_designTimeWorker.IsCompleted)
-            {
-                var token = _designTimeBatch.Token;
-                _designTimeWorker = Task.Run(() => RunDesignTimeBuildsAsync(token), CancellationToken.None);
-            }
+            // Nothing to build: say so, or the shell would wait for design-time builds that never come (M34b).
+            _ = _events.DesignTimeProgressAsync(new DesignTimeProgressParams(0, 0, true));
         }
     }
 
-    private void CancelDesignTimeBuilds()
-    {
-        lock (_designTimePending)
-        {
-            _designTimePending.Clear();
-            var previous = Interlocked.Exchange(ref _designTimeBatch, CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token));
-            previous.Cancel();
-            previous.Dispose();
-        }
-    }
-
-    /// <summary>Drains the pending set in batches, so changes made during a batch are built right after it.</summary>
-    private async Task RunDesignTimeBuildsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            // Let a burst of changes (watcher events, many projects evaluated) settle into one batch.
-            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                string[] batch;
-                lock (_designTimePending)
-                {
-                    batch = [.. _designTimePending];
-                    _designTimePending.Clear();
-                }
-
-                if (batch.Length == 0)
-                {
-                    return;
-                }
-
-                _designTimeInFlight = batch;
-                try
-                {
-                    await BuildBatchAsync(batch, cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    _designTimeInFlight = [];
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
+    private void CancelDesignTimeBuilds() => _designTimeQueue.Cancel();
 
     private async Task BuildBatchAsync(string[] batch, CancellationToken cancellationToken)
     {
@@ -609,7 +573,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var keys = new Dictionary<string, (string Directory, string Entry, string Key)>(s_pathComparer);
         var used = new Dictionary<string, (string? Framework, string Key)>(s_pathComparer);
         HashSet<string> forced;
-        lock (_designTimePending)
+        lock (_forcedDesignTime)
         {
             forced = [.. _forcedDesignTime.Intersect(batch, s_pathComparer)];
             _forcedDesignTime.ExceptWith(forced);
@@ -626,7 +590,12 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             var framework = frameworks.Length <= 1 ? null
                 : _activeFrameworks.TryGetValue(path, out var active) && frameworks.Contains(active, StringComparer.OrdinalIgnoreCase) ? active : frameworks[0];
             var (configuration, platform) = ProjectConfiguration(path);
-            _builtAssets[path] = AssetsStamp(path);
+
+            // The assets file this batch's result is known to come from: the evaluation's, which its cache key holds. The
+            // file's date now, newer once a restore wrote it before its evaluation was done, said a result taken from the
+            // cache (a build before the restore, without the packages) came from the new file, so the restore's
+            // evaluation found nothing to build again (Web21's no references, docs/ci-flakes.md).
+            _builtAssets[path] = project.AssetsStamp;
 
             // The persisted cache (M34b): unchanged inputs give the last build's command line without building.
             if (project.IntermediateDirectory is { } obj && DesignTimeKey(path, framework, properties) is { } key)
@@ -703,12 +672,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         var stale = used.Where(u => _evaluated.TryGetValue(u.Key, out var p) && p.Info.State == ProjectStates.Loaded
                                     && DesignTimeKey(u.Key, u.Value.Framework, current) is { } now && now != u.Value.Key)
             .Select(u => u.Key).ToList();
-        bool more;
-        lock (_designTimePending)
-        {
-            _designTimePending.UnionWith(stale);
-            more = _designTimePending.Count > 0;
-        }
+        var more = _designTimeQueue.Requeue(stale);
 
         // Hits and misses since the last completed progress go with the next one (M34c: benchmarks assert that warm opens
         // hit the cache).
@@ -918,27 +882,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     }
 
     /// <summary>Cancels design-time builds (running and queued) and returns their projects, to queue them again later.</summary>
-    private async Task<string[]> PauseDesignTimeBuildsAsync()
-    {
-        string[] interrupted;
-        Task worker;
-        lock (_designTimePending)
-        {
-            interrupted = [.. _designTimePending, .. _designTimeInFlight];
-            worker = _designTimeWorker;
-        }
-
-        CancelDesignTimeBuilds();
-        try
-        {
-            await worker.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-
-        return interrupted;
-    }
+    private Task<string[]> PauseDesignTimeBuildsAsync() => _designTimeQueue.PauseAsync();
 
     /// <summary>How to start a project: the SDK's run properties for the active configuration and target framework.</summary>
     public RunInfo GetRunInfo(string projectPath, string? targetFramework = null)
@@ -1612,17 +1556,8 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         {
         }
 
-        CancelDesignTimeBuilds();
-        try
-        {
-            await _designTimeWorker.ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-
+        await _designTimeQueue.DisposeAsync().ConfigureAwait(false);
         _designTime.Dispose();
-        _designTimeBatch.Dispose();
         _builder.Dispose();
 
         _evaluation.Dispose();
