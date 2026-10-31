@@ -204,12 +204,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            HttpListenerContext context;
-            try
-            {
-                context = await _listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is HttpListenerException or ObjectDisposedException or OperationCanceledException or InvalidOperationException)
+            if (await Http.ListenerAccept.NextAsync(_listener, cancellationToken).ConfigureAwait(false) is not { } context)
             {
                 return;
             }
