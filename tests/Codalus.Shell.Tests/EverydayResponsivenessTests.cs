@@ -255,7 +255,7 @@ public class EverydayResponsivenessTests
 
         // The Start page opens in the left column once the Welcome plugin runs, and takes the column's tab: the Test
         // Explorer shows after it (a later plugin host, after another test, covered it).
-        await ShellFixture.PumpUntil(() => f.Shell.Layout.IsVisible("welcome.view"), seconds: 60);
+        await f.StartViewShownAsync();
         f.Shell.Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
         await ShellFixture.PumpUntil(() => f.Shell.TestExplorer.IsViewShown && f.Shell.TestExplorer.Summary.Contains("20000 tests", StringComparison.Ordinal), seconds: 120, describe: () => $"shown: {f.Shell.TestExplorer.IsViewShown}, summary: {f.Shell.TestExplorer.Summary}");
 

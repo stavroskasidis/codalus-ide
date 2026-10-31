@@ -52,6 +52,7 @@ public sealed class TestRefreshTests
     public async Task The_test_explorer_rebuilds_nothing_while_hidden_and_at_most_five_times_a_second_while_shown()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it takes the Test Explorer's column when it comes
         var tests = f.Shell.Tests;
         var explorer = f.Shell.TestExplorer;
         tests.ControllerCreated(new TestControllerParams("codalus.synthetic", Controller, "Synthetic"), new Connection());
@@ -115,6 +116,7 @@ public sealed class TestRefreshTests
         // shown, then the old one says it isn't. With one flag for both, the explorer took itself for hidden while on
         // screen, and stopped showing results.
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it takes the Test Explorer's column when it comes
         var tests = f.Shell.Tests;
         var explorer = f.Shell.TestExplorer;
         tests.ControllerCreated(new TestControllerParams("codalus.synthetic", Controller, "Synthetic"), new Connection());

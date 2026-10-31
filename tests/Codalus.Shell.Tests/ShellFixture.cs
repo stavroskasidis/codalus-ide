@@ -270,6 +270,16 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// thread, and the last delay could end the wait before that job ran (PR #69's Save As Solution Filter).
     /// </summary>
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
+    /// <summary>
+    /// Until the Welcome plugin, the default built-in plugin, has shown its Start view: once, at startup, in the left
+    /// column, as that column's active tab. Shown after a test had shown a tool window of that column (the Test Explorer,
+    /// the Toolbox, the Document Outline), on a busy machine where the plugin host starts seconds late, it hid that tool
+    /// window, which then did no work and, made lazily, never got its content (M56). A test that shows one soon after the
+    /// fixture starts waits for this first.
+    /// </summary>
+    public Task StartViewShownAsync() =>
+        PumpUntil(() => Shell.Layout.OpenToolWindows.Any(t => t.Id == "welcome.view"), seconds: 60);
+
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
         // A monotonic clock: a machine that sleeps during the wait (a Mac with the display off) doesn't time out at once.

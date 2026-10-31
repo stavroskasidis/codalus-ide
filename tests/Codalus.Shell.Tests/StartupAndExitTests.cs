@@ -48,6 +48,7 @@ public sealed class StartupAndExitTests
     public async Task A_restored_layout_makes_a_tool_windows_content_when_its_tab_first_shows()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync();
         var snapshot = new LayoutSnapshot(LayoutSnapshot.CurrentVersion, new LayoutNode("proportional")
         {
             Id = "Main",
