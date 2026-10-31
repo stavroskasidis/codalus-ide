@@ -157,24 +157,18 @@ public sealed partial class ShellHost
         Debugger.PinnedTips.Load((session.DataTips ?? []).Select(t => (t.Path, t.Line, t.Expression, t.Comment)));
 
         // The tabs come back behind the active one: each other's view (its editor, and what it asks the language service
-        // for) is made when it's first shown. Activating every document in turn made them all at startup.
-        CodeEditorDocument? last = null;
-        foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
+        // for) is made when it's first shown. Activating every document in turn made them all at startup. They open
+        // together, their files read first: opened one by one, a layout pass between two of them (a file read on a slow
+        // runner) made the first tab of the empty group active, and built its editor (macOS CI, run 41237010138).
+        var documents = session.Documents.Where(d => File.Exists(d.Path)).ToList();
+        var active = session.Active is { } activePath ? documents.FindIndex(d => SolutionPaths.Comparer.Equals(Path.GetFullPath(d.Path), Path.GetFullPath(activePath))) : -1;
+        await OpenFilesAsync([.. documents.Select(d => (d.Path, (Position?)new Position(d.Line, d.Character)))], active: active >= 0 ? active : null, focus: false).ConfigureAwait(true);
+        foreach (var document in documents.Where(d => d.Pinned == true))
         {
-            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character), activate: false).ConfigureAwait(true) is { } opened)
+            if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, Path.GetFullPath(document.Path)) && e.Owner is not null) is { } pinned)
             {
-                last = opened;
-                if (document.Pinned == true)
-                {
-                    Layout.SetPinned(opened, true);
-                }
+                Layout.SetPinned(pinned, true);
             }
-        }
-
-        var activeEditor = session.Active is { } active ? Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) : null;
-        if ((activeEditor ?? (last?.Owner is not null ? last : null)) is { } editor)
-        {
-            Layout.OpenDocument(editor);
         }
     }
 }
