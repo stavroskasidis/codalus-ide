@@ -100,6 +100,8 @@ public static class CaretEdits
 public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
 {
     private readonly TextArea _area;
+
+    /// <summary>The extra selections, in order of start: drawing looks up the visible ones (M56).</summary>
     private readonly List<CaretSelection> _extra = [];
     private bool _applying;
 
@@ -136,6 +138,9 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
     /// <summary>All selections, the primary first.</summary>
     public IReadOnlyList<CaretSelection> All => [Primary, .. _extra];
 
+    /// <summary>The extra carets drawn by the last frame (tests: only the visible ones are).</summary>
+    internal int DrawnCarets { get; private set; }
+
     public void AddCaret(int offset)
     {
         offset = Math.Clamp(offset, 0, Document.TextLength);
@@ -144,8 +149,28 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
             return;
         }
 
-        _extra.Add(CaretSelection.At(offset));
+        _extra.Insert(FirstStartingAt(offset), CaretSelection.At(offset));
         Update();
+    }
+
+    /// <summary>The index of the first extra selection that starts at or after <paramref name="offset"/>.</summary>
+    private int FirstStartingAt(int offset)
+    {
+        int low = 0, high = _extra.Count;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (_extra[middle].Start < offset)
+            {
+                low = middle + 1;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return low;
     }
 
     /// <summary>Adds a caret on the line above (-1) or below (+1) the outermost caret, at the same column.</summary>
@@ -193,26 +218,57 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
             return;
         }
 
-        var content = Document.Text;
-        do
+        // One pass over the text, wrapping around: every occurrence not selected yet (each one was a search from the
+        // start and a copy of every selection, which took seconds at 20,000), or the next one after the selection added
+        // last, the furthest from the primary going forward.
+        var taken = new HashSet<int>(_extra.Select(s => s.Start)) { primary.Start };
+        var from = primary.End;
+        if (!all && _extra.Count > 0)
         {
-            var from = All.Max(s => s.End);
-            var next = content.IndexOf(text, from, StringComparison.Ordinal);
-            if (next < 0)
-            {
-                next = content.IndexOf(text, 0, StringComparison.Ordinal); // wrap around
-            }
-
-            if (next < 0 || All.Any(s => s.Start == next))
-            {
-                break;
-            }
-
-            _extra.Add(new CaretSelection(next, next + text.Length));
+            var before = FirstStartingAt(primary.Start);
+            from = (before > 0 ? _extra[before - 1] : _extra[^1]).End;
         }
-        while (all);
 
-        Update();
+        var added = new List<CaretSelection>();
+        foreach (var next in Occurrences(Document.Text, text, from))
+        {
+            if (taken.Add(next))
+            {
+                added.Add(new CaretSelection(next, next + text.Length));
+                if (!all)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (added.Count > 0)
+        {
+            var merged = new List<CaretSelection>(_extra.Count + added.Count);
+            merged.AddRange(_extra);
+            merged.AddRange(added);
+            merged.Sort((a, b) => a.Start.CompareTo(b.Start));
+            _extra.Clear();
+            _extra.AddRange(merged);
+            Update();
+        }
+    }
+
+    /// <summary>
+    /// The starts of <paramref name="text"/>'s occurrences, not overlapping each other, from <paramref name="from"/> to the
+    /// end, then from the start of the text to <paramref name="from"/>.
+    /// </summary>
+    private static IEnumerable<int> Occurrences(string content, string text, int from)
+    {
+        for (var next = content.IndexOf(text, from, StringComparison.Ordinal); next >= 0; next = content.IndexOf(text, next + text.Length, StringComparison.Ordinal))
+        {
+            yield return next;
+        }
+
+        for (var next = content.IndexOf(text, 0, StringComparison.Ordinal); next >= 0 && next + text.Length <= from; next = content.IndexOf(text, next + text.Length, StringComparison.Ordinal))
+        {
+            yield return next;
+        }
     }
 
     public void Clear()
@@ -279,16 +335,13 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
             return;
         }
 
+        // Carets near each other are one document change (DocumentEdits): each change ran every change handler.
         _applying = true;
         try
         {
-            using (Document.RunUpdate())
-            {
-                foreach (var (offset, length, text) in change.Edits)
-                {
-                    Document.Replace(offset, length, text);
-                }
-            }
+            var ascending = change.Edits.ToList();
+            ascending.Reverse();
+            DocumentEdits.Apply(Document, ascending);
         }
         finally
         {
@@ -330,11 +383,19 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
             return;
         }
 
-        // An edit made by something else (undo, a refactoring): keep the extra carets where the text moved them.
+        // An edit made by something else (undo, a refactoring): keep the extra carets where the text moved them. Moving
+        // keeps their order.
+        var offsets = new int[_extra.Count * 2];
         for (var i = 0; i < _extra.Count; i++)
         {
-            var s = _extra[i];
-            _extra[i] = new CaretSelection(e.GetNewOffset(s.Anchor, AnchorMovementType.Default), e.GetNewOffset(s.Caret, AnchorMovementType.Default));
+            offsets[2 * i] = _extra[i].Anchor;
+            offsets[(2 * i) + 1] = _extra[i].Caret;
+        }
+
+        DocumentEdits.Map(e, offsets);
+        for (var i = 0; i < _extra.Count; i++)
+        {
+            _extra[i] = new CaretSelection(offsets[2 * i], offsets[(2 * i) + 1]);
         }
     }
 
@@ -346,15 +407,27 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
 
     public void Draw(TextView textView, DrawingContext drawingContext)
     {
-        if (_extra.Count == 0 || !textView.VisualLinesValid)
+        DrawnCarets = 0;
+        if (_extra.Count == 0 || !textView.VisualLinesValid || textView.VisualLines.Count == 0)
         {
             return;
         }
 
+        // Only the selections in the visible lines, and only lines already built: a caret's position asked of a line off
+        // screen built that line (colorizers and all) at every caret blink, for each of thousands of carets (M56).
+        var visibleStart = textView.VisualLines[0].FirstDocumentLine.Offset;
+        var visibleEnd = textView.VisualLines[^1].LastDocumentLine.EndOffset;
+        var first = FirstStartingAt(visibleStart);
+        if (first > 0 && _extra[first - 1].End >= visibleStart)
+        {
+            first--;
+        }
+
         var caretBrush = _area.Caret.CaretBrush ?? textView.GetValue(TextView.NonPrintableCharacterBrushProperty) ?? Brushes.Gray;
         var selectionBrush = _area.SelectionBrush ?? Brushes.LightBlue;
-        foreach (var selection in _extra)
+        for (var i = first; i < _extra.Count && _extra[i].Start <= visibleEnd; i++)
         {
+            var selection = _extra[i];
             if (selection.Length > 0)
             {
                 var segment = new TextSegment { StartOffset = selection.Start, EndOffset = selection.End };
@@ -364,10 +437,17 @@ public sealed class MultiCaretController : IBackgroundRenderer, IDisposable
                 }
             }
 
-            var position = new TextViewPosition(Document.GetLocation(selection.Caret));
-            var top = textView.GetVisualPosition(position, VisualYPosition.LineTop) - textView.ScrollOffset;
-            var bottom = textView.GetVisualPosition(position, VisualYPosition.LineBottom) - textView.ScrollOffset;
+            if (selection.Caret < visibleStart || selection.Caret > visibleEnd
+                || textView.GetVisualLine(Document.GetLineByOffset(selection.Caret).LineNumber) is not { } line)
+            {
+                continue;
+            }
+
+            var column = line.GetVisualColumn(selection.Caret - line.FirstDocumentLine.Offset);
+            var top = line.GetVisualPosition(column, VisualYPosition.LineTop) - textView.ScrollOffset;
+            var bottom = line.GetVisualPosition(column, VisualYPosition.LineBottom) - textView.ScrollOffset;
             drawingContext.DrawRectangle(caretBrush, null, new Rect(top.X, top.Y, 1.5, bottom.Y - top.Y));
+            DrawnCarets++;
         }
     }
 

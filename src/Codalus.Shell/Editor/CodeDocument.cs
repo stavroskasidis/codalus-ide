@@ -156,30 +156,26 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     /// <summary>
     /// Applies LSP edits (positions in the current text) as one undoable change. Returns false when they overlap.
+    /// Edits near each other are one document change (<see cref="DocumentEdits"/>): Format Document's thousands of edits
+    /// ran every change handler once each.
     /// </summary>
     public bool ApplyEdits(IEnumerable<LanguageServices.Protocol.TextEdit> edits)
     {
+        // Inserts at the same position keep their order, as LSP has them appear in the text.
         var spans = edits
-            .Select(e => (Start: OffsetAt(e.Range.Start), End: OffsetAt(e.Range.End), e.NewText))
-            .OrderByDescending(e => e.Start)
-            .ThenByDescending(e => e.End)
+            .Select(e => OffsetAt(e.Range.Start) is var start ? (Offset: start, Length: OffsetAt(e.Range.End) - start, Text: e.NewText) : default)
+            .OrderBy(e => e.Offset)
+            .ThenBy(e => e.Length)
             .ToList();
         for (var i = 1; i < spans.Count; i++)
         {
-            if (spans[i].End > spans[i - 1].Start)
+            if (spans[i].Offset < spans[i - 1].Offset + spans[i - 1].Length)
             {
                 return false;
             }
         }
 
-        using (Text.RunUpdate())
-        {
-            foreach (var (start, end, text) in spans)
-            {
-                Text.Replace(start, end - start, text);
-            }
-        }
-
+        DocumentEdits.Apply(Text, spans);
         return true;
     }
 
