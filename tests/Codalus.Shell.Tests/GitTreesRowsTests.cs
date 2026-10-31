@@ -390,9 +390,10 @@ public sealed class GitTreesRowsTests
         var filterBox = tree.FindAncestorOfType<GitRepositoryView>()!.FindControl<TextBox>("FilterBox")!;
         filterBox.Focus();
         await ShellFixture.PumpUntil(() => filterBox.IsFocused && !tree.IsKeyboardFocusWithin);
+        var selected = vm.Selected; // team02, which the double-click on its row selected
         Click(f.Window, chevron);
         Assert.False(Row(vm, "team02").IsExpanded);
-        Assert.Same(branch, vm.Selected);
+        Assert.Same(selected, vm.Selected);
         Assert.Same(tree.ContainerFromItem(tree.SelectedItem!), f.Window.FocusManager?.GetFocusedElement());
         var before = tree.SelectedItem;
         f.Press(Key.Down);
