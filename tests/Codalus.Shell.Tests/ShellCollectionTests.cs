@@ -94,6 +94,14 @@ public sealed class ShellCollectionTests
         await settings.SetAsync("editor.fontSize", 17, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
     });
 
+    [AvaloniaFact]
+    public Task A_disposed_shell_whose_document_just_changed_is_collected() => AssertCollectedAsync(async f =>
+    {
+        // An edit tells the plugins' proposed API, which batches edited documents for 500 ms: its timer held the shell,
+        // and the edit of the unsaved-changes case, when it came just before the dispose, failed it (macOS CI).
+        await f.Shell.Languages.ChangeAsync(Path.Combine(f.UserData, "notes.txt"), 2, []);
+    });
+
     private static async Task AssertCollectedAsync(Func<ShellFixture, Task> use, Action<ShellFixture>? afterDispose = null)
     {
         var (shell, window) = await CreateUseAndDisposeAsync(use, afterDispose);
