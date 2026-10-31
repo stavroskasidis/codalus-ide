@@ -283,16 +283,8 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <summary>Checks everything; <paramref name="solutionFolder"/> also checks its <c>global.json</c>.</summary>
     public async Task<IReadOnlyList<ToolStatus>> CheckAsync(string? solutionFolder, CancellationToken cancellationToken)
     {
-        var dotnet = await DotnetAsync(solutionFolder, cancellationToken).ConfigureAwait(false);
-        var git = await VersionOfAsync("git", environment("CODALUS_GIT") is { Length: > 0 } g ? g : FindOnPath("git"), ["--version"], "git version ", cancellationToken).ConfigureAwait(false);
-        var tools = new List<ToolStatus>
-        {
-            dotnet,
-            HostRuntimeStatus(),
-            Status("git", "Git", required: true, git, "Source control, and cloning repositories"),
-        };
-
-        if (git.State == ToolState.Found)
+        var tools = new List<ToolStatus>(await CheckRequiredAsync(solutionFolder, cancellationToken).ConfigureAwait(false));
+        if (tools.Single(t => t.Id == "git") is { State: ToolState.Found } git)
         {
             var lfs = await VersionOfAsync("git-lfs", git.Path, ["lfs", "version"], "git-lfs/", cancellationToken).ConfigureAwait(false);
             tools.Add(Status("git-lfs", "Git LFS", required: false, lfs, "Repositories that keep large files in Git LFS"));
@@ -312,10 +304,32 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     }
 
     /// <summary>
+    /// The tools Codalus IDE needs, which startup offers to install when they're missing: the .NET SDK (against
+    /// <paramref name="solutionFolder"/>'s <c>global.json</c>), the runtime of its hosts and Git. The optional ones wait
+    /// for the Check Environment window: their <c>--version</c>s cost every start seconds of CPU (Podman's starts its
+    /// machine's client), competing with the window and the solution opening.
+    /// </summary>
+    /// <remarks>
+    /// It runs on the thread pool: looking for <c>dotnet</c> reads folders and starts a process, and the shell checks at
+    /// every start, from the UI thread (M56).
+    /// </remarks>
+    public Task<IReadOnlyList<ToolStatus>> CheckRequiredAsync(string? solutionFolder, CancellationToken cancellationToken) =>
+        Task.Run(() => CheckRequiredCoreAsync(solutionFolder, cancellationToken), cancellationToken);
+
+    private async Task<IReadOnlyList<ToolStatus>> CheckRequiredCoreAsync(string? solutionFolder, CancellationToken cancellationToken)
+    {
+        var dotnet = await DotnetAsync(solutionFolder, cancellationToken).ConfigureAwait(false);
+        var git = await VersionOfAsync("git", environment("CODALUS_GIT") is { Length: > 0 } g ? g : FindOnPath("git"), ["--version"], "git version ", cancellationToken).ConfigureAwait(false);
+        return [dotnet, HostRuntimeStatus(), Status("git", "Git", required: true, git, "Source control, and cloning repositories")];
+    }
+
+    /// <summary>
     /// The .NET SDK alone, against <paramref name="solutionFolder"/>'s <c>global.json</c>: what a solution's open checks,
     /// without running every other tool's <c>--version</c> (Podman's starts its machine's client and takes seconds of CPU).
+    /// On the thread pool, as <see cref="CheckRequiredAsync"/>.
     /// </summary>
-    public Task<ToolStatus> CheckDotnetAsync(string? solutionFolder, CancellationToken cancellationToken) => DotnetAsync(solutionFolder, cancellationToken);
+    public Task<ToolStatus> CheckDotnetAsync(string? solutionFolder, CancellationToken cancellationToken) =>
+        Task.Run(() => DotnetAsync(solutionFolder, cancellationToken), cancellationToken);
 
     private static ToolStatus Status(string id, string title, bool required, Probe probe, string neededFor) =>
         new(id, title, required, probe.State, neededFor) { Version = probe.Version, Path = probe.Path };
@@ -326,6 +340,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     private async Task<ToolStatus> DotnetAsync(string? solutionFolder, CancellationToken cancellationToken)
     {
         const string NeededFor = "Opening, building, running and debugging .NET projects; Codalus IDE's own helper processes";
+        await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false); // dotnet on the login shell's PATH (M56)
         var dotnet = FindDotnet();
         if (dotnet is null)
         {
@@ -576,6 +591,9 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
     /// <summary>Runs a program to its end within <paramref name="limit"/> (installs that download take minutes).</summary>
     public static async Task<(int ExitCode, string Output)> RunProcessAsync(string program, IReadOnlyList<string> arguments, string? directory, TimeSpan limit, CancellationToken cancellationToken)
     {
+        // With the login shell's PATH, DOTNET_ROOT and proxies (M56): before the start info's Environment, which copies
+        // this process's environment when it's first read.
+        await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
         var start = new ProcessStartInfo(program)
         {
             RedirectStandardOutput = true,
@@ -596,7 +614,9 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
 
         start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         start.Environment["DOTNET_NOLOGO"] = "1";
-        using var process = Process.Start(start) ?? throw new InvalidOperationException($"{program} didn't start.");
+
+        // Started on the thread pool (M56): callers on the UI thread (a solution's global.json check) waited for the start.
+        using var process = await Task.Run(() => Process.Start(start), cancellationToken).ConfigureAwait(false) ?? throw new InvalidOperationException($"{program} didn't start.");
         var output = new StringBuilder();
         var error = new StringBuilder();
         using var reading = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);

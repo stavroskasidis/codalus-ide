@@ -23,6 +23,7 @@ public sealed class CodeViewer : UserControl
 {
     private readonly IEditorServices _services;
     private readonly RangeHighlight _highlight = new();
+    private readonly LongLineCutter _longLines;
     private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
     private GrammarColorizer? _grammarColors;
     private string? _scope;
@@ -48,6 +49,10 @@ public sealed class CodeViewer : UserControl
         Editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         Editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
         Editor.TextArea.TextView.BackgroundRenderers.Add(_highlight);
+
+        // Long lines are cut as in the editor (M56): Peek Definition into a minified file drew its whole line at each redraw.
+        _longLines = new LongLineCutter(Editor.TextArea, () => this.TryFindResource("Shell.Editor.InlayHint.Foreground", ActualThemeVariant, out var value) && value is IBrush brush ? brush : Brushes.Gray);
+        Editor.TextArea.TextView.LineTransformers.Add(_longLines);
         AutomationProperties.SetName(Editor, "Definition (read-only)");
         Content = Editor;
         services.ThemeChanged += OnThemeChanged;
@@ -169,6 +174,7 @@ public sealed class CodeViewer : UserControl
         {
             _grammarColors = new GrammarColorizer();
             Editor.TextArea.TextView.LineTransformers.Add(_grammarColors);
+            KeepLongLinesLast();
         }
 
         _grammarColors.Theme = _services.Theme;
@@ -179,6 +185,17 @@ public sealed class CodeViewer : UserControl
         else
         {
             _grammarColors.Clear();
+        }
+    }
+
+    /// <summary>The cut of long lines after the colorizers (a grammar's installs itself last): nothing draws past it.</summary>
+    private void KeepLongLinesLast()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        if (transformers[^1] != _longLines)
+        {
+            transformers.Remove(_longLines);
+            transformers.Add(_longLines);
         }
     }
 
@@ -207,6 +224,7 @@ public sealed class CodeViewer : UserControl
         _services.ThemeChanged -= OnThemeChanged;
         _textMate?.Dispose();
         _textMate = null;
+        _longLines.Detach();
     }
 
     /// <summary>
@@ -226,6 +244,7 @@ public sealed class CodeViewer : UserControl
             _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
             _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
             _textMate.SetGrammar(scope);
+            KeepLongLinesLast();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

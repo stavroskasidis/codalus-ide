@@ -137,12 +137,21 @@ public sealed class TerminalViewModel : ObservableObject
         KillCommand = new RelayCommand(() => Kill(_selected), () => _selected is not null);
         ClearCommand = new RelayCommand(() => ClearRequested?.Invoke(this, EventArgs.Empty), () => _selected is not null);
         FindCommand = new RelayCommand(() => FindVisible = !FindVisible);
-        foreach (var profile in service.Profiles)
+        RefreshProfiles();
+        service.Removed += (_, session) => Ui.Post(() => OnRemoved(session));
+    }
+
+    /// <summary>
+    /// The service's profiles, again: they're found again once the login shell's PATH has come in (M56), which can be after
+    /// this window was made, and a shell only that PATH has (Homebrew's pwsh or fish) belongs in its list.
+    /// </summary>
+    public void RefreshProfiles()
+    {
+        Profiles.Clear();
+        foreach (var profile in _service.Profiles)
         {
             Profiles.Add(new TerminalProfileChoice(profile.Id, profile.Name));
         }
-
-        service.Removed += (_, session) => Ui.Post(() => OnRemoved(session));
     }
 
     public ObservableCollection<TerminalTabViewModel> Tabs { get; } = [];

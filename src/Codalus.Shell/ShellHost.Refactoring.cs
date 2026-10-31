@@ -41,7 +41,6 @@ public sealed partial class ShellHost
         }
 
         var offset = controller.Editor.CaretOffset;
-        var name = WordAt(editor.Model.Text.Text, offset);
         if (editor.Model.LanguageId == CSharpLanguageId)
         {
             // Our host classifies references (read, write, declaration) and names their definitions for the References window's groups and columns.
@@ -55,6 +54,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        var name = IdentifierAt(editor.Model.Text, offset);
         var locations = await client.ReferencesAsync(editor.Model.Uri, editor.Model.PositionAt(offset), includeDeclaration: true, CancellationToken.None).ConfigureAwait(true);
         if (locations.Length == 0)
         {
@@ -301,31 +301,64 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ Find in Files (ShellHost.FindInFiles.cs)
 
-    /// <summary>The solution's files (project items that exist, project and solution files), or the open files.</summary>
-    private IReadOnlyList<string> SearchableFiles()
+    /// <summary>
+    /// The solution's files (project items, project and solution files), or the open files without a solution: listed
+    /// when called, off the UI thread (the projects and the solution's folders are read as they are; only the open
+    /// documents are the UI thread's). <see cref="GatherAsync"/> keeps those that exist.
+    /// </summary>
+    private Func<IEnumerable<string>> SearchableFiles()
     {
         if (Solutions.Solution is not { } solution)
         {
-            return [.. _models.Values.Where(m => !m.IsReadOnly).Select(m => m.Path)];
+            List<string> open = [.. _models.Values.Where(m => !m.IsReadOnly).Select(m => m.Path)];
+            return () => open;
         }
 
-        var files = new HashSet<string>(Codalus.Workbench.Projects.SolutionService.PathComparer);
-        foreach (var project in Solutions.Projects.Values)
-        {
-            files.Add(project.Path);
-            foreach (var item in project.Items.Where(i => i.Kind != "Folder"))
-            {
-                files.Add(item.Path);
-            }
-        }
-
-        foreach (var folder in solution.Folders)
-        {
-            files.UnionWith(folder.Files);
-        }
-
-        return [.. files.Where(File.Exists).Order(StringComparer.OrdinalIgnoreCase)];
+        var projects = Solutions.Projects.Values;
+        return () => projects
+            .SelectMany(p => p.Items.Where(i => i.Kind != "Folder").Select(i => i.Path).Prepend(p.Path))
+            .Concat(solution.Folders.SelectMany(f => f.Files));
     }
+
+    /// <summary>
+    /// What a search reads, gathered on the thread pool (M56: on the UI thread, 50,000 existence checks and two sorts froze
+    /// the window before Find All, Replace All or the Task List showed anything): <paramref name="candidates"/> once each,
+    /// through <paramref name="filter"/>, those that exist when <paramref name="mustExist"/> (an open document does, on
+    /// disk or not: its text is what's read), a folder's files together (by folder, then name), and the texts of those
+    /// open, from snapshots taken here at no cost.
+    /// </summary>
+    private Task<FilesToSearch> GatherAsync(Func<IEnumerable<string>> candidates, Func<string, bool>? filter, bool mustExist, CancellationToken cancellationToken)
+    {
+        var snapshots = _models.ToDictionary(p => p.Key, p => p.Value.Text.CreateSnapshot(), Codalus.Workbench.Projects.SolutionService.PathComparer);
+        return Task.Run(() =>
+        {
+            var seen = new HashSet<string>(Codalus.Workbench.Projects.SolutionService.PathComparer);
+            var files = new List<string>();
+            foreach (var path in candidates())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (seen.Add(path) && (filter is null || filter(path)) && (!mustExist || snapshots.ContainsKey(path) || FileExists(path)))
+                {
+                    files.Add(path);
+                }
+            }
+
+            List<string> ordered = [.. files.OrderBy(Path.GetDirectoryName, StringComparer.OrdinalIgnoreCase).ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)];
+            var texts = new Dictionary<string, string>(Codalus.Workbench.Projects.SolutionService.PathComparer);
+            foreach (var file in ordered)
+            {
+                if (snapshots.TryGetValue(file, out var snapshot))
+                {
+                    texts[file] = snapshot.Text;
+                }
+            }
+
+            return new FilesToSearch(ordered, texts);
+        }, cancellationToken);
+    }
+
+    /// <summary>Whether a file a search may read exists (tests: where it's asked).</summary>
+    internal Func<string, bool> FileExists { get; set; } = File.Exists;
 
     /// <summary>The editor's text of an open file, or null.</summary>
     private string? OpenTextOf(string path) => _models.TryGetValue(path, out var model) ? model.Text.Text : null;
@@ -594,21 +627,23 @@ public sealed partial class ShellHost
         return text.Length > 0 && (char.IsLetter(text[0]) || text[0] == '_') && text.All(c => char.IsLetterOrDigit(c) || c == '_');
     }
 
-    private static string WordAt(string text, int offset)
+    /// <summary>The identifier around an offset (letters, digits and '_'), read where it is rather than from a copy of the whole text.</summary>
+    private static string IdentifierAt(AvaloniaEdit.Document.TextDocument document, int offset)
     {
+        static bool IsWord(char c) => char.IsLetterOrDigit(c) || c == '_';
         var start = offset;
-        while (start > 0 && (char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_'))
+        while (start > 0 && IsWord(document.GetCharAt(start - 1)))
         {
             start--;
         }
 
         var end = offset;
-        while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_'))
+        while (end < document.TextLength && IsWord(document.GetCharAt(end)))
         {
             end++;
         }
 
-        return text[start..end];
+        return document.GetText(start, end - start);
     }
 
     /// <summary>The identifier-like word around an offset (letters, digits, '_' and '-').</summary>

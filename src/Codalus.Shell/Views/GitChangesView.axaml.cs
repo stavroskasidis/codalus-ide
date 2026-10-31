@@ -19,30 +19,80 @@ public sealed partial class GitChangesView : UserControl, IPaneView
     public GitChangesView()
     {
         InitializeComponent();
-        foreach (var (list, selected) in new (Control, Func<object?>)[]
-                 {
-                     (StagedList, () => StagedList.SelectedItem), (ChangesList, () => ChangesList.SelectedItem), (ConflictList, () => ConflictList.SelectedItem),
-                     (StagedTree, () => StagedTree.SelectedItem), (ChangesTree, () => ChangesTree.SelectedItem), (ConflictTree, () => ConflictTree.SelectedItem),
-                 })
+        foreach (var list in new[] { StagedList, ChangesList, ConflictList, StagedTree, ChangesTree, ConflictTree })
         {
             list.DoubleTapped += (_, e) =>
             {
-                if (OpenSelected(selected()))
+                // A double-click's second click raises no Tapped: on a folder's chevron it toggles again, as a tree view's
+                // expander does on each click. A hover button acts on each click.
+                if (IsChevron(e.Source) && RowAt(e.Source) is GitChangeRow folder)
                 {
+                    (DataContext as GitChangesViewModel)?.Toggle(folder);
                     e.Handled = true;
                 }
-            };
-            list.KeyDown += (_, e) =>
-            {
-                if (e.Key == Key.Enter && OpenSelected(selected()))
+                else if (!InButton(e.Source) && OpenSelected(RowAt(e.Source) ?? list.SelectedItem))
                 {
                     e.Handled = true;
                 }
             };
 
+            // In the tunnel: a list takes Enter itself, to select the item, before a handler added to it hears it (Enter
+            // opened nothing). A row's hover button that has the focus (it keeps it after a click) takes its own Enter.
+            list.AddHandler(KeyDownEvent, (_, e) =>
+            {
+                if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && !InButton(e.Source) && OpenSelected(list.SelectedItem))
+                {
+                    e.Handled = true;
+                }
+            }, RoutingStrategies.Tunnel);
+
             // The menu of a file, a folder or the repository node: gitChanges/context, built for the node (D38).
             list.ContextRequested += (_, e) => OnContextRequested(list, e);
         }
+
+        // A tree's rows expand and collapse as a tree view's: the chevron, Enter, Left and Right (Ctrl: the folders under it
+        // too), + and -, * and / for every folder under it.
+        foreach (var tree in new[] { StagedTree, ChangesTree, ConflictTree })
+        {
+            tree.AddHandler(KeyDownEvent, (_, e) => OnTreeKeyDown(tree, e), RoutingStrategies.Tunnel);
+            tree.Tapped += (_, e) =>
+            {
+                if (IsChevron(e.Source) && RowAt(e.Source) is GitChangeRow row)
+                {
+                    (DataContext as GitChangesViewModel)?.Toggle(row);
+                    e.Handled = true;
+                }
+            };
+        }
+
+        DataContextChanged += (_, _) =>
+        {
+            // A closed tool window clears its view's data context before the view leaves the tree: the view model it
+            // reported to hears that the window is hidden now.
+            if (_reported is { } old && !ReferenceEquals(old, DataContext))
+            {
+                if (_shown)
+                {
+                    old.SetViewShown(this, false);
+                }
+
+                _reported = null;
+                _shown = false;
+            }
+
+            if (DataContext is GitChangesViewModel vm && !ReferenceEquals(vm, _reported))
+            {
+                _reported = vm;
+                _shown = false;
+                UpdateShown();
+            }
+        };
+
+        // Shown or hidden: a closed or auto-hidden tool window keeps its view attached, invisible, and its next layout pass
+        // tells (no viewport change is raised for an ancestor's visibility).
+        AttachedToVisualTree += (_, _) => UpdateShown();
+        DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
+        Sections.LayoutUpdated += (_, _) => UpdateShown();
 
         DataContextChanged += (_, _) => AttachBranchPicker();
         BranchPicker.CloseRequested += (_, _) =>
@@ -138,6 +188,99 @@ public sealed partial class GitChangesView : UserControl, IPaneView
                 }
             };
         }
+    }
+
+    private bool _shown;
+    private GitChangesViewModel? _reported; // the view model told whether the window is shown
+
+    /// <summary>
+    /// Tells the view model whether the window is shown: while it isn't, a status read keeps the files current but builds
+    /// no tree or list (M56).
+    /// </summary>
+    private void UpdateShown(bool detaching = false)
+    {
+        var shown = !detaching && this.IsAttachedToVisualTree() && Sections.IsEffectivelyVisible;
+        if (shown == _shown)
+        {
+            return;
+        }
+
+        _shown = shown;
+        _reported?.SetViewShown(this, shown);
+    }
+
+    private static object? RowAt(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext;
+
+    /// <summary>Whether a key or a tap comes from a row's hover button.</summary>
+    private static bool InButton(object? source) => (source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is not null;
+
+    /// <summary>The chevron of a folder's row (a file's row has a blank place for it, where a double-click opens the file).</summary>
+    private static bool IsChevron(object? source) =>
+        (source as Visual)?.FindAncestorOfType<Border>(includeSelf: true) is { } border && border.Classes.Contains("chevron")
+        && RowAt(source) is GitChangeRow { HasChildren: true };
+
+    /// <summary>
+    /// A tree's keys, as a tree view's: Left and Right collapse and expand a folder (or go to its parent), and with Ctrl the
+    /// folders under it too, as Ctrl+Enter does (Enter alone toggles a folder or opens a file, as in the lists); + and -
+    /// expand and collapse, * and / every folder under it.
+    /// </summary>
+    private void OnTreeKeyDown(ListBox tree, KeyEventArgs e)
+    {
+        // A row's hover button that has the focus takes its keys.
+        if (DataContext is not GitChangesViewModel vm || tree.SelectedItem is not GitChangeRow row || InButton(e.Source))
+        {
+            return;
+        }
+
+        var recursive = e.KeyModifiers == KeyModifiers.Control;
+        if (e.KeyModifiers != KeyModifiers.None && !recursive)
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Right when row.HasChildren && recursive:
+                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: true);
+                break;
+            case Key.Left when row.HasChildren && recursive:
+                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: false);
+                break;
+            case Key.Enter when row.HasChildren && recursive:
+                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: !row.IsExpanded);
+                break;
+            case Key.Right or Key.Add when row.HasChildren && !row.IsExpanded:
+                vm.SetExpanded(row, true);
+                break;
+            case Key.Multiply when row.HasChildren:
+                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: true);
+                break;
+            case Key.Divide when row.HasChildren:
+                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: false);
+                break;
+            case Key.Left or Key.Subtract when row.HasChildren && row.IsExpanded:
+                vm.SetExpanded(row, false);
+                break;
+            case Key.Left when !recursive && vm.RowsOf(row.Node.Section) is var rows && rows.IndexOf(row) is var index and > 0:
+                // To the parent row.
+                for (var i = index - 1; i >= 0; i--)
+                {
+                    if (rows[i].Depth < row.Depth)
+                    {
+                        tree.SelectedItem = rows[i];
+                        tree.ScrollIntoView(rows[i]);
+                        (tree.ContainerFromItem(rows[i]) as Control)?.Focus(NavigationMethod.Directional);
+                        break;
+                    }
+                }
+
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
     }
 
     private readonly DispatcherTimer _completionTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
@@ -250,10 +393,16 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         }
     }
 
-    /// <summary>Opens a file row or file node (folders expand instead); false when <paramref name="selected"/> isn't a file.</summary>
+    /// <summary>Opens a file row or file node (folders expand or collapse instead); false when <paramref name="selected"/> is neither.</summary>
     private bool OpenSelected(object? selected)
     {
-        if (DataContext is not GitChangesViewModel vm || (selected as GitFileRow ?? (selected as GitChangeNode)?.Row) is not { } row)
+        if (DataContext is GitChangesViewModel tree && selected is GitChangeRow { HasChildren: true } folder)
+        {
+            tree.Toggle(folder);
+            return true;
+        }
+
+        if (DataContext is not GitChangesViewModel vm || (selected as GitFileRow ?? (selected as GitChangeRow)?.Node.Row) is not { } row)
         {
             return false;
         }
@@ -282,26 +431,24 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         };
         _ = Report(target switch
         {
-            GitChangeNode node => vm.RunOnAsync(command, node),
+            GitChangeRow node => vm.RunOnAsync(command, node.Node),
             GitFileRow row => vm.RunOnAsync(command, row),
             _ => Task.CompletedTask,
         });
     }
 
     /// <summary>The menu of the node under the pointer (or the selected one, from the keyboard), which becomes selected.</summary>
-    private void OnContextRequested(Control list, ContextRequestedEventArgs e)
+    private void OnContextRequested(ListBox list, ContextRequestedEventArgs e)
     {
         if (DataContext is not GitChangesViewModel vm)
         {
             return;
         }
 
-        var item = (e.Source as Avalonia.Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext
-            ?? (e.Source as Avalonia.Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext
-            ?? (list as TreeView)?.SelectedItem ?? (list as ListBox)?.SelectedItem;
+        var item = RowAt(e.Source) ?? list.SelectedItem;
         var menu = item switch
         {
-            GitChangeNode node => vm.MenuOf(node),
+            GitChangeRow node => vm.MenuOf(node.Node),
             GitFileRow row => vm.MenuOf(row),
             _ => null,
         };
@@ -310,21 +457,11 @@ public sealed partial class GitChangesView : UserControl, IPaneView
             return;
         }
 
-        switch (list)
-        {
-            case TreeView tree:
-                tree.SelectedItem = item;
-                break;
-            case ListBox box:
-                box.SelectedItem = item;
-                break;
-        }
-
+        list.SelectedItem = item;
         e.Handled = true;
 
         // From the keyboard (Shift+F10, the Menu key), under the selected row rather than where the pointer last was.
-        if (!e.TryGetPosition(list, out _)
-            && ((list as TreeView)?.TreeContainerFromItem(item!) ?? (list as ListBox)?.ContainerFromItem(item!)) is Control container)
+        if (!e.TryGetPosition(list, out _) && list.ContainerFromItem(item!) is Control container)
         {
             menu.Placement = PlacementMode.BottomEdgeAlignedLeft;
             menu.Open(container);

@@ -184,7 +184,9 @@ public sealed class LayoutManager : ObservableObject
     {
         if (!_tools.TryGetValue(descriptor.Id, out var tool) || tool.Descriptor != descriptor)
         {
-            tool = new ToolWindowDockable(descriptor, _createContent(descriptor));
+            // Its content when Dock first presents the tab, not now (M56): a restored layout made every saved tool window's
+            // before the first frame, the tabs behind others' and the auto-hidden ones' too.
+            tool = new ToolWindowDockable(descriptor, () => _createContent(descriptor));
             _tools[descriptor.Id] = tool;
         }
 
@@ -334,7 +336,11 @@ public sealed class LayoutManager : ObservableObject
     /// Shows <paramref name="document"/> (or the open document with its id). A <paramref name="preview"/> document
     /// takes the place of the group's current preview tab, unless that one was modified.
     /// </summary>
-    public void OpenDocument(ShellDocument document, bool preview = false, bool focus = false)
+    /// <param name="activate">
+    /// False to add the tab behind the active one (a session's documents being restored): its view is made when it's
+    /// first shown, not now.
+    /// </param>
+    public void OpenDocument(ShellDocument document, bool preview = false, bool focus = false, bool activate = true)
     {
         var existing = Documents.FirstOrDefault(d => d.Id == document.Id);
         if (existing is null)
@@ -365,6 +371,11 @@ public sealed class LayoutManager : ObservableObject
             existing.IsPreview = false;
         }
 
+        if (!activate)
+        {
+            return;
+        }
+
         if (focus)
         {
             FocusRequested?.Invoke(this, existing);
@@ -374,6 +385,13 @@ public sealed class LayoutManager : ObservableObject
         if (existing.Owner is IDock owner)
         {
             Factory.SetFocusedDockable(owner, existing);
+        }
+
+        // Its group is the active one, also while the active document is worked out later (DeferActiveDocument): the tab
+        // made active last in another split group is the active document then, not the first group's.
+        if (existing.Owner is IDocumentDock group)
+        {
+            _lastDocumentDock = group;
         }
 
         UpdateActiveDocument();
@@ -426,6 +444,60 @@ public sealed class LayoutManager : ObservableObject
 
     public void CloseDocument(ShellDocument document) => Factory.CloseDockable(document);
 
+    /// <summary>Deferrals open (<see cref="DeferActiveDocument"/>): the active document is worked out after them.</summary>
+    private int _deferred;
+
+    /// <summary>
+    /// Until disposed, tabs that open, close or become active don't change <see cref="ActiveDocument"/>: it's worked out
+    /// once, after (M56), in the group of the tab <see cref="OpenDocument"/> made active last (Dock's own activations of a
+    /// closed tab's neighbor don't move it). Tabs opened or closed one by one each became the active one in turn (a
+    /// group's first tab, the neighbor of a closed active one), and each activation ran every reaction to a tab switch.
+    /// For synchronous work only: the user's own tab switches meanwhile would go unseen.
+    /// </summary>
+    public IDisposable DeferActiveDocument()
+    {
+        _deferred++;
+        return new Deferral(this);
+    }
+
+    /// <summary>
+    /// Closes <paramref name="documents"/> as one change (M56): each still closes as a tab does (one that has unsaved
+    /// changes asks, <see cref="DocumentClosed"/> follows each), but no tab becomes active on the way, and the active
+    /// document is worked out once, after the last (Close All, closing a solution).
+    /// </summary>
+    public void CloseDocuments(IEnumerable<ShellDocument> documents)
+    {
+        // Each group's active tab last, and the active document after everything: Dock makes a group's neighbor active
+        // when its active tab closes.
+        var closing = documents.OrderBy(d => d == _activeDocument ? 2 : d.Owner is IDock { ActiveDockable: var active } && active == d ? 1 : 0).ToList();
+        using (DeferActiveDocument())
+        {
+            foreach (var document in closing)
+            {
+                Factory.CloseDockable(document);
+            }
+        }
+    }
+
+    private sealed class Deferral(LayoutManager layout) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            if (--layout._deferred == 0)
+            {
+                layout.UpdateActiveDocument();
+            }
+        }
+    }
+
     private IDocumentDock DocumentsDock()
     {
         if ((Find<IDocumentDock>(DocumentsId) ?? AllDockables().OfType<IDocumentDock>().FirstOrDefault()) is { } dock)
@@ -458,8 +530,8 @@ public sealed class LayoutManager : ObservableObject
 
     private void UpdateActiveDocument(IDockable? changed = null)
     {
-        // Dock raises events while InitLayout runs, before the new root is assigned.
-        if (_root is null)
+        // Dock raises events while InitLayout runs, before the new root is assigned; and while documents close together.
+        if (_root is null || _deferred > 0)
         {
             return;
         }

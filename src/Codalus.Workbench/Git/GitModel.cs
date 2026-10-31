@@ -22,6 +22,12 @@ public sealed record GitFileStatus(string Path, string RelativePath, char Index,
     public bool IsStaged => !IsUntracked && !IsConflict && Index != '.';
 
     public bool IsUnstaged => IsUntracked || (!IsConflict && WorkTree != '.');
+
+    /// <summary>
+    /// The object id of the file's version in the index (porcelain v2's <c>hI</c>; all zeros when the index has none), or
+    /// null for an untracked or conflicted file. A file the status doesn't list has HEAD's version in the index.
+    /// </summary>
+    public string? IndexObject { get; init; }
 }
 
 /// <summary>The repository's state from <c>git status --porcelain=v2 --branch</c>.</summary>
@@ -381,7 +387,7 @@ public static partial class GitParsers
                 {
                     // 1 XY sub mH mI mW hH hI path
                     var fields = record.Split(' ', 9);
-                    files.Add(File(root, fields[8], fields[1][0], fields[1][1]));
+                    files.Add(File(root, fields[8], fields[1][0], fields[1][1]) with { IndexObject = fields[7] });
                     break;
                 }
 
@@ -390,7 +396,7 @@ public static partial class GitParsers
                     // 2 XY sub mH mI mW hH hI Xscore path, then the original path as the next record
                     var fields = record.Split(' ', 10);
                     var original = i + 1 < records.Length ? records[++i] : null;
-                    files.Add(File(root, fields[9], fields[1][0], fields[1][1]) with { OriginalPath = original is null ? null : Full(root, original) });
+                    files.Add(File(root, fields[9], fields[1][0], fields[1][1]) with { OriginalPath = original is null ? null : Full(root, original), IndexObject = fields[7] });
                     break;
                 }
 

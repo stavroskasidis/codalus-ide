@@ -13,7 +13,7 @@ The debugger (netcoredbg) is included in the packages.
 **Missing something?** The [first-run setup](#the-first-run-setup)'s Tools step checks for the .NET SDK and git. On later starts without them, Codalus IDE offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
 - **The .NET runtime Codalus IDE needs**: its helper processes (the plugin, build, language, debug and other hosts) ask for a .NET runtime (on a release candidate, that release candidate or a later version, such as `11.0.0-rc.3.26522.148`). Before it starts one, Codalus IDE checks that the runtime is installed in the .NET folder it uses, by .NET's own roll-forward rules. When it isn't, you get one notification, not one error per plugin: "Codalus IDE needs the .NET 11.0.0-rc.3.26522.148 runtime, which isn't installed (found: …)", with **Install .NET 11.0**. That installs the .NET 11 SDK, which brings the runtime, the same way as the SDK below, and then starts the plugins, language services and solution that couldn't start, without a restart. Check Environment lists it as **.NET runtime for Codalus IDE**.
 - **Which .NET folder**: with several (`/usr/local/share/dotnet` and `~/.dotnet` on a Mac, say), Codalus IDE uses the one on your `PATH` or in `DOTNET_ROOT` when it has the runtime, and otherwise a folder that has both an SDK and the runtime. A runtime installed on its own where .NET looks by default (a distribution's `dotnet-runtime-11.0`, Microsoft's runtime package) serves the helper processes as it is. After an install, the folder is chosen again.
-- **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, the .NET runtime Codalus IDE itself needs, git and Git LFS, Docker or Podman, and WSL on Windows.
+- **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, the .NET runtime Codalus IDE itself needs, git and Git LFS, Docker or Podman, and WSL on Windows. Each start checks only the first three, which it offers to install; the others are checked when Check Environment opens.
 - **How it installs**:
   - Windows: winget, or the download page when winget isn't there.
   - macOS: the .NET SDK into `~/.dotnet` through Microsoft's `dotnet-install` script, and git with Apple's Command Line Tools.
@@ -89,11 +89,18 @@ The setup doesn't ask about AI: it stays off until you turn it on ([AI assistanc
   - Search them with `Alt+S`; `Enter` opens the first match.
   - Pin one with its pin button.
   - Right-click for Open in New Window, Copy Path and Remove from List (`Delete` removes the selected entry).
-  - An entry whose files are gone offers to leave the list.
+  - The list shows at once, each entry's icon taken from its name. Whether each entry is still there is checked in the background, a second at most each, so an entry on a network share that doesn't answer never holds up the window: it shows as missing until it answers. Nothing leaves the list by itself.
+  - An entry whose files are gone, or that doesn't answer, offers to leave the list when you open it (from here or File → Open Recent).
 - **Actions**: on the right, Create a new project (New Project, [New projects and solutions](solutions.md#new-projects-and-solutions); Back on its first page returns here), Open a project or solution, Open a folder, and Clone a repository.
 - **Continue without code** (or `Esc`) opens the empty IDE.
 
-File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead.
+File → Start Window brings it back. Environment → On Startup (`workbench.startup`) can open an empty window or the last solution instead (the first recent entry that's there).
+
+**Started from the Dock, Finder or a desktop menu** on macOS and Linux, Codalus IDE reads your login shell's `PATH` and other variables (Homebrew's tools, `DOTNET_ROOT`, proxies), as a terminal has them. The window shows at once; what starts tools waits for those variables, up to 6 seconds: the environment check, the helper processes, git and the start window.
+
+**Several files at once** (Open with on a selection of files, files dropped on the window, or several `codalus <file>` within a moment) open as tabs behind the active one, and only the last becomes active.
+
+**Closing the IDE** hides its windows at once, and the helper processes shut down in parallel in the background, for up to 3 seconds. A `codalus` started meanwhile opens a window of its own.
 
 The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Set Up Codalus IDE opens it.)
 

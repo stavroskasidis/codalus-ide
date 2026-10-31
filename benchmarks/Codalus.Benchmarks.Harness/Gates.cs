@@ -70,6 +70,13 @@ public sealed record RegressionPolicy
     /// </summary>
     public bool FailNormalized { get; init; }
 
+    /// <summary>
+    /// Scenarios whose numbers are compared and reported, a regression as a warning, but never fail: a scenario CI hasn't
+    /// measured has no budget yet (benchmarks/README.md), so it gates nothing until CI's measurements set its budgets
+    /// (the everyday flows' UI-thread stalls, M56).
+    /// </summary>
+    public IReadOnlyList<string> InformativeScenarios { get; init; } = [];
+
     /// <summary>The reference application, measured in the same run: its numbers are reported but never fail.</summary>
     public string ReferenceTarget { get; init; } = "vscode";
 
@@ -174,6 +181,7 @@ internal static class Gates
     /// only over its threshold and <see cref="RegressionPolicy.LatencyNoiseSigmas"/> standard deviations of those runs
     /// (amendment 2026-10-27): a hosted runner's latency varies more between runs than the threshold.</item>
     /// <item>The reference application's own numbers measure the runner and its latest release: reported, never failed.</item>
+    /// <item>So are the numbers of the <see cref="RegressionPolicy.InformativeScenarios"/>, until they have budgets.</item>
     /// </list>
     /// </summary>
     public static IReadOnlyList<GateFinding> Compare(
@@ -189,6 +197,7 @@ internal static class Gates
                 .OrderByDescending(b => b.StartedAt)
                 .ToList();
             var isReference = result.Target == policy.ReferenceTarget;
+            var informative = policy.InformativeScenarios.Contains(result.Scenario, StringComparer.Ordinal);
             var currentReference = isReference ? null : ReferenceTime(policy, current, result.Machine.Os, run: null, anyRun: true);
 
             foreach (var (metric, distribution) in result.Summary)
@@ -288,10 +297,16 @@ internal static class Gates
                         {
                             rule += "; the reference application: never fails";
                         }
-                        else if (!gating)
+                        else if (!gating && !informative)
                         {
                             rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {needed} runs on this CPU: a warning only");
                         }
+                    }
+
+                    if (informative && !isReference)
+                    {
+                        gating = false;
+                        rule += "; informative until it has budgets: never fails";
                     }
 
                     var limit = Math.Max(reference * (1 + threshold), reference + band);
@@ -378,6 +393,26 @@ internal static class Gates
         values.Sort();
         var middle = values.Count / 2;
         return values.Count % 2 == 1 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+    }
+
+    /// <summary>
+    /// The regression gate's warnings as GitHub Actions annotations, which show only the first few of a step: each warning of
+    /// a gated scenario, then the <see cref="RegressionPolicy.InformativeScenarios"/>' as one per OS (noisy, and many), so
+    /// they can't push the gated ones off the run's page. The table lists every one.
+    /// </summary>
+    public static IEnumerable<string> Annotations(RegressionPolicy policy, IReadOnlyList<GateFinding> findings)
+    {
+        bool Informative(GateFinding f) => policy.InformativeScenarios.Contains(f.Scenario, StringComparer.Ordinal);
+        foreach (var f in findings.Where(f => f.Warning && !Informative(f)))
+        {
+            yield return string.Create(CultureInfo.InvariantCulture, $"::warning title=Benchmarks ({f.Os})::{f.Target} {f.Scenario} {f.Metric} {f.Stat}: {f.Value:F1} over {f.Limit:F1} ({f.Rule})");
+        }
+
+        foreach (var os in findings.Where(f => f.Warning && Informative(f)).GroupBy(f => f.Os))
+        {
+            yield return $"::warning title=Benchmarks ({os.Key})::{os.Count()} informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): "
+                         + string.Join(", ", os.Select(f => $"{f.Scenario} {f.Metric} {f.Stat}"));
+        }
     }
 
     public static string Format(string title, IReadOnlyList<GateFinding> findings, IEnumerable<string>? preamble = null)

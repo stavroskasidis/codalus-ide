@@ -2,6 +2,7 @@ using Codalus.Benchmarks.FixtureGen;
 using Codalus.Benchmarks.Harness;
 using Codalus.Benchmarks.Harness.Model;
 using Codalus.Benchmarks.Harness.Platform;
+using Codalus.Diagnostics.BenchEvents;
 
 namespace Codalus.Benchmarks.Harness.Tests;
 
@@ -107,6 +108,64 @@ public class ReportTests
 
         Assert.Contains("| metric | avalonia | vscode |", markdown);
         Assert.Contains("| startup_ready_ms | 310 / 320 / 320 (3) | 910 / 920 / 920 (3) |", markdown);
+    }
+}
+
+public class EverydayScenarioTests
+{
+    private static Target Target(string name) => new(name, IsPrototype: name == "shell", name, name, static (_, _) => new System.Diagnostics.ProcessStartInfo(), InstallDirectory: null);
+
+    [Fact]
+    public void The_everyday_flows_are_the_shells_scenario()
+    {
+        Assert.Contains("everyday", ScenarioRunner.Scenarios);
+        Assert.True(ScenarioRunner.Applies(Target("shell"), "everyday"));
+        Assert.False(ScenarioRunner.Applies(Target("vscode"), "everyday")); // in-app events only
+    }
+
+    [Fact]
+    public void Each_flow_gives_its_longest_wait_and_its_stalls_and_a_note_says_what_they_were()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllLines(path,
+            [
+                """{"ev":"everyday_flow","wall_us":1,"mono_us":1,"stall_max_us":120400,"stall_total_us":340250,"stalls":3,"probes":250,"gc_pause_us":12500,"elapsed_us":2500000,"flow":"typing","step":"typing","job":"ShellHost.Editor.cs:612"}""",
+                """{"ev":"everyday_note","wall_us":2,"mono_us":2,"note":"the rebuild failed or didn't run"}""",
+                """{"ev":"everyday_flow","wall_us":3,"mono_us":3,"stall_max_us":31000,"stall_total_us":0,"stalls":0,"probes":90,"gc_pause_us":0,"elapsed_us":900000,"flow":"build"}""",
+                """{"ev":"everyday_flow","wall_us":4,"mono_us":4,"stall_max_us":5000,"stall_total_us":0}""",
+                """{"ev":"scenario_done","wall_us":5,"mono_us":5}""",
+            ]);
+            var machine = new MachineInfo("linux", "Ubuntu", "x64", "CPU", 4, 16L << 30, null, null, IsCi: true);
+            var result = new ScenarioResult { Target = "shell", Scenario = "everyday", Machine = machine, StartedAt = DateTimeOffset.UnixEpoch, Method = "instrumented" };
+
+            var summary = ScenarioRunner.AddEverydayFlows(result, BenchEventLog.Read(path), run: 1);
+
+            Assert.Equal([120.4], result.Samples["everyday_typing_stall_max_ms"]);
+            Assert.Equal([340.25], result.Samples["everyday_typing_stall_total_ms"]);
+            Assert.Equal([31.0], result.Samples["everyday_build_stall_max_ms"]);
+            Assert.Equal([0.0], result.Samples["everyday_build_stall_total_ms"]);
+            Assert.Equal([12.5], result.Samples["everyday_typing_gc_pause_ms"]);
+            Assert.Equal([0.0], result.Samples["everyday_build_gc_pause_ms"]);
+            Assert.Equal(6, result.Samples.Count); // a flow without a name isn't one
+            Assert.Equal("the longest waits: typing 120 ms at typing in ShellHost.Editor.cs:612 (2.5 s), build 31 ms (0.9 s)", summary);
+            Assert.Equal(["run 1: the rebuild failed or didn't run", "Run 1: " + summary], result.Notes);
+            Assert.Contains("| everyday_typing_stall_max_ms | 120 |", Report.Markdown([result.Summarize()]), StringComparison.Ordinal);
+
+            Assert.Equal("no flow measured", ScenarioRunner.AddEverydayFlows(result, [], run: 2));
+
+            // A run that stopped early, or whose flows didn't do their work, is a warning on CI, not only a note.
+            Assert.Equal("6 of 8 flows not measured (open_tracked, next_document, ctrl_tab, sync_collapsed, explorer_search, close_reopen); 1 note(s) from the driver, in the report",
+                ScenarioRunner.EverydayProblem(BenchEventLog.Read(path), timedOut: false));
+            Assert.Equal("it didn't finish within 12 minutes; 8 of 8 flows not measured (" + string.Join(", ", BenchEventNames.EverydayFlows) + ")", ScenarioRunner.EverydayProblem([], timedOut: true));
+            BenchEvent Flow(string name) => new(BenchEventNames.EverydayFlow, 0, 0, new Dictionary<string, long>()) { Text = new Dictionary<string, string> { ["flow"] = name } };
+            Assert.Null(ScenarioRunner.EverydayProblem([.. BenchEventNames.EverydayFlows.Select(Flow)], timedOut: false));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }
 

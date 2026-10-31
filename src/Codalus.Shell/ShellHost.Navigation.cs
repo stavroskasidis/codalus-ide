@@ -26,7 +26,7 @@ public sealed partial class ShellHost
     public SymbolBrowserViewModel ClassView { get; private set; } = null!;
 
     private bool _classViewShown;
-    private bool _symbolBrowsersQueued;
+    private UiDebouncer? _symbolBrowsers;
 
     private void InitializeNavigation()
     {
@@ -50,28 +50,24 @@ public sealed partial class ShellHost
         return ClassView;
     }
 
-    /// <summary>The projects changed: Class View and an open Object Browser list them again.</summary>
-    private void QueueSymbolBrowsers()
+    /// <summary>
+    /// The projects changed: Class View and an open Object Browser list them again, once a burst settles (M56: each
+    /// evaluation of a large solution's open rebuilt Class View's roots, and its flag was set from the build host's thread).
+    /// </summary>
+    private void QueueSymbolBrowsers() =>
+        (_symbolBrowsers ??= new UiDebouncer(RefreshSymbolBrowsers, TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3))).Request();
+
+    private void RefreshSymbolBrowsers()
     {
-        if (_symbolBrowsersQueued)
+        if (_classViewShown)
         {
-            return;
+            _ = ClassView.RefreshAsync();
         }
 
-        _symbolBrowsersQueued = true;
-        Ui.Post(() =>
+        if (Layout?.FindDocument<PageDocument>(SymbolBrowserViewModel.ObjectBrowserId) is { ViewModel: SymbolBrowserViewModel browser })
         {
-            _symbolBrowsersQueued = false;
-            if (_classViewShown)
-            {
-                _ = ClassView.RefreshAsync();
-            }
-
-            if (Layout?.FindDocument<PageDocument>(SymbolBrowserViewModel.ObjectBrowserId) is { ViewModel: SymbolBrowserViewModel browser })
-            {
-                _ = browser.RefreshAsync();
-            }
-        });
+            _ = browser.RefreshAsync();
+        }
     }
 
     /// <summary>View → Object Browser (deferred from M12a): a project's assemblies, its own first, down to their members.</summary>
@@ -124,7 +120,8 @@ public sealed partial class ShellHost
     {
         if (_editTracked is { } controller && !controller.Model.IsReadOnly)
         {
-            var offset = Math.Min(e.Offset + e.InsertionLength, controller.Model.Text.TextLength);
+            var edited = Editor.DocumentEdits.EditedSpan(e); // a group's last edit, not the end of a whole-document change
+            var offset = Math.Min(edited.Offset + edited.InsertionLength, controller.Model.Text.TextLength);
             _lastEdit = (controller.Model.Path, controller.Model.PositionAt(offset));
         }
     }

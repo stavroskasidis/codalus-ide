@@ -53,6 +53,11 @@ public sealed class SingleInstance : IDisposable
     /// </summary>
     public static bool? Send(string pipeName, InstanceRequest request)
     {
+        if (!MayBeListening(pipeName))
+        {
+            return null;
+        }
+
         try
         {
             using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.CurrentUserOnly);
@@ -70,6 +75,26 @@ public sealed class SingleInstance : IDisposable
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether a shell may listen on the pipe: connecting where none does retries until the timeout, so every
+    /// <c>codalus &lt;solution&gt;</c>, Open with… and <c>codalus file</c> with no IDE running waited half a second before
+    /// starting one. Its socket file (Linux, macOS) or its entry among the named pipes (Windows); true when that can't be
+    /// told, to connect as before.
+    /// </summary>
+    internal static bool MayBeListening(string pipeName)
+    {
+        try
+        {
+            return OperatingSystem.IsWindows()
+                ? Directory.EnumerateFiles(@"\\.\pipe\").Any(p => string.Equals(Path.GetFileName(p), pipeName, StringComparison.OrdinalIgnoreCase))
+                : File.Exists(Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + pipeName)); // where .NET binds a pipe's socket
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return true;
         }
     }
 

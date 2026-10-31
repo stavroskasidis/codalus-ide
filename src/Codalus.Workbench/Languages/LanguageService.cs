@@ -229,6 +229,11 @@ public sealed class LanguageService : IAsyncDisposable
     public LanguageHostClient? RunningClient(string languageId) =>
         ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;
 
+    /// <summary>Whether a language's service was started and couldn't (until it's tried again).</summary>
+    public bool HasFailed(string languageId) =>
+        ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted
+        && (!lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null);
+
     /// <summary>Server settings for every language service (e.g. <c>{ "analysisScope": "solution" }</c>).</summary>
     public async Task ConfigureAsync(JsonElement settings)
     {
@@ -764,7 +769,13 @@ public sealed class LanguageService : IAsyncDisposable
         _solutions.ProgressChanged -= OnLoadingProgress;
         _solutions.DesignTimeProgressChanged -= OnLoadingProgress;
         await _lifetime.CancelAsync().ConfigureAwait(false);
-        foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
+
+        // The servers shut down together (M56): one after another, each up to its shutdown's time, a few slow ones
+        // outlasted the time the IDE's exit gives them all.
+        await Task.WhenAll(_clients.Values.Where(l => l.IsValueCreated).Select(DisposeClientAsync)).ConfigureAwait(false);
+        _lifetime.Dispose();
+
+        static async Task DisposeClientAsync(Lazy<Task<LanguageHostClient?>> lazy)
         {
             try
             {
@@ -777,7 +788,5 @@ public sealed class LanguageService : IAsyncDisposable
             {
             }
         }
-
-        _lifetime.Dispose();
     }
 }

@@ -2,12 +2,17 @@ using System.Collections.Specialized;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
@@ -98,13 +103,22 @@ internal static class DataTipIcons
             e.Handled = true;
             _ = node.ReevaluateAsync();
         };
-        node.PropertyChanged += (_, e) =>
+        void OnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(VariableNode.CanReevaluate))
             {
                 button.IsVisible = node.CanReevaluate;
             }
+        }
+
+        // Followed while shown: a row that went (scrolled out, a tip closed) doesn't stay reachable from its node.
+        button.AttachedToVisualTree += (_, _) =>
+        {
+            node.PropertyChanged -= OnChanged;
+            node.PropertyChanged += OnChanged;
+            button.IsVisible = node.CanReevaluate;
         };
+        button.DetachedFromVisualTree += (_, _) => node.PropertyChanged -= OnChanged;
         return button;
     }
 }
@@ -130,13 +144,23 @@ public sealed class ValueEditor
         _node = node;
         _host = host;
         Tooltip();
-        node.PropertyChanged += (_, e) =>
+
+        // Followed while shown: a row that went (scrolled out, a tip closed) doesn't stay reachable from its node.
+        cell.AttachedToVisualTree += (_, _) =>
         {
-            if (e.PropertyName is nameof(VariableNode.Value) or nameof(VariableNode.IsError))
-            {
-                Tooltip();
-            }
+            node.PropertyChanged -= OnNodeChanged;
+            node.PropertyChanged += OnNodeChanged;
+            Tooltip();
         };
+        cell.DetachedFromVisualTree += (_, _) => node.PropertyChanged -= OnNodeChanged;
+    }
+
+    private void OnNodeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(VariableNode.Value) or nameof(VariableNode.IsError))
+        {
+            Tooltip();
+        }
     }
 
     /// <summary>The box while the value is edited (tests).</summary>
@@ -381,17 +405,25 @@ public sealed class DataTipRow : Border
     private readonly Border _chevron;
     private readonly Icon _chevronIcon;
     private readonly TextBlock _value;
+    private readonly Grid _grid;
     private DispatcherTimer? _hoverTimer;
+
+    /// <summary>How many rows were built (tests: a tip builds the rows it shows, not one per member, M56).</summary>
+    internal static int Built;
 
     public DataTipRow(DataTipPanel panel, VariableNode node, IDataTipHost host)
     {
+        Interlocked.Increment(ref Built);
         Panel = panel;
         Node = node;
         _host = host;
         Classes.Add("dataTipRow");
         Height = DataTipMetrics.Row;
         Focusable = false;
-        var grid = new Grid
+
+        // The name, View and value columns are as wide as the tip's widest, measured from all its members' texts: the
+        // rows are virtualized (M56), and every row has them, so they stay put as it scrolls.
+        var grid = _grid = new Grid
         {
             ColumnDefinitions =
             {
@@ -400,10 +432,10 @@ public sealed class DataTipRow : Border
                 new ColumnDefinition(2, GridUnitType.Pixel),
                 new ColumnDefinition(16, GridUnitType.Pixel),
                 new ColumnDefinition(4, GridUnitType.Pixel),
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "N" },
+                new ColumnDefinition(panel.NameColumn, GridUnitType.Pixel),
                 new ColumnDefinition(1, GridUnitType.Pixel),
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "V" },
-                new ColumnDefinition(GridLength.Auto) { SharedSizeGroup = "A" },
+                new ColumnDefinition(panel.ViewColumn, GridUnitType.Pixel),
+                new ColumnDefinition(GridLength.Auto) { MinWidth = panel.ValueColumn }, // a value's box widens its row while it's edited
                 new ColumnDefinition(22, GridUnitType.Pixel),
             },
         };
@@ -433,7 +465,7 @@ public sealed class DataTipRow : Border
         {
             Text = node.IsPlaceholder ? node.Value : node.Name,
             Classes = { "dataTipName" },
-            Margin = new Thickness(0, 0, 8, 0),
+            Margin = new Thickness(0, 0, DataTipPanel.NameMargin, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         name.Classes.Set("muted", node.IsPlaceholder);
@@ -451,18 +483,19 @@ public sealed class DataTipRow : Border
 
         if (!node.IsPlaceholder)
         {
-            var view = new ViewButton(node) { Margin = new Thickness(4, 0, 0, 0) };
+            var view = new ViewButton(node) { Margin = new Thickness(DataTipPanel.ViewMargin, 0, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
             Grid.SetColumn(view, 7);
             grid.Children.Add(view);
+            View = view;
         }
 
         _value = new TextBlock
         {
             Classes = { "dataTipValue" },
             Text = node.IsPlaceholder ? string.Empty : node.Value,
-            MaxWidth = DataTipMetrics.MaxValueWidth,
+            MaxWidth = panel.ValueMaxWidth,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(6, 0, 0, 0),
+            Margin = new Thickness(DataTipPanel.ValueMargin, 0, 0, 0),
             VerticalAlignment = VerticalAlignment.Center,
         };
         _value.Classes.Set("error", node.IsError);
@@ -520,13 +553,19 @@ public sealed class DataTipRow : Border
                 OpenMenu();
             }
         };
-        Node.PropertyChanged += OnNodeChanged;
+
+        // A row built again for a member (scrolled back into view) shows what's open and selected as the last one did.
+        Classes.Set("open", host.IsOpen(node) && node.HasChildren);
+        Classes.Set("selected", panel.IsSelected(node));
         UpdateChevron();
     }
 
     public DataTipPanel Panel { get; }
 
     public VariableNode Node { get; }
+
+    /// <summary>The row's View button (null for a placeholder).</summary>
+    public ViewButton? View { get; }
 
     /// <summary>The value as shown (tests).</summary>
     public TextBlock ValueBlock => _value;
@@ -564,6 +603,7 @@ public sealed class DataTipRow : Border
         {
             _value.Text = Node.Value;
             AutomationProperties.SetName(this, Accessible(Node));
+            Panel.FitValue(Node);
         }
         else if (e.PropertyName is nameof(VariableNode.IsError) or nameof(VariableNode.IsChanged))
         {
@@ -605,9 +645,35 @@ public sealed class DataTipRow : Border
     /// <summary>The hover-open timer's state (tests).</summary>
     internal bool IsHoverOpenPending => _hoverTimer?.IsEnabled == true;
 
+    /// <summary>The tip's columns changed (its members loaded, its values trimmed sooner): the row's follow.</summary>
+    internal void SetColumns(double name, double view, double value, double valueMaxWidth)
+    {
+        _grid.ColumnDefinitions[5].Width = new GridLength(name, GridUnitType.Pixel);
+        _grid.ColumnDefinitions[7].Width = new GridLength(view, GridUnitType.Pixel);
+        _grid.ColumnDefinitions[8].MinWidth = value;
+        _value.MaxWidth = valueMaxWidth;
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+
+        // Followed while shown (M56): rows are built as they scroll into view, and one that went doesn't stay reachable.
+        Node.PropertyChanged -= OnNodeChanged;
+        Node.PropertyChanged += OnNodeChanged;
+        _value.Text = Node.IsPlaceholder ? string.Empty : Node.Value;
+        _value.Classes.Set("error", Node.IsError);
+        _value.Classes.Set("changed", Node.IsChanged && !Node.IsError);
+        _value.Classes.Set("muted", Node.IsDisplayPending);
+        _chevron.IsVisible = Node.HasChildren;
+        Panel.FitValue(Node); // its value may have changed since the columns were measured
+        SetColumns(Panel.NameColumn, Panel.ViewColumn, Panel.ValueColumn, Panel.ValueMaxWidth);
+    }
+
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
+        Node.PropertyChanged -= OnNodeChanged;
         StopHoverOpen();
     }
 
@@ -622,15 +688,44 @@ public sealed class DataTipRow : Border
 /// <summary>
 /// One tip of the cascade: a node's members as rows, up to 15 before it scrolls, the name column as wide as its widest
 /// name. Up, Down, Right (opens the child tip), Left (closes it, or goes back), F2 and Enter (edit), Ctrl+C and Esc.
+/// The rows are virtualized (M56): only those in view, and a few around them, are built. The name, View and value columns
+/// are measured from every member's text, so each row has them as wide, and they stay put as the tip scrolls.
 /// </summary>
+/// <remarks>
+/// TODO(issue): the keyboard's selection is a class only: give the rows selection-item automation (or automation focus)
+/// so a screen reader says what Up and Down selected, now that only the rows in view are in the automation tree.
+/// </remarks>
 public sealed class DataTipPanel : Border
 {
+    /// <summary>The space after a name, before the separator.</summary>
+    internal const double NameMargin = 8;
+
+    /// <summary>The space before the View button.</summary>
+    internal const double ViewMargin = 4;
+
+    /// <summary>The space before the value.</summary>
+    internal const double ValueMargin = 6;
+
+    /// <summary>The View button around its text (DataTip styles): its icon and spacing, its chevron, their paddings.</summary>
+    private const double ViewChrome = 2 + 14 + 3 + 2 + 2 + 10 + 2 + 1;
+
+    /// <summary>Re-evaluate after a value: its margin and its 20 px button.</summary>
+    private const double ReevaluateWidth = 4 + 20;
+
+    /// <summary>A value is measured up to this many characters: past them it's trimmed at 400 px anyway.</summary>
+    private const int MeasuredValueLength = 256;
+
     protected override Type StyleKeyOverride => typeof(Border);
 
     private readonly IDataTipHost _host;
-    private readonly StackPanel _rows = new();
+    private readonly ItemsControl _rows;
     private readonly ScrollViewer _scroll;
-    private DataTipRow? _selected;
+    private VariableNode? _selected;
+    private double _names;
+    private double _values;
+    private double _view;
+    private bool _reevaluates;
+    private bool _refitQueued;
 
     public DataTipPanel(VariableNode parent, IDataTipHost host, int level)
     {
@@ -639,7 +734,12 @@ public sealed class DataTipPanel : Border
         Level = level;
         Classes.Add("dataTip");
         Focusable = true;
-        Grid.SetIsSharedSizeScope(_rows, true);
+        _rows = new ItemsControl
+        {
+            ItemsSource = parent.Children,
+            ItemsPanel = new FuncTemplate<Panel?>(() => new VirtualizingStackPanel()),
+            ItemTemplate = new FuncDataTemplate<VariableNode?>((node, _) => node is null ? new Panel() : new DataTipRow(this, node, host), supportsRecycling: false),
+        };
         _scroll = new ScrollViewer
         {
             Content = _rows,
@@ -655,7 +755,8 @@ public sealed class DataTipPanel : Border
         Child = _scroll;
         AutomationProperties.SetName(this, Localizer.Format("dataTip.membersOf", "Members of {0}", parent.Name));
         parent.Children.CollectionChanged += OnChildrenChanged;
-        Rebuild();
+        MeasureColumns();
+        ResolveDisplays();
         AddHandler(PointerWheelChangedEvent, OnWheel, RoutingStrategies.Tunnel);
         KeyDown += OnKeyDown;
     }
@@ -665,9 +766,26 @@ public sealed class DataTipPanel : Border
     /// <summary>The tip's place in the cascade: 1 under the header, 2 under one of its rows…</summary>
     public int Level { get; }
 
-    public IReadOnlyList<DataTipRow> Rows => [.. _rows.Children.OfType<DataTipRow>()];
+    /// <summary>The members, in order: every one, though only those in view have rows built.</summary>
+    public IReadOnlyList<VariableNode> Nodes => Parent.Children;
 
-    public DataTipRow? SelectedRow => _selected;
+    /// <summary>The rows built now, in order: those in view and a few around them (M56).</summary>
+    public IReadOnlyList<DataTipRow> Rows =>
+        [.. _rows.GetRealizedContainers()
+            .Select(c => (Index: _rows.IndexFromContainer(c), Row: (c as ContentPresenter)?.Child as DataTipRow ?? c as DataTipRow))
+            .Where(r => r.Index >= 0 && r.Row is not null)
+            .OrderBy(r => r.Index)
+            .Select(r => r.Row!)];
+
+    /// <summary>A member's row, while it's built (in view).</summary>
+    public DataTipRow? RowOf(VariableNode node) => Rows.FirstOrDefault(r => ReferenceEquals(r.Node, node));
+
+    public DataTipRow? SelectedRow => _selected is { } node ? RowOf(node) : null;
+
+    /// <summary>The selected member (its row may be out of view).</summary>
+    public VariableNode? SelectedNode => _selected;
+
+    internal bool IsSelected(VariableNode node) => ReferenceEquals(_selected, node);
 
     /// <summary>How wide a value may be: 400 px, less near the text view's right edge (the tip moved left and still didn't fit).</summary>
     public double ValueMaxWidth
@@ -676,12 +794,18 @@ public sealed class DataTipPanel : Border
         set
         {
             field = value;
-            foreach (var row in Rows)
-            {
-                row.ValueBlock.MaxWidth = value;
-            }
+            ApplyColumns();
         }
     } = DataTipMetrics.MaxValueWidth;
+
+    /// <summary>The name column: the widest name, as text.</summary>
+    internal double NameColumn => _names + NameMargin;
+
+    /// <summary>The View column: a View button's width when any member has one.</summary>
+    internal double ViewColumn => _view;
+
+    /// <summary>The value column: the widest value, as text, up to <see cref="ValueMaxWidth"/>, and Re-evaluate when a member has it.</summary>
+    internal double ValueColumn => ValueMargin + Math.Min(_values, ValueMaxWidth) + (_reevaluates ? ReevaluateWidth : 0);
 
     /// <summary>The rows' scroll position.</summary>
     public double ScrollOffset => _scroll.Offset.Y;
@@ -691,56 +815,169 @@ public sealed class DataTipPanel : Border
     /// <summary>The rows changed (the members loaded): the tip's size, and its children's places, change.</summary>
     public event EventHandler? RowsChanged;
 
-    private void OnChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e) => Rebuild();
-
-    private void Rebuild()
+    private void OnChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var selected = _selected?.Node;
-        _rows.Children.Clear();
-        _selected = null;
-        foreach (var child in Parent.Children)
+        // The rows follow the members by themselves (one reset per load); the selection stays when its member does.
+        if (_selected is { } selected && !Parent.Children.Contains(selected))
         {
-            _rows.Children.Add(new DataTipRow(this, child, _host) { ValueBlock = { MaxWidth = ValueMaxWidth } });
+            _selected = null;
         }
 
-        if (selected is not null && Rows.FirstOrDefault(r => ReferenceEquals(r.Node, selected)) is { } again)
-        {
-            Select(again);
-        }
-
+        MeasureColumns();
         ResolveDisplays();
         RowsChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>The [DebuggerDisplay] of the rows in view that don't have it yet (A10).</summary>
-    private void ResolveDisplays()
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        var rows = Rows;
-        var first = Math.Max(0, (int)(ScrollOffset / DataTipMetrics.Row));
-        for (var i = first; i < rows.Count && i < first + DataTipMetrics.MaxRows + 1; i++)
+        base.OnAttachedToVisualTree(e);
+        MeasureColumns(); // in its window now: the popup's font
+    }
+
+    /// <summary>
+    /// The columns' widths, from every member's name and value as text in the tip's font (M56, the maintainer's choice):
+    /// the same for each row, built or not, so they don't change as the tip scrolls. Measured once the tip is in its
+    /// window (in its font: before, the text was measured twice, once in the default font).
+    /// </summary>
+    private void MeasureColumns()
+    {
+        if (!this.IsAttachedToVisualTree())
         {
-            _ = rows[i].Node.ResolveDisplayAsync();
+            return;
+        }
+
+        var typeface = FontTypeface();
+        var size = TextElement.GetFontSize(this);
+        double names = 0, values = 0;
+        bool views = false, reevaluates = false;
+        foreach (var node in Parent.Children)
+        {
+            names = Math.Max(names, TextWidth(node.IsPlaceholder ? node.Value : node.Name, typeface, size));
+            if (!node.IsPlaceholder)
+            {
+                values = Math.Max(values, TextWidth(node.Value, typeface, size));
+                views = views || VariableTreeSupport.HasVisualizers(node);
+            }
+
+            reevaluates |= node.CanReevaluate;
+        }
+
+        (_names, _values, _reevaluates) = (names, values, reevaluates);
+        _view = views ? ViewMargin + TextWidth(Localizer.Get("dataTip.view", "View"), typeface, size) + ViewChrome : 0;
+        ApplyColumns();
+    }
+
+    private Typeface FontTypeface() => new(TextElement.GetFontFamily(this), TextElement.GetFontStyle(this), TextElement.GetFontWeight(this), TextElement.GetFontStretch(this));
+
+    private static double TextWidth(string text, Typeface typeface, double size)
+    {
+        if (text.Length == 0)
+        {
+            return 0;
+        }
+
+        using var layout = new TextLayout(text.Length > MeasuredValueLength ? text[..MeasuredValueLength] : text, typeface, size, null);
+        return Math.Ceiling(layout.WidthIncludingTrailingWhitespace) + 1;
+    }
+
+    /// <summary>
+    /// A member's value changed after the columns were measured (its [DebuggerDisplay] applied as it scrolled into view,
+    /// Re-evaluate's answer), or its row was built: a wider value widens the value column for every row, so the rows keep
+    /// one width as the tip scrolls, and only a value's box widens its own row.
+    /// </summary>
+    internal void FitValue(VariableNode node)
+    {
+        if (node.IsPlaceholder || !this.IsAttachedToVisualTree())
+        {
+            return;
+        }
+
+        var width = TextWidth(node.Value, FontTypeface(), TextElement.GetFontSize(this));
+        if (width <= _values)
+        {
+            return;
+        }
+
+        _values = width;
+        ApplyColumns();
+        if (_refitQueued)
+        {
+            return;
+        }
+
+        // Once the rows built in this layout pass are in: theirs too, and the tip, wider, is placed again.
+        _refitQueued = true;
+        Dispatcher.UIThread.Post(() =>
+        {
+            _refitQueued = false;
+            if (this.IsAttachedToVisualTree())
+            {
+                ApplyColumns();
+                RowsChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }, DispatcherPriority.Background);
+    }
+
+    private void ApplyColumns()
+    {
+        foreach (var row in Rows)
+        {
+            row.SetColumns(NameColumn, ViewColumn, ValueColumn, ValueMaxWidth);
         }
     }
 
-    /// <summary>The top of <paramref name="row"/> in the tip's own coordinates (its border and padding included, its scroll applied).</summary>
-    public double RowTop(DataTipRow row) => DataTipMetrics.RowsTop + (Rows.ToList().IndexOf(row) * DataTipMetrics.Row) - ScrollOffset;
-
-    public void Select(DataTipRow? row)
+    /// <summary>The [DebuggerDisplay] of the members in view that don't have it yet (A10).</summary>
+    private void ResolveDisplays()
     {
-        _selected?.Classes.Remove("selected");
-        _selected = row;
-        if (row is not null)
+        var nodes = Parent.Children;
+        var first = Math.Max(0, (int)(ScrollOffset / DataTipMetrics.Row));
+        for (var i = first; i < nodes.Count && i < first + DataTipMetrics.MaxRows + 1; i++)
         {
-            row.Classes.Add("selected");
-            row.BringIntoView();
+            _ = nodes[i].ResolveDisplayAsync();
         }
+    }
+
+    /// <summary>The top of <paramref name="node"/>'s row in the tip's own coordinates (its border and padding included, its scroll applied).</summary>
+    public double RowTop(VariableNode node) => DataTipMetrics.RowsTop + (Math.Max(0, Parent.Children.IndexOf(node)) * DataTipMetrics.Row) - ScrollOffset;
+
+    /// <summary>The top of <paramref name="row"/> in the tip's own coordinates.</summary>
+    public double RowTop(DataTipRow row) => RowTop(row.Node);
+
+    public void Select(DataTipRow? row) => Select(row?.Node);
+
+    /// <summary>Selects a member, and brings its row into view.</summary>
+    public void Select(VariableNode? node)
+    {
+        if (_selected is { } old && RowOf(old) is { } before)
+        {
+            before.Classes.Remove("selected");
+        }
+
+        _selected = node;
+        if (node is null)
+        {
+            return;
+        }
+
+        if (Parent.Children.IndexOf(node) is >= 0 and var index)
+        {
+            _rows.ScrollIntoView(index);
+        }
+
+        RowOf(node)?.Classes.Add("selected");
+    }
+
+    /// <summary>The selected member's row, brought into view first: the wheel may have scrolled it out, and only the rows in view are built.</summary>
+    private DataTipRow? SelectedRowInView()
+    {
+        Select(_selected);
+        return SelectedRow;
     }
 
     /// <summary>Takes the keyboard focus with a row selected (the first, unless one is).</summary>
     public void FocusRows()
     {
-        Select(_selected ?? Rows.FirstOrDefault(r => !r.Node.IsPlaceholder));
+        Select(_selected ?? Parent.Children.FirstOrDefault(n => !n.IsPlaceholder));
         Focus(NavigationMethod.Directional);
     }
 
@@ -761,31 +998,31 @@ public sealed class DataTipPanel : Border
             return; // a value's box takes its own keys
         }
 
-        var rows = Rows.Where(r => !r.Node.IsPlaceholder).ToList();
-        var index = _selected is null ? -1 : rows.IndexOf(_selected);
+        var nodes = Parent.Children.Where(n => !n.IsPlaceholder).ToList();
+        var index = _selected is null ? -1 : nodes.IndexOf(_selected);
         switch (e.Key)
         {
-            case Key.Down when rows.Count > 0:
-                Select(rows[Math.Min(rows.Count - 1, index + 1)]);
+            case Key.Down when nodes.Count > 0:
+                Select(nodes[Math.Min(nodes.Count - 1, index + 1)]);
                 break;
-            case Key.Up when rows.Count > 0:
-                Select(rows[Math.Max(0, index - 1)]);
+            case Key.Up when nodes.Count > 0:
+                Select(nodes[Math.Max(0, index - 1)]);
                 break;
-            case Key.Right when _selected is { Node.HasChildren: true } row:
-                _host.SetOpen(this, row, row.Node, true);
+            case Key.Right when _selected is { HasChildren: true } node:
+                _host.SetOpen(this, RowOf(node) ?? (Control)this, node, true);
                 break;
-            case Key.Left when _selected is { } row && _host.IsOpen(row.Node):
-                _host.SetOpen(this, row, row.Node, false);
+            case Key.Left when _selected is { } node && _host.IsOpen(node):
+                _host.SetOpen(this, RowOf(node) ?? (Control)this, node, false);
                 break;
             case Key.Left:
                 _host.FocusParent(this);
                 break;
-            case Key.F2 or Key.Enter when _selected is { } row && row.Editor.Begin():
+            case Key.F2 or Key.Enter when SelectedRowInView() is { } row && row.Editor.Begin():
                 break;
-            case Key.C when e.KeyModifiers.HasFlag(KeyModifiers.Control) && _selected is { } row:
-                _ = VariableActions.CopyText?.Invoke(row.Node.Value);
+            case Key.C when e.KeyModifiers.HasFlag(KeyModifiers.Control) && _selected is { } node:
+                _ = VariableActions.CopyText?.Invoke(node.Value);
                 break;
-            case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && _selected is { } row:
+            case Key.F10 when e.KeyModifiers.HasFlag(KeyModifiers.Shift) && SelectedRowInView() is { } row:
                 row.OpenMenu();
                 break;
             case Key.Escape:
@@ -799,7 +1036,11 @@ public sealed class DataTipPanel : Border
     }
 
     /// <summary>Stops following the node (the tip closed).</summary>
-    public void Detach() => Parent.Children.CollectionChanged -= OnChildrenChanged;
+    public void Detach()
+    {
+        Parent.Children.CollectionChanged -= OnChildrenChanged;
+        _rows.ItemsSource = null;
+    }
 }
 
 /// <summary>

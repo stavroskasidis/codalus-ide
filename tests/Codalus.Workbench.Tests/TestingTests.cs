@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Xml.Linq;
 using Codalus.Plugins.Protocol;
 using Codalus.Workbench.Plugins;
@@ -167,6 +168,153 @@ public sealed class TestingTests : IDisposable
         Assert.Equal(3, _service.InDocument("file:///c:/src/Calc.cs").Count);
     }
 
+    [Fact]
+    public void The_document_index_finds_what_a_walk_of_the_trees_finds()
+    {
+        // Editors ask for a document's items: from the controllers' indexes, not a walk of every test (M56). After random
+        // additions, moves, changes of document and removals, in two controllers of which one goes away, the index gives
+        // the walk's items in the walk's order (editors keep the first of the items that start on a line).
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c1", "One"), _connection);
+        service.ControllerCreated(new TestControllerParams("x", "c2", "Two"), _connection);
+        string?[] documents = ["file:///c:/src/A.cs", "file:///C:/SRC/a.cs", "file:///c:/src/B.cs", null];
+        var random = new Random(56);
+        for (var step = 0; step < 600; step++)
+        {
+            var controller = random.Next(4) == 0 ? "c2" : "c1";
+            var id = random.Next(40);
+            if (random.Next(6) == 0)
+            {
+                service.ItemsUpdated(new TestItemsUpdateParams(controller, [], ["n" + id]));
+            }
+            else
+            {
+                // A parent has a smaller number: no cycles.
+                var parent = id == 0 || random.Next(4) == 0 ? null : "n" + random.Next(id);
+                var line = random.Next(6);
+                var range = random.Next(5) == 0 ? null : new RangeDto(line, 0, line + random.Next(3), 0);
+                service.ItemsUpdated(new TestItemsUpdateParams(controller, [new TestItemDto("n" + id, parent, "N" + id, null, documents[random.Next(documents.Length)], range, null, null, null)], []));
+            }
+
+            if (step == 450)
+            {
+                service.ControllerDisposed("c2");
+            }
+
+            foreach (var document in new[] { "file:///c:/src/a.cs", "file:///c:/src/B.cs" })
+            {
+                var walked = service.Read(roots => roots.SelectMany(r => r.SelfAndDescendants())
+                    .Where(n => n.Range is not null && string.Equals(n.Uri, document, StringComparison.OrdinalIgnoreCase)).ToList());
+                Assert.Equal(walked, service.InDocument(document));
+                for (var line = 0; line < 9; line++)
+                {
+                    var innermost = walked.Where(n => n.Range!.StartLine <= line && line <= n.Range.EndLine).OrderBy(n => n.Range!.EndLine - n.Range.StartLine).FirstOrDefault();
+                    Assert.Same(innermost, service.FindAt(document, line));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void A_documents_version_changes_with_its_items_and_their_outcomes_only()
+    {
+        // Editors refresh their glyphs and CodeLens when their document's version changed (M56). The class is declared in
+        // Calc.cs: its CodeLens sums up the tests under it, wherever they are declared.
+        const string calc = "file:///c:/src/Calc.cs";
+        const string other = "file:///c:/src/Other.cs";
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|c:Tests.Calc", "P|n:Tests", "Calc", uri: calc, line: 5), Item("Q|m:Waits", "Q|c:Other.Slow", "Waits", uri: other, line: 3)], []));
+        var seen = new Dictionary<string, long> { [calc] = _service.DocumentVersion(calc), [other] = _service.DocumentVersion(other) };
+        string Changed()
+        {
+            var changed = seen.Keys.Where(uri => _service.DocumentVersion(uri) != seen[uri]).ToList();
+            foreach (var uri in changed)
+            {
+                seen[uri] = _service.DocumentVersion(uri);
+            }
+
+            return string.Join(", ", changed.Select(uri => uri[(uri.LastIndexOf('/') + 1)..]));
+        }
+
+        _service.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
+        Report("r1", ("Q|m:Waits", TestStates.Passed, 1));
+        Assert.Equal("Other.cs", Changed());
+        Report("r1", ("P|m:Adds", TestStates.Started, null));
+        Assert.Equal("Calc.cs", Changed());
+
+        // Output changes neither: glyphs and CodeLens don't show it. The run's end leaves Adds not run.
+        _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", "hello\n")], []));
+        Assert.Equal(string.Empty, Changed());
+        _service.RunEnded("r1");
+        Assert.Equal("Calc.cs", Changed());
+
+        // A test of the class declared elsewhere (a partial class), then a test moved to Calc.cs: both documents.
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|m:Elsewhere", "P|c:Tests.Calc", "Elsewhere", uri: other, line: 9)], []));
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("Q|m:Waits", "Q|c:Other.Slow", "Waits", uri: calc, line: 40)], []));
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Equal(["Calc", "Adds", "Fails", "Divides", "Waits"], _service.InDocument(calc).Select(n => n.Label));
+        Assert.Equal(["Elsewhere"], _service.InDocument(other).Select(n => n.Label));
+
+        // Removing a project: its tests' document. The controller going away: every document.
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [], ["Q"]));
+        Assert.Equal("Calc.cs", Changed());
+        _service.ControllerDisposed(Controller);
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Empty(_service.InDocument(calc));
+
+        // A controller created again (a plugin that came back) drops the old one's items from every document too.
+        _service.ControllerCreated(new TestControllerParams("codalus.dotnettest", Controller, ".NET"), _connection);
+        _service.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P|c:Tests.Calc", null, "Calc", uri: calc, line: 5)], []));
+        Changed();
+        _service.ControllerCreated(new TestControllerParams("codalus.dotnettest", Controller, ".NET"), _connection);
+        Assert.Equal("Calc.cs, Other.cs", Changed());
+        Assert.Empty(_service.InDocument(calc));
+    }
+
+    [Fact]
+    public void An_item_whose_parent_is_itself_or_under_it_becomes_a_root()
+    {
+        // Ids are unique per controller, but nothing makes a plugin keep to it: a parent that is the item itself, or an
+        // item under it, made a cycle, and the editors' walk up the tree for the document's items never left it.
+        const string uri = "file:///c:/src/Loop.cs";
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c", "C"), _connection);
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [Item("self", "self", "Self", uri: uri, line: 1), Item("a", null, "A", uri: uri, line: 3), Item("b", "a", "B", uri: uri, line: 4)], []));
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [Item("a", "b", "A", uri: uri, line: 3)], []));
+
+        Assert.Equal(["Self", "A", "B"], service.InDocument(uri).Select(n => n.Label));
+        Assert.Equal(["Self", "A"], service.Read(roots => roots.Select(r => r.Label).ToList()));
+        Assert.Same(service.Find(TestNode.KeyOf("c", "a")), service.Find(TestNode.KeyOf("c", "b"))!.Parent);
+    }
+
+    [Fact]
+    public void A_documents_items_cost_what_the_document_has()
+    {
+        // Each open editor asks for its document's items at each change: the index answers from that document's items,
+        // where a walk of every test took 12-25 ms for 100K tests (M56). 1,000 questions to a forest of 100,000 tests:
+        // seconds for a walk, milliseconds for the index.
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", "c", "C"), _connection);
+        var items = new List<TestItemDto>();
+        for (var project = 0; project < 100; project++)
+        {
+            items.Add(Item("p" + project, null, "P" + project));
+            for (var test = 0; test < 1000; test++)
+            {
+                items.Add(Item($"p{project}|{test}", "p" + project, "T" + test, uri: $"file:///c:/src/P{project}/T{test / 10}.cs", line: test % 10));
+            }
+        }
+
+        service.ItemsUpdated(new TestItemsUpdateParams("c", [.. items], []));
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        for (var i = 0; i < 1000; i++)
+        {
+            Assert.Equal(10, service.InDocument($"file:///c:/src/P{i % 100}/T{i % 7}.cs").Count);
+        }
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), $"1,000 documents' items took {clock.Elapsed.TotalMilliseconds:0} ms");
+    }
+
     [Theory]
     [InlineData("", 5)]
     [InlineData("adds", 1)]
@@ -241,7 +389,7 @@ public sealed class TestingTests : IDisposable
         using var other = new TestService();
         other.ControllerCreated(new TestControllerParams("x", Controller, ".NET"), _connection);
         other.ItemsUpdated(new TestItemsUpdateParams(Controller, [Item("P", null, "Tests.Unit"), Item("P|n:Tests", "P", "Tests"), Item("P|c:Tests.Calc", "P|n:Tests", "Calc"), Item("P|m:Fails", "P|c:Tests.Calc", "Fails"), Item("P|m:Divides", "P|c:Tests.Calc", "Divides"), Item("P|t:1", "P|m:Divides", "Divides(a: 6, b: 3)"), Item("P|t:2", "P|m:Divides", "Divides(a: 9, b: 3)")], []));
-        var unmatched = other.ApplyImported("ci.trx", imported, (leaf, result) => TestNames.Matches(leaf, result.FullyQualifiedName, result.DisplayName));
+        var unmatched = other.ApplyImported("ci.trx", imported);
         Assert.Equal(2, unmatched.Count); // Adds and Waits are not in the fresh tree
         Assert.Equal(TestOutcome.Failed, other.Find(TestNode.KeyOf(Controller, "P|m:Fails"))!.Outcome);
         Assert.Equal(TestOutcome.Passed, other.Find(TestNode.KeyOf(Controller, "P|t:1"))!.Outcome);
@@ -308,6 +456,91 @@ public sealed class TestingTests : IDisposable
         Assert.Equal(("C:\\src\\Calc.cs", 21), (frames[1].File, frames[1].Line));
         Assert.Null(frames[2].File);
         Assert.Equal(frames[1], StackTraces.FirstUserFrame(frames, f => f.StartsWith("C:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Imported_results_and_playlists_are_looked_up_by_name_not_matched_against_every_test()
+    {
+        // M56: each TRX result (and each playlist entry) went through every test, building each test's name again: 5,000
+        // results against 5,000 tests froze the window for seconds. 20,000 of each take moments by name.
+        using var service = new TestService();
+        service.ControllerCreated(new TestControllerParams("x", Controller, ".NET"), _connection);
+        var items = new List<TestItemDto> { Item("P", null, "Big.Tests"), Item("P|n", "P", "Big") };
+        for (var c = 0; c < 200; c++)
+        {
+            items.Add(Item($"P|c{c}", "P|n", $"Class{c}"));
+            for (var m = 0; m < 100; m++)
+            {
+                items.Add(Item($"P|c{c}|m{m}", $"P|c{c}", $"Test{m}"));
+            }
+        }
+
+        service.ItemsUpdated(new TestItemsUpdateParams(Controller, [.. items], []));
+        var results = Enumerable.Range(0, 20_000)
+            .Select(i => new ImportedResult($"Big.Class{i / 100}.Test{i % 100}", $"Test{i % 100}", new Codalus.Workbench.Testing.TestResult(i % 7 == 0 ? TestOutcome.Failed : TestOutcome.Passed, null, [], string.Empty, DateTimeOffset.Now, "import")))
+            .Append(new ImportedResult("Big.Missing.Test", "Test", new Codalus.Workbench.Testing.TestResult(TestOutcome.Passed, null, [], string.Empty, DateTimeOffset.Now, "import")))
+            .ToList();
+
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var unmatched = service.ApplyImported("big.trx", results);
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"{watch.Elapsed} for 20,000 results"); // minutes before
+        Assert.Equal("Big.Missing.Test", Assert.Single(unmatched).FullyQualifiedName);
+        Assert.Equal(TestOutcome.Failed, service.Find(TestNode.KeyOf(Controller, "P|c0|m0"))!.Outcome);
+        Assert.Equal(TestOutcome.Passed, service.Find(TestNode.KeyOf(Controller, "P|c199|m98"))!.Outcome);
+
+        var playlist = XDocument.Parse($"<Playlist Version=\"1.0\">{string.Concat(Enumerable.Range(0, 20_000).Select(i => $"<Add Test=\"Big.Class{i / 100}.Test{i % 100}\" />"))}</Playlist>");
+        watch.Restart();
+        var keys = service.Read(roots => Playlists.ImportVisualStudio(playlist, roots));
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"{watch.Elapsed} for 20,000 playlist entries");
+        Assert.Equal(20_000, keys.Count);
+    }
+
+    [Fact]
+    public void A_tests_output_keeps_its_last_megabyte_from_a_lines_start_and_the_runs_output_is_reported_as_it_comes()
+    {
+        // M56: a test's output and a run's were kept whole (and concatenated per chunk under the service's lock); the run's
+        // was read whole at its end, on the UI thread. Output reported after the test's result goes on from what the result
+        // kept: the line saying how much went before counts all of it (it counted only the last chunk's overflow).
+        var reported = new List<string>();
+        _service.RunOutput += (_, output) => reported.Add(output.Text);
+        _service.RunStarted(new TestRunStartedParams(Controller, "r1", "Run", null, "run"));
+        var chunk = new string('o', 999) + "\n";
+        for (var i = 0; i < 3000; i++)
+        {
+            _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", chunk)], []));
+        }
+
+        _service.RunUpdated(new TestRunUpdateParams("r1", [new TestStateDto("P|m:Adds", TestStates.Passed, 1, null)], [], []));
+        AssertKept(3000L * chunk.Length, chunk);
+
+        // After the result: a chunk at a time, then two in one update.
+        var late = "late " + new string('l', 994) + "\n";
+        for (var i = 0; i < 500; i++)
+        {
+            _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", late)], []));
+        }
+
+        _service.RunUpdated(new TestRunUpdateParams("r1", [], [new TestOutputDto("P|m:Adds", late), new TestOutputDto("P|m:Adds", late)], []));
+        _service.RunEnded("r1");
+        AssertKept((3000L * chunk.Length) + (502L * late.Length), late);
+        Assert.Equal(3501, reported.Count);
+        Assert.All(reported.Take(3000), text => Assert.Equal(chunk, text));
+        Assert.Equal(late + late, reported[^1]);
+        Assert.Equal(Node("P|m:Adds").Result, Assert.Single(_service.History(Node("P|m:Adds").Key)));
+        Assert.Equal("r1", Node("P|m:Adds").Result!.RunId);
+
+        void AssertKept(long written, string last)
+        {
+            var output = Node("P|m:Adds").Result!.Output;
+            var marker = output.IndexOf('\n', StringComparison.Ordinal);
+            Assert.StartsWith("[", output, StringComparison.Ordinal);
+            var dropped = long.Parse(new string([.. output[..marker].Where(char.IsAsciiDigit)]), CultureInfo.InvariantCulture);
+            var kept = output[(marker + 1)..];
+            Assert.Equal(written, dropped + kept.Length);
+            Assert.InRange(kept.Length, TestService.MaxTestOutputLength - chunk.Length, TestService.MaxTestOutputLength);
+            Assert.Equal(0, kept.Length % chunk.Length); // whole lines: from a line's start
+            Assert.EndsWith(last, kept, StringComparison.Ordinal);
+        }
     }
 
     private sealed class FakeConnection : ITestControllerConnection

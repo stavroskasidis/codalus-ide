@@ -124,6 +124,8 @@ public sealed class ContainerEngine(IReadOnlyList<string> tool)
     /// <summary>Runs one command to its end. <paramref name="onLine"/> hears each line as it arrives (builds, pulls).</summary>
     public async Task<ContainerResult> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken, Action<string>? onLine = null, string? workingDirectory = null)
     {
+        // docker or podman on the login shell's PATH (M56): a restored Containers window lists them while it comes in.
+        await Codalus.Rpc.ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
         var (program, all) = Command(arguments);
         var start = new ProcessStartInfo(program, all)
         {

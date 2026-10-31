@@ -22,6 +22,12 @@ public sealed class CodeDocumentChangedEventArgs(int version, TextDocumentConten
 /// </summary>
 public sealed class CodeDocument : ObservableObject, IDisposable
 {
+    /// <summary>The characters past which a file opens in large-file mode (VS Code's limit, 20 MB).</summary>
+    public const int LargeFileCharacters = 20 * 1024 * 1024;
+
+    /// <summary>The lines past which a file opens in large-file mode (VS Code's limit).</summary>
+    public const int LargeFileLines = 300_000;
+
     private readonly List<TextDocumentContentChangeEvent> _pending = [];
     private FileSystemWatcher? _watcher;
     private DateTime _lastWrite;
@@ -31,6 +37,9 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     private int _changeCheckScheduled;
     private int _saving;
     private bool _checkAfterSave;
+    private Task _reload = Task.CompletedTask;
+    private int _reloading;
+    private bool _checkAfterReload;
     private bool _disposed;
 
     private CodeDocument(string path, string? uri, string text, TextFileFormat format, bool isReadOnly)
@@ -41,6 +50,7 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         Format = format;
         IsReadOnly = isReadOnly;
         Text = new TextDocument(text) { FileName = path };
+        IsLarge = text.Length > LargeFileCharacters || Text.LineCount > LargeFileLines;
         Text.UndoStack.MarkAsOriginalFile();
         Text.UndoStack.PropertyChanged += OnUndoStackChanged;
         Text.Changing += OnChanging;
@@ -62,6 +72,13 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     /// <summary>Generated documents are read-only.</summary>
     public bool IsReadOnly { get; }
+
+    /// <summary>
+    /// The file had more than <see cref="LargeFileCharacters"/> characters or <see cref="LargeFileLines"/> lines when it
+    /// opened (M56, VS Code's limits): its editors have no colors, folding or CodeLens, and no language service gets it,
+    /// which kept the window busy for seconds on such a file. Decided once, when it opens.
+    /// </summary>
+    public bool IsLarge { get; }
 
     /// <summary>The language service that owns this document (<c>csharp</c>), or null.</summary>
     public string? LanguageId
@@ -99,12 +116,32 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     public event EventHandler? Saved;
 
+    /// <summary>
+    /// Reads a file into a new document. Opened from the UI thread, the text is decoded and its lines indexed off it (a
+    /// 20 MB file took a few hundred milliseconds there), and the document is handed to the UI thread when it's ready.
+    /// </summary>
     public static async Task<CodeDocument> OpenAsync(string path, CancellationToken cancellationToken)
     {
-        var (text, format) = await TextFiles.ReadAsync(path, cancellationToken).ConfigureAwait(true);
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return await ReadAsync(path, owner: null, cancellationToken).ConfigureAwait(true);
+        }
+
+        var owner = Thread.CurrentThread;
+        return await Task.Run(() => ReadAsync(path, owner, cancellationToken), cancellationToken).ConfigureAwait(true);
+    }
+
+    private static async Task<CodeDocument> ReadAsync(string path, Thread? owner, CancellationToken cancellationToken)
+    {
+        var (text, format) = await TextFiles.ReadAsync(path, cancellationToken).ConfigureAwait(owner is null);
         var document = new CodeDocument(path, null, text, format, isReadOnly: false);
         document.RememberFileState();
         document.Watch();
+        if (owner is not null)
+        {
+            document.Text.SetOwnerThread(owner); // AvaloniaEdit checks every access against the thread that built it
+        }
+
         return document;
     }
 
@@ -120,30 +157,30 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     /// <summary>
     /// Applies LSP edits (positions in the current text) as one undoable change. Returns false when they overlap.
+    /// Edits near each other are one document change (<see cref="DocumentEdits"/>): Format Document's thousands of edits
+    /// ran every change handler once each.
     /// </summary>
     public bool ApplyEdits(IEnumerable<LanguageServices.Protocol.TextEdit> edits)
     {
+        // Inserts at the same position keep their order, as LSP has them appear in the text.
         var spans = edits
-            .Select(e => (Start: OffsetAt(e.Range.Start), End: OffsetAt(e.Range.End), e.NewText))
-            .OrderByDescending(e => e.Start)
-            .ThenByDescending(e => e.End)
+            .Select(e =>
+            {
+                var start = OffsetAt(e.Range.Start);
+                return (Offset: start, Length: OffsetAt(e.Range.End) - start, Text: e.NewText);
+            })
+            .OrderBy(e => e.Offset)
+            .ThenBy(e => e.Length)
             .ToList();
         for (var i = 1; i < spans.Count; i++)
         {
-            if (spans[i].End > spans[i - 1].Start)
+            if (spans[i].Offset < spans[i - 1].Offset + spans[i - 1].Length)
             {
                 return false;
             }
         }
 
-        using (Text.RunUpdate())
-        {
-            foreach (var (start, end, text) in spans)
-            {
-                Text.Replace(start, end - start, text);
-            }
-        }
-
+        DocumentEdits.Apply(Text, spans);
         return true;
     }
 
@@ -151,9 +188,12 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
-        var start = PositionAt(e.Offset);
-        var end = e.RemovalLength == 0 ? start : PositionAt(e.Offset + e.RemovalLength);
-        _pending.Add(new TextDocumentContentChangeEvent(new Range(start, end), e.InsertedText.Text));
+        // A group's edited range: a group over most of a long document replaces all of it (DocumentEdits).
+        var (offset, removal, insertion) = DocumentEdits.EditedSpan(e);
+        var start = PositionAt(offset);
+        var end = removal == 0 ? start : PositionAt(offset + removal);
+        var text = e.InsertedText.Text;
+        _pending.Add(new TextDocumentContentChangeEvent(new Range(start, end), insertion == text.Length ? text : text.Substring(offset - e.Offset, insertion)));
     }
 
     private void OnChanged(object? sender, DocumentChangeEventArgs e)
@@ -240,21 +280,109 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         Saved?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Replaces the text with the file's (one undoable change, so the language service sees an edit).</summary>
-    public async Task ReloadAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Replaces the text with the file's (one undoable change, so the language service sees an edit): only the part that
+    /// differs. A log being written is reloaded at each write, and replacing all of it rebuilt every editor's lines and
+    /// sent the language service the whole text each time (M56); now that's what was appended. Reloads run one at a time,
+    /// each against the text the one before left.
+    /// </summary>
+    public Task ReloadAsync(CancellationToken cancellationToken) => QueueReload(fromWatcher: false, cancellationToken);
+
+    private Task QueueReload(bool fromWatcher, CancellationToken cancellationToken)
     {
-        var (text, format) = await TextFiles.ReadAsync(Path, cancellationToken).ConfigureAwait(true);
-        Format = format;
-        OnPropertyChanged(nameof(Format));
-        if (text != Text.Text)
+        var reload = ReloadAfterAsync(_reload, fromWatcher, cancellationToken);
+        _reload = reload;
+        return reload;
+    }
+
+    private async Task ReloadAfterAsync(Task previous, bool fromWatcher, CancellationToken cancellationToken)
+    {
+        _reloading++;
+        try
         {
-            Text.Replace(0, Text.TextLength, text);
+            await Task.WhenAny(previous).ConfigureAwait(true); // its failure is its own caller's
+            await ReloadNowAsync(fromWatcher, cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (--_reloading == 0 && _checkAfterReload)
+            {
+                _checkAfterReload = false;
+                ScheduleCheck(); // the file changed again while it was read: checked against what that read remembered
+            }
+        }
+    }
+
+    private async Task ReloadNowAsync(bool fromWatcher, CancellationToken cancellationToken)
+    {
+        // Off the UI thread: the file's time and size (taken before it's read, so a write during the read is seen at the
+        // next check), the read, the decoding and what differs from the text now.
+        var version = Version;
+        var snapshot = Text.CreateSnapshot();
+        var path = Path;
+        var (state, format, text, change) = await Task.Run(
+            async () =>
+            {
+                var files = Workbench.FileSystem.FileSystems.For(path);
+                var state = await files.StatAsync(path, cancellationToken).ConfigureAwait(false);
+                var (text, format) = TextFiles.Decode(await files.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false));
+                return (state, format, text, Difference(snapshot.Text, text));
+            },
+            cancellationToken).ConfigureAwait(true);
+        (_lastWrite, _lastLength) = state.Exists ? (state.ModifiedUtc, state.Size) : (default, -1);
+        if (Version != version)
+        {
+            if (fromWatcher && IsModified)
+            {
+                ConflictDetected?.Invoke(this, EventArgs.Empty); // typed into while the file was read: not overwritten
+                return;
+            }
+
+            change = (0, Text.TextLength, text); // changed while the file was read: all of it, as asked
         }
 
-        RememberFileState();
+        Format = format;
+        OnPropertyChanged(nameof(Format));
+        if (change.Removed > 0 || change.Inserted.Length > 0)
+        {
+            Text.Replace(change.Start, change.Removed, change.Inserted);
+        }
+
         Text.UndoStack.MarkAsOriginalFile();
         IsDeletedOnDisk = false;
         Reloaded?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// What turns <paramref name="before"/> into <paramref name="after"/>: the text between their common start and end,
+    /// widened so it never starts or ends between a "\r" and its "\n", or inside a surrogate pair. A range ending between
+    /// "\r" and "\n" (line endings changed on disk) is a position past its line's end, which language services clamp to
+    /// the line's end: their copy would keep a "\r" the editor no longer has.
+    /// </summary>
+    internal static (int Start, int Removed, string Inserted) Difference(string before, string after)
+    {
+        var start = before.AsSpan().CommonPrefixLength(after);
+        var end = 0;
+        var most = Math.Min(before.Length, after.Length) - start;
+        while (end < most && before[before.Length - end - 1] == after[after.Length - end - 1])
+        {
+            end++;
+        }
+
+        if (start > 0 && start < before.Length && IsPair(before[start - 1], before[start]))
+        {
+            start--;
+        }
+
+        var removedEnd = before.Length - end;
+        if (end > 0 && removedEnd > start && IsPair(before[removedEnd - 1], before[removedEnd]))
+        {
+            end--;
+        }
+
+        return (start, before.Length - start - end, after[start..(after.Length - end)]);
+
+        static bool IsPair(char first, char second) => (first == '\r' && second == '\n') || (char.IsHighSurrogate(first) && char.IsLowSurrogate(second));
     }
 
     public void SetLineEnding(string lineEnding)
@@ -366,6 +494,12 @@ public sealed class CodeDocument : ObservableObject, IDisposable
             return;
         }
 
+        if (_reloading > 0)
+        {
+            _checkAfterReload = true; // one read at a time: checked again once the one under way is in
+            return;
+        }
+
         if (!exists)
         {
             IsDeletedOnDisk = true;
@@ -393,7 +527,7 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     {
         try
         {
-            await ReloadAsync(CancellationToken.None).ConfigureAwait(true);
+            await QueueReload(fromWatcher: true, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

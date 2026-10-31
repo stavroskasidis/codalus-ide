@@ -108,14 +108,21 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>Whether <see cref="Tools"/> has every tool, not only the required ones startup checks.</summary>
+    public bool ToolsComplete { get; private set; }
+
     /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
-    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer)
+    /// <param name="requiredOnly">The required tools alone (startup: what it offers to install).</param>
+    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer, bool requiredOnly = false)
     {
         try
         {
             // Off with the shell: a closed window's check kept its probes (git, dotnet) running, and the shell with them.
             var lifetime = _lifetime.Token;
-            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true), .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
+            Tools = requiredOnly
+                ? await EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true)
+                : [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true), .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
+            ToolsComplete = !requiredOnly;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -548,6 +555,7 @@ public sealed partial class ShellHost
         if (await EnvironmentCheck.CheckDotnetAsync(folder, CancellationToken.None).ConfigureAwait(true) is { State: ToolState.Mismatch } sdk)
         {
             Tools = await EnvironmentCheck.CheckAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            ToolsComplete = false; // without the mobile, Windows app and .NET Framework rows
             ToolsChanged?.Invoke(this, EventArgs.Empty);
             await OfferInstallAsync(sdk).ConfigureAwait(true);
         }

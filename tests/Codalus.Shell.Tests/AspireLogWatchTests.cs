@@ -1,7 +1,11 @@
 using System.Buffers.Binary;
 using System.Net;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
+using AvaloniaEdit;
 using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views;
 using Codalus.Workbench.Aspire;
 
 namespace Codalus.Shell.Tests;
@@ -10,7 +14,8 @@ namespace Codalus.Shell.Tests;
 /// The Aspire window's console of the selected resource, against a stand-in resource service: a stream that ends while
 /// the resource runs (seen for a project just started: the dashboard's stream ended after 64 ms with nothing, and the
 /// window stayed empty) is followed again, with growing waits and a bounded number of times, the lines already shown
-/// left out of its replay; not once the resource stops, and again when it starts.
+/// left out of its replay; not once the resource stops, and again when it starts. A backlog of thousands of lines
+/// reaches the console in a few batches, the UI answering meanwhile (M56).
 /// </summary>
 public sealed class AspireLogWatchTests
 {
@@ -21,18 +26,24 @@ public sealed class AspireLogWatchTests
 
     /// <summary>
     /// The resource service's <c>WatchResourceConsoleLogs</c>: each call's lines from <paramref name="lines"/> (by the
-    /// call's number, from 1), as one message, then the stream's end with an OK status.
+    /// call's number, from 1), as one message, then the stream's end with an OK status; with <paramref name="answerLater"/>
+    /// read on the thread pool, as the real service's are.
     /// </summary>
-    private sealed class StandInResourceService(Func<int, string[]> lines) : HttpMessageHandler
+    private sealed class StandInResourceService(Func<int, string[]> lines, bool answerLater = false) : HttpMessageHandler
     {
         private int _calls;
 
         public int Calls => Volatile.Read(ref _calls);
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Assert.Equal("/aspire.v1.DashboardService/WatchResourceConsoleLogs", request.RequestUri!.AbsolutePath);
             var call = Interlocked.Increment(ref _calls);
+            if (answerLater)
+            {
+                await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+            }
+
             var body = new MemoryStream();
             if (lines(call) is { Length: > 0 } texts)
             {
@@ -40,7 +51,7 @@ public sealed class AspireLogWatchTests
                 var update = new ProtoWriter();
                 for (var i = 0; i < texts.Length; i++)
                 {
-                    update.Bytes(1, [.. new ProtoWriter().String(1, texts[i]).ToArray(), 3 << 3, (byte)(i + 1)]);
+                    update.Bytes(1, [.. new ProtoWriter().String(1, texts[i]).ToArray(), 3 << 3, .. Varint(i + 1)]);
                 }
 
                 var message = update.ToArray();
@@ -53,7 +64,20 @@ public sealed class AspireLogWatchTests
 
             var response = new HttpResponseMessage(HttpStatusCode.OK) { Version = HttpVersion.Version20, Content = new StreamContent(body) };
             response.TrailingHeaders.Add("grpc-status", "0");
-            return Task.FromResult(response);
+            return response;
+        }
+
+        private static byte[] Varint(int value)
+        {
+            var bytes = new List<byte>();
+            var rest = (uint)value;
+            for (; rest >= 0x80; rest >>= 7)
+            {
+                bytes.Add((byte)(rest | 0x80));
+            }
+
+            bytes.Add((byte)rest);
+            return [.. bytes];
         }
     }
 
@@ -130,5 +154,46 @@ public sealed class AspireLogWatchTests
         await Task.Delay(300, TestContext.Current.CancellationToken);
         ShellFixture.Pump();
         Assert.Equal(2, service.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task A_backlog_of_ten_thousand_lines_reaches_the_console_in_a_few_updates()
+    {
+        // M56: the resource service sends a console's backlog as one message, and each of its lines was posted to the UI
+        // thread with the whole console so far, which a text box laid out again in full: minutes without a key handled.
+        static string Line(int i) => $"\u001b[32minfo\u001b[0m: request {i} " + new string('x', 80);
+        string[] lines = [.. Enumerable.Range(1, 10_000).Select(Line)];
+        var service = new StandInResourceService(_ => lines, answerLater: true);
+        using var client = new AspireResourceClient(new Uri("http://localhost:1"), "key", service);
+        using var window = new AspireViewModel(_ => { }) { LogRetryDelays = [] };
+        window.Attach("AppHost", client);
+        window.Apply(new AspireResourceChange([Resource("Exited")], null, null));
+        var view = new AspireView { DataContext = window };
+        var host = new Window { Width = 900, Height = 500, Content = view };
+        host.Show();
+        var editor = view.GetVisualDescendants().OfType<TextEditor>().Single();
+        var changes = 0;
+        editor.Document.Changed += (_, _) => changes++;
+        var last = "info: request 10000 " + new string('x', 80) + "\n";
+
+        using var monitor = new UiStallMonitor();
+        for (var pass = 0; pass < 2; pass++)
+        {
+            // Once for the JIT, then measured.
+            window.Selected = null;
+            ShellFixture.Pump();
+            monitor.Reset();
+            changes = 0;
+            window.Selected = window.Resources.Single();
+            await ShellFixture.PumpUntil(() => view.ConsoleText.EndsWith(last, StringComparison.Ordinal), seconds: 60, describe: () => $"{view.ConsoleText.Length} characters shown");
+        }
+
+        monitor.AssertResponsive("a resource's backlog of 10,000 lines", 1000);
+        Assert.InRange(changes, 1, 100); // a batch per dispatcher pass, not a change per line
+        Assert.Equal(10_001, editor.Document.LineCount);
+        Assert.DoesNotContain('\u001b', view.ConsoleText); // the process's colors are runs, not escapes
+        Assert.StartsWith("info: request 1 ", view.ConsoleText, StringComparison.Ordinal);
+        Assert.Equal(view.ConsoleText, window.Logs);
+        host.Close();
     }
 }

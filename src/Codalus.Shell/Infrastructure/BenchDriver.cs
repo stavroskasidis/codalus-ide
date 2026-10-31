@@ -10,11 +10,11 @@ using Codalus.Shell.Editor;
 namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// Benchmark support (<c>--open</c>, <c>--bench typing|scroll|test-filter|packages|terminal</c>, <c>--exit-on highlight|done|language</c>): opens a
+/// Benchmark support (<c>--open</c>, <c>--bench typing|scroll|completion|test-filter|packages|terminal|everyday</c>, <c>--exit-on highlight|done|language</c>): opens a
 /// file, reports when it first shows semantic highlighting, and runs self-driven typing and scrolling with in-app
 /// frame probes. These complement the harness's external measurements and are the only source on CI runners.
 /// </summary>
-internal sealed class BenchDriver(Window window, ShellHost shell)
+internal sealed partial class BenchDriver(Window window, ShellHost shell)
 {
     private const int TypingKeystrokes = 300;
     private const double ScrollPixelsPerSecond = 4000;
@@ -45,6 +45,12 @@ internal sealed class BenchDriver(Window window, ShellHost shell)
         if (shell.Options.Bench == "terminal")
         {
             await TerminalAsync().ConfigureAwait(true);
+            return;
+        }
+
+        if (shell.Options.Bench == "everyday")
+        {
+            await EverydayAsync().ConfigureAwait(true);
             return;
         }
 

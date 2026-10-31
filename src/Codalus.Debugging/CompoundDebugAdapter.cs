@@ -920,6 +920,12 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return [.. (await part.Adapter.VariablesAsync(reference, cancellationToken).ConfigureAwait(false)).Select(v => v with { VariablesReference = Reference(v.VariablesReference, part) })];
     }
 
+    public async Task<Variable[]> VariablesAsync(int variablesReference, VariablesPage page, CancellationToken cancellationToken)
+    {
+        var (part, reference) = Owner(variablesReference, "variables");
+        return [.. (await part.Adapter.VariablesAsync(reference, page, cancellationToken).ConfigureAwait(false)).Select(v => v with { VariablesReference = Reference(v.VariablesReference, part) })];
+    }
+
     public async Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken)
     {
         Part part;

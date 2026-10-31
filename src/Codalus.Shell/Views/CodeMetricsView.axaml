@@ -31,6 +31,9 @@
         </Grid>
         <Grid>
           <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
+          <!-- TODO(issue): a tree view isn't virtualized (Avalonia's keeps a stack panel): every expanded node gets a
+               container, built on the UI thread, so the metrics of 300 projects' types and members make thousands (M56; the
+               Solution Explorer's and the Document Outline's flattened rows in a list box are the way). -->
           <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{l:T codeMetrics.codeMetricsResults}">
             <TreeView.Styles>
               <Style Selector="TreeViewItem" x:DataType="vm:MetricsNodeViewModel">

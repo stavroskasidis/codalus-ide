@@ -53,6 +53,9 @@ public interface IDebugAdapter : IAsyncDisposable
 
     Task<Variable[]> VariablesAsync(int variablesReference, CancellationToken cancellationToken);
 
+    /// <summary>A page of the children (a long array's range, M56); an adapter that doesn't page returns them all.</summary>
+    Task<Variable[]> VariablesAsync(int variablesReference, VariablesPage page, CancellationToken cancellationToken) => VariablesAsync(variablesReference, cancellationToken);
+
     Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken);
 
     Task<SetVariableResponse> SetVariableAsync(int variablesReference, string name, string value, CancellationToken cancellationToken);

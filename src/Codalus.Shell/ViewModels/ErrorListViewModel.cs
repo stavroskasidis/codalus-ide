@@ -120,6 +120,7 @@ public sealed class ErrorListViewModel : ObservableObject
         _settings = settings;
         store.Changed += (_, _) => ScheduleRefresh();
         builds.DiagnosticsChanged += (_, _) => ScheduleRefresh();
+        builds.Finished += (_, _) => Dispatcher.UIThread.Post(OnBuildFinished, DispatcherPriority.Background);
         if (settings is not null)
         {
             settings.Changed += (_, e) =>
@@ -189,7 +190,10 @@ public sealed class ErrorListViewModel : ObservableObject
     /// <summary>What the list shows: the <see cref="Rows"/>, under an <see cref="ErrorListGroup"/> header per group when grouped.</summary>
     public ResettableCollection<object> Items { get; } = [];
 
-    /// <summary>Collapses or expands a group.</summary>
+    /// <summary>
+    /// Collapses or expands a group: the rows shown are grouped again, already sorted and filtered, without being built
+    /// again from the diagnostics (M56: with 100,000 errors each toggle sorted them all on the UI thread).
+    /// </summary>
     public void ToggleGroup(ErrorListGroup group)
     {
         if (!_collapsed.Remove(group.Key))
@@ -197,7 +201,10 @@ public sealed class ErrorListViewModel : ObservableObject
             _collapsed.Add(group.Key);
         }
 
-        Refresh();
+        // Rows being built for the old collapse state are built again for this one.
+        _generation++;
+        _computeAgain |= _computing;
+        Items.Reset(GroupItems(Rows, GroupByValues[GroupBy], _collapsed));
     }
 
     /// <summary>0: Build + IntelliSense, 1: Build only, 2: IntelliSense only.</summary>
@@ -263,6 +270,7 @@ public sealed class ErrorListViewModel : ObservableObject
         }
     }
 
+    /// <summary>The search box: the rows are built again once typing pauses, off the UI thread.</summary>
     public string Filter
     {
         get => _filter;
@@ -270,10 +278,15 @@ public sealed class ErrorListViewModel : ObservableObject
         {
             if (SetField(ref _filter, value ?? string.Empty))
             {
-                Refresh();
+                (_filterRefresh ??= new UiDebouncer(Refresh, TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(600))).Request();
             }
         }
     }
+
+    private UiDebouncer? _filterRefresh;
+
+    /// <summary>Whether the rows shown are being built again (tests).</summary>
+    internal bool IsRefreshing => _computing || _filterRefresh?.IsPending == true || _buildRefresh?.IsEnabled == true;
 
     public string ErrorsLabel => _errors == 1 ? "1 Error" : $"{_errors} Errors";
 
@@ -295,7 +308,7 @@ public sealed class ErrorListViewModel : ObservableObject
     /// <summary>
     /// A change of diagnostics (published on any thread, a file at a time): one refresh for a burst, its rows built on
     /// the thread pool. A solution whose packages didn't restore has hundreds of thousands of errors, which froze the
-    /// window when they were built on the UI thread.
+    /// window when they were built on the UI thread. While a build runs, at most every <see cref="BuildRefreshInterval"/>.
     /// </summary>
     private void ScheduleRefresh()
     {
@@ -307,8 +320,45 @@ public sealed class ErrorListViewModel : ObservableObject
         Dispatcher.UIThread.Post(() =>
         {
             Volatile.Write(ref _refreshScheduled, 0);
-            _ = RefreshInBackgroundAsync();
+            if (!_builds.IsBuilding)
+            {
+                _ = RefreshInBackgroundAsync();
+                return;
+            }
+
+            // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a
+            // second for the whole build (M56). Its end shows at once (OnBuildFinished).
+            if (_buildRefresh is null)
+            {
+                _buildRefresh = new DispatcherTimer();
+                _buildRefresh.Tick += (_, _) =>
+                {
+                    _buildRefresh.Stop();
+                    _ = RefreshInBackgroundAsync();
+                };
+            }
+
+            if (!_buildRefresh.IsEnabled)
+            {
+                _buildRefresh.Interval = BuildRefreshInterval;
+                _buildRefresh.Start();
+            }
         }, DispatcherPriority.Background);
+    }
+
+    /// <summary>How often, at most, the list shows the diagnostics coming in while a build runs (tests change it).</summary>
+    internal TimeSpan BuildRefreshInterval { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    private DispatcherTimer? _buildRefresh;
+
+    /// <summary>The build's last diagnostics show at once, not at the next turn of <see cref="BuildRefreshInterval"/>.</summary>
+    private void OnBuildFinished()
+    {
+        if (_buildRefresh?.IsEnabled == true)
+        {
+            _buildRefresh.Stop();
+            _ = RefreshInBackgroundAsync();
+        }
     }
 
     /// <summary>
@@ -345,11 +395,15 @@ public sealed class ErrorListViewModel : ObservableObject
         }
     }
 
-    /// <summary>Shows the diagnostics now (a filter or grouping changed).</summary>
+    /// <summary>
+    /// Shows the diagnostics again (a filter, a grouping, the scope or the active document changed), built off the UI
+    /// thread; rows being built for an older query are dropped. On the UI thread, each toggle, keystroke in the search box
+    /// and tab switch (with Current Document) built and sorted every row: up to a second with 100,000 errors (M56).
+    /// </summary>
     public void Refresh()
     {
         _generation++;
-        Apply(Compute(Query(), _store, _builds, _hotReload));
+        _ = RefreshInBackgroundAsync();
     }
 
     /// <summary>What the list shows, read on the UI thread so that <see cref="Compute"/> can run on any.</summary>
@@ -459,25 +513,30 @@ public sealed class ErrorListViewModel : ObservableObject
             .ThenBy(r => r.Line)
             .ToList();
 
+        return new ListView(rows, GroupItems(rows, query.GroupBy, query.Collapsed), errors, warnings, all.Count - errors - warnings);
+    }
+
+    /// <summary>What the list shows for <paramref name="rows"/> (sorted): the rows, or each group's header and, expanded, its rows.</summary>
+    private static List<object> GroupItems(IReadOnlyList<ErrorListRow> rows, string groupBy, IReadOnlySet<string> collapsed)
+    {
         var items = new List<object>(rows.Count);
-        if (query.GroupBy == "none")
+        if (groupBy == "none")
         {
             items.AddRange(rows);
+            return items;
         }
-        else
+
+        foreach (var (key, title, members) in Groups(rows, groupBy))
         {
-            foreach (var (key, title, members) in Groups(rows, query.GroupBy))
+            var expanded = !collapsed.Contains(key);
+            items.Add(new ErrorListGroup(key, title, members.Count, expanded));
+            if (expanded)
             {
-                var expanded = !query.Collapsed.Contains(key);
-                items.Add(new ErrorListGroup(key, title, members.Count, expanded));
-                if (expanded)
-                {
-                    items.AddRange(members);
-                }
+                items.AddRange(members);
             }
         }
 
-        return new ListView(rows, items, errors, warnings, all.Count - errors - warnings);
+        return items;
     }
 
     private void Apply(ListView view)

@@ -237,7 +237,7 @@ internal sealed class DataTipCascade : IDataTipHost
         var level = new Level(popup, panel, anchor);
         _levels.Add(level);
         _root.Children.Add(popup);
-        SetAnchorOpen(anchor, true);
+        SetAnchorOpen(level, true);
         panel.RowsChanged += (_, _) => Arrange();
         panel.ScrollChanged += (_, _) => Arrange();
         panel.Opacity = _faded ? 0.15 : 1;
@@ -254,8 +254,9 @@ internal sealed class DataTipCascade : IDataTipHost
 
     public void PointerOnRow(DataTipPanel owner, DataTipRow row)
     {
-        // Another row of the same tip: the child tip of the row the pointer left closes.
-        if (_levels.Count > owner.Level && !ReferenceEquals(_levels[owner.Level].Anchor, row))
+        // Another row of the same tip: the child tip of the row the pointer left closes. Rows are built as they scroll into
+        // view (M56): a child tip is its member's, whichever row shows it.
+        if (_levels.Count > owner.Level && !ReferenceEquals(_levels[owner.Level].Panel.Parent, row.Node))
         {
             CloseFrom(owner.Level);
         }
@@ -298,20 +299,24 @@ internal sealed class DataTipCascade : IDataTipHost
             level.Popup.IsOpen = false;
             _root.Children.Remove(level.Popup);
             level.Panel.Detach();
-            SetAnchorOpen(level.Anchor, false);
+            SetAnchorOpen(level, false);
         }
     }
 
-    private static void SetAnchorOpen(Control anchor, bool open)
+    /// <summary>Marks a child tip's row open, or the header: the row that shows its member now, if one does (M56).</summary>
+    private void SetAnchorOpen(Level level, bool open)
     {
-        switch (anchor)
+        if (level.Anchor is DataTipHeader header)
         {
-            case DataTipRow row:
-                row.IsOpen = open;
-                break;
-            case DataTipHeader header:
-                header.IsOpen = open;
-                break;
+            header.IsOpen = open;
+        }
+        else if (level.Panel.Level >= 2 && _levels.Count >= level.Panel.Level - 1 && _levels[level.Panel.Level - 2].Panel.RowOf(level.Panel.Parent) is { } row)
+        {
+            row.IsOpen = open;
+        }
+        else if (level.Anchor is DataTipRow anchor && ReferenceEquals(anchor.Node, level.Panel.Parent))
+        {
+            anchor.IsOpen = open;
         }
     }
 
@@ -339,8 +344,7 @@ internal sealed class DataTipCascade : IDataTipHost
             else
             {
                 var owner = _levels[i - 1];
-                var row = owner.Panel.Rows.FirstOrDefault(r => ReferenceEquals(r, level.Anchor));
-                top = owner.Bounds.Top + (row is null ? 0 : owner.Panel.RowTop(row));
+                top = owner.Bounds.Top + owner.Panel.RowTop(level.Panel.Parent); // by its member: its row may be out of view, or another (M56)
                 bottom = top + DataTipMetrics.Row;
             }
 

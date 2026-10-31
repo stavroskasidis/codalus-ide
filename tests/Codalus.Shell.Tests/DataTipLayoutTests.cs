@@ -172,7 +172,7 @@ public sealed class DataTipLayoutTests
         var last = s.View.VisualLines.Last(l => l.VisualTop + l.Height - s.View.VerticalOffset <= s.View.Bounds.Height).FirstDocumentLine.LineNumber;
         var tip = await s.HoverAsync(s.OffsetOf(last, "app", 1));
         tip.SetOpen(null, tip.Header, tip.Root, true);
-        await ShellFixture.PumpUntil(() => tip.Panels is [{ Rows.Count: 40 }]);
+        await ShellFixture.PumpUntil(() => tip.Panels is [{ Nodes.Count: 40 }]);
         ShellFixture.RenderFrame(s.F.Window);
         var members = tip.Panels[0];
         ShellFixture.RenderFrame(HostOf(members));

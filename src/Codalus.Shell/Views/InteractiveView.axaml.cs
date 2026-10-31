@@ -1,6 +1,4 @@
-using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Text;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -23,12 +21,10 @@ namespace Codalus.Shell.Views;
 /// </summary>
 public sealed partial class InteractiveView : UserControl, IPaneView
 {
-    private readonly ConcurrentQueue<string?> _pending = new();
     private readonly SemanticColorizer _colorizer = new();
     private readonly DispatcherTimer _tokensTimer;
+    private readonly OutputPresenter _transcript;
     private InteractiveViewModel? _vm;
-    private OutputChannel? _channel;
-    private int _flushScheduled;
     private bool _syncing;
     private CompletionPopup? _completion;
     private SignatureHelpPopup? _signature;
@@ -42,6 +38,7 @@ public sealed partial class InteractiveView : UserControl, IPaneView
     {
         InitializeComponent();
         _tail = Controls.FollowTail.Attach(TranscriptEditor);
+        _transcript = new OutputPresenter(TranscriptEditor, _tail);
         InputEditor.TextArea.TextView.LineTransformers.Add(_colorizer);
         InputEditor.Options.EnableHyperlinks = false;
         InputEditor.Options.EnableEmailHyperlinks = false;
@@ -430,63 +427,22 @@ public sealed partial class InteractiveView : UserControl, IPaneView
 
     // ------------------------------------------------------------------ transcript
 
+    /// <summary>
+    /// Shows the transcript as the Output window shows a channel (M56: each trim of a flooded transcript reloaded it whole,
+    /// about 3M characters, and each show read it again); null pauses it, its text kept.
+    /// </summary>
     private void Show(OutputChannel? channel)
     {
-        if (ReferenceEquals(channel, _channel))
+        if (channel is null)
         {
+            _transcript.Pause();
             return;
         }
 
-        if (_channel is not null)
+        if (!ReferenceEquals(channel, _transcript.Channel))
         {
-            _channel.Appended -= OnAppended;
-        }
-
-        _channel = channel;
-        _pending.Clear();
-        TranscriptEditor.Text = channel?.GetText() ?? string.Empty;
-        if (channel is not null)
-        {
-            channel.Appended += OnAppended;
-        }
-
-        _tail.Reset();
-    }
-
-    private void OnAppended(object? sender, string? text)
-    {
-        _pending.Enqueue(text);
-        if (Interlocked.Exchange(ref _flushScheduled, 1) == 0)
-        {
-            Dispatcher.UIThread.Post(Flush, DispatcherPriority.Background);
-        }
-    }
-
-    private void Flush()
-    {
-        Interlocked.Exchange(ref _flushScheduled, 0);
-        var batch = new StringBuilder();
-        var reload = false;
-        while (_pending.TryDequeue(out var text))
-        {
-            if (text is null)
-            {
-                reload = true;
-                batch.Clear();
-            }
-            else
-            {
-                batch.Append(text);
-            }
-        }
-
-        if (reload)
-        {
-            TranscriptEditor.Text = _channel?.GetText() ?? string.Empty;
-        }
-        else if (batch.Length > 0)
-        {
-            TranscriptEditor.AppendText(batch.ToString());
+            _transcript.Show(channel);
+            _tail.Reset();
         }
 
         // FollowTail keeps the end in view while the user is there (M34a).

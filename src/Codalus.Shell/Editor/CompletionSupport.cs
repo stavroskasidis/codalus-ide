@@ -7,7 +7,8 @@ namespace Codalus.Shell.Editor;
 
 /// <summary>
 /// One item of the completion list. Filtering uses <see cref="Text"/> (the filter text); committing applies the resolved
-/// edit (prefetched while the item is selected) and any additional edits.
+/// edit (prefetched while the item is selected) and any additional edits, or the item's own text when the resolve hasn't
+/// arrived (committing never waits for it, M56).
 /// </summary>
 public sealed class CompletionData(LspCompletionItem item, Func<LspCompletionItem, Task<LspCompletionItem>> resolve, Action<CompletionData, ISegment> commit)
 {
@@ -52,49 +53,17 @@ public sealed class CompletionData(LspCompletionItem item, Func<LspCompletionIte
     public IReadOnlySet<char> CommitCharacters { get; init; } = new HashSet<char>();
 
     /// <summary>
-    /// Resolves the item for the character that commits it (<c>codalusCommitCharacter</c>): set for the C# service's
-    /// items, whose edit may depend on it.
+    /// The character being typed that commits the item, while it's committed that way: the editor types it after the
+    /// commit. (The UI thread waited up to 300 ms for the server to resolve the item again for that character before
+    /// each one, M56.)
     /// </summary>
-    public Func<LspCompletionItem, Task<LspCompletionItem>>? ResolveForCommit { get; init; }
-
-    /// <summary>The character being typed that commits the item, while it's committed that way.</summary>
     public char? CommitCharacter { get; set; }
-
-    /// <summary>The committed edit already typed <see cref="CommitCharacter"/> (the server said so).</summary>
-    public bool IncludedCommitCharacter { get; set; }
 
     /// <summary>Starts resolving (description and edits) in the background.</summary>
     public Task<LspCompletionItem> Resolve() => _resolved ??= resolve(Item);
 
     /// <summary>The resolved item once it has arrived, else null.</summary>
     public LspCompletionItem? Resolved => _resolved is { IsCompletedSuccessfully: true } task ? task.Result : null;
-
-    /// <summary>
-    /// The resolved item if it arrives within <paramref name="timeout"/>, else null. While a typed character commits it,
-    /// the server resolves it again for that character (its edit may change: <c>List</c> before <c>&lt;</c>), falling back
-    /// to the edit resolved already.
-    /// </summary>
-    public LspCompletionItem? ResolvedWithin(TimeSpan timeout)
-    {
-        if (CommitCharacter is { } typed && ResolveForCommit is { } resolveForCommit)
-        {
-            return Wait(resolveForCommit(Item with { CommitCharacter = typed.ToString() }), timeout) ?? Wait(Resolve(), TimeSpan.Zero);
-        }
-
-        return Wait(Resolve(), timeout);
-
-        static LspCompletionItem? Wait(Task<LspCompletionItem> task, TimeSpan timeout)
-        {
-            try
-            {
-                return task.Wait(timeout) ? task.Result : null;
-            }
-            catch (AggregateException)
-            {
-                return null;
-            }
-        }
-    }
 
     /// <summary>Commits the item over <paramref name="segment"/> (the typed text).</summary>
     public void Complete(ISegment segment) => commit(this, segment);

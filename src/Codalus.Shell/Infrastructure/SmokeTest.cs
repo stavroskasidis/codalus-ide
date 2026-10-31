@@ -414,7 +414,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Rows.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
@@ -1475,6 +1475,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Run("debug.start");
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the breakpoint", 300).ConfigureAwait(true);
         await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, $"the editor shows the current line {line}").ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false); // a later session's stop leaves it behind the Debug Console, which reads nothing (M56)
         await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
         await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the Call Stack has frames").ConfigureAwait(true);
 
@@ -1825,6 +1826,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Run("debug.start");
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the generator stops at its breakpoint", 420).ConfigureAwait(true);
         Check(string.Equals(shell.Debugger.SelectedFrame?.Source?.Path, generator, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase), $"in HelloGenerator.cs (got {shell.Debugger.SelectedFrame?.Source?.Path})");
+        shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false); // behind the Debug Console, it reads nothing (M56)
         await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)), "Locals shows the class names the generator got").ConfigureAwait(true);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("smoke-test-debug-roslyn.png");

@@ -121,15 +121,22 @@ public sealed partial class ShellHost
             return false;
         }
 
+        _openRequests++; // once a path is chosen: a picker cancelled meanwhile opened nothing
+
+        // A local path's checks run off the UI thread (M56): on a share that is offline, each waits for the network's
+        // timeout, and for good on a dead mount, so on a thread of their own rather than the pool's. The paths given here
+        // come from a picker, the OS or the command line, just looked at; recent entries are checked first, within
+        // PathProbe's time (OpenRecentEntryAsync).
         var remote = IsRemotePath(path);
-        if (remote ? await Codalus.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : Directory.Exists(path))
+        var local = remote ? default : await Task.Factory.StartNew(() => LocalSolutionPath(path), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(true);
+        if (remote ? await Codalus.Workbench.FileSystem.FileSystems.DirectoryExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : local.IsFolder)
         {
             await OpenFolderWorkspaceAsync(path).ConfigureAwait(true); // a recent folder (folder mode, ADR 0033)
             return Solutions.IsOpen;
         }
 
-        path = remote ? path : Codalus.Platform.RealPath.Resolve(path);
-        if (!(remote ? await Codalus.Workbench.FileSystem.FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : File.Exists(path)))
+        path = remote ? path : local.Path;
+        if (!(remote ? await Codalus.Workbench.FileSystem.FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(true) : local.Exists))
         {
             Recent.Remove(path);
             Workbench.Notifications.Error(Localizer.Format("msg.solutions.doesntExist", "'{0}' doesn't exist.", RemoteDisplay(path)));
@@ -228,21 +235,50 @@ public sealed partial class ShellHost
         return false;
     }
 
+    /// <summary>Opens started (a solution, a folder): the last-solution startup opens nothing once one has.</summary>
+    private int _openRequests;
+
+    /// <summary>A local path: whether it's a folder, else its real path and whether that file is there.</summary>
+    private static (bool IsFolder, string Path, bool Exists) LocalSolutionPath(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            return (true, path, true);
+        }
+
+        var real = Codalus.Platform.RealPath.Resolve(path);
+        return (false, real, File.Exists(real));
+    }
+
     /// <summary>
     /// Opens <paramref name="folder"/> from the command line or a drop: its solution (.slnx first, then .sln, then a single
     /// project), or the folder itself (folder mode, ADR 0033) when it has none.
     /// </summary>
-    public Task OpenFolderAsync(string folder)
+    public async Task OpenFolderAsync(string folder)
     {
-        var candidates = s_openPatterns
-            .Select(pattern => Directory.EnumerateFiles(folder, pattern).Order(StringComparer.OrdinalIgnoreCase).ToList())
-            .FirstOrDefault(found => found.Count > 0);
+        _openRequests++;
+
+        // Listed off the UI thread (M56): a folder on a share that is slow, or the last solution's at startup.
+        var candidates = await Task.Run(() =>
+        {
+            try
+            {
+                return s_openPatterns
+                    .Select(pattern => Directory.EnumerateFiles(folder, pattern).Order(StringComparer.OrdinalIgnoreCase).ToList())
+                    .FirstOrDefault(found => found.Count > 0);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null; // the folder's own open says what's wrong
+            }
+        }).ConfigureAwait(true);
         if (candidates is not [var single, ..] || candidates.Count > 1 && !single.EndsWith(".sln", StringComparison.OrdinalIgnoreCase) && !single.EndsWith(".slnx", StringComparison.OrdinalIgnoreCase))
         {
-            return OpenFolderWorkspaceAsync(folder);
+            await OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
+            return;
         }
 
-        return OpenSolutionAsync(single);
+        await OpenSolutionAsync(single).ConfigureAwait(true);
     }
 
     public async Task CloseSolutionAsync()
@@ -273,7 +309,8 @@ public sealed partial class ShellHost
 
     public async Task OpenRecentAsync()
     {
-        var items = Recent.Items.Select(p => new QuickPickItem(Path.GetFileName(p)) { Detail = Path.GetDirectoryName(p), Tag = p, Icon = Directory.Exists(p) ? Controls.FileIcons.ForFolder(Path.GetFileName(p), open: false) : Controls.FileIcons.ForFile(Path.GetFileName(p)) }).ToList();
+        // The icons from the names, not the disk (M56): an entry on a share that is offline held the UI thread for its timeout.
+        var items = Recent.Items.Select(p => new QuickPickItem(Path.GetFileName(p)) { Detail = Path.GetDirectoryName(p), Tag = p, Icon = PathProbe.Guess(p) == PathState.Folder ? Controls.FileIcons.ForFolder(Path.GetFileName(p), open: false) : Controls.FileIcons.ForFile(Path.GetFileName(p)) }).ToList();
         if (items.Count == 0)
         {
             Workbench.Notifications.Info(Localizer.Get("msg.solutions.noRecentSolutionsYet", "No recent solutions yet."));
@@ -282,7 +319,7 @@ public sealed partial class ShellHost
 
         if (await Palette.ShowAsync(items, "Open a recent solution").ConfigureAwait(true) is { Tag: string path })
         {
-            await OpenSolutionAsync(path).ConfigureAwait(true);
+            await OpenRecentEntryAsync(path).ConfigureAwait(true); // checked as the start window's entries are (M56)
         }
     }
 
@@ -443,8 +480,19 @@ public sealed partial class ShellHost
             BenchEvents.Emit(BenchEventNames.SolutionLoaded);
         }
 
-        UpdateSolutionStatus();
+        // Each project evaluated reports progress, and the toolbar's startup choices walk every project: once for a
+        // burst of them, and at once when they're all done.
+        if (progress.Completed)
+        {
+            UpdateSolutionStatus();
+        }
+        else
+        {
+            (_solutionStatus ??= new UiDebouncer(UpdateSolutionStatus, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500))).Request();
+        }
     }
+
+    private UiDebouncer? _solutionStatus;
 
     private void OnRestoreState(RestoreStateChangedEventArgs e)
     {

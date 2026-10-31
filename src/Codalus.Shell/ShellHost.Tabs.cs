@@ -27,7 +27,8 @@ public sealed partial class ShellHost
     {
         Layout.ActiveDocumentChanged += (_, _) => UpdateTabColors();
         Solutions.SolutionChanged += (_, _) => Ui.Post(UpdateTabColors);
-        Solutions.ProjectChanged += (_, _) => Ui.Post(UpdateTabColors);
+        var tabColors = new UiDebouncer(UpdateTabColors, TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(1));
+        Solutions.ProjectChanged += (_, _) => tabColors.Request();
         Theme.Changed += (_, _) => UpdateTabColors();
         Workbench.Settings.Changed += (_, e) =>
         {

@@ -457,18 +457,23 @@ public sealed class GitShellTests
         File.WriteAllText(Path.Combine(folder, "Zeta.txt"), "z\n");
         File.WriteAllText(Path.Combine(folder, "Alpha.txt"), "a\n");
         await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
-        await ShellFixture.PumpUntil(() => vm.Changes.Count == 2);
+        await ShellFixture.PumpUntil(() => vm.Changes.Count == 2 && vm.ChangesTree.Count == 1);
         Assert.Equal(["Alpha.txt", "Zeta.txt"], Assert.Single(vm.ChangesTree).Children.Select(c => c.Text));
+        Assert.Equal(["Alpha.txt", "Zeta.txt"], vm.ChangesRows.Skip(1).Select(r => r.Text));
+        Assert.Equal(1, vm.ChangesRows[1].Depth);
+
+        // The list, sorted and filtered off the UI thread (M56).
         vm.IsTreeView = false;
         Assert.True(vm.IsListView);
+        await ShellFixture.PumpUntil(() => vm.ChangesItems.Count == 2);
         Assert.Equal(Path.GetFileName(folder), vm.ChangesItems[0].Location);
         vm.SortBy("name");
-        Assert.Equal(["Zeta.txt", "Alpha.txt"], vm.ChangesItems.Select(r => r.Name));
+        await ShellFixture.PumpUntil(() => vm.ChangesItems.Select(r => r.Name).SequenceEqual(["Zeta.txt", "Alpha.txt"]));
         vm.ShowFilter = true;
         vm.FilterText = "alp";
-        Assert.Equal(["Alpha.txt"], vm.ChangesItems.Select(r => r.Name));
+        await ShellFixture.PumpUntil(() => vm.ChangesItems.Select(r => r.Name).SequenceEqual(["Alpha.txt"]));
         vm.ShowFilter = false;
-        Assert.Equal(2, vm.ChangesItems.Count);
+        await ShellFixture.PumpUntil(() => vm.ChangesItems.Count == 2);
         vm.IsTreeView = true;
         File.Delete(Path.Combine(folder, "Zeta.txt"));
         File.Delete(Path.Combine(folder, "Alpha.txt"));

@@ -11,6 +11,7 @@ public sealed partial class ThreadsView : UserControl, IPaneView
     public ThreadsView()
     {
         InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
         List.DoubleTapped += (_, _) => Activate();
         List.KeyDown += (_, e) =>
         {

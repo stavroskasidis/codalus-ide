@@ -105,6 +105,10 @@ public sealed class GitChangesMenuTests
         await OpenAsync(f, folder);
         var vm = f.Shell.GitChanges;
         await ShellFixture.PumpUntil(() => vm.Changes.Count == 10 && vm.Staged.Count == 1);
+
+        // The trees are built while the window is shown (M56).
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => vm.IsViewShown && vm.ChangesTree.Count == 1 && !vm.IsRefreshing);
         string P(params string[] parts) => Path.Combine([folder, .. parts]);
         string[] Commands(string path, string section, string kind) => [.. f.Shell.GitChangesMenuItems(path, section, kind).Select(i => i.Command)];
 
@@ -144,6 +148,7 @@ public sealed class GitChangesMenuTests
         Assert.True(greetings.CanDiscard);
         vm.ShowFilter = true;
         vm.FilterText = "Greeter";
+        await ShellFixture.PumpUntil(() => vm.ChangesHeader == "Changes (2 of 10)" && !vm.IsRefreshing);
         greetings = vm.FindNode("changes", P("src", "Greetings"))!;
         Assert.Equal("2 of 5 files", greetings.CountText);
         Assert.Equal("Changes (2 of 10)", vm.ChangesHeader);

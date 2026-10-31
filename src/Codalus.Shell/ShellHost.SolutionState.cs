@@ -156,15 +156,23 @@ public sealed partial class ShellHost
         Watch.Load(session.Watches);
         Debugger.PinnedTips.Load((session.DataTips ?? []).Select(t => (t.Path, t.Line, t.Expression, t.Comment)));
 
+        // The tabs come back behind the active one: each other's view (its editor, and what it asks the language service
+        // for) is made when it's first shown. Activating every document in turn made them all at startup.
+        CodeEditorDocument? last = null;
         foreach (var document in session.Documents.Where(d => File.Exists(d.Path)))
         {
-            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character)).ConfigureAwait(true) is { } opened && document.Pinned == true)
+            if (await OpenFileAsync(document.Path, preview: false, new Position(document.Line, document.Character), activate: false).ConfigureAwait(true) is { } opened)
             {
-                Layout.SetPinned(opened, true);
+                last = opened;
+                if (document.Pinned == true)
+                {
+                    Layout.SetPinned(opened, true);
+                }
             }
         }
 
-        if (session.Active is { } active && Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) is { } editor)
+        var activeEditor = session.Active is { } active ? Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, active)) : null;
+        if ((activeEditor ?? (last?.Owner is not null ? last : null)) is { } editor)
         {
             Layout.OpenDocument(editor);
         }

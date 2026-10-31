@@ -76,6 +76,17 @@ public sealed partial class ShellHost
                 [("tests", Tests.Read(roots => roots.Sum(r => r.Leaves().Count()))), ("controllers", Tests.Controllers.Count)]);
         }
         Tests.RunFinished += (_, run) => Ui.Post(() => OnTestRunFinished(run));
+
+        // The runs' output goes to Output > Tests as it comes, from the controller's thread (the channel is thread-safe and
+        // capped): read whole at a run's end, on the UI thread, a verbose run froze the window (M56).
+        Tests.RunBegan += (_, run) =>
+        {
+            if (run.StartedAlone)
+            {
+                TestsChannel.Clear();
+            }
+        };
+        Tests.RunOutput += (_, output) => TestsChannel.Append(output.Text);
         Workbench.Settings.Changed += (_, e) =>
         {
             if (e.Affects(TestHistorySetting))
@@ -155,19 +166,35 @@ public sealed partial class ShellHost
             Tooltip = run.Name + " finished. Click to open the Test Explorer.",
             Command = BuiltIns.ViewCommandPrefix + TestExplorerViewModel.ToolWindowId,
         });
-        var attachments = run.Attachments;
-        if (run.Output.Length > 0 || attachments.Count > 0)
+        // The run's output is in the channel already (RunOutput); then the files the run produced (coverage reports, logs):
+        // where to find them.
+        foreach (var attachment in run.Attachments)
         {
-            var channel = Workbench.Output.GetOrCreate("codalus.tests", "Tests");
-            channel.Clear();
-            channel.Append(run.Output);
-            foreach (var attachment in attachments)
-            {
-                // Files the run produced (coverage reports, logs): where to find them.
-                var where = DocumentUris.ToPath(attachment.Uri) ?? attachment.Uri;
-                channel.Append($"Attachment: {attachment.DisplayName ?? Path.GetFileName(where)}: {where}\n");
-            }
+            var where = DocumentUris.ToPath(attachment.Uri) ?? attachment.Uri;
+            TestsChannel.Append($"Attachment: {attachment.DisplayName ?? Path.GetFileName(where)}: {where}\n");
         }
+    }
+
+    /// <summary>Output &gt; Tests: what test runs write.</summary>
+    private Codalus.Workbench.Output.OutputChannel TestsChannel => Workbench.Output.GetOrCreate("codalus.tests", "Tests");
+
+    /// <summary>
+    /// A test's whole result as text (<see cref="TestExplorerViewModel.DetailsText"/>) in a read-only editor tab, which
+    /// shows only the lines in view: the Test Explorer's details pane shows part of a long one (M56).
+    /// </summary>
+    public CodeEditorDocument OpenTestDetails(string test, string text)
+    {
+        var uri = "codalus-test-result:///" + Uri.EscapeDataString(test);
+        if (Editors.FirstOrDefault(e => e.Model.Uri == uri) is { } open)
+        {
+            Layout.CloseDocument(open);
+        }
+
+        var name = string.Concat(test.Select(c => char.IsLetterOrDigit(c) || c is '_' or '.' ? c : '_')).Trim('_', '.');
+        var model = CodeDocument.ReadOnly(Path.Combine("Test results", (name.Length == 0 ? "test" : name) + ".txt"), uri, text, Localizer.Get("msg.testing.testResult", "test result"));
+        var view = CreateView(model, primary: true);
+        Layout.OpenDocument(view, focus: true);
+        return view;
     }
 
     // ------------------------------------------------------------------ running
@@ -430,8 +457,12 @@ public sealed partial class ShellHost
 
         try
         {
-            var document = XDocument.Load(file);
-            var keys = Tests.Read(roots => Playlists.ImportVisualStudio(document, roots));
+            // Read and matched off the UI thread (M56).
+            var keys = await Task.Run(() =>
+            {
+                var document = XDocument.Load(file);
+                return Tests.Read(roots => Playlists.ImportVisualStudio(document, roots));
+            }).ConfigureAwait(true);
             if (keys.Count == 0)
             {
                 Workbench.Notifications.Warning(Localizer.Get("msg.testing.thePlaylistNamesNoTestsThat", "The playlist names no tests that the Test Explorer knows. Build the solution so the tests are discovered, then import it again."));
@@ -457,7 +488,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        var leaves = Tests.Read(roots => roots.SelectMany(r => r.Leaves()).Where(l => l.Result is not null).ToList());
+        var leaves = await Task.Run(() => Tests.Read(roots => roots.SelectMany(r => r.Leaves()).Where(l => l.Result is not null).ToList())).ConfigureAwait(true);
         if (leaves.Count == 0)
         {
             StatusBar.ShowMessage(Localizer.Get("msg.testing.thereAreNoTestResultsTo", "There are no test results to export."), TimeSpan.FromSeconds(4));
@@ -472,7 +503,7 @@ public sealed partial class ShellHost
 
         try
         {
-            var document = Tests.Read(_ => Trx.Export(leaves, "Codalus IDE", DateTimeOffset.Now));
+            var document = await Task.Run(() => Tests.Read(_ => Trx.Export(leaves, "Codalus IDE", DateTimeOffset.Now))).ConfigureAwait(true);
             await using var stream = File.Create(file);
             await document.SaveAsync(stream, SaveOptions.None, CancellationToken.None).ConfigureAwait(true);
             StatusBar.ShowMessage(Localizer.Format("msg.testing.exportedResultsTo", "Exported {0} results to {1}.", leaves.Count, Path.GetFileName(file)), TimeSpan.FromSeconds(5));
@@ -517,15 +548,22 @@ public sealed partial class ShellHost
 
     public async Task ImportTrxAsync()
     {
-        if (Window is null || await Window.PickFileAsync("Import Test Results", "Test results", ["*.trx"]).ConfigureAwait(true) is not { } file)
+        if (Window is not null && await Window.PickFileAsync("Import Test Results", "Test results", ["*.trx"]).ConfigureAwait(true) is { } file)
         {
-            return;
+            await ImportTrxAsync(file).ConfigureAwait(true);
         }
+    }
 
+    /// <summary>Applies a TRX file's results to the tests they name, read and matched off the UI thread (M56).</summary>
+    internal async Task ImportTrxAsync(string file)
+    {
         try
         {
-            var imported = Trx.Import(XDocument.Load(file), "import");
-            var unmatched = Tests.ApplyImported(Path.GetFileName(file), imported, (leaf, result) => TestNames.Matches(leaf, result.FullyQualifiedName, result.DisplayName));
+            var (imported, unmatched) = await Task.Run(() =>
+            {
+                var imported = Trx.Import(XDocument.Load(file), "import");
+                return (imported, Tests.ApplyImported(Path.GetFileName(file), imported));
+            }).ConfigureAwait(true);
             Layout.ShowToolWindow(TestExplorerViewModel.ToolWindowId, focus: false);
             var message = $"Imported {imported.Count - unmatched.Count} of {imported.Count} results from {Path.GetFileName(file)}.";
             if (unmatched.Count > 0)

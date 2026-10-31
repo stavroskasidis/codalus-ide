@@ -42,6 +42,9 @@ public static class IconThemeCompiler
             await File.WriteAllLinesAsync(list, svgs, cancellationToken).ConfigureAwait(false);
             try
             {
+                // Started from the shell's constructor (a theme not converted yet): the plugin host finds its runtime with
+                // the login shell's PATH and DOTNET_ROOT, which come in while the window shows (M56).
+                await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
                 var start = new ProcessStartInfo(host.FileName) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
                 foreach (var argument in host.Arguments.Concat(["--compile-icons", partial, list]))
                 {

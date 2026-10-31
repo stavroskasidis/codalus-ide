@@ -14,11 +14,12 @@ public static class LensDetails
     /// The history of lines <paramref name="startLine"/>–<paramref name="endLine"/> (one-based): <c>Ada, 3 days ago</c>
     /// and <c>2 authors, 5 changes</c>; null when no committed line is in the range.
     /// </summary>
-    public static string? Git(IReadOnlyList<BlameRange> blame, int startLine, int endLine, DateTimeOffset now)
+    public static string? Git(IReadOnlyList<BlameRange> blame, int startLine, int endLine, DateTimeOffset now) =>
+        History([.. blame.Where(r => !r.IsUncommitted && r.StartLine <= endLine && r.StartLine + r.LineCount - 1 >= startLine)], now);
+
+    /// <summary>The history of <paramref name="committed"/> blame ranges (a member's, <see cref="GitLensIndex"/>); null without any.</summary>
+    internal static string? History(IReadOnlyList<BlameRange> committed, DateTimeOffset now)
     {
-        var committed = blame
-            .Where(r => !r.IsUncommitted && r.StartLine <= endLine && r.StartLine + r.LineCount - 1 >= startLine)
-            .ToList();
         if (committed.Count == 0)
         {
             return null;

@@ -8,29 +8,48 @@ using Codalus.Workbench.Debugging;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>QuickWatch (Shift+F9, ADR 0021): one expression evaluated as a tree, editable, and added to Watch on request.</summary>
-public sealed class QuickWatchViewModel : ObservableObject
+/// <summary>
+/// QuickWatch (Shift+F9, ADR 0021): one expression evaluated as a tree, editable, and added to Watch on request; again at
+/// each stop while the window is shown, and once when it's shown again (M56).
+/// </summary>
+public sealed class QuickWatchViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.quickWatch";
 
     private readonly DebugService _debugger;
     private readonly Func<string, Task> _addWatch;
+    private readonly ShownRefresh _refresh;
     private string _expression = string.Empty;
     private string? _error;
+    private int _generation;
 
     public QuickWatchViewModel(DebugService debugger, Func<string, Task> addWatch)
     {
         _debugger = debugger;
         _addWatch = addWatch;
+        _refresh = new ShownRefresh(() => _ = ReevaluateAsync(), stale: false);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
             {
-                Roots.Clear();
+                ClearRoots();
             }
         });
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = ReevaluateAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
     }
+
+    /// <summary>Clears the tree; what's still loading under it stops (M56).</summary>
+    private void ClearRoots()
+    {
+        foreach (var old in Roots)
+        {
+            old.CancelLoads();
+        }
+
+        Roots.Clear();
+    }
+
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public string Expression
     {
@@ -60,6 +79,7 @@ public sealed class QuickWatchViewModel : ObservableObject
     /// <summary>Evaluates <paramref name="expression"/> (or the current one) in the selected frame.</summary>
     public async Task EvaluateAsync(string? expression = null)
     {
+        _refresh.Fresh();
         if (expression is not null)
         {
             Expression = expression;
@@ -70,10 +90,11 @@ public sealed class QuickWatchViewModel : ObservableObject
 
     private async Task ReevaluateAsync()
     {
+        var generation = ++_generation;
         var expression = Expression.Trim();
         if (expression.Length == 0)
         {
-            Roots.Clear();
+            ClearRoots();
             Error = null;
             return;
         }
@@ -81,22 +102,37 @@ public sealed class QuickWatchViewModel : ObservableObject
         if (_debugger.State != DebugState.Stopped)
         {
             Error = "Expressions can be evaluated only while the program is paused.";
-            Roots.Clear();
+            ClearRoots();
             return;
         }
 
         try
         {
             var result = await _debugger.EvaluateAsync(expression, "watch").ConfigureAwait(true);
-            Roots.Clear();
-            var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression) { Icon = WatchViewModel.IconOf(expression), IsExpanded = result.VariablesReference > 0 };
+            if (generation != _generation)
+            {
+                return; // an answer for an earlier stop, or expression
+            }
+
+            ClearRoots();
+            var root = new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(_debugger), evaluateName: expression)
+            {
+                Icon = WatchViewModel.IconOf(expression),
+                Counts = ChildCounts.Of(result),
+                IsExpanded = result.VariablesReference > 0,
+            };
             root.Source?.Track(root);
             Roots.Add(root);
             Error = null;
         }
         catch (Exception ex) when (ex is DapException or DapConnectionLostException or InvalidOperationException or OperationCanceledException)
         {
-            Roots.Clear();
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            ClearRoots();
             Error = ex.Message;
         }
     }
@@ -124,7 +160,7 @@ public sealed class QuickWatchViewModel : ObservableObject
 /// </summary>
 public sealed class DataTipViewModel(DebugService debugger, string expression, EvaluateResponse result, string icon = "symbol-local") : ObservableObject
 {
-    public VariableNode Root { get; } = Tracked(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon });
+    public VariableNode Root { get; } = Tracked(new VariableNode(expression, result.Result, result.Type, result.VariablesReference, new VariableSource(debugger), evaluateName: expression) { Icon = icon, Counts = ChildCounts.Of(result) });
 
     private static VariableNode Tracked(VariableNode node)
     {
@@ -180,6 +216,7 @@ public sealed class DataTipViewModel(DebugService debugger, string expression, E
 public sealed class ThreadRow(DapThread thread, string location, bool isCurrent, bool isFlagged, Action<ThreadRow, bool> setFlagged) : ObservableObject
 {
     private bool _isFlagged = isFlagged;
+    private bool _isCurrent = isCurrent;
 
     public DapThread Thread { get; } = thread;
 
@@ -191,7 +228,19 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 
     public string Location { get; } = location;
 
-    public bool IsCurrent { get; } = isCurrent;
+    /// <summary>The active thread: the marker follows it when another is picked, without reading the stacks again (M56).</summary>
+    public bool IsCurrent
+    {
+        get => _isCurrent;
+        set
+        {
+            if (SetField(ref _isCurrent, value))
+            {
+                OnPropertyChanged(nameof(Marker));
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
 
     public string Marker => IsCurrent ? "▶" : string.Empty;
 
@@ -210,27 +259,39 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
     public string AccessibleName => $"Thread {IdText} {Name}, {Location}{(IsCurrent ? ", current" : string.Empty)}{(IsFlagged ? ", flagged" : string.Empty)}";
 }
 
-/// <summary>The Threads window: every thread with its location; flags; switching the active thread.</summary>
-public sealed class ThreadsViewModel : ObservableObject
+/// <summary>
+/// The Threads window: every thread with its location; flags; switching the active thread. Each thread's location is
+/// a request of its own: they're read at a stop only while the window is shown, and once when it's shown (M56).
+/// </summary>
+public sealed class ThreadsViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.threads";
 
     private readonly DebugService _debugger;
     private readonly HashSet<int> _flagged = [];
+    private readonly ShownRefresh _refresh;
     private bool _flaggedOnly;
     private int _generation;
 
     public ThreadsViewModel(DebugService debugger)
     {
         _debugger = debugger;
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
-        debugger.FrameChanged += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
+        debugger.FrameChanged += (_, _) => Ui.Post(() =>
+        {
+            // Another frame or thread: the locations (each thread's top frame) stay; the marker follows the thread.
+            foreach (var row in Rows)
+            {
+                row.IsCurrent = row.Id == _debugger.SelectedThreadId;
+            }
+        });
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
             {
                 _generation++;
-                Rows.Clear();
+                Rows.Reset([]);
                 OnPropertyChanged(nameof(IsEmpty));
             }
 
@@ -241,7 +302,9 @@ public sealed class ThreadsViewModel : ObservableObject
         });
     }
 
-    public ObservableCollection<ThreadRow> Rows { get; } = [];
+    public ResettableCollection<ThreadRow> Rows { get; } = [];
+
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -260,10 +323,11 @@ public sealed class ThreadsViewModel : ObservableObject
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         if (_debugger.State != DebugState.Stopped)
         {
-            Rows.Clear();
+            Rows.Reset([]);
             OnPropertyChanged(nameof(IsEmpty));
             return;
         }
@@ -283,11 +347,11 @@ public sealed class ThreadsViewModel : ObservableObject
             return;
         }
 
-        Rows.Clear();
+        var rows = new List<ThreadRow>();
         foreach (var thread in _debugger.Threads.Where(t => !_flaggedOnly || _flagged.Contains(t.Id)))
         {
             var location = tops.TryGetValue(thread.Id, out var frame) ? frame.Name : "[External Code]";
-            Rows.Add(new ThreadRow(thread, location, thread.Id == _debugger.SelectedThreadId, _flagged.Contains(thread.Id), (row, flagged) =>
+            rows.Add(new ThreadRow(thread, location, thread.Id == _debugger.SelectedThreadId, _flagged.Contains(thread.Id), (row, flagged) =>
             {
                 if (flagged)
                 {
@@ -300,6 +364,7 @@ public sealed class ThreadsViewModel : ObservableObject
             }));
         }
 
+        Rows.Reset(rows);
         OnPropertyChanged(nameof(IsEmpty));
     }
 
@@ -325,23 +390,29 @@ public sealed record ModuleRow(DebugModule Module)
     public string AccessibleName => $"{Name}, {SymbolStatus}";
 }
 
-/// <summary>The Modules window: the modules the debuggee loaded, with their symbol status (from <c>module</c> events).</summary>
-public sealed class ModulesViewModel : ObservableObject
+/// <summary>
+/// The Modules window: the modules the debuggee loaded, with their symbol status (from <c>module</c> events). The rows
+/// are built again once per burst of events, with one reset, and only while the window is shown (M56).
+/// </summary>
+public sealed class ModulesViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.modules";
 
     private readonly DebugService _debugger;
+    private readonly ShownRefresh _refresh;
     private string _filter = string.Empty;
     private bool _queued;
 
     public ModulesViewModel(DebugService debugger)
     {
         _debugger = debugger;
+        _refresh = new ShownRefresh(Refresh);
         debugger.ModulesChanged += (_, _) => Ui.Post(Queue);
-        Refresh();
     }
 
-    public ObservableCollection<ModuleRow> Rows { get; } = [];
+    public ResettableCollection<ModuleRow> Rows { get; } = [];
+
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
 
@@ -368,20 +439,16 @@ public sealed class ModulesViewModel : ObservableObject
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             _queued = false;
-            Refresh();
+            _refresh.Request();
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
     public void Refresh()
     {
-        Rows.Clear();
-        foreach (var module in _debugger.Modules.Where(m => _filter.Length == 0
+        _refresh.Fresh();
+        Rows.Reset([.. _debugger.Modules.Where(m => _filter.Length == 0
                      || m.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-                     || (m.Path?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false)))
-        {
-            Rows.Add(new ModuleRow(module));
-        }
-
+                     || (m.Path?.Contains(_filter, StringComparison.OrdinalIgnoreCase) ?? false)).Select(m => new ModuleRow(m))]);
         OnPropertyChanged(nameof(IsEmpty));
     }
 }

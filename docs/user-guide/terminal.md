@@ -27,7 +27,7 @@
 - `Ctrl`+click a `path(line,col)` or `path:line:col` reference, which compilers and test runners print, to open the file at that line. Relative paths are resolved against the terminal's current folder.
 
 **Find, copy and paste**
-- `Ctrl+F` finds text in the terminal and its scrollback.
+- `Ctrl+F` finds text in the terminal and its scrollback. A long scrollback is searched a slice at a time, so typing and the program's output go on meanwhile, and a newer search replaces the one still running.
 - Select with the mouse to copy:
   - On Windows and Linux, `Ctrl+C` copies when there is a selection; otherwise it interrupts the running program. `Ctrl+Shift+C` always copies.
   - On macOS, use `Cmd+C`.

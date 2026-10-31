@@ -81,13 +81,15 @@ public sealed class AllRepositoriesShellTests
         await f.Shell.Git.RefreshAsync();
         await f.Shell.Git.Siblings.Single().RefreshAsync();
         await ShellFixture.PumpUntil(() => changes.Changes.Count == 2);
-        Assert.Equal([app, library], changes.ChangesTree.Select(n => n.FullPath));
-        Assert.Equal(["App", "Library"], changes.ChangesTree.Select(n => n.Text));
         Assert.Equal(["App", "Library"], changes.Changes.Select(r => r.Location));
         Assert.Equal("Commit All Repos", changes.CommitText);
 
+        // The trees are built while the window is shown (M56).
         f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+        await ShellFixture.PumpUntil(() => changes.ChangesTree.Count == 2);
+        Assert.Equal([app, library], changes.ChangesTree.Select(n => n.FullPath));
+        Assert.Equal(["App", "Library"], changes.ChangesTree.Select(n => n.Text));
         NavigationDepthTests.Screenshot(f, "all-repositories-changes");
 
         // A node's menu runs in its own repository, and says which.

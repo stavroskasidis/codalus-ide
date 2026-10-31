@@ -9,12 +9,17 @@ namespace Codalus.Projects.Host;
 /// included, so an added file changes it; sorted, since a glob's order follows the file system's), and at the end the
 /// project file, its imports and the assets file with their sizes and timestamps. Environment variables are not part
 /// of it. <c>CODALUS_DESIGNTIME_CACHE_TRACE=&lt;folder&gt;</c> writes what each fingerprint hashed there, to compare two.
+/// An import MSBuild took from its cache as it was before the file changed on disk is stamped with the date it was read
+/// with: stamped with the file's, a design-time build of the old content was cached under the key of the new.
 /// </summary>
 internal sealed class Fingerprint
 {
     private readonly IncrementalHash _hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
     private readonly StringBuilder? _trace = Environment.GetEnvironmentVariable("CODALUS_DESIGNTIME_CACHE_TRACE") is { Length: > 0 } ? new() : null;
     private readonly string _path;
+
+    /// <summary>Each import's file date when MSBuild read it (its cache keeps a file as read until it is reloaded).</summary>
+    private readonly Dictionary<string, DateTime> _read = new(StringComparer.OrdinalIgnoreCase);
 
     public Fingerprint(string path, IReadOnlyDictionary<string, string> globalProperties, Project outer)
     {
@@ -41,14 +46,22 @@ internal sealed class Fingerprint
         {
             Append(item);
         }
+
+        foreach (var import in project.Imports.Select(i => i.ImportedProject).Where(i => i.LastWriteTimeWhenRead != DateTime.MinValue))
+        {
+            _read[import.FullPath] = import.LastWriteTimeWhenRead.ToUniversalTime();
+        }
     }
+
+    /// <summary>The imports that changed on disk since MSBuild read them, as <see cref="Finish"/> found them.</summary>
+    public List<string> Stale { get; } = [];
 
     /// <param name="restored">Further files a restore changes (M43a: a non-SDK-style project's <c>packages.config</c> and its references' hint paths).</param>
     public string Finish(IEnumerable<string> imports, string? assetsFile, IEnumerable<string>? restored = null)
     {
         foreach (var file in imports.Order(StringComparer.OrdinalIgnoreCase))
         {
-            Stamp(file);
+            Stamp(file, _read.TryGetValue(file, out var read) ? read : null);
         }
 
         Stamp(assetsFile);
@@ -73,10 +86,17 @@ internal sealed class Fingerprint
         return result;
     }
 
-    private void Stamp(string? file)
+    private void Stamp(string? file, DateTime? read = null)
     {
         Append(file);
         var info = file is null ? null : new FileInfo(file);
+        if (info is { Exists: true } && read is { } readAt && readAt != info.LastWriteTimeUtc)
+        {
+            Stale.Add(file!);
+            Append($"{readAt.Ticks}:read");
+            return;
+        }
+
         Append(info is { Exists: true } ? $"{info.LastWriteTimeUtc.Ticks}:{info.Length}" : "missing");
     }
 

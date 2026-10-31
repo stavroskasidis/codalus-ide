@@ -20,7 +20,7 @@ public sealed partial class ShellHost
 
     private void InitializeBookmarks()
     {
-        TaskList = new TaskListViewModel(SearchableFiles, OpenTextOf, () =>
+        TaskList = new TaskListViewModel(cancellationToken => GatherAsync(SearchableFiles(), null, mustExist: true, cancellationToken), () =>
         {
             var tokens = Workbench.Settings.GetStrings(TaskListTokensSetting);
             return tokens.Count > 0 ? tokens : ["TODO", "HACK", "UNDONE"];

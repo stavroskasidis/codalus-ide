@@ -8,23 +8,34 @@
   <DockPanel>
     <TextBox x:Name="FilterBox" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="{l:T documentOutline.filterSymbols}" AutomationProperties.Name="{l:T documentOutline.filterSymbols}" />
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
-    <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" Background="Transparent" AutomationProperties.Name="{l:T documentOutline.documentOutline}">
-      <TreeView.Styles>
-        <Style Selector="TreeViewItem" x:DataType="vm:SymbolNodeViewModel">
-          <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+    <!-- The outline's tree as rows (M56): a list box creates only the rows in view. It scrolls to the caret's symbol
+         itself, not after every change to the rows. -->
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" AutoScrollToSelectedItem="False" Background="Transparent" AutomationProperties.Name="{l:T documentOutline.documentOutline}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:SymbolNodeViewModel">
+          <Setter Property="Padding" Value="0" />
           <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+          <Setter Property="VerticalContentAlignment" Value="Center" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
         </Style>
-      </TreeView.Styles>
-      <TreeView.ItemTemplate>
-        <TreeDataTemplate x:DataType="vm:SymbolNodeViewModel" ItemsSource="{Binding Children}">
-          <StackPanel Orientation="Horizontal" Spacing="6" Background="Transparent">
-            <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
-            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
-          </StackPanel>
-        </TreeDataTemplate>
-      </TreeView.ItemTemplate>
-    </TreeView>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:SymbolNodeViewModel">
+          <Panel>
+            <Border Classes="selectionPill" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+            <DockPanel Margin="{Binding Indent}" Background="Transparent">
+              <Border DockPanel.Dock="Left" Classes="chevron" Width="16" Height="18" Background="Transparent">
+                <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <StackPanel Orientation="Horizontal" Spacing="6" Margin="4,0,0,0">
+                <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" />
+              </StackPanel>
+            </DockPanel>
+          </Panel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
   </DockPanel>
 </UserControl>

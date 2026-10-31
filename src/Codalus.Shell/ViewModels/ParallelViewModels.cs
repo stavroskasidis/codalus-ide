@@ -28,37 +28,48 @@ public sealed class ParallelStackNodeViewModel(ParallelStackNode node, IReadOnly
 
 /// <summary>
 /// Parallel Stacks (M14b): every thread's call stack, merged — the callers threads share once, then their branches —
-/// refreshed at every stop. The node with the active thread is marked.
+/// refreshed at every stop while the window is shown, and once when it's shown (M56: a request per thread). The node
+/// with the active thread is marked.
 /// </summary>
-public sealed class ParallelStacksViewModel : ObservableObject
+/// <remarks>
+/// TODO(issue): shown, the tree is built again at each stop on the UI thread, every node expanded and none of it
+/// virtualized (Avalonia's TreeView): up to a TextBlock per frame, 64 frames a thread. Flatten it into a virtualized list,
+/// as the Solution Explorer's rows, or cap the frames per node and the nodes with a "more" row.
+/// </remarks>
+public sealed class ParallelStacksViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.parallelStacks";
     private const int Levels = 64;
 
     private readonly DebugService _debugger;
+    private readonly ShownRefresh _refresh;
     private int _generation;
 
     public ParallelStacksViewModel(DebugService debugger)
     {
         _debugger = debugger;
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
             {
                 _generation++;
-                Roots.Clear();
+                Roots.Reset([]);
                 OnPropertyChanged(nameof(IsEmpty));
             }
         });
     }
 
-    public ObservableCollection<ParallelStackNodeViewModel> Roots { get; } = [];
+    public ResettableCollection<ParallelStackNodeViewModel> Roots { get; } = [];
+
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Roots.Count == 0;
 
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         IReadOnlyDictionary<int, IReadOnlyList<StackFrame>> stacks;
         try
@@ -76,13 +87,8 @@ public sealed class ParallelStacksViewModel : ObservableObject
         }
 
         var names = _debugger.Threads.ToDictionary(t => t.Id, t => t.Name);
-        Roots.Clear();
         var tree = ParallelStacks.Build(stacks.ToDictionary(s => s.Key, s => (IReadOnlyList<string>)[.. s.Value.Select(f => f.Name)]));
-        foreach (var node in tree)
-        {
-            Roots.Add(new ParallelStackNodeViewModel(node, names, _debugger.SelectedThreadId));
-        }
-
+        Roots.Reset([.. tree.Select(node => new ParallelStackNodeViewModel(node, names, _debugger.SelectedThreadId))]);
         OnPropertyChanged(nameof(IsEmpty));
     }
 }
@@ -94,20 +100,22 @@ public sealed record ParallelWatchRow(int ThreadId, string Thread, string Frame,
 
 /// <summary>
 /// Parallel Watch (M14b): one expression evaluated on every thread, in each thread's innermost frame that has source
-/// (its own code), at every stop.
+/// (its own code), at every stop while the window is shown, and once when it's shown (M56).
 /// </summary>
-public sealed class ParallelWatchViewModel : ObservableObject
+public sealed class ParallelWatchViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "debug.parallelWatch";
 
     private readonly DebugService _debugger;
+    private readonly ShownRefresh _refresh;
     private string _expression = string.Empty;
     private int _generation;
 
     public ParallelWatchViewModel(DebugService debugger)
     {
         _debugger = debugger;
-        debugger.Stopped += (_, _) => Ui.Post(() => _ = RefreshAsync());
+        _refresh = new ShownRefresh(() => _ = RefreshAsync());
+        debugger.Stopped += (_, _) => Ui.Post(_refresh.Request);
         debugger.StateChanged += (_, _) => Ui.Post(() =>
         {
             if (debugger.State != DebugState.Stopped)
@@ -126,8 +134,11 @@ public sealed class ParallelWatchViewModel : ObservableObject
 
     public ObservableCollection<ParallelWatchRow> Rows { get; } = [];
 
+    void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
+
     public async Task RefreshAsync()
     {
+        _refresh.Fresh();
         var generation = ++_generation;
         var expression = Expression.Trim();
         Rows.Clear();
@@ -137,6 +148,11 @@ public sealed class ParallelWatchViewModel : ObservableObject
         }
 
         var stacks = await _debugger.AllStacksAsync(32, CancellationToken.None).ConfigureAwait(true);
+        if (generation != _generation)
+        {
+            return; // a newer refresh (the next stop, another expression) reads its own
+        }
+
         var names = _debugger.Threads.ToDictionary(t => t.Id, t => t.Name);
         foreach (var (thread, frames) in stacks.OrderBy(s => s.Key))
         {

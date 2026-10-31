@@ -228,8 +228,15 @@ public sealed partial class ShellHost : IEditorServices
         Languages.StatusChanged += (_, e) => Ui.Post(() => OnLanguageStatus(e.LanguageId, e.Status));
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
         Languages.Diagnostics.Changed += (_, _) => ScheduleDiagnosticsStatus();
-        Solutions.ProjectChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
-        Solutions.CompilerInputsChanged += (_, _) => ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
+        // Once for a burst: each editor finds its project context again, in an index built for it.
+        var projectContexts = new UiDebouncer(() =>
+        {
+            _contextIndex = null;
+            ProjectContextsChanged?.Invoke(this, EventArgs.Empty);
+        }, TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(1));
+        Solutions.ProjectChanged += (_, _) => projectContexts.Request();
+        Solutions.CompilerInputsChanged += (_, _) => projectContexts.Request();
+        Solutions.SolutionChanged += (_, _) => projectContexts.Request();
         InitializeProfiles();
         InitializeSync();
         InitializeColors(); // before ThemeChanged's subscribers: they read the customized theme
@@ -285,33 +292,34 @@ public sealed partial class ShellHost : IEditorServices
     /// Opens a file in the editor (or shows its open tab). <paramref name="preview"/> opens it in the group's preview
     /// tab; <paramref name="at"/> moves the caret there.
     /// </summary>
-    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null, bool textEditor = false)
+    /// <param name="activate">False to add the tab behind the active one, its view made when it's first shown (a session restored).</param>
+    public async Task<CodeEditorDocument?> OpenFileAsync(string path, bool preview = false, Position? at = null, string? initialContent = null, bool textEditor = false, bool activate = true)
     {
         path = Path.GetFullPath(path);
         if (initialContent is null && Views.ImageDocument.IsImage(path) && File.Exists(path))
         {
-            OpenImage(path, preview);
+            OpenImage(path, preview, activate);
             return null;
         }
 
         // A binary file opens in the hex viewer, unless the text editor was asked for.
         if (initialContent is null && !textEditor && !_models.ContainsKey(path) && File.Exists(path) && Views.HexDocument.LooksBinary(path))
         {
-            OpenHex(path, preview);
+            OpenHex(path, preview, activate);
             return null;
         }
 
         // A .resx file opens in the resource editor, unless the text editor was asked for or has it open.
         if (initialContent is null && !textEditor && at is null && Views.ResxEditorDocument.IsResx(path) && !_models.ContainsKey(path) && File.Exists(path))
         {
-            OpenResx(path, preview);
+            OpenResx(path, preview, activate);
             return null;
         }
 
         // A form's code file opens in the Windows Forms designer on Windows (M41a), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && File.Exists(path) && OpensInWinFormsDesigner(path))
         {
-            await OpenWinFormsDesignerAsync(path, preview).ConfigureAwait(true);
+            await OpenWinFormsDesignerAsync(path, preview, activate).ConfigureAwait(true);
             return null;
         }
 
@@ -322,14 +330,14 @@ public sealed partial class ShellHost : IEditorServices
 
         // A plugin's custom editor claims the file (API 1.0), unless the text editor was asked for.
         if (initialContent is null && !textEditor && at is null && Plugins.CustomEditorFor(path) is { } custom && File.Exists(path)
-            && await OpenInCustomEditorAsync(path, custom, preview).ConfigureAwait(true))
+            && await OpenInCustomEditorAsync(path, custom, preview, activate).ConfigureAwait(true))
         {
             return null;
         }
 
         if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null) is { } open)
         {
-            Layout.OpenDocument(open, preview, focus: !preview);
+            Layout.OpenDocument(open, preview, focus: !preview, activate);
             if (at is { } position)
             {
                 open.Navigate(position);
@@ -344,7 +352,7 @@ public sealed partial class ShellHost : IEditorServices
             var created = CodeDocument.Create(path, initialContent);
             Track(created);
             view = CreateView(created, primary: true);
-            Layout.OpenDocument(view, preview, focus: !preview);
+            Layout.OpenDocument(view, preview, focus: !preview, activate);
         }
         else
         {
@@ -363,7 +371,7 @@ public sealed partial class ShellHost : IEditorServices
                 }
 
                 view = CreateView(model, primary: true);
-                Layout.OpenDocument(view, preview, focus: !preview);
+                Layout.OpenDocument(view, preview, focus: !preview, activate);
             }
             finally
             {
@@ -377,6 +385,162 @@ public sealed partial class ShellHost : IEditorServices
         }
 
         return view;
+    }
+
+    /// <summary>
+    /// Opens several files at once (the OS's multi-open, a drop, several <c>codalus file</c> requests together): each as a
+    /// tab behind the active one, its view made when it's first shown, and the last one active (M56). Opening each as the
+    /// active tab built every one's editor in turn on the UI thread, with its language requests, for tabs not looked at.
+    /// </summary>
+    /// <returns>For each file, whether it opened in a text editor.</returns>
+    public async Task<IReadOnlyList<bool>> OpenFilesAsync(IReadOnlyList<(string Path, Position? At)> files)
+    {
+        var opened = new bool[files.Count];
+        var paths = files.Select(f => Path.GetFullPath(f.Path)).ToList();
+        var openings = await OpeningsAsync(paths, files.Select(f => f.At).ToList()).ConfigureAwait(true);
+
+        // The text editors' files are read first, together, so the tabs then open in one go: a layout pass between two of
+        // them made the first tab of an empty group active, and built its editor, before the last one was.
+        var reads = paths.Where((_, i) => openings[i].Kind == FileOpening.Text).Distinct(SolutionPaths.Comparer).ToList();
+        foreach (var path in reads)
+        {
+            BeginModelRequest(path);
+        }
+
+        try
+        {
+            var models = reads.ToDictionary(path => path, ModelAsync, SolutionPaths.Comparer);
+            foreach (var read in models.Values)
+            {
+                await ((Task)read).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext); // a failed read: the open says why
+            }
+
+            // Nothing awaits in here: tabs added to an empty group made the first one active (its tab strip selects it)
+            // before the last one was, and the user's own tab switches meanwhile must count.
+            var later = new List<int>();
+            using (Layout.DeferActiveDocument())
+            {
+                for (var i = 0; i < files.Count; i++)
+                {
+                    var activate = i == files.Count - 1;
+                    switch (openings[i].Kind)
+                    {
+                        case FileOpening.Text when models[paths[i]] is { IsCompletedSuccessfully: true } read:
+                            if (openings[i].Form)
+                            {
+                                TellWinFormsWindowsOnly(paths[i]);
+                            }
+
+                            ShowInEditor(read.Result, files[i].At, activate);
+                            opened[i] = true;
+                            break;
+                        case FileOpening.Image:
+                            OpenImage(paths[i], activate: activate);
+                            break;
+                        case FileOpening.Binary:
+                            OpenHex(paths[i], activate: activate);
+                            break;
+                        case FileOpening.Resources:
+                            OpenResx(paths[i], activate: activate);
+                            break;
+                        default:
+                            later.Add(i);
+                            break;
+                    }
+                }
+            }
+
+            // A form's designer, a plugin's editor, and a file that couldn't be read (the open says why) open as one file does.
+            foreach (var i in later)
+            {
+                opened[i] = await OpenFileAsync(paths[i], at: files[i].At, activate: i == files.Count - 1).ConfigureAwait(true) is not null;
+            }
+        }
+        finally
+        {
+            foreach (var path in reads)
+            {
+                EndModelRequest(path);
+                ForgetUnshown(path); // read for a tab that didn't open: an open that threw on the way
+            }
+        }
+
+        return opened;
+    }
+
+    /// <summary>How <see cref="OpenFileAsync"/> opens a file, as far as its name and the disk tell (<see cref="OpenFilesAsync"/>).</summary>
+    private enum FileOpening
+    {
+        Text,
+        Image,
+        Binary,
+        Resources,
+
+        /// <summary>A form's designer, a plugin's editor, or a file that isn't there.</summary>
+        Other,
+    }
+
+    /// <summary>
+    /// How each file opens, as <see cref="OpenFileAsync"/> decides, with its disk checks (whether it's there, a binary's
+    /// first bytes, a form's designer file) on the thread pool (M56): on the UI thread they held it for every file of the
+    /// batch before any read began. <c>Form</c>: a form that opens as code off Windows (it says why, once).
+    /// </summary>
+    private async Task<List<(FileOpening Kind, bool Form)>> OpeningsAsync(List<string> paths, List<Position?> at)
+    {
+        var tracked = paths.Select(_models.ContainsKey).ToList();
+        var custom = paths.Select((path, i) => at[i] is null && Plugins.CustomEditorFor(path) is not null).ToList();
+        var designer = Workbench.Settings.GetBoolean(OpenFormsInDesignerSetting, true) && WinFormsDesigner.IsWindows() && Remote is null;
+        var tellForms = !_toldWindowsOnly && !WinFormsDesigner.IsWindows();
+        var forms = WinFormsDesigner;
+        return await Task.Run(() => paths.Select((path, i) =>
+        {
+            var exists = File.Exists(path);
+            if (Views.ImageDocument.IsImage(path) && exists)
+            {
+                return (FileOpening.Image, false);
+            }
+
+            if (!tracked[i] && exists && Views.HexDocument.LooksBinary(path))
+            {
+                return (FileOpening.Binary, false);
+            }
+
+            if (at[i] is null && Views.ResxEditorDocument.IsResx(path) && !tracked[i] && exists)
+            {
+                return (FileOpening.Resources, false);
+            }
+
+            if (exists && ((at[i] is null && designer && forms.HasDesigner(path)) || custom[i]))
+            {
+                return (FileOpening.Other, false);
+            }
+
+            return tracked[i] || exists ? (FileOpening.Text, tellForms && exists && forms.HasDesigner(path)) : (FileOpening.Other, false);
+        }).ToList()).ConfigureAwait(true);
+    }
+
+    /// <summary>Shows <paramref name="model"/> in its editor's tab, or a new editor's; <paramref name="at"/> moves the caret there.</summary>
+    private void ShowInEditor(CodeDocument model, Position? at, bool activate)
+    {
+        if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, model.Path) && e.Owner is not null) is not { } view)
+        {
+            view = CreateView(model, primary: true);
+        }
+
+        Layout.OpenDocument(view, preview: false, focus: true, activate);
+        if (at is { } caret)
+        {
+            view.Navigate(caret);
+        }
+    }
+
+    /// <summary>Forgets the model of <paramref name="path"/> when no editor shows it and nothing holds it (a tab that didn't open).</summary>
+    private void ForgetUnshown(string path)
+    {
+        if (_models.TryGetValue(path, out var model) && !model.IsReadOnly && !Editors.Any(e => e.Model == model) && !IsHeld(model))
+        {
+            Forget(model);
+        }
     }
 
     /// <summary>
@@ -517,7 +681,13 @@ public sealed partial class ShellHost : IEditorServices
         _snapshots[model] = model.Text.CreateSnapshot();
         model.ContentChanged += (_, e) =>
         {
+            _editedSinceReady.Add(model.Path);
             _snapshots[model] = model.Text.CreateSnapshot();
+
+            // TODO(issue): didChange is JSON-encoded on the UI thread before its first await: the whole text at each
+            // keystroke for a server that syncs whole documents, every change of an update of thousands (Format
+            // Document, Replace All). An ordered writer in JsonRpcConnection, carrying every outgoing message and fed
+            // the snapshot rather than the text, would move it off without reordering.
             _ = Languages.ChangeAsync(model.Path, e.Version, e.Changes);
             ClearXamlBuildDiagnostics(model.Path);
         };
@@ -528,8 +698,10 @@ public sealed partial class ShellHost : IEditorServices
         model.Saved += (_, _) => Ui.Post(() => OnSavedForDebugEdits(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         TrackForDiffs(model);
-        if (model.LanguageId is { } languageId)
+        if (model.LanguageId is { } languageId && !model.IsLarge)
         {
+            // A large file stays out of the language service (M56, as in VS Code): its didOpen alone, the whole text in
+            // JSON, kept the window busy, and the service would analyze it at every edit.
             _ = OpenInLanguageServiceAsync(model, languageId);
         }
     }
@@ -545,6 +717,9 @@ public sealed partial class ShellHost : IEditorServices
             }
         }
 
+        // TODO(issue): didOpen makes the whole text a string and JSON-encodes it on the UI thread (0.1-0.3 s for a file
+        // just under the large-file limits, more for XML with the default escaping); the ordered writer of didChange's
+        // TODO, with relaxed escaping, would move it off too.
         if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
         {
             foreach (var editor in LanguageViews.Where(e => e.Model == model))
@@ -560,6 +735,12 @@ public sealed partial class ShellHost : IEditorServices
         }
         else
         {
+            // No service: the CodeLens rows kept for it go.
+            foreach (var editor in LanguageViews.Where(e => e.Model == model))
+            {
+                editor.Controller?.Insights.Refresh();
+            }
+
             await OfferWebLanguagesAsync(languageId).ConfigureAwait(true);
             await OfferFSharpAsync(languageId).ConfigureAwait(true);
         }
@@ -572,8 +753,12 @@ public sealed partial class ShellHost : IEditorServices
             return;
         }
 
-        // The last view of the file: forget the model.
-        var model = closed.Model;
+        Forget(closed.Model); // the last view of the file
+    }
+
+    /// <summary>Forgets a model no editor shows: the language service closes its file, and its watcher stops.</summary>
+    private void Forget(CodeDocument model)
+    {
         _models.Remove(model.IsReadOnly ? model.Uri : model.Path);
         lock (_snapshots)
         {
@@ -600,15 +785,51 @@ public sealed partial class ShellHost : IEditorServices
 
     private WorkspaceStatusParams? _languageStatus;
 
+    /// <summary>The languages whose service reported loading (projects changed, a restart) since it last reported ready.</summary>
+    private readonly HashSet<string> _languagesLoading = new(StringComparer.Ordinal);
+
+    /// <summary>The languages whose service has reported ready at least once.</summary>
+    private readonly HashSet<string> _languagesReady = new(StringComparer.Ordinal);
+
+    /// <summary>The documents edited since a language service last reported ready (their editors asked again on their own).</summary>
+    private readonly HashSet<string> _editedSinceReady = new(SolutionPaths.Comparer);
+
     private void OnLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
         _languageStatus = status;
         UpdateLanguageStatus();
-        if (status.State == WorkspaceStates.Ready)
+        if (status.State != WorkspaceStates.Ready)
         {
-            Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.LanguageReady);
-            RefreshEditors();
+            _languagesLoading.Add(languageId);
+            return;
         }
+
+        Diagnostics.BenchEvents.BenchEvents.Emit(Diagnostics.BenchEvents.BenchEventNames.LanguageReady);
+        if (_languagesLoading.Remove(languageId) | _languagesReady.Add(languageId))
+        {
+            _editedSinceReady.Clear();
+            RefreshEditors(); // the projects loaded: everything may know more now
+        }
+        else
+        {
+            RefreshEditorsAfterEdits();
+        }
+    }
+
+    /// <summary>
+    /// The language service reported ready again after the background pass that edits start (at every pause in typing):
+    /// the other editors ask again for what those edits may have changed in them (colors, hints, CodeLens counts). An
+    /// edited document's editors have asked already, and a hidden editor asks when it shows again: asking for every
+    /// open editor at each pause kept a large solution's language service busy with documents nobody looked at.
+    /// </summary>
+    private void RefreshEditorsAfterEdits()
+    {
+        foreach (var editor in LanguageViews.Where(e => !_editedSinceReady.Contains(e.Model.Path)))
+        {
+            editor.Controller?.RefreshWhenShown();
+        }
+
+        _editedSinceReady.Clear();
     }
 
     /// <summary>
@@ -635,7 +856,11 @@ public sealed partial class ShellHost : IEditorServices
     // ------------------------------------------------------------------ IEditorServices
 
     LanguageHostClient? IEditorServices.Client(CodeDocument document) =>
-        document.LanguageId is { } languageId ? Languages.RunningClient(languageId) : null;
+        document is { LanguageId: { } languageId, IsLarge: false } ? Languages.RunningClient(languageId) : null;
+
+    bool IEditorServices.ExpectsCodeLens(CodeDocument document) =>
+        document is { IsReadOnly: false, IsLarge: false, LanguageId: CSharpLanguageId } && document.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)
+        && !Languages.HasFailed(CSharpLanguageId) && Languages.RunningClient(CSharpLanguageId) is not { Capabilities.CodeLensProvider: null };
 
     public void OpenLocations(IReadOnlyList<Location> locations, string title) => _ = OpenLocationsAsync(locations, title);
 
@@ -673,17 +898,30 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
-    public ProjectContext? ProjectContextOf(CodeDocument document)
+    public ProjectContext? ProjectContextOf(CodeDocument document) =>
+        (_contextIndex ??= ContextIndex()).TryGetValue(document.Path, out var project)
+            ? new ProjectContext(project.Path, project.Name, project.TargetFrameworks, Solutions.ActiveFramework(project.Path) ?? project.TargetFrameworks[0])
+            : null;
+
+    /// <summary>
+    /// The multi-targeted projects' files by path, the first project that lists a file winning, built at the first lookup
+    /// after their projects changed: each editor looked through every item of every such project after each burst, 50-150
+    /// ms with 100 editors and 300 of them (M56).
+    /// </summary>
+    private Dictionary<string, Codalus.Projects.Protocol.ProjectInfo>? _contextIndex;
+
+    private Dictionary<string, Codalus.Projects.Protocol.ProjectInfo> ContextIndex()
     {
+        var index = new Dictionary<string, Codalus.Projects.Protocol.ProjectInfo>(SolutionPaths.Comparer);
         foreach (var project in Solutions.Projects.Values.Where(p => p.TargetFrameworks.Length > 1))
         {
-            if (project.Items.Any(i => SolutionPaths.Comparer.Equals(i.Path, document.Path)))
+            foreach (var item in project.Items)
             {
-                return new ProjectContext(project.Path, project.Name, project.TargetFrameworks, Solutions.ActiveFramework(project.Path) ?? project.TargetFrameworks[0]);
+                index.TryAdd(item.Path, project);
             }
         }
 
-        return null;
+        return index;
     }
 
     public async Task SetActiveFrameworkAsync(string projectPath, string targetFramework)
@@ -944,23 +1182,15 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>Close All (or Close All But This): together, so no tab becomes active on the way (M56).</summary>
     public void CloseAllDocuments(bool exceptActive)
     {
         var active = Layout.ActiveDocument;
-        foreach (var document in Layout.Documents.Where(d => !exceptActive || d != active).ToList())
-        {
-            Layout.CloseDocument(document);
-        }
+        Layout.CloseDocuments([.. Layout.Documents.Where(d => !exceptActive || d != active)]);
     }
 
-    /// <summary>Closes every document that isn't pinned (M34d).</summary>
-    public void CloseUnpinnedDocuments()
-    {
-        foreach (var document in Layout.Documents.Where(d => !d.IsPinned).ToList())
-        {
-            Layout.CloseDocument(document);
-        }
-    }
+    /// <summary>Closes every document that isn't pinned (M34d), together.</summary>
+    public void CloseUnpinnedDocuments() => Layout.CloseDocuments([.. Layout.Documents.Where(d => !d.IsPinned)]);
 
     public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
 
@@ -1001,14 +1231,8 @@ public sealed partial class ShellHost : IEditorServices
         return false;
     }
 
-    /// <summary>Closing a solution closes its documents (unsaved ones stay open, as the user has to decide).</summary>
-    private void CloseSolutionDocuments()
-    {
-        foreach (var editor in Editors.Where(e => !e.Model.IsModified).ToList())
-        {
-            Layout.CloseDocument(editor);
-        }
-    }
+    /// <summary>Closing a solution closes its documents together (unsaved ones stay open, as the user has to decide).</summary>
+    private void CloseSolutionDocuments() => Layout.CloseDocuments([.. Editors.Where(e => !e.Model.IsModified)]);
 
     // ------------------------------------------------------------------ split views
 

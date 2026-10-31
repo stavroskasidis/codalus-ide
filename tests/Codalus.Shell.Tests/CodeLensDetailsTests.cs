@@ -27,6 +27,50 @@ public sealed class CodeLensDetailsTests
         Assert.Null(LensDetails.Git(blame, 20, 30, s_now));
     }
 
+    [Fact]
+    public void The_blame_index_words_a_members_history_as_a_pass_over_every_range_did()
+    {
+        var random = new Random(56);
+        for (var round = 0; round < 50; round++)
+        {
+            var blame = new List<BlameRange>();
+            var line = 1;
+            while (line < 400)
+            {
+                var count = random.Next(1, 12);
+                var commit = random.Next(8) == 0 ? new string('0', 40) : $"{random.Next(6):x}{new string('c', 39)}";
+                blame.Add(new BlameRange(line, count, commit, $"Author{random.Next(4)}", s_now.AddDays(-random.Next(400)), "change"));
+                line += count;
+            }
+
+            var index = new GitLensIndex(blame);
+            for (var lens = 0; lens < 100; lens++)
+            {
+                var start = random.Next(1, 420);
+                var end = start + random.Next(0, 60);
+                Assert.Equal(LensDetails.Git(blame, start, end, s_now), index.Text(start, end, s_now));
+            }
+        }
+    }
+
+    [Fact]
+    public void Each_lens_searches_the_blame_rather_than_passing_over_it()
+    {
+        // A 100,000-line file blamed in 20,000 ranges, with a lens on each of 10,000 members of 10 lines: a pass over every
+        // range for each lens looked at 200,000,000 of them after each pause in typing (M56).
+        var blame = Enumerable.Range(0, 20_000)
+            .Select(i => new BlameRange(1 + (i * 5), 5, i % 7 == 0 ? new string('0', 40) : $"{i % 97:x2}{new string('a', 38)}", $"Author{i % 9}", s_now.AddDays(-(i % 300)), "change"))
+            .ToList();
+        var index = new GitLensIndex(blame);
+
+        for (var member = 0; member < 10_000; member++)
+        {
+            Assert.NotNull(index.Text(1 + (member * 10), 10 + (member * 10), s_now));
+        }
+
+        Assert.True(index.Visits < 10_000 * 24, $"{index.Visits} ranges looked at for 10,000 lenses");
+    }
+
     [Theory]
     [InlineData(0.5, "just now")]
     [InlineData(90, "1 hour ago")]
@@ -75,9 +119,12 @@ public sealed class CodeLensDetailsTests
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(line) is { } eol && eol.Contains("Ada Tester", StringComparison.Ordinal), seconds: 90);
         Assert.Contains("Ada Tester, just now | 1 author, 1 change", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
 
-        // Turned off, it goes; the reference counts stay.
+        // Turned off, it goes; the reference counts stay. (The row stays too, empty while the counts are on their way: the
+        // history can come first.)
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.GitCodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
-        await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal));
-        Assert.Contains("references", shapes.Insights.EndOfLineText(line), StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(
+            () => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal) && eol.Contains("references", StringComparison.Ordinal),
+            seconds: 60,
+            describe: () => $"'{shapes.Insights.EndOfLineText(line)}'");
     }
 }

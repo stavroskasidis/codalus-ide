@@ -24,6 +24,7 @@ public sealed class CodeSearchIndex
     private readonly Lock _gate = new();
     private Snapshot _snapshot = Snapshot.Empty;
     private LastMatch? _lastMatch;
+    private int _generation; // counts Clear's: what was built for a closed solution isn't put back
 
     /// <summary>Raised (on any thread) when the index changed: loaded, rebuilt or updated.</summary>
     public event EventHandler? Changed;
@@ -51,9 +52,93 @@ public sealed class CodeSearchIndex
         {
             _snapshot = Snapshot.Empty;
             _lastMatch = null;
+            _generation++;
         }
 
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// <see cref="Replace"/> off the calling thread: the files are stamped and the snapshot built in the background (an
+    /// index of the 96-project benchmark's shape, 144,000 symbols, takes 0.15–0.3 s), then put in place, unless the index
+    /// was cleared meanwhile. Returns whether it was put in place.
+    /// </summary>
+    public async Task<bool> ReplaceAsync(IReadOnlyList<IndexedDocument> documents)
+    {
+        var generation = Volatile.Read(ref _generation);
+        var built = await Task.Run(() => Build(Map(documents), [], loaded: true, complete: true, completedAt: DateTime.UtcNow)).ConfigureAwait(false);
+        lock (_gate)
+        {
+            if (_generation != generation)
+            {
+                return false;
+            }
+
+            _snapshot = built with { Files = _snapshot.Files };
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>
+    /// <see cref="Update"/> off the calling thread, built again when another change came first; nothing changes if the
+    /// index was cleared meanwhile. Returns whether it was put in place.
+    /// </summary>
+    public async Task<bool> UpdateAsync(IReadOnlyList<IndexedDocument> documents, IReadOnlyList<string> removed)
+    {
+        var generation = Volatile.Read(ref _generation);
+        var changed = await Task.Run(() => Map(documents)).ConfigureAwait(false);
+        while (true)
+        {
+            var basis = _snapshot;
+            var built = await Task.Run(() =>
+            {
+                var map = new Dictionary<string, IndexedFile>(basis.Documents, SolutionService.PathComparer);
+                foreach (var path in removed)
+                {
+                    map.Remove(path);
+                }
+
+                foreach (var (path, file) in changed)
+                {
+                    map[path] = file;
+                }
+
+                return Build(map, basis.Files, loaded: true, basis.Complete, basis.CompletedAt);
+            }).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (_generation != generation)
+                {
+                    return false;
+                }
+
+                if (ReferenceEquals(_snapshot, basis))
+                {
+                    _snapshot = built;
+                    break;
+                }
+            }
+        }
+
+        Changed?.Invoke(this, EventArgs.Empty);
+        return true;
+    }
+
+    /// <summary>The host's documents by path, each stamped with its file's length and time written.</summary>
+    private static Dictionary<string, IndexedFile> Map(IEnumerable<IndexedDocument> documents)
+    {
+        var map = new Dictionary<string, IndexedFile>(SolutionService.PathComparer);
+        foreach (var document in documents)
+        {
+            if (FromHost(document) is { } file)
+            {
+                map[file.Path] = file;
+            }
+        }
+
+        return map;
     }
 
     /// <summary>Replaces the symbols with the language host's index of the whole solution.</summary>
@@ -705,8 +790,9 @@ public sealed class CodeSearchIndex
     /// <summary>Writes the index next to the solution, in the background.</summary>
     public Task SaveAsync(SolutionStateStore store, SolutionStateKey key)
     {
+        // The snapshot is immutable: sorted and serialized in the background (megabytes for a large solution).
         var snapshot = _snapshot;
-        return store.WriteAsync(key, FileName, new CodeSearchIndexFile(FormatVersion, [.. snapshot.Documents.Values.OrderBy(d => d.Path, StringComparer.Ordinal)], snapshot.Files), CodeSearchJsonContext.Default.CodeSearchIndexFile);
+        return store.WriteAsync(key, FileName, () => new CodeSearchIndexFile(FormatVersion, [.. snapshot.Documents.Values.OrderBy(d => d.Path, StringComparer.Ordinal)], snapshot.Files), CodeSearchJsonContext.Default.CodeSearchIndexFile);
     }
 
     // ------------------------------------------------------------------ snapshot

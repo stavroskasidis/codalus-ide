@@ -67,6 +67,52 @@ public sealed class LoginShellPathTests
     }
 
     /// <summary>
+    /// A profile that starts a background job holding the shell's output open (M56): the read ends a second after the shell
+    /// did, as for a shell that takes too long, instead of when the job ends. The IDE's start waited for it, and then its
+    /// processes did, without a word.
+    /// </summary>
+    [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task A_background_job_holding_the_login_shells_output_doesnt_hold_the_read()
+    {
+        if (OperatingSystem.IsWindows() || !File.Exists("/bin/sh"))
+        {
+            Assert.Skip("A Unix shell is needed.");
+        }
+
+        var folder = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "codalus-loginshell-" + Guid.NewGuid().ToString("N"))).FullName;
+        var job = Path.Combine(folder, "job.pid");
+        var shell = Path.Combine(folder, "shell");
+        try
+        {
+            // Called as `shell -ilc <command>`: runs the command, then leaves a job behind with the output.
+            File.WriteAllText(shell, $"#!/bin/sh\n/bin/sh -c \"$2\"\nsleep 60 &\necho $! > '{job}'\nexit 0\n");
+            File.SetUnixFileMode(shell, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+            var read = Task.Run(() => LoginShellPath.ReadEnvironment(shell, TimeSpan.FromSeconds(20)), TestContext.Current.CancellationToken);
+
+            Assert.Null(await read.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            if (File.Exists(job) && int.TryParse(File.ReadAllText(job).Trim(), out var pid))
+            {
+                try
+                {
+                    using var sleeping = System.Diagnostics.Process.GetProcessById(pid);
+                    sleeping.Kill();
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    // It ended already.
+                }
+            }
+
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// The Mac's case: the login PATH puts Homebrew's dotnet first, a link to a wrapper script whose folder has no SDKs,
     /// so the build host's MSBuildLocator can't use it. The root with the newest SDK is chosen instead.
     /// </summary>

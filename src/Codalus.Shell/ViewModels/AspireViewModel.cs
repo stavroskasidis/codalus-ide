@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Aspire;
+using Codalus.Workbench.Output;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -36,7 +37,7 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     private AspireResourceClient? _client;
     private AspireResourceRow? _selected;
     private string? _status = "No AppHost is running. Start an Aspire AppHost project (F5 or Ctrl+F5) to see its resources here.";
-    private string _logs = string.Empty;
+    private OutputChannel? _console;
     private string? _dashboard;
     private CancellationTokenSource? _logWatch;
 
@@ -75,11 +76,20 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
 
     public bool HasSelection => _selected is not null;
 
-    public string Logs
+    /// <summary>
+    /// The selected resource's console, shown as the Output window shows a channel (a read-only, virtualized editor,
+    /// the process's colors kept, at most <see cref="OutputChannel.MaxLength"/> characters): a channel of its own each
+    /// time a resource is followed, so a stale watch's lines never reach the one shown. A text box set to the whole
+    /// console for each line, posted above input, froze the window for minutes on a resource's backlog (M56).
+    /// </summary>
+    public OutputChannel? ConsoleOutput
     {
-        get => _logs;
-        private set => SetField(ref _logs, value);
+        get => _console;
+        private set => SetField(ref _console, value);
     }
+
+    /// <summary>The console's text without its escape sequences (tests).</summary>
+    internal string Logs => _console is { } console ? PlainText(console.GetText()) : string.Empty;
 
     /// <summary>The dashboard's login URL, once the AppHost printed it.</summary>
     public string? DashboardUrl
@@ -262,14 +272,15 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     {
         _logWatch?.Cancel();
         _logWatch = null;
-        Logs = string.Empty;
         if (_selected is not { } row || _client is not { } client)
         {
+            ConsoleOutput = null;
             return;
         }
 
+        var console = ConsoleOutput = new OutputChannel("aspire.console." + row.Resource.Name, row.Name);
         var watch = _logWatch = new CancellationTokenSource();
-        _ = WatchLogsAsync(client, row.Resource.Name, watch.Token);
+        _ = WatchLogsAsync(client, row.Resource.Name, console, watch.Token);
     }
 
     /// <summary>
@@ -277,11 +288,12 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     /// started: the stream ended after 64 ms with nothing, and the window stayed empty), so while the resource is live
     /// it's followed again, after <see cref="LogRetryDelays"/> (longer each time), until a stream brings new lines or
     /// the delays run out; not once the resource stops or goes, nor after another is selected or the AppHost ends (the
-    /// token). Each stream replays the console from its start: lines already shown (by their numbers) are skipped.
+    /// token). Each stream replays the console from its start: lines already shown (by their numbers) are skipped. The
+    /// lines go to <paramref name="console"/> from the thread that reads them; its view applies them once per dispatcher
+    /// pass, however many there are (a backlog comes as one message of thousands).
     /// </summary>
-    private async Task WatchLogsAsync(AspireResourceClient client, string resource, CancellationToken cancellationToken)
+    private async Task WatchLogsAsync(AspireResourceClient client, string resource, OutputChannel console, CancellationToken cancellationToken)
     {
-        var text = new System.Text.StringBuilder();
         var shown = 0;
         var empty = 0; // streams in a row that brought no new line
         while (true)
@@ -291,6 +303,12 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
             {
                 await foreach (var line in client.WatchLogsAsync(resource, cancellationToken).ConfigureAwait(false))
                 {
+                    // A message's lines come without a check of the token: a watch another selection replaced stops here.
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return;
+                    }
+
                     if (line.Number > 0 && line.Number <= shown)
                     {
                         continue;
@@ -298,20 +316,14 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
 
                     fresh = true;
                     shown = Math.Max(shown, line.Number);
-                    text.Append(PlainText(line.Text)).Append('\n');
-                    if (text.Length > 200_000)
+                    if (line.IsError)
                     {
-                        text.Remove(0, text.Length - 150_000);
+                        console.AppendErrorLine(line.Text);
                     }
-
-                    var snapshot = text.ToString();
-                    Ui.Post(() =>
+                    else
                     {
-                        if (!cancellationToken.IsCancellationRequested)
-                        {
-                            Logs = snapshot;
-                        }
-                    });
+                        console.AppendLine(line.Text);
+                    }
                 }
             }
             catch (OperationCanceledException)

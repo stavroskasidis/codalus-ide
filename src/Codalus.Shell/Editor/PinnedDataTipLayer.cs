@@ -180,7 +180,11 @@ public sealed class PinnedDataTipLayer : Canvas
         var panel = new StackPanel { Spacing = 1 };
         foreach (var tip in tips)
         {
-            var model = new ViewModels.DataTipViewModel(debugger, tip.Expression, new Codalus.Debugging.EvaluateResponse(tip.Value ?? "…", tip.IsError ? null : tip.Type, stopped && !tip.IsError ? tip.VariablesReference : 0), IconOf(tip.Expression))
+            // With the counts the evaluation gave: a long array opens in ranges read a page at a time (M56).
+            var result = stopped && !tip.IsError
+                ? new Codalus.Debugging.EvaluateResponse(tip.Value ?? "…", tip.Type, tip.VariablesReference, tip.NamedVariables, tip.IndexedVariables)
+                : new Codalus.Debugging.EvaluateResponse(tip.Value ?? "…", tip.IsError ? null : tip.Type);
+            var model = new ViewModels.DataTipViewModel(debugger, tip.Expression, result, IconOf(tip.Expression))
             {
                 PinExpression = (expression, value) =>
                 {

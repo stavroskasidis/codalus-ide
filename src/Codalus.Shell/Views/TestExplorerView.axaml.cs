@@ -16,9 +16,39 @@ namespace Codalus.Shell.Views;
 /// </summary>
 public sealed partial class TestExplorerView : UserControl, IPaneView
 {
+    private bool _shown;
+    private TestExplorerViewModel? _reported; // the view model told whether the explorer is shown
+
     public TestExplorerView()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            // A closed tool window clears its view's data context before the view leaves the tree: the view model it
+            // reported to hears that the explorer is hidden now.
+            if (_reported is { } old && !ReferenceEquals(old, ViewModel))
+            {
+                if (_shown)
+                {
+                    old.SetViewShown(this, false);
+                }
+
+                _reported = null;
+                _shown = false;
+            }
+
+            if (ViewModel is { } vm && !ReferenceEquals(vm, _reported))
+            {
+                _reported = vm;
+                _shown = false;
+                UpdateShown();
+            }
+        };
+        // Shown or hidden: a closed or auto-hidden tool window keeps its view attached, invisible, and its next layout
+        // pass tells (no event is raised for an ancestor's visibility). The whole view: the list hides while it's empty.
+        AttachedToVisualTree += (_, _) => UpdateShown();
+        DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
+        LayoutUpdated += (_, _) => UpdateShown();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         Filter.KeyDown += (_, e) =>
         {
@@ -52,6 +82,19 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
     }
 
     private TestExplorerViewModel? ViewModel => DataContext as TestExplorerViewModel;
+
+    /// <summary>Tells the view model whether the explorer is shown: changes to the tests wait while it isn't (M56).</summary>
+    private void UpdateShown(bool detaching = false)
+    {
+        var shown = !detaching && this.IsAttachedToVisualTree() && IsEffectivelyVisible;
+        if (shown == _shown)
+        {
+            return;
+        }
+
+        _shown = shown;
+        _reported?.SetViewShown(this, shown);
+    }
 
     private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;
 
@@ -156,7 +199,7 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         menu.Items.Add(Item("Copy Name", () => Copy(row.Group.Node?.FullLabel ?? row.Label), "copy"));
         if (row.Group.Node is { IsLeaf: true, Result: { } result })
         {
-            menu.Items.Add(Item("Copy Details", () => Copy(Describe(row.Group.Node, result)), "copy"));
+            menu.Items.Add(Item("Copy Details", () => Copy(TestExplorerViewModel.DetailsText(row.Group.Node, result)), "copy"));
             if (shell.Ai.IsEnabled && result.Outcome is not TestOutcome.Passed)
             {
                 menu.Items.Add(Item("Ask AI Why It Fails", () => _ = shell.ExplainTestWithAiAsync(), "sparkle"));
@@ -173,28 +216,6 @@ public sealed partial class TestExplorerView : UserControl, IPaneView
         {
             _ = Codalus.Shell.Infrastructure.SafeClipboard.TrySetTextAsync(clipboard, text);
         }
-    }
-
-    private static string Describe(TestNode node, TestResult result)
-    {
-        var text = new System.Text.StringBuilder();
-        text.AppendLine(node.FullLabel);
-        text.AppendLine(TestExplorerViewModel.OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + TestExplorerViewModel.Format(d) : string.Empty));
-        foreach (var message in result.Messages)
-        {
-            text.AppendLine(message.Message);
-            if (message.StackTrace is { } stack)
-            {
-                text.AppendLine(stack);
-            }
-        }
-
-        if (result.Output.Length > 0)
-        {
-            text.AppendLine().AppendLine(result.Output);
-        }
-
-        return text.ToString();
     }
 
     private void OnOpenFrame(object? sender, RoutedEventArgs e)

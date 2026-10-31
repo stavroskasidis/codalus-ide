@@ -21,8 +21,8 @@ public sealed partial class OutputView : UserControl, IPaneView
     public OutputView()
     {
         InitializeComponent();
-        _presenter = new OutputPresenter(Editor);
         _tail = FollowTail.Attach(Editor);
+        _presenter = new OutputPresenter(Editor, _tail);
     }
 
     /// <summary>Whether the view sticks to the end of the output (tests).</summary>
@@ -55,7 +55,8 @@ public sealed partial class OutputView : UserControl, IPaneView
             _viewModel.PropertyChanged -= OnViewModelChanged;
         }
 
-        Show(null);
+        // The text stays: shown again with the same channel, unchanged, it isn't read again (M56).
+        _presenter.Pause();
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)

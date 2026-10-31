@@ -9,6 +9,7 @@ using Codalus.LanguageServices.Protocol;
 using Location = Codalus.LanguageServices.Protocol.Location;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Editor;
 
@@ -26,6 +27,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly Grid _editors = new();
     private readonly ComboBox _context = new() { MinWidth = 140, Margin = new Thickness(4, 2) };
     private readonly Border _contextBar;
+    private readonly Border _largeFileBar;
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
     private readonly Popup _exception = new() { IsLightDismissEnabled = true };
     private PeekPresenter? _peek;
@@ -61,6 +63,21 @@ public sealed class CodeEditorView : UserControl, IPaneView
             IsVisible = false,
         };
         _contextBar.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
+
+        // Large-file mode (M56): what the editor leaves out of a file this large, as VS Code's notice says.
+        _largeFileBar = new Border
+        {
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 3),
+            Child = new TextBlock
+            {
+                Text = Localizer.Get("msg.editor.largeFile", "This file is large: colors, folding, CodeLens and the language service are off for it, so the editor stays responsive."),
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+            IsVisible = document.Model.IsLarge,
+        };
+        _largeFileBar.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
         _lightbulb.Click += (_, _) => _ = _services.ShowCodeActionsAsync();
         AutomationProperties.SetName(_lightbulb, "Show quick actions (Ctrl+.)");
         ToolTip.SetTip(_lightbulb, "Quick actions (Ctrl+.)");
@@ -73,6 +90,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
         var layout = new DockPanel();
         DockPanel.SetDock(_contextBar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_navigationBar, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(_largeFileBar, Avalonia.Controls.Dock.Top);
+        layout.Children.Add(_largeFileBar);
         layout.Children.Add(_contextBar);
         layout.Children.Add(_navigationBar);
         layout.Children.Add(_editors);
@@ -94,6 +113,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     /// <summary>The type and member drop-downs (tests).</summary>
     public NavigationBar NavigationBar => _navigationBar;
+
+    /// <summary>Whether the bar saying the file opened in large-file mode shows (tests).</summary>
+    internal bool ShowsLargeFileBar => _largeFileBar.IsVisible;
 
     /// <summary>The primary editor's sticky scroll and overview ruler (tests).</summary>
     public StickyScroll StickyScroll => _primary?.Sticky ?? throw new InvalidOperationException("The view is not attached.");
@@ -207,11 +229,20 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _editors.Children.Clear();
     }
 
-    private void OnDiagnosticsChanged(object? sender, string path) => Ui.Post(() =>
+    private void OnDiagnosticsChanged(object? sender, string path)
     {
-        _primary?.Ruler.Invalidate();
-        _split?.Ruler.Invalidate();
-    });
+        // The ruler marks this file's problems: another file's (a background pass publishes every file's) leave it as it is.
+        if (!SolutionPaths.Comparer.Equals(path, _document.Model.Path))
+        {
+            return;
+        }
+
+        Ui.Post(() =>
+        {
+            _primary?.Ruler.InvalidateProblems();
+            _split?.Ruler.InvalidateProblems();
+        });
+    }
 
     private EditorParts CreateEditor(bool primary)
     {
@@ -247,6 +278,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
         sticky.LinesPinned += (_, lines) => controller.KeepTokens(lines);
         var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = Options.OverviewRuler };
+        controller.Search.ResultsChanged += (_, _) => ruler.Invalidate();
         return new EditorParts(editor, controller, minimap, sticky, ruler);
     }
 
@@ -260,6 +292,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
         {
             grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });
         }
+
+        // Quick Find in the editor's top right corner, over the text and its sticky lines.
+        grid.Children.Add(parts.Controller.Search);
 
         Grid.SetColumn(parts.Ruler, 1);
         grid.Children.Add(parts.Ruler);
@@ -325,9 +360,10 @@ public sealed class CodeEditorView : UserControl, IPaneView
     {
         var context = _services.ProjectContextOf(_document.Model);
         _contextBar.IsVisible = context is not null;
-        if (context is null)
+        if (context is null || (_context.Tag is ProjectContext shown && shown.ProjectPath == context.ProjectPath && shown.Active == context.Active
+                                && shown.Frameworks.SequenceEqual(context.Frameworks)))
         {
-            return;
+            return; // none, or the same: a burst of project changes refilled every editor's list
         }
 
         _updatingContext = true;

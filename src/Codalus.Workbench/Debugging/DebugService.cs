@@ -53,6 +53,17 @@ public sealed class DebugService : IAsyncDisposable
     private readonly HashSet<int> _runToIds = [];
     private readonly List<BreakpointLocation> _hitLocations = [];
     private readonly Dictionary<string, DebugModule> _modules = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// <see cref="_modules"/> in load order, sorted once after they change (null until then); and whether each module
+    /// path asked about is the solution's code (M56): the data tip asked for each member of an object, and each asking
+    /// copied and sorted every module and scanned every project.
+    /// </summary>
+    private IReadOnlyList<DebugModule>? _moduleList;
+    private readonly Dictionary<string, bool> _userCode = new(SolutionService.PathComparer);
+
+    /// <summary>Counts the changes to the modules and projects <see cref="_userCode"/>'s answers come from (under <see cref="_gate"/>).</summary>
+    private int _userCodeGeneration;
     private readonly List<DebugProcess> _processes = [];
     private readonly List<int> _terminalProcesses = [];
     private RunTarget? _runTo;
@@ -256,8 +267,34 @@ public sealed class DebugService : IAsyncDisposable
         {
             lock (_gate)
             {
-                return [.. _modules.Values.OrderBy(m => m.Order)];
+                return _moduleList ??= [.. _modules.Values.OrderBy(m => m.Order)];
             }
+        }
+    }
+
+    /// <summary>
+    /// The modules changed, under <see cref="_gate"/> with the change itself: their list is sorted again when next read,
+    /// and what's user code is asked again (an answer being made from the list before is dropped).
+    /// </summary>
+    private void ModulesUpdated()
+    {
+        _moduleList = null;
+        UserCodeUpdated();
+    }
+
+    /// <summary>What's user code is asked again, under <see cref="_gate"/>: an answer being made meanwhile isn't kept.</summary>
+    private void UserCodeUpdated()
+    {
+        _userCode.Clear();
+        _userCodeGeneration++;
+    }
+
+    /// <summary>The solution's projects changed (<see cref="IsUserModule"/>'s answers may have): user code is asked again.</summary>
+    public void UserCodeChanged()
+    {
+        lock (_gate)
+        {
+            UserCodeUpdated();
         }
     }
 
@@ -1033,6 +1070,7 @@ public sealed class DebugService : IAsyncDisposable
             _runToIds.Clear();
             _hitLocations.Clear();
             _modules.Clear();
+            ModulesUpdated();
             _runTo = null;
         }
 
@@ -1227,6 +1265,7 @@ public sealed class DebugService : IAsyncDisposable
             _runToIds.Clear();
             _hitLocations.Clear();
             _modules.Clear();
+            ModulesUpdated();
             _runTo = null;
         }
 
@@ -1545,6 +1584,7 @@ public sealed class DebugService : IAsyncDisposable
 
     private void MarkRunning()
     {
+        Interlocked.Increment(ref _stops);
         _resumedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         CurrentStop = null;
         Frames = [];
@@ -1595,7 +1635,8 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public DebuggerDisplays? Displays { get; set; }
 
-    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference)
+    /// <summary>A reference's children: all of them, or <paramref name="page"/> of them (a long array's range, M56).</summary>
+    public async Task<IReadOnlyList<Variable>> VariablesAsync(int variablesReference, VariablesPage? page = null)
     {
         if (_adapter is not { } adapter || variablesReference <= 0)
         {
@@ -1603,7 +1644,9 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var token = _session.Token;
-        var variables = await adapter.VariablesAsync(variablesReference, token).ConfigureAwait(false);
+        var variables = page is null
+            ? await adapter.VariablesAsync(variablesReference, token).ConfigureAwait(false)
+            : await adapter.VariablesAsync(variablesReference, page, token).ConfigureAwait(false);
         return Displays is { } displays && State == DebugState.Stopped
             ? await displays.ApplyAsync(
                 variablesReference,
@@ -1638,8 +1681,31 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var module = Modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
-        return module?.IsUserCode ?? IsUserModule(path);
+        int generation;
+        IReadOnlyList<DebugModule> modules;
+        lock (_gate)
+        {
+            if (_userCode.TryGetValue(path, out var known))
+            {
+                return known;
+            }
+
+            generation = _userCodeGeneration;
+            modules = _moduleList ??= [.. _modules.Values.OrderBy(m => m.Order)];
+        }
+
+        var module = modules.FirstOrDefault(m => m.Path is { } p && SolutionService.PathComparer.Equals(p, path));
+        var mine = module?.IsUserCode ?? IsUserModule(path);
+        lock (_gate)
+        {
+            // Kept only if the modules and projects it was made from haven't changed meanwhile (asked off the UI thread).
+            if (generation == _userCodeGeneration)
+            {
+                _userCode[path] = mine;
+            }
+        }
+
+        return mine;
     }
 
     /// <summary>
@@ -1699,6 +1765,16 @@ public sealed class DebugService : IAsyncDisposable
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Counts the stops and resumes: a loop over the threads (one request each, which the adapter answers one at a time)
+    /// stops asking once the program has run on, and doesn't hold up the next stop's own requests behind its own (M56).
+    /// </summary>
+    private int _stops;
+
+    /// <summary>Whether the program is still at the stop <paramref name="stop"/> counted, and the loop is still wanted.</summary>
+    private bool IsStop(int stop, CancellationToken cancellationToken) =>
+        !cancellationToken.IsCancellationRequested && State == DebugState.Stopped && stop == Volatile.Read(ref _stops);
+
     /// <summary>The top frame of each thread (for the Threads window), while stopped. Threads without frames are left out.</summary>
     public async Task<IReadOnlyDictionary<int, StackFrame>> TopFramesAsync(CancellationToken cancellationToken)
     {
@@ -1709,8 +1785,14 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var stop = Volatile.Read(ref _stops);
         foreach (var thread in Threads)
         {
+            if (!IsStop(stop, linked.Token))
+            {
+                break; // the program ran on: the next stop asks again
+            }
+
             try
             {
                 var frames = await adapter.StackTraceAsync(thread.Id, 1, linked.Token).ConfigureAwait(false);
@@ -1738,8 +1820,14 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _session.Token);
+        var stop = Volatile.Read(ref _stops);
         foreach (var thread in Threads)
         {
+            if (!IsStop(stop, linked.Token))
+            {
+                break; // the program ran on: the next stop asks again
+            }
+
             try
             {
                 var frames = await adapter.StackTraceAsync(thread.Id, levels, linked.Token).ConfigureAwait(false);
@@ -1974,6 +2062,8 @@ public sealed class DebugService : IAsyncDisposable
                 var order = _modules.TryGetValue(id, out var existing) ? existing.Order : _modules.Count;
                 _modules[id] = new DebugModule(id, e.Module.Name, e.Module.Path, e.Module.SymbolStatus, e.Module.IsOptimized, e.Module.IsUserCode, order);
             }
+
+            ModulesUpdated();
         }
 
         ModulesChanged?.Invoke(this, EventArgs.Empty);
@@ -1987,6 +2077,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_resumedAt);
+        Interlocked.Increment(ref _stops);
         try
         {
             var (threadId, frames) = await StoppedThreadAsync(adapter, stopped).ConfigureAwait(false);

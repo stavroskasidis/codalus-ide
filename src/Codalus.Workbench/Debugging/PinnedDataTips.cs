@@ -36,6 +36,15 @@ public sealed class PinnedDataTip
     /// <summary>The adapter's reference to the value's members at the last pause (0: none); stale once the program runs.</summary>
     public int VariablesReference { get; internal set; }
 
+    /// <summary>How many named children the adapter counted at the last pause (netcoredbg's count of an array's elements).</summary>
+    public int? NamedVariables { get; internal set; }
+
+    /// <summary>
+    /// How many indexed children (an array's elements) the adapter counted at the last pause: a long array expands in
+    /// ranges read a page at a time (M56), not all at once.
+    /// </summary>
+    public int? IndexedVariables { get; internal set; }
+
     /// <summary>Whether the value changed at the last pause.</summary>
     public bool Changed { get; internal set; }
 
@@ -199,6 +208,8 @@ public sealed class PinnedDataTipStore
             tip.Value = value;
             tip.Type = response?.Type;
             tip.VariablesReference = response?.VariablesReference ?? 0;
+            tip.NamedVariables = response?.NamedVariables;
+            tip.IndexedVariables = response?.IndexedVariables;
         }
 
         Changed?.Invoke(this, null);

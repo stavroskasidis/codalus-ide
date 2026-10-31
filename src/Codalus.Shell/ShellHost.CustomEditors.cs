@@ -56,12 +56,15 @@ public sealed partial class ShellHost
             });
     }
 
-    /// <summary>Opens <paramref name="path"/> in <paramref name="editor"/>; false (after saying why) when its plugin couldn't.</summary>
-    private async Task<bool> OpenInCustomEditorAsync(string path, Workbench.Plugins.ContributedCustomEditor editor, bool preview)
+    /// <summary>
+    /// Opens <paramref name="path"/> in <paramref name="editor"/>; false (after saying why) when its plugin couldn't.
+    /// <paramref name="activate"/> false adds the tab behind the active one (files opened together, M56).
+    /// </summary>
+    private async Task<bool> OpenInCustomEditorAsync(string path, Workbench.Plugins.ContributedCustomEditor editor, bool preview, bool activate = true)
     {
         if (Layout.FindDocument<CustomEditorDocument>(CustomEditorDocument.IdFor(path)) is { } open)
         {
-            Layout.OpenDocument(open, preview, focus: !preview);
+            Layout.OpenDocument(open, preview, focus: !preview, activate);
             return true;
         }
 
@@ -71,7 +74,7 @@ public sealed partial class ShellHost
             var viewId = await Plugins.OpenCustomEditorAsync(editor, path, text, CancellationToken.None).ConfigureAwait(true);
             var document = new CustomEditorDocument(path, viewId, editor, Plugins);
             document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
-            Layout.OpenDocument(document, preview, focus: !preview);
+            Layout.OpenDocument(document, preview, focus: !preview, activate);
             return true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)

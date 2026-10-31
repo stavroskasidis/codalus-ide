@@ -106,6 +106,23 @@ public sealed class ProjectWatcherTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Dropped_events_report_the_watched_folders_and_say_anything_below_may_have_changed()
+    {
+        // Show All Files lists the projects whose folders hold a changed folder: the watched folders alone held no nested
+        // project, and every listing stayed as it was, deleted files and all (M56).
+        _watcher.OnOverflow();
+        await WaitUntilAsync(() => Reported().Any(c => c.Overflowed));
+        var overflow = Reported().First(c => c.Overflowed);
+        Assert.True(overflow.SolutionFileChanged);
+        Assert.Contains(_root, overflow.Directories);
+
+        // What comes after doesn't say so.
+        Directory.CreateDirectory(Path.Combine(_root, "App", "Models"));
+        await WaitUntilAsync(() => Reported().Any(c => !c.Overflowed && c.Directories.Contains(Path.Combine(_root, "App"))));
+        Assert.Single(Reported(), c => c.Overflowed);
+    }
+
+    [Fact]
     public async Task Other_changes_are_reported_during_a_restore()
     {
         _watcher.HoldRestoreOutputs();

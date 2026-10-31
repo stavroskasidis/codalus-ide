@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Projects.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
 using Codalus.Workbench.Projects;
@@ -17,7 +18,7 @@ public sealed partial class ShellHost
 
     private void InitializeFindInFiles()
     {
-        FindResults = new FindResultsViewModel(FilesToSearchAsync, OpenTextOf, OpenFindResultAsync);
+        FindResults = new FindResultsViewModel(FilesToSearchAsync, OpenFindResultAsync);
         FindResults.ShowRequested += (_, _) => Layout.ShowToolWindow(FindResultsViewModel.ToolWindowId, focus: false);
         FindResults.RootFolder = () => Solutions.Solution?.Directory;
         FindReplace = new FindReplaceViewModel(
@@ -39,23 +40,29 @@ public sealed partial class ShellHost
         return selection is { IsEmpty: false, IsMultiline: false } ? selection.GetText() : null;
     }
 
-    /// <summary>The files a search looks in: its scope's, with its file types applied (except to the current document).</summary>
-    private async Task<IReadOnlyList<string>> FilesToSearchAsync(FindInFilesOptions options)
+    /// <summary>
+    /// The files a search looks in: its scope's, with its file types applied (except to the current document), and their
+    /// open texts, gathered off the UI thread (<see cref="GatherAsync"/>).
+    /// </summary>
+    private Task<FilesToSearch> FilesToSearchAsync(FindInFilesOptions options, CancellationToken cancellationToken)
     {
         var filter = new FileTypeFilter(options.FileTypes);
+        var root = Solutions.Solution?.Directory;
         switch (options.LookIn)
         {
             case FindScopes.EntireSolution:
-                return Filter(SearchableFiles(), Solutions.Solution?.Directory);
+                return GatherAsync(SearchableFiles(), path => filter.Matches(path, root), mustExist: true, cancellationToken);
 
             case FindScopes.CurrentProject:
-                return Filter(CurrentProjectFiles(), Solutions.Solution?.Directory);
+                return GatherAsync(CurrentProjectFiles(), path => filter.Matches(path, root), mustExist: true, cancellationToken);
 
             case FindScopes.CurrentDocument:
-                return ActiveEditor is { } editor && !editor.Model.IsReadOnly ? [editor.Model.Path] : [];
+                var document = ActiveEditor is { } editor && !editor.Model.IsReadOnly ? editor.Model.Path : null;
+                return GatherAsync(() => document is null ? [] : [document], null, mustExist: false, cancellationToken);
 
             case FindScopes.OpenDocuments:
-                return Filter([.. _models.Values.Where(m => !m.IsReadOnly).Select(m => m.Path).Order(StringComparer.OrdinalIgnoreCase)], Solutions.Solution?.Directory);
+                List<string> open = [.. _models.Values.Where(m => !m.IsReadOnly).Select(m => m.Path)];
+                return GatherAsync(() => open, path => filter.Matches(path, root), mustExist: false, cancellationToken);
 
             default:
                 var folder = options.LookIn;
@@ -64,30 +71,28 @@ public sealed partial class ShellHost
                     throw new DirectoryNotFoundException($"The folder '{folder}' doesn't exist.");
                 }
 
-                return await Task.Run(() => Filter(
-                    [.. Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
-                        .Order(StringComparer.OrdinalIgnoreCase)],
-                    folder)).ConfigureAwait(true);
+                return GatherAsync(
+                    () => Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }),
+                    path => filter.Matches(path, folder),
+                    mustExist: false,
+                    cancellationToken);
         }
-
-        IReadOnlyList<string> Filter(IReadOnlyList<string> files, string? root) => [.. files.Where(f => filter.Matches(f, root))];
     }
 
-    /// <summary>The active document's project's files (project items that exist and the project file), or none.</summary>
-    private IReadOnlyList<string> CurrentProjectFiles()
+    /// <summary>The active document's project's files (its items and the project file), listed when called (off the UI thread), or none.</summary>
+    private Func<IEnumerable<string>> CurrentProjectFiles()
     {
         var path = ActiveEditor?.Model.Path;
-        var project = path is null ? null : Solutions.Projects.Values.FirstOrDefault(p =>
-            SolutionService.PathComparer.Equals(p.Path, path) || p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path)));
-        if (project is null)
-        {
-            return [];
-        }
-
-        var files = new HashSet<string>(SolutionService.PathComparer) { project.Path };
-        files.UnionWith(project.Items.Where(i => i.Kind != "Folder").Select(i => i.Path));
-        return [.. files.Where(File.Exists).Order(StringComparer.OrdinalIgnoreCase)];
+        var projects = Solutions.Projects.Values;
+        return () => ProjectListing(projects, path) is { } project
+            ? project.Items.Where(i => i.Kind != "Folder").Select(i => i.Path).Prepend(project.Path)
+            : [];
     }
+
+    /// <summary>The first of <paramref name="projects"/> that is <paramref name="path"/> or lists it.</summary>
+    private static ProjectInfo? ProjectListing(IEnumerable<ProjectInfo> projects, string? path) =>
+        path is null ? null : projects.FirstOrDefault(p =>
+            SolutionService.PathComparer.Equals(p.Path, path) || p.Items.Any(i => SolutionService.PathComparer.Equals(i.Path, path)));
 
     /// <summary>Opens a result in the text editor with the match selected.</summary>
     private async Task OpenFindResultAsync(string path, Position position, int length)
@@ -144,9 +149,10 @@ public sealed partial class ShellHost
     {
         var regex = options.CreateRegex();
         IReadOnlyList<string> files;
+        IReadOnlyDictionary<string, string> openTexts;
         try
         {
-            files = await FilesToSearchAsync(options).ConfigureAwait(true);
+            (files, openTexts) = await FilesToSearchAsync(options, CancellationToken.None).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -154,7 +160,6 @@ public sealed partial class ShellHost
             return;
         }
 
-        var openTexts = files.Select(f => (f, OpenTextOf(f))).Where(x => x.Item2 is not null).ToDictionary(x => x.f, x => x.Item2!, SolutionService.PathComparer);
         StatusBar.ShowMessage(Localizer.Format("msg.findInFiles.searchingFiles", "Searching {0} files…", files.Count));
         var (changes, rows, occurrences) = await Task.Run(async () =>
         {

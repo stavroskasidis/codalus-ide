@@ -31,6 +31,9 @@ public sealed class TestFilter
 {
     private readonly List<(string Field, string Value, bool Negated)> _terms = [];
 
+    // The terms by field and negation, grouped once: each group must match (or, negated, must not).
+    private (bool Negated, (string Field, string Value, bool Negated)[] Terms)[] _groups = [];
+
     public static TestFilter Empty { get; } = new();
 
     public bool IsEmpty => _terms.Count == 0;
@@ -54,6 +57,7 @@ public sealed class TestFilter
             }
         }
 
+        filter._groups = [.. filter._terms.GroupBy(t => (t.Field, t.Negated)).Select(g => (g.Key.Negated, g.ToArray()))];
         return filter;
     }
 
@@ -90,10 +94,10 @@ public sealed class TestFilter
     /// <summary>Whether a test (leaf) matches.</summary>
     public bool Matches(TestNode leaf)
     {
-        foreach (var group in _terms.GroupBy(t => (t.Field, t.Negated)))
+        foreach (var (negated, terms) in _groups)
         {
-            var any = group.Any(t => Term(leaf, t.Field, t.Value));
-            if (group.Key.Negated ? any : !any)
+            var any = terms.Any(t => Term(leaf, t.Field, t.Value));
+            if (negated ? any : !any)
             {
                 return false;
             }
@@ -256,18 +260,22 @@ public static class TestProjection
             return null;
         }
 
-        group.Tests = group.Children.Sum(c => c.Tests);
-        group.Outcome = Aggregate(group.Children);
-        return group;
-    }
+        // The worst outcome; a group whose tests all passed or were skipped (some passed) is Passed.
+        var tests = 0;
+        var worst = TestOutcome.None;
+        var anyPassed = false;
+        var allPassedOrSkipped = true;
+        foreach (var child in group.Children)
+        {
+            tests += child.Tests;
+            worst = child.Outcome > worst ? child.Outcome : worst;
+            anyPassed |= child.Outcome == TestOutcome.Passed;
+            allPassedOrSkipped &= child.Outcome is TestOutcome.Passed or TestOutcome.Skipped;
+        }
 
-    /// <summary>The worst outcome; a group whose tests all passed or were skipped (some passed) is Passed.</summary>
-    private static TestOutcome Aggregate(List<TestGroup> children)
-    {
-        var worst = children.Max(c => c.Outcome);
-        return worst == TestOutcome.Skipped && children.Any(c => c.Outcome == TestOutcome.Passed) && children.All(c => c.Outcome is TestOutcome.Passed or TestOutcome.Skipped)
-            ? TestOutcome.Passed
-            : worst;
+        group.Tests = tests;
+        group.Outcome = worst == TestOutcome.Skipped && anyPassed && allPassedOrSkipped ? TestOutcome.Passed : worst;
+        return group;
     }
 
     /// <summary>The groups a test goes in, with a sort order.</summary>
@@ -350,16 +358,36 @@ public static class TestProjection
     /// <summary>The summary line: total, passed, failed, skipped, not run.</summary>
     public static string Summary(IReadOnlyList<TestNode> roots)
     {
-        var leaves = roots.SelectMany(r => r.Leaves()).ToList();
-        int Count(Func<TestOutcome, bool> predicate) => leaves.Count(l => predicate(l.Outcome));
+        // One walk: the leaves were listed, then counted four times.
+        int total = 0, passed = 0, failed = 0, skipped = 0;
+        foreach (var root in roots)
+        {
+            foreach (var leaf in root.Leaves())
+            {
+                total++;
+                switch (leaf.Outcome)
+                {
+                    case TestOutcome.Passed:
+                        passed++;
+                        break;
+                    case TestOutcome.Failed or TestOutcome.Errored:
+                        failed++;
+                        break;
+                    case TestOutcome.Skipped:
+                        skipped++;
+                        break;
+                }
+            }
+        }
+
         var culture = CultureInfo.CurrentCulture;
         return string.Format(
             culture,
             "{0} tests · {1} passed · {2} failed · {3} skipped · {4} not run",
-            leaves.Count,
-            Count(o => o == TestOutcome.Passed),
-            Count(o => o.IsFailure()),
-            Count(o => o == TestOutcome.Skipped),
-            Count(o => o is TestOutcome.None or TestOutcome.Queued or TestOutcome.Running));
+            total,
+            passed,
+            failed,
+            skipped,
+            total - passed - failed - skipped); // not run, queued or running
     }
 }

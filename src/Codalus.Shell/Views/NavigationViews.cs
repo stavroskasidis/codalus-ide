@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -12,17 +11,23 @@ using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>The Document Outline (M12a): click or Enter moves the caret to a symbol; the caret's symbol is selected.</summary>
+/// <summary>
+/// The Document Outline (M12a): click or Enter moves the caret to a symbol; the caret's symbol is selected. Its rows expand
+/// and collapse as a tree view's: the chevron, Left and Right (Left on a child goes to its parent). It tells its view model
+/// whether it's shown (the rows follow the editor only then).
+/// </summary>
 public sealed partial class DocumentOutlineView : UserControl, IPaneView
 {
-    private bool _selecting;
+    private DocumentOutlineViewModel? _model;
 
     public DocumentOutlineView()
     {
         InitializeComponent();
-        Tree.Tapped += OnTapped;
-        Tree.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Bubble);
+        List.Tapped += OnTapped;
+        List.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
+        List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
         FilterBox.AddHandler(KeyDownEvent, OnFilterKeyDown, RoutingStrategies.Tunnel);
+        ShownTracker.Track(this);
     }
 
     public void FocusPrimary() => FilterBox.Focus();
@@ -30,53 +35,107 @@ public sealed partial class DocumentOutlineView : UserControl, IPaneView
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
-        if (DataContext is DocumentOutlineViewModel vm)
+        if (_model is not null)
         {
-            vm.PropertyChanged += (_, args) =>
-            {
-                if (args.PropertyName == nameof(DocumentOutlineViewModel.Current) && vm.Current is { } current && !Tree.IsKeyboardFocusWithin)
-                {
-                    _selecting = true;
-                    Tree.SelectedItem = current;
-                    _selecting = false;
-                }
-            };
+            _model.PropertyChanged -= OnModelChanged;
+        }
+
+        _model = DataContext as DocumentOutlineViewModel;
+        if (_model is not null)
+        {
+            _model.PropertyChanged += OnModelChanged;
         }
     }
 
+    /// <summary>The caret's symbol is selected and brought into view, unless the user is in the list.</summary>
+    private void OnModelChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DocumentOutlineViewModel.Current) && _model?.Current is { } current && !List.IsKeyboardFocusWithin)
+        {
+            List.SelectedItem = current;
+            List.ScrollIntoView(current);
+        }
+    }
+
+    private static SymbolNodeViewModel? RowAt(object? source) =>
+        (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as SymbolNodeViewModel;
+
+    private static bool IsChevron(object? source) =>
+        (source as Visual)?.FindAncestorOfType<Border>(includeSelf: true) is { } border && border.Classes.Contains("chevron");
+
+    /// <summary>
+    /// The chevron collapses and expands its row at each press: on a tap, a second click soon after the first was a double
+    /// tap, and the row stayed as the first click left it.
+    /// </summary>
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (IsChevron(e.Source) && RowAt(e.Source) is { } row && _model is { } vm && e.GetCurrentPoint(List).Properties.IsLeftButtonPressed)
+        {
+            vm.Toggle(row);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>A click on a row (not its chevron) goes to its symbol.</summary>
     private void OnTapped(object? sender, TappedEventArgs e)
     {
-        if (_selecting || e.Source is not Visual visual || visual.FindAncestorOfType<ToggleButton>(includeSelf: true) is not null)
+        if (RowAt(e.Source) is { } row && _model is { } vm && !IsChevron(e.Source))
         {
-            return;
-        }
-
-        if (visual.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext is SymbolNodeViewModel node)
-        {
-            (DataContext as DocumentOutlineViewModel)?.Navigate(node);
+            vm.Navigate(row);
         }
     }
 
     private void OnKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && Tree.SelectedItem is SymbolNodeViewModel node && DataContext is DocumentOutlineViewModel vm)
+        if (List.SelectedItem is not SymbolNodeViewModel row || _model is not { } vm || e.KeyModifiers != KeyModifiers.None)
         {
-            vm.Navigate(node);
-            e.Handled = true;
+            return;
         }
+
+        switch (e.Key)
+        {
+            case Key.Enter:
+                vm.Navigate(row);
+                break;
+            case Key.Right when row.HasChildren && !row.IsExpanded:
+                vm.SetExpanded(row, true);
+                break;
+            case Key.Left when row.HasChildren && row.IsExpanded:
+                vm.SetExpanded(row, false);
+                break;
+            case Key.Left when vm.Rows.IndexOf(row) is var index and > 0:
+                // To the parent's row.
+                for (var i = index - 1; i >= 0; i--)
+                {
+                    if (vm.Rows[i].Depth < row.Depth)
+                    {
+                        List.SelectedItem = vm.Rows[i];
+                        List.ScrollIntoView(vm.Rows[i]);
+                        List.ContainerFromItem(vm.Rows[i])?.Focus();
+                        break;
+                    }
+                }
+
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
     }
 
     private void OnFilterKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Down && DataContext is DocumentOutlineViewModel { Roots.Count: > 0 } vm)
+        if (e.Key == Key.Down && _model is { Rows.Count: > 0 } vm)
         {
-            Tree.SelectedItem = vm.Roots[0];
-            Tree.ContainerFromItem(vm.Roots[0])?.Focus();
+            List.SelectedItem = vm.Rows[0];
+            List.ScrollIntoView(vm.Rows[0]);
+            List.ContainerFromItem(vm.Rows[0])?.Focus();
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter && DataContext is DocumentOutlineViewModel { Roots.Count: > 0 } first)
+        else if (e.Key == Key.Enter && _model is { Rows.Count: > 0 } first)
         {
-            first.Navigate(first.Roots[0]);
+            first.Navigate(first.Rows[0]);
             e.Handled = true;
         }
     }

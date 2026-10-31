@@ -540,7 +540,8 @@ jobs:
   # GPU-less VMs, so the numbers are indicative only; authoritative numbers come from reference hardware
   # (docs/adr/0002-performance-budgets.md). On master the regression gate (`compare`) fails when a scenario regresses
   # against the median of earlier runs on the same runner OS: sizes against one run or a value accepted in
-  # benchmarks/accepted.json, latency and memory only against 3 runs on the same runner CPU (fewer: a warning).
+  # benchmarks/accepted.json, latency and memory only against 3 runs on the same runner CPU (fewer: a warning). The
+  # everyday flows (M56) only warn until they have budgets.
   benchmarks:
     needs: plan
     if: needs.plan.outputs.kind == 'stable' || inputs.benchmarks
@@ -584,7 +585,7 @@ jobs:
       - name: Run benchmarks
         # Bounded below the job's limit: a slow run still reports what it measured, and its log is kept. Cold start takes
         # 6 launches (its p50 of 5 warm ones; with 3 it was the lower of 2), a few seconds each; the heavier scenarios 3
-        # (ADR 0002, amendment 2026-10-27).
+        # (ADR 0002, amendment 2026-10-27). The everyday flows (M56) take a few minutes a run, 12 at most.
         timeout-minutes: 70
         shell: bash
         run: |
@@ -592,6 +593,12 @@ jobs:
           status=0
           bench --scenarios cold-start --runs 6 || status=$?
           bench --scenarios editor-100k,self-driven,binary-size --runs 3 || status=$?
+          # The everyday flows' UI-thread stalls are informative until CI's first measurements set their budgets
+          # (informativeScenarios in benchmarks/budgets.json), and so is a run of them that fails: a warning, never the
+          # release (the harness also annotates a run that timed out, measured fewer flows or noted a problem).
+          # TODO(issue): count its status with the others once it has budgets.
+          bench --scenarios everyday --runs 3 \
+            || echo "::warning title=Benchmarks (${RUNNER_OS})::the everyday scenario failed; it's informative until it has budgets"
           exit "$status"
       - name: Report
         if: always()

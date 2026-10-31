@@ -196,6 +196,31 @@ public sealed class GitDepthShellTests
         Assert.False(history.CanCompareWithPrevious);
     }
 
+    /// <summary>
+    /// Select All in a long history keeps the list's order, each commit's place looked up once (M56): a search of the
+    /// loaded commits for each selected one was 3 billion comparisons with 80,000 loaded, seconds on the UI thread. The
+    /// budget is a second, many times what the lookup takes on a loaded machine and less than the search took on a fast one.
+    /// </summary>
+    [Fact]
+    public void Selecting_every_commit_of_a_long_history_keeps_the_lists_order_at_once()
+    {
+        using var git = new GitService(watch: false);
+        var history = new GitHistoryViewModel(git, new GitLogQuery(), "History", (_, _) => Task.CompletedTask);
+        var rows = Enumerable.Range(0, 80_000)
+            .Select(i => new GitCommitRow(new GitCommit($"{i:x40}", [], "Ada Tester", "ada@example.com", DateTimeOffset.UnixEpoch, [], $"Commit {i}")))
+            .ToList();
+        foreach (var row in rows)
+        {
+            history.Rows.Add(row);
+        }
+
+        var started = Stopwatch.StartNew();
+        history.SelectedRows = [.. Enumerable.Reverse(rows)];
+        var elapsed = started.Elapsed;
+        Assert.Equal(rows, history.SelectedRows);
+        Assert.True(elapsed < TimeSpan.FromSeconds(1), $"Select All took {elapsed.TotalMilliseconds:0} ms");
+    }
+
     [AvaloniaFact]
     public async Task A_conflict_is_resolved_in_the_merge_editor_and_the_merge_continued()
     {

@@ -357,9 +357,14 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.Equal("null", members.Single(v => v.Name == "_items").Value);
         var codes = members.Single(v => v.Name == "_codes");
         Assert.Equal("{int[3]}", codes.Value);
+        Assert.Equal(3, codes.IndexedVariables); // counted, so a long one shows in ranges (M56)
 
         // Count's getter ran (a func-eval neuters the values read before it): what's expanded now is read again.
         Assert.Equal(["7", "8", "9"], (await dap.VariablesAsync(codes.VariablesReference)).Select(v => v.Value));
+
+        // A page of the elements, as a range reads them: start and count.
+        var page = (await dap.RequestAsync("variables", new VariablesArguments(codes.VariablesReference, "indexed", 1, 1), s_json.VariablesArguments, s_json.VariablesResponse)).Variables;
+        Assert.Equal(("[1]", "8", "this._codes[1]"), (Assert.Single(page).Name, page[0].Value, page[0].EvaluateName));
         Assert.Contains(await dap.VariablesAsync(locals.Single(v => v.Name == "item").VariablesReference), v => v is { Name: "Name", Value: "\"Tea\"" });
 
         // Evaluation: members, operators, indexers, calls with overloads (func-eval), static fields, errors.
