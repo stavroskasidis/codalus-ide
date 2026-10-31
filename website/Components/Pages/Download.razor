@@ -2,7 +2,7 @@
 @inject Releases Releases
 @inject SiteOptions Site
 
-<PageMeta Image="setup.png" ImageAlt="The first-run setup of Codalus IDE" Title="Download" Software="true" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, an AppImage, and apt and dnf repositories." />
+<PageMeta Image="setup.png" ImageAlt="The first-run setup of Codalus IDE" Title="Download" Software="true" Description="Download Codalus IDE for Windows, macOS and Linux: installers that update themselves, a portable zip, apt and dnf repositories, the AUR, and an AppImage for any Linux distribution." />
 
 <div class="container">
     <div class="intro-split rise">
@@ -67,43 +67,82 @@
 
         <div class="os-panel" role="tabpanel" id="linux-panel" aria-labelledby="tab-linux">
             <div class="os-head"><h2 id="linux">Linux</h2><span>x64 or arm64, X11 or Wayland through XWayland</span></div>
-            <DownloadFile Kind="AppImage" Suffix="linux-x64.AppImage" Arm64Suffix="linux-arm64.AppImage" Recommended="true">
-                <code>chmod +x</code> the file and run it. It updates itself.
-            </DownloadFile>
-            <DownloadFile Kind="Debian and Ubuntu package" Suffix="linux-x64.deb" Arm64Suffix="linux-arm64.deb">
-                <code>sudo apt install ./</code> the file, or use the apt repository below to get updates with the system.
-            </DownloadFile>
-            <DownloadFile Kind="Fedora and RHEL package" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
-                <code>sudo dnf install ./</code> the file, or use the dnf repository below.
-            </DownloadFile>
-            <DownloadFile Kind="Tarball" Suffix="linux-x64.tar.gz" Arm64Suffix="linux-arm64.tar.gz">
-                Extract it and run <code>codalus/codalus</code>.
-            </DownloadFile>
-            <div class="os-foot">
-                <strong>Package repositories</strong>
-                <span>Installs from the apt and dnf repositories update with the system. The repositories and the .rpm packages are signed with the project's key, and the packages download from the GitHub release.</span>
+            @* A picker of distributions (site.js; without script every panel shows). Each leads with what installs from
+               its package manager, which adds the menu entry and the command and updates with the system; the
+               AppImage is for the rest. The repositories' headings keep their old anchors (#apt, #dnf, #zypper, #aur). *@
+            <div class="distros" data-tabs data-tabs-hash data-tabs-detect-distro>
+                <div class="tabs tabs-bar" role="tablist" aria-label="Linux distribution" hidden>
+                    @foreach (var (key, name) in s_distros)
+                    {
+                        <button class="tab" type="button" role="tab" id="tab-@key" aria-controls="@key-panel" data-key="@key">@name</button>
+                    }
+                </div>
+                <div class="distro" role="tabpanel" id="debian-panel" aria-labelledby="tab-debian">
+                    <div class="distro-repo">
+                        <h2 id="apt">Debian, Ubuntu and Linux Mint: the apt repository <span class="badge">Recommended</span></h2>
+                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo apt upgrade</code> updates it with everything else.</p>
+                        <Commands Text="@Apt" />
+                        <p>Needs apt 1.6 or later (Debian 10, Ubuntu 18.04). Added the repository before 0.4.0? Run the second command again.</p>
+                    </div>
+                    <DownloadFile Kind="The .deb on its own" Suffix="linux-x64.deb" Arm64Suffix="linux-arm64.deb">
+                        <code>sudo apt install ./</code> the file. Without the repository it doesn't update.
+                    </DownloadFile>
+                </div>
+                <div class="distro" role="tabpanel" id="fedora-panel" aria-labelledby="tab-fedora">
+                    <div class="distro-repo">
+                        <h2 id="dnf">Fedora, RHEL and their relatives: the dnf repository <span class="badge">Recommended</span></h2>
+                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo dnf upgrade</code> updates it with everything else.</p>
+                        <Commands Text="@Dnf" />
+                        <p>Use <code>nightly</code> in place of <code>stable</code> for nightly builds.</p>
+                    </div>
+                    <DownloadFile Kind="The .rpm on its own" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
+                        <code>sudo dnf install ./</code> the file. Without the repository it doesn't update.
+                    </DownloadFile>
+                </div>
+                <div class="distro" role="tabpanel" id="opensuse-panel" aria-labelledby="tab-opensuse">
+                    <div class="distro-repo">
+                        <h2 id="zypper">openSUSE: the rpm repository, with zypper <span class="badge">Recommended</span></h2>
+                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. <code>sudo zypper update</code> updates it with everything else.</p>
+                        <Commands Text="@Zypper" />
+                        <p>Added it before 0.4.0? Remove it with <code>sudo zypper removerepo codalus-stable</code> and add it again.</p>
+                    </div>
+                    <DownloadFile Kind="The .rpm on its own" Suffix="linux-x64.rpm" Arm64Suffix="linux-arm64.rpm">
+                        <code>sudo zypper install ./</code> the file. Without the repository it doesn't update.
+                    </DownloadFile>
+                </div>
+                <div class="distro" role="tabpanel" id="arch-panel" aria-labelledby="tab-arch">
+                    <div class="distro-repo">
+                        <h2 id="aur">Arch Linux and Manjaro: the AUR <span class="badge">Recommended</span></h2>
+                        <p>Adds Codalus IDE to the applications menu and <code>codalus</code> to your PATH. An AUR helper updates it with everything else.</p>
+                        <Commands Text="@Aur" />
+                        <p>Or with an AUR helper: <code>yay -S codalus-bin</code>.</p>
+                    </div>
+                </div>
+                <div class="distro" role="tabpanel" id="other-panel" aria-labelledby="tab-other">
+                    <div class="distro-repo">
+                        <h2 id="appimage">Any distribution: the AppImage</h2>
+                        <p>One file that runs on any distribution, without administrator rights, and updates itself. It doesn't add itself to the applications menu: on Debian, Ubuntu, Fedora, openSUSE or Arch, their package does.</p>
+                    </div>
+                    <DownloadFile Kind="AppImage" Suffix="linux-x64.AppImage" Arm64Suffix="linux-arm64.AppImage" Recommended="true">
+                        Make it executable, then open it (<a href="download/#appimage-run">how</a>).
+                    </DownloadFile>
+                    <div class="distro-repo">
+                        <h2 id="appimage-run">Running the AppImage</h2>
+                        <ul>
+                            <li><strong>From the file manager:</strong> right-click the file, choose Properties, and turn on <em>Executable as Program</em> (GNOME Files) or <em>Is executable</em> under Permissions (Dolphin). Then double-click it.</li>
+                            <li><strong>From a terminal:</strong></li>
+                        </ul>
+                        <Commands Text="@AppImage" />
+                        <p>It needs FUSE, which desktop installations have: the <code>fuse3</code> package (not the older <code>libfuse2</code> that some AppImages ask for). Where FUSE isn't available, in a container say, it says “Cannot mount AppImage”: start it with <code>--appimage-extract-and-run</code>, or set <code>APPIMAGE_EXTRACT_AND_RUN=1</code>.</p>
+                    </div>
+                    <DownloadFile Kind="Tarball" Suffix="linux-x64.tar.gz" Arm64Suffix="linux-arm64.tar.gz">
+                        Extract it and run <code>codalus/codalus</code>. It doesn't update itself.
+                    </DownloadFile>
+                </div>
             </div>
-            <div class="repo-grid" style="margin: 0; padding: 20px 24px 24px">
-                <div class="card card-outline">
-                    <h3 id="apt">Debian and Ubuntu (apt)</h3>
-                    <Commands Text="@Apt" />
-                    <p>Needs apt 1.6 or later (Debian 10, Ubuntu 18.04). Added the repository before 0.4.0? Run the second command again.</p>
-                </div>
-                <div class="card card-outline">
-                    <h3 id="dnf">Fedora and RHEL (dnf)</h3>
-                    <Commands Text="@Dnf" />
-                    <p>Use <code>nightly</code> in place of <code>stable</code> for nightly builds.</p>
-                </div>
-                <div class="card card-outline">
-                    <h3 id="zypper">openSUSE (zypper)</h3>
-                    <Commands Text="@Zypper" />
-                    <p>The same rpm repository, so it updates with the system. Added it before 0.4.0? Remove it with <code>sudo zypper removerepo codalus-stable</code> and add it again.</p>
-                </div>
-                <div class="card card-outline">
-                    <h3 id="aur">Arch Linux (AUR)</h3>
-                    <Commands Text="@Aur" />
-                    <p>Or with an AUR helper: <code>yay -S codalus-bin</code>.</p>
-                </div>
+            <div class="os-foot">
+                <strong>Signed packages</strong>
+                <span>The apt and dnf repositories and the .rpm packages are signed with the project's key, and the packages download from the GitHub release.</span>
             </div>
         </div>
     </section>
@@ -162,6 +201,20 @@
         sudo rpm --import {Site.BaseUrl}codalus-packages.asc
         sudo zypper addrepo {Site.BaseUrl}rpm/codalus-stable.repo
         sudo zypper install codalus
+        """;
+
+    private static readonly (string Key, string Name)[] s_distros =
+    [
+        ("debian", "Debian and Ubuntu"),
+        ("fedora", "Fedora and RHEL"),
+        ("opensuse", "openSUSE"),
+        ("arch", "Arch Linux"),
+        ("other", "Other distributions"),
+    ];
+
+    private string AppImage => $"""
+        chmod +x {Releases.FileName("linux-x64.AppImage")}
+        ./{Releases.FileName("linux-x64.AppImage")}
         """;
 
     private const string Aur = """
