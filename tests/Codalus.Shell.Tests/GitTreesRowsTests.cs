@@ -177,6 +177,17 @@ public sealed class GitTreesRowsTests
         Assert.False(Row(vm, "tags").IsExpanded);
         Assert.EndsWith(", collapsed", Row(vm, "tags").AccessibleName, StringComparison.Ordinal);
 
+        // The current branch's history: its one commit has all 7,001 refs, of which the Branch / Tag column makes 8 chips
+        // (it made one for each, 0.5 to 1 s for 320 at each selection), every name in the tooltip.
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0 }, seconds: 60);
+        var commit = vm.History!.Rows.Single();
+        Assert.Equal(7001, commit.RefChips.Count);
+        Assert.Equal(GitCommitRow.MaxShownRefs, commit.ShownRefs.Count);
+        Assert.Contains("t04999", commit.RefsTip, StringComparison.Ordinal);
+        ShellFixture.RenderFrame(f.Window);
+        var history = f.Window.GetVisualDescendants().OfType<GitHistoryView>().Single(v => v.IsEffectivelyVisible);
+        Assert.InRange(history.GetVisualDescendants().OfType<Border>().Count(b => b.Classes.Contains("ref")), 1, GitCommitRow.MaxShownRefs);
+
         // The tags expanded: 5,000 rows more, one insertion; only the rows in view get controls.
         var rows = Changes(vm.Rows);
         var count = vm.Rows.Count;
@@ -236,6 +247,14 @@ public sealed class GitTreesRowsTests
         vm.Filter = string.Empty;
         await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
         Assert.Equal(count + 5000 - 2, vm.Rows.Count); // the tags as the user left them, expanded
+
+        // Still nothing selected after those builds and another ref's change: the current branch was selected only at first.
+        Git(folder, "branch", "another");
+        await StatusReadAsync(f, vm);
+        Assert.NotNull(vm.Find("refs/heads/another"));
+        Assert.Null(vm.Selected);
+        Assert.Null(vm.SelectedRow);
+        Assert.Null(vm.History);
 
         // Behind another tab: git's changes read nothing and build nothing.
         await ShellFixture.PumpUntil(() => !vm.IsReading);
@@ -360,6 +379,10 @@ public sealed class GitTreesRowsTests
         f.Press(Key.Enter);
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "team01/b0150" });
         await ShellFixture.PumpUntil(() => vm.Find("refs/heads/team01/b0150") is { IsCurrent: true } && !vm.IsReading);
+        // Selected first, its history loaded: the headless platform stamps a click when the test sends it, so the work of
+        // the first click's selection counted against the double-click time (real platforms stamp it when the user clicks).
+        await FocusAsync(tree, Row(vm, "b0007"));
+        await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0 });
         var b0007 = await ItemAsync(tree, Row(vm, "b0007"));
         Click(f.Window, b0007.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "b0007"), clicks: 2);
         await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "team00/b0007" });
@@ -490,5 +513,37 @@ public sealed class GitTreesRowsTests
         vm.IsTreeView = true;
         await ShellFixture.PumpUntil(() => vm.ViewsBuilt.Tree == 3);
         Assert.False(Row("src/D001").IsExpanded);
+
+        // The list chosen while a Refresh's tree is built: the tree is shown, then the list is built of the new files.
+        vm.TreeBuilt = () =>
+        {
+            vm.TreeBuilt = null;
+            vm.ViewIndex = 1;
+        };
+        await vm.LoadAsync();
+        Assert.True(vm.IsListView);
+        Assert.Equal((4, 3), vm.ViewsBuilt);
+        Assert.Equal(10_000, vm.Items.Count);
+        Assert.Same(vm.Files[0], vm.Items[0]);
+
+        // Refreshed in the list, then Tree, List and Tree while its tree is built, and a folder collapsed meanwhile: one
+        // tree built at a time, built again for the folder, which stays collapsed.
+        await vm.LoadAsync();
+        Assert.Equal((4, 4), vm.ViewsBuilt);
+        vm.TreeBuilt = () =>
+        {
+            vm.TreeBuilt = null;
+            vm.ViewIndex = 1;
+            vm.ViewIndex = 0;
+            vm.Changes.SetExpanded(Row("src/D003"), false);
+        };
+        vm.ViewIndex = 0;
+        await ShellFixture.PumpUntil(() => vm.ViewsBuilt.Tree >= 5);
+        var until = DateTime.UtcNow.AddMilliseconds(500);
+        await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until);
+        Assert.Equal((5, 4), vm.ViewsBuilt);
+        Assert.False(Row("src/D001").IsExpanded);
+        Assert.False(Row("src/D003").IsExpanded);
+        Assert.Equal(1 + 1 + 1000 + 9980, vm.Rows.Count);
     }
 }

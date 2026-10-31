@@ -476,8 +476,9 @@ public class EverydayResponsivenessTests
 
     /// <summary>
     /// The Git Repository document with 5,000 tags and 2,000 branches: typing in its filter, status reads with the tags
-    /// expanded, expanding and collapsing. Each keystroke and status read built a tree view item per ref on the UI thread,
-    /// and a filter expanded every match at each keystroke (M57).
+    /// expanded, selecting branches, expanding and collapsing. Each keystroke and status read built a tree view item per ref
+    /// on the UI thread, a filter expanded every match at each keystroke, and the history of the commit every ref is at
+    /// made a chip for each (M57).
     /// </summary>
     [AvaloniaFact]
     public async Task Git_repository_flows_on_seven_thousand_refs()
@@ -515,6 +516,17 @@ public class EverydayResponsivenessTests
                 var reads = vm.RefsReads;
                 await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
                 await ShellFixture.PumpUntil(() => vm.RefsReads > reads && !vm.IsReading, seconds: 60);
+            }
+        });
+
+        string[] branches = ["team00/b0007", "team01/b0150", "main"];
+        await FlowAsync(monitor, "selecting branches at the commit all 7,000 refs are at, each showing its history", async () =>
+        {
+            foreach (var name in branches)
+            {
+                vm.Selected = vm.Find("refs/heads/" + name);
+                await ShellFixture.PumpUntil(() => vm.History is { IsLoading: false, Rows.Count: > 0 } history && history.Title == name.Split('/')[^1], seconds: 60);
+                ShellFixture.RenderFrame(f.Window);
             }
         });
 

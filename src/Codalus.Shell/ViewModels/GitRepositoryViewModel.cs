@@ -321,6 +321,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     private CancellationTokenSource? _selectionCts;
     private GitRepositoryNode? _selected;
     private GitRepositoryRow? _selectedRow;
+    private bool _hasSelected;
     private string _filter = string.Empty;
     private bool _isLoading;
     private string? _error;
@@ -450,6 +451,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
 
             if (SetField(ref _selected, value))
             {
+                _hasSelected |= value is not null;
                 SyncSelectedRow();
                 _ = ShowAsync(value);
             }
@@ -759,12 +761,15 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             _rebuilding = false;
         }
 
-        // The same node selected again; the current branch at first; nothing for one that's gone (a deleted branch).
+        // The same node selected again; the current branch until something was selected; nothing for one that's gone (a
+        // deleted branch), and still nothing after the next build (M57: a filter or another ref's change selected the
+        // current branch again).
         var selected = selectedKey is null ? null : _byKey.GetValueOrDefault(selectedKey);
-        selected ??= _selected is null ? _byKey.Values.FirstOrDefault(n => n is { Kind: GitRepositoryNodeKind.Branch, IsCurrent: true }) : null;
+        selected ??= _hasSelected ? null : _byKey.Values.FirstOrDefault(n => n is { Kind: GitRepositoryNodeKind.Branch, IsCurrent: true });
 
         // The same branch at the same commit keeps its history (and its scroll); a moved branch reloads it.
         _selected = selected;
+        _hasSelected |= selected is not null;
         OnPropertyChanged(nameof(Selected));
         SyncSelectedRow(force: true);
         if (HistoryKey(selected) != _historyFor)

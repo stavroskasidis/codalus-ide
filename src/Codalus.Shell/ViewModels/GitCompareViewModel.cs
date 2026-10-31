@@ -23,6 +23,7 @@ public sealed class GitCompareViewModel : ObservableObject
     private bool _listStale = true;
     private int _version;
     private bool _showing;
+    private int _treeBuilding;
     private GitChangeRow? _selectedRow;
     private GitFileRow? _selectedItem;
     private string? _selectedKey;
@@ -69,6 +70,9 @@ public sealed class GitCompareViewModel : ObservableObject
 
     /// <summary>How many times the tree and the list were built (tests: only the shown view's).</summary>
     internal (int Tree, int List) ViewsBuilt { get; private set; }
+
+    /// <summary>Runs when a tree is built, before it's shown (tests: what the user does while it's built).</summary>
+    internal Action? TreeBuilt { get; set; }
 
     /// <summary>The Tree view's selection; Refresh selects the same node again.</summary>
     public GitChangeRow? SelectedRow
@@ -202,39 +206,75 @@ public sealed class GitCompareViewModel : ObservableObject
 
     /// <summary>
     /// Builds the view shown when it's out of date: the tree off the UI thread, shown in place with the folders the user
-    /// collapsed still collapsed, or the list with one reset; then the same selection.
+    /// collapsed still collapsed, or the list with one reset; then the same selection. The Tree and List switch works while
+    /// the tree is built, so once it's built the view shown then is built too (M57: a switch to List during a Refresh's
+    /// tree left the list empty); one tree is built at a time for a comparison, and again if a folder was collapsed or
+    /// expanded meanwhile.
     /// </summary>
     private async Task ShowViewAsync(int version)
     {
-        if (_isTreeView && _treeStale)
+        while (version == _version)
         {
-            var rows = _rows;
-            var root = _git.Root ?? string.Empty;
-            var collapsed = Changes.Collapsed;
-            var expandedChanged = Changes.ExpandedChanged;
-            var (tree, flat) = await Task.Run(() =>
+            if (_isTreeView && _treeStale)
             {
-                var built = GitChangesViewModel.BuildTree(root, rows, "compare", staged: true, collapsed, expandedChanged);
-                return (built, GitChangeTree.Flatten(built));
-            }).ConfigureAwait(true);
-            if (version != _version || !_isTreeView || !ReferenceEquals(rows, _rows))
+                if (_treeBuilding == version)
+                {
+                    return; // the build under way shows it
+                }
+
+                var rows = _rows;
+                var root = _git.Root ?? string.Empty;
+                var collapsed = Changes.Collapsed;
+                var expandedChanged = Changes.ExpandedChanged;
+                _treeBuilding = version;
+                IReadOnlyList<GitChangeNode> tree;
+                IReadOnlyList<(GitChangeNode Node, int Depth)> flat;
+                try
+                {
+                    (tree, flat) = await Task.Run(() =>
+                    {
+                        var built = GitChangesViewModel.BuildTree(root, rows, "compare", staged: true, collapsed, expandedChanged);
+                        return (built, GitChangeTree.Flatten(built));
+                    }).ConfigureAwait(true);
+                }
+                finally
+                {
+                    if (_treeBuilding == version)
+                    {
+                        _treeBuilding = 0;
+                    }
+                }
+
+                TreeBuilt?.Invoke();
+                if (version != _version || !ReferenceEquals(rows, _rows))
+                {
+                    return;
+                }
+
+                if (!Changes.Collapsed.SetEquals(collapsed))
+                {
+                    continue; // a folder collapsed or expanded meanwhile: the tree built before it would undo it
+                }
+
+                // Shown even if the List view is now: it's built, and the loop builds the list next.
+                _treeStale = false;
+                ViewsBuilt = (ViewsBuilt.Tree + 1, ViewsBuilt.List);
+                Shown(() => Changes.Show(tree, flat));
+                _selectedRow = _selectedKey is null ? null : Changes.RowOf(_selectedKey);
+                OnPropertyChanged(nameof(SelectedRow));
+            }
+            else if (!_isTreeView && _listStale)
+            {
+                _listStale = false;
+                ViewsBuilt = (ViewsBuilt.Tree, ViewsBuilt.List + 1);
+                Shown(() => Items.Reset(_rows));
+                _selectedItem = _selectedPath is null ? null : _rows.FirstOrDefault(r => string.Equals(r.Status.Path, _selectedPath, StringComparison.Ordinal));
+                OnPropertyChanged(nameof(SelectedItem));
+            }
+            else
             {
                 return;
             }
-
-            _treeStale = false;
-            ViewsBuilt = (ViewsBuilt.Tree + 1, ViewsBuilt.List);
-            Shown(() => Changes.Show(tree, flat));
-            _selectedRow = _selectedKey is null ? null : Changes.RowOf(_selectedKey);
-            OnPropertyChanged(nameof(SelectedRow));
-        }
-        else if (!_isTreeView && _listStale)
-        {
-            _listStale = false;
-            ViewsBuilt = (ViewsBuilt.Tree, ViewsBuilt.List + 1);
-            Shown(() => Items.Reset(_rows));
-            _selectedItem = _selectedPath is null ? null : _rows.FirstOrDefault(r => string.Equals(r.Status.Path, _selectedPath, StringComparison.Ordinal));
-            OnPropertyChanged(nameof(SelectedItem));
         }
     }
 
