@@ -36,18 +36,21 @@ internal static class FindSearch
     /// <summary>
     /// The matches of <paramref name="regex"/> in <paramref name="text"/> between <paramref name="start"/> and
     /// <paramref name="end"/>, up to <paramref name="max"/>; empty ones are skipped. Null when <paramref name="stop"/>
-    /// says the search is no longer wanted.
+    /// says the search is no longer wanted. Their lines only when <paramref name="withLines"/> (counted from the start of
+    /// the text, so not for a step from the middle of it).
     /// </summary>
-    public static Result? Matches(string text, Regex regex, bool wholeWords, int max, Func<bool>? stop = null, int start = 0, int end = int.MaxValue)
+    public static Result? Matches(string text, Regex regex, bool wholeWords, int max, Func<bool>? stop = null, int start = 0, int end = int.MaxValue, bool withLines = true)
     {
         var matches = new List<(int, int)>();
         var lines = new List<int>();
         var source = wholeWords ? new StringTextSource(text) : null;
         var line = 1;
         var counted = 0;
+        var tried = 0;
         for (var match = regex.Match(text, start); match.Success && match.Index + match.Length <= end; match = match.NextMatch())
         {
-            if (stop is not null && (matches.Count & 255) == 0 && stop())
+            // Every 256 regex matches, kept or not: with whole words or empty matches most may be skipped.
+            if (stop is not null && (++tried & 255) == 0 && stop())
             {
                 return null;
             }
@@ -63,6 +66,11 @@ internal static class FindSearch
             }
 
             matches.Add((match.Index, match.Length));
+            if (!withLines)
+            {
+                continue;
+            }
+
             line += LineBreaks(text, counted, match.Index);
             counted = match.Index;
             if (lines.Count == 0 || lines[^1] != line)
@@ -267,6 +275,9 @@ public sealed class FindWidget : Border, IBackgroundRenderer
     /// <summary>The searches run (tests: one per pause in typing, not one per key or edit).</summary>
     internal int SearchesRun { get; private set; }
 
+    /// <summary>The matches found by steps past the counted ones (tests: a step back finds those near the caret, not all).</summary>
+    internal long MatchesStepped { get; private set; }
+
     /// <summary>What the status shows: the match count, the current match, or why there are none.</summary>
     internal string Status => _status.Text ?? string.Empty;
 
@@ -374,6 +385,7 @@ public sealed class FindWidget : Border, IBackgroundRenderer
 
     private void OnTextChanged(object? sender, EventArgs e)
     {
+        _selectFirst = false; // typing in the text: a search that ends meanwhile doesn't select a match the next key would replace
         if (IsOpen && SearchPattern.Length > 0)
         {
             CancelSearch(); // a search of the text before the edit stops; its matches would be dropped
@@ -425,8 +437,8 @@ public sealed class FindWidget : Border, IBackgroundRenderer
         var query = new FindQuery(SearchPattern, MatchCase, WholeWords, UseRegex);
         var version = document.Version;
         var snapshot = document.CreateSnapshot();
-        var selectFirst = _selectFirst;
-        var from = Math.Max(Area.Caret.Offset - Area.Selection.Length, 0);
+        var caret = Area.Caret.Offset;
+        var selected = Area.Selection.Length;
         _searching = true;
         SearchesRun++;
         var (result, error) = await Task.Run(() => Search(snapshot, query, MaxMatches, () => Volatile.Read(ref _generation) != generation)).ConfigureAwait(true);
@@ -438,10 +450,21 @@ public sealed class FindWidget : Border, IBackgroundRenderer
         _searching = false;
         _error = error;
         Apply(result);
-        if (selectFirst && result is { Matches.Count: > 0 })
+        // The first match is selected for a query typed into the widget, while it's still there: not once the text was
+        // clicked or typed in, or the caret moved, meanwhile.
+        if (_selectFirst && result is { Matches.Count: > 0 } && IsKeyboardFocusWithin && Area.Caret.Offset == caret && Area.Selection.Length == selected)
         {
             _selectFirst = false;
-            FindNext(from);
+            FindNext(Math.Max(caret - selected, 0));
+        }
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsKeyboardFocusWithinProperty && !IsKeyboardFocusWithin)
+        {
+            _selectFirst = false; // the focus went back to the text (or elsewhere): a search ending later moves nothing
         }
     }
 
@@ -655,8 +678,25 @@ public sealed class FindWidget : Border, IBackgroundRenderer
     /// <summary>Past the matches counted (there were more): the next one after <paramref name="offset"/>, searched now.</summary>
     private (int Offset, int Length)? Beyond(int offset) => Step(offset, int.MaxValue, last: false);
 
-    /// <summary>Past the matches counted: the last one in [<paramref name="from"/>, <paramref name="to"/>), searched now.</summary>
-    private (int Offset, int Length)? Before(int from, int to) => Step(from, to, last: true);
+    /// <summary>
+    /// Past the matches counted: the last one in [<paramref name="from"/>, <paramref name="to"/>), searched now backwards,
+    /// in windows ending at <paramref name="to"/> that double until one has a match: the cost is the text between the
+    /// match and the caret, not every match from the last counted one (a search from it collected 180,000 on the UI
+    /// thread). A window starts at a character, not at a match's end: a regex whose matches can start inside one another
+    /// may find a shorter match at a window's start than a search from the top would.
+    /// </summary>
+    private (int Offset, int Length)? Before(int from, int to)
+    {
+        for (var size = 4096; ; size = (int)Math.Min(size * 2L, int.MaxValue))
+        {
+            var start = Math.Max(from, to - size);
+            var found = Step(start, to, last: true);
+            if (found is not null || start == from)
+            {
+                return found;
+            }
+        }
+    }
 
     private (int Offset, int Length)? Step(int from, int to, bool last)
     {
@@ -668,7 +708,8 @@ public sealed class FindWidget : Border, IBackgroundRenderer
         try
         {
             var regex = FindSearch.RegexOf(new FindQuery(SearchPattern, MatchCase, WholeWords, UseRegex), s_stepTimeout);
-            var found = FindSearch.Matches(document.Text, regex, WholeWords, last ? int.MaxValue : 1, start: Math.Min(from, document.TextLength), end: to)!.Matches;
+            var found = FindSearch.Matches(document.Text, regex, WholeWords, last ? int.MaxValue : 1, start: Math.Min(from, document.TextLength), end: to, withLines: false)!.Matches;
+            MatchesStepped += found.Count;
             return found.Count == 0 ? null : last ? found[^1] : found[0];
         }
         catch (Exception ex) when (ex is ArgumentException or RegexMatchTimeoutException)
@@ -698,7 +739,7 @@ public sealed class FindWidget : Border, IBackgroundRenderer
         }
 
         var start = Math.Max(Area.Caret.Offset - Area.Selection.Length, 0);
-        if (NextAfter(start) is not { } match || !(Area.Selection.SurroundingSegment is { } selected && selected.Offset == match.Offset && selected.Length == match.Length))
+        if (!IsMatchSelected())
         {
             FindNext(start);
             return;
@@ -706,6 +747,23 @@ public sealed class FindWidget : Border, IBackgroundRenderer
 
         Area.Selection.ReplaceSelectionWithText(ReplacePattern);
         FindNext();
+    }
+
+    /// <summary>Whether the selection is a match: a counted one, or one past them (searched now).</summary>
+    private bool IsMatchSelected()
+    {
+        if (Area.Selection.SurroundingSegment is not { Length: > 0 } selected)
+        {
+            return false;
+        }
+
+        if (NextAfter(selected.Offset) is { } match && match == (selected.Offset, selected.Length))
+        {
+            return true;
+        }
+
+        return _capped && LastResult() is { } last && selected.Offset >= last.EndOffset
+            && Step(selected.Offset, selected.EndOffset, last: false) == (selected.Offset, selected.Length);
     }
 
     public void ReplaceAll() => _ = ReplaceAllAsync();

@@ -1084,6 +1084,11 @@ public sealed partial class CodeEditorController : IDisposable
             && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]))
         {
             completion.CommitWith(committing[0]);
+            if (_lateResolve is { ByCharacter: true } late)
+            {
+                late.Input = e; // done once this input's character is typed
+            }
+
             return;
         }
 
@@ -1259,7 +1264,15 @@ public sealed partial class CodeEditorController : IDisposable
             AutoClose(entered);
             if (_lateResolve is { ByCharacter: true, Version: null } late)
             {
-                late.Version = Model.Version; // the character that committed an item is typed (and its pair closed)
+                if (late.Input == e)
+                {
+                    late.Version = Model.Version; // the character that committed the item is typed (and its pair closed)
+                    TryApplyLateResolve(late);
+                }
+                else
+                {
+                    _lateResolve = null; // that character wasn't typed (another handler took it): the commit's offsets are stale
+                }
             }
 
             if (entered == "/" && AtDocCommentStart())
@@ -1340,6 +1353,9 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
+    /// <summary>The on-type format asked for and not answered yet: its character and the document version it's for.</summary>
+    private (string Character, int Version)? _formatOnType;
+
     private async Task FormatOnTypeAsync(string ch)
     {
         try
@@ -1351,7 +1367,13 @@ public sealed partial class CodeEditorController : IDisposable
 
             var version = Model.Version;
             var options = new FormattingOptions(Editor.Options.IndentationSize, Editor.Options.ConvertTabsToSpaces);
+            _formatOnType = (ch, version);
             var edits = await client.FormatOnTypeAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), ch, options, CancellationToken.None).ConfigureAwait(true);
+            if (_formatOnType == (ch, version))
+            {
+                _formatOnType = null;
+            }
+
             if (edits.Length > 0 && version == Model.Version && !_disposed && _completion is null)
             {
                 // Text the server adds at the caret (an XML end tag, M35) goes after it: the caret stays where the user typed.
@@ -1582,12 +1604,25 @@ public sealed partial class CodeEditorController : IDisposable
     private static HashSet<char> CommitCharacterSet(string[]? characters) => [.. (characters ?? []).Where(c => c.Length == 1).Select(c => c[0])];
 
     /// <summary>A completion item for this editor (tests: committing it as the list does).</summary>
-    internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve) =>
-        new(item, resolve, Commit);
+    internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve, string commitCharacters = "") =>
+        new(item, resolve, Commit) { CommitCharacters = commitCharacters.ToHashSet() };
+
+    /// <summary>Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text (tests).</summary>
+    internal void OpenCompletion(int start, IEnumerable<CompletionData> items)
+    {
+        var window = NewCompletionPopup(start, Editor.CaretOffset);
+        foreach (var item in items)
+        {
+            window.CompletionList.CompletionData.Add(item);
+        }
+
+        OpenCompletion(window);
+        window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+    }
 
     /// <summary>
     /// A commit made before its item's resolve arrived: the text it inserted, and the document's version once the commit
-    /// was done (by a commit character: once the editor typed it).
+    /// was done (by a commit character: once the editor typed it, in the same text input).
     /// </summary>
     private sealed class LateResolve(CompletionData data, int start, int length, int typedFrom, bool byCharacter)
     {
@@ -1602,7 +1637,13 @@ public sealed partial class CodeEditorController : IDisposable
 
         public bool ByCharacter { get; } = byCharacter;
 
+        /// <summary>The text input whose character committed the item (by character).</summary>
+        public TextInputEventArgs? Input { get; set; }
+
         public int? Version { get; set; }
+
+        /// <summary>The resolved item, once it has arrived.</summary>
+        public LanguageServices.Protocol.CompletionItem? Resolved { get; set; }
     }
 
     private LateResolve? _lateResolve;
@@ -1690,46 +1731,76 @@ public sealed partial class CodeEditorController : IDisposable
         return moved;
     }
 
-    /// <summary>
-    /// Applies the resolve of an item committed without it, if the document is still as the commit left it: its edit in
-    /// place of the item's text, and its additional edits, in the commit's undo step. Typed on meanwhile, they're dropped.
-    /// </summary>
+    /// <summary>Waits for the resolve of an item committed without it, then applies it if it still may.</summary>
     private async Task ApplyLateResolveAsync(LateResolve late)
     {
-        LanguageServices.Protocol.CompletionItem resolved;
         try
         {
-            resolved = await late.Data.Resolve().ConfigureAwait(true);
+            late.Resolved = await late.Data.Resolve().ConfigureAwait(true);
         }
         catch (Exception ex) when (IsTransient(ex))
         {
             return;
         }
 
-        if (_disposed || _lateResolve != late || late.Version != Model.Version || resolved.InsertTextFormat == InsertTextFormat.Snippet)
+        TryApplyLateResolve(late);
+    }
+
+    /// <summary>
+    /// Applies the resolve of an item committed without it, once both it has arrived and the commit is done (a commit
+    /// character typed), if the document is still as the commit left it: its edit in place of the item's text, and its
+    /// additional edits, in the commit's undo step. Typed on meanwhile, they're dropped.
+    /// </summary>
+    private void TryApplyLateResolve(LateResolve late)
+    {
+        if (late.Resolved is not { } resolved || late.Version is null || _disposed || _lateResolve != late)
         {
             return;
         }
 
         _lateResolve = null;
+        if (late.Version != Model.Version || resolved.InsertTextFormat == InsertTextFormat.Snippet)
+        {
+            return;
+        }
+
+        // The text as Commit picks it, with the resolved edit. Its range refers to the text at the request, which is unchanged
+        // before the commit's start: it may start before the typed word (an override completion replaces "override ToS"
+        // with the whole declaration), as Commit's own edit may.
         var document = Model.Text;
-        var text = resolved.TextEdit?.NewText ?? resolved.InsertText ?? resolved.Label;
+        var textEdit = resolved.TextEdit ?? late.Data.Item.TextEdit;
+        var text = textEdit?.NewText ?? late.Data.Item.InsertText ?? late.Data.Item.Label;
+        var start = late.Start;
+        if (resolved.TextEdit is { } edit && Model.OffsetAt(edit.Range.Start) is var editStart && editStart <= late.TypedFrom)
+        {
+            start = Math.Min(start, editStart);
+        }
+
+        var end = late.Start + late.Length;
+
+        // An on-type format of the commit character asked for meanwhile is for the text before these edits: asked again.
+        var reformat = _formatOnType is { } pending && pending.Version == late.Version ? pending.Character : null;
         document.UndoStack.StartContinuedUndoGroup();
         try
         {
             using (document.RunUpdate())
             {
-                if (document.GetText(late.Start, late.Length) != text)
+                if (start != late.Start || document.GetText(start, end - start) != text)
                 {
-                    document.Replace(late.Start, late.Length, text);
+                    document.Replace(start, end - start, text);
                 }
 
-                ApplyAdditionalEdits(resolved, late.TypedFrom);
+                ApplyAdditionalEdits(resolved, Math.Min(start, late.TypedFrom));
             }
         }
         finally
         {
             document.UndoStack.EndUndoGroup();
+        }
+
+        if (reformat is not null)
+        {
+            _ = FormatOnTypeAsync(reformat);
         }
     }
 

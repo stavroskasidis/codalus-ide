@@ -143,6 +143,8 @@ public sealed class EditorLargeTextTests
 
         // Just past the cut: the line is drawn up to the match, which is selected as anywhere else.
         editor.Search.Open();
+        editor.Search.Reactivate(); // typed into the widget, which has the focus
+        ShellFixture.Pump();
         editor.Search.SearchPattern = "MARK";
         await ShellFixture.PumpUntil(() => editor.Editor.SelectionLength > 0); // searched off the UI thread, a moment after the last key
         Assert.Equal((15_000, 4), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));

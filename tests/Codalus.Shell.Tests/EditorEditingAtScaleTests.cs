@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using AvaloniaEdit.Document;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
@@ -87,6 +89,7 @@ public sealed class EditorEditingAtScaleTests
             Assert.Equal(19_999, editor.MultiCaret.ExtraCarets.Count);
             Assert.True(editor.MultiCaret.ExtraCarets.Zip(editor.MultiCaret.ExtraCarets.Skip(1)).All(p => p.First.Start < p.Second.Start));
             Assert.Equal(document.GetLineByNumber(1).Offset + "call(".Length, editor.MultiCaret.ExtraCarets[0].Start);
+            ShellFixture.Pump(); // each step is a user action of its own, measured alone: not the four in one block
 
             // A frame draws the visible carets only, and builds no line for the others.
             ShellFixture.RenderFrame(f.Window);
@@ -97,6 +100,7 @@ public sealed class EditorEditingAtScaleTests
             Assert.Equal(visible, editor.MultiCaret.DrawnCarets);
             Assert.Null(view.GetVisualLine(1));
             Assert.Null(view.GetVisualLine(25_001));
+            ShellFixture.Pump();
 
             // Typing replaces every selection in one document change, undone in one step.
             changes = 0;
@@ -104,6 +108,7 @@ public sealed class EditorEditingAtScaleTests
             Assert.Equal(1, changes);
             Assert.Equal(0, Occurrences(document.Text, "marker"));
             Assert.Equal(20_000, Occurrences(document.Text, "call(X,"));
+            ShellFixture.Pump();
             editor.Editor.Undo();
             Assert.Equal(2, changes);
             Assert.Equal(text, document.Text);
@@ -272,6 +277,7 @@ public sealed class EditorEditingAtScaleTests
         using var monitor = new UiStallMonitor();
         await FlowAsync(monitor, "typing a common word into Quick Find, then typing in the document with it open", async () =>
         {
+            find.Reactivate(); // typed into the widget: its first match is selected
             find.SearchPattern = string.Empty;
             await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount == 0);
             editor.Editor.CaretOffset = 0;
@@ -334,9 +340,18 @@ public sealed class EditorEditingAtScaleTests
         editor.Editor.CaretOffset = line.Offset;
         find.FindNext();
         Assert.Equal((line.Offset + "x24999 = ".Length, 3), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        var stepped = find.MatchesStepped;
         find.FindPrevious();
         var previous = document.GetLineByNumber(24_999);
         Assert.Equal((previous.Offset + "x24998 = ".Length, 3), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        Assert.InRange(find.MatchesStepped - stepped, 1, 1_000); // the ones near the caret, not the 4,998 from the last counted
+
+        // Replace Next past them replaces the selected match (it reselected it) and goes on to the next one.
+        find.ReplaceNext();
+        Assert.Equal("x24998 = barbaz;", document.GetText(document.GetLineByNumber(24_999)));
+        Assert.Equal((line.Offset + "x24999 = ".Length, 3), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        editor.Editor.Undo();
+        Assert.Equal(text, document.Text);
 
         // Replace All: every match, not only the counted ones, as one document change; a bookmark's anchor moves with
         // each edit before it; one undo step.
@@ -350,6 +365,18 @@ public sealed class EditorEditingAtScaleTests
         Assert.Equal(document.GetLineByNumber(20_000).Offset, mark.Offset);
         editor.Editor.Undo();
         Assert.Equal(text, document.Text);
+    }
+
+    [Fact]
+    public void A_cancelled_search_stops_even_when_its_matches_are_skipped()
+    {
+        // Whole words: one kept match, then 100,000 skipped. The stop was asked only when the kept count was a multiple of
+        // 256, so a cancelled search went on over the whole text.
+        var text = "foo " + string.Concat(Enumerable.Repeat("foox ", 100_000));
+        var asked = 0;
+        var regex = FindSearch.RegexOf(new FindQuery("foo", MatchCase: true, WholeWords: true, UseRegex: false), TimeSpan.FromSeconds(10));
+        Assert.Null(FindSearch.Matches(text, regex, wholeWords: true, FindWidget.MaxMatches, stop: () => ++asked > 1));
+        Assert.Equal(2, asked);
     }
 
     [AvaloniaFact]
@@ -372,6 +399,14 @@ public sealed class EditorEditingAtScaleTests
             await Task.Delay(50);
             return resolved;
         });
+
+        // Opened as a list, the item's resolve starts when it's selected: held until the commit is done.
+        var gate = new TaskCompletionSource();
+        Task<LspCompletionItem> Held(LspCompletionItem _) => Task.Run(async () =>
+        {
+            await gate.Task;
+            return resolved;
+        });
         TextSegment Typed() => new() { StartOffset = Text.IndexOf("Li }", StringComparison.Ordinal), Length = 2 };
 
         // Committed by Enter: the item's own text at once, then the resolve's edit and its using, undone in one step.
@@ -385,12 +420,12 @@ public sealed class EditorEditingAtScaleTests
 
         // Committed by a character, which the editor then types: the late resolve still applies.
         editor.Editor.CaretOffset = Typed().EndOffset;
-        var data = editor.NewCompletionData(item, Slow);
-        data.CommitCharacter = ';';
-        data.Complete(Typed());
-        data.CommitCharacter = null;
+        editor.OpenCompletion(Typed().StartOffset, [editor.NewCompletionData(item, Held, commitCharacters: ";")]);
+        Assert.True(editor.IsCompletionOpen);
         editor.Editor.TextArea.PerformTextInput(";");
+        Assert.False(editor.IsCompletionOpen);
         Assert.Contains("{ List<>; }", document.Text, StringComparison.Ordinal);
+        gate.SetResult();
         await ShellFixture.PumpUntil(() => document.Text.StartsWith("using System.Collections.Generic;", StringComparison.Ordinal));
         Assert.Contains("{ List; }", document.Text, StringComparison.Ordinal);
         for (var undo = 0; undo < 3 && document.Text != Text; undo++)
@@ -407,5 +442,186 @@ public sealed class EditorEditingAtScaleTests
         await WaitAsync(400);
         Assert.Contains("{ List<>x }", document.Text, StringComparison.Ordinal);
         Assert.DoesNotContain("using", document.Text, StringComparison.Ordinal);
+        editor.Editor.Undo();
+        editor.Editor.Undo();
+        Assert.Equal(Text, document.Text);
+
+        // Committed by a character that another handler then took (it wasn't typed): the commit's offsets are stale at the
+        // next key, so the resolve is dropped there rather than applied after it.
+        void TakeSemicolon(object? sender, TextInputEventArgs e) => e.Handled |= e.Text == ";";
+        editor.Editor.TextArea.TextEntering += TakeSemicolon;
+        editor.Editor.CaretOffset = Typed().EndOffset;
+        gate = new TaskCompletionSource();
+        editor.OpenCompletion(Typed().StartOffset, [editor.NewCompletionData(item, Held, commitCharacters: ";")]);
+        editor.Editor.TextArea.PerformTextInput(";");
+        editor.Editor.TextArea.TextEntering -= TakeSemicolon;
+        Assert.Contains("{ List<> }", document.Text, StringComparison.Ordinal);
+        editor.Editor.TextArea.PerformTextInput("x");
+        gate.SetResult();
+        await WaitAsync(400);
+        Assert.Contains("{ List<>x }", document.Text, StringComparison.Ordinal);
+        Assert.DoesNotContain("using", document.Text, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task A_late_resolve_replaces_from_where_its_edit_starts_and_keeps_the_items_text_without_one()
+    {
+        // The C# service's items have no edit of their own; an override's resolve replaces "override ToS" with the whole
+        // declaration. Committed (Tab) before it came, the late edit must start where its range does, not at the typed word.
+        await using var f = ShellFixture.Create();
+        const string Text = "class C\n{\n    override ToS\n}\n";
+        var editor = await OpenAsync(f, "override.txt", Text);
+        var document = editor.Model.Text;
+        var typedFrom = Text.IndexOf("ToS", StringComparison.Ordinal);
+        TextSegment Typed() => new() { StartOffset = typedFrom, Length = 3 };
+        Func<LspCompletionItem, Task<LspCompletionItem>> Slow(LspCompletionItem resolved) => _ => Task.Run(async () =>
+        {
+            await Task.Delay(50);
+            return resolved;
+        });
+        var item = new LspCompletionItem("ToString()") { InsertText = "ToString", Data = JsonElement.Parse("1") };
+        var declaration = new LspCompletionItem("ToString()")
+        {
+            TextEdit = new TextEdit(new Range(new Position(2, 4), new Position(2, 16)), "public override string ToString() => base.ToString();"),
+        };
+
+        editor.Editor.CaretOffset = Typed().EndOffset;
+        editor.NewCompletionData(item, Slow(declaration)).Complete(Typed());
+        Assert.Contains("    override ToString\n", document.Text, StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => document.Text.Contains("=>", StringComparison.Ordinal));
+        Assert.Equal("class C\n{\n    public override string ToString() => base.ToString();\n}\n", document.Text);
+        editor.Editor.Undo();
+        Assert.Equal(Text, document.Text);
+
+        // A resolve with no edit (only a using): the item's own text stays, not the resolve's label.
+        var usingOnly = new LspCompletionItem("ToString() (resolved)")
+        {
+            AdditionalTextEdits = [new TextEdit(new Range(new Position(0, 0), new Position(0, 0)), "using System;\n")],
+        };
+        editor.Editor.CaretOffset = Typed().EndOffset;
+        editor.NewCompletionData(item, Slow(usingOnly)).Complete(Typed());
+        await ShellFixture.PumpUntil(() => document.Text.StartsWith("using System;", StringComparison.Ordinal));
+        Assert.Equal("using System;\nclass C\n{\n    override ToString\n}\n", document.Text);
+    }
+
+    [AvaloniaFact]
+    public async Task Insert_next_matching_caret_goes_on_past_the_wrap_to_every_match()
+    {
+        await using var f = ShellFixture.Create();
+        const string Text = "word 1\nword 2\nword 3\nword 4\n";
+        var editor = await OpenAsync(f, "next.txt", Text);
+        int Line(int number) => editor.Model.Text.GetLineByNumber(number).Offset;
+        editor.Editor.CaretOffset = Line(3) + 1;
+        editor.MultiCaret.SelectNextOccurrence(); // selects the word
+        for (var i = 0; i < 3; i++)
+        {
+            editor.MultiCaret.SelectNextOccurrence(); // line 4, then wrapping around: line 1, line 2
+        }
+
+        Assert.Equal([Line(1), Line(2), Line(4)], editor.MultiCaret.ExtraCarets.Select(s => s.Start));
+        editor.MultiCaret.SelectNextOccurrence(); // every match taken: nothing more
+        Assert.Equal(3, editor.MultiCaret.ExtraCarets.Count);
+    }
+
+    /// <summary>Opens Quick Find on <paramref name="pattern"/>, typed into it (it has the focus), and waits for its results.</summary>
+    private static async Task<FindWidget> FindAsync(CodeEditorController editor, string pattern, bool replace = false)
+    {
+        var find = editor.Search;
+        find.IsReplaceMode = replace;
+        find.Open();
+        find.Reactivate();
+        ShellFixture.Pump();
+        find.SearchPattern = pattern;
+        await ShellFixture.PumpUntil(() => !find.IsSearching && find.Status.Length > 0, seconds: 30);
+        return find;
+    }
+
+    [AvaloniaFact]
+    public async Task A_search_ending_while_the_user_types_in_the_text_never_selects_a_match()
+    {
+        // A query with no match yet, then the word typed into the document: the search the edit starts must not select it
+        // (and move the caret), or the next key replaces it.
+        await using var f = ShellFixture.Create();
+        var editor = await OpenAsync(f, "typing.txt", "first line\nsecond line\n");
+        var find = await FindAsync(editor, "zebra");
+        Assert.Equal(0, find.MatchCount);
+        Assert.Equal("No matches found", find.Status);
+
+        editor.Editor.TextArea.Focus();
+        editor.Editor.CaretOffset = editor.Model.Text.TextLength;
+        foreach (var c in "zebra")
+        {
+            editor.Editor.TextArea.PerformTextInput(c.ToString());
+        }
+
+        var caret = editor.Editor.CaretOffset;
+        await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount == 1, seconds: 30);
+        Assert.Equal((caret, 0), (editor.Editor.CaretOffset, editor.Editor.SelectionLength));
+
+        // Typed into the widget again: the first match is selected.
+        find.Reactivate();
+        ShellFixture.Pump();
+        find.SearchPattern = "line";
+        await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount == 2, seconds: 30);
+        Assert.Equal(("line", 4), (editor.Editor.SelectedText, editor.Editor.SelectionLength));
+    }
+
+    [AvaloniaFact]
+    public async Task Quick_find_keys_go_between_matches_replace_and_close()
+    {
+        await using var f = ShellFixture.Create();
+        const string Text = "foo one\nfoo two\nfoo three\n";
+        var editor = await OpenAsync(f, "keys.txt", Text);
+        var document = editor.Model.Text;
+        var find = await FindAsync(editor, "foo", replace: true);
+        int Line(int number) => document.GetLineByNumber(number).Offset;
+        Assert.Equal(Line(1), editor.Editor.SelectionStart);
+        Assert.Equal("1 of 3", find.Status);
+
+        f.Window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Assert.Equal(Line(2), editor.Editor.SelectionStart);
+        f.Window.KeyPress(Key.F3, RawInputModifiers.None, PhysicalKey.F3, null);
+        Assert.Equal(Line(3), editor.Editor.SelectionStart);
+        f.Window.KeyPress(Key.Enter, RawInputModifiers.Shift, PhysicalKey.Enter, null);
+        Assert.Equal(Line(2), editor.Editor.SelectionStart);
+
+        // Replace Next: the selected match is replaced and the next one selected; with none selected, it selects first.
+        find.ReplacePattern = "bar";
+        f.Window.KeyPress(Key.R, RawInputModifiers.Alt, PhysicalKey.R, null);
+        Assert.Equal("foo one\nbar two\nfoo three\n", document.Text);
+        Assert.Equal(Line(3), editor.Editor.SelectionStart);
+        editor.Editor.TextArea.ClearSelection();
+        editor.Editor.CaretOffset = 0;
+        find.ReplaceNext();
+        Assert.Equal("foo one\nbar two\nfoo three\n", document.Text);
+        Assert.Equal((0, 3), (editor.Editor.SelectionStart, editor.Editor.SelectionLength));
+        find.ReplaceNext();
+        Assert.Equal("bar one\nbar two\nfoo three\n", document.Text);
+
+        // Escape in the box closes it; Ctrl+F's widget closes on Escape in the text too.
+        f.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(find.IsOpen);
+        find.Open();
+        editor.Editor.TextArea.Focus();
+        f.Window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        Assert.False(find.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task An_invalid_or_runaway_regular_expression_says_so_without_hanging()
+    {
+        await using var f = ShellFixture.Create();
+        var editor = await OpenAsync(f, "regex.txt", new string('a', 40) + "\n");
+        var find = editor.Search;
+        find.UseRegex = true;
+        await FindAsync(editor, "(");
+        Assert.Equal("Invalid regular expression", find.Status);
+
+        // Nested quantifiers that backtrack for ever: the search stops at its timeout, off the UI thread.
+        using var monitor = new UiStallMonitor();
+        find.SearchPattern = "(a+)+b";
+        await ShellFixture.PumpUntil(() => !find.IsSearching && find.Status != "Invalid regular expression", seconds: 30);
+        Assert.Equal("The expression takes too long", find.Status);
+        monitor.AssertResponsive("a runaway regular expression in Quick Find", Budget);
     }
 }

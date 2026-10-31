@@ -266,6 +266,8 @@ public sealed record CompletionItem(string Label)
     /// <summary>
     /// Extension (<c>codalusCommitCharacter</c>): on a <c>completionItem/resolve</c> request, the character typed to
     /// commit the item (the server may change the edit for it: <c>List</c> rather than <c>List&lt;&gt;</c> before <c>&lt;</c>).
+    /// The editor no longer sends it: committing doesn't wait for a resolve (M56). TODO(issue): remove it, with
+    /// <c>codalusIncludesCommitCharacter</c> and the C# host's path for it.
     /// </summary>
     [JsonPropertyName("codalusCommitCharacter")]
     public string? CommitCharacter { get; init; }

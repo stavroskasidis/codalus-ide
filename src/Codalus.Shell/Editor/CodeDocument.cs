@@ -163,7 +163,11 @@ public sealed class CodeDocument : ObservableObject, IDisposable
     {
         // Inserts at the same position keep their order, as LSP has them appear in the text.
         var spans = edits
-            .Select(e => OffsetAt(e.Range.Start) is var start ? (Offset: start, Length: OffsetAt(e.Range.End) - start, Text: e.NewText) : default)
+            .Select(e =>
+            {
+                var start = OffsetAt(e.Range.Start);
+                return (Offset: start, Length: OffsetAt(e.Range.End) - start, Text: e.NewText);
+            })
             .OrderBy(e => e.Offset)
             .ThenBy(e => e.Length)
             .ToList();
