@@ -1026,7 +1026,7 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             var structural = changes.Directories.Concat(changes.MSBuildFiles.Select(f => System.IO.Path.GetDirectoryName(f)!)).Distinct(s_pathComparer).ToArray();
             if (structural.Length > 0)
             {
-                await _events.FilesChangedAsync(new FilesChangedParams(structural)).ConfigureAwait(false);
+                await _events.FilesChangedAsync(new FilesChangedParams(structural) { Rescan = changes.Overflowed }).ConfigureAwait(false);
             }
 
             if (changes.SolutionFileChanged && !IsSingleProject && !IsFolder)
@@ -1061,7 +1061,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
                 }
             }
 
-            // Projects whose own folder changed, plus every project that imports a changed MSBuild file.
+            // Projects whose own folder changed, plus every project that imports a changed MSBuild file. TODO(issue): after an
+            // overflow (changes.Overflowed) the changed folders are the watched ones, so a project nested below one isn't
+            // evaluated again, and its globs miss what the dropped events added or deleted until its folder changes again.
             var affected = ProjectPaths
                 .Where(p => changes.Directories.Any(d => ProjectFileEditor.IsSameOrUnder(d, System.IO.Path.GetDirectoryName(p)!))
                             || changes.MSBuildFiles.Any(f => s_pathComparer.Equals(f, p)

@@ -49,11 +49,28 @@ public sealed class SolutionExplorerHostTests : IDisposable
 
         Assert.Equal([missing], ExplorerFiles.WithMissingAnalyzers(inputs).MissingAnalyzers ?? []);
 
+        // An Analyzer item's relative path is the project folder's, not the host's working folder's.
+        Directory.CreateDirectory(P("Gen"));
+        File.WriteAllText(P("Gen", "Gen.dll"), string.Empty);
+        var relative = Path.Combine("..", "Gen", "Gen.dll");
+        Assert.Equal([Path.Combine("..", "Gen", "Other.dll")], ExplorerFiles.WithMissingAnalyzers(inputs with { Arguments = [$"/analyzer:{relative}", $"/analyzer:{Path.Combine("..", "Gen", "Other.dll")}"] }).MissingAnalyzers ?? []);
+
         // None missing, or a failed build: sent as they are.
         var complete = inputs with { Arguments = [$"/analyzer:{present}", "A.cs"] };
         Assert.Same(complete, ExplorerFiles.WithMissingAnalyzers(complete));
         Assert.Null(complete.MissingAnalyzers);
         var failed = inputs with { State = CompilerInputStates.Failed };
         Assert.Same(failed, ExplorerFiles.WithMissingAnalyzers(failed));
+    }
+
+    [Fact]
+    public void A_rescan_is_in_the_message_only_when_the_watcher_dropped_events()
+    {
+        // Show All Files lists every project again after an overflow (M56); a host from before reads as no rescan.
+        var json = ItemJsonContext.Default.FilesChangedParams;
+        Assert.Equal("""{"directories":["/a"]}""", System.Text.Json.JsonSerializer.Serialize(new FilesChangedParams(["/a"]), json));
+        Assert.Equal("""{"directories":["/a"],"rescan":true}""", System.Text.Json.JsonSerializer.Serialize(new FilesChangedParams(["/a"]) { Rescan = true }, json));
+        Assert.False(System.Text.Json.JsonSerializer.Deserialize("""{"directories":["/a"]}""", json)!.Rescan);
+        Assert.True(System.Text.Json.JsonSerializer.Deserialize("""{"directories":["/a"],"rescan":true}""", json)!.Rescan);
     }
 }

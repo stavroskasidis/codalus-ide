@@ -108,7 +108,16 @@ public sealed record ListTreeParams(string Path, int? MaxEntries = null, string[
 public sealed record ListTreeResult(DirectoryEntry[] Entries, bool Truncated);
 
 /// <summary>Folders whose files were created, deleted or renamed.</summary>
-public sealed record FilesChangedParams(string[] Directories);
+public sealed record FilesChangedParams(string[] Directories)
+{
+    /// <summary>
+    /// The watcher dropped events (the OS's buffer overflowed, as in a large checkout): anything under the folders it
+    /// watches may have changed, deep below <see cref="Directories"/> (those folders then), so Show All Files lists every
+    /// project again. Left out when false.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Rescan { get; init; }
+}
 
 /// <summary>Folder mode: the project files under the folder.</summary>
 public sealed record DiscoverProjectsResult(string[] Projects);

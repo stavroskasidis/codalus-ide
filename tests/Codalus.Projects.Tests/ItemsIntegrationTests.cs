@@ -328,7 +328,7 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
         Assert.Equal(3, limited.Entries.Length);
 
         var changed = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _service.FilesChanged += (_, directories) => changed.TrySetResult(directories);
+        _service.FilesChanged += (_, changes) => changed.TrySetResult(changes.Directories);
         File.WriteAllText(Path.Combine(AppDir, "Excluded", "New.txt"), "new");
         Assert.Contains(Path.Combine(AppDir, "Excluded"), await changed.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken));
     }

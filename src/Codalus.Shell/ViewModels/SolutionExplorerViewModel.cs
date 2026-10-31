@@ -135,21 +135,24 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private bool _showAllFiles;
     private bool _folderView;
 
+    // Both listings of the disk below start from one posted job (QueueDiskLoad).
+    private bool _diskQueued;
+
     // Show All Files: each loaded project's files on disk, down to the folders its listing went into (see LoadProjectsAsync).
     private readonly Dictionary<string, IReadOnlyList<DirectoryEntry>> _disk = new(SolutionService.PathComparer);
     private readonly Dictionary<string, IReadOnlySet<string>> _diskFolders = new(SolutionService.PathComparer);
-    private readonly Dictionary<string, int> _diskListings = new(SolutionService.PathComparer); // each project's newest listing
     private readonly HashSet<string> _diskQueue = new(SolutionService.PathComparer);
     private bool _diskQueueAll;
-    private int _diskListing;
+    private HashSet<string>? _diskBatch; // the projects of the batch on its way: one at a time, the queue waits for it
+    private int _diskGeneration; // Show All Files went off or the solution closed: the batch on its way is stale
     private CancellationTokenSource _diskCancellation = new();
+    private string? _syncWhenListed; // Sync with Active Document's file, once the listings that can bring it have come
 
     // The folder view: the workspace folder's files on disk.
     private IReadOnlyList<DirectoryEntry> _folderEntries = [];
     private bool _folderQueued;
     private int _folderGeneration;
     private bool _rootIsFolderView;
-    private bool _diskQueued;
 
     /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
     private ProjectInfo? ProjectInfoOf(string path) => _shell.Solutions?.Projects.GetValueOrDefault(path);
@@ -272,16 +275,17 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _folderCancellation.Cancel();
             _folderEntries = [];
             _folderView = false;
+            _analyzersFound.Clear();
             return;
         }
 
-        // The projects the solution lost lose their listings; the ones it gained are listed once they've loaded.
+        // The projects the solution lost lose their listings (and what a batch on its way brings for them); the ones it
+        // gained are listed once they've loaded.
         var projects = solution.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer);
-        foreach (var gone in _diskListings.Keys.Where(p => !projects.Contains(p)).ToList())
+        foreach (var gone in _diskFolders.Keys.Where(p => !projects.Contains(p)).ToList())
         {
             _disk.Remove(gone);
             _diskFolders.Remove(gone);
-            _diskListings.Remove(gone);
         }
 
         if (IsFolderView)
@@ -292,9 +296,10 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>
     /// Folders changed on disk (the build host's watcher, which leaves out bin and obj): the folder view lists the folder
-    /// again, and Show All Files the projects whose folders hold them.
+    /// again, and Show All Files the projects whose folders hold them, or with <paramref name="rescan"/> (the watcher
+    /// dropped events, and reports only the folders it watches) every project.
     /// </summary>
-    public void OnFilesChanged(IReadOnlyList<string> directories)
+    public void OnFilesChanged(IReadOnlyList<string> directories, bool rescan = false)
     {
         if (IsFolderView)
         {
@@ -303,8 +308,18 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         if (_showAllFiles)
         {
-            QueueDiskRefresh(ProjectsHolding(_shell.Solutions.Projects.Keys, directories));
+            QueueDiskRefresh(rescan ? null : ProjectsHolding(_shell.Solutions.Projects.Keys, directories));
         }
+    }
+
+    /// <summary>
+    /// A build finished (of <paramref name="project"/> and the projects it references; null: of the solution): Show All
+    /// Files lists them again, and the analyzers the build host marked missing are looked for again.
+    /// </summary>
+    public void OnBuildFinished(string? project)
+    {
+        RefreshDisk(project);
+        FindMissingAnalyzers();
     }
 
     /// <summary>
@@ -401,18 +416,26 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>Lists what is queued, through the build host: the workspace folder (the folder view) and projects' folders (Show All Files).</summary>
     public Task LoadDiskAsync() => Task.WhenAll(LoadFolderAsync(), LoadProjectsAsync());
 
-    /// <summary>Drops Show All Files' listings, and stops the ones on their way.</summary>
+    /// <summary>Drops Show All Files' listings, and stops the batch on its way: what it brings is stale.</summary>
     private void ForgetListings()
     {
         _diskCancellation.Cancel();
         _diskCancellation.Dispose();
         _diskCancellation = new CancellationTokenSource();
+        _diskGeneration++;
+        _diskBatch = null;
         _disk.Clear();
         _diskFolders.Clear();
-        _diskListings.Clear();
         _diskQueue.Clear();
         _diskQueueAll = false;
+        _syncWhenListed = null;
     }
+
+    /// <summary>Whether a listing of <paramref name="project"/> is queued or on its way.</summary>
+    private bool IsListing(string project) => _diskQueueAll || _diskQueue.Contains(project) || _diskBatch?.Contains(project) == true;
+
+    /// <summary>Whether a listing of the disk is queued or on its way (tests).</summary>
+    internal bool IsListingDisk => _diskQueued || _folderQueued || _diskQueueAll || _diskQueue.Count > 0 || _diskBatch is not null;
 
     private CancellationTokenSource _folderCancellation = new();
 
@@ -470,77 +493,107 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Show All Files' listings of the queued projects' folders, through the build host and off the UI thread, four at a
-    /// time. Each goes into the folders that hold the project's items and the folders expanded: another folder (bin, obj)
-    /// shows, without what is in it until it's expanded. A listing equal to the project's last keeps its instance, so the
-    /// tree keeps the project's subtree; the tree is built again once, if any changed. Every project's whole folder, bin
-    /// and obj with hundreds of files after a build, was listed again one project at a time for each change of any folder
-    /// and each build, and every project's subtree built again on the UI thread (M56).
+    /// Show All Files' listings of the queued projects' folders, through the build host and off the UI thread: one batch
+    /// at a time, four listings at a time in it, and what is queued meanwhile goes with the next batch. Each goes into the
+    /// folders that hold the project's items and the folders expanded: another folder (bin, obj) shows, without what is in
+    /// it until it's expanded. A listing equal to the project's last keeps its instance, so the tree keeps the project's
+    /// subtree; the tree is built again once, with the refreshes queued meanwhile, if any changed. Every project's whole
+    /// folder, bin and obj with hundreds of files after a build, was listed again one project at a time for each change of
+    /// any folder and each build, and every project's subtree built again on the UI thread (M56).
     /// </summary>
     private async Task LoadProjectsAsync()
     {
+        if (_diskBatch is not null)
+        {
+            return; // the batch on its way starts the next one when it ends
+        }
+
         var queued = _diskQueueAll ? [.. _shell.Solutions.Projects.Keys] : _diskQueue.ToList();
         _diskQueue.Clear();
         _diskQueueAll = false;
-        var requests = new List<(string Project, ProjectInfo Info, IReadOnlyList<DirectoryEntry>? Old, int Number)>();
+        var requests = new List<(string Project, ProjectInfo Info, IReadOnlyList<DirectoryEntry>? Old)>();
         foreach (var project in _showAllFiles ? queued : [])
         {
             if (_shell.Solutions.Projects.TryGetValue(project, out var info) && info.State == ProjectStates.Loaded)
             {
-                requests.Add((project, info, _disk.GetValueOrDefault(project), _diskListings[project] = ++_diskListing));
+                requests.Add((project, info, _disk.GetValueOrDefault(project)));
             }
         }
 
         if (requests.Count == 0)
         {
+            ResolveSyncWhenListed(); // nothing on its way can bring it
             return;
         }
 
+        var generation = _diskGeneration;
+        _diskBatch = requests.Select(r => r.Project).ToHashSet(SolutionService.PathComparer);
         var expanded = _expanded.Where(id => id.StartsWith("d:", StringComparison.Ordinal)).Select(id => id[2..]).ToList();
         var listings = new System.Collections.Concurrent.ConcurrentBag<ProjectListing>();
         try
         {
             await Parallel.ForEachAsync(requests, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = _diskCancellation.Token }, async (r, cancellationToken) =>
-                listings.Add(await ListProjectAsync(r.Project, r.Info, r.Old, r.Number, expanded, cancellationToken).ConfigureAwait(false))).ConfigureAwait(true);
+                listings.Add(await ListProjectAsync(r.Project, r.Info, r.Old, expanded, cancellationToken).ConfigureAwait(false))).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
-            return; // Show All Files went off, or the solution closed
+            // Show All Files went off, or the solution closed: the generation tells.
         }
 
-        var changed = false;
-        foreach (var listing in listings)
+        if (generation != _diskGeneration)
         {
-            if (!_diskListings.TryGetValue(listing.Project, out var newest) || newest != listing.Number)
-            {
-                continue; // a newer listing of the project is on its way
-            }
+            return; // stale: Show All Files went off or the solution closed meanwhile, and a batch since has the queue
+        }
 
+        _diskBatch = null;
+        var changed = false;
+        var failed = new List<string>();
+        var inSolution = _shell.Solutions.Solution?.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer) ?? [];
+        foreach (var listing in listings.Where(l => inSolution.Contains(l.Project))) // not the projects the solution lost meanwhile
+        {
+            // The folders listed decide which folders have a "Loading…" row, so they count too. A listing that failed (the
+            // build host restarting, its two minutes up) brings nothing new, and the folders it was to go into count as
+            // listed: the expanded ones showed "Loading…" until the project's next listing, if any came.
+            var entries = _disk.GetValueOrDefault(listing.Project);
+            var folders = _diskFolders.GetValueOrDefault(listing.Project);
+            var listed = listing.Error is null || folders is null ? listing.Folders : folders.Union(listing.Folders, SolutionService.PathComparer).ToHashSet(SolutionService.PathComparer);
             if (listing.Error is { } error)
             {
-                _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {error}");
-                continue;
+                failed.Add(error);
             }
 
-            // The folders listed decide which folders have a "Loading…" row, so they count too.
-            var folders = _diskFolders.GetValueOrDefault(listing.Project);
-            changed |= !ReferenceEquals(_disk.GetValueOrDefault(listing.Project), listing.Entries) || folders is null || !folders.SetEquals(listing.Folders);
-            _disk[listing.Project] = listing.Entries;
-            _diskFolders[listing.Project] = listing.Folders;
+            changed |= (listing.Error is null && !ReferenceEquals(entries, listing.Entries)) || folders is null || !folders.SetEquals(listed);
+            _disk[listing.Project] = listing.Error is null ? listing.Entries : entries ?? [];
+            _diskFolders[listing.Project] = listed;
+            Listings++;
         }
 
-        Listings += listings.Count;
+        if (failed.Count > 0)
+        {
+            // One line for the batch: with the build host down, each project's own line flooded the log after a build.
+            _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk of {failed.Count} project(s): {failed[0]}");
+        }
+
         DiskLoaded?.Invoke(this, EventArgs.Empty);
+        if (_diskQueueAll || _diskQueue.Count > 0)
+        {
+            QueueDiskLoad(); // what was queued meanwhile, as the next batch
+        }
+
         if (changed)
         {
-            Refresh();
+            QueueRefresh(); // with the refreshes queued meanwhile (evaluations', expansions'), one build of the tree
+        }
+        else
+        {
+            ResolveSyncWhenListed(); // the tree is as it was
         }
     }
 
-    private sealed record ProjectListing(string Project, int Number, IReadOnlyList<DirectoryEntry> Entries, IReadOnlySet<string> Folders, string? Error = null);
+    private sealed record ProjectListing(string Project, IReadOnlyList<DirectoryEntry> Entries, IReadOnlySet<string> Folders, string? Error = null);
 
     /// <summary>A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread).</summary>
-    private async Task<ProjectListing> ListProjectAsync(string project, ProjectInfo info, IReadOnlyList<DirectoryEntry>? old, int number, IReadOnlyList<string> expanded, CancellationToken cancellationToken)
+    private async Task<ProjectListing> ListProjectAsync(string project, ProjectInfo info, IReadOnlyList<DirectoryEntry>? old, IReadOnlyList<string> expanded, CancellationToken cancellationToken)
     {
         var directory = System.IO.Path.GetDirectoryName(project)!;
         var below = System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar;
@@ -550,16 +603,16 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         try
         {
             var tree = await _shell.ProjectItems.ListTreeAsync(directory, cancellationToken, folders: folders).ConfigureAwait(false);
-            return new ProjectListing(project, number, old is not null && old.SequenceEqual(tree.Entries) ? old : tree.Entries, folders);
+            return new ProjectListing(project, old is not null && old.SequenceEqual(tree.Entries) ? old : tree.Entries, folders);
         }
         catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException
                                    || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            return new ProjectListing(project, number, [], folders, ex.Message);
+            return new ProjectListing(project, [], folders, ex.Message);
         }
     }
 
-    /// <summary>The projects' folders listed so far (tests).</summary>
+    /// <summary>The projects' listings taken so far, failed ones too (tests).</summary>
     internal int Listings { get; private set; }
 
     /// <summary>
@@ -645,16 +698,17 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void SyncWithActiveDocument()
     {
         RefreshIfQueued(); // a project that just loaded is in the tree to find
+        _syncWhenListed = null;
         if (_shell.ActiveEditor?.Model.Path is not { } path || FindByPath(path) is not { } node)
         {
             if (_shell.ActiveEditor?.Model.Path is { } unlisted && ListDownTo(unlisted))
             {
                 ClearFilter();
-                _pendingReveal = "f:" + unlisted; // once its folders are listed
+                _syncWhenListed = unlisted; // revealed once the listings that can bring it have come (ResolveSyncWhenListed)
                 return;
             }
 
-            _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
+            ShowNotInSolution();
             return;
         }
 
@@ -662,20 +716,24 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         Reveal(node.Id);
     }
 
+    private void ShowNotInSolution() =>
+        _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
+
     /// <summary>
     /// Show All Files: a file in a folder that isn't in its project shows once the folder is expanded and listed. This
-    /// expands the folders down to <paramref name="path"/> in the project whose folder holds it, and lists them; true when
-    /// it did (the file is in the tree after the listing's refresh), false when they were expanded already.
+    /// expands the folders down to <paramref name="path"/> in the project whose folder holds it most closely, and queues
+    /// listings of every project whose folder holds it (two projects can share a folder); true while a listing of one of
+    /// them is queued or on its way, the file may come with it.
     /// </summary>
     private bool ListDownTo(string path)
     {
         if (!_showAllFiles || System.IO.Path.GetDirectoryName(path) is not { } folder
-            || ProjectsHolding(_diskFolders.Keys, [folder]).MaxBy(p => System.IO.Path.GetDirectoryName(p)!.Length) is not { } project)
+            || ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]) is not { Count: > 0 } projects)
         {
             return false;
         }
 
-        var directory = System.IO.Path.GetDirectoryName(project)!;
+        var directory = System.IO.Path.GetDirectoryName(projects.MaxBy(p => System.IO.Path.GetDirectoryName(p)!.Length))!;
         var expanded = false;
         for (var down = folder; down.Length > directory.Length; down = System.IO.Path.GetDirectoryName(down)!)
         {
@@ -684,10 +742,34 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         if (expanded)
         {
-            QueueDiskRefresh([project]);
+            QueueDiskRefresh(projects);
         }
 
-        return expanded;
+        return projects.Any(IsListing);
+    }
+
+    /// <summary>
+    /// Sync with Active Document's file, once no listing that can bring it is queued or on its way: selected when it came,
+    /// else the usual message. It waited as a node id, which never came for a file no listing has (in a folder the build
+    /// host leaves out, a listing cut short or failed), with no message, and a refresh minutes later could jump to it (M56).
+    /// </summary>
+    private void ResolveSyncWhenListed()
+    {
+        if (_syncWhenListed is not { } path
+            || (System.IO.Path.GetDirectoryName(path) is { } folder && ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]).Any(IsListing)))
+        {
+            return;
+        }
+
+        _syncWhenListed = null;
+        if (FindByPath(path) is { } node)
+        {
+            Reveal(node.Id);
+        }
+        else
+        {
+            ShowNotInSolution();
+        }
     }
 
     /// <summary>
@@ -958,7 +1040,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         var solutions = _shell.Solutions;
         _root = solutions.Solution is { } solution
-            ? SolutionTree.Build(solution, solutions.Projects, solutions.CompilerInputs, new ExplorerOptions
+            ? SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
             {
                 DiskEntries = _showAllFiles ? _disk : null,
                 FolderEntries = IsFolderView ? _folderEntries : null,
@@ -1017,6 +1099,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _trackWhenFound = null;
             OnActiveDocumentChanged();
         }
+
+        ResolveSyncWhenListed();
     }
 
     /// <summary>A filter's matches, found off the UI thread and shown with one reset, unless the filter or the tree changed meanwhile.</summary>
@@ -1153,7 +1237,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
         else if (expanded && IsUnlisted(row.Node))
         {
-            QueueDiskRefresh([row.Node.ProjectPath!]); // its project's listing goes into it now (it's in the expanded ones by then)
+            // Its projects' listings go into it now (it's in the expanded ones by then): each project whose folder holds it
+            // has it, under the same id, and expands with it (two projects can share a folder).
+            QueueDiskRefresh(ProjectsHolding(_shell.Solutions.Projects.Keys, [row.Node.Path!]));
         }
 
         if (!row.HasChildren || (expanded ? !_expanded.Add(row.Id) : !_expanded.Remove(row.Id)))
@@ -1528,6 +1614,106 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         QueueRefresh();
+    }
+
+    // ------------------------------------------------------------------ analyzers a build made
+
+    // By project: the inputs the build host sent with analyzers marked missing (missingAnalyzers), and the same inputs
+    // without the ones a build has made since, which the tree takes while the build host's are the project's.
+    private readonly Dictionary<string, (CompilerInputsInfo Sent, CompilerInputsInfo Inputs)> _analyzersFound = new(SolutionService.PathComparer);
+
+    /// <summary>
+    /// After a build, the analyzers marked missing are looked for again, off the UI thread and through the file system of
+    /// the build host's paths. A build doesn't run design-time builds again, so a source generator built from the
+    /// solution (on a fresh clone, an analyzer another project of it outputs) kept its warning until the project's next
+    /// one (M56).
+    /// </summary>
+    private void FindMissingAnalyzers()
+    {
+        var marked = _shell.Solutions.CompilerInputs.Values
+            .Select(sent => (Sent: sent, Inputs: _analyzersFound.TryGetValue(sent.Path, out var found) && ReferenceEquals(found.Sent, sent) ? found.Inputs : sent))
+            .Where(i => i.Inputs.MissingAnalyzers is { Length: > 0 })
+            .ToList();
+        if (marked.Count > 0)
+        {
+            _ = FindMissingAnalyzersAsync(marked);
+        }
+    }
+
+    private async Task FindMissingAnalyzersAsync(List<(CompilerInputsInfo Sent, CompilerInputsInfo Inputs)> marked)
+    {
+        var found = await Task.Run(async () =>
+        {
+            var results = new List<(CompilerInputsInfo Sent, CompilerInputsInfo Inputs)>();
+            foreach (var (sent, inputs) in marked)
+            {
+                var missing = new List<string>();
+                foreach (var analyzer in inputs.MissingAnalyzers!)
+                {
+                    // A relative path (an Analyzer item's own) is the project folder's, as the build host takes it; one that
+                    // can't be looked at (a remote window's connection lost) stays missing.
+                    try
+                    {
+                        var path = System.IO.Path.GetFullPath(analyzer, System.IO.Path.GetDirectoryName(inputs.Path)!);
+                        if (!await Codalus.Workbench.FileSystem.FileSystems.FileExistsAsync(path, CancellationToken.None).ConfigureAwait(false))
+                        {
+                            missing.Add(analyzer);
+                        }
+                    }
+                    catch (Exception ex) when (ex is IOException or ArgumentException or InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException)
+                    {
+                        missing.Add(analyzer);
+                    }
+                }
+
+                if (missing.Count < inputs.MissingAnalyzers!.Length)
+                {
+                    results.Add((sent, inputs with { MissingAnalyzers = missing.Count == 0 ? null : [.. missing] }));
+                }
+            }
+
+            return results;
+        }).ConfigureAwait(true);
+
+        var changed = false;
+        foreach (var (sent, inputs) in found)
+        {
+            // Not when the build host sent newer inputs meanwhile: it marked them itself.
+            if (ReferenceEquals(_shell.Solutions.CompilerInputs.GetValueOrDefault(sent.Path), sent))
+            {
+                _analyzersFound[sent.Path] = (sent, inputs);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            QueueRefresh();
+        }
+    }
+
+    /// <summary>The build host's inputs, with the analyzers a build made since unmarked (the same instances each time, for the tree's cache).</summary>
+    private IReadOnlyDictionary<string, CompilerInputsInfo> WithAnalyzersFound(IReadOnlyDictionary<string, CompilerInputsInfo> sent)
+    {
+        if (_analyzersFound.Count == 0)
+        {
+            return sent;
+        }
+
+        var inputs = new Dictionary<string, CompilerInputsInfo>(sent, SolutionService.PathComparer);
+        foreach (var (project, found) in _analyzersFound.ToList())
+        {
+            if (inputs.TryGetValue(project, out var current) && ReferenceEquals(current, found.Sent))
+            {
+                inputs[project] = found.Inputs;
+            }
+            else
+            {
+                _analyzersFound.Remove(project); // newer inputs, which the build host marked itself
+            }
+        }
+
+        return inputs;
     }
 
     // ------------------------------------------------------------------ activation

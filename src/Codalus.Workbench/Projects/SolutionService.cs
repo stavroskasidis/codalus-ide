@@ -132,8 +132,11 @@ public sealed class SolutionService : IAsyncDisposable
     /// <summary>Build host messages and process output, for the Output window.</summary>
     public event EventHandler<string>? Log;
 
-    /// <summary>Folders whose set of files changed on disk (Show All Files and the folder view refresh; ADR 0033).</summary>
-    public event EventHandler<IReadOnlyList<string>>? FilesChanged;
+    /// <summary>
+    /// Folders whose set of files changed on disk (Show All Files and the folder view refresh; ADR 0033), or, with
+    /// <see cref="FilesChangedParams.Rescan"/>, anything under the folders the build host watches.
+    /// </summary>
+    public event EventHandler<FilesChangedParams>? FilesChanged;
     /// <summary>A message of a <c>dotnet ef</c> command the build host runs (ADR 0036).</summary>
     public event EventHandler<EfOutputParams>? EfOutput;
 
@@ -328,7 +331,7 @@ public sealed class SolutionService : IAsyncDisposable
         connection.OnNotification(ProjectMethods.Log, json.LogParams, p => Log?.Invoke(this, $"[{p.Level}] {p.Message}"));
         connection.OnNotification(ProjectMethods.BuildOutput, json.BuildOutputParams, p => BuildOutput?.Invoke(this, p.Line));
         connection.OnNotification(ProjectMethods.BuildDiagnostic, json.BuildDiagnosticInfo, d => BuildDiagnostic?.Invoke(this, d));
-        connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p.Directories));
+        connection.OnNotification(ItemMethods.FilesChanged, ItemJsonContext.Default.FilesChangedParams, p => FilesChanged?.Invoke(this, p));
         connection.OnNotification(EfMethods.Output, EntityFrameworkJsonContext.Default.EfOutputParams, o => EfOutput?.Invoke(this, o));
         connection.OnNotification(ScaffoldMethods.Output, WebToolsJsonContext.Default.ScaffoldOutputParams, o => ScaffoldOutput?.Invoke(this, o));
         connection.OnNotification(WcfReferenceMethods.Output, WcfJsonContext.Default.ScaffoldOutputParams, o => WcfOutput?.Invoke(this, o));

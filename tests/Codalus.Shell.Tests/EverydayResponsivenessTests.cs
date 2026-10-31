@@ -57,6 +57,14 @@ public class EverydayResponsivenessTests
             }
         }
 
+        // What a build of App leaves in its bin, for Show All Files.
+        var output = Path.Combine(folder, "src", "App", "bin", "Debug", "net10.0");
+        Directory.CreateDirectory(output);
+        for (var i = 0; i < 500; i++)
+        {
+            await File.WriteAllTextAsync(Path.Combine(output, $"Out{i:000}.dll"), string.Empty, TestContext.Current.CancellationToken);
+        }
+
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         f.Window.Height = 700;
         await f.Shell.OpenSolutionAsync(solution);
@@ -123,6 +131,40 @@ public class EverydayResponsivenessTests
             {
                 await f.Shell.OpenFileAsync(file);
             }
+        });
+
+        // Show All Files listed every project's whole folder again, bin and obj included, for each folder change and build,
+        // and built every project's subtree again on the UI thread (M56).
+        var app = Path.Combine(folder, "src", "App", "App.csproj");
+        var bin = Path.Combine(folder, "src", "App", "bin");
+        async Task ListedAsync()
+        {
+            await ShellFixture.PumpUntil(() => !explorer.IsListingDisk, seconds: 60);
+            await WaitAsync(30);
+        }
+
+        await Flow("Show All Files: on, bin expanded, a build's and a folder change's listings", async () =>
+        {
+            explorer.ShowAllFiles = true;
+            await ListedAsync();
+            explorer.Reveal("d:" + bin);
+            foreach (var expand in new[] { bin, Path.Combine(bin, "Debug"), output })
+            {
+                await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Id == "d:" + expand), seconds: 60);
+                explorer.SetExpanded(explorer.Rows.First(r => r.Id == "d:" + expand), true);
+                await ListedAsync();
+            }
+
+            var later = Path.Combine(output, "Later.dll");
+            await File.WriteAllTextAsync(later, string.Empty, TestContext.Current.CancellationToken);
+            explorer.OnBuildFinished(app);
+            await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Id == "f:" + later), seconds: 60);
+            explorer.OnFilesChanged([Path.Combine(folder, "src", "App", "Many"), Path.Combine(folder, "src", "Core", "Many")]);
+            await ListedAsync();
+            File.Delete(later);
+            explorer.CollapseAll();
+            explorer.ShowAllFiles = false;
+            await WaitAsync(50);
         });
     }
 

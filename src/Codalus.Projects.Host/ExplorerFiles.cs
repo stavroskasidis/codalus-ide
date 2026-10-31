@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Codalus.Projects.Protocol;
 
 namespace Codalus.Projects.Host;
@@ -15,7 +16,7 @@ internal static class ExplorerFiles
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     /// <summary>Folders the tree and the project discovery never descend into.</summary>
-    public static readonly HashSet<string> SkippedFolders = new(StringComparer.OrdinalIgnoreCase) { ".git", ".vs", ".idea", "node_modules" };
+    public static FrozenSet<string> SkippedFolders { get; } = new[] { ".git", ".vs", ".idea", "node_modules" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Everything under a folder, without version control, IDE and package folders, up to a limit; with
@@ -75,10 +76,12 @@ internal static class ExplorerFiles
     /// The inputs with the analyzers that aren't on disk marked, for the Solution Explorer: the shell checked each analyzer
     /// on its UI thread for every build of its tree (6,000 checks in a 300-project solution), and on its own disk when the
     /// host runs on another machine. Cached inputs needn't be marked: they are taken only while their analyzers are there
-    /// (<see cref="DesignTimeCache.TryRead(string?, string, string, string)"/>).
+    /// (<see cref="DesignTimeCache.TryRead(string?, string, string, string)"/>). A relative path (an <c>Analyzer</c> item's
+    /// own) is the project folder's, where the compiler runs: taken as the host's working folder's, it was always missing.
     /// </summary>
     public static CompilerInputsInfo WithMissingAnalyzers(CompilerInputsInfo inputs) =>
-        inputs.State == CompilerInputStates.Ok && CompilerInputsInfo.AnalyzerPaths(inputs.Arguments).Where(a => !File.Exists(a)).Distinct(s_pathComparer).ToArray() is { Length: > 0 } missing
+        inputs.State == CompilerInputStates.Ok && CompilerInputsInfo.AnalyzerPaths(inputs.Arguments)
+            .Where(a => !File.Exists(Path.GetFullPath(a, Path.GetDirectoryName(inputs.Path)!))).Distinct(s_pathComparer).ToArray() is { Length: > 0 } missing
             ? inputs with { MissingAnalyzers = missing }
             : inputs;
 }
