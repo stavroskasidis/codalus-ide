@@ -1,9 +1,13 @@
 using System.Text.Json;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using AvaloniaEdit;
 using AvaloniaEdit.Document;
+using AvaloniaEdit.Folding;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Shell.Controls;
 using Codalus.Shell.Editor;
 using LspCompletionItem = Codalus.LanguageServices.Protocol.CompletionItem;
 using Range = Codalus.LanguageServices.Protocol.Range;
@@ -183,6 +187,74 @@ public sealed class EditorEditingAtScaleTests
         // Edits far apart stay separate changes: one group would rewrite the text between them.
         var far = new TextDocument(new string('a', 10_000));
         Assert.Equal(2, DocumentEdits.Apply(far, [(0, 0, "b"), (DocumentEdits.MaxGap + 10, 0, "c")]));
+    }
+
+    [AvaloniaFact]
+    public void A_change_over_most_of_the_document_keeps_folds_the_caret_and_anchors_where_each_edit_moves_them()
+    {
+        // A group over half the document or more replaces all of it, where AvaloniaEdit rebuilds its lines in one pass:
+        // folds stay folded, and the caret, anchors and segments move as when the edits are applied one by one.
+        var text = string.Concat(Enumerable.Range(0, 400).Select(i => $"call(marker, {i});\n"));
+        var editor = new TextEditor { Document = new TextDocument(text), FontFamily = MarkdownRenderer.Monospace };
+        var window = new Window { Width = 600, Height = 400, Content = editor };
+        window.Show();
+        try
+        {
+            var document = editor.Document;
+            var oneByOne = new TextDocument(text);
+            int LineOffset(int number) => document.GetLineByNumber(number).Offset;
+            var view = editor.TextArea.TextView;
+            double Height(int first, int last) => view.GetVisualTopByDocumentLine(last) - view.GetVisualTopByDocumentLine(first);
+            var lineHeight = Height(1, 2);
+
+            var fold = FoldingManager.Install(editor.TextArea).CreateFolding(document.GetLineByNumber(100).EndOffset, document.GetLineByNumber(120).EndOffset);
+            fold.IsFolded = true;
+            Assert.Equal(lineHeight, Height(100, 121), 3); // lines 101-120 hidden
+            editor.CaretOffset = LineOffset(200) + 14;
+            var segments = new TextSegmentCollection<TextSegment>(document) { new TextSegment { StartOffset = LineOffset(250), Length = 12 } };
+            var anchor = document.CreateAnchor(LineOffset(300) + 2);
+            int[] Positions() => [fold.StartOffset, fold.EndOffset, editor.CaretOffset, segments.First().StartOffset, segments.First().EndOffset, anchor.Offset];
+            var positions = Positions();
+            var expected = positions.Select(o => oneByOne.CreateAnchor(o)).ToList();
+            DocumentChangeEventArgs? change = null;
+            document.Changed += (_, e) => change = e;
+
+            var edits = new List<(int Offset, int Length, string Text)>();
+            for (var i = text.IndexOf("marker", StringComparison.Ordinal); i >= 0; i = text.IndexOf("marker", i + 6, StringComparison.Ordinal))
+            {
+                edits.Add((i, 6, "X"));
+            }
+
+            Assert.Equal(1, DocumentEdits.Apply(document, edits[1..]));
+            using (oneByOne.RunUpdate())
+            {
+                foreach (var (offset, length, replacement) in Enumerable.Reverse(edits[1..]))
+                {
+                    oneByOne.Replace(offset, length, replacement);
+                }
+            }
+
+            Assert.Equal((0, text.Length), (change!.Offset, change.RemovalLength));
+            Assert.Equal(oneByOne.Text, document.Text);
+            Assert.Equal([.. expected.Select(a => a.Offset)], Positions());
+            Assert.True(fold.IsFolded);
+            Assert.Equal(lineHeight, Height(100, 121), 3);
+
+            // Undone, in one step: the same, back where they were.
+            document.UndoStack.Undo();
+            Assert.Equal(text, document.Text);
+            Assert.Equal(positions, Positions());
+            Assert.True(fold.IsFolded);
+            Assert.Equal(lineHeight, Height(100, 121), 3);
+
+            // A group over a small part replaces only its span.
+            DocumentEdits.Apply(document, edits[10..20]);
+            Assert.Equal((edits[10].Offset, edits[19].Offset + 6 - edits[10].Offset), (change.Offset, change.RemovalLength));
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 
     [Fact]

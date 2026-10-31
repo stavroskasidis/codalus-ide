@@ -26,11 +26,28 @@ public readonly record struct CaretSelection(int Anchor, int Caret)
 /// </summary>
 public static class CaretEdits
 {
+    private static readonly Comparer<CaretSelection> s_order = Comparer<CaretSelection>.Create(Compare);
+
     /// <summary>Merges overlapping or touching selections; result sorted by start.</summary>
     public static List<CaretSelection> Normalize(IEnumerable<CaretSelection> selections)
     {
-        var result = new List<CaretSelection>();
-        foreach (var selection in selections.OrderBy(s => s.Start).ThenBy(s => s.End))
+        // The primary first and the rest in order (MultiCaretController.All) moves the primary to its place: a sort of
+        // 20,000 selections at every key took tens of milliseconds.
+        var sorted = new List<CaretSelection>(selections);
+        if (!InOrder(sorted, 1))
+        {
+            sorted.Sort(s_order);
+        }
+        else if (sorted.Count > 1 && Compare(sorted[0], sorted[1]) > 0)
+        {
+            var first = sorted[0];
+            sorted.RemoveAt(0);
+            var index = sorted.BinarySearch(first, s_order);
+            sorted.Insert(index < 0 ? ~index : index, first);
+        }
+
+        var result = new List<CaretSelection>(sorted.Count);
+        foreach (var selection in sorted)
         {
             // Overlapping selections, or two carets at the same place.
             if (result.Count > 0 && (selection.Start < result[^1].End || (selection.Start == result[^1].Start && selection.End == result[^1].End)))
@@ -44,6 +61,21 @@ public static class CaretEdits
         }
 
         return result;
+    }
+
+    private static int Compare(CaretSelection a, CaretSelection b) => a.Start != b.Start ? a.Start.CompareTo(b.Start) : a.End.CompareTo(b.End);
+
+    private static bool InOrder(List<CaretSelection> selections, int from)
+    {
+        for (var i = from + 1; i < selections.Count; i++)
+        {
+            if (Compare(selections[i - 1], selections[i]) > 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -61,7 +93,11 @@ public static class CaretEdits
             .ToList();
 
         // Ranges widened for backspace/delete may now overlap: merge again.
-        ranges.Sort();
+        if (emptyRange is not null)
+        {
+            ranges.Sort();
+        }
+
         var merged = new List<(int Start, int End)>();
         foreach (var range in ranges)
         {

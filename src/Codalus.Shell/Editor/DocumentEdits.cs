@@ -71,14 +71,20 @@ internal static class DocumentEdits
             return;
         }
 
-        // In order of offset: the entries wholly before an offset are before every later one too.
+        // In order of offset: the entries wholly before an offset are before every later one too. Carets come in order.
         var order = new int[offsets.Length];
+        var ascending = true;
         for (var i = 0; i < order.Length; i++)
         {
             order[i] = i;
+            ascending &= i == 0 || offsets[i - 1] <= offsets[i];
         }
 
-        Array.Sort((int[])offsets.Clone(), order);
+        if (!ascending)
+        {
+            Array.Sort((int[])offsets.Clone(), order);
+        }
+
         var next = 0;
         var delta = 0;
         foreach (var index in order)
@@ -155,9 +161,19 @@ internal static class DocumentEdits
             return;
         }
 
-        // One replace of the group's span; the map's entries are in the coordinates left by the entries before them.
+        // One replace of the group's span; the map's entries are in the coordinates left by the entries before them. A span
+        // of half the document or more replaces all of it, AvaloniaEdit's path for setting the text: it rebuilds its line
+        // tree, and each view its line heights, in one pass (foldings fold again; the map moves the rest as before), where
+        // a replace of a part removes each line of the span and inserts it again through both trees: typing with 20,000
+        // carets on 100,000 lines spent 100-150 ms of each key there against 40-100 ms, and a second until the JIT had
+        // optimized it.
         var first = edits[start].Offset;
         var last = edits[end - 1].Offset + edits[end - 1].Length;
+        if (2 * (last - first) >= document.TextLength)
+        {
+            (first, last) = (0, document.TextLength);
+        }
+
         var original = document.GetText(first, last - first);
         var replacement = new StringBuilder(original.Length);
         var map = new OffsetChangeMap();
@@ -172,6 +188,7 @@ internal static class DocumentEdits
             position = offset + length;
         }
 
+        replacement.Append(original, position - first, last - position);
         document.Replace(first, last - first, replacement.ToString(), map);
     }
 }
