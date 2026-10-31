@@ -47,7 +47,7 @@ public sealed partial class ShellHost
             ? "The data host stopped unexpectedly and is restarting; running queries were canceled."
             : "The data host keeps crashing and was stopped. Reopen the Database Explorer to try again."));
         DbExplorer.SelectionChanged += (_, node) => Workbench.Context.Set("dataNodeKind", node?.Kind);
-        _connectionDiscovery = new UiDebouncer(() => _ = DiscoverConnectionsInBackgroundAsync(), TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3));
+        _connectionDiscovery = Debouncer(() => _ = DiscoverConnectionsInBackgroundAsync(), TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3));
         Solutions.SolutionChanged += (_, _) => _connectionDiscovery.Request();
         Solutions.ProjectChanged += (_, _) => _connectionDiscovery.Request();
         SyncDataTree();

@@ -78,6 +78,30 @@ public sealed partial class ShellHost : IAsyncDisposable
     /// <summary>Cancelled when the shell is disposed: work it started for itself (the environment check) stops with it.</summary>
     private readonly CancellationTokenSource _lifetime = new();
 
+    private readonly List<UiDebouncer> _debouncers = [];
+
+    /// <summary>
+    /// A debouncer that stops with the shell (<see cref="StopTimers"/>); one made later is stopped already. Not a
+    /// registration on the shell's lifetime: a pending read whose token is linked to it keeps that token's callbacks.
+    /// </summary>
+    internal UiDebouncer Debouncer(Action action, TimeSpan delay, TimeSpan maxDelay)
+    {
+        var debouncer = new UiDebouncer(action, delay, maxDelay);
+        lock (_debouncers)
+        {
+            if (_disposeStarted)
+            {
+                debouncer.Stop();
+            }
+            else
+            {
+                _debouncers.Add(debouncer);
+            }
+        }
+
+        return debouncer;
+    }
+
     public ShellHost(Application app, ShellOptions options)
     {
         Options = options;
@@ -1325,6 +1349,16 @@ public sealed partial class ShellHost : IAsyncDisposable
         foreach (var timer in new[] { _statusTimer, _repositoryTimer, _autoRecoverTimer, _indexTimer, _codeSearchRefresh, _gitRepositoryTimer, _endpointsRefresh })
         {
             timer?.Stop();
+        }
+
+        lock (_debouncers)
+        {
+            foreach (var debouncer in _debouncers)
+            {
+                debouncer.Stop();
+            }
+
+            _debouncers.Clear();
         }
     }
 }
