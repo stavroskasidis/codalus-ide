@@ -2516,6 +2516,7 @@
   "msg.git.openInNewWindow": "Open in New Window",
   "msg.git.pulling": "Pulling…",
   "msg.git.pushing": "Pushing…",
+  "msg.git.stashTooManyFiles": "{0} files are too many to stash on their own on Windows: git gives their paths to the commands it runs on a command line, which holds 32,767 characters. Stash fewer files at a time, or all the changes.",
   "msg.git.syncing": "Syncing…",
   "msg.git.theOpenSolutionIsNotIn": "The open solution is not in a git repository.",
   "msg.git.unsavedEditsLostToo": "{0} also has unsaved edits, and they will be lost too.",

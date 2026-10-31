@@ -1,4 +1,5 @@
 using System.Globalization;
+using Codalus.Workbench.Localization;
 using System.Text;
 
 namespace Codalus.Workbench.Git;
@@ -141,7 +142,7 @@ public sealed partial class GitService
             if (OperatingSystem.IsWindows() && !StashFitsCommandLine(relative))
             {
                 throw new GitException(
-                    $"{relative.Count.ToString(CultureInfo.CurrentCulture)} files are too many to stash on their own on Windows: git gives their paths to the commands it runs on a command line, which holds 32,767 characters. Stash fewer files at a time, or all the changes.",
+                    Localizer.Format("msg.git.stashTooManyFiles", "{0} files are too many to stash on their own on Windows: git gives their paths to the commands it runs on a command line, which holds 32,767 characters. Stash fewer files at a time, or all the changes.", relative.Count),
                     -1);
             }
 
