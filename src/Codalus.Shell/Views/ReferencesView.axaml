@@ -69,7 +69,19 @@
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
+    <Style Selector="ListBox.filterValues ListBoxItem">
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="MinHeight" Value="24" />
+    </Style>
   </UserControl.Styles>
+
+  <UserControl.Resources>
+    <!-- A column filter's value (the filter's flyout lists them in a list box, which creates only the rows in view: a
+         check box for each of thousands of files or members took a second to open, M56). -->
+    <DataTemplate x:Key="FilterValueTemplate" x:DataType="vm:ReferenceFilterValue">
+      <CheckBox Content="{Binding Display}" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Display}" />
+    </DataTemplate>
+  </UserControl.Resources>
 
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">

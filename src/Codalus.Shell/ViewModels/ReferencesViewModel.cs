@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Infrastructure;
@@ -66,7 +65,8 @@ public sealed record ReferenceRow(string Path, int Line, int Column, string Text
     /// <summary>A header by its depth (chevron, icon, text); a reference under its group's text.</summary>
     public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * 18) : Depth == 0 ? 8 : 40 + ((Depth - 1) * 18), 0, 0, 0);
 
-    public string FileName => IsHeader ? string.Empty : System.IO.Path.GetFileName(Path);
+    /// <summary>The File column, once: the search looks in it for every reference at each keystroke.</summary>
+    public string FileName { get; } = IsHeader ? string.Empty : System.IO.Path.GetFileName(Path);
 
     public string LineLabel => IsHeader ? string.Empty : Line.ToString(CultureInfo.InvariantCulture);
 
@@ -186,7 +186,7 @@ public sealed class ReferenceColumnFilter : ObservableObject
 
     public ReferenceColumn Column { get; }
 
-    public ObservableCollection<ReferenceFilterValue> Values { get; } = [];
+    public ResettableCollection<ReferenceFilterValue> Values { get; } = [];
 
     public RelayCommand SelectAllCommand { get; }
 
@@ -202,14 +202,12 @@ public sealed class ReferenceColumnFilter : ObservableObject
     internal void Load(IEnumerable<string> values)
     {
         var hidden = Hidden();
-        Values.Clear();
-        foreach (var group in values.GroupBy(v => v, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase))
+        Values.Reset(values.GroupBy(v => v, StringComparer.Ordinal).OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase).Select(group =>
         {
             var value = new ReferenceFilterValue(this, group.Key, group.Count());
             value.Reset(!hidden.Contains(group.Key));
-            Values.Add(value);
-        }
-
+            return value;
+        }));
         Notify();
     }
 
@@ -266,6 +264,10 @@ public sealed class ReferencesViewModel : ObservableObject
 
     /// <summary>The columns' widths when the user hasn't changed them (Code fills what the others leave).</summary>
     public static IReadOnlyList<double> DefaultWidths { get; } = [0, 140, 48, 40, 140, 180, 140, 80];
+
+    /// <summary>The columns the search box looks in.</summary>
+    private static readonly ReferenceColumn[] s_searched =
+        [ReferenceColumn.Code, ReferenceColumn.File, ReferenceColumn.Project, ReferenceColumn.ContainingMember, ReferenceColumn.ContainingType, ReferenceColumn.Definition];
 
     private readonly List<ReferenceRow> _references = [];
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
@@ -328,7 +330,7 @@ public sealed class ReferencesViewModel : ObservableObject
 
     public static IReadOnlyList<string> ScopeOptions => ReferencesScope.All;
 
-    public ObservableCollection<ReferenceRow> Rows { get; } = [];
+    public ResettableCollection<ReferenceRow> Rows { get; } = [];
 
     /// <summary>The filter buttons of the File, Project, Containing member, Containing type and Kind columns.</summary>
     public IReadOnlyList<ReferenceColumnFilter> Filters { get; }
@@ -668,35 +670,18 @@ public sealed class ReferencesViewModel : ObservableObject
         Refresh();
     }
 
-    /// <summary>Shows the references through the scope, the filters and the grouping, keeping the selection.</summary>
+    /// <summary>
+    /// Shows the references through the scope, the filters and the grouping, keeping the selection: the rows that changed
+    /// are replaced at once (<see cref="ResettableCollection{T}.Patch"/>), and the selected row is found again by its
+    /// reference or group.
+    /// </summary>
     internal void Refresh()
     {
-        var rows = Arrange();
         var selected = _selectedRow;
-        var index = 0;
-        while (index < rows.Count && index < Rows.Count && Rows[index].Equals(rows[index]))
-        {
-            index++;
-        }
-
-        for (var i = index; i < rows.Count && i < Rows.Count; i++)
-        {
-            Rows[i] = rows[i];
-        }
-
-        while (Rows.Count > rows.Count)
-        {
-            Rows.RemoveAt(Rows.Count - 1);
-        }
-
-        for (var i = Rows.Count; i < rows.Count; i++)
-        {
-            Rows.Add(rows[i]);
-        }
-
-        SelectedRow = selected is null || Rows.Contains(selected) ? selected
-            : selected.IsHeader ? Rows.FirstOrDefault(r => r.GroupKey is not null && r.GroupKey == selected.GroupKey)
-            : Rows.FirstOrDefault(r => !r.IsHeader && r.Source == selected.Source);
+        Rows.Patch(Arrange());
+        SelectedRow = selected is null ? null : Rows.FirstOrDefault(r => selected.IsHeader
+            ? r.IsHeader && r.GroupKey is not null && r.GroupKey == selected.GroupKey
+            : !r.IsHeader && r.Source == selected.Source);
         OnPropertyChanged(nameof(Summary));
     }
 
@@ -793,9 +778,23 @@ public sealed class ReferencesViewModel : ObservableObject
         }
     }
 
-    private bool PassesSearch(ReferenceRow row) => _filter.Length == 0
-        || new[] { ReferenceColumn.Code, ReferenceColumn.File, ReferenceColumn.Project, ReferenceColumn.ContainingMember, ReferenceColumn.ContainingType, ReferenceColumn.Definition }
-            .Any(c => ColumnValue(row, c).Contains(_filter, StringComparison.OrdinalIgnoreCase));
+    private bool PassesSearch(ReferenceRow row)
+    {
+        if (_filter.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (var column in s_searched)
+        {
+            if (ColumnValue(row, column).Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // ------------------------------------------------------------------ opening, walking, copying
 

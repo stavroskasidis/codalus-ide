@@ -117,22 +117,49 @@ public sealed partial class ShellHost
         return window;
     }
 
-    /// <summary>Shows another language's plain locations in a References window, their lines read from the files.</summary>
+    /// <summary>
+    /// Shows another language's plain locations in a References window, their lines read from the files (the open ones'
+    /// unsaved text) and their projects looked up in one index, off the UI thread: each location looked through every
+    /// item of every project on it, seconds for thousands of references in a large solution (M56).
+    /// </summary>
     public async Task<ReferencesViewModel> ShowReferenceLocationsAsync(string symbol, IReadOnlyList<Location> locations)
     {
-        var lines = new Dictionary<string, string[]>(Codalus.Workbench.Projects.SolutionService.PathComparer);
-        foreach (var path in locations.Select(l => DocumentUris.ToPath(l.Uri)).OfType<string>().Distinct(Codalus.Workbench.Projects.SolutionService.PathComparer))
+        var comparer = Codalus.Workbench.Projects.SolutionService.PathComparer;
+        var paths = locations.Select(l => DocumentUris.ToPath(l.Uri)).OfType<string>().Distinct(comparer).ToList();
+        var open = new Dictionary<string, string>(comparer);
+        foreach (var path in paths)
         {
-            lines[path] = (OpenTextOf(path) ?? await ReadAllTextOrEmptyAsync(path).ConfigureAwait(true)).Split('\n');
+            if (OpenTextOf(path) is { } text)
+            {
+                open[path] = text;
+            }
         }
 
+        var (lines, projects) = await Task.Run(() => ReadReferencedFilesAsync(paths, open, [.. Solutions.Projects.Values])).ConfigureAwait(true);
         var window = ShowReferencesWindow();
         window.ShowLocations(
             symbol,
             locations,
             (path, line) => lines.TryGetValue(path, out var text) && line < text.Length ? text[line].TrimEnd('\r') : string.Empty,
-            path => ErrorListViewModel.ProjectOf(Solutions.Projects.Values, path)?.Name);
+            path => projects.GetValueOrDefault(path));
         return window;
+    }
+
+    /// <summary>The lines of each file (an open one's from <paramref name="open"/>) and its project's name, null for none.</summary>
+    internal static async Task<(Dictionary<string, string[]> Lines, Dictionary<string, string?> Projects)> ReadReferencedFilesAsync(
+        IReadOnlyList<string> paths, IReadOnlyDictionary<string, string> open, IReadOnlyList<Codalus.Projects.Protocol.ProjectInfo> projects)
+    {
+        var comparer = Codalus.Workbench.Projects.SolutionService.PathComparer;
+        var lines = new Dictionary<string, string[]>(comparer);
+        var names = new Dictionary<string, string?>(comparer);
+        var projectOf = ErrorListViewModel.ProjectNames(projects);
+        foreach (var path in paths)
+        {
+            lines[path] = (open.TryGetValue(path, out var text) ? text : await ReadAllTextOrEmptyAsync(path).ConfigureAwait(false)).Split('\n');
+            names[path] = projectOf(path) is { Length: > 0 } name ? name : null;
+        }
+
+        return (lines, names);
     }
 
     private static async Task<string> ReadAllTextOrEmptyAsync(string path)

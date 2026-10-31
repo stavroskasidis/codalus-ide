@@ -201,6 +201,150 @@ public sealed class ReferencesWindowTests
         Assert.Equal("Program.cs:4", $"{window.SelectedRow!.FileName}:{window.SelectedRow.Line}");
     }
 
+    /// <summary>A logging call used everywhere: 20,000 references in 2,000 files of 40 projects, in 5,000 members.</summary>
+    private static IReadOnlyList<ReferenceItem> Many() =>
+    [
+        .. Enumerable.Range(0, 20_000).Select(i => new ReferenceItem(
+            new Location(DocumentUris.FromPath(Path.Combine(Root, $"P{i % 40}", $"F{i % 2000:0000}.cs")), new Range(new Position(i / 2000, 4), new Position(i / 2000, 7))),
+            i % 10 == 0 ? ReferenceItemKinds.Write : ReferenceItemKinds.Read,
+            $"T{i % 500}.M{i % 5000}()",
+            $"P{i % 40}",
+            $"Log.Write(\"{i}\");")
+        {
+            Definition = "Log.Write(string)",
+            DefinitionKind = SymbolKind.Method,
+            ContainingType = $"T{i % 500}",
+            TextStart = 4,
+        }),
+    ];
+
+    [Fact]
+    public void Twenty_thousand_references_show_and_filter_with_a_change_or_two_each()
+    {
+        var window = Window();
+        var changes = 0;
+        window.Rows.CollectionChanged += (_, _) => changes++;
+
+        // Shown at once: a change for each row paused the window for every widely used symbol (M56).
+        window.Show("Write", Many());
+        Assert.InRange(changes, 1, 2);
+        Assert.Equal(20_000, window.Rows.Count(r => !r.IsHeader));
+
+        // Each keystroke in the search changes the rows at once, and the selected reference stays selected.
+        window.SelectedRow = window.Rows.First(r => r.Text == "Log.Write(\"1234\");");
+        foreach (var text in new[] { "1", "12", "123", "1234", "123", string.Empty })
+        {
+            changes = 0;
+            window.Filter = text;
+            Assert.InRange(changes, 0, 2);
+            Assert.Equal("Log.Write(\"1234\");", window.SelectedRow?.Text);
+        }
+
+        Assert.Equal(20_000, window.Rows.Count(r => !r.IsHeader));
+
+        // A group collapsed and expanded again: a change each, the header selected meanwhile.
+        var header = window.Rows.First(r => r.IsHeader && r.Label.StartsWith("P1 ", StringComparison.Ordinal));
+        changes = 0;
+        window.Toggle(header);
+        window.Toggle(window.Rows.First(r => r.GroupKey == header.GroupKey));
+        Assert.InRange(changes, 2, 4);
+        Assert.Equal(20_000, window.Rows.Count(r => !r.IsHeader));
+    }
+
+    [Fact]
+    public void Find_results_of_a_large_replace_all_show_and_filter_with_a_change_or_two_each()
+    {
+        var results = new FindResultsViewModel(_ => Task.FromResult<IReadOnlyList<string>>([]), _ => null, (_, _, _) => Task.CompletedTask);
+        var page = results.CurrentPage;
+        var changes = 0;
+        page.Rows.CollectionChanged += (_, _) => changes++;
+
+        // Replace All changed 100,000 lines in 2,000 files: they were added a row at a time (M56).
+        var rows = Enumerable.Range(0, 100_000).Select(i => new FindResultRow(Path.Combine(Root, $"F{i / 50:0000}.cs"), (i % 50) + 1, 0, 5, $"after{i}", false)).ToList();
+        results.ShowReplaced(new FindInFilesOptions("before"), "after", rows, 100_000, 2_000);
+        Assert.InRange(changes, 1, 2);
+        Assert.Equal(102_000, page.Rows.Count);
+
+        page.SelectedRow = page.Rows.First(r => r.Code == "after4321");
+        foreach (var text in new[] { "4", "43", "432", "4321", string.Empty })
+        {
+            changes = 0;
+            page.Filter = text;
+            Assert.InRange(changes, 0, 2);
+            Assert.Equal("after4321", page.SelectedRow?.Code);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_column_filter_of_thousands_of_values_creates_only_the_check_boxes_in_view()
+    {
+        await using var f = ShellFixture.Create();
+        var window = f.Shell.ShowReferences("Write", Many());
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<ReferencesView>().Any(v => v.IsEffectivelyVisible && v.DataContext == window));
+        var view = f.Window.GetVisualDescendants().OfType<ReferencesView>().First(v => v.DataContext == window);
+        Assert.Equal(5_000, window.MemberFilter.Values.Count);
+
+        // The Containing member column's filter: a check box for each of 5,000 members took a second to open (M56).
+        var button = view.FindControl<ColumnsPanel>("Header")!.GetVisualDescendants().OfType<Button>().First(b => (string?)b.Tag == "ContainingMember");
+        button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => view.FilterFlyout is { IsOpen: true });
+        var list = ((Control)view.FilterFlyout!.Content!).GetVisualDescendants().OfType<ListBox>().Single();
+        await ShellFixture.PumpUntil(() => list.GetRealizedContainers().Any());
+        ShellFixture.Pump();
+        var boxes = list.GetVisualDescendants().OfType<CheckBox>().ToList();
+        Assert.InRange(boxes.Count, 1, 100);
+
+        // The check boxes are the values': unchecking one hides its references, Clear and Select All check them all.
+        boxes.Single(b => b.DataContext == window.MemberFilter.Values[0]).IsChecked = false;
+        Assert.False(window.MemberFilter.Values[0].IsChecked);
+        Assert.Equal(20_000 - 4, window.Rows.Count(r => !r.IsHeader));
+        window.MemberFilter.ClearCommand.Execute(null);
+        Assert.All(list.GetVisualDescendants().OfType<CheckBox>(), b => Assert.False(b.IsChecked));
+        Assert.Empty(window.Rows);
+        window.MemberFilter.SelectAllCommand.Execute(null);
+        Assert.All(list.GetVisualDescendants().OfType<CheckBox>(), b => Assert.True(b.IsChecked));
+        Assert.Equal(20_000, window.Rows.Count(r => !r.IsHeader));
+        view.FilterFlyout.Hide();
+    }
+
+    [Fact]
+    public async Task Plain_locations_read_their_lines_and_projects_off_the_ui_thread_from_one_index()
+    {
+        // 300 projects of 170 items: each location looked through every item of every project (M56).
+        var root = Path.Combine(Path.GetTempPath(), "codalus-refs-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            Codalus.Projects.Protocol.ProjectInfo Project(int p) => new(
+                Path.Combine(root, $"P{p}", $"P{p}.fsproj"), $"P{p}", Codalus.Projects.Protocol.ProjectStates.Loaded, null, ["net10.0"], "Library",
+                [.. Enumerable.Range(0, 170).Select(i => new Codalus.Projects.Protocol.ProjectItemInfo("Compile", Path.Combine(root, $"P{p}", $"F{i}.fs"), null, null))], [], [], Restored: true);
+            var projects = Enumerable.Range(0, 300).Select(Project).ToList();
+            var paths = Enumerable.Range(0, 1_000).Select(i => Path.Combine(root, $"P{i % 300}", $"F{i % 170}.fs")).Distinct().ToList();
+            foreach (var path in paths.Skip(1))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                await File.WriteAllTextAsync(path, "module M\nlet greet name = name\n", TestContext.Current.CancellationToken);
+            }
+
+            var open = new Dictionary<string, string> { [paths[0]] = "module Open\nlet unsaved = 1\n" };
+            var (lines, names) = await ShellHost.ReadReferencedFilesAsync(paths, open, projects);
+
+            Assert.Equal(paths.Count, lines.Count);
+            Assert.Equal("let unsaved = 1", lines[paths[0]][1]);
+            Assert.Equal("let greet name = name", lines[paths[^1]][1]);
+            foreach (var path in paths.Take(50))
+            {
+                Assert.Equal(ErrorListViewModel.ProjectOf(projects, path)?.Name, names[path]);
+            }
+
+            Assert.Null((await ShellHost.ReadReferencedFilesAsync([Path.Combine(root, "Elsewhere.fs")], open, projects)).Projects[Path.Combine(root, "Elsewhere.fs")]);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Plain_locations_group_under_the_symbol_with_their_lines()
     {

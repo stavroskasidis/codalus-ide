@@ -163,7 +163,7 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 
     // ------------------------------------------------------------------ the current page
 
-    public ObservableCollection<FindResultRow> Rows => _currentPage.Rows;
+    public ResettableCollection<FindResultRow> Rows => _currentPage.Rows;
 
     public string Title => _currentPage.Title;
 
@@ -340,7 +340,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     /// <summary>The page's tab: Find Results 1, 2…</summary>
     public string Header => Localizer.Format("findResults.pageHeader", "Find Results {0}", Number);
 
-    public ObservableCollection<FindResultRow> Rows { get; } = [];
+    public ResettableCollection<FindResultRow> Rows { get; } = [];
 
     public RelayCommand CancelCommand { get; }
 
@@ -549,46 +549,20 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Shows the results through the filter and grouping. Only the rows from the first one that differs change, so
-    /// results streaming in are added at the end and the selection stays.
+    /// Shows the results through the filter and grouping. Only the rows that changed are replaced, at once
+    /// (<see cref="ResettableCollection{T}.Patch"/>): results streaming in are added at the end with one insertion per
+    /// batch, and the selection stays, found again by its match or group. Replace All's 100,000 changed lines were added a
+    /// row at a time, a list box update each.
     /// </summary>
     private void Refresh()
     {
         OnPropertyChanged(nameof(MatchCount));
         OnPropertyChanged(nameof(HasMatches));
-        var rows = Arrange();
         var selected = _selectedRow;
-        var index = 0;
-        while (index < rows.Count && index < Rows.Count && Rows[index].Equals(rows[index]))
-        {
-            index++;
-        }
-
-        for (var i = index; i < rows.Count && i < Rows.Count; i++)
-        {
-            Rows[i] = rows[i];
-        }
-
-        while (Rows.Count > rows.Count)
-        {
-            Rows.RemoveAt(Rows.Count - 1);
-        }
-
-        for (var i = Rows.Count; i < rows.Count; i++)
-        {
-            Rows.Add(rows[i]);
-        }
-
-        if (selected is not null && !Rows.Contains(selected))
-        {
-            SelectedRow = selected.IsHeader
-                ? Rows.FirstOrDefault(r => r.IsHeader && r.GroupKey is not null && r.GroupKey == selected.GroupKey)
-                : Rows.FirstOrDefault(r => !r.IsHeader && r.Source == selected.Source);
-        }
-        else
-        {
-            SelectedRow = selected;
-        }
+        Rows.Patch(Arrange());
+        SelectedRow = selected is null ? null : Rows.FirstOrDefault(r => selected.IsHeader
+            ? r.IsHeader && r.GroupKey is not null && r.GroupKey == selected.GroupKey
+            : !r.IsHeader && r.Source == selected.Source);
     }
 
     private List<FindResultRow> Arrange()
@@ -672,7 +646,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
     private bool PassesFilter(FindResultRow row) => _filter.Length == 0
         || row.Code.Contains(_filter, StringComparison.OrdinalIgnoreCase)
-        || System.IO.Path.GetFileName(row.Path).Contains(_filter, StringComparison.OrdinalIgnoreCase);
+        || System.IO.Path.GetFileName(row.Path.AsSpan()).Contains(_filter, StringComparison.OrdinalIgnoreCase);
 
     // ------------------------------------------------------------------ walking the results
 
