@@ -152,7 +152,7 @@ Settings under **Text Editor** turn each of these on or off.
   - Tests show their last outcome (`✓ Passed (12 ms)`, `✗ Failed`, `Not run`), and test classes how many of their tests pass (`✓ 4/4 passing`).
   - Turn these off with Text Editor → CodeLens: Git History (`editor.gitCodeLens`) and CodeLens: Test Status (`editor.testCodeLens`).
 - **Inheritance margin**: arrows in the margin of members and types that implement, override or are overridden. Click an arrow to see and open the related symbols.
-- **Navigation bar**: above the editor, the document's types and the members of the type at the caret.
+- **Navigation bar**: above the editor, the document's types and the members of the type at the caret. In a file that declares a type (C#, Visual Basic, XAML, F#, JavaScript and TypeScript, CSS, SCSS and Less) it is there from the moment the file opens, empty until the language service lists the types, so the code doesn't move down when they come.
 - **Sticky scroll**: the lines of the enclosing namespace, type and member stay at the top while you scroll, drawn as in the editor (colors, indentation, line numbers). Click one to go there.
 - **Indentation guides** and **bracket pair colors**: matching brackets share a color by nesting depth. Bracket pair colors are off by default in the Classic themes, as in the classic IDE, and on in the other families; **Text Editor → Bracket Pair Colorization** (`editor.bracketPairColorization`) sets them for every theme.
 - **Overview ruler**: beside the scroll bar, marks for errors, warnings, Git changes, breakpoints, find results and the caret. Click to scroll there. The square at the top is the document's health (red: errors, yellow: warnings, green: none); click it for the next problem.

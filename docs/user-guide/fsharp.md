@@ -21,7 +21,7 @@ FsAutoComplete loads the projects with MSBuild, so it runs only in trusted folde
 - **Navigation:** Go to Definition, Find All References, rename, the outline and folding.
 - **Quick fixes** (`Ctrl+.`): adding missing match cases, record fields and interface members, and many more.
 - **Inlay hints** for inferred types and parameter names (setting: **Inlay Hints**).
-- **CodeLens:** each function's signature, and the number of references (settings: **Signature CodeLens**, **References CodeLens**).
+- **CodeLens:** each function's signature, and the number of references (settings: **Signature CodeLens**, **References CodeLens**). Their rows are there from the moment a file opens, empty until FsAutoComplete fills them in, so the code doesn't move down.
 - **Formatting:** Format Document with Fantomas, which reads the formatting settings from `.editorconfig` (`fsharp_*`, `max_line_length`, `indent_size`). A Fantomas the project has as a local tool (`dotnet tool install fantomas`), or that you've installed as a global tool, is used instead of Codalus IDE's.
 
 **References to C# projects:** FsAutoComplete compiles only F#, so it reads a C# project an F# project references from its built assembly. Until you build the solution once, the C# project's types are reported as not defined.
