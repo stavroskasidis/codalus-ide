@@ -162,4 +162,17 @@ public static class BenchEventNames
 
     /// <summary>A keystroke in an interactive shell: <c>latency_us</c> from writing it to the echo on screen, rendered (M10).</summary>
     public const string TerminalEcho = "terminal_echo";
+
+    /// <summary>
+    /// One everyday flow of <c>--bench everyday</c> (M56), measured after a run to warm up: <c>flow</c> (text) names it.
+    /// While it ran, a probe posted at input priority every 10 ms timed how long each waited for the UI thread:
+    /// <c>stall_max_us</c> is the longest wait, <c>stall_total_us</c> the sum of the waits over 50 ms and <c>stalls</c> their
+    /// number, each without the garbage collector's pauses (<c>gc_pause_us</c> is the flow's), <c>probes</c> how many probes
+    /// ran; <c>job</c> (text) is the posted job the UI thread ran most during the longest wait, when it was one, and
+    /// <c>elapsed_us</c> how long the flow took.
+    /// </summary>
+    public const string EverydayFlow = "everyday_flow";
+
+    /// <summary>Something <c>--bench everyday</c> couldn't do as planned: <c>note</c> (text) says what, for the result's notes.</summary>
+    public const string EverydayNote = "everyday_note";
 }

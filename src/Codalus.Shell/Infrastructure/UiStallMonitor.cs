@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using Avalonia.Threading;
-using Codalus.Shell.Infrastructure;
 
-namespace Codalus.Shell.Tests;
+namespace Codalus.Shell.Infrastructure;
 
 /// <summary>
-/// The UI thread's longest wait at input priority while a flow runs (M56: the UI must never hang, under any load). A thread
+/// The UI thread's longest wait at input priority while a flow runs (M56: the UI must never hang, under any load), shared by
+/// the stall-budget tests (EverydayResponsivenessTests) and the benchmarks' everyday flows (<c>--bench everyday</c>). A thread
 /// of its own posts a probe at <see cref="DispatcherPriority.Input"/> every 10 ms and times how long each waits to run: a job
 /// that blocks the UI thread, and a queue of jobs above input (Avalonia's queued scrolls ran at Default), delay a key press
 /// by as long. The smoke test's sweep monitor probes at Default, under such a queue. While a probe waits, the monitor
@@ -14,6 +14,9 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 internal sealed class UiStallMonitor : IDisposable
 {
+    /// <summary>A wait longer than this is a stall: a key press that waited so long shows (<see cref="UiStallReport.StalledMilliseconds"/>).</summary>
+    public const double StallMilliseconds = 50;
+
     private readonly Lock _gate = new();
     private readonly Thread _thread;
     private volatile bool _stopped;
@@ -21,6 +24,8 @@ internal sealed class UiStallMonitor : IDisposable
     private double _longestGc;
     private string? _longestJob;
     private int _probes;
+    private int _stalls;
+    private double _stalled;
 
     public UiStallMonitor()
     {
@@ -41,14 +46,17 @@ internal sealed class UiStallMonitor : IDisposable
         }
     }
 
-    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it.</summary>
-    public string Describe()
+    /// <summary>What the monitor measured since the last <see cref="Reset"/>.</summary>
+    public UiStallReport Report()
     {
         lock (_gate)
         {
-            return $"{_longest:0} ms (and {_longestGc:0} ms of GC pauses) in {_longestJob ?? "no posted job (layout, rendering, input or a handler)"}, over {_probes} probes";
+            return new UiStallReport(_probes, _longest, _longestGc, _longestJob, _stalls, _stalled);
         }
     }
+
+    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it.</summary>
+    public string Describe() => Report().Describe();
 
     public void Reset()
     {
@@ -58,16 +66,8 @@ internal sealed class UiStallMonitor : IDisposable
             _longestGc = 0;
             _longestJob = null;
             _probes = 0;
-        }
-    }
-
-    /// <summary>Fails when the UI thread held a probe longer than <paramref name="budgetMilliseconds"/> since the last reset.</summary>
-    public void AssertResponsive(string flow, double budgetMilliseconds)
-    {
-        lock (_gate)
-        {
-            Assert.True(_probes > 0, $"{flow}: the stall monitor saw no probe answered");
-            Assert.True(_longest <= budgetMilliseconds, $"{flow}: the UI thread didn't answer input for {Describe()}; the budget is {budgetMilliseconds:0} ms");
+            _stalls = 0;
+            _stalled = 0;
         }
     }
 
@@ -103,6 +103,12 @@ internal sealed class UiStallMonitor : IDisposable
             lock (_gate)
             {
                 _probes++;
+                if (waited > StallMilliseconds)
+                {
+                    _stalls++;
+                    _stalled += waited;
+                }
+
                 if (waited > _longest)
                 {
                     _longest = waited;
@@ -121,4 +127,16 @@ internal sealed class UiStallMonitor : IDisposable
         _thread.Join();
         Ui.Unwatch();
     }
+}
+
+/// <summary>
+/// What a <see cref="UiStallMonitor"/> measured: the probes answered, the longest wait (without the GC's pauses, which are
+/// <see cref="LongestGcMilliseconds"/>) and the posted job the UI thread ran most during it, and the waits over
+/// <see cref="UiStallMonitor.StallMilliseconds"/>: how many, and their sum (each without its GC pauses).
+/// </summary>
+internal readonly record struct UiStallReport(int Probes, double LongestMilliseconds, double LongestGcMilliseconds, string? LongestJob, int Stalls, double StalledMilliseconds)
+{
+    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it.</summary>
+    public string Describe() =>
+        $"{LongestMilliseconds:0} ms (and {LongestGcMilliseconds:0} ms of GC pauses) in {LongestJob ?? "no posted job (layout, rendering, input or a handler)"}, over {Probes} probes";
 }
