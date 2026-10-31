@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Avalonia.Automation;
 using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
@@ -109,6 +110,9 @@ public sealed class TreeRowsAutomationTests
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsExpanded)));
             }
         }
+
+        /// <summary>How many tree items follow the row (the bindings' own handler is weak, Avalonia's).</summary>
+        public int Watchers => PropertyChanged?.GetInvocationList().Count(d => d.Target is TreeRowItemAutomationPeer) ?? 0;
 
         public override string ToString() => Name;
     }
@@ -449,6 +453,125 @@ public sealed class TreeRowsAutomationTests
     }
 
     /// <summary>
+    /// Rows inserted one at a time above the rows in view (the Test Explorer's small changes): the rows' places are worked
+    /// out once for the batch, not once for each row (M57 review: each insertion moved the rows in view, and each move
+    /// walked every row again on the UI thread), and the rows in view carry them before a screen reader's next call.
+    /// </summary>
+    [AvaloniaFact]
+    public void Rows_changed_one_at_a_time_have_their_places_worked_out_once()
+    {
+        var rows = new ObservableCollection<Row>(Enumerable.Range(0, 200).Select(i => new Row($"R{i}", 0)));
+        var (list, window) = Show(rows, height: 300);
+        try
+        {
+            _ = PeerOf(list, rows[0]); // a screen reader asks for a row
+            ShellFixture.Pump();
+            var before = list.PlacesWorkedOut;
+            for (var i = 0; i < 50; i++)
+            {
+                rows.Insert(0, new Row($"N{i}", 0));
+            }
+
+            Dispatcher.UIThread.RunJobs(DispatcherPriority.Input); // what runs before a screen reader's call
+            Assert.Equal(1, list.PlacesWorkedOut - before);
+            foreach (var container in list.GetRealizedContainers())
+            {
+                AssertPlace(container, list.IndexFromContainer(container) + 1, 250);
+            }
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// The rows outlive their views (M57 review): Dock builds a document's view again, and the old one keeps its rows'
+    /// controls. A tree item follows its row only while its control is on screen, so an old view is let go and announces
+    /// nothing; shown again, it follows its rows again.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_tree_item_follows_its_row_only_while_its_list_is_on_screen()
+    {
+        var b = new Row("B", 0, new Row("b1", 1));
+        var rows = new ObservableCollection<Row> { new("A", 0), b, new("C", 0) };
+        var (list, window) = Show(rows, height: 300);
+        try
+        {
+            var peer = PeerOf(list, b);
+            var announced = new List<ExpandCollapseState>();
+            peer.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty)
+                {
+                    announced.Add((ExpandCollapseState)e.NewValue!);
+                }
+            };
+            Assert.Equal(1, b.Watchers);
+
+            // The view goes (another tab, a tool window closed): its controls keep their rows, its peers stop following them.
+            window.Content = null;
+            ShellFixture.Pump();
+            Assert.Equal(b, list.ContainerFromItem(b)?.DataContext);
+            Assert.Equal(0, b.Watchers);
+            b.IsExpanded = true;
+            Assert.Empty(announced);
+
+            // Shown again: the row is followed from its state now, not announced for what happened while it was away.
+            window.Content = list;
+            ShellFixture.Pump();
+            Assert.Equal(1, b.Watchers);
+            Assert.Empty(announced);
+            Assert.Equal(ExpandCollapseState.Expanded, peer.ExpandCollapseState);
+            b.IsExpanded = false;
+            Assert.Equal([ExpandCollapseState.Collapsed], announced);
+        }
+        finally
+        {
+            window.Close();
+        }
+
+        Assert.Equal(0, b.Watchers);
+    }
+
+    /// <summary>
+    /// A view whose rows a screen reader read is collected once it's gone, while its rows live on in their model (M57
+    /// review: each row's handler held its tree item, and so the whole view).
+    /// </summary>
+    [AvaloniaFact]
+    public void A_list_whose_rows_were_read_is_collected_once_it_s_gone()
+    {
+        var rows = new ObservableCollection<Row>(Enumerable.Range(0, 30).Select(i => new Row($"R{i}", 0, new Row($"R{i}x", 1))));
+        var gone = ShowReadAndClose(rows);
+        for (var i = 0; i < 3 && gone.IsAlive; i++)
+        {
+            ShellFixture.Pump();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+        }
+
+        Assert.False(gone.IsAlive, $"the list is alive; {rows.Sum(r => r.Watchers)} tree items follow its rows");
+        GC.KeepAlive(rows);
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        static WeakReference ShowReadAndClose(ObservableCollection<Row> rows)
+        {
+            var (list, window) = Show(rows, height: 300);
+            foreach (var container in list.GetRealizedContainers())
+            {
+                Assert.IsType<TreeRowItemAutomationPeer>(ControlAutomationPeer.CreatePeerForElement(container));
+            }
+
+            Assert.True(rows.Sum(r => r.Watchers) > 5);
+            window.Content = null;
+            window.Close();
+            ShellFixture.Pump();
+            return new WeakReference(list);
+        }
+    }
+
+    /// <summary>
     /// On macOS a folder's tree item says its state after its name too (M57 review): Avalonia 12.1's native peer passes
     /// <c>AXExpanded</c>, not the <c>AXDisclosing</c> VoiceOver reads on an outline's row. Its name changes, and says so,
     /// as the row expands; a file's name is its name alone.
@@ -573,15 +696,30 @@ public sealed class TreeRowsAutomationTests
         AssertTreeItem(list, Row("Geometry"), level: 3, position: 2, size: 2, ExpandCollapseState.Collapsed);
         Assert.Equal(NameOf(list, Row("Arithmetic").AccessibleName, ExpandCollapseState.Collapsed), PeerOf(list, Row("Arithmetic")).GetName());
 
-        Invoke(list, Row("Arithmetic"), expand: true);
-        Assert.True(Row("Arithmetic").IsExpanded);
+        // The toggled row stays the same row, so its tree item announces its new state (M57 review: each toggle made every
+        // row again, and a screen reader heard nothing).
+        var arithmetic = Row("Arithmetic");
+        var announced = new List<(ExpandCollapseState Old, ExpandCollapseState New)>();
+        PeerOf(list, arithmetic).PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty)
+            {
+                announced.Add(((ExpandCollapseState)e.OldValue!, (ExpandCollapseState)e.NewValue!));
+            }
+        };
+        Invoke(list, arithmetic, expand: true);
+        Assert.Same(arithmetic, Row("Arithmetic"));
+        Assert.True(arithmetic.IsExpanded);
+        Assert.Equal([(ExpandCollapseState.Collapsed, ExpandCollapseState.Expanded)], announced);
         list.ScrollIntoView(Row("Divide(int, int)"));
         await ShellFixture.PumpUntil(() => list.ContainerFromItem(Row("Divide(int, int)")) is not null, describe: () => $"{list.Bounds}, {string.Join(", ", results.Rows.Select(r => r.Label))}");
         AssertTreeItem(list, Row("Arithmetic"), level: 3, position: 1, size: 2, ExpandCollapseState.Expanded);
         AssertTreeItem(list, Row("Divide(int, int)"), level: 4, position: 2, size: 2, ExpandCollapseState.LeafNode);
         Assert.Equal((3, 2, 2), list.PlaceOf(results.Rows.IndexOf(Row("Geometry")))); // below the pane's few rows in view
         Invoke(list, Row("Arithmetic"), expand: false);
-        Assert.False(Row("Arithmetic").IsExpanded);
+        Assert.Same(arithmetic, Row("Arithmetic"));
+        Assert.False(arithmetic.IsExpanded);
+        Assert.Equal((ExpandCollapseState.Expanded, ExpandCollapseState.Collapsed), announced[^1]);
         Assert.DoesNotContain(results.Rows, r => r.Label == "Divide(int, int)");
     }
 }

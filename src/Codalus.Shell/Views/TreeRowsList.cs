@@ -5,6 +5,7 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
 
@@ -59,8 +60,9 @@ public sealed class TreeRowsList : ListBox
 
         // Right away, not deferred: a recycled container still carries its last row's place, and Avalonia's AT-SPI answers
         // a screen reader at Default priority, before anything posted at Background (M57 review: Orca said "4 of 9" for a
-        // root 5 of 40 after a scroll). PlaceOf is a lookup once the rows' places are worked out.
-        if (_hasPeers)
+        // root 5 of 40 after a scroll). PlaceOf is a lookup once the rows' places are worked out. After a change to the
+        // rows, the pass already queued writes it, before AT-SPI's next call.
+        if (_hasPeers && !_refreshQueued)
         {
             WritePlace(container, index);
         }
@@ -70,9 +72,11 @@ public sealed class TreeRowsList : ListBox
     {
         base.ContainerIndexChangedOverride(container, oldIndex, newIndex);
 
-        // A row added or removed above moves the rows in view without preparing them again (after the rows' change: the
-        // panel hears it after this list does).
-        if (_hasPeers)
+        // A row added or removed above moves the rows in view without preparing them again: the pass queued by the rows'
+        // change (the panel hears it after this list does) writes their places, once for a whole batch of changes. Here
+        // each change would work out every row's place again (M57 review: the Test Explorer inserts and removes up to 200
+        // rows one at a time).
+        if (_hasPeers && !_refreshQueued)
         {
             WritePlace(container, newIndex);
         }
@@ -102,10 +106,14 @@ public sealed class TreeRowsList : ListBox
         if (_places is not { } places || places.Positions.Length != rows.Count)
         {
             _places = places = Places(rows);
+            PlacesWorkedOut++;
         }
 
         return (row.Depth + 1, places.Positions[index], places.Sizes[index]);
     }
+
+    /// <summary>How many times the rows' places were worked out (tests).</summary>
+    internal int PlacesWorkedOut { get; private set; }
 
     /// <summary>
     /// A row's container got its peer: from now on the rows in view carry their place (AT-SPI reads it there), from this
@@ -233,8 +241,10 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
     public TreeRowItemAutomationPeer(TreeRowItem owner)
         : base(owner)
     {
-        Watch();
-        owner.DataContextChanged += (_, _) => Watch();
+        Watch(owner.IsAttachedToVisualTree());
+        owner.DataContextChanged += (_, _) => Watch(Owner.IsAttachedToVisualTree());
+        owner.AttachedToVisualTree += (_, _) => Watch(attached: true);
+        owner.DetachedFromVisualTree += (_, _) => Watch(attached: false);
     }
 
     public ExpandCollapseState ExpandCollapseState => StateOf(Row);
@@ -294,15 +304,18 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
     /// <summary>
     /// Follows the row the container shows. Another row in a recycled container isn't a change of state (M57 review: a
     /// scroll announced "expanded" and "collapsed" for rows nobody touched): only the same row's expansion is announced.
+    /// Only while the container is on screen: the rows outlive their views (Dock builds a view again, and the panel pools
+    /// a container out of the tree with its last row), and the row's handler would keep the old view alive and announce
+    /// rows nobody sees (M57 review).
     /// </summary>
-    private void Watch()
+    private void Watch(bool attached)
     {
         if (_watched is not null)
         {
             _watched.PropertyChanged -= OnRowChanged;
         }
 
-        _watched = Owner.DataContext as INotifyPropertyChanged;
+        _watched = attached ? Owner.DataContext as INotifyPropertyChanged : null;
         if (_watched is not null)
         {
             _watched.PropertyChanged += OnRowChanged;

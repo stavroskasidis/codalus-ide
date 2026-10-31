@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using Avalonia;
 using Codalus.LanguageServices.Protocol;
@@ -95,7 +94,7 @@ public sealed class CoverageResultsViewModel : ObservableObject
         Refresh();
     }
 
-    public ObservableCollection<CoverageRowViewModel> Rows { get; } = [];
+    public ResettableCollection<CoverageRowViewModel> Rows { get; } = [];
 
     public RelayCommand ExportCommand { get; }
 
@@ -162,7 +161,11 @@ public sealed class CoverageResultsViewModel : ObservableObject
         });
     }
 
-    /// <summary>Rebuilds the rows, keeping expansion and selection by key.</summary>
+    /// <summary>
+    /// Shows the rows in place, keeping expansion and selection by key: a row whose node is still in its place stays and
+    /// takes its new expansion, so a toggled folder's tree item announces it (M57 review: every row made again said
+    /// nothing to a screen reader), and only the rows under it are inserted or removed.
+    /// </summary>
     public void Refresh()
     {
         var tree = _coverage.Tree();
@@ -182,17 +185,17 @@ public sealed class CoverageResultsViewModel : ObservableObject
 
         var selectedKey = _selected?.Key;
         var filter = _filterText.Trim();
-        var rows = new List<CoverageRowViewModel>();
+        var rows = new List<(CoverageNode Node, int Depth, bool Expanded)>();
         foreach (var root in tree)
         {
             Add(root, 0);
         }
 
-        Rows.Clear();
-        foreach (var row in rows)
-        {
-            Rows.Add(row);
-        }
+        Rows.Patch(
+            rows,
+            (row, r) => row.Depth == r.Depth && ReferenceEquals(row.Node, r.Node),
+            r => new CoverageRowViewModel(r.Node, r.Depth, r.Expanded),
+            (row, r) => row.IsExpanded = r.Expanded);
 
         Selected = selectedKey is null ? null : Rows.FirstOrDefault(r => r.Key == selectedKey);
         var totals = _coverage.Totals;
@@ -221,7 +224,7 @@ public sealed class CoverageResultsViewModel : ObservableObject
 
             // While filtering, everything that matches below is shown.
             var expanded = filter.Length > 0 || _expanded.Contains(node.Key);
-            rows.Add(new CoverageRowViewModel(node, depth, expanded && node.Children.Count > 0));
+            rows.Add((node, depth, expanded && node.Children.Count > 0));
             if (expanded)
             {
                 foreach (var child in node.Children)
