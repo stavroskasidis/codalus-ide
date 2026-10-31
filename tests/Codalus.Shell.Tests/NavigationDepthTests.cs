@@ -598,13 +598,14 @@ public class NavigationDepthTests
 
         // The Document Outline lists the types and follows the caret.
         f.Shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-        await ShellFixture.PumpUntil(() => f.Shell.DocumentOutline.Roots.Count == 1 && f.Shell.DocumentOutline.Roots[0].Children.Count == 5, seconds: 30);
-        await ShellFixture.PumpUntil(() => f.Shell.DocumentOutline.Current?.Name == "Describe");
-        f.Shell.DocumentOutline.Filter = "Scale";
-        Assert.Equal(["Scale", "Scale"], f.Shell.DocumentOutline.Roots.Select(r => r.Name));
-        f.Shell.DocumentOutline.Navigate(f.Shell.DocumentOutline.Roots[0]);
+        var outline = f.Shell.DocumentOutline;
+        await ShellFixture.PumpUntil(() => outline.Rows.Count(r => r.Depth == 0) == 1 && outline.Rows.Count(r => r.Depth == 1) == 5, seconds: 30);
+        await ShellFixture.PumpUntil(() => outline.Current?.Name == "Describe");
+        outline.Filter = "Scale";
+        await ShellFixture.PumpUntil(() => outline.Rows.Select(r => r.Name).SequenceEqual(["Scale", "Scale"]), describe: () => string.Join(", ", outline.Rows.Select(r => r.Name)));
+        outline.Navigate(outline.Rows[0]);
         Assert.Contains("Scale(IShape", shapes.Model.Text.GetText(shapes.Model.Text.GetLineByNumber(shapes.Caret.Line)), StringComparison.Ordinal);
-        f.Shell.DocumentOutline.Filter = string.Empty;
+        outline.Filter = string.Empty;
 
         // Call Hierarchy: callers of IShape.Area, recursively.
         shapes.Editor.CaretOffset = shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal) + "double ".Length;

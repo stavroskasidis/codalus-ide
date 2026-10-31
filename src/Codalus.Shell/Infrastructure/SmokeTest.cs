@@ -414,7 +414,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Rows.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 

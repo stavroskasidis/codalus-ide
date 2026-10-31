@@ -510,6 +510,14 @@ public sealed class EditorInsights : IDisposable
     /// <summary>Raised on the UI thread when <see cref="Symbols"/> changed.</summary>
     public event EventHandler? SymbolsChanged;
 
+    /// <summary>Takes <paramref name="symbols"/> as the language service's for the current text (tests: thousands of members without a service).</summary>
+    internal void ShowSymbols(IReadOnlyList<DocumentSymbol> symbols)
+    {
+        Symbols = symbols;
+        SymbolsVersion = Model.Version;
+        SymbolsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     /// <summary>The innermost symbols containing a position, outermost first (navigation bar, sticky scroll, outline).</summary>
     public IReadOnlyList<DocumentSymbol> SymbolPath(Position position)
     {
