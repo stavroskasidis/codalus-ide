@@ -42,7 +42,7 @@ What existed:
 
 **Commit characters**, as the classic IDE applies Roslyn's rules:
 - A typed commit character commits the selected item, then is typed, unless the edit already contains it. The characters are the item's `commitCharacters`, else the server's `allCommitCharacters`. The C# service computes an item's set from Roslyn's `CommitCharacterRules` (the first rule naming a character decides, as in Roslyn's commit manager) and sends it only when it differs from the defaults. In suggestion mode it sends none.
-- The editor resolves the item again with the character (`codalusCommitCharacter`), so Roslyn's `GetChangeAsync(…, commitCharacter)` can change the edit, and it says whether the edit already includes the character (`codalusIncludesCommitCharacter`).
+- The editor resolved the item again with the character (`codalusCommitCharacter`), so Roslyn's `GetChangeAsync(…, commitCharacter)` could change the edit, and it said whether the edit already included the character (`codalusIncludesCommitCharacter`). Since M56 it doesn't: a commit never waits for the server (it inserts the item's text, and a resolve that comes later replaces it only if nothing was typed since), so the character's own edit, mostly XML documentation tags, isn't applied (`TODO(issue)`).
 - **No commit on a soft selection** (drawn as an outline). Following Roslyn's hard-selection rules, the selection is soft:
   - in suggestion mode;
   - while nothing is typed, unless the server preselects an item with a hard selection (`codalusSoftSelection` marks a preselected item that asks to be soft);
