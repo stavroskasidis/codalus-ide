@@ -857,8 +857,9 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 if (!completion.Task.Wait(timeout))
                 {
+                    var threads = SnapshotThreads(thread);
                     var abort = TryAbort(eval, completion);
-                    throw new ClrEvalTimeoutException(EvalTimeoutDiagnostic(thread, timeout, abort));
+                    throw new ClrEvalTimeoutException(EvalTimeoutDiagnostic(thread, timeout, abort), threads);
                 }
 
                 completed = completion.Task.Result;
@@ -929,6 +930,57 @@ internal sealed class CorDebugTarget : IClrProcess
                 _evalCallbacks.Add(name + " at " + System.Diagnostics.Stopwatch.GetElapsedTime(_evalStarted).TotalMilliseconds.ToString("0", CultureInfo.InvariantCulture) + " ms");
             }
         }
+    }
+
+    /// <summary>
+    /// Every thread's state and frames while a timed-out func-eval still runs: the process is stopped for them, then
+    /// continued, so the abort finds the eval as it was (the timeout's diagnostic).
+    /// </summary>
+    private List<ClrThreadSnapshot> SnapshotThreads(IClrThread evaluating)
+    {
+        var threads = new List<ClrThreadSnapshot>();
+        try
+        {
+            Process.Stop(3000);
+            try
+            {
+                foreach (var raw in Process.Threads)
+                {
+                    string state;
+                    try
+                    {
+                        state = raw.UserState.ToString();
+                    }
+                    catch (COMException ex)
+                    {
+                        state = "state unknown: " + EvalProblem(ex);
+                    }
+
+                    IReadOnlyList<IClrFrame> frames;
+                    try
+                    {
+                        frames = Thread(raw).Frames();
+                    }
+                    catch (Exception ex) when (ex is ClrException or COMException)
+                    {
+                        frames = [];
+                        state += ", no stack: " + ex.Message;
+                    }
+
+                    threads.Add(new ClrThreadSnapshot(raw.Id, raw.Id == evaluating.Id, state, frames));
+                }
+            }
+            finally
+            {
+                Process.Continue(false);
+            }
+        }
+        catch (COMException)
+        {
+            // The process is ending, or won't stop: the diagnostic goes without the stacks.
+        }
+
+        return threads;
     }
 
     private string EvalTimeoutDiagnostic(IClrThread thread, TimeSpan timeout, string abort)
