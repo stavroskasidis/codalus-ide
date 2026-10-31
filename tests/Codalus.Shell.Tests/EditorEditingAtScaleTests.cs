@@ -192,9 +192,9 @@ public sealed class EditorEditingAtScaleTests
     [AvaloniaFact]
     public void A_change_over_most_of_the_document_keeps_folds_the_caret_and_anchors_where_each_edit_moves_them()
     {
-        // A group over half the document or more replaces all of it, where AvaloniaEdit rebuilds its lines in one pass:
+        // A group over half a long document or more replaces all of it, where AvaloniaEdit rebuilds its lines in one pass:
         // folds stay folded, and the caret, anchors and segments move as when the edits are applied one by one.
-        var text = string.Concat(Enumerable.Range(0, 400).Select(i => $"call(marker, {i});\n"));
+        var text = string.Concat(Enumerable.Range(0, DocumentEdits.WholeDocumentLines + 1_000).Select(i => $"call(marker, {i});\n"));
         var editor = new TextEditor { Document = new TextDocument(text), FontFamily = MarkdownRenderer.Monospace };
         var window = new Window { Width = 600, Height = 400, Content = editor };
         window.Show();
@@ -235,6 +235,9 @@ public sealed class EditorEditingAtScaleTests
             }
 
             Assert.Equal((0, text.Length), (change!.Offset, change.RemovalLength));
+            var spanRemoval = edits[^1].Offset + 6 - edits[1].Offset;
+            var spanInsertion = spanRemoval - (5 * (edits.Count - 1));
+            Assert.Equal((edits[1].Offset, spanRemoval, spanInsertion), DocumentEdits.EditedSpan(change)); // what the handlers of edited lines take
             Assert.Equal(oneByOne.Text, document.Text);
             Assert.Equal([.. expected.Select(a => a.Offset)], Positions());
             Assert.True(fold.IsFolded);
@@ -243,6 +246,7 @@ public sealed class EditorEditingAtScaleTests
             // Undone, in one step: the same, back where they were.
             document.UndoStack.Undo();
             Assert.Equal(text, document.Text);
+            Assert.Equal((edits[1].Offset, spanInsertion, spanRemoval), DocumentEdits.EditedSpan(change));
             Assert.Equal(positions, Positions());
             Assert.True(fold.IsFolded);
             Assert.Equal(lineHeight, Height(100, 121), 3);
@@ -250,11 +254,68 @@ public sealed class EditorEditingAtScaleTests
             // A group over a small part replaces only its span.
             DocumentEdits.Apply(document, edits[10..20]);
             Assert.Equal((edits[10].Offset, edits[19].Offset + 6 - edits[10].Offset), (change.Offset, change.RemovalLength));
+
+            // So does a group over most of a short document: rebuilding its lines would save next to nothing.
+            var shortText = string.Concat(Enumerable.Range(0, 400).Select(i => $"call(marker, {i});\n"));
+            var shortDocument = new TextDocument(shortText);
+            shortDocument.Changed += (_, e) => change = e;
+            var shortEdits = edits.Where(edit => edit.Offset < shortText.Length).ToList();
+            Assert.Equal(1, DocumentEdits.Apply(shortDocument, shortEdits[1..]));
+            Assert.Equal((shortEdits[1].Offset, shortEdits[^1].Offset + 6 - shortEdits[1].Offset), (change.Offset, change.RemovalLength));
         }
         finally
         {
             window.Close();
         }
+    }
+
+    [AvaloniaFact]
+    public async Task A_change_over_most_of_a_long_document_gives_each_handler_its_edited_lines()
+    {
+        // A group over half a long document replaces all of it. Go to Last Edit Location, the semantic tokens kept, the
+        // next edit's recent edit and the language service's change take the edited lines from its map: they went to the
+        // end of the file, dropped every token, and sent the whole document as the edit.
+        await using var f = ShellFixture.Create();
+        var lines = DocumentEdits.WholeDocumentLines + 1_000;
+        var text = string.Concat(Enumerable.Range(0, lines).Select(i => $"call(marker, {i});\n"));
+        var editor = await OpenAsync(f, "group.txt", text);
+        var document = editor.Model.Text;
+
+        // "marker" becomes "X" on lines 1,001 to lines - 1,000, the last one with a line break after it.
+        var (firstEdited, lastEdited) = (1_001, lines - 1_000);
+        var edits = new List<(int Offset, int Length, string Text)>();
+        for (var number = firstEdited; number <= lastEdited; number++)
+        {
+            edits.Add((document.GetLineByNumber(number).Offset + "call(".Length, 6, number == lastEdited ? "X\n" : "X"));
+        }
+
+        // Tokens on the first line, an edited one and the last (zero-based lines 0, 2,000 and lines - 1).
+        editor.Colorizer.Apply(0, lines, [0, 0, 4, 1, 0, 2_000, 0, 4, 1, 0, lines - 1 - 2_000, 0, 4, 1, 0]);
+        CodeDocumentChangedEventArgs? sent = null;
+        editor.Model.ContentChanged += (_, e) => sent = e;
+
+        Assert.Equal(1, DocumentEdits.Apply(document, edits));
+        Assert.Equal(1, editor.Colorizer.TokenAt(0, 0));
+        Assert.Equal(-1, editor.Colorizer.TokenAt(2_000, 0));
+        Assert.Equal(1, editor.Colorizer.TokenAt(lines, 0)); // moved down a line by the line break
+        var change = Assert.Single(sent!.Changes);
+        Assert.Equal((firstEdited - 1, 5, lastEdited - 1, 11), (change.Range!.Start.Line, change.Range.Start.Character, change.Range.End.Line, change.Range.End.Character));
+        Assert.StartsWith("X, 1000);\n", change.Text, StringComparison.Ordinal);
+        Assert.EndsWith($"call(X, {lines - 1_002});\ncall(X\n", change.Text, StringComparison.Ordinal);
+        var recent = editor.NextEditSuggestions.RecentEdits[^1];
+        Assert.Equal(firstEdited, recent.Line);
+        Assert.StartsWith("call(marker, 1000);\n", recent.OldText, StringComparison.Ordinal);
+        Assert.EndsWith($"call(marker, {lines - 1_001});", recent.OldText, StringComparison.Ordinal);
+
+        // Go to Last Edit Location: after the last edit, not at the end of the file; after the undo, where it undid last.
+        editor.Editor.CaretOffset = 0;
+        await f.Shell.GoToLastEditAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller?.Caret.Line == lastEdited + 1);
+        editor.Editor.Undo();
+        Assert.Equal(text, document.Text);
+        editor.Editor.CaretOffset = 0;
+        await f.Shell.GoToLastEditAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Controller?.Caret.Line == lastEdited);
     }
 
     [Fact]

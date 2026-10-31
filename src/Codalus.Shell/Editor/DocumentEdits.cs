@@ -21,6 +21,13 @@ internal static class DocumentEdits
     internal const int MaxGap = 1024;
 
     /// <summary>
+    /// The fewest lines for which a group over half the document or more replaces all of it (<see cref="ApplyGroup"/>):
+    /// below it rebuilding the line tree saves next to nothing, and a change of the edited part keeps the measured line
+    /// heights and the lines before it.
+    /// </summary>
+    internal const int WholeDocumentLines = 5_000;
+
+    /// <summary>
     /// Applies <paramref name="edits"/> (offsets in the current text, ascending, not overlapping; edits at the same offset
     /// in their order, as LSP orders inserts) as one undoable update. Returns the number of document changes it made.
     /// </summary>
@@ -46,6 +53,43 @@ internal static class DocumentEdits
         }
 
         return changes;
+    }
+
+    /// <summary>
+    /// The part of the text a change edited, in the text before it (offset, removal length) and after it (offset,
+    /// insertion length): for a group, from its first edit to its last, which is less than the change's own range when
+    /// the group replaced the whole document (<see cref="ApplyGroup"/>), or its undo. Handlers that work on the edited
+    /// lines (the last edit location, semantic tokens, bracket states, the language service's change list) use it.
+    /// </summary>
+    public static (int Offset, int RemovalLength, int InsertionLength) EditedSpan(DocumentChangeEventArgs e)
+    {
+        if (e.OffsetChangeMap is not { Count: > 1 } map) // a plain change: one entry
+        {
+            return (e.Offset, e.RemovalLength, e.InsertionLength);
+        }
+
+        // An ascending map (as Apply builds it): the first entry's offset stands, the last entry's end is in the text
+        // after. A descending one (its undo): each entry's offset is in the text before, the first entry ends last.
+        var delta = e.InsertionLength - e.RemovalLength;
+        int start, end;
+        if (IsAscending(map))
+        {
+            (start, end) = (map[0].Offset, map[^1].Offset + map[^1].InsertionLength);
+        }
+        else if (IsDescending(map))
+        {
+            (start, end) = (map[^1].Offset, map[0].Offset + map[0].RemovalLength + delta);
+        }
+        else
+        {
+            return (e.Offset, e.RemovalLength, e.InsertionLength);
+        }
+
+        var removal = end - delta - start;
+        var insertion = end - start;
+        return start >= e.Offset && removal >= 0 && insertion >= 0 && start + removal <= e.Offset + e.RemovalLength && start + insertion <= e.Offset + e.InsertionLength
+            ? (start, removal, insertion)
+            : (e.Offset, e.RemovalLength, e.InsertionLength);
     }
 
     /// <summary>
@@ -162,14 +206,14 @@ internal static class DocumentEdits
         }
 
         // One replace of the group's span; the map's entries are in the coordinates left by the entries before them. A span
-        // of half the document or more replaces all of it, AvaloniaEdit's path for setting the text: it rebuilds its line
-        // tree, and each view its line heights, in one pass (foldings fold again; the map moves the rest as before), where
-        // a replace of a part removes each line of the span and inserts it again through both trees: typing with 20,000
-        // carets on 100,000 lines spent 100-150 ms of each key there against 40-100 ms, and a second until the JIT had
-        // optimized it.
+        // of half a long document or more replaces all of it, AvaloniaEdit's path for setting the text: it rebuilds its
+        // line tree, and each view its line heights, in one pass (foldings fold again; the map moves the rest as before),
+        // where a replace of a part removes each line of the span and inserts it again through both trees: typing with
+        // 20,000 carets on 100,000 lines spent 100-150 ms of each key there against 40-100 ms, and a second until the JIT
+        // had optimized it. Handlers of the edited lines take them from the map (EditedSpan), not the change's range.
         var first = edits[start].Offset;
         var last = edits[end - 1].Offset + edits[end - 1].Length;
-        if (2 * (last - first) >= document.TextLength)
+        if (2 * (last - first) >= document.TextLength && document.LineCount >= WholeDocumentLines)
         {
             (first, last) = (0, document.TextLength);
         }

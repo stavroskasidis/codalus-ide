@@ -120,7 +120,8 @@ public sealed partial class ShellHost
     {
         if (_editTracked is { } controller && !controller.Model.IsReadOnly)
         {
-            var offset = Math.Min(e.Offset + e.InsertionLength, controller.Model.Text.TextLength);
+            var edited = Editor.DocumentEdits.EditedSpan(e); // a group's last edit, not the end of a whole-document change
+            var offset = Math.Min(edited.Offset + edited.InsertionLength, controller.Model.Text.TextLength);
             _lastEdit = (controller.Model.Path, controller.Model.PositionAt(offset));
         }
     }

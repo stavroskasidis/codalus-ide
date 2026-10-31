@@ -187,9 +187,12 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
-        var start = PositionAt(e.Offset);
-        var end = e.RemovalLength == 0 ? start : PositionAt(e.Offset + e.RemovalLength);
-        _pending.Add(new TextDocumentContentChangeEvent(new Range(start, end), e.InsertedText.Text));
+        // A group's edited range: a group over most of a long document replaces all of it (DocumentEdits).
+        var (offset, removal, insertion) = DocumentEdits.EditedSpan(e);
+        var start = PositionAt(offset);
+        var end = removal == 0 ? start : PositionAt(offset + removal);
+        var text = e.InsertedText.Text;
+        _pending.Add(new TextDocumentContentChangeEvent(new Range(start, end), insertion == text.Length ? text : text.Substring(offset - e.Offset, insertion)));
     }
 
     private void OnChanged(object? sender, DocumentChangeEventArgs e)

@@ -1623,7 +1623,7 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
 
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
-        _changingLine = _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber;
+        _changingLine = _document.GetLineByOffset(Math.Min(DocumentEdits.EditedSpan(e).Offset, _document.TextLength)).LineNumber;
         _lineCountBefore = _document.LineCount;
     }
 
@@ -1631,8 +1631,10 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
     {
         _changes++;
 
-        // The edited line's start state stands; the states after it move with their lines.
-        var line = Math.Min(_changingLine, _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber);
+        // The edited line's start state stands; the states after it move with their lines. A group's edited lines, not all
+        // of a whole-document change (DocumentEdits).
+        var edited = DocumentEdits.EditedSpan(e);
+        var line = Math.Min(_changingLine, _document.GetLineByOffset(Math.Min(edited.Offset, _document.TextLength)).LineNumber);
         if (line >= _states.Count)
         {
             return;
@@ -1658,7 +1660,7 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
             _states.RemoveRange(line, Math.Min(-delta, _states.Count - line));
         }
 
-        var lastEdited = _document.GetLineByOffset(Math.Min(e.Offset + e.InsertionLength, _document.TextLength)).LineNumber;
+        var lastEdited = _document.GetLineByOffset(Math.Min(edited.Offset + edited.InsertionLength, _document.TextLength)).LineNumber;
         _stableFrom = pending ? Math.Max(_stableFrom >= line ? _stableFrom + delta : _stableFrom, lastEdited) : lastEdited;
         _valid = Math.Min(_valid, line);
     }
