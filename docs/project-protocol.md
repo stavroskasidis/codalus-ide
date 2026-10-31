@@ -156,7 +156,7 @@ The Properties window, Include and Exclude, links, moves between projects, Show 
 
 | Notification | Params |
 |---|---|
-| `fs/changed` | `{directories}`: folders whose set of files changed (debounced), for Show All Files and the folder view |
+| `fs/changed` | `{directories, rescan?}`: folders whose set of files changed (debounced), for Show All Files and the folder view. `rescan: true` when the watcher dropped events (its buffer overflowed): anything under the watched folders may have changed, so Show All Files lists every project again. Left out when false; a message from an older host reads as no rescan. |
 
 - **`ItemInfoResult`** `{project, path, itemType?, isLinked, link?, fromGlob, elements: [{operation (include \| update \| remove), itemType, value, line, condition?}], metadata: [{name, value, projectValue?}], itemTypes}`. `itemType` is null for a file that isn't an item. `metadata` has `CopyToOutputDirectory`, `Generator`, `CustomToolNamespace`, `Link` (linked files) and every metadata of the item; `projectValue` is what the project file sets. `itemTypes` are the Build Action choices (`None`, `Compile`, `Content`, `EmbeddedResource`, `AdditionalFiles`, then `AvailableItemName`).
 - **`fs/move` across projects:** when a file moves (or is copied) from one project's folder into another's, the source project's explicit items that name it are carried to the target project with `items/set`'s edit, and removed from the source on a move.
