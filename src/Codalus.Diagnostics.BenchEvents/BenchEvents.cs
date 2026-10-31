@@ -168,11 +168,18 @@ public static class BenchEventNames
     /// While it ran, a probe posted at input priority every 10 ms timed how long each waited for the UI thread:
     /// <c>stall_max_us</c> is the longest wait, <c>stall_total_us</c> the sum of the waits over 50 ms and <c>stalls</c> their
     /// number, each without the garbage collector's pauses (<c>gc_pause_us</c> is the flow's), <c>probes</c> how many probes
-    /// ran; <c>job</c> (text) is the posted job the UI thread ran most during the longest wait, when it was one, and
-    /// <c>elapsed_us</c> how long the flow took.
+    /// ran; <c>step</c> (text) is the flow's step during the longest wait, <c>job</c> (text) the job posted from another thread
+    /// that the UI thread ran most during it, when it was one (often it was the step's own work), and <c>elapsed_us</c> how
+    /// long the flow took.
     /// </summary>
     public const string EverydayFlow = "everyday_flow";
 
-    /// <summary>Something <c>--bench everyday</c> couldn't do as planned: <c>note</c> (text) says what, for the result's notes.</summary>
+    /// <summary>The flows of <c>--bench everyday</c>, in the order they run: a run that measured fewer didn't finish.</summary>
+    public static readonly IReadOnlyList<string> EverydayFlows = ["open_tracked", "next_document", "ctrl_tab", "sync_collapsed", "explorer_search", "close_reopen", "typing", "build"];
+
+    /// <summary>
+    /// Something <c>--bench everyday</c> couldn't do as planned, or a flow that didn't do its work (a filter that didn't
+    /// apply, a Sync that didn't select the file): <c>note</c> (text) says what, for the result's notes.
+    /// </summary>
     public const string EverydayNote = "everyday_note";
 }

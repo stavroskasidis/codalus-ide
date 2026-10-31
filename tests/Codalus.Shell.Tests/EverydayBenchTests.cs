@@ -6,7 +6,8 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// <c>--bench everyday</c> (M56): CI's benchmark of the everyday flows, which runs only in the benchmarks job of stable
-/// releases. These keep it working between them: its stall monitor, and every flow on a small solution.
+/// releases. These keep it working between them: its stall monitor, and every flow on a small solution, each checking that
+/// it did its work (a flow that does nothing would measure nothing).
 /// </summary>
 public class EverydayBenchTests
 {
@@ -26,27 +27,6 @@ public class EverydayBenchTests
         Assert.Equal(report.LongestMilliseconds, monitor.LongestMilliseconds);
     }
 
-    [Fact]
-    public void The_bench_option_opens_the_solution_for_the_everyday_flows()
-    {
-        var root = Directory.CreateTempSubdirectory("codalus-everyday-").FullName;
-        try
-        {
-            var solution = Path.Combine(root, "Solution50.slnx");
-            File.WriteAllText(solution, "<Solution />");
-            var options = ShellOptions.Parse([solution, "--bench", "everyday", "--exit-on", "done"]);
-
-            Assert.Equal(solution, options.Path);
-            Assert.Equal(("everyday", "done"), (options.Bench, options.ExitOn));
-            Assert.True(BenchDriver.IsRequested(options));
-            Assert.Empty(options.Errors);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
     [AvaloniaFact]
     public async Task Every_everyday_flow_runs_and_is_measured()
     {
@@ -60,7 +40,9 @@ public class EverydayBenchTests
             await File.WriteAllTextAsync(Path.Combine(root, project, project + ".csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net11.0</TargetFramework></PropertyGroup></Project>", TestContext.Current.CancellationToken);
             for (var i = 0; i < 8; i++)
             {
-                await File.WriteAllTextAsync(Path.Combine(root, project, $"Type{i:00}.cs"), $"namespace {project};\n\npublic static class Type{i:00}\n{{\n    public static int Value => {i};\n}}\n", TestContext.Current.CancellationToken);
+                // A warning for the build's flow to find in the Error List, as Solution50's unused fields are.
+                var warning = i == 3 ? "#warning everyday\n" : string.Empty;
+                await File.WriteAllTextAsync(Path.Combine(root, project, $"Type{i:00}.cs"), $"{warning}namespace {project};\n\npublic static class Type{i:00}\n{{\n    public static int Value => {i};\n}}\n", TestContext.Current.CancellationToken);
             }
         }
 
@@ -69,12 +51,19 @@ public class EverydayBenchTests
         f.Shell.Trust.Trust(root);
         await f.Shell.OpenSolutionAsync(solution);
 
-        var run = new BenchDriver(f.Window, f.Shell).RunEverydayFlowsAsync();
+        var driver = new BenchDriver(f.Window, f.Shell);
+        var run = driver.RunEverydayFlowsAsync();
         await ShellFixture.PumpUntil(() => run.IsCompleted, seconds: 600);
         var flows = await run;
 
-        Assert.Equal(["open_tracked", "tab_switch", "sync_collapsed", "explorer_search", "close_reopen", "typing", "build"], flows.Select(flow => flow.Name));
+        Assert.Equal(Codalus.Diagnostics.BenchEvents.BenchEventNames.EverydayFlows, flows.Select(flow => flow.Name));
         Assert.All(flows, flow => Assert.True(flow.Stalls.Probes > 0, $"{flow.Name}: no probe answered"));
+        Assert.All(flows, flow => Assert.NotNull(flow.Stalls.LongestStep));
+
+        // Each flow checked its work: Track and Sync selected the file, each tab and Ctrl+Tab's release activated a document,
+        // each filter showed the files it matches and clearing it the tree, the files opened again, the keystrokes reached
+        // the file, and the rebuild succeeded and its warnings reached the Error List.
+        Assert.Empty(driver.EverydayNotes);
         Assert.Equal(20, f.Shell.Editors.Count());
         Assert.True(f.Shell.Explorer.TrackActiveItem);
         Assert.False(f.Shell.HasUnsavedDocuments); // the typing undone, as the build and Close All need
