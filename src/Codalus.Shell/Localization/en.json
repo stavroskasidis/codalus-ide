@@ -3758,6 +3758,7 @@
   "pullRequests.refresh": "Refresh",
   "pullRequests.refreshPullRequests": "Refresh Pull Requests",
   "pullRequests.reviewComments": "Review comments",
+  "quickPick.moreMatches": "{0} more match: type to narrow the list down",
   "quickPick.noMatchingResults": "No matching results",
   "quickPick.results": "Results",
   "quickWatch.addWatch": "Add Watch",

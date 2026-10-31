@@ -85,4 +85,154 @@ public sealed class FloodResponsivenessTests
         Assert.Equal(loads + 1, view.Coloring.Loads);
         host.Close();
     }
+
+    [AvaloniaFact]
+    public async Task The_error_list_shows_a_builds_diagnostics_at_most_every_quarter_second_and_at_once_when_it_ends()
+    {
+        // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a second
+        // for the whole build, losing its selection each time.
+        await using var f = ShellFixture.Create();
+        var list = f.Shell.ErrorList;
+        var build = new TaskCompletionSource<BuildResultInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Shell.Builds.Runner = (_, _) => build.Task;
+        var building = f.Shell.Builds.BuildAsync("Build", null, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Builds.IsBuilding);
+        await ShellFixture.PumpUntil(() => !list.IsRefreshing);
+
+        var resets = 0;
+        list.Items.CollectionChanged += (_, e) => resets += e.Action == NotifyCollectionChangedAction.Reset ? 1 : 0;
+        var root = Path.Combine(Path.GetTempPath(), "codalus-build-" + Guid.NewGuid().ToString("N"));
+        var watch = Stopwatch.StartNew();
+        for (var i = 0; i < 40; i++)
+        {
+            f.Shell.Languages.Diagnostics.Set(Path.Combine(root, $"File{i:00}.cs"), "csharp", null,
+                [new Diagnostic(new Range(new Position(0, 0), new Position(0, 4)), DiagnosticSeverity.Error, "CS0246", "csharp", "The type or namespace name could not be found")]);
+            await WaitAsync(25);
+        }
+
+        var elapsed = watch.Elapsed;
+        Assert.InRange(resets, 1, (int)(elapsed.TotalMilliseconds / ErrorListViewModel.BuildRefreshInterval.TotalMilliseconds) + 2);
+
+        // The build's end shows the rest at once.
+        build.SetResult(new BuildResultInfo(false, false, 40, 0, 1000));
+        await building;
+        await ShellFixture.PumpUntil(() => list.Rows.Count == 40 && !list.IsRefreshing);
+    }
+
+    [AvaloniaFact]
+    public async Task Find_all_replace_all_and_the_task_list_check_the_solutions_files_off_the_ui_thread()
+    {
+        // Find All (Entire solution, Current project), Replace All and the Task List checked each of the solution's files
+        // on disk, sorted them twice and copied each open document's text, on the UI thread, before showing anything:
+        // 50,000 files froze the window for seconds.
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        var folder = Path.GetDirectoryName(solution)!;
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(solution);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 120);
+        var checks = 0;
+        var onUiThread = 0;
+        f.Shell.FileExists = path =>
+        {
+            Interlocked.Increment(ref checks);
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                Interlocked.Increment(ref onUiThread);
+            }
+
+            return File.Exists(path);
+        };
+
+        // An open document's unsaved text is what's searched.
+        var file = f.Shell.Solutions.Projects.Values.SelectMany(p => p.Items).First(i => i.Path.EndsWith(".cs", StringComparison.Ordinal)).Path;
+        var editor = await f.Shell.OpenFileAsync(file);
+        Assert.NotNull(editor);
+        editor.Model.Text.Insert(0, "// TODO: zzflood unsaved\n");
+        var find = f.Shell.FindReplace;
+        var results = f.Shell.FindResults;
+        find.Query = "zzflood";
+        foreach (var scope in new[] { FindScopes.EntireSolution, FindScopes.CurrentProject })
+        {
+            find.LookIn = scope;
+            await find.FindAllAsync();
+            await ShellFixture.PumpUntil(() => !results.CurrentPage.IsSearching);
+            Assert.Contains(results.CurrentPage.Rows, r => !r.IsHeader && r.Path == file && r.Line == 1);
+        }
+
+        await f.Shell.TaskList.RefreshAsync();
+        Assert.Contains(f.Shell.TaskList.Rows, r => r is { Token: "TODO", Text: "zzflood unsaved", Line: 1 } && r.Path == file);
+        Assert.True(checks > 10, $"{checks} files checked");
+        Assert.Equal(0, onUiThread);
+    }
+
+    [AvaloniaFact]
+    public void A_quick_pick_of_fifty_thousand_items_shows_the_best_thousand_with_one_reset_per_keystroke()
+    {
+        // Each keystroke added every match to the list a change at a time: with 20,000 branches the picker fell behind.
+        using var pick = new QuickPickViewModel();
+        var changes = 0;
+        pick.Rows.CollectionChanged += (_, e) =>
+        {
+            changes++;
+            Assert.Equal(NotifyCollectionChangedAction.Reset, e.Action);
+        };
+        _ = pick.ShowAsync([.. Enumerable.Range(0, 50_000).Select(i => new QuickPickItem($"origin/feature/branch-{i:00000}"))], "Switch branch");
+        Assert.Equal(1, changes);
+        Assert.Equal(QuickPickViewModel.MaxRows, pick.Rows.Count);
+        Assert.True(pick.HasMore);
+        Assert.Contains(49_000.ToString("N0", CultureInfo.CurrentCulture), pick.MoreText, StringComparison.Ordinal);
+
+        foreach (var query in new[] { "b", "br", "bra", "branch-4999" })
+        {
+            changes = 0;
+            pick.Query = query;
+            Assert.Equal(1, changes);
+            Assert.InRange(pick.Rows.Count, 1, QuickPickViewModel.MaxRows);
+            Assert.Equal(0, pick.SelectedIndex);
+        }
+
+        // Few enough match: all show, and nothing says there are more.
+        Assert.InRange(pick.Rows.Count, 1, 100);
+        Assert.False(pick.HasMore);
+        pick.Cancel();
+    }
+
+    [AvaloniaFact]
+    public async Task Terminal_find_looks_through_a_long_scrollback_a_slice_at_a_time()
+    {
+        // Find walked the whole scrollback at once, on the UI thread and holding the terminal: up to 1,000,000 rows, seconds
+        // per keystroke, with the program's output stopped.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 800;
+        var session = f.Shell.ShowTerminal(newTerminal: true, profile: OperatingSystem.IsWindows() ? "cmd" : "sh");
+        Assert.NotNull(session);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<TerminalView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<TerminalView>().First();
+        var control = f.Window.GetVisualDescendants().OfType<TerminalControl>().First(c => c.Session == session);
+        session.Terminal.ScrollbackLimit = 100_000;
+        var text = new StringBuilder();
+        for (var i = 0; i < 60_000; i++)
+        {
+            text.Append("row ").Append(i.ToString(CultureInfo.InvariantCulture)).Append("\r\n");
+        }
+
+        session.Terminal.Feed(text.ToString());
+        ShellFixture.Pump();
+
+        // A miss: the rows after the first slice wait for the next passes, and then nothing is selected.
+        var vm = f.Shell.TerminalWindow;
+        vm.FindVisible = true;
+        vm.FindText = "zz-missing";
+        Assert.True(view.IsFinding);
+        await ShellFixture.PumpUntil(() => !view.IsFinding);
+        Assert.False(control.HasSelection);
+
+        // A match far from the view is found and selected; a newer find replaces one still looking.
+        vm.FindText = "row 1234";
+        vm.FindText = "row 12345";
+        await ShellFixture.PumpUntil(() => !view.IsFinding);
+        Assert.Equal("row 12345", control.SelectedText());
+    }
 }

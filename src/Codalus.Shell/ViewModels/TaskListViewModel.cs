@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Infrastructure;
@@ -16,9 +15,10 @@ public sealed record TaskRow(string Token, string Text, string Path, int Line)
 /// <summary>
 /// The Task List (M12b): comments starting with a task token (setting <c>taskList.tokens</c>, by default <c>TODO</c>,
 /// <c>HACK</c>, <c>UNDONE</c>) in the solution's files, unsaved text included. Scans on the thread pool when it opens
-/// and on Refresh; a filter narrows by text or file.
+/// and on Refresh, the files listed there too (<paramref name="files"/>: those that exist, and the open ones' texts);
+/// a filter narrows by text or file.
 /// </summary>
-public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<string, string?> openText, Func<IReadOnlyList<string>> tokens, Func<string, Position, Task> open) : ObservableObject, IDisposable
+public sealed class TaskListViewModel(Func<CancellationToken, Task<FilesToSearch>> files, Func<IReadOnlyList<string>> tokens, Func<string, Position, Task> open) : ObservableObject, IDisposable
 {
     public const string ToolWindowId = "taskList";
     private const int MaxTasks = 5000;
@@ -34,7 +34,7 @@ public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<st
     private string _summary = string.Empty;
     private bool _scanned;
 
-    public ObservableCollection<TaskRow> Rows { get; } = [];
+    public ResettableCollection<TaskRow> Rows { get; } = [];
 
     public string Filter
     {
@@ -69,8 +69,6 @@ public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<st
         _scan?.Cancel();
         _scan?.Dispose();
         var cts = _scan = new CancellationTokenSource();
-        var paths = files().Where(f => s_textExtensions.Contains(System.IO.Path.GetExtension(f))).ToList();
-        var texts = paths.Select(p => (p, openText(p))).Where(x => x.Item2 is not null).ToDictionary(x => x.p, x => x.Item2!, Codalus.Workbench.Projects.SolutionService.PathComparer);
         var words = tokens().Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => Regex.Escape(t.Trim())).ToList();
         if (words.Count == 0)
         {
@@ -81,9 +79,11 @@ public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<st
 
         // A comment marker, then a token as a whole word: // TODO: x, /* HACK x, # UNDONE x, <!-- TODO x, ' TODO x.
         var regex = new Regex(@"(?://+|/\*+|#|<!--|'|\*)\s*(" + string.Join('|', words) + @")\b[:\s-]*(.*)$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-        Summary = $"Scanning {paths.Count} files…";
         try
         {
+            var (all, texts) = await files(cts.Token).ConfigureAwait(true);
+            var paths = await Task.Run(() => all.Where(f => s_textExtensions.Contains(System.IO.Path.GetExtension(f))).ToList(), cts.Token).ConfigureAwait(true);
+            Summary = $"Scanning {paths.Count} files…";
             var found = await Task.Run(() => Scan(paths, texts, regex, cts.Token), cts.Token).ConfigureAwait(true);
             _all.Clear();
             _all.AddRange(found);
@@ -94,7 +94,7 @@ public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<st
         }
     }
 
-    private static List<TaskRow> Scan(List<string> paths, Dictionary<string, string> texts, Regex regex, CancellationToken cancellationToken)
+    private static List<TaskRow> Scan(List<string> paths, IReadOnlyDictionary<string, string> texts, Regex regex, CancellationToken cancellationToken)
     {
         var rows = new List<TaskRow>();
         foreach (var path in paths)
@@ -132,12 +132,8 @@ public sealed class TaskListViewModel(Func<IReadOnlyList<string>> files, Func<st
 
     private void Apply()
     {
-        Rows.Clear();
-        foreach (var row in _all.Where(r => _filter.Length == 0 || r.Text.Contains(_filter, StringComparison.OrdinalIgnoreCase) || r.File.Contains(_filter, StringComparison.OrdinalIgnoreCase) || r.Token.Equals(_filter, StringComparison.OrdinalIgnoreCase)))
-        {
-            Rows.Add(row);
-        }
-
+        // One reset: a row at a time raised a change for each, up to 5,000 per keystroke in the filter.
+        Rows.Reset(_all.Where(r => _filter.Length == 0 || r.Text.Contains(_filter, StringComparison.OrdinalIgnoreCase) || r.File.Contains(_filter, StringComparison.OrdinalIgnoreCase) || r.Token.Equals(_filter, StringComparison.OrdinalIgnoreCase)));
         Summary = _all.Count == 0 ? "No tasks in the solution's files." : $"{_all.Count} task(s){(Rows.Count < _all.Count ? $", {Rows.Count} shown" : string.Empty)}.";
     }
 

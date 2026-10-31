@@ -120,6 +120,7 @@ public sealed class ErrorListViewModel : ObservableObject
         _settings = settings;
         store.Changed += (_, _) => ScheduleRefresh();
         builds.DiagnosticsChanged += (_, _) => ScheduleRefresh();
+        builds.Finished += (_, _) => Dispatcher.UIThread.Post(OnBuildFinished, DispatcherPriority.Background);
         if (settings is not null)
         {
             settings.Changed += (_, e) =>
@@ -285,7 +286,7 @@ public sealed class ErrorListViewModel : ObservableObject
     private UiDebouncer? _filterRefresh;
 
     /// <summary>Whether the rows shown are being built again (tests).</summary>
-    internal bool IsRefreshing => _computing || _filterRefresh?.IsPending == true;
+    internal bool IsRefreshing => _computing || _filterRefresh?.IsPending == true || _buildRefresh?.IsEnabled == true;
 
     public string ErrorsLabel => _errors == 1 ? "1 Error" : $"{_errors} Errors";
 
@@ -307,7 +308,7 @@ public sealed class ErrorListViewModel : ObservableObject
     /// <summary>
     /// A change of diagnostics (published on any thread, a file at a time): one refresh for a burst, its rows built on
     /// the thread pool. A solution whose packages didn't restore has hundreds of thousands of errors, which froze the
-    /// window when they were built on the UI thread.
+    /// window when they were built on the UI thread. While a build runs, at most every <see cref="BuildRefreshInterval"/>.
     /// </summary>
     private void ScheduleRefresh()
     {
@@ -319,8 +320,44 @@ public sealed class ErrorListViewModel : ObservableObject
         Dispatcher.UIThread.Post(() =>
         {
             Volatile.Write(ref _refreshScheduled, 0);
-            _ = RefreshInBackgroundAsync();
+            if (!_builds.IsBuilding)
+            {
+                _ = RefreshInBackgroundAsync();
+                return;
+            }
+
+            // A build reports its diagnostics one at a time: the list was built again and reset for each, 20-30 times a
+            // second for the whole build, losing its selection each time (M56). Its end shows at once (OnBuildFinished).
+            if (_buildRefresh is null)
+            {
+                _buildRefresh = new DispatcherTimer { Interval = BuildRefreshInterval };
+                _buildRefresh.Tick += (_, _) =>
+                {
+                    _buildRefresh.Stop();
+                    _ = RefreshInBackgroundAsync();
+                };
+            }
+
+            if (!_buildRefresh.IsEnabled)
+            {
+                _buildRefresh.Start();
+            }
         }, DispatcherPriority.Background);
+    }
+
+    /// <summary>How often, at most, the list shows the diagnostics coming in while a build runs.</summary>
+    internal static readonly TimeSpan BuildRefreshInterval = TimeSpan.FromMilliseconds(250);
+
+    private DispatcherTimer? _buildRefresh;
+
+    /// <summary>The build's last diagnostics show at once, not at the next turn of <see cref="BuildRefreshInterval"/>.</summary>
+    private void OnBuildFinished()
+    {
+        if (_buildRefresh?.IsEnabled == true)
+        {
+            _buildRefresh.Stop();
+            _ = RefreshInBackgroundAsync();
+        }
     }
 
     /// <summary>

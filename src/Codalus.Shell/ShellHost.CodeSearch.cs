@@ -299,7 +299,11 @@ public sealed partial class ShellHost : ICodeSearchHost
                 var document = ActiveEditor?.Model.Path;
                 return path => document is not null && SolutionService.PathComparer.Equals(path, document);
             case CodeSearchScope.CurrentProject:
-                var files = new HashSet<string>(CurrentProjectFiles(), SolutionService.PathComparer);
+                // A filter, so no file is checked on disk (M56: each of the project's, on the UI thread, at every query),
+                // and only the projects of the active document's name are looked through.
+                var active = ActiveEditor?.Model.Path;
+                var named = active is not null && ProjectOfFile().TryGetValue(active, out var name) ? Solutions.Projects.Values.Where(p => p.Name == name) : [];
+                var files = new HashSet<string>(ProjectListing(named, active) is { } project ? project.Items.Select(i => i.Path).Prepend(project.Path) : [], SolutionService.PathComparer);
                 return files.Contains;
             default:
                 return null;

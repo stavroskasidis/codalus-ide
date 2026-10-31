@@ -148,40 +148,84 @@ public sealed partial class TerminalView : UserControl, IPaneView
     private void OnFindPrevious(object? sender, RoutedEventArgs e) => _viewModel?.FindNext(backwards: true);
 
     private (int Row, int Column)? _lastMatch;
+    private int _findGeneration;
+    private bool _finding;
 
-    /// <summary>Finds the text in the buffer (case-insensitive), from the last match on.</summary>
+    /// <summary>How many rows a find looks through per dispatcher pass, holding the terminal for that long.</summary>
+    internal const int FindSliceRows = 2000;
+
+    /// <summary>Whether a find is still looking through the rows (tests).</summary>
+    internal bool IsFinding => _finding;
+
+    /// <summary>
+    /// Finds the text in the buffer (case-insensitive), from the last match on, a slice of rows per dispatcher pass at
+    /// background priority, a newer find (the next keystroke) dropping the rest: the whole scrollback at once, up to
+    /// 1,000,000 rows, held the UI thread and the terminal's output for seconds (M56).
+    /// </summary>
     private void OnFind(object? sender, bool backwards)
     {
         var control = Active;
+        var generation = ++_findGeneration;
+        _finding = false;
         if (control.Session is not { } session || _viewModel?.FindText is not { Length: > 0 } query)
         {
             return;
         }
 
         var terminal = session.Terminal;
+        int startRow, startColumn;
         lock (terminal.SyncRoot)
         {
+            (startRow, startColumn) = _lastMatch ?? (backwards ? (terminal.TotalRows - 1, int.MaxValue) : (control.ViewportTop, -1));
+        }
+
+        _finding = true;
+        FindFrom(control, terminal, query, backwards, startRow, startColumn, 0, generation);
+    }
+
+    private void FindFrom(TerminalControl control, Codalus.Terminal.VirtualTerminal terminal, string query, bool backwards, int startRow, int startColumn, int step, int generation)
+    {
+        if (generation != _findGeneration)
+        {
+            return;
+        }
+
+        lock (terminal.SyncRoot)
+        {
+            // Rows that scroll out of a full scrollback move the others up meanwhile: a slice may look at a row twice or
+            // miss one, but what it selects is the row it read, under this lock.
             var total = terminal.TotalRows;
-            var (startRow, startColumn) = _lastMatch ?? (backwards ? (total - 1, int.MaxValue) : (control.ViewportTop, -1));
-            for (var step = 0; step <= total; step++)
+            for (var end = Math.Min(step + FindSliceRows, total + 1); step < end; step++)
             {
                 var row = ((backwards ? startRow - step : startRow + step) % total + total) % total;
-                var text = terminal.GetRow(row).GetText();
-                var columns = terminal.GetRow(row).TextColumns();
+                var line = terminal.GetRow(row);
+                var text = line.GetText();
                 var index = backwards
                     ? (step == 0 && startColumn != int.MaxValue ? (startColumn > 0 ? text.LastIndexOf(query, Math.Min(startColumn - 1, text.Length - 1), StringComparison.OrdinalIgnoreCase) : -1) : text.LastIndexOf(query, StringComparison.OrdinalIgnoreCase))
                     : text.IndexOf(query, step == 0 ? Math.Min(startColumn + 1, text.Length) : 0, StringComparison.OrdinalIgnoreCase);
                 if (index >= 0)
                 {
+                    var columns = line.TextColumns(); // the matched row's only
                     var column = index < columns.Length ? columns[index] : index;
                     _lastMatch = (row, index);
+                    _finding = false;
                     control.Select(row, column, query.Length);
                     return;
                 }
             }
+
+            if (step > total)
+            {
+                _lastMatch = null;
+                _finding = false;
+                control.ClearSelection();
+                return;
+            }
         }
 
-        _lastMatch = null;
-        control.ClearSelection();
+        var next = step;
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => FindFrom(control, terminal, query, backwards, startRow, startColumn, next, generation),
+            Avalonia.Threading.DispatcherPriority.Background);
     }
 }

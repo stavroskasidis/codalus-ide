@@ -98,6 +98,13 @@ public static class FindResultsGrouping
 }
 
 /// <summary>
+/// The files a search reads, a folder's files together, and the editor's text of those open (unsaved changes count),
+/// all gathered off the UI thread but the open documents' snapshots (M56: 50,000 existence checks, two sorts and a copy
+/// of each open document's text froze the window before Find All showed it was searching).
+/// </summary>
+public sealed record FilesToSearch(IReadOnlyList<string> Files, IReadOnlyDictionary<string, string> OpenTexts);
+
+/// <summary>
 /// Find Results: what Find and Replace (<see cref="FindReplaceViewModel"/>) found, in numbered pages (Find Results 1, 2…). A page with Keep Results on keeps its results: the next search
 /// goes to a page without it, or a new one. The members below the pages act on the current page.
 /// </summary>
@@ -105,18 +112,15 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 {
     public const string ToolWindowId = "findResults";
 
-    private readonly Func<FindInFilesOptions, Task<IReadOnlyList<string>>> _files;
-    private readonly Func<string, string?> _openText;
+    private readonly Func<FindInFilesOptions, CancellationToken, Task<FilesToSearch>> _files;
     private readonly Func<string, Position, int, Task> _open;
     private FindResultsPage _currentPage;
 
-    /// <param name="files">The files a Find in Files search looks in (its scope, its file types applied).</param>
-    /// <param name="openText">The editor's text of an open file (unsaved changes count), or null.</param>
+    /// <param name="files">The files a Find in Files search looks in (its scope, its file types applied) and their open texts.</param>
     /// <param name="open">Opens a file at a position, selecting that many characters.</param>
-    public FindResultsViewModel(Func<FindInFilesOptions, Task<IReadOnlyList<string>>> files, Func<string, string?> openText, Func<string, Position, int, Task> open)
+    public FindResultsViewModel(Func<FindInFilesOptions, CancellationToken, Task<FilesToSearch>> files, Func<string, Position, int, Task> open)
     {
         _files = files;
-        _openText = openText;
         _open = open;
         _currentPage = new FindResultsPage(this, 1);
         Pages.Add(_currentPage);
@@ -271,9 +275,7 @@ public sealed class FindResultsViewModel : ObservableObject, IDisposable
 
     // ------------------------------------------------------------------ for the pages
 
-    internal Task<IReadOnlyList<string>> FilesAsync(FindInFilesOptions options) => _files(options);
-
-    internal string? OpenText(string path) => _openText(path);
+    internal Task<FilesToSearch> FilesAsync(FindInFilesOptions options, CancellationToken cancellationToken) => _files(options, cancellationToken);
 
     internal Task Open(string path, Position position, int length) => _open(path, position, length);
 
@@ -810,10 +812,11 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
 
         IsSearching = true;
         BaseSummary = "Searching…";
-        IReadOnlyList<string> files;
+        FilesToSearch? search;
         try
         {
-            files = await _owner.FilesAsync(options).ConfigureAwait(true);
+            // A folder's files together, so grouping by path adds its rows at the end as they stream in.
+            search = await _owner.FilesAsync(options, cts.Token).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -821,8 +824,12 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             BaseSummary = ex.Message;
             return;
         }
+        catch (OperationCanceledException)
+        {
+            search = null;
+        }
 
-        if (cts.IsCancellationRequested)
+        if (search is null || cts.IsCancellationRequested)
         {
             if (_search == cts)
             {
@@ -833,11 +840,7 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             return;
         }
 
-        // A folder's files together, so grouping by path adds its rows at the end as they stream in.
-        files = [.. files
-            .OrderBy(f => System.IO.Path.GetDirectoryName(f), StringComparer.OrdinalIgnoreCase)
-            .ThenBy(System.IO.Path.GetFileName, StringComparer.OrdinalIgnoreCase)];
-        var openTexts = files.Select(f => (f, _owner.OpenText(f))).Where(x => x.Item2 is not null).ToDictionary(x => x.f, x => x.Item2!, SolutionService.PathComparer);
+        var (files, openTexts) = search;
         IsSearching = true;
         BaseSummary = $"Searching {files.Count} files…";
         var lines = 0;
