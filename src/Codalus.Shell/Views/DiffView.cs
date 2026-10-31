@@ -190,6 +190,8 @@ internal sealed class DiffNavigationSource(CodeEditorController controller, Text
 
     public IReadOnlyList<DocumentSymbol> Symbols => controller.Insights.Symbols;
 
+    public bool TypesExpected => controller.Insights.TypesExpected;
+
     public event EventHandler? SymbolsChanged
     {
         add => controller.Insights.SymbolsChanged += value;
