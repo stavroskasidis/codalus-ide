@@ -44,6 +44,10 @@ public sealed class GitCompareViewModel : ObservableObject
     /// <summary>"main → feature/sign-in": the tab, the header and the accessible name.</summary>
     public string Title => Localizer.Format("msg.gitCompare.title", "{0} → {1}", FromName, ToName);
 
+    /// <summary>
+    /// The compared files' tree. TODO(issue): built on the UI thread into a tree view that isn't virtualized, an item per
+    /// file: seconds for two branches 10,000 files apart (M56; Git Changes' flattened rows are the way).
+    /// </summary>
     public ObservableCollection<GitChangeNode> Tree { get; } = [];
 
     public ObservableCollection<GitFileRow> Items { get; } = [];

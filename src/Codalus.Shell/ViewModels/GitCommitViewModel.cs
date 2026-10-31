@@ -194,6 +194,10 @@ public sealed class GitCommitViewModel : ObservableObject
 
     public string ChangesHeader => Localizer.Format("msg.gitCommit.changes", "Changes ({0})", _details?.Files.Count ?? 0);
 
+    /// <summary>
+    /// The changed files' tree, every folder expanded. TODO(issue): built on the UI thread into a tree view that isn't
+    /// virtualized, an item per file: seconds for a commit of 10,000 files (M56; Git Changes' flattened rows are the way).
+    /// </summary>
     public ObservableCollection<GitCommitTreeNode> Tree { get; } = [];
 
     public bool CanExplain => _actions.Explain is not null;

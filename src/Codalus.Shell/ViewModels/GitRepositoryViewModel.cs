@@ -403,7 +403,11 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Builds the tree from what was read, with the filter; keeps the expanded nodes and the selection.</summary>
+    /// <summary>
+    /// Builds the tree from what was read, with the filter; keeps the expanded nodes and the selection. TODO(issue): the
+    /// tree view isn't virtualized and this runs on the UI thread at each filter keystroke and status read: thousands of
+    /// branches and tags make thousands of tree items each time (M56; Git Changes' flattened rows are the way).
+    /// </summary>
     private void Rebuild()
     {
         var query = _filter.Trim();
