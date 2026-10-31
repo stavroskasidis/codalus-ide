@@ -5,6 +5,7 @@ using Codalus.LanguageServices.Protocol;
 using Codalus.Plugins.Protocol;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
+using Codalus.Workbench.Projects;
 using Codalus.Workbench.Testing;
 using Range = Codalus.LanguageServices.Protocol.Range;
 
@@ -92,7 +93,7 @@ public class EverydayResponsivenessTests
             }
         });
 
-        await Flow("tab switches, as Ctrl+Tab held down", async () =>
+        await Flow("every tab activated in turn, as Next Document held down", async () =>
         {
             foreach (var editor in f.Shell.Editors.Where(e => e.Owner is not null).ToList())
             {
@@ -115,12 +116,26 @@ public class EverydayResponsivenessTests
 
         await Flow("typing in the search box and clearing it", async () =>
         {
-            foreach (var text in new[] { "f", "f1", "f19", "f199", string.Empty })
+            // "f" matches nearly every file, and its matches are shown before the rest is typed; then the rest, a letter
+            // every 80 ms, filters once at the end. Cleared after 320 ms, the box never filtered at all, and the flow
+            // measured nothing.
+            async Task FilteredAsync(string text)
             {
-                explorer.Filter = text;
+                await ShellFixture.PumpUntil(() => !explorer.IsFiltering && explorer.Rows.Any(r => r.Node.Kind == ExplorerNodeKind.File && r.Name.Contains(text, StringComparison.OrdinalIgnoreCase)),
+                    describe: () => $"filter {text}: {explorer.Rows.Count} rows, filtering {explorer.IsFiltering}");
+                await WaitAsync(100);
+            }
+
+            explorer.Filter = "f";
+            await FilteredAsync("f");
+            for (var length = 2; length <= "f199".Length; length++)
+            {
+                explorer.Filter = "f199"[..length];
                 await WaitAsync(80);
             }
 
+            await FilteredAsync("f199");
+            explorer.Filter = string.Empty;
             await ShellFixture.PumpUntil(() => !explorer.IsFiltering);
         });
 

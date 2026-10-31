@@ -169,7 +169,7 @@ public class SolutionExplorerRevealTests
         var revealed = new List<string?>();
         explorer.RevealRequested += (_, row) => revealed.Add(row.Node.Path);
 
-        // Ctrl+Tab held down: every tab is activated, one reveal comes, for the last one.
+        // Every tab activated in turn (Next Document held down): one reveal comes, for the last one.
         var editors = f.Shell.Editors.Where(e => files.Contains(e.Model.Path)).ToList();
         foreach (var editor in editors)
         {
