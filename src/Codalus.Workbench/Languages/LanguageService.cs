@@ -8,8 +8,13 @@ using Codalus.Workbench.Projects;
 
 namespace Codalus.Workbench.Languages;
 
-/// <summary>An open document handed to a language service. <see cref="Text"/> reads the editor's current text.</summary>
-public sealed record LanguageDocument(string Path, string LanguageId, Func<(string Text, int Version)> Text);
+/// <summary>
+/// An open document handed to a language service. <see cref="Text"/> reads the editor's current text. <see cref="Snapshot"/>,
+/// when given, takes the current version's immutable snapshot cheaply, its text made later by the function it returns
+/// (M57): a <c>didOpen</c> sends the snapshot taken when it was queued, so a request queued behind it never reads a later
+/// edit's text.
+/// </summary>
+public sealed record LanguageDocument(string Path, string LanguageId, Func<(string Text, int Version)> Text, Func<(Func<string> Text, int Version)>? Snapshot = null);
 
 /// <summary>
 /// Connects editors and the project system to language services (ADR 0005). It starts a service's host on demand
@@ -380,11 +385,12 @@ public sealed class LanguageService : IAsyncDisposable
     }
 
     /// <summary>
-    /// Queues a document's <c>didOpen</c>, its text and version read when it is written, off the caller's thread (M57: the
-    /// UI thread built and encoded the whole text of each file it opened).
+    /// Queues a document's <c>didOpen</c>, its text made and encoded when it is written, off the caller's thread (M57: the
+    /// UI thread built and encoded the whole text of each file it opened). It carries the snapshot taken now, when the
+    /// document gives one, so a request queued behind it reads this text and not a later edit's.
     /// </summary>
     private Task Open(LanguageHostClient client, LanguageDocument document) =>
-        client.DidOpenAsync(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, _lifetime.Token);
+        client.DidOpenAsync(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, _lifetime.Token, document.Snapshot?.Invoke());
 
     // ------------------------------------------------------------------ documents
 

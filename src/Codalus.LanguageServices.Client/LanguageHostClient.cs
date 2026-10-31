@@ -313,21 +313,24 @@ public sealed class LanguageHostClient : IAsyncDisposable
         DidOpenAsync(document.Uri, document.LanguageId, () => (document.Text, document.Version), cancellationToken);
 
     /// <summary>
-    /// Opens a document whose text and version are read when the <c>didOpen</c> is written, on the connection's writer
-    /// loop (M57): <paramref name="snapshot"/> reads something immutable (the editor's latest snapshot), so the caller pays
-    /// nothing for the text or its JSON, and the changes queued after it at or below the version it sent are skipped.
+    /// Opens a document whose text is made when the <c>didOpen</c> is written, on the connection's writer loop (M57), so
+    /// the caller pays nothing for the text or its JSON; the changes queued after it at or below the version it sent are
+    /// skipped. It sends <paramref name="queued"/>, the snapshot taken when it was queued, when given: a request queued
+    /// behind it then reads that text, not a later edit's. It sends <paramref name="latest"/>'s instead when the loop has
+    /// already skipped a newer change of the document because it wasn't open there (queued, from the editor's thread, just
+    /// before this was), so no edit is lost.
     /// </summary>
-    public Task DidOpenAsync(string uri, string languageId, Func<(string Text, int Version)> snapshot, CancellationToken cancellationToken) =>
-        _process.IsRunning ? Open(_process.Connection, uri, languageId, snapshot, cancellationToken) : Task.CompletedTask;
+    public Task DidOpenAsync(string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null) =>
+        _process.IsRunning ? Open(_process.Connection, uri, languageId, latest, cancellationToken, queued) : Task.CompletedTask;
 
-    private static Task Open(JsonRpcConnection connection, string uri, string languageId, Func<(string Text, int Version)> snapshot, CancellationToken cancellationToken)
+    private static Task Open(JsonRpcConnection connection, string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null)
     {
-        var sent = Sent(connection);
+        var versions = Versions(connection);
         return connection.NotifyAsync(Methods.DidOpen, () =>
         {
             // TODO(issue): write the snapshot's chunks into the JSON as they are, without making one big string of it.
-            var (text, version) = snapshot();
-            sent[uri] = version;
+            var (text, version) = queued is { } snapshot && !versions.SkippedPast(uri, snapshot.Version) ? (snapshot.Text(), snapshot.Version) : latest();
+            versions.Opened(uri, version);
             return new DidOpenTextDocumentParams(new TextDocumentItem(uri, languageId, version, text));
         }, ProtocolJsonContext.Default.DidOpenTextDocumentParams, null, cancellationToken);
     }
@@ -344,10 +347,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
         }
 
         var connection = _process.Connection;
-        var sent = Sent(connection);
+        var versions = Versions(connection);
         return connection.NotifyAsync(
             Methods.DidChange,
-            () => Advance(sent, uri, version) ? new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), changes) : null,
+            () => versions.Advance(uri, version) ? new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), changes) : null,
             ProtocolJsonContext.Default.DidChangeTextDocumentParams,
             null,
             cancellationToken);
@@ -368,18 +371,18 @@ public sealed class LanguageHostClient : IAsyncDisposable
         }
 
         var connection = _process.Connection;
-        var sent = Sent(connection);
+        var versions = Versions(connection);
         return connection.NotifyAsync(
             Methods.DidChange,
             () =>
             {
-                if (!sent.TryGetValue(uri, out var at) || version <= at)
+                if (!versions.Takes(uri, version))
                 {
                     return null; // not open there, or a newer text went first (its didOpen carried it)
                 }
 
                 var whole = text(); // before the version moves: a text that can't be made leaves the server's as it was
-                sent[uri] = version;
+                versions.Advance(uri, version);
                 return new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), [new TextDocumentContentChangeEvent(null, whole)]);
             },
             ProtocolJsonContext.Default.DidChangeTextDocumentParams,
@@ -395,12 +398,12 @@ public sealed class LanguageHostClient : IAsyncDisposable
         }
 
         var connection = _process.Connection;
-        var sent = Sent(connection);
+        var versions = Versions(connection);
         return connection.NotifyAsync(
             Methods.DidClose,
             () =>
             {
-                sent.Remove(uri);
+                versions.Closed(uri);
                 return new DidCloseTextDocumentParams(new TextDocumentIdentifier(uri));
             },
             ProtocolJsonContext.Default.DidCloseTextDocumentParams,
@@ -412,20 +415,56 @@ public sealed class LanguageHostClient : IAsyncDisposable
     /// The version of each document a connection's server has, as its writer loop sends them (M57): a <c>didOpen</c> sets
     /// it, a change raises it, a <c>didClose</c> removes it. Only the loop reads and writes it, one message at a time.
     /// </summary>
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonRpcConnection, Dictionary<string, int>> s_sent = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonRpcConnection, DocumentVersions> s_versions = new();
 
-    private static Dictionary<string, int> Sent(JsonRpcConnection connection) => s_sent.GetValue(connection, static _ => new Dictionary<string, int>(StringComparer.Ordinal));
+    private static DocumentVersions Versions(JsonRpcConnection connection) => s_versions.GetValue(connection, static _ => new DocumentVersions());
 
-    /// <summary>Whether a change at <paramref name="version"/> goes out: the server has the document, at an older version.</summary>
-    private static bool Advance(Dictionary<string, int> sent, string uri, int version)
+    /// <summary>What a connection's server has of each document (see <see cref="s_versions"/>).</summary>
+    private sealed class DocumentVersions
     {
-        if (!sent.TryGetValue(uri, out var at) || version <= at)
+        private readonly Dictionary<string, int> _sent = new(StringComparer.Ordinal);
+
+        /// <summary>The newest change skipped because the document wasn't open there yet, until its <c>didOpen</c>.</summary>
+        private readonly Dictionary<string, int> _skipped = new(StringComparer.Ordinal);
+
+        public void Opened(string uri, int version)
         {
+            _sent[uri] = version;
+            _skipped.Remove(uri);
+        }
+
+        public void Closed(string uri)
+        {
+            _sent.Remove(uri);
+            _skipped.Remove(uri);
+        }
+
+        /// <summary>Whether a change at <paramref name="version"/> goes out: the server has the document, at an older version.</summary>
+        public bool Takes(string uri, int version)
+        {
+            if (_sent.TryGetValue(uri, out var at))
+            {
+                return version > at;
+            }
+
+            _skipped[uri] = _skipped.TryGetValue(uri, out var skipped) ? Math.Max(skipped, version) : version;
             return false;
         }
 
-        sent[uri] = version;
-        return true;
+        /// <summary><see cref="Takes"/>, and the server's version moves to <paramref name="version"/> when it does.</summary>
+        public bool Advance(string uri, int version)
+        {
+            if (!Takes(uri, version))
+            {
+                return false;
+            }
+
+            _sent[uri] = version;
+            return true;
+        }
+
+        /// <summary>Whether a change newer than <paramref name="version"/> was skipped because the document wasn't open.</summary>
+        public bool SkippedPast(string uri, int version) => _skipped.TryGetValue(uri, out var skipped) && skipped > version;
     }
 
     public Task DidSaveAsync(string uri, CancellationToken cancellationToken) =>

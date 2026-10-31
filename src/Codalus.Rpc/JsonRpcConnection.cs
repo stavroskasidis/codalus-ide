@@ -725,6 +725,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     /// </summary>
     private async Task EndWritesAsync(List<Outgoing> written, Exception failure)
     {
+        // TODO(issue): a failure that isn't the peer leaving (a remote window's path rewrite) leaves reads going, so nothing
+        // raises Disconnected and the supervisor doesn't restart the host. Ending the connection here would need the
+        // supervisor to stop the old process before starting a new one (it doesn't today, as a host whose pipe broke exits).
         var lost = await LostAsync(failure).ConfigureAwait(false);
         List<Outgoing> queued;
         lock (_queueGate)

@@ -737,9 +737,25 @@ public sealed partial class ShellHost : IEditorServices
             return (snapshot.Source.Text, snapshot.Version);
         }
 
+        (Func<string>, int) Snapshot()
+        {
+            // Taken when the didOpen is queued, cheaply (the immutable snapshot and its version); its text is made on the
+            // writer loop. A request queued behind the didOpen then reads this text, not a later edit's (M57).
+            lock (_snapshots)
+            {
+                if (!_snapshots.TryGetValue(model, out var snapshot))
+                {
+                    return (static () => string.Empty, model.Version); // closed: a didClose follows
+                }
+
+                var source = snapshot.Source;
+                return (() => source.Text, snapshot.Version);
+            }
+        }
+
         // The didOpen is only queued; its text is made and encoded on the connection's writer loop (M57: 0.7-0.8 s of the
         // UI thread for 19 MB of XML just under the large-file limits, each '<' six bytes of JSON).
-        if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text)).ConfigureAwait(true))
+        if (await Languages.OpenAsync(new LanguageDocument(model.Path, languageId, Text, Snapshot)).ConfigureAwait(true))
         {
             foreach (var editor in LanguageViews.Where(e => e.Model == model))
             {

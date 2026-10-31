@@ -505,6 +505,89 @@ public sealed class LspBridgeTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A didOpen sends the snapshot taken when it was queued: a request queued behind it reads that text, and the edit
+    /// made after the request follows it (M57 integration: the didOpen read the editor's latest snapshot when written, so a
+    /// hover queued before the next key read that key's text, and the key's own change was skipped as already sent).
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_request_queued_behind_a_didOpen_reads_the_text_it_was_queued_with(bool incremental)
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "queued-open.log");
+        await using var service = LoggingService(log, incremental);
+        Assert.True(await service.OpenAsync(new LanguageDocument(Path.Combine(_root, "warm.conf"), "conf", () => ("w = 0\n", 1)))); // the host is up
+        var client = (await service.ClientAsync("conf"))!;
+        var path = Path.Combine(_root, "queued.conf");
+        var uri = DocumentUris.FromPath(path);
+        using var gate = new ManualResetEventSlim(initialState: false);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var current = ("b = 1\n", 1);
+        var currentGate = new object();
+        string Held(string text)
+        {
+            entered.TrySetResult();
+            gate.Wait(TimeSpan.FromSeconds(30));
+            return text;
+        }
+
+        (string, int) Latest()
+        {
+            Held(string.Empty); // the writer reads the latest text: held too, so the edit below is in it
+            lock (currentGate)
+            {
+                return current;
+            }
+        }
+
+        // The writer is held making the didOpen's text; the hover, then the next key's change, are queued behind it.
+        var opening = service.OpenAsync(new LanguageDocument(path, "conf", Latest, () => (() => Held("b = 1\n"), 1)));
+        await entered.Task.WaitAsync(ct);
+        var hover = client.HoverAsync(uri, new Position(0, 0), ct);
+        lock (currentGate)
+        {
+            current = ("!b = 1\n", 2);
+        }
+
+        var change = service.ChangeAsync(path, 2, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "!")], () => "!b = 1\n");
+        gate.Set();
+
+        Assert.True(await opening);
+        await hover;
+        await change;
+        Assert.Equal("b = 1\n", await File.ReadAllTextAsync(log + ".text", ct)); // what the hover read
+        var lines = (await LogAsync(service, path, log, ct)).Skip(1).ToArray(); // after warm.conf's didOpen
+        Assert.Equal(["didOpen 1 6", "hover", "didChange 2 7 1", "hover"], lines);
+        Assert.Equal("!b = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
+    /// <summary>
+    /// A change skipped because its document wasn't open yet, newer than the snapshot a didOpen was queued with (the editor's
+    /// thread queued the change between the snapshot and the didOpen), makes the didOpen send the latest text: the edit is
+    /// never lost.
+    /// </summary>
+    [Fact]
+    public async Task A_didOpen_queued_after_a_newer_change_sends_the_latest_text()
+    {
+        var ct = Timeout();
+        var log = Path.Combine(_root, "late-open.log");
+        await using var service = LoggingService(log, incremental: true);
+        Assert.True(await service.OpenAsync(new LanguageDocument(Path.Combine(_root, "warm.conf"), "conf", () => ("w = 0\n", 1))));
+        var client = (await service.ClientAsync("conf"))!;
+        var path = Path.Combine(_root, "late.conf");
+        var uri = DocumentUris.FromPath(path);
+
+        // The change reaches the client before the document is open on its connection: skipped there, and remembered.
+        await client.DidChangeAsync(uri, 2, [new TextDocumentContentChangeEvent(new LanguageServices.Protocol.Range(new Position(0, 0), new Position(0, 0)), "!")], ct);
+        await client.DidOpenAsync(uri, "conf", () => ("!b = 1\n", 2), ct, (() => "b = 1\n", 1));
+
+        var lines = (await LogAsync(service, path, log, ct)).Skip(1).ToArray();
+        Assert.Equal(["didOpen 2 7", "hover"], lines);
+        Assert.Equal("!b = 1\n", await File.ReadAllTextAsync(log + ".text", ct));
+    }
+
+    /// <summary>
     /// A document closed while its server starts is never opened there: its editor has let go of the text by then, and
     /// a late open would leave the server with text that no edit or close corrects (M47: the C# host got an empty
     /// Shapes.cs from Code Search's preview, so the file's types were in neither the index nor workspace symbols).
