@@ -4,10 +4,13 @@
 
 - **Tabs and splits**: Window → Split Right (`Ctrl+\` in the VS Code scheme; the default scheme's `Ctrl+\`, `Ctrl+E` is the Error List) or Split Down opens another editor group. Window → Split shows two views of the same file. `Ctrl+Tab` switches documents: hold `Ctrl`, and each `Tab` (`Shift+Tab` back, or the arrow keys) moves through the open documents in the order you last used them; release `Ctrl` to switch (`Esc` stays). A quick `Ctrl+Tab` goes back to the document you used before. Next Document and Previous Document (`Ctrl+Alt+PageDown`, `Ctrl+Alt+PageUp`) go through them in tab order.
 - **Multiple carets**: `Ctrl+Alt+Click`, `Ctrl+Alt+Up/Down`, or `Shift+Alt+.` (next occurrence of the selection). `Shift+Alt`+drag selects a box.
-- **Folding**: regions, members, usings and comments fold from the margin, or with `Ctrl+M Ctrl+M`.
+- **Folding**: regions, members, usings and comments fold from the margin, or with `Ctrl+M Ctrl+M`. A file shows at most 5,000 folding regions, the outermost first; the ones you collapsed are always kept.
 - **The minimap** on the right shows the whole file; click or drag to scroll (setting **Text Editor → Minimap**).
 - **Find and replace**: `Ctrl+F` and `Ctrl+H`, with case, whole word and regular expressions; `F3` and `Shift+F3` move between matches.
-- **Files**: encodings, BOMs and line endings are kept as they were. Indentation follows `.editorconfig`. A file changed outside the editor is reloaded (or, with unsaved edits, you are asked). Open documents are restored when the solution opens again.
+- **Files**: encodings, BOMs and line endings are kept as they were. Indentation follows `.editorconfig`. A file changed outside the editor is reloaded (or, with unsaved edits, you are asked), as an edit of only what changed: a log being written gets its new lines, and the view stays where it was. Typing while a change on disk is being read asks too, instead of losing what you typed. Open documents are restored when the solution opens again.
+- **Very long lines** (minified files, generated data): a line is drawn up to 10,000 characters, then a muted marker, **… 52,000 more characters**. The text is all there: selecting, copying, Find and saving keep every character, and colors stop at the marker. The arrow keys step over the marker to the line's end and back. A caret placed in the hidden part (by Find, Go To Line, an error) shows the line drawn up to it when it's within 20,000 characters; farther in, it moves to the line's end, or back to the 20,000th character, the way it was going. Peek Definition and the other read-only views cut long lines the same way.
+- **Large files**: a file over 20 MB or 300,000 lines opens without colors, folding, CodeLens or its language service (so no squiggles, completion or Quick Info from it), with a bar at the top saying so, and the editor stays responsive. That's decided when the file opens.
+- **Bracket colors** far from where you've been (right after a jump to the end of a large file, or an unclosed bracket typed near the top) can show the default color for a moment, until a pass in the background colors them.
 
 ## C# language services
 
