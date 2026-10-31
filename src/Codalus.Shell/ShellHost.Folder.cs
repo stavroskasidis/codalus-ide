@@ -281,19 +281,11 @@ public sealed partial class ShellHost
         Solutions.Solution is { } solution ? FolderConfiguration.ReadLaunch(solution.Directory).Configurations : [];
 
     /// <summary>The launch configuration Start uses in folder mode: the chosen one, else the first.</summary>
-    public LaunchConfiguration? CurrentLaunchConfiguration
-    {
-        get
-        {
-            if (!IsFolderMode)
-            {
-                return null;
-            }
+    public LaunchConfiguration? CurrentLaunchConfiguration => IsFolderMode ? CurrentOf(LaunchConfigurations()) : null;
 
-            var configurations = LaunchConfigurations();
-            return configurations.FirstOrDefault(c => c.Name == _launchConfiguration) ?? (configurations.Count > 0 ? configurations[0] : null);
-        }
-    }
+    /// <summary>The chosen one of <paramref name="configurations"/>, else the first.</summary>
+    private LaunchConfiguration? CurrentOf(IReadOnlyList<LaunchConfiguration> configurations) =>
+        configurations.FirstOrDefault(c => c.Name == _launchConfiguration) ?? (configurations.Count > 0 ? configurations[0] : null);
 
     public void SelectLaunchConfiguration(string name)
     {
