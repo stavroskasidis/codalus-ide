@@ -158,6 +158,15 @@ public sealed class GitServiceTests : IAsyncLifetime
         await Git(Repo, "commit", "-q", "-m", "ignore bin");
         using var git = new GitService();
         Assert.True(await git.OpenAsync(Repo, Ct));
+
+        // A fence before counting: FSEvents (macOS) delivers writes made just before its stream started, here the commit's
+        // index and branch, and one landing after the open would count as this test's first change. Its events come in
+        // order, so once the read for a folder made now is in, those are too (as in ProjectWatcherTests).
+        var fence = git.StatusReads;
+        Directory.CreateDirectory(Path.Combine(Repo, "fence"));
+        await WaitUntil(() => git.StatusReads > fence, "the watcher asked for no status read for the fence");
+        await SettledAsync(git);
+
         var status = 0;
         var index = 0;
         git.StatusChanged += (_, _) => Interlocked.Increment(ref status);
