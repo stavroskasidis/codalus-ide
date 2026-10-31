@@ -21,9 +21,9 @@ internal static class DocumentEdits
     internal const int MaxGap = 1024;
 
     /// <summary>
-    /// The fewest lines for which a group over half the document or more replaces all of it (<see cref="ApplyGroup"/>):
+    /// The fewest lines for which a group over nearly all of the document replaces all of it (<see cref="ApplyGroup"/>):
     /// below it rebuilding the line tree saves next to nothing, and a change of the edited part keeps the measured line
-    /// heights and the lines before it.
+    /// heights and the lines around it.
     /// </summary>
     internal const int WholeDocumentLines = 5_000;
 
@@ -206,14 +206,17 @@ internal static class DocumentEdits
         }
 
         // One replace of the group's span; the map's entries are in the coordinates left by the entries before them. A span
-        // of half a long document or more replaces all of it, AvaloniaEdit's path for setting the text: it rebuilds its
-        // line tree, and each view its line heights, in one pass (foldings fold again; the map moves the rest as before),
-        // where a replace of a part removes each line of the span and inserts it again through both trees: typing with
-        // 20,000 carets on 100,000 lines spent 100-150 ms of each key there against 40-100 ms, and a second until the JIT
-        // had optimized it. Handlers of the edited lines take them from the map (EditedSpan), not the change's range.
+        // over nearly all of a long document (no more than MaxGap untouched at either end) replaces all of it, AvaloniaEdit's
+        // path for setting the text: it rebuilds its line tree, and each view its line heights, in one pass (foldings fold
+        // again; the map moves the rest as before), where a replace of a part removes each line of the span and inserts it
+        // again through both trees: typing with 20,000 carets on 100,000 lines spent 100-150 ms of each key there against
+        // 40-100 ms, and a second until the JIT had optimized it. Only nearly all: the rebuild also drops the measured
+        // heights (CodeLens rows, wrapped lines), the grammar's tokens and the DocumentLines (all but the first) of the
+        // lines outside the span, so a span starting below the view would move the view, and blank the grammar's colors
+        // above it. Handlers of the edited lines take them from the map (EditedSpan), not the change's range.
         var first = edits[start].Offset;
         var last = edits[end - 1].Offset + edits[end - 1].Length;
-        if (2 * (last - first) >= document.TextLength && document.LineCount >= WholeDocumentLines)
+        if (first <= MaxGap && document.TextLength - last <= MaxGap && document.LineCount >= WholeDocumentLines)
         {
             (first, last) = (0, document.TextLength);
         }
