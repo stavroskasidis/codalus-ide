@@ -385,6 +385,21 @@ public sealed class GitTreesRowsTests
         Click(f.Window, chevron);
         Assert.True(Row(vm, "team02").IsExpanded);
 
+        // From outside the tree (the filter box), the chevron focuses the selected row, not the list itself, so the arrow
+        // keys move from it (M57 review: the list held the focus, and Down moved nothing).
+        var filterBox = tree.FindAncestorOfType<GitRepositoryView>()!.FindControl<TextBox>("FilterBox")!;
+        filterBox.Focus();
+        await ShellFixture.PumpUntil(() => filterBox.IsFocused && !tree.IsKeyboardFocusWithin);
+        Click(f.Window, chevron);
+        Assert.False(Row(vm, "team02").IsExpanded);
+        Assert.Same(branch, vm.Selected);
+        Assert.Same(tree.ContainerFromItem(tree.SelectedItem!), f.Window.FocusManager?.GetFocusedElement());
+        var before = tree.SelectedItem;
+        f.Press(Key.Down);
+        Assert.NotSame(before, tree.SelectedItem);
+        Click(f.Window, chevron);
+        Assert.True(Row(vm, "team02").IsExpanded);
+
         // Its tree item (M57): the third of the repository's branch folders and branches, at level 3; a screen reader's
         // Collapse and Expand do what the chevron does.
         var siblings = vm.Rows.Skip(2).TakeWhile(r => r.Depth > 1).Count(r => r.Depth == 2);

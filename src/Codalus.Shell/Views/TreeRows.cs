@@ -24,8 +24,8 @@ internal static class TreeRows
     /// <summary>
     /// Gives <paramref name="list"/> a tree's mouse and keys over the rows of <paramref name="owner"/>; <paramref name="activate"/>
     /// is Enter and the double-click on a row that isn't a folder (true when it did something). With
-    /// <paramref name="offRowsActivatesSelected"/> a double-click off the rows acts on the selected row (Git Changes, as its
-    /// lists do: there it opens a file's diff, where the Git Repository would check a branch out).
+    /// <paramref name="offRowsActivatesSelected"/> a double-click off the rows acts on the selected row (Git Changes and Compare,
+    /// as their lists do: there it opens a file's diff, where the Git Repository would check a branch out).
     /// </summary>
     public static void Attach(TreeRowsList list, Func<ITreeRowsOwner?> owner, Func<ITreeRow, bool>? activate = null, bool offRowsActivatesSelected = false)
     {
@@ -39,7 +39,15 @@ internal static class TreeRows
                 e.Handled = true;
                 if (!list.IsKeyboardFocusWithin)
                 {
-                    list.Focus(NavigationMethod.Pointer);
+                    // A row, not the list itself: the arrow keys move from a focused row (ReferenceFilterList).
+                    if (list.SelectedItem is { } selected && list.ContainerFromItem(selected) is { } container)
+                    {
+                        container.Focus(NavigationMethod.Pointer);
+                    }
+                    else
+                    {
+                        list.Focus(NavigationMethod.Pointer);
+                    }
                 }
             }
         }, RoutingStrategies.Tunnel);

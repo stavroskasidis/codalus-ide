@@ -14,7 +14,8 @@ public sealed partial class GitCompareView : UserControl
     public GitCompareView()
     {
         InitializeComponent();
-        TreeRows.Attach(Tree, () => (DataContext as GitCompareViewModel)?.Changes, row => Open((row as GitChangeRow)?.Node.Row));
+        // A double-click off the rows opens the selected file's diff, as Compare's list does (and as before M57).
+        TreeRows.Attach(Tree, () => (DataContext as GitCompareViewModel)?.Changes, row => Open((row as GitChangeRow)?.Node.Row), offRowsActivatesSelected: true);
         List.DoubleTapped += (_, e) =>
         {
             if (Open(List.SelectedItem as GitFileRow))

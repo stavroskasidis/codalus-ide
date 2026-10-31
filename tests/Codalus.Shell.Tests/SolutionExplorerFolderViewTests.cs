@@ -302,6 +302,7 @@ public class SolutionExplorerFolderViewTests
             if (batch.IsCompleted)
             {
                 await SettledAsync(explorer);
+                explorer.SetExpanded(Row(explorer, "d:" + expand)!, false); // not shown, so the next try's build doesn't list it too
                 return false;
             }
 
