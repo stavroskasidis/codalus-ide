@@ -15,12 +15,18 @@ internal static class ExplorerFiles
     private static readonly StringComparer s_pathComparer =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
-    /// <summary>Folders the tree and the project discovery never descend into.</summary>
+    /// <summary>Folders the project discovery never descends into.</summary>
     public static FrozenSet<string> SkippedFolders { get; } = new[] { ".git", ".vs", ".idea", "node_modules" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Folders the tree never lists: version control's.</summary>
+    private static readonly FrozenSet<string> s_hiddenFolders = new[] { ".git" }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
-    /// Everything under a folder, without version control, IDE and package folders, up to a limit; with
-    /// <see cref="ListTreeParams.Folders"/>, going only into those folders.
+    /// Everything under a folder, without version control's folder, up to a limit; with <see cref="ListTreeParams.Folders"/>,
+    /// going only into those folders. IDE and package folders (<c>.vs</c>, <c>.idea</c>, <c>node_modules</c>) are listed,
+    /// marked <see cref="DirectoryEntry.Skipped"/>, and gone into only when <see cref="ListTreeParams.Folders"/> names them:
+    /// the Solution Explorer shows them dimmed, listed once they're expanded. They were left out, so neither Show All Files
+    /// nor the folder view showed them at all (M57).
     /// </summary>
     public static ListTreeResult ListTree(ListTreeParams parameters)
     {
@@ -33,7 +39,9 @@ internal static class ExplorerFiles
             return new ListTreeResult([], false);
         }
 
-        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = OperatingSystem.IsWindows() ? FileAttributes.Hidden | FileAttributes.System : 0 };
+        // Windows' hidden and system entries are left out, except the IDE folders, which the classic IDE makes hidden (.vs).
+        var hidden = OperatingSystem.IsWindows() ? FileAttributes.Hidden | FileAttributes.System : 0;
+        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = 0 };
         var pending = new Stack<DirectoryInfo>();
         pending.Push(root);
         while (pending.Count > 0)
@@ -51,7 +59,9 @@ internal static class ExplorerFiles
 
             foreach (var child in children)
             {
-                if (child is DirectoryInfo sub && (SkippedFolders.Contains(sub.Name) || (sub.Attributes & FileAttributes.ReparsePoint) != 0))
+                var skipped = child is DirectoryInfo && SkippedFolders.Contains(child.Name);
+                if ((child is DirectoryInfo sub && (s_hiddenFolders.Contains(sub.Name) || (sub.Attributes & FileAttributes.ReparsePoint) != 0))
+                    || ((child.Attributes & hidden) != 0 && !skipped))
                 {
                     continue;
                 }
@@ -61,8 +71,8 @@ internal static class ExplorerFiles
                     return new ListTreeResult([.. entries], true);
                 }
 
-                entries.Add(new DirectoryEntry(child.FullName, child is DirectoryInfo));
-                if (child is DirectoryInfo folder && (folders is null || folders.Contains(folder.FullName)))
+                entries.Add(new DirectoryEntry(child.FullName, child is DirectoryInfo) { Skipped = skipped });
+                if (child is DirectoryInfo folder && (folders is null ? !skipped : folders.Contains(folder.FullName)))
                 {
                     pending.Push(folder);
                 }
@@ -70,6 +80,36 @@ internal static class ExplorerFiles
         }
 
         return new ListTreeResult([.. entries], false);
+    }
+
+    /// <summary>
+    /// Folder mode's project discovery: the project files under <paramref name="root"/>, without bin, obj and
+    /// <see cref="SkippedFolders"/> (the tree lists IDE and package folders since M57; this still never goes into them).
+    /// </summary>
+    public static List<string> DiscoverProjects(string root, IReadOnlyCollection<string> extensions)
+    {
+        var found = new List<string>();
+        void Walk(string directory)
+        {
+            try
+            {
+                found.AddRange(Directory.EnumerateFiles(directory).Where(f => extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)));
+                foreach (var sub in Directory.EnumerateDirectories(directory))
+                {
+                    var name = Path.GetFileName(sub);
+                    if (!SkippedFolders.Contains(name) && !name.Equals("bin", StringComparison.OrdinalIgnoreCase) && !name.Equals("obj", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Walk(sub);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+
+        Walk(root);
+        return [.. found.Order(StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>

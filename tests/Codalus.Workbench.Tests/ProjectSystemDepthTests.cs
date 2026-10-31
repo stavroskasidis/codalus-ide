@@ -305,7 +305,7 @@ public sealed class ProjectSystemDepthTests : IDisposable
             new(F("README.md"), false),
         };
 
-        var root = SolutionTree.Build(solution, new Dictionary<string, ProjectInfo>(), options: new ExplorerOptions { FolderEntries = entries });
+        var root = SolutionTree.Build(solution, new Dictionary<string, ProjectInfo>(), options: new ExplorerOptions { FolderListings = FolderListing.FromTree(folder, entries, truncated: false) });
         Assert.Equal(("Folder 'repo'", "(1 project loaded)"), (root.Name, root.Detail));
         Assert.Equal(["src", "README.md"], root.Children.Select(n => n.Name));
         var src = root.Children[0];

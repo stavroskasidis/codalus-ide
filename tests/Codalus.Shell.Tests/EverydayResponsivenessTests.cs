@@ -185,6 +185,102 @@ public class EverydayResponsivenessTests
     }
 
     [AvaloniaFact]
+    public async Task Folder_view_flows_on_thirty_thousand_entries()
+    {
+        // The folder view listed the whole folder, up to 20,000 entries, at each change, build and change of the loaded
+        // projects, and built every node on the UI thread; past the 20,000th entry, folders showed empty (M57).
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "big-folder");
+        for (var m = 0; m < 30; m++)
+        {
+            var module = Path.Combine(folder, "src", $"m{m:00}");
+            Directory.CreateDirectory(module);
+            for (var i = 0; i < 1000; i++)
+            {
+                await File.WriteAllTextAsync(Path.Combine(module, $"F{i:000}.cs"), string.Empty, TestContext.Current.CancellationToken);
+            }
+        }
+
+        var deep = Path.Combine(folder, "deep", "l1", "l2", "l3", "l4");
+        var other = Path.Combine(folder, "other", "x", "y");
+        foreach (var file in new[] { Path.Combine(deep, "target.cs"), Path.Combine(other, "sync.cs") })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            await File.WriteAllTextAsync(file, string.Empty, TestContext.Current.CancellationToken);
+        }
+
+        f.Shell.Trust.Trust(folder);
+        f.Window.Height = 700;
+        var explorer = f.Shell.Explorer;
+        var sync = Path.Combine(other, "sync.cs");
+        async Task ListedAsync()
+        {
+            await ShellFixture.PumpUntil(() => !explorer.IsListingDisk, seconds: 60);
+            await WaitAsync(30);
+        }
+
+        async Task ExpandAsync(string expand)
+        {
+            await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Id == "d:" + expand), seconds: 60);
+            var row = explorer.Rows.First(r => r.Id == "d:" + expand);
+            if (!row.IsExpanded)
+            {
+                explorer.SetExpanded(row, true);
+            }
+
+            await ListedAsync();
+        }
+
+        // A folder the whole folder's listing cut short: it showed with fewer files than it has, or none.
+        await f.Shell.OpenFolderWorkspaceAsync(folder);
+        await ShellFixture.PumpUntil(() => explorer.IsFolderView && explorer.Rows.Any(r => r.Name == "src"), seconds: 60);
+        var whole = await f.Shell.ProjectItems.ListTreeAsync(folder, TestContext.Current.CancellationToken);
+        Assert.True(whole.Truncated);
+        var listed = whole.Entries.Where(e => !e.IsDirectory).GroupBy(e => Path.GetDirectoryName(e.Path)!).ToDictionary(g => g.Key, g => g.Count());
+        var cut = Enumerable.Range(0, 30).Select(m => Path.Combine(folder, "src", $"m{m:00}")).First(m => listed.GetValueOrDefault(m) < 1000);
+        await f.Shell.CloseSolutionAsync();
+
+        using var monitor = new UiStallMonitor();
+        await FlowAsync(monitor, "the folder view on 30,000 entries: open, a deep expansion, changes, a build, a filter, Sync into a folder not listed", async () =>
+        {
+            await f.Shell.OpenFolderWorkspaceAsync(folder);
+            await ShellFixture.PumpUntil(() => explorer.IsFolderView && explorer.Rows.Any(r => r.Name == "src"), seconds: 60);
+            await ListedAsync();
+            foreach (var expand in new[] { Path.Combine(folder, "src"), cut, Path.Combine(folder, "deep"), Path.Combine(folder, "deep", "l1"), Path.Combine(folder, "deep", "l1", "l2"), Path.Combine(folder, "deep", "l1", "l2", "l3"), deep })
+            {
+                await ExpandAsync(expand);
+            }
+
+            // Complete now: each folder is listed alone.
+            Assert.Equal(1000, explorer.Rows.Count(r => r.Node.Kind == ExplorerNodeKind.File && Path.GetDirectoryName(r.Node.Path) == cut));
+            Assert.DoesNotContain(explorer.Rows, r => r.Id.EndsWith(SolutionTree.CutSuffix, StringComparison.Ordinal));
+
+            for (var burst = 0; burst < 20; burst++)
+            {
+                explorer.OnFilesChanged([cut, deep, Path.Combine(folder, "src", $"m{burst:00}"), Path.Combine(folder, "other")]);
+                await WaitAsync(10);
+            }
+
+            await ListedAsync();
+            explorer.OnBuildFinished(null);
+            await ListedAsync();
+
+            explorer.Filter = "target";
+            await ShellFixture.PumpUntil(() => !explorer.IsFiltering && explorer.Rows.Any(r => r.Name == "target.cs"), seconds: 60);
+            await WaitAsync(100);
+            explorer.Filter = string.Empty;
+
+            await f.Shell.OpenFileAsync(sync);
+            explorer.SyncWithActiveDocument();
+            await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == sync, seconds: 60, describe: () =>
+                $"selected {explorer.Selected?.Id}, active {f.Shell.ActiveEditor?.Model.Path}, message '{f.Shell.StatusBar.Message}', listing {explorer.IsListingDisk}, "
+                + $"filter '{explorer.Filter}', rows {string.Join(", ", explorer.Rows.Where(r => r.Depth <= 2).Select(r => r.Id))}");
+            await ListedAsync();
+            await f.Shell.CloseSolutionAsync();
+        });
+    }
+
+    [AvaloniaFact]
     public async Task Error_list_flows_on_a_hundred_thousand_diagnostics()
     {
         // An unrestored solution reports 100,000 errors and more: each keystroke in the search box, each toggle and each

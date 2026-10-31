@@ -247,6 +247,40 @@ public class SolutionExplorerShowAllFilesTests
     }
 
     [AvaloniaFact]
+    public async Task Package_and_ide_folders_show_dimmed_and_are_listed_once_theyre_expanded()
+    {
+        // The build host left node_modules, .vs and .idea out of every listing, so Show All Files never showed them (M57).
+        // App's node_modules isn't in the project (as the Web SDK leaves it out), nor is .vs (a dot folder).
+        var (f, folder) = await OpenAsync(folder =>
+        {
+            foreach (var file in new[] { Path.Combine(folder, "src", "App", "node_modules", "left-pad", "index.js"), Path.Combine(folder, "src", "App", ".vs", "App", "v18", ".suo") })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+                File.WriteAllText(file, string.Empty);
+            }
+
+            var app = Path.Combine(folder, "src", "App", "App.csproj");
+            File.WriteAllText(app, File.ReadAllText(app).Replace("<Folder Include=\"Empty\\\" />", "<Folder Include=\"Empty\\\" />\n    <None Remove=\"node_modules\\**\" />", StringComparison.Ordinal));
+        });
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        foreach (var name in new[] { "node_modules", ".vs" })
+        {
+            var skipped = Path.Combine(folder, "src", "App", name);
+            explorer.Reveal("d:" + skipped);
+            var row = explorer.Selected!;
+            Assert.True(row is { IsDimmed: true, HasChildren: true } && row.Id == "d:" + skipped);
+            Assert.Empty(Find(explorer.Root!, "d:" + skipped)!.Children);
+            var listings = explorer.Listings;
+            explorer.SetExpanded(row, true);
+            await SettledAsync(explorer);
+            Assert.Equal(listings + 1, explorer.Listings);
+            var inside = Find(explorer.Root!, "d:" + skipped)!.Children.Single();
+            Assert.True(inside is { IsExcluded: true, Kind: ExplorerNodeKind.Folder }, inside.Id);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Expanding_a_folder_that_two_projects_share_lists_both()
     {
         // Core's folder gets a second project: both have its bin, under one id, and it expands in both.
@@ -342,8 +376,8 @@ public class SolutionExplorerShowAllFilesTests
     {
         var (f, folder) = await OpenAsync(folder =>
         {
-            Directory.CreateDirectory(Path.Combine(folder, "src", "App", ".idea"));
-            File.WriteAllText(Path.Combine(folder, "src", "App", ".idea", "workspace.xml"), "<project />\n");
+            Directory.CreateDirectory(Path.Combine(folder, "src", "App", ".git"));
+            File.WriteAllText(Path.Combine(folder, "src", "App", ".git", "description"), "Unnamed repository.\n");
         });
         await using var _ = f;
         var explorer = f.Shell.Explorer;
@@ -362,10 +396,10 @@ public class SolutionExplorerShowAllFilesTests
         await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == ignored, seconds: 60);
         Assert.Null(f.Shell.StatusBar.Message);
 
-        // A file no listing has (the build host leaves .idea out, and it isn't an item): the folders down to it are listed,
+        // A file no listing has (the build host leaves .git out, and it isn't an item): the folders down to it are listed,
         // then the message, and nothing waits for it. It waited for good, with no message.
-        var workspace = Path.Combine(folder, "src", "App", ".idea", "workspace.xml");
-        await f.Shell.OpenFileAsync(workspace);
+        var description = Path.Combine(folder, "src", "App", ".git", "description");
+        await f.Shell.OpenFileAsync(description);
         var listings = explorer.Listings;
         explorer.SyncWithActiveDocument();
         Assert.Null(f.Shell.StatusBar.Message);
