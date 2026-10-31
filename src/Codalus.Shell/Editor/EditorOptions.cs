@@ -267,6 +267,9 @@ public interface IEditorServices
 
     void OpenLink(string target);
 
+    /// <summary>How Markdown editors show their preview beside the text (shared by every one), or null for none.</summary>
+    MarkdownSplitState? MarkdownSplit => null;
+
     /// <summary>Writes to the Language Services log.</summary>
     void Log(string message);
 

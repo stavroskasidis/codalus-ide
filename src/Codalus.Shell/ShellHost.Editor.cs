@@ -1252,6 +1252,23 @@ public sealed partial class ShellHost : IEditorServices
         }
     }
 
+    /// <summary>How Markdown editors show their preview: collapsed or not, and its width (kept in <c>state.json</c>).</summary>
+    public MarkdownSplitState MarkdownSplit { get; } = new();
+
+    MarkdownSplitState? IEditorServices.MarkdownSplit => MarkdownSplit;
+
+    /// <summary>Collapses the active Markdown editor's preview, or shows it again (Markdown: Toggle Preview, Ctrl+K Ctrl+V).</summary>
+    public void ToggleMarkdownPreview()
+    {
+        if (ActiveEditor?.View?.MarkdownSplit is not { } split)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.editor.openAMarkdownFileToPreview", "Open a Markdown file to preview it."), TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        split.Toggle();
+    }
+
     /// <summary>Opens a live preview of the active Markdown document beside it (Ctrl+K V).</summary>
     public MarkdownPreviewDocument? ShowMarkdownPreview()
     {
@@ -1267,17 +1284,7 @@ public sealed partial class ShellHost : IEditorServices
             return open;
         }
 
-        var preview = new MarkdownPreviewDocument(model, link =>
-        {
-            if (Uri.TryCreate(link, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
-            {
-                OpenExternalUrl(uri);
-            }
-            else if (link.StartsWith("command:", StringComparison.Ordinal))
-            {
-                Run(link["command:".Length..]);
-            }
-        });
+        var preview = new MarkdownPreviewDocument(model, OpenLink);
         Layout.OpenInNewGroup(preview, below: false);
         return preview;
     }

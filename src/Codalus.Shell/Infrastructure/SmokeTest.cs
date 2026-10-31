@@ -885,6 +885,27 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => project.LineColors(1) >= 2, "the XML grammar colors the project file").ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
 
+        await StepAsync("languages.markdownPreview", "M11", "A Markdown file opens beside its live preview, which collapses and shows again", async () =>
+        {
+            var markdown = Path.Combine(Work, "smoke-readme.md");
+            await File.WriteAllTextAsync(markdown, "# Smoke test\n\nSome *emphasis*, a [link](https://example.com) and a list:\n\n- one\n- two\n\n```csharp\nConsole.WriteLine(\"hi\");\n```\n").ConfigureAwait(true);
+            var editor = await OpenAsync(markdown).ConfigureAwait(true);
+            if (shell.MarkdownSplit.Collapsed)
+            {
+                shell.Run("markdown.togglePreview"); // a previous session left it collapsed
+            }
+
+            await WaitAsync(() => shell.ActiveEditor?.View?.MarkdownSplit is { IsCollapsed: false, Preview: { Rendered.Length: > 0, Bounds.Width: > 0 } }, "the preview shows beside the text").ConfigureAwait(true);
+            var split = shell.ActiveEditor!.View!.MarkdownSplit!;
+            editor.Model.Text.Insert(editor.Model.Text.TextLength, "\n## Added\n");
+            await WaitAsync(() => split.Preview.Rendered.Contains("## Added", StringComparison.Ordinal), "the preview follows an edit").ConfigureAwait(true);
+            Screenshot("smoke-test-markdown-preview.png");
+            shell.Run("markdown.togglePreview");
+            await WaitAsync(() => split.IsCollapsed && !split.Preview.IsVisible, "Toggle Preview collapses it").ConfigureAwait(true);
+            shell.Run("markdown.togglePreview");
+            await WaitAsync(() => !split.IsCollapsed && split.Preview.IsVisible, "Toggle Preview shows it again").ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
         await StepAsync("web.http", "M15", "The Endpoints Explorer, and a .http request to the running web app", async () =>
         {
             var (solution, http) = PrepareWebFixture();
