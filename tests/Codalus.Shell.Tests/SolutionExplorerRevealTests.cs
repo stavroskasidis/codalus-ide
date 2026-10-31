@@ -14,7 +14,12 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public class SolutionExplorerRevealTests
 {
-    /// <summary>The fixture with a folder of 200 files in App, the project above Core, opened and shown.</summary>
+    /// <summary>
+    /// The fixture with a folder of 200 files in App, the project above Core, opened and shown, without a restore and once
+    /// its design-time builds are done: nothing builds the tree then but the tests. A restore's evaluations, and the
+    /// design-time builds after them, came during the steps that count the tree's builds, on a busy machine (a load
+    /// average of 9 on 4 cores failed three of these tests, a build more each, before M56's review fixes as after).
+    /// </summary>
     private static async Task<(ShellFixture F, string Folder)> OpenAsync()
     {
         var f = ShellFixture.Create();
@@ -27,10 +32,11 @@ public class SolutionExplorerRevealTests
             await File.WriteAllTextAsync(Path.Combine(many, $"F{i:000}.cs"), $"namespace App.Many;\n\ninternal static class F{i:000};\n", TestContext.Current.CancellationToken);
         }
 
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         f.Window.Height = 500;
         await f.Shell.OpenSolutionAsync(solution);
-        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.DesignTimeProgress is { Completed: true } && f.Shell.Solutions.Projects.Count == 3, seconds: 90);
         await ShellFixture.PumpUntil(() => f.Shell.Explorer.Rows.FirstOrDefault(r => r.Name == "App") is { HasChildren: true });
         f.Shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
         await ShellFixture.PumpUntil(() => View(f) is { IsEffectivelyVisible: true });
