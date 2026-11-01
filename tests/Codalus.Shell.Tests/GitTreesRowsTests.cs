@@ -248,13 +248,21 @@ public sealed class GitTreesRowsTests
         await ShellFixture.PumpUntil(() => vm.HasMessage);
 
         // Typing in the filter filters once, a pause after the last keystroke, with every match's folders open.
+        // TODO(issue): two builds came while typing on macOS CI (run 41264132614, docs/ci-flakes.md): the failure says
+        // how long the keystroke really waited (the filter builds after FilterDelay) and whether git's refs were read again.
         built = vm.TreesBuilt;
+        var readsBefore = vm.RefsReads;
+        var since = System.Diagnostics.Stopwatch.StartNew();
         foreach (var text in new[] { "t", "t0", "t01", "t012" })
         {
+            var gap = since.ElapsedMilliseconds;
+            since.Restart();
             vm.Filter = text;
             var until = DateTime.UtcNow.AddMilliseconds(40);
             await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until);
-            Assert.Equal(built, vm.TreesBuilt);
+            Assert.True(built == vm.TreesBuilt,
+                $"{vm.TreesBuilt - built} build(s) while typing, after \"{text}\": {gap} ms since the keystroke before, {since.ElapsedMilliseconds} ms since this one "
+                + $"(the filter builds {GitRepositoryViewModel.FilterDelay.TotalMilliseconds:0} ms after the last); refs read {vm.RefsReads - readsBefore} more time(s) meanwhile.");
         }
 
         await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
