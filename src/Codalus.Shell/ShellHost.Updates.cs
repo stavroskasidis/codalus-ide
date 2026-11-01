@@ -182,14 +182,22 @@ public sealed partial class ShellHost
     {
         const string Download = "Download and Restart";
         const string Notes = "Release Notes";
-        var (message, actions) = SelfUpdate.Install.Kind switch
+        var copy = Localizer.Get("msg.updates.copyCommand", "Copy Command");
+        var (message, actions) = SelfUpdate.Install switch
         {
-            InstallKind.SelfUpdating => ($"Codalus IDE {offer.Version} is available.", new[] { Download, Notes }),
-            InstallKind.SystemPackage => ($"Codalus IDE {offer.Version} is available. Update it with your package manager (apt upgrade or dnf upgrade).", [Notes]),
+            { Kind: InstallKind.SelfUpdating } => ($"Codalus IDE {offer.Version} is available.", new[] { Download, Notes }),
+            { Kind: InstallKind.SystemPackage, UpdateCommand: { } command } => (
+                Localizer.Format("msg.updates.runInstallCommand", "Codalus IDE {0} is available. To update, run the command that installed it again: {1}", offer.Version, command),
+                [copy, Notes]),
+            { Kind: InstallKind.SystemPackage } => ($"Codalus IDE {offer.Version} is available. Update it with your package manager (apt upgrade or dnf upgrade).", [Notes]),
             _ => ($"Codalus IDE {offer.Version} is available.", ["Download Page"]),
         };
         var choice = await Workbench.Notifications.Info(message, actions).Result.ConfigureAwait(true);
-        if (choice == Download)
+        if (choice == copy && SelfUpdate.Install.UpdateCommand is { } updateCommand && Window?.Clipboard is { } clipboard)
+        {
+            await SafeClipboard.TrySetTextAsync(clipboard, updateCommand).ConfigureAwait(true);
+        }
+        else if (choice == Download)
         {
             var state = await SelfUpdate.DownloadAsync(offer, CancellationToken.None).ConfigureAwait(true);
             if (state.Status == UpdateStatus.Ready)

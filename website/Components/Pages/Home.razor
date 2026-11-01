@@ -173,15 +173,15 @@
     private sealed record Model(string Key, string Label, string Ext, string File, string Alt, string[] Points, string Where, string Guide);
 
     /// <summary>
-    /// The offered release's recommended file for each OS: site.js points the Download buttons at the visitor's, so a
-    /// click downloads it. Without a release (or without script) the buttons lead to the Download page.
+    /// The offered release's recommended file for Windows and macOS: site.js points the Download buttons at the
+    /// visitor's, so a click downloads it. Linux has none: the button leads to the Download page's Linux tab, which
+    /// recommends the visitor's distribution's package, and the AppImage for the others. Without a release (or without
+    /// script) the buttons lead to the Download page.
     /// </summary>
     private Dictionary<string, object> DownloadFiles => Releases.Offered is null ? [] : new()
     {
         ["data-windows"] = Releases.AssetUrl("win-x64-setup.exe"),
         ["data-macos"] = Releases.AssetUrl("osx-arm64.pkg"),
-        ["data-linux"] = Releases.AssetUrl("linux-x64.AppImage"),
-        ["data-linux-arm64"] = Releases.AssetUrl("linux-arm64.AppImage"),
     };
 
     private static readonly (string Name, string Role)[] s_hosts =
