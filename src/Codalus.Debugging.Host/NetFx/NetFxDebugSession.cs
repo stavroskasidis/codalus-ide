@@ -333,6 +333,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _process = debugger.Launch(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
         }
 
+        if (_process is CorDebugTarget target)
+        {
+            target.DescribeThreads = ThreadsOfTimedOutEval;
+            target.EvalTimedOut = log.WriteLine;
+        }
+
         log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
         _ = dap.SendEventAsync(DapEvents.Process, new ProcessEvent(Path.GetFileName(arguments.Program ?? "process"), _process.Id, IsLocalProcess: true, StartMethod: attach ? "attach" : "launch"), DapJsonContext.Default.ProcessEvent);
         _ = Task.Factory.StartNew(EventLoopAsync, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
@@ -1419,7 +1425,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 catch (TimeoutException ex)
                 {
                     timedOut = true;
-                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException timeout ? timeout.Diagnostic : ex.Message));
+                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException ? "timed out (above)" : ex.Message));
                     result.Add(new Variable(property.Name, "(the getter timed out)", null, 0, path));
                 }
                 catch (InvalidOperationException ex)
@@ -1677,6 +1683,56 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
+    }
+
+    /// <summary>The frames logged per thread when a func-eval times out.</summary>
+    private const int TimedOutEvalFrames = 30;
+
+    /// <summary>
+    /// What every thread is doing while a func-eval that timed out is stopped before its abort (<see cref="CorDebugTarget.DescribeThreads"/>):
+    /// the eval thread's frames above the evaluation, and where the suspended threads are, to tell what it waits on.
+    /// </summary>
+    private string ThreadsOfTimedOutEval()
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var thread in Process.Threads())
+        {
+            var frames = SafeFrames(thread);
+            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture)).Append(':');
+            foreach (var frame in frames.Take(TimedOutEvalFrames))
+            {
+                text.AppendLine().Append("    ").Append(FrameText(frame));
+            }
+
+            if (frames.Count > TimedOutEvalFrames)
+            {
+                text.AppendLine().Append("    (").Append((frames.Count - TimedOutEvalFrames).ToString(CultureInfo.InvariantCulture)).Append(" more)");
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>A frame for the log: its method and IL offset, or what an internal or native frame is.</summary>
+    private string FrameText(IClrFrame frame)
+    {
+        if (frame.Module is not { } module)
+        {
+            return frame.Description ?? "[?]";
+        }
+
+        var token = "0x" + frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture);
+        string name;
+        try
+        {
+            name = Types.Info(module)?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] {token}";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or BadImageFormatException or ArgumentException)
+        {
+            name = $"[{Path.GetFileName(module.Path)}] {token}";
+        }
+
+        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
     }
 
     private static IReadOnlyList<IClrFrame> SafeFrames(IClrThread thread)
