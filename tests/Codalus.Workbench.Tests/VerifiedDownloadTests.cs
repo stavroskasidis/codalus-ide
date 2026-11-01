@@ -10,7 +10,12 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed class VerifiedDownloadTests : IDisposable
 {
-    private static readonly TimeSpan s_stall = TimeSpan.FromMilliseconds(200);
+    /// <summary>
+    /// The stall limit of the tests that stall a body (a <see cref="StallingStream"/>); the others keep the product's. A
+    /// limit of 0.2 s for every test took a body copied from memory for a stall when a loaded machine's thread pool was
+    /// slow to read it, so the download asked for the rest again (M56's final local validation, 2026-10-31).
+    /// </summary>
+    private static readonly TimeSpan s_stall = TimeSpan.FromSeconds(2);
     private static readonly byte[] s_content = [.. Enumerable.Range(0, 300_000).Select(i => (byte)(i * 7))];
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "codalus-download-" + Guid.NewGuid().ToString("N"));
@@ -66,10 +71,10 @@ public sealed class VerifiedDownloadTests : IDisposable
 
     private static HttpResponseMessage Whole(long? from) => new(HttpStatusCode.OK) { Content = new ByteArrayContent(s_content) };
 
-    private Task FetchAsync(Server server, IProgress<string>? progress = null, string? target = null, string? downloadCache = null)
+    private Task FetchAsync(Server server, IProgress<string>? progress = null, string? target = null, string? downloadCache = null, TimeSpan? stall = null)
     {
         var http = new HttpClient(server);
-        return VerifiedDownload.FetchAsync(http, new Uri("https://nodejs.org/dist/node.tar.gz"), target ?? Target, Sha256, "Node.js", progress, TestContext.Current.CancellationToken, s_stall, downloadCache);
+        return VerifiedDownload.FetchAsync(http, new Uri("https://nodejs.org/dist/node.tar.gz"), target ?? Target, Sha256, "Node.js", progress, TestContext.Current.CancellationToken, stall, downloadCache);
     }
 
     [Fact]
@@ -108,11 +113,11 @@ public sealed class VerifiedDownloadTests : IDisposable
         var server = new Server(_ => Stalls(100_000), Rest);
         var messages = new List<string>();
 
-        await FetchAsync(server, new SynchronousProgress(messages.Add));
+        await FetchAsync(server, new SynchronousProgress(messages.Add), stall: s_stall);
 
         Assert.Equal([null, 100_000L], server.Ranges);
         Assert.Equal(s_content, await File.ReadAllBytesAsync(Target, TestContext.Current.CancellationToken));
-        Assert.Contains(messages, m => m.Contains("stopped at 0.1 MB (no data for 0.2 s); asking again (2 of 4)", StringComparison.Ordinal));
+        Assert.Contains(messages, m => m.Contains("stopped at 0.1 MB (no data for 2 s); asking again (2 of 4)", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -120,7 +125,7 @@ public sealed class VerifiedDownloadTests : IDisposable
     {
         var server = new Server(_ => Stalls(100_000), Whole);
 
-        await FetchAsync(server);
+        await FetchAsync(server, stall: s_stall);
 
         Assert.Equal([null, 100_000L], server.Ranges);
         Assert.Equal(s_content, await File.ReadAllBytesAsync(Target, TestContext.Current.CancellationToken));
@@ -131,10 +136,10 @@ public sealed class VerifiedDownloadTests : IDisposable
     {
         var server = new Server(from => from is null ? Stalls(100_000) : new HttpResponseMessage(HttpStatusCode.PartialContent) { Content = new StreamContent(new StallingStream([])) });
 
-        var error = await Assert.ThrowsAsync<IOException>(() => FetchAsync(server));
+        var error = await Assert.ThrowsAsync<IOException>(() => FetchAsync(server, stall: s_stall));
 
         Assert.Equal(VerifiedDownload.Attempts, server.Ranges.Count);
-        Assert.Contains("failed after 4 attempts, at 0.1 MB: no data for 0.2 s", error.Message, StringComparison.Ordinal);
+        Assert.Contains("failed after 4 attempts, at 0.1 MB: no data for 2 s", error.Message, StringComparison.Ordinal);
     }
 
     [Fact]

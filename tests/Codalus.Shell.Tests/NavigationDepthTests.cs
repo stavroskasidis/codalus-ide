@@ -86,7 +86,7 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
         Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
         var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is not null, seconds: 60);
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is { Length: > 0 }, seconds: 60); // its counts, to click: the row is there before them
         ShellFixture.Pump();
         var view = shapes.Editor.TextArea.TextView;
         view.EnsureVisualLines();
@@ -147,6 +147,114 @@ public class NavigationDepthTests
         // CodeLens can be turned off.
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is null);
+    }
+
+    [AvaloniaFact]
+    public async Task Lens_rows_keep_their_room_from_the_first_frame_until_their_counts_arrive()
+    {
+        // The maintainer's screenshots: a file opened without CodeLens, then each row the service listed and resolved
+        // pushed the code below it down. The classic IDE keeps the rows' room (empty) from the start, from its syntax
+        // tree; here from the text (CSharpLensScanner), until the service's lenses and their counts take it.
+        await using var f = ShellFixture.Create();
+        f.Window.Width = 1200;
+        f.Window.Height = 1600; // every line in view, so every line's height is measured
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var path = Path.Combine(folder, "src", "Lib", "Shapes.cs");
+        string[] declarations = ["interface IShape", "double Area();", "class Shape", "string Describe(int", "class Circle", "double Radius", "class Square", "class Geometry", "double Scale(IShape", "double Scale(double"];
+
+        // Every frame from the editor's first: where the last declaration is (all the rows but its own above it), and
+        // whether each declaration has its row. Hooked as the editor attaches, before its first layout: a busy machine
+        // can take longer than the service's first answer between the open and the test's next look.
+        const string probe = "class Geometry";
+        var frames = new List<(double Top, bool Rows)>();
+        var seen = new List<string>();
+        var bars = new List<bool>(); // whether the navigation bar showed, in every frame: it mustn't push the code down either
+        CodeEditorController? hooked = null;
+        void Hook(CodeEditorController controller, CodeEditorDocument document)
+        {
+            hooked = controller;
+            var text = controller.Editor.TextArea.TextView;
+            text.VisualLinesChanged += (_, _) =>
+            {
+                var source = controller.Model.Text.Text;
+                int Line(string code) => controller.Model.Text.GetLineByOffset(source.IndexOf(code, StringComparison.Ordinal)).LineNumber;
+                var shown = text.VisualLinesValid && text.VisualLines.Count > 0 ? text.VisualLines[^1].LastDocumentLine.LineNumber : 0;
+                seen.Add(shown.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                bars.Add(document.View?.NavigationBar.IsVisible == true);
+                if (shown >= Line(probe))
+                {
+                    frames.Add((text.GetVisualTopByDocumentLine(Line(probe)), declarations.All(code => controller.Insights.LensRowAbove(Line(code)) is not null)));
+                }
+            };
+        }
+
+        f.Shell.Layout.ActiveDocumentChanged += (_, document) =>
+        {
+            if (hooked is null && document is CodeEditorDocument { Model.Name: "Shapes.cs" } opened)
+            {
+                if (opened.Controller is { } controller)
+                {
+                    Hook(controller, opened);
+                }
+                else
+                {
+                    opened.ControllerAttached += (_, _) =>
+                    {
+                        if (hooked is null)
+                        {
+                            Hook(opened.Controller!, opened);
+                        }
+                    };
+                }
+            }
+        };
+        var shapes = await OpenAsync(f, path);
+        Assert.Same(shapes, hooked);
+        var view = shapes.Editor.TextArea.TextView;
+        int LineOf(string code) => shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf(code, StringComparison.Ordinal)).LineNumber;
+
+        // The service lists the lenses (their rows still empty), then resolves them: nothing below them moves.
+        await ShellFixture.PumpUntil(
+            () => !shapes.Insights.HasLensEstimates && declarations.All(code => shapes.Insights.LensRowAbove(LineOf(code)) is { Length: > 0 }),
+            seconds: 60,
+            describe: () => string.Join("; ", declarations.Select(code => $"{code}: '{shapes.Insights.LensRowAbove(LineOf(code))}'")));
+        view.EnsureVisualLines();
+        Assert.Contains("reference", shapes.Insights.LensRowAbove(LineOf("class Geometry")), StringComparison.Ordinal);
+        Screenshot(f, "codelens-resolved");
+        Assert.True(frames.Count > 0, $"no frame showed line {LineOf(probe)}; frames' last lines: {string.Join(", ", seen)}");
+        Assert.True(frames[0].Rows, "the first frame didn't keep every declaration's row: " + shapes.Insights.DescribeLenses());
+        Assert.All(frames, frame => Assert.Equal(frames[0].Top, frame.Top, 1));
+        Assert.Equal(frames[0].Top, view.GetVisualTopByDocumentLine(LineOf(probe)), 1);
+
+        // The navigation bar too (the maintainer's report): it showed, empty, from the first frame, until the types came.
+        var bar = f.Shell.ActiveEditor!.View!.NavigationBar;
+        await ShellFixture.PumpUntil(() => bar.Types.Count == 5, seconds: 60);
+        Assert.False(shapes.Insights.TypesExpected);
+        Assert.True(bar.IsVisible);
+        Assert.NotEmpty(bars);
+        Assert.All(bars, Assert.True);
+
+        // The file changed outside the editor: its text is replaced, and the new text's rows are kept at once.
+        await File.WriteAllTextAsync(path, (await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken)).Replace(
+            "public static class Geometry\n{", "public static class Geometry\n{\n    public static double Half(double value) => value / 2;\n", StringComparison.Ordinal),
+            TestContext.Current.CancellationToken);
+        await shapes.Model.ReloadAsync(TestContext.Current.CancellationToken);
+        view.EnsureVisualLines();
+        Assert.True(shapes.Insights.HasLensEstimates, shapes.Insights.DescribeLenses());
+        Assert.Equal(string.Empty, shapes.Insights.LensRowAbove(LineOf("double Half(")));
+        Screenshot(f, "codelens-placeholders");
+        var top = view.GetVisualTopByDocumentLine(LineOf(probe));
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(LineOf("double Half(")) is { Length: > 0 }, seconds: 60);
+        view.EnsureVisualLines();
+        Assert.Equal(top, view.GetVisualTopByDocumentLine(LineOf(probe)), 1);
+
+        // A file of top-level statements declares no type: no empty bar shows before its symbols, nor after them.
+        var program = await OpenAsync(f, Path.Combine(folder, "src", "App", "Program.cs"));
+        var programBar = f.Shell.ActiveEditor!.View!.NavigationBar;
+        Assert.False(program.Insights.TypesExpected);
+        Assert.False(programBar.IsVisible);
+        await ShellFixture.PumpUntil(() => program.Insights.SymbolsVersion == program.Model.Version, seconds: 60);
+        Assert.False(programBar.IsVisible);
     }
 
     [AvaloniaFact]
@@ -508,13 +616,14 @@ public class NavigationDepthTests
 
         // The Document Outline lists the types and follows the caret.
         f.Shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-        await ShellFixture.PumpUntil(() => f.Shell.DocumentOutline.Roots.Count == 1 && f.Shell.DocumentOutline.Roots[0].Children.Count == 5, seconds: 30);
-        await ShellFixture.PumpUntil(() => f.Shell.DocumentOutline.Current?.Name == "Describe");
-        f.Shell.DocumentOutline.Filter = "Scale";
-        Assert.Equal(["Scale", "Scale"], f.Shell.DocumentOutline.Roots.Select(r => r.Name));
-        f.Shell.DocumentOutline.Navigate(f.Shell.DocumentOutline.Roots[0]);
+        var outline = f.Shell.DocumentOutline;
+        await ShellFixture.PumpUntil(() => outline.Rows.Count(r => r.Depth == 0) == 1 && outline.Rows.Count(r => r.Depth == 1) == 5, seconds: 30);
+        await ShellFixture.PumpUntil(() => outline.Current?.Name == "Describe");
+        outline.Filter = "Scale";
+        await ShellFixture.PumpUntil(() => outline.Rows.Select(r => r.Name).SequenceEqual(["Scale", "Scale"]), describe: () => string.Join(", ", outline.Rows.Select(r => r.Name)));
+        outline.Navigate(outline.Rows[0]);
         Assert.Contains("Scale(IShape", shapes.Model.Text.GetText(shapes.Model.Text.GetLineByNumber(shapes.Caret.Line)), StringComparison.Ordinal);
-        f.Shell.DocumentOutline.Filter = string.Empty;
+        outline.Filter = string.Empty;
 
         // Call Hierarchy: callers of IShape.Area, recursively.
         shapes.Editor.CaretOffset = shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal) + "double ".Length;

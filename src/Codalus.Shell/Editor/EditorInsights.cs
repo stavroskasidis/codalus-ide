@@ -18,13 +18,18 @@ namespace Codalus.Shell.Editor;
 /// The editor's inline information (M12a): inlay hints, inline diagnostics at the end of lines, CodeLens on a row of its
 /// own above its line (the end of the line before, after a line break: the line itself keeps its height), the
 /// inheritance margin, indentation guides and bracket pair colors. Language-service data is requested for the viewport
-/// (debounced, cancellable) and kept in segments that follow edits until the next response. UI thread only.
+/// (debounced, cancellable) and kept in segments that follow edits until the next response. A C# file's CodeLens rows
+/// are kept empty from its first frame, where the text says the service will list them, until their counts arrive.
+/// UI thread only.
 /// </summary>
 public sealed class EditorInsights : IDisposable
 {
     private static readonly TimeSpan s_hintDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan s_lensDelay = TimeSpan.FromMilliseconds(700);
     private const int ViewportMarginLines = 40;
+
+    /// <summary>The longest text whose CodeLens rows are estimated on the UI thread (about 3 ms); longer ones off it.</summary>
+    private const int EstimateOnUiThreadLength = 512 * 1024;
 
     private readonly TextEditor _editor;
     private readonly Func<CodeDocument> _model;
@@ -36,6 +41,7 @@ public sealed class EditorInsights : IDisposable
     private readonly DispatcherTimer _hintTimer = new() { Interval = s_hintDelay };
     private readonly DispatcherTimer _lensTimer = new() { Interval = s_lensDelay };
     private readonly DispatcherTimer _symbolTimer = new() { Interval = TimeSpan.FromMilliseconds(400) };
+    private readonly HashSet<IDisposable> _pending = [];
     private CancellationTokenSource? _symbolCts;
     private TextSegmentCollection<HintSegment> _hints;
     private TextSegmentCollection<LensSegment> _lenses;
@@ -43,14 +49,26 @@ public sealed class EditorInsights : IDisposable
     private (int First, int Last) _hintRange = (-1, -1);
     private int _lensVersion = -1;
 
+    // The CodeLens rows kept before the service has listed the document's lenses: where its declarations are, from the
+    // text alone (DeclarationScanners: C#'s and F#'s). Null once it has, or when none are expected.
+    private TextSegmentCollection<TextSegment>? _estimates;
+    private bool _lensesListed;
+    private CancellationTokenSource? _estimateCts;
+
+    // Whether the service has listed the document's symbols, and the check of the text for a type before it has.
+    private bool _symbolsListed;
+    private CancellationTokenSource? _typesCts;
+
     // Our own CodeLens entries (deferred from M12a): Git history from blame and test outcomes, by one-based line.
-    private IReadOnlyList<Codalus.Workbench.Git.BlameRange> _blame = [];
+    private GitLensIndex? _blame;
     private int _blameVersion = -1;
     private long _blameAt;
     private CancellationTokenSource? _blameCts;
     private Dictionary<int, string> _gitLenses = [];
     private Dictionary<int, string> _testLenses = [];
     private bool _testLensesQueued;
+    private long _testLensVersion = -1; // the document's version (TestService.DocumentVersion) the test lenses show
+    private bool _testsChangedWhileHidden;
     private static readonly TimeSpan s_blameInterval = TimeSpan.FromSeconds(3);
     private CancellationTokenSource? _hintCts;
     private CancellationTokenSource? _lensCts;
@@ -68,7 +86,7 @@ public sealed class EditorInsights : IDisposable
         _lenses = new TextSegmentCollection<LensSegment>(document);
         _generator = new InlineGenerator(this);
         _guides = new IndentGuideRenderer(editor, Brush);
-        _brackets = new BracketPairColorizer(document, Brush, () => _model().LanguageId ?? string.Empty);
+        _brackets = new BracketPairColorizer(document, Brush, () => _model().LanguageId ?? string.Empty, () => _editor.TextArea.TextView.Redraw());
         Margin = new InheritanceMargin(this);
 
         var view = editor.TextArea.TextView;
@@ -91,6 +109,7 @@ public sealed class EditorInsights : IDisposable
             _ = RefreshSymbolsAsync();
         };
         view.ScrollOffsetChanged += OnScrolled;
+        view.VisualLinesChanged += OnVisualLinesChanged;
         document.Changed += OnDocumentChanged;
         editor.TextArea.AddHandler(InputElement.KeyDownEvent, OnKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         services.Options.PropertyChanged += OnOptionsChanged;
@@ -102,6 +121,178 @@ public sealed class EditorInsights : IDisposable
         ApplyOptions();
         LoadReviewThreads();
         UpdateTestLenses();
+        EstimateLenses();
+        EstimateTypes();
+    }
+
+    // ------------------------------------------------------------------ the navigation bar before the service answers
+
+    /// <summary>
+    /// Whether the document's types are expected but not listed yet: its language service will list its symbols and its
+    /// text declares a type it lists (<see cref="DeclarationScanners.DeclaresType"/>). The navigation bar shows from the first
+    /// frame, empty, instead of moving the code down when the symbols arrive. False once the service has listed them.
+    /// Changes raise <see cref="SymbolsChanged"/>.
+    /// </summary>
+    public bool TypesExpected { get; private set; }
+
+    private void EstimateTypes()
+    {
+        _typesCts?.Cancel();
+        if (_symbolsListed || !_services.ExpectsDocumentSymbols(Model))
+        {
+            SetTypesExpected(false);
+            return;
+        }
+
+        if (TypesExpected)
+        {
+            return;
+        }
+
+        var document = _editor.Document;
+        if (document.TextLength <= EstimateOnUiThreadLength)
+        {
+            SetTypesExpected(DeclarationScanners.DeclaresType(Model.LanguageId, Model.Path, document.Text));
+            return;
+        }
+
+        _ = EstimateTypesOffThreadAsync(document.CreateSnapshot(), Model.LanguageId, Model.Path, Model.Version, Restart(ref _typesCts).Token);
+    }
+
+    private async Task EstimateTypesOffThreadAsync(AvaloniaEdit.Document.ITextSource snapshot, string? languageId, string path, int version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var declares = await Task.Run(() => DeclarationScanners.DeclaresType(languageId, path, snapshot.Text), cancellationToken).ConfigureAwait(true);
+            if (!cancellationToken.IsCancellationRequested && !_disposed && !_symbolsListed && Model.Version == version)
+            {
+                SetTypesExpected(declares);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SetTypesExpected(bool expected)
+    {
+        if (TypesExpected != expected)
+        {
+            TypesExpected = expected;
+            SymbolsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The service listed the symbols for the current text: they replace the estimate.</summary>
+    private void SymbolsListed(IReadOnlyList<DocumentSymbol> symbols, int version)
+    {
+        _symbolsListed = true;
+        _typesCts?.Cancel();
+        TypesExpected = false;
+        Symbols = symbols;
+        SymbolsVersion = version;
+        SymbolsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ------------------------------------------------------------------ CodeLens rows before the service answers
+
+    /// <summary>Whether the rows of CodeLens the service hasn't listed yet are kept (tests).</summary>
+    internal bool HasLensEstimates => _estimates is not null;
+
+    /// <summary>The CodeLens state, for a test's failure message.</summary>
+    internal string DescribeLenses() =>
+        $"listed {_lensesListed} (version {_lensVersion} of {Model.Version}), {_lenses.Count} lenses, {_estimates?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no"} estimates, "
+        + $"CodeLens {Options.CodeLens}, expected {_services.ExpectsCodeLens(Model)}, language {Model.LanguageId}";
+
+    /// <summary>
+    /// Keeps the room of the CodeLens rows the service will list until it does: the declarations
+    /// <see cref="DeclarationScanners.Lenses"/> finds in the text (C#'s and F#'s), as the classic IDE does from its syntax tree. Opening a file
+    /// (or restoring it at startup, before the service has loaded the solution), the code doesn't move down when the
+    /// lenses arrive; their rows stay empty until the counts do. A long text is scanned off the UI thread.
+    /// </summary>
+    private void EstimateLenses()
+    {
+        var had = ClearEstimates();
+        if (_lensesListed || !Options.CodeLens || !_services.ExpectsCodeLens(Model))
+        {
+            if (had)
+            {
+                _editor.TextArea.TextView.Redraw();
+                Updated?.Invoke(this, EventArgs.Empty);
+            }
+
+            return;
+        }
+
+        var document = _editor.Document;
+        if (document.TextLength <= EstimateOnUiThreadLength)
+        {
+            SetEstimates(DeclarationScanners.Lenses(Model.LanguageId, Model.Path, document.Text));
+            return;
+        }
+
+        _ = EstimateOffThreadAsync(document.CreateSnapshot(), Model.Version, Restart(ref _estimateCts).Token);
+    }
+
+    private async Task EstimateOffThreadAsync(AvaloniaEdit.Document.ITextSource snapshot, int version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var (languageId, path) = (Model.LanguageId, Model.Path);
+            var offsets = await Task.Run(() => DeclarationScanners.Lenses(languageId, path, snapshot.Text), cancellationToken).ConfigureAwait(true);
+            if (!cancellationToken.IsCancellationRequested && !_disposed && !_lensesListed && Model.Version == version)
+            {
+                SetEstimates(offsets);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void SetEstimates(IReadOnlyList<int> offsets)
+    {
+        var document = _editor.Document;
+        var estimates = new TextSegmentCollection<TextSegment>(document);
+        foreach (var offset in offsets.Where(o => o <= document.TextLength))
+        {
+            estimates.Add(new TextSegment { StartOffset = offset, Length = 0 });
+        }
+
+        _estimates = estimates;
+        _editor.TextArea.TextView.Redraw();
+        Updated?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Drops the estimated rows (the service listed the lenses, or won't); returns whether there were any.</summary>
+    private bool ClearEstimates()
+    {
+        _estimateCts?.Cancel();
+        if (_estimates is null)
+        {
+            return false;
+        }
+
+        _estimates.Disconnect(_editor.Document);
+        _estimates = null;
+        return true;
+    }
+
+    /// <summary>
+    /// The document's text was replaced by its file's (changed outside the editor): the lenses' segments collapsed with
+    /// the old text, so the new text's rows are estimated again until the service lists its lenses.
+    /// </summary>
+    public void Reloaded()
+    {
+        if (_lensesListed)
+        {
+            _lenses.Disconnect(_editor.Document);
+            _lenses = new TextSegmentCollection<LensSegment>(_editor.Document);
+            _lensesListed = false;
+            _lensVersion = -1;
+        }
+
+        EstimateLenses();
     }
 
     // ------------------------------------------------------------------ Git and test CodeLens (deferred from M12a)
@@ -123,7 +314,9 @@ public sealed class EditorInsights : IDisposable
         return parts;
     }
 
-    private void OnTestsChanged(object? sender, EventArgs e)
+    private void OnTestsChanged(object? sender, EventArgs e) => QueueTestLenses();
+
+    private void QueueTestLenses()
     {
         if (_testLensesQueued)
         {
@@ -136,25 +329,71 @@ public sealed class EditorInsights : IDisposable
             _testLensesQueued = false;
             if (!_disposed)
             {
-                UpdateTestLenses();
+                UpdateTestLensesIfChanged();
             }
         });
     }
 
+    /// <summary>
+    /// The test lenses follow when the document's tests changed, and only while the editor shows: a hidden one catches up
+    /// when it's shown. Every editor, hidden tabs too, looked through every test of the solution at each change (M56).
+    /// </summary>
+    private void UpdateTestLensesIfChanged()
+    {
+        if (_editor.TextArea.TextView is not { IsEffectivelyVisible: true } view || TopLevel.GetTopLevel(view) is null)
+        {
+            _testsChangedWhileHidden = true;
+            return;
+        }
+
+        _testsChangedWhileHidden = false;
+        if (_services.Tests.DocumentVersion(DocumentUris.FromPath(Model.Path)) != _testLensVersion)
+        {
+            UpdateTestLenses();
+        }
+    }
+
+    private void OnVisualLinesChanged(object? sender, EventArgs e)
+    {
+        if (_testsChangedWhileHidden && !_testLensesQueued)
+        {
+            // Shown again: after this layout pass. Ui.Post would run it inside it, where the redraw for new lenses throws
+            // away the visual lines just built.
+            _testLensesQueued = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+            {
+                _testLensesQueued = false;
+                if (!_disposed)
+                {
+                    UpdateTestLensesIfChanged();
+                }
+            }, Avalonia.Threading.DispatcherPriority.Loaded);
+        }
+    }
+
+    /// <summary>How many times the test lenses were worked out (tests).</summary>
+    internal int TestLensUpdates { get; private set; }
+
     /// <summary>The test outcomes by the line their test (or class) starts on; the innermost wins a line.</summary>
     private void UpdateTestLenses()
     {
-        var lenses = new Dictionary<int, string>();
-        if (Options.CodeLens && Options.TestCodeLens)
+        var uri = DocumentUris.FromPath(Model.Path);
+        _testLensVersion = _services.Tests.DocumentVersion(uri);
+        TestLensUpdates++;
+        var lenses = !(Options.CodeLens && Options.TestCodeLens) ? new Dictionary<int, string>() : _services.Tests.InDocument(uri, nodes =>
         {
-            foreach (var node in _services.Tests.InDocument(DocumentUris.FromPath(Model.Path)).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            // Under the model's lock: a class's text walks the tests under it, which discovery changes meanwhile.
+            var texts = new Dictionary<int, string>();
+            foreach (var node in nodes.OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
             {
                 if (LensDetails.Tests(node) is { } text)
                 {
-                    lenses.TryAdd(node.Range!.StartLine + 1, text);
+                    texts.TryAdd(node.Range!.StartLine + 1, text);
                 }
             }
-        }
+
+            return texts;
+        });
 
         if (!lenses.OrderBy(p => p.Key).SequenceEqual(_testLenses.OrderBy(p => p.Key)))
         {
@@ -171,7 +410,7 @@ public sealed class EditorInsights : IDisposable
     private async Task RefreshBlameAsync()
     {
         var model = Model;
-        if (!Options.CodeLens || !Options.GitCodeLens || _blameVersion == model.Version || _services.Git.RepositoryFor(model.Path) is null
+        if (!Options.CodeLens || !Options.GitCodeLens || model.IsLarge || _blameVersion == model.Version || _services.Git.RepositoryFor(model.Path) is null
             || model.IsModified && System.Diagnostics.Stopwatch.GetElapsedTime(_blameAt) < s_blameInterval)
         {
             return;
@@ -182,38 +421,54 @@ public sealed class EditorInsights : IDisposable
         _blameAt = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            var blame = await _services.Git.BlameInRepositoryAsync(model.Path, model.IsModified ? model.Text.Text : null, token).ConfigureAwait(true);
+            // The unsaved text, made a string off the UI thread (a copy of the whole document after each pause in typing).
+            var snapshot = model.IsModified ? model.Text.CreateSnapshot() : null;
+            var text = snapshot is null ? null : await Task.Run(() => snapshot.Text, token).ConfigureAwait(true);
+            var blame = await _services.Git.BlameInRepositoryAsync(model.Path, text, token).ConfigureAwait(true);
+            var index = await Task.Run(() => new GitLensIndex(blame), token).ConfigureAwait(true);
             if (token.IsCancellationRequested || _disposed || model.Version != version)
             {
                 return;
             }
 
-            _blame = blame;
+            _blame = index;
             _blameVersion = version;
             UpdateGitLenses();
         }
         catch (Exception ex) when (ex is Codalus.Workbench.Git.GitException or OperationCanceledException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            _blame = [];
+            _blame = null;
         }
     }
 
     /// <summary>
     /// The history of each member with a CodeLens: its lines are its document symbol's range. Redraws only when they
     /// changed, or when <paramref name="lensesChanged"/> (new CodeLens entries to show): the document symbols of every
-    /// open arrive while the first semantic tokens are being computed, and a file outside a repository has none.
+    /// open arrive while the first semantic tokens are being computed, and a file outside a repository has none. Each lens
+    /// finds its symbol in one index of them and its ranges by a search of the blame's (<see cref="GitLensIndex"/>): a pass
+    /// over every symbol and every range for each lens took seconds after each pause in typing in a file with thousands of
+    /// members (M56).
     /// </summary>
     private void UpdateGitLenses(bool lensesChanged = false)
     {
         var lenses = new Dictionary<int, string>();
-        if (Options.CodeLens && Options.GitCodeLens && _blame.Count > 0)
+        if (Options.CodeLens && Options.GitCodeLens && _blame is { Blame.Count: > 0 } blame)
         {
-            var symbols = Flatten(Symbols).ToList();
+            // The symbol each line names: the innermost (the first of them, as a search of every symbol picked it).
+            var named = new Dictionary<int, DocumentSymbol>();
+            foreach (var symbol in Flatten(Symbols))
+            {
+                var at = symbol.SelectionRange.Start.Line;
+                if (!named.TryGetValue(at, out var known) || Lines(symbol) < Lines(known))
+                {
+                    named[at] = symbol;
+                }
+            }
+
             var now = DateTimeOffset.Now;
             foreach (var line in _lenses.Select(l => _editor.Document.GetLineByOffset(l.StartOffset).LineNumber).Distinct())
             {
-                var symbol = symbols.Where(s => s.SelectionRange.Start.Line == line - 1).MinBy(s => s.Range.End.Line - s.Range.Start.Line);
-                if (symbol is not null && LensDetails.Git(_blame, symbol.Range.Start.Line + 1, symbol.Range.End.Line + 1, now) is { } text)
+                if (named.TryGetValue(line - 1, out var symbol) && blame.Text(symbol.Range.Start.Line + 1, symbol.Range.End.Line + 1, now) is { } text)
                 {
                     lenses[line] = text;
                 }
@@ -231,6 +486,8 @@ public sealed class EditorInsights : IDisposable
 
         static IEnumerable<DocumentSymbol> Flatten(IEnumerable<DocumentSymbol> level) =>
             level.SelectMany(s => Flatten(s.Children ?? []).Prepend(s));
+
+        static int Lines(DocumentSymbol symbol) => symbol.Range.End.Line - symbol.Range.Start.Line;
     }
 
     // ------------------------------------------------------------------ review comments (M13b)
@@ -329,6 +586,9 @@ public sealed class EditorInsights : IDisposable
     /// <summary>Raised on the UI thread when <see cref="Symbols"/> changed.</summary>
     public event EventHandler? SymbolsChanged;
 
+    /// <summary>Takes <paramref name="symbols"/> as the language service's for the current text (tests: thousands of members without a service).</summary>
+    internal void ShowSymbols(IReadOnlyList<DocumentSymbol> symbols) => SymbolsListed(symbols, Model.Version);
+
     /// <summary>The innermost symbols containing a position, outermost first (navigation bar, sticky scroll, outline).</summary>
     public IReadOnlyList<DocumentSymbol> SymbolPath(Position position)
     {
@@ -365,9 +625,7 @@ public sealed class EditorInsights : IDisposable
                 return;
             }
 
-            Symbols = symbols;
-            SymbolsVersion = version;
-            SymbolsChanged?.Invoke(this, EventArgs.Empty);
+            SymbolsListed(symbols, version);
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
@@ -394,16 +652,26 @@ public sealed class EditorInsights : IDisposable
     {
         UpdateTestLenses();
         _guides.Enabled = Options.IndentGuides;
-        _brackets.Enabled = Options.BracketPairColorization;
+        _brackets.Enabled = Options.BracketPairColorization && !Model.IsLarge;
         Margin.IsVisible = Options.InheritanceMargin;
         _editor.TextArea.TextView.Redraw();
     }
 
-    /// <summary>Re-requests everything (the language service started, the document reloaded, options changed).</summary>
+    /// <summary>Re-requests everything (the language service started or couldn't, the document reloaded, options changed).</summary>
     public void Refresh()
     {
         _hintRange = (-1, -1);
         _lensVersion = -1;
+        if (!_lensesListed)
+        {
+            EstimateLenses();
+        }
+
+        if (!_symbolsListed)
+        {
+            EstimateTypes(); // the service started, or couldn't
+        }
+
         Restart(_hintTimer);
         Restart(_lensTimer);
         Restart(_symbolTimer);
@@ -549,7 +817,7 @@ public sealed class EditorInsights : IDisposable
                 // Asked before the language service had the document's semantics (it just opened, the project is
                 // still loading): ask again a few times rather than wait for the next edit or diagnostics.
                 _emptyHints++;
-                DispatcherTimer.RunOnce(() =>
+                RunOnce(() =>
                 {
                     if (!_disposed && _hints.Count == 0)
                     {
@@ -576,11 +844,20 @@ public sealed class EditorInsights : IDisposable
     {
         if (_disposed || _client() is not { Capabilities.CodeLensProvider: { } options } client || !Options.CodeLens)
         {
-            if (_lenses.Count > 0 && !Options.CodeLens)
+            if (!_disposed && !Options.CodeLens)
             {
-                _lenses.Disconnect(_editor.Document);
-                _lenses = new TextSegmentCollection<LensSegment>(_editor.Document);
-                _editor.TextArea.TextView.Redraw();
+                // Turned on again, the rows are kept from the text at once.
+                _lensesListed = false;
+                if (_lenses.Count > 0 | ClearEstimates())
+                {
+                    _lenses.Disconnect(_editor.Document);
+                    _lenses = new TextSegmentCollection<LensSegment>(_editor.Document);
+                    _editor.TextArea.TextView.Redraw();
+                }
+            }
+            else if (!_disposed && _client() is { Capabilities: { CodeLensProvider: null } } && ClearEstimates())
+            {
+                _editor.TextArea.TextView.Redraw(); // a service without CodeLens
             }
 
             return;
@@ -623,6 +900,8 @@ public sealed class EditorInsights : IDisposable
                 _lenses.Disconnect(_editor.Document);
                 _lenses = collection;
                 _lensVersion = version;
+                _lensesListed = true;
+                ClearEstimates();
                 UpdateGitLenses(lensesChanged: true);
                 _ = RefreshBlameAsync();
             }
@@ -679,7 +958,22 @@ public sealed class EditorInsights : IDisposable
         _services.Log($"{Model.Name}: inline information request failed ({ex.GetType().Name}: {ex.Message}); retrying");
         _hintRange = (-1, -1);
         _lensVersion = -1;
-        DispatcherTimer.RunOnce(() => Restart(timer), TimeSpan.FromSeconds(_failures));
+        RunOnce(() => Restart(timer), TimeSpan.FromSeconds(_failures));
+    }
+
+    /// <summary>
+    /// A one-shot timer that <see cref="Dispose"/> stops: a pending one holds the editor (and its shell) until it ticks,
+    /// and a dispatcher that no longer runs (a test's, once it ended) never ticks it.
+    /// </summary>
+    private void RunOnce(Action action, TimeSpan delay)
+    {
+        IDisposable? timer = null;
+        timer = DispatcherTimer.RunOnce(() =>
+        {
+            _pending.Remove(timer!);
+            action();
+        }, delay);
+        _pending.Add(timer);
     }
 
     private static CancellationTokenSource Restart(ref CancellationTokenSource? cts)
@@ -814,17 +1108,26 @@ public sealed class EditorInsights : IDisposable
         _hintTimer.Stop();
         _lensTimer.Stop();
         _symbolTimer.Stop();
-        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts })
+        foreach (var timer in _pending)
+        {
+            timer.Dispose();
+        }
+
+        _pending.Clear();
+        foreach (var cts in new[] { _hintCts, _lensCts, _runLensCts, _symbolCts, _blameCts, _estimateCts, _typesCts })
         {
             cts?.Cancel();
             cts?.Dispose();
         }
+
+        _estimates?.Disconnect(_editor.Document);
 
         var view = _editor.TextArea.TextView;
         view.ElementGenerators.Remove(_generator);
         view.BackgroundRenderers.Remove(_guides);
         view.LineTransformers.Remove(_brackets);
         view.ScrollOffsetChanged -= OnScrolled;
+        view.VisualLinesChanged -= OnVisualLinesChanged;
         _editor.Document.Changed -= OnDocumentChanged;
         _brackets.Detach();
         _hints.Disconnect(_editor.Document);
@@ -894,9 +1197,10 @@ public sealed class EditorInsights : IDisposable
                 parts.Add(message);
             }
 
-            // A line's CodeLens goes above it; at its end only when there is no line before it to show it after.
+            // A line's CodeLens goes above it; at its end only when there is no line before it to show it after (and
+            // only with text: there it takes no room to keep).
             LensSegment? first = null;
-            if (!CanShowAbove(line) && Lenses(line) is { } lens)
+            if (!CanShowAbove(line) && Lenses(line) is { Text.Length: > 0 } lens)
             {
                 first = lens.Lens;
                 parts.Add(lens.Text);
@@ -908,6 +1212,11 @@ public sealed class EditorInsights : IDisposable
         /// <summary>The CodeLens row shown above <paramref name="line"/> (after the end of the line before), or null.</summary>
         public LensRow? LensAbove(DocumentLine line) => CanShowAbove(line) ? Lenses(line) : null;
 
+        /// <summary>
+        /// A line's CodeLens row: its titles, or none yet (an empty row, as tall as one with titles) while its lenses
+        /// wait for their counts or the service hasn't listed them yet (estimated). The row's room never changes when
+        /// the counts arrive, nor when one resolves to nothing ("-").
+        /// </summary>
         private LensRow? Lenses(DocumentLine line)
         {
             if (!owner.Options.CodeLens)
@@ -915,9 +1224,9 @@ public sealed class EditorInsights : IDisposable
                 return null;
             }
 
-            var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length).Where(l => l.Title is not null && l.Title != "-").ToList();
-            var titles = lenses.Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
-            if (titles.Count == 0)
+            var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length);
+            var titles = lenses.Where(l => l.Title is not null && l.Title != "-").Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
+            if (titles.Count == 0 && lenses.Count == 0 && owner._estimates?.FindOverlappingSegments(line.Offset, line.Length).Count is not > 0)
             {
                 return null;
             }
@@ -941,7 +1250,8 @@ public sealed class EditorInsights : IDisposable
                 }
             }
 
-            return new LensRow(indent.ToString(), string.Join(" | ", titles), lenses.FirstOrDefault());
+            var first = lenses.FirstOrDefault(l => l.Title is not null && l.Title != "-") ?? lenses.FirstOrDefault();
+            return new LensRow(indent.ToString(), string.Join(" | ", titles), first);
         }
 
         /// <summary>A line's CodeLens shows above it when the line before is there to end with it (not folded away).</summary>
@@ -988,7 +1298,7 @@ public sealed class EditorInsights : IDisposable
                 return new InlineTextElement(text, color, null, click);
             }
 
-            Action? lensClick = below.Lens is { } nextLens ? () => owner.RunLens(nextLens) : null;
+            Action? lensClick = below is { Lens: { } nextLens, Text.Length: > 0 } ? () => owner.RunLens(nextLens) : null; // an empty row isn't a link
             return new LensRowElement(owner, text, color, click, below, lensClick);
         }
     }
@@ -997,7 +1307,8 @@ public sealed class EditorInsights : IDisposable
     /// The end of a line's text and the next line's CodeLens row: the line's own end-of-line text (if any), a line break,
     /// the next line's indentation and its CodeLens, smaller, muted and in the UI's proportional font (compact, as in the
     /// classic IDE). None of it is part of the document or takes the caret; the next line itself keeps its height (no
-    /// taller caret or selection), and the row clicks run its first lens.
+    /// taller caret or selection), and the row clicks run its first lens. A row without titles yet holds a space in the
+    /// titles' font, so it is exactly as tall as the row they fill.
     /// </summary>
     private sealed class LensRowElement : VisualLineElement
     {
@@ -1006,16 +1317,18 @@ public sealed class EditorInsights : IDisposable
         private readonly IBrush _color;
         private readonly Action? _click;
         private readonly LensRow _row;
+        private readonly string _titles;
         private readonly Action? _lensClick;
 
         public LensRowElement(EditorInsights owner, string text, IBrush color, Action? click, LensRow row, Action? lensClick)
-            : base(text.Length + 1 + row.Indent.Length + row.Text.Length, 0)
+            : base(text.Length + 1 + row.Indent.Length + Math.Max(1, row.Text.Length), 0)
         {
             _owner = owner;
             _text = text;
             _color = color;
             _click = click;
             _row = row;
+            _titles = row.Text.Length > 0 ? row.Text : " ";
             _lensClick = lensClick;
         }
 
@@ -1035,7 +1348,7 @@ public sealed class EditorInsights : IDisposable
             at -= _text.Length + 1;
             return at < _row.Indent.Length
                 ? Run(_row.Indent[at..], _color, small: false, ui: false)
-                : Run(_row.Text[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true, ui: true);
+                : Run(_titles[(at - _row.Indent.Length)..], _owner.Brush("Shell.Editor.CodeLens.Foreground"), small: true, ui: true);
         }
 
         private TextCharacters Run(string text, IBrush foreground, bool small, bool ui)
@@ -1317,7 +1630,12 @@ internal sealed class IndentGuideRenderer(TextEditor editor, Func<string, IBrush
 
 /// <summary>
 /// Colors (), [] and {} by nesting depth, skipping strings and comments (C-style lexing: <c>//</c>, <c>/* */</c>,
-/// quotes, C# verbatim strings). The depth at each line start is cached and recomputed from the first changed line.
+/// quotes, C# verbatim strings). The lexer's state at each line start is cached. An edit keeps the states after it,
+/// moved with their lines, and lexes again from the edited line only until a state comes out as it was (most keystrokes
+/// change one line's). A line far past the known states isn't lexed on the UI thread: it shows in the default color
+/// until a pass over a snapshot of the text, off the UI thread, has its state and redraws it (M56, as VS Code does; a
+/// jump to the end of a 100,000-line file lexed every line before it in the frame). Only the first
+/// <see cref="LongLineCutter.MaxRendered"/> characters of a line count, the ones drawn.
 /// </summary>
 internal sealed class BracketPairColorizer : DocumentColorizingTransformer
 {
@@ -1328,78 +1646,293 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
         "java", "c", "cpp", "go", "rust", "fsharp", "powershell", "razor", "aspnetcorerazor", "kotlin", "swift", "dart", "php",
     };
 
+    /// <summary>The furthest a line may be past the known states and still be lexed on the UI thread, in lines.</summary>
+    internal const int SyncLines = 1_000;
+
+    /// <summary>The characters lexed on the UI thread for one line's state; past them the background pass takes over.</summary>
+    private const int SyncCharacters = 256 * 1024;
+
+    /// <summary>How far past the line asked for the background pass goes, so scrolling on finds its states there.</summary>
+    private const int BackgroundMargin = 2_000;
+
+    /// <summary>Lines longer than this aren't colored (their state still counts their first characters).</summary>
+    private const int MaxColoredLength = 2_000;
+
     private readonly TextDocument _document;
     private readonly Func<string, IBrush> _brush;
     private readonly Func<string> _language;
-    private readonly List<LineState> _states = [new(0, Lex.Code)];
+    private readonly Action _redraw;
 
-    private enum Lex
+    /// <summary>The lexer's state at the start of each line (index 0: line 1); only the first <see cref="_valid"/> are known.</summary>
+    private readonly List<LineState> _states = [new(0, Lex.Code)];
+    private int _valid = 1;
+
+    /// <summary>From this index on, a state lexed again that equals the one kept means the rest kept are right again.</summary>
+    private int _stableFrom;
+
+    private int _changes;
+    private int _editsInUpdate;
+    private int _changingLine;
+    private int _lineCountBefore;
+    private int _backgroundTarget;
+    private bool _backgroundRunning;
+    private bool _detached;
+
+    internal enum Lex
     {
         Code,
         BlockComment,
         VerbatimString,
     }
 
-    private readonly record struct LineState(int Depth, Lex Mode);
+    internal readonly record struct LineState(int Depth, Lex Mode);
 
-    public BracketPairColorizer(TextDocument document, Func<string, IBrush> brush, Func<string> language)
+    public BracketPairColorizer(TextDocument document, Func<string, IBrush> brush, Func<string> language, Action redraw)
     {
         _document = document;
         _brush = brush;
         _language = language;
+        _redraw = redraw;
+        document.UpdateStarted += OnUpdateStarted;
         document.Changing += OnChanging;
+        document.Changed += OnChanged;
     }
 
     public bool Enabled { get; set; } = true;
 
-    public void Detach() => _document.Changing -= OnChanging;
+    /// <summary>The lines lexed on the UI thread so far (tests).</summary>
+    internal int ScannedLines { get; private set; }
+
+    /// <summary>The passes over a snapshot that completed and were applied (tests).</summary>
+    internal int BackgroundPasses { get; private set; }
+
+    public void Detach()
+    {
+        _detached = true;
+        _document.UpdateStarted -= OnUpdateStarted;
+        _document.Changing -= OnChanging;
+        _document.Changed -= OnChanged;
+    }
+
+    private void OnUpdateStarted(object? sender, EventArgs e) => _editsInUpdate = 0;
 
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
-        var line = _document.GetLineByOffset(Math.Min(e.Offset, _document.TextLength)).LineNumber;
-        if (_states.Count > line)
-        {
-            _states.RemoveRange(line, _states.Count - line);
-        }
+        _changingLine = _document.GetLineByOffset(Math.Min(DocumentEdits.EditedSpan(e).Offset, _document.TextLength)).LineNumber;
+        _lineCountBefore = _document.LineCount;
     }
 
-    protected override void ColorizeLine(DocumentLine line)
+    private void OnChanged(object? sender, DocumentChangeEventArgs e)
     {
-        if (!Enabled || !s_languages.Contains(_language()) || line.Length > 2000)
+        _changes++;
+
+        // The edited line's start state stands; the states after it move with their lines. A group's edited lines, not all
+        // of a whole-document change (DocumentEdits).
+        var edited = DocumentEdits.EditedSpan(e);
+        var line = Math.Min(_changingLine, _document.GetLineByOffset(Math.Min(edited.Offset, _document.TextLength)).LineNumber);
+        if (line >= _states.Count)
         {
             return;
         }
 
-        var state = StateAt(line.LineNumber);
+        if (++_editsInUpdate > 1)
+        {
+            // Many edits in one update (Format Document, Replace All; every edit is an update of its own): moving every
+            // state for each would cost more than lexing again, which the background pass does for lines far below.
+            _states.RemoveRange(line, _states.Count - line);
+            _valid = Math.Min(_valid, line);
+            return;
+        }
+
+        var pending = _valid < _states.Count;
+        var delta = _document.LineCount - _lineCountBefore;
+        if (delta > 0)
+        {
+            _states.InsertRange(line, new LineState[delta]);
+        }
+        else if (delta < 0)
+        {
+            _states.RemoveRange(line, Math.Min(-delta, _states.Count - line));
+        }
+
+        var lastEdited = _document.GetLineByOffset(Math.Min(edited.Offset + edited.InsertionLength, _document.TextLength)).LineNumber;
+        _stableFrom = pending ? Math.Max(_stableFrom >= line ? _stableFrom + delta : _stableFrom, lastEdited) : lastEdited;
+        _valid = Math.Min(_valid, line);
+    }
+
+    protected override void ColorizeLine(DocumentLine line)
+    {
+        if (!Enabled || !s_languages.Contains(_language()) || line.Length > MaxColoredLength || StateAt(line.LineNumber) is not { } state)
+        {
+            return;
+        }
+
         var brushes = s_brushes.Select(_brush).ToArray();
-        Scan(line, state, (offset, depth) =>
+        Scan(_document.GetText(line.Offset, line.Length), state, (offset, depth) =>
         {
             var b = brushes[((depth % brushes.Length) + brushes.Length) % brushes.Length];
-            ChangeLinePart(offset, offset + 1, element => element.TextRunProperties.SetForegroundBrush(b));
+            ChangeLinePart(line.Offset + offset, line.Offset + offset + 1, element => element.TextRunProperties.SetForegroundBrush(b));
         });
     }
 
-    /// <summary>The lexer state at the start of a one-based line (computed forward from the last cached line).</summary>
-    private LineState StateAt(int lineNumber)
+    /// <summary>
+    /// The lexer state at the start of a one-based line: lexed forward from the last known one when it's near, else null
+    /// until the background pass has it.
+    /// </summary>
+    internal LineState? StateAt(int lineNumber)
     {
-        while (_states.Count < lineNumber)
+        if (lineNumber <= _valid)
         {
-            var line = _document.GetLineByNumber(_states.Count);
-            _states.Add(Scan(line, _states[^1], null));
+            return _states[lineNumber - 1];
+        }
+
+        // Far past the known states, only an edit's states kept after it can make lexing on the UI thread short, when they
+        // compare equal soon; once a pass is lexing them, the frame doesn't try again.
+        var far = lineNumber - _valid > SyncLines;
+        if ((far && (_backgroundRunning || _valid >= _states.Count)) || !Advance(lineNumber))
+        {
+            LexInBackground(lineNumber);
+            return null;
         }
 
         return _states[lineNumber - 1];
     }
 
-    private LineState Scan(DocumentLine line, LineState state, Action<int, int>? bracket)
+    /// <summary>The lexer state at the start of a line, lexed from the first line of a text (tests: what the cache must equal).</summary>
+    internal static LineState Lexed(TextDocument document, int lineNumber)
+    {
+        var state = new LineState(0, Lex.Code);
+        for (var number = 1; number < lineNumber; number++)
+        {
+            var line = document.GetLineByNumber(number);
+            state = Scan(document.GetText(line.Offset, Math.Min(line.Length, LongLineCutter.MaxRendered)), state, null);
+        }
+
+        return state;
+    }
+
+    /// <summary>Lexes from the first unknown state up to a line's, within the UI thread's budget; false when it ran out.</summary>
+    private bool Advance(int lineNumber)
+    {
+        var budget = SyncCharacters;
+        var lines = SyncLines;
+        while (_valid < lineNumber)
+        {
+            if (budget <= 0 || lines-- <= 0)
+            {
+                return false;
+            }
+
+            var line = _document.GetLineByNumber(_valid);
+            var length = Math.Min(line.Length, LongLineCutter.MaxRendered);
+            var end = Scan(_document.GetText(line.Offset, length), _states[_valid - 1], null);
+            budget -= length + 1;
+            ScannedLines++;
+            if (_valid < _states.Count)
+            {
+                if (_valid >= _stableFrom && _states[_valid] == end)
+                {
+                    _valid = _states.Count; // as before the edit from here on
+                    continue;
+                }
+
+                _states[_valid] = end;
+            }
+            else
+            {
+                _states.Add(end);
+            }
+
+            _valid++;
+        }
+
+        return true;
+    }
+
+    /// <summary>Has the states up to a line (and a margin past it) lexed over a snapshot off the UI thread, then redraws.</summary>
+    private void LexInBackground(int lineNumber)
+    {
+        _backgroundTarget = Math.Max(_backgroundTarget, Math.Min(_document.LineCount, lineNumber + BackgroundMargin));
+        if (_backgroundRunning)
+        {
+            return;
+        }
+
+        _backgroundRunning = true;
+        var changes = _changes;
+        var start = _valid;
+        var state = _states[start - 1];
+        var target = _backgroundTarget;
+        var snapshot = _document.CreateSnapshot();
+        _ = Task.Run(() =>
+        {
+            var document = new TextDocument(snapshot);
+            var states = new List<LineState>(Math.Max(0, target - start));
+            for (var number = start; number < target; number++)
+            {
+                var line = document.GetLineByNumber(number);
+                state = Scan(document.GetText(line.Offset, Math.Min(line.Length, LongLineCutter.MaxRendered)), state, null);
+                states.Add(state);
+            }
+
+            return states;
+        }).ContinueWith(
+            t => Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplyBackground(t.IsCompletedSuccessfully ? t.Result : null, changes, start), Avalonia.Threading.DispatcherPriority.Background),
+            TaskScheduler.Default);
+    }
+
+    private void ApplyBackground(List<LineState>? states, int changes, int start)
+    {
+        _backgroundRunning = false;
+        var asked = _backgroundTarget;
+        _backgroundTarget = 0;
+        if (_detached)
+        {
+            return;
+        }
+
+        if (states is null || changes != _changes)
+        {
+            // Edited meanwhile: the lines still unknown when they're drawn again ask for a pass from the edit.
+            _redraw();
+            return;
+        }
+
+        // states[i] is the state at the start of line start + i + 1 (index start + i). The UI thread may have lexed some
+        // of them meanwhile, from the same text.
+        for (var index = _valid; index < start + states.Count; index++)
+        {
+            if (index < _states.Count)
+            {
+                _states[index] = states[index - start];
+            }
+            else
+            {
+                _states.Add(states[index - start]);
+            }
+        }
+
+        _valid = Math.Max(_valid, start + states.Count);
+        _stableFrom = Math.Max(_stableFrom, _valid); // states kept past the pass are confirmed by the next that compares equal
+        BackgroundPasses++;
+        if (asked > _valid)
+        {
+            LexInBackground(asked); // scrolled on meanwhile
+        }
+
+        _redraw();
+    }
+
+    /// <summary>Lexes a line's text from its start state; <paramref name="bracket"/> gets each bracket's offset in the line and depth.</summary>
+    private static LineState Scan(ReadOnlySpan<char> text, LineState state, Action<int, int>? bracket)
     {
         var depth = state.Depth;
         var mode = state.Mode;
-        var end = line.EndOffset;
-        for (var i = line.Offset; i < end; i++)
+        var end = text.Length;
+        for (var i = 0; i < end; i++)
         {
-            var c = _document.GetCharAt(i);
-            var next = i + 1 < end ? _document.GetCharAt(i + 1) : '\0';
+            var c = text[i];
+            var next = i + 1 < end ? text[i + 1] : '\0';
             switch (mode)
             {
                 case Lex.BlockComment:
@@ -1443,7 +1976,7 @@ internal sealed class BracketPairColorizer : DocumentColorizingTransformer
                     // A regular string or character literal ends on the line.
                     for (i++; i < end; i++)
                     {
-                        var s = _document.GetCharAt(i);
+                        var s = text[i];
                         if (s == '\\')
                         {
                             i++;

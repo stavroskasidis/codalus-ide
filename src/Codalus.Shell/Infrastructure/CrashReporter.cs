@@ -38,6 +38,19 @@ public static class CrashReporter
         }
     }
 
+    /// <summary>
+    /// Forgets the configuration <paramref name="owner"/> installed (a disposed shell), unless another replaced it: the
+    /// statics would hold it. Reports are off until a shell installs it again.
+    /// </summary>
+    public static void Release(object owner)
+    {
+        if (s_enabled.Target == owner || s_logTail.Target == owner)
+        {
+            s_enabled = () => false;
+            s_logTail = () => string.Empty;
+        }
+    }
+
     /// <summary>Writes a report (a crash, a recovered UI error, or a helper process that died); returns its path, or null when disabled.</summary>
     public static string? Write(string kind, string details)
     {

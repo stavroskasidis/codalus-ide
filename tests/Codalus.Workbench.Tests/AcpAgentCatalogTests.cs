@@ -234,7 +234,7 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         // Ubuntu 24.04's Node.js is 18: apt isn't offered for Claude (22), snap is.
         var (ubuntu, note) = AcpNodeInstall.Options(new(PlatformKind.Linux, "ubuntu debian", false, false, true, 18, null, true), 22);
         Assert.Equal(["snap", "page"], ubuntu.Select(o => o.Id));
-        Assert.Equal("sudo snap install node --classic --channel=24/stable", ubuntu[0].Command);
+        Assert.Equal("sudo snap install node --classic --channel=26/stable", ubuntu[0].Command);
         Assert.Equal(Setup.InstallKind.Terminal, ubuntu[0].Kind);
         Assert.Equal("apt isn't offered: the distribution's nodejs package is 18, and 22 or later is needed.", note);
         Assert.Equal(["apt", "page"], Ids(new(PlatformKind.Linux, "debian", false, false, false, 22, null, true), 22));

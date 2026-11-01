@@ -552,6 +552,73 @@ public partial class PolishTests
     }
 
     [AvaloniaFact]
+    public async Task Pinned_tabs_take_a_row_of_their_own_above_the_others_unless_turned_off()
+    {
+        // As the classic IDE's "Show pinned tabs in a separate row", on by default (the maintainer's screenshot).
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "pinned-row");
+        Directory.CreateDirectory(folder);
+        var files = Enumerable.Range(1, 4).Select(i => Path.Combine(folder, $"doc-{i}.txt")).ToList();
+        foreach (var file in files)
+        {
+            await File.WriteAllTextAsync(file, "text", TestContext.Current.CancellationToken);
+            await f.Shell.OpenFileAsync(file, preview: false);
+        }
+
+        ShellFixture.Pump();
+        var strip = f.Window.GetVisualDescendants().OfType<Dock.Avalonia.Controls.DocumentTabStrip>().Single(s => s.IsEffectivelyVisible);
+        var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
+        Assert.True(panel.PinnedRow);
+        var oneRow = panel.Bounds.Height;
+        List<Avalonia.Controls.Primitives.TabStripItem> Tabs() => [.. panel.Children.OfType<Avalonia.Controls.Primitives.TabStripItem>()];
+        Assert.All(Tabs(), t => Assert.Equal(0, t.Bounds.Y));
+
+        // Without unpinned tabs or pinned ones there is one row; with both, the pinned ones are above, from the left.
+        f.Shell.Layout.SetPinned(f.Shell.Layout.Documents.Single(d => d.FilePath == files[1]), true);
+        f.Shell.Layout.SetPinned(f.Shell.Layout.Documents.Single(d => d.FilePath == files[3]), true);
+        f.Window.UpdateLayout();
+        ShellFixture.Pump();
+        var pinned = Tabs().Where(DocumentTab.GetIsPinned).ToList();
+        var others = Tabs().Where(t => !DocumentTab.GetIsPinned(t)).ToList();
+        Assert.Equal(2, pinned.Count);
+        Assert.All(pinned, t => Assert.Equal(0, t.Bounds.Y));
+        Assert.All(others, t => Assert.True(t.Bounds.Y >= pinned[0].Bounds.Height - 0.5, $"an unpinned tab at {t.Bounds.Y:0}"));
+        Assert.Equal(0, pinned.Min(t => t.Bounds.X));
+        Assert.Equal(0, others.Min(t => t.Bounds.X));
+        Assert.True(panel.Bounds.Height > oneRow * 1.5, $"two rows: {panel.Bounds.Height:0} px, one was {oneRow:0}");
+
+        // The frame's edge under the strip opens under the selected tab only when it's on the row above it.
+        var edge = strip.GetVisualDescendants().OfType<TabStripEdge>().Single();
+        f.Shell.Layout.OpenDocument(f.Shell.Layout.Documents.Single(d => d.FilePath == files[3]));
+        f.Window.UpdateLayout();
+        ShellFixture.Pump();
+        Assert.True(Tabs().Single(t => t.IsSelected).Bounds.Y == 0);
+        if (edge.Bounds.Height > 0)
+        {
+            Assert.Null(edge.Gap());
+        }
+
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window);
+            frame!.Save(Path.Combine(snapshots, "document-tabs-pinned-row.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        // Turned off: one row again, pinned tabs at its left.
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.PinnedTabsOnSeparateRowSetting, false, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => !panel.PinnedRow);
+        f.Window.UpdateLayout();
+        ShellFixture.Pump();
+        Assert.All(Tabs(), t => Assert.Equal(0, t.Bounds.Y));
+        Assert.Equal(oneRow, panel.Bounds.Height, 0.5);
+        Assert.All(Tabs().Take(2), t => Assert.True(DocumentTab.GetIsPinned(t)));
+
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.PinnedTabsOnSeparateRowSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => panel.PinnedRow);
+    }
+
+    [AvaloniaFact]
     public async Task Pinned_and_selected_document_tabs_stay_in_view_when_tabs_dont_fit()
     {
         // The Mac's review: with many documents open, the strip scrolled the pinned tab out of view.

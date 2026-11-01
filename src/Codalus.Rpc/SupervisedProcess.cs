@@ -176,7 +176,19 @@ public sealed class SupervisedProcess : IAsyncDisposable
         }
         finally
         {
+            ReleaseStartLock();
+        }
+    }
+
+    /// <summary>Lets the next start in; disposed meanwhile (a start that waited for the environment, M56), there's none.</summary>
+    private void ReleaseStartLock()
+    {
+        try
+        {
             _startLock.Release();
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 
@@ -186,7 +198,10 @@ public sealed class SupervisedProcess : IAsyncDisposable
         IHostProcess process;
         try
         {
-            process = await (_launch.Launcher ?? LocalProcessLauncher.Instance).StartAsync(_launch, cancellationToken).ConfigureAwait(false);
+            // On the thread pool: a launcher works synchronously (the runtime check's file probes, then Process.Start,
+            // which on Windows waits for .NET's process-creation lock behind any other start), and hosts are started from
+            // the UI thread (a restored tab, a solution's open, a plugin's activation), which held each start (M56).
+            process = await Task.Run(() => (_launch.Launcher ?? LocalProcessLauncher.Instance).StartAsync(_launch, cancellationToken), cancellationToken).ConfigureAwait(false);
         }
         catch (HostRuntimeMissingException ex)
         {
@@ -210,11 +225,26 @@ public sealed class SupervisedProcess : IAsyncDisposable
         ConfigureConnection?.Invoke(connection);
         connection.Disconnected += OnDisconnected;
         connection.HandlerFailed += (_, ex) => Log?.Invoke(this, $"[{Name}] handler failed: {ex.Message}");
+        bool disposed;
         lock (_gate)
         {
-            _process = process;
-            _connection = connection;
-            _run = run;
+            disposed = _disposed;
+            if (!disposed)
+            {
+                _process = process;
+                _connection = connection;
+                _run = run;
+            }
+        }
+
+        if (disposed)
+        {
+            // Disposed while its launcher ran (it waits for the environment, M56): DisposeAsync found no process to stop,
+            // so this one stops here instead of running on, unowned, after its owner's shutdown.
+            await connection.DisposeAsync().ConfigureAwait(false);
+            process.Kill();
+            await process.DisposeAsync().ConfigureAwait(false);
+            ObjectDisposedException.ThrowIf(disposed, this);
         }
 
         connection.Start();
@@ -372,7 +402,7 @@ public sealed class SupervisedProcess : IAsyncDisposable
             }
             finally
             {
-                _startLock.Release();
+                ReleaseStartLock();
             }
 
             Restarted?.Invoke(this, EventArgs.Empty);

@@ -17,6 +17,12 @@
                  Text="{l:T quickPick.noMatchingResults}"
                  Margin="8"
                  IsVisible="{Binding IsEmpty}" />
+      <TextBlock DockPanel.Dock="Bottom"
+                 Classes="muted"
+                 FontSize="{DynamicResource Shell.FontSize.Small}"
+                 Text="{Binding MoreText}"
+                 Margin="8,4,8,0"
+                 IsVisible="{Binding HasMore}" />
       <ListBox x:Name="List"
                Margin="0,6,0,0"
                Background="Transparent"

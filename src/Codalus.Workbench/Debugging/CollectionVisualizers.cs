@@ -106,7 +106,7 @@ public static class CollectionVisualizers
     {
         var value = await debugger.EvaluateAsync(expression, "watch", cancellationToken).ConfigureAwait(false);
         var raw = value.VariablesReference > 0 ? await debugger.VariablesAsync(value.VariablesReference).ConfigureAwait(false) : [];
-        if (await CollectionViews.ReadAsync(kind, raw, r => debugger.VariablesAsync(r), cancellationToken).ConfigureAwait(false) is not { } view)
+        if (await CollectionViews.ReadAsync(kind, raw, r => debugger.VariablesAsync(r), (r, start, take) => debugger.VariablesAsync(r, new VariablesPage(start, take)), cancellationToken).ConfigureAwait(false) is not { } view)
         {
             throw new InvalidOperationException($"'{expression}' has no elements to show ({value.Result}).");
         }

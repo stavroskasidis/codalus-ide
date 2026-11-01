@@ -1,4 +1,5 @@
 using Codalus.Plugins.Protocol;
+using Codalus.Workbench.Output;
 
 namespace Codalus.Workbench.Testing;
 
@@ -133,14 +134,26 @@ public sealed class TestNode
         }
     }
 
+    /// <summary>
+    /// When the node was put under its parent (or among the roots), by <see cref="TestService"/>: siblings are in this
+    /// order, so it orders the items of a document as a walk of the tree meets them.
+    /// </summary>
+    internal long Order { get; set; }
+
+    /// <summary>The node, then everything under it, parents before their children and children in order.</summary>
     public IEnumerable<TestNode> SelfAndDescendants()
     {
-        yield return this;
-        foreach (var child in _children.ToList())
+        // One stack: nested iterators passed every node through each level above it, and copied each child list, so a
+        // walk of 100K tests cost tens of milliseconds (M56).
+        var stack = new Stack<TestNode>();
+        stack.Push(this);
+        while (stack.TryPop(out var node))
         {
-            foreach (var descendant in child.SelfAndDescendants())
+            yield return node;
+            var children = node._children;
+            for (var i = children.Count - 1; i >= 0; i--)
             {
-                yield return descendant;
+                stack.Push(children[i]);
             }
         }
     }
@@ -157,10 +170,9 @@ public sealed class TestNode
 
         var worst = TestOutcome.None;
         var allPassedOrSkipped = true;
-        var any = false;
+        var anyPassed = false;
         foreach (var leaf in Leaves())
         {
-            any = true;
             var outcome = leaf.Outcome;
             if (outcome > worst)
             {
@@ -168,10 +180,11 @@ public sealed class TestNode
             }
 
             allPassedOrSkipped &= outcome is TestOutcome.Passed or TestOutcome.Skipped;
+            anyPassed |= outcome == TestOutcome.Passed;
         }
 
         // A group where everything ran shows Passed even if some leaves were skipped (Skipped > Passed in the order).
-        return any && allPassedOrSkipped && worst == TestOutcome.Skipped && Leaves().Any(l => l.Outcome == TestOutcome.Passed) ? TestOutcome.Passed : worst;
+        return allPassedOrSkipped && worst == TestOutcome.Skipped && anyPassed ? TestOutcome.Passed : worst;
     }
 
     /// <summary>The leaf-or-group path of labels from the root, for display and sorting.</summary>
@@ -204,6 +217,9 @@ public enum TestRunKind
     Coverage,
 }
 
+/// <summary>Output a run reported (<see cref="TestService.RunOutput"/>).</summary>
+public sealed record TestRunOutput(TestRunRecord Run, string Text);
+
 /// <summary>One test run, as the controller reported it.</summary>
 public sealed class TestRunRecord
 {
@@ -234,9 +250,13 @@ public sealed class TestRunRecord
 
     public DateTimeOffset? Ended { get; internal set; }
 
+    /// <summary>Whether no other run was in progress when this one started (its output starts the Tests channel afresh).</summary>
+    public bool StartedAlone { get; internal init; }
+
     /// <summary>Final results by node key.</summary>
     public Dictionary<string, TestResult> Results { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>What the run wrote: the end of it, at most an output channel's <see cref="OutputChannel.MaxLength"/>.</summary>
     public string Output
     {
         get
@@ -263,7 +283,13 @@ public sealed class TestRunRecord
     {
         lock (_output)
         {
+            // The end of it from a line's start, as an output channel keeps (M56: a verbose run kept everything it wrote while
+            // the record lived).
             _output.Append(text);
+            if (_output.Length > OutputChannel.MaxLength)
+            {
+                _output.Remove(0, OutputChannel.LineStart(_output, _output.Length - (OutputChannel.MaxLength * 3 / 4)));
+            }
         }
     }
 

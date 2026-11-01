@@ -160,9 +160,17 @@ public class OutputFormattingTests
         snapshot = channel.GetSnapshot();
         var (start, length) = Assert.Single(snapshot.ErrorRanges);
         Assert.Equal("late error\n", snapshot.Text.Substring(start, length));
-        Assert.Contains(events, e => e.Text is null); // the trim asked for a re-read
+
+        // A trim comes with the text appended and how much went (M56: a view read the whole channel again at each one),
+        // and every change with the version it made, the one a snapshot then has.
+        var trim = Assert.Single(events, e => e.Trimmed > 0);
+        Assert.Equal(line, trim.Text);
+        Assert.InRange(trim.Trimmed, OutputChannel.MaxLength / 4, OutputChannel.MaxLength / 4 + 4096);
+        Assert.Equal(Enumerable.Range(1, events.Count).Select(v => (long)v), events.Select(e => e.Version));
+        Assert.Equal(events[^1].Version, snapshot.Version);
 
         channel.Clear();
+        Assert.Null(events[^1].Text);
         Assert.Empty(channel.GetSnapshot().ErrorRanges);
         channel.AppendErrorLine("again");
         Assert.Equal([(0, 6)], channel.GetSnapshot().ErrorRanges);

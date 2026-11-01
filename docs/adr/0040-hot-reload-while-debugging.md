@@ -3,7 +3,7 @@
 - **Status:** accepted as research (M14c, 2026-10-11); implementation deferred
 - **Date:** 2026-10-11
 - **Deciders:** maintainer
-- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28; its phase 2, built 2026-10-29 as M55: under the Codalus debugger, edits apply to the program being debugged, a Blazor Web App's server included; netcoredbg keeps this ADR's limits)
+- **Amended by:** [ADR 0090](0090-blazor-web-app-edits-under-the-codalus-debugger.md) (2026-10-30: under the Codalus debugger a Blazor Web App's server is launched, with the IDE as its pages' browser refresh server; `dotnet watch` while debugging is netcoredbg's), [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28; its phase 2, built 2026-10-29 as M55: under the Codalus debugger, edits apply to the program being debugged, a Blazor Web App's server included; netcoredbg keeps this ADR's limits)
 
 ## Context
 

@@ -108,12 +108,36 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// The latest environment check's probes (git, dotnet), off the UI thread. The dispose waits for them once it has
+    /// cancelled them: their end, after it, resumed the check on the UI thread, which held the disposed shell until then.
+    /// </summary>
+    private Task _environmentProbe = Task.CompletedTask;
+
+    /// <summary>Whether <see cref="Tools"/> has every tool, not only the required ones startup checks.</summary>
+    public bool ToolsComplete { get; private set; }
+
     /// <summary>Checks the environment; <paramref name="offer"/> offers to install what the IDE needs and is missing.</summary>
-    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer)
+    /// <param name="requiredOnly">The required tools alone (startup: what it offers to install).</param>
+    public async Task<IReadOnlyList<ToolStatus>> CheckEnvironmentAsync(bool offer, bool requiredOnly = false)
     {
         try
         {
-            Tools = [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true), .. await MobileToolsAsync().ConfigureAwait(true), .. await WindowsAppToolsAsync().ConfigureAwait(true), .. NetFrameworkTools()];
+            // Off with the shell: a closed window's check kept its probes (git, dotnet) running, and the shell with them.
+            var lifetime = _lifetime.Token;
+            var probe = requiredOnly
+                ? EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, lifetime)
+                : EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime);
+            _environmentProbe = probe;
+            var tools = await probe.ConfigureAwait(true);
+            Tools = requiredOnly
+                ? tools
+                : [.. tools, .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
+            ToolsComplete = !requiredOnly;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            return Tools;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {
@@ -327,7 +351,7 @@ public sealed partial class ShellHost
     /// What the solution's mobile projects need (M20a): their workloads, and the Android SDK and a JDK when one targets
     /// Android. Nothing when the solution has no mobile project.
     /// </summary>
-    private async Task<IReadOnlyList<ToolStatus>> MobileToolsAsync()
+    private async Task<IReadOnlyList<ToolStatus>> MobileToolsAsync(CancellationToken cancellationToken)
     {
         var projects = MobileProjects();
         if (projects.Count == 0)
@@ -337,7 +361,7 @@ public sealed partial class ShellHost
 
         var rows = new List<ToolStatus>();
         var dotnet = EnvironmentCheck.FindDotnet() ?? "dotnet";
-        var installed = await Mobile.InstalledWorkloadsAsync(dotnet, Solutions.Solution?.Directory, CancellationToken.None).ConfigureAwait(true) ?? [];
+        var installed = await Mobile.InstalledWorkloadsAsync(dotnet, Solutions.Solution?.Directory, cancellationToken).ConfigureAwait(true) ?? [];
         var needed = projects.SelectMany(p => p.TargetFrameworks.Select(MobileTargets.PlatformOf)
                 .Where(f => MobileTargets.RunsOn(f, Workbench.Platform))
                 .Select(f => MobileTargets.Workload(f, p.UsesMaui)))
@@ -542,6 +566,7 @@ public sealed partial class ShellHost
         if (await EnvironmentCheck.CheckDotnetAsync(folder, CancellationToken.None).ConfigureAwait(true) is { State: ToolState.Mismatch } sdk)
         {
             Tools = await EnvironmentCheck.CheckAsync(folder, CancellationToken.None).ConfigureAwait(true);
+            ToolsComplete = false; // without the mobile, Windows app and .NET Framework rows
             ToolsChanged?.Invoke(this, EventArgs.Empty);
             await OfferInstallAsync(sdk).ConfigureAwait(true);
         }

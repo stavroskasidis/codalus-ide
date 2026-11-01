@@ -10,7 +10,6 @@ using AvaloniaEdit.Document;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Folding;
 using AvaloniaEdit.Rendering;
-using AvaloniaEdit.Search;
 using Codalus.LanguageServices.Client;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Rpc;
@@ -50,7 +49,7 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DefinitionLink _link;
     private readonly HighlightRenderer _highlights;
     private readonly FoldingManager _folding;
-    private readonly SearchPanel _search;
+    private readonly FindWidget _search;
     private readonly MultiCaretController _multiCaret;
     private readonly DispatcherTimer _hoverTimer;
     private readonly BreakpointMargin _breakpointMargin;
@@ -65,11 +64,15 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly CoverageMargin _coverageMargin;
     private readonly HotLineMargin _hotLineMargin;
     private readonly EditorInsights _insights;
+    private readonly LongLineCutter _longLines;
     private readonly BookmarkMargin _bookmarkMargin;
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
     private bool _indexLoaded;
+    private string? _indexKey; // what the status knew the index version read by (IndexKey)
+    private bool _indexMayHaveChanged; // the repository's index changed since it was read
+    private bool _gitMarkersWhenShown; // the change markers' refresh waits for the editor to be shown
     private CancellationTokenSource? _gitCts;
     private CancellationTokenSource? _tokensCts;
     private CancellationTokenSource? _foldingCts;
@@ -167,9 +170,11 @@ public sealed partial class CodeEditorController : IDisposable
         _gitTimer.Start();
         _insights = new EditorInsights(editor, () => Model, () => Client, services);
         editor.TextArea.LeftMargins.Insert(2, _insights.Margin);
+        _longLines = new LongLineCutter(editor.TextArea, () => ResourceBrush("Shell.Editor.InlayHint.Foreground"));
+        view.LineTransformers.Add(_longLines);
         _folding = FoldingManager.Install(editor.TextArea);
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
-        _search = SearchPanel.Install(editor);
+        _search = new FindWidget(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
         _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
@@ -204,6 +209,8 @@ public sealed partial class CodeEditorController : IDisposable
         view.PointerPressed += OnPointerPressed;
         _multiCaret.Changed += (_, _) => OnCaretChanged(this, EventArgs.Empty);
 
+        view.AttachedToVisualTree += OnViewAttached;
+        view.DetachedFromVisualTree += OnViewDetached;
         UpdateDiagnostics();
         UpdateGrammar();
         RefreshAll();
@@ -284,7 +291,8 @@ public sealed partial class CodeEditorController : IDisposable
 
     public MultiCaretController MultiCaret => _multiCaret;
 
-    public SearchPanel Search => _search;
+    /// <summary>Quick Find and Quick Replace; the view places it over the editor.</summary>
+    public FindWidget Search => _search;
 
     public bool IsCompletionOpen => _completion is not null;
 
@@ -413,7 +421,7 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Colors the document with its language's TextMate grammar (ADR 0016), if it has one.</summary>
     private void UpdateGrammar()
     {
-        var scope = _services.TextMate.ScopeFor(Model.LanguageId);
+        var scope = Model.IsLarge ? null : _services.TextMate.ScopeFor(Model.LanguageId);
         if (scope == GrammarScope)
         {
             return;
@@ -435,9 +443,15 @@ public sealed partial class CodeEditorController : IDisposable
                 _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
             }
 
+            // TODO(issue): AvaloniaEdit.TextMate copies each visible line whole on the UI thread at every scroll, to
+            // tokenize its first 10,000 characters there, and keeps a thread per editor: a megabyte line under the
+            // large-file limits costs a copy per scroll step. A colorizer on one shared tokenizer (as GrammarColorizer
+            // tokenizes) that reads only what's drawn, visible lines first, would end both.
             _textMate.SetGrammar(scope);
             KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
+            KeepLongLinesLast();
+            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden: setting a grammar starts the thread
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -466,6 +480,119 @@ public sealed partial class CodeEditorController : IDisposable
         transformers.Insert(transformers.IndexOf(grammar) + 1, _colorizer);
         transformers.Insert(transformers.IndexOf(_colorizer) + 1, _markers);
     }
+
+    // ------------------------------------------------------------------ the grammar's tokenizer while hidden
+
+    /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
+    internal bool GrammarTokenizing => _textMate is { } installation && Tokenizer(installation) is { IsStopped: false };
+
+    /// <summary>The scopes the grammar's tokenizer has for a one-based line's column, null when it has none (tests).</summary>
+    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) =>
+        _textMate is { } installation && Tokenizer(installation)?.GetLineTokens(line - 1) is { } tokens
+            ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
+            : null;
+
+    private static bool s_noTokenizer;
+    private bool _grammarCheckScheduled;
+
+    private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
+
+    private void OnViewDetached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
+
+    /// <summary>
+    /// Checks once things settle: Dock detaches a view and attaches it again in one go when it moves (a tab dragged to
+    /// another pane or a floating window, Window > Split), and its tokenizer isn't stopped and started for that.
+    /// </summary>
+    private void ScheduleGrammarCheck()
+    {
+        if (_grammarCheckScheduled)
+        {
+            return;
+        }
+
+        _grammarCheckScheduled = true;
+        Dispatcher.UIThread.Post(
+            () =>
+            {
+                _grammarCheckScheduled = false;
+                if (!_disposed)
+                {
+                    MatchGrammarToView();
+                }
+            },
+            DispatcherPriority.Background);
+    }
+
+    /// <summary>
+    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
+    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each
+    /// editor as long as its tab is open, and a session of many JSON, XML or Markdown tabs starved the pool (M56). The
+    /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
+    /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
+    /// <para>
+    /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
+    /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
+    /// visible lines on the UI thread at each scroll, beside the worker), and TextMateSharp queues a line that failed again.
+    /// </para>
+    /// </summary>
+    private void MatchGrammarToView()
+    {
+        if (_textMate is not { } installation || Tokenizer(installation) is not { } model || GrammarTransformer() is not { } transformer)
+        {
+            return;
+        }
+
+        if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
+        {
+            model.RemoveModelTokensChangedListener(transformer); // its only listener: the model stops its thread
+        }
+        else
+        {
+            // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
+            // redraw, after the listener is in, shows them.
+            model.AddModelTokensChangedListener(transformer);
+            Editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    private AvaloniaEdit.TextMate.TextMateColoringTransformer? GrammarTransformer() =>
+        Editor.TextArea.TextView.LineTransformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+
+    /// <summary>The installation's model, or null when the package has none by that name: no pausing then, rather than an exception at each tab switch.</summary>
+    private static TextMateSharp.Model.TMModel? Tokenizer(AvaloniaEdit.TextMate.TextMate.Installation installation)
+    {
+        if (!s_noTokenizer)
+        {
+            try
+            {
+                return TokenizerModel(installation);
+            }
+            catch (MissingFieldException)
+            {
+                s_noTokenizer = true;
+            }
+        }
+
+        return null;
+    }
+
+    // The installation's model isn't public; Native AOT resolves this accessor at compile time.
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_tmModel")]
+    private static extern ref TextMateSharp.Model.TMModel? TokenizerModel(AvaloniaEdit.TextMate.TextMate.Installation installation);
+
+    /// <summary>The cut of long lines after every colorizer (a grammar's installs itself last): nothing draws past it.</summary>
+    private void KeepLongLinesLast()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        if (transformers[^1] != _longLines)
+        {
+            transformers.Remove(_longLines);
+            transformers.Add(_longLines);
+        }
+    }
+
+    /// <summary>The cuts of long lines made so far, one each time such a line is built (tests).</summary>
+    internal int LongLineCuts => _longLines.Cuts;
 
     private void ApplyTheme()
     {
@@ -497,7 +624,11 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
-    private void OnReloaded(object? sender, EventArgs e) => RefreshAll();
+    private void OnReloaded(object? sender, EventArgs e)
+    {
+        _insights.Reloaded();
+        RefreshAll();
+    }
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -534,6 +665,26 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     private bool _refreshPending;
+
+    /// <summary>A refresh asked for while the editor was hidden, done when it shows again.</summary>
+    private bool _refreshWhenShown;
+
+    /// <summary>Whether the editor would ask again for everything the next time it shows (tests).</summary>
+    internal bool RefreshesWhenShown => _refreshWhenShown;
+
+    /// <summary>Requests everything again now if the editor shows, else the next time it does (its visual lines are built again).</summary>
+    public void RefreshWhenShown()
+    {
+        if (IsShown)
+        {
+            _refreshWhenShown = false;
+            RefreshAll();
+        }
+        else
+        {
+            _refreshWhenShown = true;
+        }
+    }
 
     private void AfterTokens()
     {
@@ -584,6 +735,20 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnViewChanged(object? sender, EventArgs e)
     {
+        if (_refreshWhenShown && IsShown)
+        {
+            _refreshWhenShown = false;
+            RefreshAll();
+        }
+
+        if (_gitMarkersWhenShown && IsShown)
+        {
+            // Shown again: the change markers asked for meanwhile, once (after this layout pass, by the timer).
+            _gitMarkersWhenShown = false;
+            _gitTimer.Stop();
+            _gitTimer.Start();
+        }
+
         LightbulbChanged?.Invoke(this, EventArgs.Empty);
         var visible = VisibleLines();
         if (!_colorizer.Covers(visible) && !TokensInFlightCover(visible))
@@ -738,7 +903,17 @@ public sealed partial class CodeEditorController : IDisposable
 
     // ------------------------------------------------------------------ folding
 
-    private void ScheduleFolding(TimeSpan delay) => _ = FoldingAsync(delay, Restart(ref _foldingCts).Token);
+    private void ScheduleFolding(TimeSpan delay)
+    {
+        if (!Model.IsLarge)
+        {
+            FoldingPasses++;
+            _ = FoldingAsync(delay, Restart(ref _foldingCts).Token);
+        }
+    }
+
+    /// <summary>The folding passes started so far (tests: none for a large file).</summary>
+    internal int FoldingPasses { get; private set; }
 
     private async Task FoldingAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
@@ -756,7 +931,10 @@ public sealed partial class CodeEditorController : IDisposable
                 var snapshot = Model.Text.CreateSnapshot();
                 var configuration = Configuration;
                 var languageId = Model.LanguageId;
-                var local = await Task.Run(() => LanguageFeatures.Foldings(new AvaloniaEdit.Document.TextDocument(snapshot), languageId, configuration), cancellationToken).ConfigureAwait(true);
+                var folded = Folded();
+                var local = await Task.Run(
+                    () => LanguageFeatures.CapFoldings(LanguageFeatures.Foldings(new AvaloniaEdit.Document.TextDocument(snapshot), languageId, configuration), folded),
+                    cancellationToken).ConfigureAwait(true);
                 if (!cancellationToken.IsCancellationRequested && version0 == Model.Version && !_disposed)
                 {
                     _folding.UpdateFoldings(local, -1);
@@ -803,8 +981,11 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         foldings.Sort((a, b) => a.StartOffset.CompareTo(b.StartOffset));
-        _folding.UpdateFoldings(foldings, -1);
+        _folding.UpdateFoldings(LanguageFeatures.CapFoldings(foldings, Folded()), -1);
     }
+
+    /// <summary>Where the collapsed foldings are: kept when the foldings are capped.</summary>
+    private HashSet<(int Start, int End)> Folded() => [.. _folding.AllFoldings.Where(f => f.IsFolded).Select(f => (f.StartOffset, f.EndOffset))];
 
     /// <summary>Toggles the innermost folding at the caret (Ctrl+M Ctrl+M).</summary>
     public void ToggleFoldAtCaret()
@@ -909,12 +1090,16 @@ public sealed partial class CodeEditorController : IDisposable
             return;
         }
 
-        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed, unless
-        // the item's edit typed it already.
+        // A commit character ("(", ".", ";", Space…) commits the completion list's selected item, then is typed.
         if (_completion is { } completion && e.Text is { Length: 1 } committing && !e.Handled && Editor.SelectionLength == 0
-            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]) && completion.CommitWith(committing[0]))
+            && (committing[0] != ' ' || Options.CommitOnSpace) && completion.CommitsOn(committing[0]))
         {
-            e.Handled = true;
+            completion.CommitWith(committing[0]);
+            if (_lateResolve is { ByCharacter: true } late)
+            {
+                late.Input = e; // done once this input's character is typed
+            }
+
             return;
         }
 
@@ -1088,6 +1273,19 @@ public sealed partial class CodeEditorController : IDisposable
         if (e.Text is { Length: 1 } entered)
         {
             AutoClose(entered);
+            if (_lateResolve is { ByCharacter: true, Version: null } late)
+            {
+                if (late.Input == e)
+                {
+                    late.Version = Model.Version; // the character that committed the item is typed (and its pair closed)
+                    TryApplyLateResolve(late);
+                }
+                else
+                {
+                    _lateResolve = null; // that character wasn't typed (another handler took it): the commit's offsets are stale
+                }
+            }
+
             if (entered == "/" && AtDocCommentStart())
             {
                 _ = DocCommentAsync();
@@ -1166,6 +1364,9 @@ public sealed partial class CodeEditorController : IDisposable
         }
     }
 
+    /// <summary>The on-type format asked for and not answered yet: its character and the document version it's for.</summary>
+    private (string Character, int Version)? _formatOnType;
+
     private async Task FormatOnTypeAsync(string ch)
     {
         try
@@ -1177,7 +1378,13 @@ public sealed partial class CodeEditorController : IDisposable
 
             var version = Model.Version;
             var options = new FormattingOptions(Editor.Options.IndentationSize, Editor.Options.ConvertTabsToSpaces);
+            _formatOnType = (ch, version);
             var edits = await client.FormatOnTypeAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), ch, options, CancellationToken.None).ConfigureAwait(true);
+            if (_formatOnType == (ch, version))
+            {
+                _formatOnType = null;
+            }
+
             if (edits.Length > 0 && version == Model.Version && !_disposed && _completion is null)
             {
                 // Text the server adds at the caret (an XML end tag, M35) goes after it: the caret stays where the user typed.
@@ -1313,7 +1520,6 @@ public sealed partial class CodeEditorController : IDisposable
                 window.CompletionList.CompletionData.Add(new CompletionData(item, Resolve, Commit)
                 {
                     CommitCharacters = ours ? new HashSet<char>() : item.CommitCharacters is { } own ? CommitCharacterSet(own) : fromEmbedded ? new HashSet<char>() : allCommitCharacters,
-                    ResolveForCommit = ours || fromEmbedded || item.Data is null ? null : i => client.ResolveCompletionAsync(i, CancellationToken.None),
                 });
             }
 
@@ -1408,10 +1614,62 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>A server's commit characters (single characters only) as a set.</summary>
     private static HashSet<char> CommitCharacterSet(string[]? characters) => [.. (characters ?? []).Where(c => c.Length == 1).Select(c => c[0])];
 
+    /// <summary>A completion item for this editor (tests: committing it as the list does).</summary>
+    internal CompletionData NewCompletionData(LanguageServices.Protocol.CompletionItem item, Func<LanguageServices.Protocol.CompletionItem, Task<LanguageServices.Protocol.CompletionItem>> resolve, string commitCharacters = "") =>
+        new(item, resolve, Commit) { CommitCharacters = commitCharacters.ToHashSet() };
+
+    /// <summary>Opens the completion list over [<paramref name="start"/>, the caret) with these items, filtered by the typed text (tests).</summary>
+    internal void OpenCompletion(int start, IEnumerable<CompletionData> items)
+    {
+        var window = NewCompletionPopup(start, Editor.CaretOffset);
+        foreach (var item in items)
+        {
+            window.CompletionList.CompletionData.Add(item);
+        }
+
+        OpenCompletion(window);
+        window.CompletionList.SelectItem(Model.Text.GetText(start, Editor.CaretOffset - start));
+    }
+
+    /// <summary>
+    /// A commit made before its item's resolve arrived: the text it inserted, and the document's version once the commit
+    /// was done (by a commit character: once the editor typed it, in the same text input).
+    /// </summary>
+    private sealed class LateResolve(CompletionData data, int start, int length, int typedFrom, bool byCharacter)
+    {
+        public CompletionData Data { get; } = data;
+
+        public int Start { get; } = start;
+
+        public int Length { get; } = length;
+
+        /// <summary>Where the typed text started: additional edits (usings) apply only before it.</summary>
+        public int TypedFrom { get; } = typedFrom;
+
+        public bool ByCharacter { get; } = byCharacter;
+
+        /// <summary>The text input whose character committed the item (by character).</summary>
+        public TextInputEventArgs? Input { get; set; }
+
+        public int? Version { get; set; }
+
+        /// <summary>The resolved item, once it has arrived.</summary>
+        public LanguageServices.Protocol.CompletionItem? Resolved { get; set; }
+    }
+
+    private LateResolve? _lateResolve;
+
+    /// <summary>
+    /// Commits a completion item without waiting for the language service (M56: the UI thread waited up to 300 ms for a
+    /// resolve on every commit character): with the resolve prefetched while the item was selected if it has arrived, else
+    /// with the item's own text; a resolve that arrives later applies its edits only while the document is as the commit
+    /// left it.
+    /// </summary>
     private void Commit(CompletionData data, ISegment segment)
     {
-        var resolved = data.ResolvedWithin(TimeSpan.FromMilliseconds(300));
-        data.IncludedCommitCharacter = data.CommitCharacter is not null && resolved?.IncludesCommitCharacter == true;
+        _lateResolve = null;
+        _ = data.Resolve(); // prefetched when the item was selected; started now at the latest
+        var resolved = data.Resolved;
         if ((resolved ?? data.Item) is { InsertTextFormat: InsertTextFormat.Snippet } snippet)
         {
             // A snippet (ours, or a server's): its text goes through the snippet engine, with tab stops (M12b).
@@ -1444,22 +1702,116 @@ public sealed partial class CodeEditorController : IDisposable
             }
 
             document.Replace(replaceStart, replaceLength, text);
-            var caretAfter = replaceStart + text.Length;
-
-            // Additional edits refer to the text when completion was requested; they sit before the completed span
-            // (usings at the top), so applying them last-first from the end keeps their positions valid.
-            foreach (var edit in (resolved?.AdditionalTextEdits ?? []).OrderByDescending(e => e.Range.Start.Line).ThenByDescending(e => e.Range.Start.Character))
+            var caretAfter = replaceStart + text.Length + ApplyAdditionalEdits(resolved, segment.Offset);
+            Editor.CaretOffset = Math.Clamp(caretAfter, 0, document.TextLength);
+            if (resolved is null && data.Item.Data is not null)
             {
-                var start = Model.OffsetAt(edit.Range.Start);
-                var end = Model.OffsetAt(edit.Range.End);
-                if (end <= segment.Offset)
-                {
-                    document.Replace(start, end - start, edit.NewText);
-                    caretAfter += edit.NewText.Length - (end - start);
-                }
+                _lateResolve = new LateResolve(data, replaceStart, text.Length, segment.Offset, byCharacter: data.CommitCharacter is not null);
+            }
+        }
+
+        if (_lateResolve is { } late)
+        {
+            if (!late.ByCharacter)
+            {
+                late.Version = Model.Version; // committed by Enter or Tab: done
             }
 
-            Editor.CaretOffset = Math.Clamp(caretAfter, 0, document.TextLength);
+            _ = ApplyLateResolveAsync(late);
+        }
+    }
+
+    /// <summary>
+    /// Applies a resolved item's additional edits (usings): they refer to the text when completion was requested and sit
+    /// before the typed text, so applying them last-first keeps their positions valid. Returns how far they moved it.
+    /// </summary>
+    private int ApplyAdditionalEdits(LanguageServices.Protocol.CompletionItem? resolved, int typedFrom)
+    {
+        var moved = 0;
+        foreach (var edit in (resolved?.AdditionalTextEdits ?? []).OrderByDescending(e => e.Range.Start.Line).ThenByDescending(e => e.Range.Start.Character))
+        {
+            var start = Model.OffsetAt(edit.Range.Start);
+            var end = Model.OffsetAt(edit.Range.End);
+            if (end <= typedFrom)
+            {
+                Model.Text.Replace(start, end - start, edit.NewText);
+                moved += edit.NewText.Length - (end - start);
+            }
+        }
+
+        return moved;
+    }
+
+    /// <summary>Waits for the resolve of an item committed without it, then applies it if it still may.</summary>
+    private async Task ApplyLateResolveAsync(LateResolve late)
+    {
+        try
+        {
+            late.Resolved = await late.Data.Resolve().ConfigureAwait(true);
+        }
+        catch (Exception ex) when (IsTransient(ex))
+        {
+            return;
+        }
+
+        TryApplyLateResolve(late);
+    }
+
+    /// <summary>
+    /// Applies the resolve of an item committed without it, once both it has arrived and the commit is done (a commit
+    /// character typed), if the document is still as the commit left it: its edit in place of the item's text, and its
+    /// additional edits, in the commit's undo step. Typed on meanwhile, they're dropped.
+    /// </summary>
+    private void TryApplyLateResolve(LateResolve late)
+    {
+        if (late.Resolved is not { } resolved || late.Version is null || _disposed || _lateResolve != late)
+        {
+            return;
+        }
+
+        _lateResolve = null;
+        if (late.Version != Model.Version || resolved.InsertTextFormat == InsertTextFormat.Snippet)
+        {
+            return;
+        }
+
+        // The text as Commit picks it, with the resolved edit. Its range refers to the text at the request, which is unchanged
+        // before the commit's start: it may start before the typed word (an override completion replaces "override ToS"
+        // with the whole declaration), as Commit's own edit may.
+        var document = Model.Text;
+        var textEdit = resolved.TextEdit ?? late.Data.Item.TextEdit;
+        var text = textEdit?.NewText ?? late.Data.Item.InsertText ?? late.Data.Item.Label;
+        var start = late.Start;
+        if (resolved.TextEdit is { } edit && Model.OffsetAt(edit.Range.Start) is var editStart && editStart <= late.TypedFrom)
+        {
+            start = Math.Min(start, editStart);
+        }
+
+        var end = late.Start + late.Length;
+
+        // An on-type format of the commit character asked for meanwhile is for the text before these edits: asked again.
+        var reformat = _formatOnType is { } pending && pending.Version == late.Version ? pending.Character : null;
+        document.UndoStack.StartContinuedUndoGroup();
+        try
+        {
+            using (document.RunUpdate())
+            {
+                if (start != late.Start || document.GetText(start, end - start) != text)
+                {
+                    document.Replace(start, end - start, text);
+                }
+
+                ApplyAdditionalEdits(resolved, Math.Min(start, late.TypedFrom));
+            }
+        }
+        finally
+        {
+            document.UndoStack.EndUndoGroup();
+        }
+
+        if (reformat is not null)
+        {
+            _ = FormatOnTypeAsync(reformat);
         }
     }
 
@@ -1565,6 +1917,11 @@ public sealed partial class CodeEditorController : IDisposable
             else if (_multiCaret.ExtraCarets.Count > 0)
             {
                 _multiCaret.Clear();
+                e.Handled = true;
+            }
+            else if (_search.IsOpen)
+            {
+                _search.Close(); // as AvaloniaEdit's search panel closed on Escape in the text
                 e.Handled = true;
             }
         }
@@ -1812,7 +2169,7 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnGitIndexChanged(object? sender, EventArgs e) => Ui.Post(() =>
     {
-        _indexLoaded = false;
+        _indexMayHaveChanged = true;
         if (!_disposed)
         {
             _gitTimer.Stop();
@@ -1826,18 +2183,52 @@ public sealed partial class CodeEditorController : IDisposable
         _gitTimer.Start();
     }
 
+    /// <summary>
+    /// The change markers follow while the editor shows; a hidden one's wait until it's shown, and are worked out once
+    /// then. Every editor, every tab behind another too, read its file's index version (a git process each) after every
+    /// status refresh (M56).
+    /// </summary>
     private void OnGitTimer(object? sender, EventArgs e)
     {
         _gitTimer.Stop();
+        if (!IsShown)
+        {
+            _gitMarkersWhenShown = true;
+            return;
+        }
+
         _ = UpdateGitMarkersAsync();
     }
 
-    /// <summary>Compares the editor's text with the file's index version and updates the change markers.</summary>
+    /// <summary>Whether the editor shows: its view is visible in a window (not a tab behind another, nor a closed window).</summary>
+    private bool IsShown => Editor.TextArea.TextView is { IsEffectivelyVisible: true } view && TopLevel.GetTopLevel(view) is not null;
+
+    /// <summary>How many times the change markers were worked out, and the file's index version read (tests).</summary>
+    internal (int Updates, int IndexReads) GitMarkerWork { get; private set; }
+
+    /// <summary>
+    /// What the file's index version is known by in its repository's status: the object id the status lists for it, HEAD's
+    /// commit when the status doesn't list it (the index has HEAD's version), or null when the status can't tell (a
+    /// conflict, or no status).
+    /// </summary>
+    internal static string? IndexKey(string path, GitStatus? status, GitFileStatus? file) => status is null ? null : file switch
+    {
+        null => $"{path}\nHEAD {status.Head}",
+        { IsUntracked: true } => $"{path}\nuntracked",
+        { IndexObject: { } blob } => $"{path}\n{blob}",
+        _ => null,
+    };
+
+    /// <summary>
+    /// Compares the editor's text with the file's index version and updates the change markers. The index version is read
+    /// again only when the status says it's another (or can't tell, after the index changed): a save, a refresh after a
+    /// command or a build's churn left it as it was, and each status refresh read it again in every editor.
+    /// </summary>
     public async Task UpdateGitMarkersAsync()
     {
         var git = _services.Git;
 
-        // The file's own repository: a solution can span several (M13b); only the open one has a status.
+        // The file's own repository: a solution can span several (M13b); only the open ones have a status.
         if (_disposed || Model.IsReadOnly || git.RepositoryFor(Model.Path) is not { } root)
         {
             _gitMargin.Changes = [];
@@ -1847,14 +2238,28 @@ public sealed partial class CodeEditorController : IDisposable
         var cancellationToken = Restart(ref _gitCts).Token;
         try
         {
-            if (!_indexLoaded)
+            var comparer = Workbench.Projects.SolutionService.PathComparer;
+            var service = git.ServiceFor(Model.Path);
+            var repository = service.Root is { } open && comparer.Equals(open, root) ? service.Status : null;
+            var status = repository?.Files.FirstOrDefault(f => comparer.Equals(f.Path, Model.Path));
+            var key = IndexKey(Model.Path, repository, status);
+            var work = GitMarkerWork;
+            if (!_indexLoaded || (key is null ? _indexMayHaveChanged : key != _indexKey))
             {
+                _indexLoaded = false;
+                _indexMayHaveChanged = false;
+                GitMarkerWork = (work.Updates + 1, work.IndexReads + 1);
                 _indexText = await git.ShowInRepositoryAsync(Model.Path, ":", cancellationToken).ConfigureAwait(true);
                 _indexLoaded = true;
+                _indexKey = key;
+            }
+            else
+            {
+                _indexMayHaveChanged = false;
+                GitMarkerWork = (work.Updates + 1, work.IndexReads);
             }
 
-            var status = root == git.Root ? git.Status?.Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, Model.Path)) : null;
-            var current = Model.Text.Text;
+            var current = Model.Text.CreateSnapshot(); // made a string off the UI thread, with the diff
             var baseline = _indexText ?? (status is { IsUntracked: true } ? string.Empty : null);
             if (baseline is null)
             {
@@ -1862,7 +2267,7 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current)), cancellationToken).ConfigureAwait(true);
+            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current.Text)), cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 _gitMargin.Changes = changes;
@@ -2297,6 +2702,8 @@ public sealed partial class CodeEditorController : IDisposable
         _disposed = true;
         CloseIntelliSense();
         _hoverPopup.Closed -= OnHoverClosed;
+        Editor.TextArea.TextView.AttachedToVisualTree -= OnViewAttached;
+        Editor.TextArea.TextView.DetachedFromVisualTree -= OnViewDetached;
         _textMate?.Dispose();
         _insights.Dispose();
         _inline.Dispose();
@@ -2334,12 +2741,14 @@ public sealed partial class CodeEditorController : IDisposable
         Model.PropertyChanged -= OnModelPropertyChanged;
         Model.Text.Changing -= OnDocumentChanging;
         FoldingManager.Uninstall(_folding);
-        _search.Uninstall();
+        _search.Detach();
         _multiCaret.Dispose();
         var view = Editor.TextArea.TextView;
         view.LineTransformers.Remove(_colorizer);
         view.LineTransformers.Remove(_markers);
         view.LineTransformers.Remove(_link);
+        view.LineTransformers.Remove(_longLines);
+        _longLines.Detach();
         _link.Dispose();
         view.BackgroundRenderers.Remove(_highlights);
         view.BackgroundRenderers.Remove(_markers);

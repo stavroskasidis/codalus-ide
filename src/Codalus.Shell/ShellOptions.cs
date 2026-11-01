@@ -121,7 +121,10 @@ public sealed record ShellOptions
     /// <summary><c>--install-plugin</c> (repeatable): plugin ids (with an optional <c>@version</c>) or <c>.nupkg</c> files to install.</summary>
     public IReadOnlyList<string> InstallPlugins { get; init; } = [];
 
-    /// <summary>Benchmarks: a self-driven scenario on <see cref="OpenFile"/> (<c>--bench typing|scroll</c>).</summary>
+    /// <summary>
+    /// Benchmarks: a self-driven scenario (<c>--bench typing|scroll|completion</c> on <see cref="OpenFile"/>, and
+    /// <c>test-filter|packages|terminal|everyday</c>; see <see cref="Infrastructure.BenchDriver"/>).
+    /// </summary>
     public string? Bench { get; init; }
 
     /// <summary>Writes a screenshot of the window once it is interactive (<c>--screenshot file.png</c>).</summary>

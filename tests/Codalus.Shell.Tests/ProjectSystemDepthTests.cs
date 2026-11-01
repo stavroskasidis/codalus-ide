@@ -142,13 +142,37 @@ public sealed class ProjectSystemDepthTests
         var ignored = Path.Combine(appDir, "Excluded", "Ignored.cs");
         f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
 
+        // A folder that isn't in the project shows at once, dimmed, and what is in it once it's expanded (M56).
         explorer.ShowAllFiles = true;
-        await ShellFixture.PumpUntil(() => explorer.Root is { } root && Find(root, "f:" + ignored) is { IsExcluded: true }, seconds: 60);
+        var excluded = Path.GetDirectoryName(ignored)!;
+        await ShellFixture.PumpUntil(() => explorer.Root is { } root && Find(root, "d:" + excluded) is { IsExcluded: true }, seconds: 60);
+        Assert.Empty(Find(explorer.Root!, "d:" + excluded)!.Children);
+        explorer.Reveal("d:" + excluded);
+        var excludedRow = explorer.Selected!;
+        Assert.True(excludedRow.IsDimmed && excludedRow.HasChildren);
+        explorer.SetExpanded(excludedRow, true);
+        Assert.Equal("d:" + excluded + "|listing", explorer.Rows[explorer.Rows.IndexOf(excludedRow) + 1].Id); // "Loading…"
+        await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + ignored) is { IsExcluded: true }, seconds: 60);
+
+        // An expanded one is listed again when it changes.
+        var later = Path.Combine(excluded, "Later.cs");
+        await File.WriteAllTextAsync(later, "class Later;\n", TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + later) is { IsExcluded: true }, seconds: 60);
         explorer.Reveal("f:" + ignored);
         Assert.True(explorer.Selected!.IsExcluded);
         Assert.True(explorer.Selected.IsDimmed);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("explorerItemExcluded"));
         NavigationDepthTests.Screenshot(f, "m26a-show-all-files");
+
+        // Collapsed and listed again, the folder's files aren't: Sync with Active Document lists the folders down to the
+        // file and reveals it.
+        explorer.CollapseAll();
+        explorer.RefreshDisk(app);
+        await ShellFixture.PumpUntil(() => Find(explorer.Root!, "f:" + ignored) is null, seconds: 60);
+        await f.Shell.OpenFileAsync(ignored);
+        explorer.SyncWithActiveDocument();
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Node.Path == ignored, seconds: 60);
+        f.Shell.Workbench.Context.Set("focusedView", SolutionExplorerViewModel.ToolWindowId);
 
         await f.RunAsync("explorer.includeInProject");
         await ShellFixture.PumpUntil(() => Read(app).Contains("<Compile Include=\"Excluded\\Ignored.cs\" />", StringComparison.Ordinal), seconds: 60);
@@ -306,7 +330,8 @@ public sealed class ProjectSystemDepthTests
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("folderMode"));
         Assert.Equal(folder, f.Shell.Recent.Items[0]);
         var tool = Path.Combine(folder, "src", "Tool", "Tool.csproj");
-        explorer.Reveal("f:" + tool);
+        explorer.Reveal("f:" + tool); // once src and src/Tool are listed: the folder view lists a folder once it's expanded (M57)
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Id == "f:" + tool, seconds: 60);
         Assert.Equal("(not loaded)", explorer.Selected!.Detail);
         NavigationDepthTests.Screenshot(f, "m26a-folder-view");
 

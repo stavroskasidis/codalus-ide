@@ -144,15 +144,16 @@ public sealed class DataTipCollectionTests
         Companion(s.F);
         var tip = await s.HoverAsync(s.OffsetOf(5, "forecasts", 1));
         tip.SetOpen(null, tip.Header, tip.Root, true);
-        await ShellFixture.PumpUntil(() => tip.Panels is [{ Rows.Count: 71 }]);
+        await ShellFixture.PumpUntil(() => tip.Panels is [{ Nodes.Count: 71 }] && tip.Panels[0].Rows.Count > 0);
         var panel = tip.Panels[0];
-        var rows = panel.Rows;
+        var nodes = panel.Nodes;
 
-        // The first 60 got their display as they loaded; the rest show their type, muted, until they show.
-        Assert.Equal("Day = 0", rows[0].Node.Value);
-        Assert.Equal("{App.Forecast}", rows[65].Node.Value);
-        Assert.True(rows[65].Node.IsDisplayPending);
-        Assert.Contains("muted", rows[65].ValueBlock.Classes);
+        // The first 60 got their display as they loaded; the rest show their type, muted, until they show (their rows
+        // are built as they scroll into view, M56).
+        Assert.Equal("Day = 0", nodes[0].Value);
+        Assert.Equal("{App.Forecast}", nodes[65].Value);
+        Assert.True(nodes[65].IsDisplayPending);
+        Assert.Null(panel.RowOf(nodes[65]));
         Assert.Equal((DataTipMetrics.MaxRows * DataTipMetrics.Row) + 2 + 4, panel.Bounds.Height, 1);
 
         // Scrolled to the end: the rows in view get theirs.
@@ -164,8 +165,9 @@ public sealed class DataTipCollectionTests
             ShellFixture.Pump();
         }
 
-        await ShellFixture.PumpUntil(() => rows[65].Node.Value == "Day = 65", describe: () => $"row 65: {rows[65].Node.Value}, scrolled to {panel.ScrollOffset}");
-        Assert.False(rows[65].Node.IsDisplayPending);
-        Assert.DoesNotContain("muted", rows[65].ValueBlock.Classes);
+        await ShellFixture.PumpUntil(() => nodes[65].Value == "Day = 65" && panel.RowOf(nodes[65]) is not null, describe: () => $"row 65: {nodes[65].Value}, scrolled to {panel.ScrollOffset}");
+        Assert.False(nodes[65].IsDisplayPending);
+        Assert.DoesNotContain("muted", panel.RowOf(nodes[65])!.ValueBlock.Classes);
+        Assert.Equal("Day = 65", panel.RowOf(nodes[65])!.ValueBlock.Text);
     }
 }

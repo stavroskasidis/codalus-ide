@@ -808,7 +808,7 @@ public sealed class SetupViewModel : ObservableObject
                 VisitedTools = true;
                 ShowIntegrations();
                 FillTools();
-                if (Tools.Count == 0)
+                if (Tools.Count == 0 || !_shell.ToolsComplete)
                 {
                     _ = CheckToolsAsync();
                 }

@@ -70,11 +70,13 @@ public sealed class TabStripEdge : Control
 
     /// <summary>
     /// The span the line leaves open under the selected tab, in this control's coordinates (its left and right ends), or
-    /// null when there is no selected tab or the edge isn't drawn.
+    /// null when there is no selected tab, the edge isn't drawn, or the tab isn't on the row above it (a pinned tab on
+    /// the pinned row, <see cref="DocumentTabPanel.PinnedRow"/>).
     /// </summary>
     public (double Left, double Right)? Gap()
     {
-        if (Bounds.Height <= 0 || SelectedTab is not { } tab || tab.TranslatePoint(default, this) is not { } at)
+        if (Bounds.Height <= 0 || SelectedTab is not { } tab || tab.TranslatePoint(default, this) is not { } at
+            || at.Y + tab.Bounds.Height < -tab.Bounds.Height / 2)
         {
             return null;
         }

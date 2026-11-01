@@ -214,6 +214,39 @@ public static partial class LanguageFeatures
         return foldings;
     }
 
+    /// <summary>The most foldings an editor shows (VS Code's <c>editor.foldingMaximumRegions</c> default).</summary>
+    public const int MaxFoldings = 5_000;
+
+    /// <summary>
+    /// At most <see cref="MaxFoldings"/> of a document's foldings (sorted by start), the outermost first, then the earliest,
+    /// as VS Code keeps them, and every one the user has collapsed (<paramref name="folded"/>, by start and end offset).
+    /// A large XML file had hundreds of thousands, each a section AvaloniaEdit adds on the UI thread (M56).
+    /// </summary>
+    public static List<NewFolding> CapFoldings(List<NewFolding> foldings, IReadOnlySet<(int Start, int End)> folded)
+    {
+        if (foldings.Count <= MaxFoldings)
+        {
+            return foldings;
+        }
+
+        // Each folding's depth: how many of the foldings before it still contain it.
+        var depths = new int[foldings.Count];
+        var open = new Stack<int>();
+        for (var i = 0; i < foldings.Count; i++)
+        {
+            while (open.Count > 0 && open.Peek() <= foldings[i].StartOffset)
+            {
+                open.Pop();
+            }
+
+            depths[i] = open.Count;
+            open.Push(foldings[i].EndOffset);
+        }
+
+        var kept = Enumerable.Range(0, foldings.Count).OrderBy(i => depths[i]).ThenBy(i => i).Take(MaxFoldings).ToHashSet();
+        return [.. foldings.Where((f, i) => kept.Contains(i) || folded.Contains((f.StartOffset, f.EndOffset)))];
+    }
+
     private static int NextIndent(int[] indents, int line)
     {
         for (var i = line + 1; i < indents.Length; i++)

@@ -49,6 +49,10 @@ public sealed class WebsiteTests : IDisposable
         Assert.Contains("assets/fonts/schibsted-grotesk.woff2", files);
         Assert.Contains("assets/fonts/OFL-schibsted-grotesk.txt", files);
         Assert.True(File.Exists(Path.Combine(outDir, ".nojekyll")));
+
+        // The Arch Linux install script, as `curl … | bash` downloads it: the same bytes (line endings too).
+        Assert.Contains("install-arch.sh", files);
+        Assert.Equal(File.ReadAllBytes(Path.Combine(s_repoRoot, "website", "wwwroot", "install-arch.sh")), File.ReadAllBytes(Path.Combine(outDir, "install-arch.sh")));
         Assert.Contains("<base href=\"/codalus/\"", File.ReadAllText(Path.Combine(outDir, "docs", "git", "index.html")), StringComparison.Ordinal);
     }
 
@@ -98,12 +102,48 @@ public sealed class WebsiteTests : IDisposable
         // site.js points the buttons at the visitor's file; without script they lead to the Download page.
         Assert.Contains("data-windows=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-win-x64-setup.exe\"", html, StringComparison.Ordinal);
         Assert.Contains("data-macos=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-osx-arm64.pkg\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-linux=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-linux-x64.AppImage\"", html, StringComparison.Ordinal);
-        Assert.Contains("data-linux-arm64=\"https://github.com/stavroskasidis/codalus-ide/releases/download/v0.2.0/codalus-0.2.0-linux-arm64.AppImage\"", html, StringComparison.Ordinal);
         Assert.Contains("href=\"download/\" data-download-os", html, StringComparison.Ordinal);
+
+        // Linux has no one file: the button leads to the Download page's Linux tab, which asks for the distribution.
+        Assert.DoesNotContain("data-linux", html, StringComparison.Ordinal);
 
         var none = await Get(Options(), "");
         Assert.DoesNotContain("data-windows=", none, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_linux_downloads_recommend_each_distributions_package_and_the_appimage_for_the_others()
+    {
+        var html = await Get(Options(stable: "v0.2.0"), "download/");
+        var linux = html[html.IndexOf("id=\"linux-panel\"", StringComparison.Ordinal)..];
+
+        // A tab per distribution, and its panel; the repositories keep their anchors (the user guide links #zypper).
+        var tabs = Regex.Matches(linux, "role=\"tab\" id=\"tab-(?<key>[a-z]+)\" aria-controls=\"\\k<key>-panel\"").Select(m => m.Groups["key"].Value).ToList();
+        Assert.Equal(["debian", "fedora", "opensuse", "arch", "other"], tabs);
+        foreach (var (key, anchor) in new[] { ("debian", "apt"), ("fedora", "dnf"), ("opensuse", "zypper"), ("arch", "aur"), ("other", "appimage") })
+        {
+            Assert.Matches($"id=\"{key}-panel\"[^>]*>\\s*<div class=\"distro-repo\">\\s*<h2 id=\"{anchor}\">", linux);
+        }
+
+        // Each package says what it adds; the AppImage is recommended only among the files for the other distributions.
+        Assert.Equal(4, Regex.Count(linux, "Adds Codalus IDE to the applications menu"));
+        var otherAt = linux.IndexOf("id=\"other-panel\"", StringComparison.Ordinal);
+        Assert.DoesNotContain("AppImage", linux[..otherAt], StringComparison.Ordinal);
+        var other = WebUtility.HtmlDecode(linux[otherAt..]); // commands are encoded ("chmod &#x2B;x")
+        Assert.Contains("releases/download/v0.2.0/codalus-0.2.0-linux-arm64.AppImage", other, StringComparison.Ordinal);
+
+        // Arch Linux: the install command (the one the IDE gives to update), the script it runs, and the PKGBUILD by hand.
+        var arch = WebUtility.HtmlDecode(linux[linux.IndexOf("id=\"arch-panel\"", StringComparison.Ordinal)..otherAt]);
+        Assert.Contains("curl -fsSL https://codalus.dev/install-arch.sh | bash", arch, StringComparison.Ordinal);
+        Assert.Contains("href=\"install-arch.sh\"", arch, StringComparison.Ordinal);
+        Assert.Contains("releases/download/v0.2.0/aur-codalus-bin-0.2.0.zip", arch, StringComparison.Ordinal);
+        Assert.DoesNotContain("aur.archlinux.org", arch, StringComparison.Ordinal);
+
+        // How to run it: a file manager's switch, the terminal's commands, and what to do without FUSE.
+        Assert.Contains("Executable as Program", other, StringComparison.Ordinal);
+        Assert.Contains("chmod +x codalus-0.2.0-linux-x64.AppImage", other, StringComparison.Ordinal);
+        Assert.Contains("./codalus-0.2.0-linux-x64.AppImage", other, StringComparison.Ordinal);
+        Assert.Contains("--appimage-extract-and-run", other, StringComparison.Ordinal);
     }
 
     [Fact]

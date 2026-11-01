@@ -40,7 +40,28 @@ public sealed record GitLfsStatus(bool IsUsed, bool IsInstalled, IReadOnlyList<G
 {
     public static readonly GitLfsStatus None = new(false, false, [], [], null);
 
-    public GitLfsLock? LockOf(string path) => Locks.FirstOrDefault(l => Workbench.Projects.SolutionService.PathComparer.Equals(l.Path, path));
+    // Each list's index by path, built on its first lookup: Git Changes looks up every changed file, and a scan of the LFS
+    // files for each was 200 million comparisons for 10,000 changes in a repository of 20,000 assets. Kept by the list,
+    // not in the record, which `with` copies (a status with the last locks keeps its own files' index).
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<GitLfsFile>, Dictionary<string, GitLfsFile>> s_files = new();
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<GitLfsLock>, Dictionary<string, GitLfsLock>> s_locks = new();
 
-    public GitLfsFile? FileOf(string path) => Files.FirstOrDefault(f => Workbench.Projects.SolutionService.PathComparer.Equals(f.Path, path));
+    public GitLfsLock? LockOf(string path) => Locks.Count == 0 ? null : s_locks.GetValue(Locks, locks => Index(locks, l => l.Path)).GetValueOrDefault(path);
+
+    public GitLfsFile? FileOf(string path) => Files.Count == 0 ? null : s_files.GetValue(Files, files => Index(files, f => f.Path)).GetValueOrDefault(path);
+
+    /// <summary>The same Git LFS state: the same files and locks, each the same (the lists compare by reference in a record).</summary>
+    public bool IsSameAs(GitLfsStatus other) =>
+        this with { Files = other.Files, Locks = other.Locks } == other && Files.SequenceEqual(other.Files) && Locks.SequenceEqual(other.Locks);
+
+    private static Dictionary<string, T> Index<T>(IEnumerable<T> items, Func<T, string> path)
+    {
+        var index = new Dictionary<string, T>(Workbench.Projects.SolutionService.PathComparer);
+        foreach (var item in items)
+        {
+            index.TryAdd(path(item), item); // the first, as a scan finds
+        }
+
+        return index;
+    }
 }

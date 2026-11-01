@@ -71,6 +71,14 @@ public static class LoginShellPath
                 return null;
             }
 
+            // A background job the profile started can hold the output open after the shell exited: its end would never
+            // come, and the IDE's start waited for it (M56: the environment's gate does). What it printed then can't be
+            // told complete, as for a shell that took too long.
+            if (Task.WaitAny([output], TimeSpan.FromSeconds(1)) < 0)
+            {
+                return null;
+            }
+
             var text = output.GetAwaiter().GetResult();
             var first = text.IndexOf(Marker, StringComparison.Ordinal);
             var last = text.LastIndexOf(Marker, StringComparison.Ordinal);

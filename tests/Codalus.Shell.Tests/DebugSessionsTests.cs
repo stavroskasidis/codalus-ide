@@ -183,6 +183,7 @@ public sealed class DebugSessionsTests
         Assert.True(f.Shell.Debugger.State == DebugState.Stopped, string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)) + "\n" + f.Shell.DebugLog.GetText());
         Assert.Equal(generator, f.Shell.Debugger.SelectedFrame?.Source?.Path, ignoreCase: OperatingSystem.IsWindows());
         Assert.Contains("csc.dll", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+        f.Shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false); // shown, as it reads nothing at a stop while hidden (M56)
         await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)));
         await f.RunAsync("debug.stop");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);

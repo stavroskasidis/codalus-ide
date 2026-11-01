@@ -342,7 +342,7 @@ internal sealed partial class SmokeTest
             foreach (var theme in s_galleryThemes)
             {
                 await shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
-                await WaitAsync(() => shell.Theme.ActiveTheme == theme, $"the {theme} theme applies").ConfigureAwait(true);
+                await WaitAsync(() => shell.Theme.ActiveTheme == theme, () => ThemeWait(theme)).ConfigureAwait(true);
                 if (settle)
                 {
                     await SettleAsync().ConfigureAwait(true);
@@ -429,8 +429,22 @@ internal sealed partial class SmokeTest
         }
         catch (Exception ex)
         {
+            // In the smoke test's output too: a picture missing from a run's gallery said nothing there (WSL, 2026-10-30).
             shell.Workbench.Log.AppendLine($"[smoke] Gallery picture {name} failed: {ex.Message}");
+            Console.Out.WriteLine($"  (gallery picture {name} failed: {ex.GetType().Name}: {ex.Message})");
         }
+    }
+
+    /// <summary>
+    /// A theme wait's words, with what the theme service and the settings had when it timed out: the light theme never
+    /// applied in the control set's loop on WSL (2026-10-30), and nothing said why.
+    /// </summary>
+    private string ThemeWait(string theme)
+    {
+        var settings = shell.Workbench.Settings;
+        return $"the {theme} theme applies (the setting {shell.Theme.Setting}, its value {settings.GetString(ThemeService.SettingKey, "(default)")}, "
+            + $"the active theme {shell.Theme.ActiveTheme}, the preview {shell.Theme.PreviewTheme ?? "none"}, the settings' diagnostics: "
+            + (settings.Diagnostics.Count == 0 ? "none" : string.Join("; ", settings.Diagnostics)) + ")";
     }
 
     /// <summary>index.md: one row per surface and state, a picture per theme.</summary>

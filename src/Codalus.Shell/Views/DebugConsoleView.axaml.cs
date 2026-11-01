@@ -19,8 +19,8 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
     public DebugConsoleView()
     {
         InitializeComponent();
-        _presenter = new OutputPresenter(Editor);
         _tail = Controls.FollowTail.Attach(Editor);
+        _presenter = new OutputPresenter(Editor, _tail);
         Input.KeyDown += (_, e) =>
         {
             if (DataContext is not DebugConsoleViewModel vm)
@@ -62,7 +62,7 @@ public sealed partial class DebugConsoleView : UserControl, IPaneView
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        Show(null);
+        _presenter.Pause(); // shown again unchanged, the console isn't read again (M56)
     }
 
     private void Show(OutputChannel? channel)

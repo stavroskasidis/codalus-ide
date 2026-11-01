@@ -223,24 +223,39 @@ public sealed record Scope(string Name, int VariablesReference, bool Expensive =
 
 public sealed record ScopesResponse(Scope[] Scopes);
 
-public sealed record VariablesArguments(int VariablesReference);
+/// <summary>
+/// <see cref="Filter"/> (<c>indexed</c> or <c>named</c>), <see cref="Start"/> and <see cref="Count"/> ask for a page of
+/// the children: a long array's range (M56). netcoredbg reads start and count, and no filter of an array's.
+/// </summary>
+public sealed record VariablesArguments(int VariablesReference, string? Filter = null, int? Start = null, int? Count = null);
 
-public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null);
+/// <summary>
+/// Which of a reference's children a <c>variables</c> request reads (M56): <see cref="Count"/> of them from
+/// <see cref="Start"/>, of <see cref="Filter"/>'s kind (<c>indexed</c>, or null for netcoredbg, which pages an array's
+/// elements without one). An adapter that doesn't page sends them all.
+/// </summary>
+public sealed record VariablesPage(int Start, int Count, string? Filter = null);
+
+/// <summary>
+/// <see cref="NamedVariables"/> and <see cref="IndexedVariables"/> count the children (M56): netcoredbg counts an
+/// array's elements as named ones, and reports no indexed ones.
+/// </summary>
+public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null, int? NamedVariables = null, int? IndexedVariables = null);
 
 public sealed record VariablesResponse(Variable[] Variables);
 
 /// <summary><see cref="Context"/> is <c>watch</c>, <c>repl</c>, <c>hover</c> or <c>clipboard</c>.</summary>
 public sealed record EvaluateArguments(string Expression, int? FrameId = null, string? Context = null);
 
-public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0);
+public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0, int? NamedVariables = null, int? IndexedVariables = null);
 
 public sealed record SetVariableArguments(int VariablesReference, string Name, string Value);
 
-public sealed record SetVariableResponse(string Value, string? Type = null, int? VariablesReference = null);
+public sealed record SetVariableResponse(string Value, string? Type = null, int? VariablesReference = null, int? NamedVariables = null, int? IndexedVariables = null);
 
 public sealed record SetExpressionArguments(string Expression, string Value, int? FrameId = null);
 
-public sealed record SetExpressionResponse(string Value, string? Type = null, int? VariablesReference = null);
+public sealed record SetExpressionResponse(string Value, string? Type = null, int? VariablesReference = null, int? NamedVariables = null, int? IndexedVariables = null);
 
 public sealed record ExceptionDetails(
     string? Message = null,

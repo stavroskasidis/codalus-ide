@@ -13,8 +13,8 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The Solution Explorer: Enter or double-click opens, Left/Right collapse and expand (or move to the parent),
-/// the context menu comes from the <c>solutionExplorer/context</c> menu location, and files and folders can be
+/// The Solution Explorer: Enter or double-click opens, Left/Right collapse and expand (or move to the parent), as a
+/// screen reader's Expand and Collapse on a row do (a tree item's, M57), the context menu comes from the <c>solutionExplorer/context</c> menu location, and files and folders can be
 /// dragged onto folders and projects (Ctrl copies).
 /// </summary>
 public sealed partial class SolutionExplorerView : UserControl, IPaneView
@@ -34,21 +34,46 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private PointerPressedEventArgs? _dragStart;
     private Point _dragOrigin;
     private ListBoxItem? _dropTarget;
+    private ExplorerRowViewModel? _revealWhenShown;
+    private bool _shown;
+    private SolutionExplorerViewModel? _reported; // the view model told whether the explorer is shown
 
     public SolutionExplorerView()
     {
         InitializeComponent();
         DataContextChanged += (_, _) =>
         {
-            if (ViewModel is { } vm)
+            // A closed tool window clears its view's data context before the view leaves the tree: the view model it
+            // reported to hears that the explorer is hidden now.
+            if (_reported is { } old && !ReferenceEquals(old, ViewModel))
             {
-                vm.SearchRequested -= OnSearchRequested;
+                old.SearchRequested -= OnSearchRequested;
+                old.RevealRequested -= OnRevealRequested;
+                if (_shown)
+                {
+                    old.SetViewShown(this, false);
+                }
+
+                _reported = null;
+                _shown = false;
+            }
+
+            if (ViewModel is { } vm && !ReferenceEquals(vm, _reported))
+            {
                 vm.SearchRequested += OnSearchRequested;
-                vm.RevealRequested -= OnRevealRequested;
                 vm.RevealRequested += OnRevealRequested;
+                _reported = vm;
+                _shown = false;
+                UpdateShown();
             }
         };
+        // Shown or hidden: a closed or auto-hidden tool window keeps its view attached, invisible, and its next layout
+        // pass tells (no viewport change is raised for an ancestor's visibility).
+        AttachedToVisualTree += (_, _) => UpdateShown();
+        DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
+        List.LayoutUpdated += (_, _) => UpdateShown();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        List.ExpandRow = (row, expanded) => ViewModel?.SetExpanded((ExplorerRowViewModel)row, expanded);
         List.DoubleTapped += (_, e) =>
         {
             if (RowAt(e.Source) is { } row && !IsChevron(e.Source))
@@ -83,18 +108,40 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     private SolutionExplorerViewModel? ViewModel => DataContext as SolutionExplorerViewModel;
 
     /// <summary>
-    /// A revealed row comes into view at once (M50): the list scrolls only when its selection changes, so a row that was
-    /// already selected but scrolled away stayed hidden.
+    /// A revealed row comes into view at once (M50), with one scroll: the list doesn't follow its selection on its own
+    /// (M56). A reveal while the explorer is hidden waits for it to be shown.
     /// </summary>
     private void OnRevealRequested(object? sender, ExplorerRowViewModel row)
     {
-        if (!List.IsEffectivelyVisible)
+        if (!this.IsAttachedToVisualTree() || !List.IsEffectivelyVisible)
+        {
+            _revealWhenShown = row;
+            return;
+        }
+
+        _revealWhenShown = null;
+        List.ScrollIntoView(row); // lays the row out itself when it isn't realized
+    }
+
+    /// <summary>
+    /// Tells the view model whether the explorer is shown (Track Active Item waits while it isn't), and brings a reveal
+    /// that came while it was hidden into view.
+    /// </summary>
+    private void UpdateShown(bool detaching = false)
+    {
+        var shown = !detaching && this.IsAttachedToVisualTree() && List.IsEffectivelyVisible;
+        if (shown == _shown)
         {
             return;
         }
 
-        List.UpdateLayout();
-        List.ScrollIntoView(row);
+        _shown = shown;
+        _reported?.SetViewShown(this, shown);
+        if (shown && _revealWhenShown is { } row && _reported?.Rows.Contains(row) == true)
+        {
+            _revealWhenShown = null;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => List.ScrollIntoView(row), Avalonia.Threading.DispatcherPriority.Loaded);
+        }
     }
 
     private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;

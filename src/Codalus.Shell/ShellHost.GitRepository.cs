@@ -70,7 +70,7 @@ public sealed partial class ShellHost
             var target = reference ?? (git.Status?.Branch is { } branch ? "refs/heads/" + branch : null);
             if (target is not null)
             {
-                document.ViewModel.Select(target, git);
+                await document.ViewModel.SelectAsync(target, git).ConfigureAwait(true);
             }
         }
 
@@ -86,6 +86,7 @@ public sealed partial class ShellHost
         var history = new GitHistoryViewModel(git, query, title, (action, commit) => InRepositoryAsync(git, () => CommitActionAsync(action, commit)), lines)
         {
             CanShowAllBranches = canShowAllBranches,
+            CompareCommits = (older, newer) => InRepositoryAsync(git, () => OpenCommitCompareAsync(older, newer)),
         };
         var settings = Workbench.Settings;
         history.InitializeToggles(
@@ -103,7 +104,10 @@ public sealed partial class ShellHost
         return history;
     }
 
-    /// <summary>After git changed a repository (its status): the open document reads the refs again, once things settle.</summary>
+    /// <summary>
+    /// After git changed a repository (its status): the open document reads the refs again, once things settle, and only
+    /// while it's shown; a document behind another tab reads them once it's shown again (M57).
+    /// </summary>
     private void ScheduleGitRepositoryReload()
     {
         if (Layout.FindDocument<GitRepositoryDocument>(GitRepositoryViewModel.DocumentId) is null)
@@ -119,13 +123,12 @@ public sealed partial class ShellHost
                 _gitRepositoryTimer.Stop();
                 if (Layout.FindDocument<GitRepositoryDocument>(GitRepositoryViewModel.DocumentId) is { } document)
                 {
-                    _ = document.ViewModel.LoadAsync(pullRequests: false);
+                    document.ViewModel.RequestReload();
                 }
             };
         }
 
-        _gitRepositoryTimer.Stop();
-        _gitRepositoryTimer.Start();
+        StartTimer(_gitRepositoryTimer);
     }
 
     /// <summary>

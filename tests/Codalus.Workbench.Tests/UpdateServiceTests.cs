@@ -138,6 +138,27 @@ public sealed class UpdateServiceTests
         Assert.Equal(kind, InstallInfo.KindOf(version, velopack, system));
     }
 
+    [Fact]
+    public void An_arch_package_is_the_one_pacman_lists_as_codalus_bin()
+    {
+        var database = Directory.CreateTempSubdirectory("codalus-pacman-").FullName;
+        try
+        {
+            Assert.False(InstallInfo.IsPacmanPackage(Path.Combine(database, "missing")));
+            Directory.CreateDirectory(Path.Combine(database, "codalus-0.10.0-1")); // another package's name
+            Assert.False(InstallInfo.IsPacmanPackage(database));
+
+            // pacman's local database: a folder per installed package, <name>-<version>-<release>.
+            Directory.CreateDirectory(Path.Combine(database, "codalus-bin-0.10.0-1"));
+            Assert.True(InstallInfo.IsPacmanPackage(database));
+            Assert.StartsWith("curl -fsSL https://codalus.dev/install-arch.sh", InstallInfo.ArchInstallCommand, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(database, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("0.2.0", "0.1.9", 1)]
     [InlineData("0.2.0", "0.2.0-nightly.20261011.1", 1)]

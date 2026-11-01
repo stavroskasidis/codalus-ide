@@ -186,7 +186,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 ## Accessibility
 
 - **Keyboard**: every function is reachable from it. `Alt+F6` and `Alt+Shift+F6` (`F6` and `Shift+F6` in the VS Code scheme) move between panes, and every command is in the command palette and the search box.
-- **Screen readers**: lists, trees and buttons have accessible names.
+- **Screen readers**: lists, trees and buttons have accessible names. The Solution Explorer, Git Changes, the Document Outline, the Git Repository tree, a commit's changed files, Compare, the Test Explorer and Coverage Results are trees to a screen reader: each row is a tree item that says whether it's expanded or collapsed, which a screen reader's own expand and collapse commands change, as `Right` and `Left` do. On macOS a folder's name also ends in "expanded" or "collapsed", for VoiceOver. On Linux (AT-SPI) a row also says its place among its siblings ("3 of 12"); on Windows and macOS the IDE doesn't pass a row's level or place yet.
 - **Color**: every theme family has a High contrast mode, and Classic has High Contrast; Follow System switches to it when the operating system's high contrast is on. Icons are monochrome there. A family's High contrast mode has black surfaces, white text with at least 7:1 contrast, and white borders around every tool window and field. Diffs mark lines with `+` and `−`, not only with color.
 
 ## Updates and network access
@@ -194,7 +194,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 **Updates** (Environment → Updates):
 - **Updates** (`update.mode`): installed builds (the Windows Setup.exe, the macOS .pkg, the AppImage, winget) download new releases in the background and apply them when the IDE restarts: a status bar item offers **Restart to update**, which reopens your solution (on macOS, an app that an older .pkg installed in `/Applications` asks once for an administrator's password, because that installer left it owned by the system). **notify** only says that a release is available; **off** stops all update traffic. Help → Check for Updates checks right away in every mode.
 - **Update Channel** (`update.channel`): stable releases or nightly builds. Empty follows the channel the build came from. Switching from nightly builds to stable releases installs the newest stable release, even when it is older, after you confirm.
-- **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
+- **Other installs**: the `.deb` and `.rpm` update with the system (`apt upgrade`, `dnf upgrade`); on Arch Linux, the install command run again updates `codalus-bin`, and the notice that a release is out gives it ([Getting started](getting-started.md#arch-linux)); the zip, `.app` zip and tar.gz say that a release is out and link to it. Development builds never check.
 - **A release that needs another .NET runtime**: each release's signed update feed says which .NET runtime its helper processes need. When that runtime isn't installed, the release isn't downloaded; a warning says "Codalus IDE X is available, but it needs the .NET … runtime, which isn't installed", with **Install .NET …** (which then checks again and downloads it) and **Update Anyway**.
 - **What's New** (Help → What's New): the release notes of the versions you skipped, shown once after an update.
 

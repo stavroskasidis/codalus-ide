@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia;
 using Avalonia.Threading;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Testing;
 
 namespace Codalus.Shell.ViewModels;
@@ -22,7 +23,7 @@ public sealed record OutcomeStyle(TestOutcome Outcome)
 }
 
 /// <summary>One visible line of the Test Explorer (the arranged tree is flattened so the list can virtualize).</summary>
-public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) : ObservableObject
+public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) : ObservableObject, ITreeRow
 {
     private TestGroup _group = group;
     private bool _isExpanded = expanded;
@@ -83,7 +84,6 @@ public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) 
             if (SetField(ref _isExpanded, value))
             {
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
@@ -92,14 +92,11 @@ public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) 
 
     public string? Tooltip => _group.Node?.FullLabel;
 
-    public string AccessibleName
-    {
-        get
-        {
-            var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
-            return $"{Label}, {TestExplorerViewModel.OutcomeText(_group.Outcome)}{(HasDetail ? ", " + Detail : string.Empty)}{state}";
-        }
-    }
+    /// <summary>
+    /// The row's name for a screen reader: a group's expansion, level and place are its tree item's
+    /// (<see cref="Views.TreeRowsList"/>, M57), not words in its name.
+    /// </summary>
+    public string AccessibleName => $"{Label}, {TestExplorerViewModel.OutcomeText(_group.Outcome)}{(HasDetail ? ", " + Detail : string.Empty)}";
 
     internal static string Icons(TestOutcome outcome) => outcome switch
     {
@@ -123,17 +120,28 @@ public sealed record HistoryRow(string Outcome, string When, string Duration, st
 /// <summary>
 /// The Test Explorer (ADR 0010): the tests of every controller, arranged (<see cref="TestProjection"/>), filtered and
 /// flattened for a virtualized list; the selected test's details; the toolbar. Rebuilds are coalesced and keep
-/// expansion and selection by key.
+/// expansion and selection by key. Changes to the tests show at most every <see cref="ChangeInterval"/>, and not while
+/// the explorer is hidden: it catches up once when it's shown (M56).
 /// </summary>
 public sealed class TestExplorerViewModel : ObservableObject
 {
     public const string ToolWindowId = "testExplorer";
+
+    /// <summary>
+    /// The least time between two rebuilds for changes to the tests (discovery, a run's results): each rebuild arranges
+    /// every test, and the service reports changes every 50 ms. The last change always shows.
+    /// </summary>
+    public static readonly TimeSpan ChangeInterval = TimeSpan.FromMilliseconds(200);
 
     private static readonly TimeSpan s_filterDelay = TimeSpan.FromMilliseconds(150);
     private readonly ShellHost _shell;
     private readonly HashSet<string> _expanded = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _filterTimer;
+    private readonly DispatcherTimer _changeTimer = new();
+    private long _lastRefresh;
+    private readonly ShownViews _views = new();
+    private bool _changedWhileHidden;
     private ObservableCollection<TestRowViewModel> _rows = [];
     private TestRowViewModel? _selected;
     private string _filterText = string.Empty;
@@ -153,6 +161,11 @@ public sealed class TestExplorerViewModel : ObservableObject
             _filterTimer.Stop();
             _filter = TestFilter.Parse(_filterText);
             Refresh();
+        };
+        _changeTimer.Tick += (_, _) =>
+        {
+            _changeTimer.Stop();
+            OnTestsChanged();
         };
         shell.Tests.Changed += (_, _) => QueueRefresh();
         shell.Tests.RunningChanged += (_, _) => Ui.Post(() =>
@@ -177,6 +190,7 @@ public sealed class TestExplorerViewModel : ObservableObject
                 _ = shell.OpenFileAsync(file, preview: false, new LanguageServices.Protocol.Position(Math.Max(0, frame.Line - 1), 0));
             }
         });
+        ShowFullOutputCommand = new RelayCommand(ShowFullOutput);
         Refresh();
     }
 
@@ -348,6 +362,9 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     public RelayCommand OpenFrameCommand { get; }
 
+    /// <summary>Opens the selected test's whole result in a read-only editor tab (the details pane shows part of a long one).</summary>
+    public RelayCommand ShowFullOutputCommand { get; }
+
     public TestRowViewModel? Selected
     {
         get => _selected;
@@ -391,6 +408,18 @@ public sealed class TestExplorerViewModel : ObservableObject
 
     public bool HasOutput => !string.IsNullOrEmpty(DetailsOutput);
 
+    /// <summary>
+    /// The most of a test's output the details pane shows, its end; and of a message, an expected or an actual value, its
+    /// start (M56: a test's megabytes of output were laid out whole in the pane, at each selection and each resize).
+    /// </summary>
+    internal const int DetailsTextLength = 32 * 1024;
+
+    /// <summary>Whether the pane shows only part of the result's text: Show Full Output opens all of it.</summary>
+    public bool IsDetailsCut { get; private set; }
+
+    private string? _outputSource; // the output DetailsOutput was cut from: cut once per result, not at each refresh
+    private string? _outputShown;
+
     public IReadOnlyList<HistoryRow> DetailsHistory { get; private set; } = [];
 
     public bool HasHistory => DetailsHistory.Count > 1;
@@ -409,6 +438,7 @@ public sealed class TestExplorerViewModel : ObservableObject
             DetailsMessage = DetailsExpected = DetailsActual = DetailsOutput = DetailsSource = null;
             DetailsFrames = [];
             DetailsHistory = [];
+            IsDetailsCut = false;
         }
         else
         {
@@ -420,11 +450,19 @@ public sealed class TestExplorerViewModel : ObservableObject
             DetailsIcon = TestRowViewModel.Icons(outcome);
             DetailsStyle = new OutcomeStyle(outcome);
             var message = result is { Messages.Count: > 0 } ? result.Messages[0] : null;
-            DetailsMessage = message?.Message is { Length: > 0 } text ? text : node.Error;
-            DetailsExpected = message?.Expected;
-            DetailsActual = message?.Actual;
+            var fullMessage = message?.Message is { Length: > 0 } text ? text : node.Error;
+            DetailsMessage = Head(fullMessage);
+            DetailsExpected = Head(message?.Expected);
+            DetailsActual = Head(message?.Actual);
             DetailsFrames = [.. StackTraces.Parse(message?.StackTrace).Select(f => new StackFrameRow(f.Text.Trim(), f.File, f.Line))];
-            DetailsOutput = result?.Output;
+            if (!ReferenceEquals(result?.Output, _outputSource))
+            {
+                _outputSource = result?.Output;
+                _outputShown = Tail(_outputSource);
+            }
+
+            DetailsOutput = _outputShown;
+            IsDetailsCut = Longer(fullMessage) || Longer(message?.Expected) || Longer(message?.Actual) || Longer(result?.Output);
             DetailsSource = node.Uri is { } uri && LanguageServices.Protocol.DocumentUris.ToPath(uri) is { } path
                 ? $"{Path.GetFileName(path)}:{(node.Range?.StartLine ?? 0) + 1}"
                 : null;
@@ -440,11 +478,106 @@ public sealed class TestExplorerViewModel : ObservableObject
         {
             nameof(HasDetails), nameof(DetailsTitle), nameof(DetailsOutcome), nameof(DetailsIcon), nameof(DetailsStyle), nameof(DetailsMessage), nameof(HasMessage),
             nameof(DetailsExpected), nameof(DetailsActual), nameof(HasExpected), nameof(DetailsFrames), nameof(HasFrames), nameof(DetailsOutput), nameof(HasOutput),
-            nameof(DetailsHistory), nameof(HasHistory), nameof(DetailsSource), nameof(HasSource),
+            nameof(DetailsHistory), nameof(HasHistory), nameof(DetailsSource), nameof(HasSource), nameof(IsDetailsCut),
         })
         {
             OnPropertyChanged(name);
         }
+    }
+
+    private static bool Longer(string? text) => text?.Length > DetailsTextLength;
+
+    /// <summary>The start of a long text, to a line's end where one is near: the rest is in Show Full Output.</summary>
+    private static string? Head(string? text)
+    {
+        if (!Longer(text))
+        {
+            return text;
+        }
+
+        var end = text!.LastIndexOf('\n', DetailsTextLength - 1, 4096) is var newline and >= 0 ? newline : DetailsTextLength;
+        if (char.IsHighSurrogate(text[end - 1]))
+        {
+            end--;
+        }
+
+        return text[..end] + "\n…";
+    }
+
+    /// <summary>The end of a long text, from a line's start where one is near.</summary>
+    private static string? Tail(string? text)
+    {
+        if (!Longer(text))
+        {
+            return text;
+        }
+
+        var start = text!.Length - DetailsTextLength;
+        start = text.IndexOf('\n', start, 4096) is var newline and >= 0 ? newline + 1 : start;
+        if (char.IsLowSurrogate(text[start]))
+        {
+            start++;
+        }
+
+        return "…\n" + text[start..];
+    }
+
+    private void ShowFullOutput()
+    {
+        if (_selected?.Group.Node is { } selected && _shell.Tests.Find(selected.Key) is { } node)
+        {
+            _shell.OpenTestDetails(node.FullLabel, DetailsText(node, node.IsLeaf ? node.Result : null));
+        }
+    }
+
+    /// <summary>
+    /// What the details pane shows of a test, as text: the test, its outcome, its messages (expected and actual values,
+    /// stack traces) and its output; where the pane shows the node's error (a discovery or build error, a group's), that.
+    /// </summary>
+    internal static string DetailsText(TestNode node, TestResult? result)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine(node.FullLabel);
+        if (result is not null)
+        {
+            text.AppendLine(OutcomeText(result.Outcome) + (result.Duration is { } d ? " in " + Format(d) : string.Empty));
+        }
+
+        if (result is not { Messages: [{ Message.Length: > 0 }, ..] } && node.Error is { Length: > 0 } error)
+        {
+            text.AppendLine(error);
+        }
+
+        if (result is null)
+        {
+            return text.ToString();
+        }
+
+        foreach (var message in result.Messages)
+        {
+            text.AppendLine(message.Message);
+            if (message.Expected is { } expected)
+            {
+                text.Append(Localizer.Get("testExplorer.expected", "Expected  ").Trim()).Append(": ").AppendLine(expected);
+            }
+
+            if (message.Actual is { } actual)
+            {
+                text.Append(Localizer.Get("testExplorer.actual", "Actual  ").Trim()).Append(": ").AppendLine(actual);
+            }
+
+            if (message.StackTrace is { } stack)
+            {
+                text.AppendLine(stack);
+            }
+        }
+
+        if (result.Output.Length > 0)
+        {
+            text.AppendLine().AppendLine(result.Output);
+        }
+
+        return text.ToString();
     }
 
     /// <summary>Opens the selected test's source (double-click, Enter).</summary>
@@ -482,8 +615,55 @@ public sealed class TestExplorerViewModel : ObservableObject
         Dispatcher.UIThread.Post(() =>
         {
             Interlocked.Exchange(ref _refreshQueued, 0);
-            Refresh();
+            OnTestsChanged();
         });
+    }
+
+    /// <summary>
+    /// The tests changed: a rebuild now, or when <see cref="ChangeInterval"/> has passed since the last one, or, while the
+    /// explorer is hidden, none until it's shown. Each rebuild used to come at every change, shown or not: 50-100 ms of
+    /// the UI thread twenty times a second for 100K tests during discovery and runs (M56).
+    /// </summary>
+    private void OnTestsChanged()
+    {
+        if (!_views.Any)
+        {
+            _changedWhileHidden = true;
+            return;
+        }
+
+        var wait = ChangeInterval - System.Diagnostics.Stopwatch.GetElapsedTime(_lastRefresh);
+        if (wait > TimeSpan.Zero)
+        {
+            if (!_changeTimer.IsEnabled)
+            {
+                _changeTimer.Interval = wait;
+                _changeTimer.Start();
+            }
+
+            return;
+        }
+
+        Refresh();
+    }
+
+    /// <summary>Whether a view said the explorer is shown (tests).</summary>
+    internal bool IsViewShown => _views.Any;
+
+    /// <summary>The rebuilds of the arranged tree (tests).</summary>
+    internal int Builds { get; private set; }
+
+    /// <summary>
+    /// A view tells whether it shows the explorer (attached and visible): changes to the tests rebuild nothing while none
+    /// does, and one rebuild catches up when one does again.
+    /// </summary>
+    public void SetViewShown(object view, bool shown)
+    {
+        if (_views.Set(view, shown) && shown && _changedWhileHidden)
+        {
+            _changedWhileHidden = false;
+            QueueRefresh();
+        }
     }
 
     public void Refresh()
@@ -494,6 +674,10 @@ public sealed class TestExplorerViewModel : ObservableObject
             return;
         }
 
+        Builds++;
+        _lastRefresh = System.Diagnostics.Stopwatch.GetTimestamp();
+        _changeTimer.Stop(); // this rebuild shows the changes it waited for
+        _changedWhileHidden = false;
         var playlist = _playlist is null ? null : new HashSet<string>(_playlist.Tests, StringComparer.Ordinal);
         var (groups, summary) = _shell.Tests.Read(roots => (TestProjection.Build(roots, _grouping, _filter, playlist), TestProjection.Summary(roots)));
         Summary = summary;

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -31,6 +32,7 @@ internal static class MenuBuilder
             menuBar.IsVisible = false;
             AttachApplicationMenu(shell);
             window.Opened += (_, _) => AttachApplicationMenu(shell); // again, should Avalonia install its default after us
+            window.Activated += (_, _) => KeepApplicationMenu(shell);
             var native = new NativeMenu();
             NativeMenu.SetMenu(window, native);
             var nativeShown = string.Empty;
@@ -89,11 +91,14 @@ internal static class MenuBuilder
         }
     }
 
+    /// <summary>The application menu's entries we made, and the shell they run in.</summary>
+    private static readonly ConditionalWeakTable<NativeMenuItemBase, ShellHost> s_applicationEntries = new();
+
     /// <summary>
     /// macOS's application menu: our About and Settings entries before the ones the system adds (Services, Hide, Quit).
     /// Without a menu of its own, Avalonia's default shows "About Avalonia" (found on the Mac).
     /// </summary>
-    private static void AttachApplicationMenu(ShellHost shell)
+    internal static void AttachApplicationMenu(ShellHost shell)
     {
         if (Avalonia.Application.Current is not { } app)
         {
@@ -127,9 +132,44 @@ internal static class MenuBuilder
             menu.Items.RemoveAt(0);
         }
 
-        menu.Items.Insert(0, new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") });
-        menu.Items.Insert(1, new NativeMenuItemSeparator());
-        menu.Items.Insert(2, new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) });
+        NativeMenuItemBase[] entries =
+        [
+            new NativeMenuItem("About " + ShellInfo.ProductName) { Command = shell.CommandFor("help.about") },
+            new NativeMenuItemSeparator(),
+            new NativeMenuItem("Settings…") { Command = shell.CommandFor("workbench.openOptions"), Gesture = new KeyGesture(Key.OemComma, Avalonia.Input.KeyModifiers.Meta) },
+        ];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            menu.Items.Insert(i, entries[i]);
+            s_applicationEntries.AddOrUpdate(entries[i], shell);
+        }
+    }
+
+    /// <summary>An activated window whose application menu entries left with another window's shell puts its own back.</summary>
+    private static void KeepApplicationMenu(ShellHost shell)
+    {
+        if (Avalonia.Application.Current is { } app
+            && !(NativeMenu.GetMenu(app)?.Items.Any(item => s_applicationEntries.TryGetValue(item, out _)) ?? false))
+        {
+            AttachApplicationMenu(shell);
+        }
+    }
+
+    /// <summary>
+    /// Takes <paramref name="shell"/>'s entries out of the application menu, which outlives it: their commands kept the
+    /// disposed shell, and ran in it (another window puts its own back when it's activated).
+    /// </summary>
+    public static void Release(ShellHost shell)
+    {
+        if (Avalonia.Application.Current is not { } app || NativeMenu.GetMenu(app) is not { } menu)
+        {
+            return;
+        }
+
+        foreach (var item in menu.Items.Where(item => s_applicationEntries.TryGetValue(item, out var owner) && owner == shell).ToList())
+        {
+            menu.Items.Remove(item);
+        }
     }
 
     /// <summary>

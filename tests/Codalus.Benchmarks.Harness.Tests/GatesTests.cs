@@ -44,6 +44,58 @@ public class GatesTests
         Assert.Equal(3, budgets.Regression.LatencyNoiseSigmas);
         Assert.False(budgets.Regression.FailNormalized);
         Assert.Equal("startup_selfreported_ms", budgets.Regression.ReferenceMetric);
+
+        // The everyday flows (M56) have no budgets until CI has measured them, and their numbers gate nothing until then.
+        Assert.Equal(["everyday"], budgets.Regression.InformativeScenarios);
+        Assert.DoesNotContain(budgets.Budgets, b => b.Scenario == "everyday");
+    }
+
+    [Fact]
+    public void An_informative_scenario_is_compared_and_reported_but_never_fails()
+    {
+        var baseline = Enumerable.Range(1, 6).Select(i => Result("shell", "everyday", i, "EPYC", $"{i}", ("everyday_typing_stall_max_ms", [40 + (i % 3)]), ("memory_everyday_mb", [300]))).ToList();
+        var current = new[] { Result("shell", "everyday", 9, "EPYC", null, ("everyday_typing_stall_max_ms", [400]), ("memory_everyday_mb", [600])) };
+
+        // Ten times its runs' median, and memory doubled: both fail in a scenario that gates.
+        Assert.All(Gates.Compare(new RegressionPolicy(), current, baseline), f => Assert.True(f.Failed));
+
+        var informative = Gates.Compare(new RegressionPolicy { InformativeScenarios = ["everyday"] }, current, baseline);
+        Assert.Equal(2, informative.Count);
+        Assert.All(informative, f =>
+        {
+            Assert.False(f.Failed);
+            Assert.True(f.Warning);
+            Assert.EndsWith("; informative until it has budgets: never fails", f.Rule, StringComparison.Ordinal);
+        });
+        Assert.Contains("0 failed, 2 warning(s)", Gates.Format("Regression gate", informative), StringComparison.Ordinal);
+
+        // Within its limits, it's reported as such; and the other scenarios still gate.
+        var within = Assert.Single(Gates.Compare(new RegressionPolicy { InformativeScenarios = ["everyday"] }, [Result("shell", "everyday", 9, "EPYC", null, ("everyday_typing_stall_max_ms", [41]))], baseline));
+        Assert.False(within.Failed || within.Warning);
+        var coldStart = Enumerable.Range(1, 6).Select(i => Result("shell", "cold-start", i, "EPYC", $"{i}", ("startup_interactive_ms", [400 + (i % 3)]))).ToList();
+        Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy { InformativeScenarios = ["everyday"] }, [Result("shell", "cold-start", 9, "EPYC", null, ("startup_interactive_ms", [900]))], coldStart)).Failed);
+    }
+
+    [Fact]
+    public void Informative_warnings_are_annotated_last_as_one_per_os()
+    {
+        var policy = new RegressionPolicy { InformativeScenarios = ["everyday"] };
+        GateFinding Warning(string os, string scenario, string metric) => new(os, "shell", scenario, metric, "p50", 200, 100, false, "rule") { Warning = true };
+        var findings = new[]
+        {
+            Warning("windows", "everyday", "everyday_typing_stall_max_ms"),
+            Warning("windows", "everyday", "everyday_build_stall_max_ms"),
+            Warning("windows", "cold-start", "startup_interactive_ms"),
+            Warning("linux", "everyday", "everyday_typing_stall_total_ms"),
+            new GateFinding("linux", "shell", "cold-start", "startup_interactive_ms", "p50", 90, 100, false, "rule"),
+        };
+
+        Assert.Equal(
+        [
+            "::warning title=Benchmarks (windows)::shell cold-start startup_interactive_ms p50: 200.0 over 100.0 (rule)",
+            "::warning title=Benchmarks (windows)::2 informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): everyday everyday_typing_stall_max_ms p50, everyday everyday_build_stall_max_ms p50",
+            "::warning title=Benchmarks (linux)::1 informative metric(s) over their limits, which never fail until they have budgets (the job summary's table): everyday everyday_typing_stall_total_ms p50",
+        ], Gates.Annotations(policy, findings));
     }
 
     [Fact]

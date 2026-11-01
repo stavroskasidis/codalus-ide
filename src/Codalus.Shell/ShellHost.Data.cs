@@ -47,24 +47,60 @@ public sealed partial class ShellHost
             ? "The data host stopped unexpectedly and is restarting; running queries were canceled."
             : "The data host keeps crashing and was stopped. Reopen the Database Explorer to try again."));
         DbExplorer.SelectionChanged += (_, node) => Workbench.Context.Set("dataNodeKind", node?.Kind);
-        Solutions.SolutionChanged += (_, _) => Ui.Post(DiscoverConnections);
-        Solutions.ProjectChanged += (_, _) => Ui.Post(DiscoverConnections);
+        _connectionDiscovery = Debouncer(() => _ = DiscoverConnectionsInBackgroundAsync(), TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3));
+        Solutions.SolutionChanged += (_, _) => _connectionDiscovery.Request();
+        Solutions.ProjectChanged += (_, _) => _connectionDiscovery.Request();
         SyncDataTree();
     }
 
     public Workbench.Output.OutputChannel DataLog => Workbench.Output.GetOrCreate("codalus.data", "Data");
 
-    /// <summary>The solution's connection strings: appsettings, user secrets, Aspire AppHost resources.</summary>
+    private UiDebouncer _connectionDiscovery = null!;
+    private CancellationTokenSource? _connectionScan;
+
+    /// <summary>
+    /// Looks for the solution's connection strings again once its projects stop changing for a moment, off the UI
+    /// thread: it reads every project's settings files and project file, and a large solution's projects evaluate one at
+    /// a time (300 projects: 4.3 s of the UI thread while it opened, when each evaluation read them all again).
+    /// </summary>
+    private async Task DiscoverConnectionsInBackgroundAsync()
+    {
+        _connectionScan?.Cancel();
+        _connectionScan?.Dispose();
+        var scan = _connectionScan = new CancellationTokenSource();
+        var solution = Solutions.Solution;
+        var projects = Solutions.Projects.Values.ToList();
+        try
+        {
+            var found = await Task.Run(() => FindConnections(solution, projects), scan.Token).ConfigureAwait(true);
+            if (!scan.IsCancellationRequested && ReferenceEquals(Solutions.Solution, solution))
+            {
+                SetDiscoveredConnections(found);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer scan, or the Database Explorer's own, took over before this one started.
+        }
+    }
+
+    /// <summary>The solution's connection strings, now (opening or refreshing the Database Explorer); a scan under way would be older.</summary>
     private void DiscoverConnections()
     {
-        if (Solutions.Solution is null || Solutions.Solution.Trusted != true)
+        _connectionScan?.Cancel();
+        SetDiscoveredConnections(FindConnections(Solutions.Solution, [.. Solutions.Projects.Values]));
+    }
+
+    /// <summary>The connection strings of a solution's projects: appsettings, user secrets, Aspire AppHost resources.</summary>
+    private static List<DataConnection> FindConnections(Codalus.Projects.Protocol.SolutionInfo? solution, IReadOnlyList<Codalus.Projects.Protocol.ProjectInfo> projects)
+    {
+        var found = new List<DataConnection>();
+        if (solution is not { Trusted: true })
         {
-            Data.SetDiscovered([]);
-            return;
+            return found;
         }
 
-        var found = new List<DataConnection>();
-        foreach (var project in Solutions.Projects.Values.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
+        foreach (var project in projects.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
             foreach (var connection in ConnectionDiscovery.ForProject(project.Path))
             {
@@ -74,9 +110,17 @@ public sealed partial class ShellHost
                 }
             }
 
-            found.AddRange(AspireResources.Discover(project.Path, project.Name));
+            if (project.IsAspireHost)
+            {
+                found.AddRange(AspireResources.Discover(project.Path, project.Name));
+            }
         }
 
+        return found;
+    }
+
+    private void SetDiscoveredConnections(List<DataConnection> found)
+    {
         if (found.Select(c => c.Id).Order(StringComparer.Ordinal).SequenceEqual(Data.DiscoveredConnections.Select(c => c.Id).Order(StringComparer.Ordinal)))
         {
             return;
@@ -857,8 +901,8 @@ public static partial class AspireResources
         string text;
         try
         {
-            if (!File.ReadAllText(projectPath).Contains("Aspire.AppHost", StringComparison.OrdinalIgnoreCase)
-                && !File.ReadAllText(projectPath).Contains("IsAspireHost", StringComparison.OrdinalIgnoreCase))
+            var project = File.ReadAllText(projectPath);
+            if (!project.Contains("Aspire.AppHost", StringComparison.OrdinalIgnoreCase) && !project.Contains("IsAspireHost", StringComparison.OrdinalIgnoreCase))
             {
                 return [];
             }

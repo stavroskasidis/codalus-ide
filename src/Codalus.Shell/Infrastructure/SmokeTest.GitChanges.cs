@@ -30,8 +30,9 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => shell.GitChanges.ChangesTree.Count > 0, "the change is listed").ConfigureAwait(true);
             var items = shell.GitChangesMenuItems(folder, "changes", "folder").Select(i => i.Command).ToList();
             Check(items.SequenceEqual(["git.stage", "git.discard", "git.stash", "git.history", "explorer.reveal", "terminal.openInTerminal", "explorer.copyPath", "explorer.copyRelativePath", "gitChanges.expandAll", "gitChanges.collapseAll"]), "a folder's menu has the classic IDE's entries: " + string.Join(", ", items));
-            var tree = view.GetVisualDescendants().OfType<TreeView>().Single(t => t.Name == "ChangesTree");
+            var tree = view.GetVisualDescendants().OfType<ListBox>().Single(t => t.Name == "ChangesTree");
             var node = shell.GitChanges.ChangesTree.SelectMany(Nodes).First(n => !n.IsFile && !n.IsRepository);
+            Check(shell.GitChanges.ChangesRows.Any(r => ReferenceEquals(r.Node, node)), "the folder has its row in the Changes tree's list");
             var menu = shell.GitChanges.MenuOf(node) ?? throw new SmokeFailure("The folder's menu didn't build.");
             menu.Open(tree);
             await WaitAsync(() => menu.IsOpen, "the folder's menu opens").ConfigureAwait(true);

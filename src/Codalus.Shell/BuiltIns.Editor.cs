@@ -71,6 +71,7 @@ internal static partial class BuiltIns
           { "key": "primary+k primary+d", "command": "editor.action.formatDocument", "when": "editorTextFocus" },
           { "key": "primary+k primary+c", "command": "editor.action.addCommentLine", "when": "editorTextFocus" },
           { "key": "primary+k v", "command": "markdown.showPreviewToSide", "when": "activeDocumentKind == textFile" },
+          { "key": "primary+k primary+v", "command": "markdown.togglePreview", "when": "activeDocumentKind == textFile" },
           { "key": "primary+k primary+u", "command": "editor.action.removeCommentLine", "when": "editorTextFocus" },
           { "key": "primary+/", "command": "editor.action.commentLine", "when": "editorTextFocus" },
           { "key": "primary+alt+space", "mac": "ctrl+.", "command": "editor.action.triggerWordCompletion", "when": "editorTextFocus" },
@@ -359,6 +360,7 @@ internal static partial class BuiltIns
         Add("editor.action.formatDocument", "Format Document", "Editor", Ui(() => shell.FormatAsync(selectionOnly: false)), Editor);
         Add("editor.action.commentLine", "Toggle Line Comment", "Editor", OnEditor(c => c.Comment(CommentAction.Toggle)), Editor);
         Add("markdown.showPreviewToSide", "Open Preview to the Side", "Markdown", Ui(() => shell.ShowMarkdownPreview()), Editor);
+        Add("markdown.togglePreview", "Toggle Preview", "Markdown", Ui(shell.ToggleMarkdownPreview), Editor);
         Add("editor.action.addCommentLine", "Comment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Comment)), Editor);
         Add("editor.action.removeCommentLine", "Uncomment Selection", "Editor", OnEditor(c => c.Comment(CommentAction.Uncomment)), Editor);
         Add("editor.action.triggerWordCompletion", "Complete Word", "Editor", OnEditor(c => c.CompleteWords()), Editor);

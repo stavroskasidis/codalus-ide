@@ -47,7 +47,7 @@ public sealed partial class ShellHost
 
     private void ScheduleSync()
     {
-        if (_applyingSync || SyncTarget.Length == 0)
+        if (_disposeStarted || _applyingSync || SyncTarget.Length == 0)
         {
             return;
         }

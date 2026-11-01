@@ -30,7 +30,23 @@ public sealed class DiffCommandTests
     public async Task A_second_process_hands_its_request_to_the_running_one()
     {
         var name = SingleInstance.PipeName(Path.Combine(Path.GetTempPath(), "codalus-instance-" + Guid.NewGuid().ToString("N")));
+
+        // No shell running: the request is refused at once (a connect where nothing listens waits for its whole
+        // timeout, half a second before every codalus <solution> started an IDE).
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        Assert.False(SingleInstance.MayBeListening(name));
         Assert.False(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
+        Assert.True(started.ElapsedMilliseconds < 250, $"refused after {started.ElapsedMilliseconds} ms");
+
+        // The pipe is looked up by its name, not found among all of the machine's (on Windows each listing took 185 ms on
+        // a loaded runner, CI run 41233191844; this machine's 1,600 pipes, 12 ms).
+        started.Restart();
+        for (var i = 0; i < 50; i++)
+        {
+            Assert.False(SingleInstance.MayBeListening(name));
+        }
+
+        Assert.True(started.ElapsedMilliseconds < 250, $"50 lookups took {started.ElapsedMilliseconds} ms");
 
         var received = new TaskCompletionSource<InstanceRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = SingleInstance.Listen(name, request =>
@@ -52,6 +68,14 @@ public sealed class DiffCommandTests
         var request = await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Equal("diff", request.Command);
         Assert.Equal(["left.txt", "right.txt"], request.Arguments);
+
+        // Still listening after each request it answers: the next listener is there before the answered one closes,
+        // so a codalus started right after one finds the shell (macOS CI, run 41251924698: the name was gone between).
+        for (var i = 0; i < 20; i++)
+        {
+            Assert.True(SingleInstance.TrySend(name, new InstanceRequest("ping", [])), $"request {i + 1} found no shell");
+            Assert.True(SingleInstance.MayBeListening(name), $"no listener right after request {i + 1}");
+        }
         Assert.NotEqual(name, SingleInstance.PipeName(Path.GetTempPath())); // one pipe per user-data folder
     }
 

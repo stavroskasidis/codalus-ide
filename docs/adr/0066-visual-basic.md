@@ -39,3 +39,11 @@ The research for M35 found the following:
   - `My` beyond what the compiler generates from the project's `MyType`.
   - Expressions in Watch and Immediate are C#. Translating simple VB expressions (`Nothing`, `AndAlso`, `Is`) before netcoredbg sees them is a candidate. `TODO(issue)`
   - Project-level imports (`Import` items) are edited in the project file. A page for them is a candidate. `TODO(issue)`
+
+## Amendment (2026-11-01): a VB file outside a loaded project is never read as C#
+
+Miscellaneous Files, the home of open files no loaded project has, is a C# project. A Visual Basic file opened before its project loaded, or in an untrusted folder, went there and was parsed as C#: its document symbols were empty, so the navigation bar and the outline showed nothing (the bar appeared later, when the project came, and moved the code down), and while the solution loaded it got C# syntax errors.
+
+- A Visual Basic file never goes to Miscellaneous Files, as a Razor file doesn't (ADR 0023).
+- Outside a loaded project, its document symbols are read from its own text, parsed as Visual Basic (`DocumentSymbolsFeature.VisualBasicSymbols`): the same syntax-only symbols its project gives, so the navigation bar and the outline are right from the first answer. Other features have nothing for it until its project loads.
+- Considered: a Visual Basic Miscellaneous Files project. Every place that singles out Miscellaneous Files (diagnostics while loading, workspace symbols, code metrics) would take a second project, for semantics that loose VB files rarely need.

@@ -133,6 +133,12 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
+      <!-- TODO(issue): make the Find and Replace, dialog, switcher, Code Search and palette views below the first time each
+           opens, as ConnectAgentLayer and FeedbackLayer are (M56's survey, hidden-overlays-built-at-startup: about 550 lines
+           of XAML built and styled before the first frame, unmeasured). The code-behind's uses (Palette.FocusInput,
+           CodeSearch's and FindReplace's IsVisualAncestorOf) then go through Ensure accessors, a view not made yet meaning
+           closed. -->
+
       <!-- Find and Replace (Ctrl+Shift+F): floats over the documents' top right and isn't modal, so the layer has no
            background and lets clicks through. -->
       <Panel x:Name="FindLayer" IsVisible="{Binding FindReplace.IsOpen}" ZIndex="1">

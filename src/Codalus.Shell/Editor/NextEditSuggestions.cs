@@ -63,8 +63,9 @@ public sealed class NextEditSuggestions : IDisposable
     private void OnChanging(object? sender, DocumentChangeEventArgs e)
     {
         var document = _editor.Document;
-        var first = document.GetLineByOffset(e.Offset);
-        var last = document.GetLineByOffset(Math.Min(document.TextLength, e.Offset + e.RemovalLength));
+        var (offset, removal, _) = DocumentEdits.EditedSpan(e); // a group's edited lines, not all of a whole-document change
+        var first = document.GetLineByOffset(offset);
+        var last = document.GetLineByOffset(Math.Min(document.TextLength, offset + removal));
         _changing = (first.LineNumber, document.GetText(first.Offset, last.EndOffset - first.Offset));
     }
 
@@ -79,7 +80,8 @@ public sealed class NextEditSuggestions : IDisposable
         _changing = null;
         var document = _editor.Document;
         var first = document.GetLineByNumber(Math.Min(changing.Line, document.LineCount));
-        var last = document.GetLineByOffset(Math.Min(document.TextLength, e.Offset + e.InsertionLength));
+        var (offset, _, insertion) = DocumentEdits.EditedSpan(e);
+        var last = document.GetLineByOffset(Math.Min(document.TextLength, offset + insertion));
         var newText = document.GetText(first.Offset, last.EndOffset - first.Offset);
         var now = DateTime.UtcNow;
 

@@ -14,6 +14,7 @@ public sealed partial class VariablesView : UserControl, IPaneView
     public VariablesView()
     {
         InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
         DataContextChanged += (_, _) =>
         {
             if (DataContext is VariablesViewModel vm)

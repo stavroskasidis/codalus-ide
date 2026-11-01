@@ -74,6 +74,19 @@ public sealed class SolutionStateStore(string userStateDirectory, Action<string>
         }
     }
 
+    /// <summary>
+    /// Queues a write of what <paramref name="value"/> makes, serialized in the background in its turn (it must be safe
+    /// to call from another thread: an immutable snapshot's): <see cref="FlushAsync"/> waits for it like any other.
+    /// </summary>
+    public Task WriteAsync<T>(SolutionStateKey key, string name, Func<T> value, JsonTypeInfo<T> info)
+    {
+        lock (_gate)
+        {
+            _writes = _writes.ContinueWith(_ => WriteNow(key, name, JsonSerializer.Serialize(value(), info)), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            return _writes;
+        }
+    }
+
     /// <summary>Waits for the writes queued so far.</summary>
     public Task FlushAsync()
     {

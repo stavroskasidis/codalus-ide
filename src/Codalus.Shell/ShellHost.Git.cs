@@ -34,6 +34,11 @@ public sealed partial class ShellHost
         Git.IndexChanged += (_, _) => Ui.Post(ReloadGitDiffs);
         Git.StatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
         Git.SiblingStatusChanged += (_, _) => Ui.Post(ScheduleGitRepositoryReload);
+
+        // A build's outputs churn under bin/ (which is watched: scripts live there): a status read at most every 2 s while
+        // it runs, and the one it put off when it ends.
+        Git.IsBuilding = () => Builds.IsBuilding;
+        Builds.Finished += (_, _) => Git.OnBuildEnded();
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = path => OpenFileAsync(path);
         GitChanges.RunWithArguments = RunOnGitChangeAsync;
@@ -139,10 +144,14 @@ public sealed partial class ShellHost
     {
         try
         {
-            if (!await Git.OpenAsync(folder, CancellationToken.None).ConfigureAwait(true))
+            if (!await Git.OpenAsync(folder, _lifetime.Token).ConfigureAwait(true))
             {
                 UpdateGitStatus();
             }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // The shell closed meanwhile: its git stopped with it.
         }
         catch (GitException ex)
         {

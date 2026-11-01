@@ -126,7 +126,7 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
 
     public string Title => _references ? Localizer.Get("symbolBrowser.objectBrowser", "Object Browser") : Localizer.Get("symbolBrowser.classView", "Class View");
 
-    public ObservableCollection<SymbolBrowserNode> Roots { get; } = [];
+    public ResettableCollection<SymbolBrowserNode> Roots { get; } = [];
 
     /// <summary>The C# and VB projects (the Object Browser's picker).</summary>
     public ObservableCollection<ProjectInfo> Projects { get; } = [];
@@ -235,10 +235,7 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
             try
             {
                 await Task.Delay(200, cts.Token).ConfigureAwait(true); // typing settles
-                foreach (var project in projects)
-                {
-                    roots.AddRange(await ChildrenAsync(project.Path, null, query, cts.Token).ConfigureAwait(true));
-                }
+                roots.AddRange(await SearchAsync(projects, query, cts.Token).ConfigureAwait(true));
             }
             catch (OperationCanceledException)
             {
@@ -246,18 +243,47 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
             }
         }
 
-        // The same roots (projects reloaded, none added or removed) keep their nodes: replacing them would collapse the
-        // tree and clear its selection.
-        if (cts.IsCancellationRequested || roots.Select(Key).SequenceEqual(Roots.Select(Key)))
+        // The same roots (projects reloaded, added or removed) keep their nodes: a new node collapses its tree and drops
+        // its selection. Shown with one reset (M56: an add each, in a tree that doesn't virtualize).
+        var known = Roots.GroupBy(Key).ToDictionary(g => g.Key, g => g.First());
+        roots = [.. roots.Select(root => known.GetValueOrDefault(Key(root)) ?? root)];
+        if (cts.IsCancellationRequested || roots.SequenceEqual(Roots))
         {
             return;
         }
 
-        Roots.Clear();
-        foreach (var root in roots)
+        Roots.Reset(roots);
+    }
+
+    /// <summary>The most a search shows: past it, a row asks to refine the query (the maintainer's choice, M56).</summary>
+    internal const int SearchLimit = 1000;
+
+    /// <summary>
+    /// The matches of every project, a few projects at a time, in the projects' order, until <see cref="SearchLimit"/>:
+    /// each project was asked in turn, and all their matches (200 each, 60,000 for 300 projects) were added to the tree.
+    /// </summary>
+    private async Task<List<SymbolBrowserNode>> SearchAsync(List<ProjectInfo> projects, string query, CancellationToken cancellationToken)
+    {
+        var found = new IReadOnlyList<SymbolBrowserNode>?[projects.Count];
+        var total = 0;
+        var next = -1;
+        async Task Worker()
         {
-            Roots.Add(root);
+            for (var i = Interlocked.Increment(ref next); i < projects.Count && total < SearchLimit; i = Interlocked.Increment(ref next))
+            {
+                found[i] = await ChildrenAsync(projects[i].Path, null, query, cancellationToken).ConfigureAwait(true);
+                total += found[i]!.Count; // on the UI thread, as every continuation here
+            }
         }
+
+        await Task.WhenAll(Enumerable.Range(0, Math.Min(4, projects.Count)).Select(_ => Worker())).ConfigureAwait(true);
+        var roots = found.OfType<IReadOnlyList<SymbolBrowserNode>>().SelectMany(nodes => nodes).Take(SearchLimit).ToList();
+        if (total > SearchLimit || found.Any(nodes => nodes is null))
+        {
+            roots.Add(SymbolBrowserNode.Placeholder(string.Empty, Localizer.Format("msg.symbolBrowser.moreResults", "More than {0} results: refine the search.", SearchLimit)));
+        }
+
+        return roots;
     }
 
     private static (string Project, string? Id, string Name) Key(SymbolBrowserNode node) => (node.Project, node.Id, node.Name);

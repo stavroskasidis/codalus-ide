@@ -40,11 +40,13 @@ internal sealed partial class SmokeTest
         await File.AppendAllTextAsync(Path.Combine(library, "Library.cs"), "// changed with the solution\n").ConfigureAwait(true);
         await shell.Git.RefreshAsync().ConfigureAwait(true);
         await shell.Git.Siblings[0].RefreshAsync().ConfigureAwait(true);
-        await WaitAsync(() => changes.ChangesTree.Count == 2, "Changes has a tree for each repository").ConfigureAwait(true);
+        await WaitAsync(() => changes.Changes.Select(r => r.Repository).Distinct().Count() == 2, "Changes lists each repository's change").ConfigureAwait(true);
         Check(changes.CommitText == "Commit All Repos", "the commit button commits in every repository");
 
+        // The trees are built while the window is shown (M56).
         shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
         await WaitAsync(() => window.GetVisualDescendants().OfType<GitChangesView>().Any(), "the Git Changes window shows").ConfigureAwait(true);
+        await WaitAsync(() => changes.ChangesTree.Count == 2, "Changes has a tree for each repository").ConfigureAwait(true);
         var view = window.GetVisualDescendants().OfType<GitChangesView>().Single();
         changes.Message = "Smoke test: the solution and its library";
         await RenderedAsync().ConfigureAwait(true);

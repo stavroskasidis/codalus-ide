@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -127,42 +128,43 @@ public sealed partial class ReferencesView : UserControl, IPaneView
         }
     }
 
-    /// <summary>The filter's flyout: Select All and Clear, then a check box for each of the column's values.</summary>
-    private static void ShowFilter(Button button, ReferenceColumnFilter filter)
+    /// <summary>
+    /// The filter's flyout: Select All and Clear, then the column's values with their check boxes, in a list box that
+    /// creates only the rows in view (a check box for each of thousands of files or members took a second to open, M56).
+    /// The check boxes follow the values, Select All's and Clear's too. The keyboard works as with the check boxes before:
+    /// Tab reaches a selected row, the arrow keys move, Space checks or unchecks (<see cref="ReferenceFilterList"/>).
+    /// </summary>
+    private void ShowFilter(Button button, ReferenceColumnFilter filter)
     {
-        var boxes = filter.Values.Select(value =>
-        {
-            var box = new CheckBox { Content = value.Display, IsChecked = value.IsChecked };
-            box.IsCheckedChanged += (_, _) => value.IsChecked = box.IsChecked == true;
-            AutomationProperties.SetName(box, value.Display);
-            return box;
-        }).ToList();
-
         Button Action(string text, bool check)
         {
             var action = new Button { Content = text, Classes = { "subtle" } };
-            action.Click += (_, _) =>
-            {
-                (check ? filter.SelectAllCommand : filter.ClearCommand).Execute(null); // one refresh for the whole list
-                foreach (var box in boxes)
-                {
-                    box.IsChecked = check;
-                }
-            };
+            action.Click += (_, _) => (check ? filter.SelectAllCommand : filter.ClearCommand).Execute(null); // one refresh for the whole list
             return action;
         }
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 0, 0, 4) };
         actions.Children.Add(Action(Localizer.Get("references.selectAll", "Select All"), true));
         actions.Children.Add(Action(Localizer.Get("references.clearSelection", "Clear"), false));
-        var list = new StackPanel { Spacing = 2 };
-        list.Children.AddRange(boxes);
+        var list = new ReferenceFilterList
+        {
+            ItemsSource = filter.Values,
+            ItemTemplate = (IDataTemplate)Resources["FilterValueTemplate"]!,
+            MaxHeight = 320,
+            Background = Avalonia.Media.Brushes.Transparent,
+            Classes = { "filterValues" },
+        };
+        AutomationProperties.SetName(list, ToolTip.GetTip(button) as string ?? string.Empty);
         var content = new DockPanel { MinWidth = 180 };
         DockPanel.SetDock(actions, Avalonia.Controls.Dock.Top);
         content.Children.Add(actions);
-        content.Children.Add(new ScrollViewer { Content = list, MaxHeight = 320 });
-        new Flyout { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight }.ShowAt(button);
+        content.Children.Add(list);
+        FilterFlyout = new Flyout { Content = content, Placement = PlacementMode.BottomEdgeAlignedRight };
+        FilterFlyout.ShowAt(button);
     }
+
+    /// <summary>The last filter flyout shown (tests).</summary>
+    internal Flyout? FilterFlyout { get; private set; }
 
     public void FocusPrimary() => List.Focus();
 }

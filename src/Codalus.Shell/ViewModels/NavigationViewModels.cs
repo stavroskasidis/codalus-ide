@@ -5,33 +5,88 @@ using Codalus.Shell.Infrastructure;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A symbol of the Document Outline and the navigation bar.</summary>
-public sealed class SymbolNodeViewModel(DocumentSymbol symbol, string? container = null) : ObservableObject
+/// <summary>
+/// A row of the Document Outline: a symbol at its depth in the outline's tree, flattened, with a chevron when it has
+/// children (or, in a filtered list, a match with its containing symbol). Its icon and kind names serve the navigation bar
+/// and the other symbol lists too.
+/// </summary>
+public sealed class SymbolNodeViewModel : ObservableObject, ITreeRow
 {
-    private bool _isExpanded = true;
+    private DocumentSymbol _symbol;
+    private bool _hasChildren;
+    private bool _isExpanded;
+
+    public SymbolNodeViewModel(DocumentSymbol symbol, string key, int depth, bool hasChildren, bool expanded, string? container = null)
+    {
+        _symbol = symbol;
+        Key = key;
+        Depth = depth;
+        _hasChildren = hasChildren;
+        _isExpanded = expanded;
+        Container = container;
+    }
+
+    /// <summary>What the row is known by across the outline's rebuilds: its symbol's kind and name (and which of the same), under its parents'.</summary>
+    public string Key { get; }
+
+    public int Depth { get; }
+
+    public Avalonia.Thickness Indent => new(4 + (Depth * 16), 0, 0, 0);
+
+    /// <summary>The symbol, the latest the language service sent for the row (its range follows the edits).</summary>
+    public DocumentSymbol Symbol => _symbol;
+
+    /// <summary>In a filtered list: the containing symbol, shown as the detail.</summary>
+    public string? Container { get; }
+
+    public bool HasChildren => _hasChildren;
 
     public bool IsExpanded
     {
         get => _isExpanded;
-        set => SetField(ref _isExpanded, value);
+        set
+        {
+            if (SetField(ref _isExpanded, value))
+            {
+                OnPropertyChanged(nameof(Chevron));
+            }
+        }
     }
+
+    public string? Chevron => _hasChildren ? (_isExpanded ? "chevron-down" : "chevron-right") : null;
 
     public bool HasDetail => !string.IsNullOrEmpty(Detail);
 
-    public DocumentSymbol Symbol { get; } = symbol;
-
-    public string Name => Symbol.Name;
+    public string Name => _symbol.Name;
 
     /// <summary>The signature or type, or (in a filtered list) the containing symbol.</summary>
-    public string? Detail => container ?? Symbol.Detail;
+    public string? Detail => Container ?? _symbol.Detail;
 
-    public string Icon => IconFor(Symbol.Kind);
+    public string Icon => IconFor(_symbol.Kind);
 
-    public IReadOnlyList<SymbolNodeViewModel> Children { get; } = [.. (symbol.Children ?? []).Select(c => new SymbolNodeViewModel(c))];
-
-    public string AccessibleName => $"{KindName(Symbol.Kind)} {Name}";
+    /// <summary>Its kind and name: a screen reader hears its expansion, level and place from its tree item (M57).</summary>
+    public string AccessibleName => $"{KindName(_symbol.Kind)} {Name}";
 
     public override string ToString() => Name;
+
+    /// <summary>The same row in a rebuild: its symbol's new range and signature, and whether it has children now.</summary>
+    internal void Update(DocumentSymbol symbol, bool hasChildren)
+    {
+        var detail = Detail;
+        _symbol = symbol;
+        if (detail != Detail)
+        {
+            OnPropertyChanged(nameof(Detail));
+            OnPropertyChanged(nameof(HasDetail));
+        }
+
+        if (_hasChildren != hasChildren)
+        {
+            _hasChildren = hasChildren;
+            OnPropertyChanged(nameof(HasChildren));
+            OnPropertyChanged(nameof(Chevron));
+        }
+    }
 
     /// <summary>
     /// A symbol kind's icon, colored as a classic IDE colors them (M34a: types amber, members purple, fields and
@@ -73,19 +128,30 @@ public sealed class SymbolNodeViewModel(DocumentSymbol symbol, string? container
 }
 
 /// <summary>
-/// The Document Outline tool window (M12a): the active document's namespaces, types and members, nested; a filter
-/// flattens it to the matching symbols. It follows the caret, and selecting a symbol moves the caret there.
+/// The Document Outline tool window (M12a): the active document's namespaces, types and members, nested, starting
+/// expanded; a filter flattens it to the matching symbols. It follows the caret, and selecting a symbol moves the caret
+/// there. The tree is a list of rows (M56): a list box creates only the rows in view, where the tree view built a
+/// container for every symbol of the file after each pause in typing (seconds for a file of 10,000 symbols). The rows are
+/// built off the UI thread, only while the window is shown, and the rows of the symbols that are still there stay, with
+/// their expansion, selection and scrolling: each pause in typing replaced every node and expanded what was collapsed.
 /// </summary>
-public sealed class DocumentOutlineViewModel : ObservableObject
+public sealed class DocumentOutlineViewModel : ObservableObject, IShownAware
 {
     public const string ToolWindowId = "documentOutline";
 
+    private readonly ShownViews _views = new();
+    private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal); // rows' keys
     private CodeEditorController? _editor;
+    private CodeEditorController? _shownEditor; // whose rows show
     private string _filter = string.Empty;
     private string _message = "Open a document to see its outline.";
     private SymbolNodeViewModel? _current;
+    private bool _stale = true; // the rows wait for the window to be shown
+    private int _generation; // the rebuild whose rows are wanted; an older one's are dropped
+    private bool _building;
 
-    public ObservableCollection<SymbolNodeViewModel> Roots { get; } = [];
+    /// <summary>The outline's rows, the tree flattened: a symbol, then its children's rows while it's expanded.</summary>
+    public ResettableCollection<SymbolNodeViewModel> Rows { get; } = [];
 
     public string Filter
     {
@@ -105,7 +171,33 @@ public sealed class DocumentOutlineViewModel : ObservableObject
         private set => SetField(ref _message, value);
     }
 
-    public bool HasMessage => Roots.Count == 0;
+    public bool HasMessage => Rows.Count == 0;
+
+    /// <summary>Whether the window is shown (its rows follow the editor only then).</summary>
+    public bool IsShown => _views.Any;
+
+    /// <summary>How many times the rows were built (tests: a hidden outline builds none).</summary>
+    internal int Builds { get; private set; }
+
+    /// <summary>Whether a rebuild is on its way (tests).</summary>
+    internal bool IsBuilding => _building;
+
+    public void SetViewShown(object view, bool shown)
+    {
+        if (!_views.Set(view, shown) || !shown)
+        {
+            return;
+        }
+
+        if (_stale)
+        {
+            Rebuild();
+        }
+        else
+        {
+            UpdateCurrent(); // the caret moved meanwhile
+        }
+    }
 
     /// <summary>The innermost symbol at the caret (the view selects it).</summary>
     public SymbolNodeViewModel? Current
@@ -135,59 +227,193 @@ public sealed class DocumentOutlineViewModel : ObservableObject
             editor.CaretChanged += OnCaretChanged;
         }
 
+        // Another document's outline starts expanded, as the window shows it first.
+        _collapsed.Clear();
         Rebuild();
     }
 
     private void OnSymbolsChanged(object? sender, EventArgs e) => Rebuild();
 
-    private void OnCaretChanged(object? sender, EventArgs e) => UpdateCurrent();
+    private void OnCaretChanged(object? sender, EventArgs e)
+    {
+        if (_views.Any)
+        {
+            UpdateCurrent();
+        }
+    }
 
+    /// <summary>A row of a rebuild, made on the thread pool: the row it is (its key), its symbol and where it sits.</summary>
+    private sealed record OutlineRow(string Key, DocumentSymbol Symbol, int Depth, bool HasChildren, string? Container);
+
+    /// <summary>Builds the rows again while the window is shown; else when it's shown next.</summary>
     private void Rebuild()
     {
-        Roots.Clear();
-        if (_editor is null)
+        if (!_views.Any)
         {
-            Message = "Open a document to see its outline.";
+            _stale = true;
+            return;
         }
-        else if (_editor.Insights.Symbols.Count == 0)
+
+        _stale = false;
+        var generation = ++_generation;
+        if (!ReferenceEquals(_editor, _shownEditor) && Rows.Count > 0)
         {
-            Message = _editor.Insights.SymbolsVersion < 0 ? "No outline for this document." : "This document has no symbols.";
+            // Another document's: its rows go at once, not when the new ones are flattened (they went to the old
+            // document's symbols in the new one meanwhile). The same document's stay until then, so edits don't flicker.
+            _shownEditor = null;
+            Message = string.Empty;
+            Rows.Reset([]);
+            OnPropertyChanged(nameof(HasMessage));
+            Current = null;
         }
-        else if (_filter.Length > 0)
+
+        if (_editor is null || _editor.Insights.Symbols.Count == 0)
         {
-            foreach (var match in Flatten(_editor.Insights.Symbols, null).Where(m => m.Symbol.Name.Contains(_filter, StringComparison.OrdinalIgnoreCase)))
+            _building = false;
+            Message = _editor is null ? "Open a document to see its outline."
+                : _editor.Insights.SymbolsVersion < 0 ? "No outline for this document." : "This document has no symbols.";
+            Show([], _editor);
+            return;
+        }
+
+        _ = RebuildAsync(_editor, _editor.Insights.Symbols, new HashSet<string>(_collapsed, StringComparer.Ordinal), _filter, generation);
+    }
+
+    private async Task RebuildAsync(CodeEditorController editor, IReadOnlyList<DocumentSymbol> symbols, HashSet<string> collapsed, string filter, int generation)
+    {
+        _building = true;
+        try
+        {
+            var rows = await Task.Run(() => Flatten(symbols, collapsed, filter)).ConfigureAwait(true);
+            if (generation != _generation)
             {
-                Roots.Add(new SymbolNodeViewModel(match.Symbol with { Children = null }, match.Container));
+                return;
             }
 
-            Message = Roots.Count == 0 ? $"No symbols match '{_filter}'." : string.Empty;
+            Message = filter.Length > 0 && rows.Count == 0 ? $"No symbols match '{filter}'." : string.Empty;
+            Show(rows, editor);
+        }
+        finally
+        {
+            if (generation == _generation)
+            {
+                _building = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Shows a rebuild's rows: those of the same symbols at the start and the end stay (updated), the rest are replaced at
+    /// once, so editing a member's body changes no row, and adding one inserts one. Another document's replace them all.
+    /// </summary>
+    private void Show(IReadOnlyList<OutlineRow> rows, CodeEditorController? editor)
+    {
+        Builds++;
+        SymbolNodeViewModel Create(OutlineRow item) => new(item.Symbol, item.Key, item.Depth, item.HasChildren, !_collapsed.Contains(item.Key), item.Container);
+        if (!ReferenceEquals(editor, _shownEditor))
+        {
+            _shownEditor = editor;
+            Rows.Reset(rows.Select(Create));
         }
         else
         {
-            foreach (var symbol in _editor.Insights.Symbols)
-            {
-                Roots.Add(new SymbolNodeViewModel(symbol));
-            }
-
-            Message = string.Empty;
+            Rows.Patch(
+                rows,
+                (row, item) => row.Depth == item.Depth && string.Equals(row.Key, item.Key, StringComparison.Ordinal),
+                Create,
+                (row, item) =>
+                {
+                    row.Update(item.Symbol, item.HasChildren);
+                    row.IsExpanded = !_collapsed.Contains(item.Key);
+                });
         }
 
         OnPropertyChanged(nameof(HasMessage));
         UpdateCurrent();
     }
 
-    private static IEnumerable<(DocumentSymbol Symbol, string? Container)> Flatten(IEnumerable<DocumentSymbol> symbols, string? container)
+    /// <summary>
+    /// The rows of <paramref name="symbols"/>: each symbol, then (while it's expanded) its children's; with a filter, the
+    /// symbols whose names contain it, flat, each with its container.
+    /// </summary>
+    private static List<OutlineRow> Flatten(IReadOnlyList<DocumentSymbol> symbols, IReadOnlySet<string> collapsed, string filter)
     {
-        foreach (var symbol in symbols)
+        var rows = new List<OutlineRow>();
+        Add(rows, symbols, string.Empty, 0, null, collapsed, filter);
+        return rows;
+    }
+
+    private static void Add(List<OutlineRow> rows, IReadOnlyList<DocumentSymbol> level, string parent, int depth, string? container, IReadOnlySet<string> collapsed, string filter)
+    {
+        // A symbol's key: its kind and name under its parent's, and which of the same it is (overloads).
+        var seen = new Dictionary<(int, string), int>();
+        foreach (var symbol in level)
         {
-            yield return (symbol, container);
-            foreach (var child in Flatten(symbol.Children ?? [], symbol.Name))
+            var same = seen.GetValueOrDefault((symbol.Kind, symbol.Name));
+            seen[(symbol.Kind, symbol.Name)] = same + 1;
+            var key = $"{parent}/{symbol.Kind.ToString(System.Globalization.CultureInfo.InvariantCulture)}:{symbol.Name}#{same.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+            var children = symbol.Children ?? [];
+            if (filter.Length > 0)
             {
-                yield return child;
+                if (symbol.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    rows.Add(new OutlineRow(key, symbol, 0, false, container));
+                }
+
+                Add(rows, children, key, 0, symbol.Name, collapsed, filter);
+            }
+            else
+            {
+                rows.Add(new OutlineRow(key, symbol, depth, children.Length > 0, null));
+                if (children.Length > 0 && !collapsed.Contains(key))
+                {
+                    Add(rows, children, key, depth + 1, null, collapsed, filter);
+                }
             }
         }
     }
 
+    /// <summary>Expands (true) or collapses a row: its descendants' rows are inserted below it, or removed, at once.</summary>
+    public void SetExpanded(SymbolNodeViewModel row, bool expanded)
+    {
+        if (!row.HasChildren || row.IsExpanded == expanded || _filter.Length > 0 || Rows.IndexOf(row) is not (>= 0 and var index))
+        {
+            return;
+        }
+
+        if (expanded)
+        {
+            _collapsed.Remove(row.Key);
+            var below = new List<OutlineRow>();
+            Add(below, row.Symbol.Children ?? [], row.Key, row.Depth + 1, null, _collapsed, string.Empty);
+            row.IsExpanded = true;
+            Rows.InsertRange(index + 1, [.. below.Select(r => new SymbolNodeViewModel(r.Symbol, r.Key, r.Depth, r.HasChildren, !_collapsed.Contains(r.Key)))]);
+        }
+        else
+        {
+            _collapsed.Add(row.Key);
+            var end = index + 1;
+            while (end < Rows.Count && Rows[end].Depth > row.Depth)
+            {
+                end++;
+            }
+
+            row.IsExpanded = false;
+            Rows.RemoveRange(index + 1, end - index - 1);
+        }
+
+        // A rebuild on its way was made with the expansion before this one: it's made again.
+        if (_building)
+        {
+            Rebuild();
+        }
+
+        UpdateCurrent();
+    }
+
+    public void Toggle(SymbolNodeViewModel row) => SetExpanded(row, !row.IsExpanded);
+
+    /// <summary>The innermost symbol at the caret, or its innermost ancestor shown (a collapsed one hides its descendants).</summary>
     private void UpdateCurrent()
     {
         if (_editor is null || _filter.Length > 0)
@@ -197,27 +423,37 @@ public sealed class DocumentOutlineViewModel : ObservableObject
         }
 
         var caret = _editor.Model.PositionAt(_editor.Editor.CaretOffset);
-        var path = _editor.Insights.SymbolPath(caret);
         SymbolNodeViewModel? node = null;
-        IReadOnlyList<SymbolNodeViewModel> level = Roots;
-        foreach (var symbol in path)
+        var from = 0;
+        foreach (var symbol in _editor.Insights.SymbolPath(caret))
         {
-            node = level.FirstOrDefault(n => n.Symbol == symbol);
-            if (node is null)
+            // Outermost first, as the rows: each one is after the one before.
+            var at = -1;
+            for (var i = from; i < Rows.Count; i++)
+            {
+                if (ReferenceEquals(Rows[i].Symbol, symbol))
+                {
+                    at = i;
+                    break;
+                }
+            }
+
+            if (at < 0)
             {
                 break;
             }
 
-            level = node.Children;
+            node = Rows[at];
+            from = at + 1;
         }
 
         Current = node;
     }
 
-    /// <summary>Moves the caret to a symbol (Enter or double-click).</summary>
+    /// <summary>Moves the caret to a symbol (Enter or a click), one of the current document's rows.</summary>
     public void Navigate(SymbolNodeViewModel node)
     {
-        if (_editor is { } editor)
+        if (_editor is { } editor && ReferenceEquals(editor, _shownEditor))
         {
             editor.Navigate(node.Symbol.SelectionRange.Start);
         }

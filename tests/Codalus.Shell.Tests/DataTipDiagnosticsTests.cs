@@ -70,7 +70,7 @@ public sealed class DataTipDiagnosticsTests
         await ShellFixture.PumpUntil(() => s.Editor.Markers.At(bottom).Count > 0, seconds: 60);
         tip = await s.HoverAsync(bottom);
         tip.SetOpen(null, tip.Header, tip.Root, true);
-        await ShellFixture.PumpUntil(() => tip.Panels is [{ Rows.Count: 30 }] && tip.Strip is { IsOpen: true });
+        await ShellFixture.PumpUntil(() => tip.Panels is [{ Nodes.Count: 30 }] && tip.Strip is { IsOpen: true });
         ShellFixture.RenderFrame(s.F.Window);
         Assert.True(tip.IsFlipped);
         header = s.InTextView(tip.Header);

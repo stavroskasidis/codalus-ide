@@ -299,7 +299,11 @@ public sealed partial class ShellHost : ICodeSearchHost
                 var document = ActiveEditor?.Model.Path;
                 return path => document is not null && SolutionService.PathComparer.Equals(path, document);
             case CodeSearchScope.CurrentProject:
-                var files = new HashSet<string>(CurrentProjectFiles(), SolutionService.PathComparer);
+                // A filter, so no file is checked on disk (M56: each of the project's, on the UI thread, at every query),
+                // and only the projects of the active document's name are looked through.
+                var active = ActiveEditor?.Model.Path;
+                var named = active is not null && ProjectOfFile().TryGetValue(active, out var name) ? Solutions.Projects.Values.Where(p => p.Name == name) : [];
+                var files = new HashSet<string>(ProjectListing(named, active) is { } project ? project.Items.Select(i => i.Path).Prepend(project.Path) : [], SolutionService.PathComparer);
                 return files.Contains;
             default:
                 return null;
@@ -421,7 +425,9 @@ public sealed partial class ShellHost : ICodeSearchHost
         Dictionary<string, string> open;
         lock (_snapshots)
         {
-            open = _snapshots.Where(s => !s.Key.IsReadOnly).ToDictionary(s => s.Key.Path, s => s.Value.Text, SolutionService.PathComparer);
+            // TODO(issue): every open document's whole text is made a string here, on the UI thread; search the
+            // snapshots (immutable) inside the Task.Run below instead.
+            open = _snapshots.Where(s => !s.Key.IsReadOnly).ToDictionary(s => s.Key.Path, s => s.Value.Source.Text, SolutionService.PathComparer);
         }
 
         var regex = options.CreateRegex();
@@ -689,7 +695,7 @@ public sealed partial class ShellHost : ICodeSearchHost
             await ReleasePreviewAsync().ConfigureAwait(true);
             _previewModel = model;
             _previewDocument = CreateView(model, primary: false);
-            _previewView = new CodeEditorView(_previewDocument, this, EditorFont);
+            _previewView = new CodeEditorView(_previewDocument, this, EditorFont, markdownPreview: false);
             var area = _previewView.Editor.TextArea;
             area.Caret.PositionChanged += OnCodeSearchPreviewCaretChanged;
             area.SelectionChanged += OnCodeSearchPreviewCaretChanged;
@@ -884,14 +890,33 @@ public sealed partial class ShellHost : ICodeSearchHost
         }
     }
 
+    /// <summary>How long a whole-solution index is current while the C# service only reports ready after edits.</summary>
+    internal static readonly TimeSpan FullIndexInterval = TimeSpan.FromMinutes(3);
+
+    /// <summary>The C# service reported loading (projects changed, a restart) since the last whole-solution index.</summary>
+    private bool _indexAfterLoading = true;
+
     private void OnCodeSearchLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
         // The whole solution once its projects are in the C# host (the index is from syntax: no need to wait for the
-        // background pass), and again whenever it reports ready (after a restart, a reload).
-        if (languageId == CSharpLanguageId && _indexKey is not null && !Languages.IsLoading
-            && (status.State == WorkspaceStates.Ready || !CodeSearchIndex.IsComplete))
+        // background pass), and again when it reports ready after loading (a restart, a reload). It reports ready after
+        // every edit's background pass too: the edited documents are indexed on their own (QueueIndexUpdate), and asking
+        // for every document again then cost every document's declarations from the host and 0.2–0.4 s of the UI thread
+        // (144,000 symbols) at each pause in typing; files changed outside the editor are caught by one every few minutes.
+        if (languageId == CSharpLanguageId)
         {
-            _ = RefreshCodeSearchIndexAsync();
+            if (status.State != WorkspaceStates.Ready)
+            {
+                _indexAfterLoading = true;
+            }
+
+            if (_indexKey is not null && !Languages.IsLoading
+                && (!CodeSearchIndex.IsComplete
+                    || status.State == WorkspaceStates.Ready && (_indexAfterLoading || DateTime.UtcNow - CodeSearchIndex.CompletedAt > FullIndexInterval)))
+            {
+                _indexAfterLoading = false;
+                _ = RefreshCodeSearchIndexAsync();
+            }
         }
 
         RefreshCodeSearchSoon();
@@ -918,9 +943,14 @@ public sealed partial class ShellHost : ICodeSearchHost
                 return;
             }
 
-            // The index becomes complete, unsaved and queued for writing with no await between: a solution (or the
-            // window) closing the moment it is complete must never find it complete but not yet marked unsaved.
-            CodeSearchIndex.Replace(index.Documents);
+            // Built off the UI thread. Then it becomes complete, unsaved and queued for writing with no await between:
+            // a solution (or the window) closing the moment it is complete must never find it complete but not yet
+            // marked unsaved; one that closed while it was built took its index with it (ReplaceAsync puts nothing back).
+            if (!await CodeSearchIndex.ReplaceAsync(index.Documents).ConfigureAwait(true) || cts.IsCancellationRequested || _indexKey != key)
+            {
+                return;
+            }
+
             CodeSearchIndex.SetFiles(files);
             _indexUnsaved = true;
             _ = SaveCodeSearchIndex(onlyIfChanged: false);
@@ -951,8 +981,7 @@ public sealed partial class ShellHost : ICodeSearchHost
             };
         }
 
-        _indexTimer.Stop();
-        _indexTimer.Start();
+        StartTimer(_indexTimer);
     }
 
     private async Task UpdateCodeSearchIndexAsync()
@@ -966,10 +995,13 @@ public sealed partial class ShellHost : ICodeSearchHost
         _indexPending.Clear();
         try
         {
+            var key = _indexKey;
             var index = await client.SymbolIndexAsync([.. paths.Select(DocumentUris.FromPath)], CancellationToken.None).ConfigureAwait(true);
-            var gone = paths.Where(p => !File.Exists(p) && index.Documents.All(d => DocumentUris.ToPath(d.Uri) is not { } indexed || !SolutionService.PathComparer.Equals(indexed, p)));
-            CodeSearchIndex.Update(index.Documents, gone);
-            _indexUnsaved = true;
+            var gone = paths.Where(p => !File.Exists(p) && index.Documents.All(d => DocumentUris.ToPath(d.Uri) is not { } indexed || !SolutionService.PathComparer.Equals(indexed, p))).ToList();
+            if (await CodeSearchIndex.UpdateAsync(index.Documents, gone).ConfigureAwait(true) && _indexKey == key)
+            {
+                _indexUnsaved = true;
+            }
         }
         catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException or ObjectDisposedException)
         {
@@ -997,7 +1029,7 @@ public sealed partial class ShellHost : ICodeSearchHost
 
         if (!_codeSearchRefresh.IsEnabled)
         {
-            _codeSearchRefresh.Start();
+            StartTimer(_codeSearchRefresh);
         }
     }
 }

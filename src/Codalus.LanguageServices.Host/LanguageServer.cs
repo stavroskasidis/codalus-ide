@@ -235,7 +235,10 @@ internal sealed class LanguageServer : IAsyncDisposable
 
         OnDocument(Methods.DocumentSymbol, json.DocumentSymbolParams, json.DocumentSymbolArray, p => p.TextDocument,
             async (document, _, ct) => await DocumentSymbolsFeature.SymbolsAsync(document, ct).ConfigureAwait(false), [],
-            (xaml, _, _) => Task.FromResult<DocumentSymbol[]?>(Xaml.XamlAnalysis.Symbols(xaml)));
+            (xaml, _, _) => Task.FromResult<DocumentSymbol[]?>(Xaml.XamlAnalysis.Symbols(xaml)),
+            outside: (path, _, ct) => Task.FromResult(WorkspaceManager.IsVisualBasic(path) && _workspace.OpenText(path) is { } text
+                ? DocumentSymbolsFeature.VisualBasicSymbols(text, ct)
+                : null));
         OnPosition(Methods.PrepareCallHierarchy, json.TextDocumentPositionParams, json.CallHierarchyItemArray, p => (p.TextDocument, p.Position),
             async (document, offset, _, ct) => await HierarchyFeature.PrepareCallsAsync(document, offset, ct).ConfigureAwait(false), []);
         _connection.OnRequest(Methods.CallHierarchyIncomingCalls, json.CallHierarchyCallsParams, json.CallHierarchyIncomingCallArray, (p, ct) =>
@@ -445,7 +448,8 @@ internal sealed class LanguageServer : IAsyncDisposable
         TResult? empty,
         Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
         Func<Razor.RazorMapping, TParams, CancellationToken, Task<TResult?>>? razor = null,
-        Semantics semantics = Semantics.Workspace)
+        Semantics semantics = Semantics.Workspace,
+        Func<string, TParams, CancellationToken, Task<TResult?>>? outside = null)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
         {
@@ -465,8 +469,14 @@ internal sealed class LanguageServer : IAsyncDisposable
                     : empty!;
             }
 
-            return await WorkspaceManager.FindDocumentAsync(solution, where(p).Uri, ct).ConfigureAwait(false) is { } document
-                ? await handler(document, p, ct).ConfigureAwait(false) ?? empty!
+            if (await WorkspaceManager.FindDocumentAsync(solution, where(p).Uri, ct).ConfigureAwait(false) is { } document)
+            {
+                return await handler(document, p, ct).ConfigureAwait(false) ?? empty!;
+            }
+
+            // A file no loaded project has, and not in Miscellaneous Files (Visual Basic): read on its own where a feature can.
+            return outside is not null && DocumentUris.ToPath(where(p).Uri) is { } outsidePath
+                ? await outside(outsidePath, p, ct).ConfigureAwait(false) ?? empty!
                 : empty!;
         });
     }

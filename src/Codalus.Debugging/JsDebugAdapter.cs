@@ -158,7 +158,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     private static DapJsonContext Json => DapJsonContext.Default;
 
     private InitializeArguments InitializeArguments() =>
-        new("codalus", "Codalus IDE", _adapterId, SupportsStartDebuggingRequest: true);
+        new("codalus", "Codalus IDE", _adapterId, SupportsVariablePaging: true, SupportsStartDebuggingRequest: true);
 
     private void OnServerOutput(string? line)
     {
@@ -541,6 +541,9 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
 
     public async Task<Variable[]> VariablesAsync(int variablesReference, CancellationToken cancellationToken) =>
         (await Active("variables").RequestAsync("variables", new VariablesArguments(variablesReference), Json.VariablesArguments, Json.VariablesResponse, cancellationToken).ConfigureAwait(false)).Variables;
+
+    public async Task<Variable[]> VariablesAsync(int variablesReference, VariablesPage page, CancellationToken cancellationToken) =>
+        (await Active("variables").RequestAsync("variables", new VariablesArguments(variablesReference, page.Filter, page.Start, page.Count), Json.VariablesArguments, Json.VariablesResponse, cancellationToken).ConfigureAwait(false)).Variables;
 
     public Task<EvaluateResponse> EvaluateAsync(string expression, int? frameId, string context, CancellationToken cancellationToken) =>
         Active("evaluate").RequestAsync("evaluate", new EvaluateArguments(expression, frameId, context), Json.EvaluateArguments, Json.EvaluateResponse, cancellationToken);

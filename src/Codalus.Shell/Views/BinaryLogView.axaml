@@ -23,6 +23,9 @@
       <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
     </StackPanel>
     <Grid ColumnDefinitions="*,Auto,*">
+      <!-- TODO(issue): a tree view isn't virtualized (Avalonia's keeps a stack panel): every expanded node gets a container,
+           built on the UI thread, so a large build's log of thousands of projects, targets and tasks makes thousands (M56;
+           the Solution Explorer's and the Document Outline's flattened rows in a list box are the way). -->
       <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T binaryLog.binaryLogTree}">
         <TreeView.Styles>
           <Style Selector="TreeViewItem" x:DataType="vm:BinaryLogNodeViewModel">

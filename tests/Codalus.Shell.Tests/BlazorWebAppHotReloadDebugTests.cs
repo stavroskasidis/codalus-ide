@@ -13,8 +13,10 @@ namespace Codalus.Shell.Tests;
 /// the server under <c>dotnet watch</c>, attaches netcoredbg to the app it starts and debugs the page in a headless
 /// Chromium browser under vscode-js-debug, in one session. An edit to a WebAssembly component runs in the browser under
 /// the debugger; the server refuses it, and says so; an edit that needs a restart restarts the app, and debugging follows
-/// it without leaving the old server holding the port (Linux and macOS, when it was stopped at a breakpoint). Needs
-/// Chrome, Edge or Chromium and netcoredbg: skipped without them locally, failing in CI.
+/// it without leaving the old server holding the port (Linux and macOS, when it was stopped at a breakpoint). Under the
+/// Codalus debugger F5 launches the server instead, with the IDE as the browser refresh server, and both the server and
+/// the page take edits (ADR 0090). Needs Chrome, Edge or Chromium and netcoredbg: skipped without them locally, failing
+/// in CI.
 /// </summary>
 public sealed class BlazorWebAppHotReloadDebugTests
 {
@@ -30,6 +32,10 @@ public sealed class BlazorWebAppHotReloadDebugTests
         return ((IPEndPoint)socket.LocalEndpoint).Port;
     }
 
+    /// <summary>The dotnet watch cases are netcoredbg's: the Codalus debugger launches the server (the debug-codalus shard).</summary>
+    private static void SkipUnderTheCodalusDebugger(ShellFixture f) =>
+        Assert.SkipWhen(f.Shell.Debugger.UsesCodalusAdapter, "Under the Codalus debugger F5 launches the server, without dotnet watch (ADR 0090).");
+
     private static void SkipWithoutPrerequisites()
     {
         Assert.SkipWhen(NodeRuntime.Platform is null, "No Node.js build for this platform.");
@@ -38,12 +44,18 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     /// <summary>The sample on a free port, open, its server the startup project, Hot Reload while debugging on.</summary>
-    private static async Task<(ShellFixture F, string Folder, string Counter)> OpenAsync()
+    private static async Task<(ShellFixture F, string Folder, string Counter)> OpenAsync(bool sdk10 = false)
     {
         Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, SharedCache);
         Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
         var f = ShellFixture.Create();
         var folder = f.CopySample("BlazorHosted");
+        if (sdk10)
+        {
+            // As WPoseidon's: SDK 11's browser tools aren't supported yet (BrowserHotReload.UnsupportedReason).
+            await File.WriteAllTextAsync(Path.Combine(folder, "global.json"), "{\"sdk\":{\"version\":\"10.0.100\",\"rollForward\":\"latestFeature\"}}", TestContext.Current.CancellationToken);
+        }
+
         var settings = Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json");
         await File.WriteAllTextAsync(settings, (await File.ReadAllTextAsync(settings, TestContext.Current.CancellationToken))
             .Replace("5274", FreePort().ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), TestContext.Current.CancellationToken);
@@ -58,7 +70,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     private static string Diagnostics(ShellFixture f) =>
-        $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}.\n"
+        $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}"
+        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty) + ".\n"
         + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
 
     /// <summary>
@@ -107,6 +120,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
+                SkipUnderTheCodalusDebugger(f);
                 var initialized = Line(counter, "initialized");
                 f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
                 await f.RunAsync("debug.start");
@@ -133,7 +147,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Running);
 
                 // 3. The tick, every half second, now adds 1000: the browser runs the change under the debugger, while the
-                // server's runtime refuses it (a debugger is attached) and keeps running the same process.
+                // server's runtime refuses it (netcoredbg is attached) and keeps running the same process.
                 var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
                 await ShellFixture.PumpUntil(() => editor?.Controller is not null);
                 var offset = editor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
@@ -142,9 +156,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
                 Assert.Equal(server, f.Shell.Debugger.ProcessId);
-                // Under the Codalus debugger (M55) the server takes the edit itself; netcoredbg's keeps its code.
-                var said = f.Shell.Debugger.UsesCodalusAdapter ? "through the Codalus debugger" : "keeps the code it started with";
-                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains(said, StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
+                await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("keeps the code it started with", StringComparison.Ordinal), seconds: 30, describe: () => Diagnostics(f));
                 Assert.Contains("sent to the browser", f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text, StringComparison.Ordinal);
 
                 // The browser applies the update on its own, and dotnet watch doesn't report it (SDK 11 says "applied" only
@@ -187,51 +199,109 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     /// <summary>
-    /// M55: under the Codalus debugger the server dotnet watch runs takes an edit in place, through the debugger: its
-    /// answer changes, without a restart, in the same process (dotnet watch's own copy of the update is refused).
+    /// ADR 0090, the maintainer's report on WPoseidon (SDK 10.0.303): under the Codalus debugger F5 launches the server
+    /// itself, with no dotnet watch, and the IDE is the browser refresh server the SDK's middleware points the page at.
+    /// An edit to the server applies in place, in the same process; an edit to a WebAssembly component applies to the
+    /// server's copy and in the browser, whose agent answers, and the page runs it. The page's runtime can apply at least
+    /// what the session limits edits to.
     /// </summary>
     [AvaloniaFact]
-    public async Task Under_the_Codalus_debugger_an_edit_applies_to_the_server_in_place()
+    public async Task Under_the_Codalus_debugger_F5_launches_the_server_and_edits_apply_to_it_and_to_the_page()
     {
         SkipWithoutPrerequisites();
-        var (f, folder, _) = await OpenAsync();
+        var (f, folder, counter) = await OpenAsync(sdk10: true);
         await using (f)
         {
             try
             {
-                await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
-                var settings = await File.ReadAllTextAsync(Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json"), TestContext.Current.CancellationToken);
-                var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
-                await f.RunAsync("debug.start");
-                await ShellFixture.PumpUntil(() => f.Shell.WatchedServerDebugSession?.ProcessId is not null && f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running, seconds: 600, describe: () => Diagnostics(f));
-                var watch = f.Shell.HotReloadProgram!;
-                var server = f.Shell.Debugger.ProcessId!.Value;
-                using var http = new HttpClient();
-                Assert.Equal("hello from the server", await http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken));
-
-                var greeting = Path.Combine(folder, "BlazorHosted", "Greeting.cs");
-                var editor = await f.Shell.OpenFileAsync(greeting, preview: false, null);
-                await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-                var offset = editor!.Model.Text.Text.IndexOf("hello from the server", StringComparison.Ordinal);
-                editor.Model.Text.Replace(offset, "hello from the server".Length, "edited on the server");
-                await f.RunAsync("run.applyCodeChanges");
-                var answer = string.Empty;
-                await ShellFixture.PumpUntil(() =>
-                {
-                    answer = http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken).GetAwaiter().GetResult();
-                    return answer == "edited on the server";
-                }, seconds: 120, describe: () => $"The server answered '{answer}'. " + Diagnostics(f));
-                Assert.Equal(0, watch.HotReload!.Restarts);
-                Assert.Equal(server, f.Shell.Debugger.ProcessId);
-                Assert.True(IsRunning(server));
-
-                await StopAndCheckAsync(f, server);
+                await ReportingAsync(f, () => LaunchedServerAndPageAsync(f, folder, counter));
             }
             finally
             {
                 Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
             }
         }
+    }
+
+    private static async Task LaunchedServerAndPageAsync(ShellFixture f, string folder, string counter)
+    {
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
+        var settings = await File.ReadAllTextAsync(Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json"), TestContext.Current.CancellationToken);
+        var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
+        await f.RunAsync("debug.start");
+        await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running && f.Shell.Debugger.IsCompound
+            && f.Shell.DebugEdits.Browser?.Server is { Pages: > 0 }, seconds: 600, describe: () => Diagnostics(f));
+        Assert.Null(f.Shell.HotReloadProgram); // no dotnet watch
+        Assert.Null(f.Shell.WatchedServerDebugSession);
+        var server = f.Shell.Debugger.ProcessId!.Value;
+
+        // What the page's runtime can apply covers what the session limits every edit to.
+        var browser = f.Shell.DebugEdits.Browser!;
+        // The page connects before its WebAssembly runtime starts: until then its agent answers with an error ("!…").
+        string? reported = null;
+        await ShellFixture.PumpUntil(() =>
+        {
+            reported = browser.Server!.CapabilitiesAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            return reported is { Length: > 0 } && !reported.StartsWith('!');
+        }, seconds: 120, describe: () => $"The page answered '{reported}'. " + Diagnostics(f));
+        var missing = browser.Capabilities!.Except(reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal).ToList();
+        Assert.True(missing.Count == 0, $"The page's runtime can't apply {string.Join(", ", missing)}; it reported '{reported}'.");
+
+        // 1. The server, in place, in the same process.
+        using var http = new HttpClient();
+        Assert.Equal("hello from the server", await http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken));
+        var greeting = Path.Combine(folder, "BlazorHosted", "Greeting.cs");
+        var editor = await f.Shell.OpenFileAsync(greeting, preview: false, null);
+        await ShellFixture.PumpUntil(() => editor?.Controller is not null);
+        var offset = editor!.Model.Text.Text.IndexOf("hello from the server", StringComparison.Ordinal);
+        editor.Model.Text.Replace(offset, "hello from the server".Length, "edited on the server");
+        await f.RunAsync("run.applyCodeChanges");
+        var answer = string.Empty;
+        await ShellFixture.PumpUntil(() =>
+        {
+            answer = http.GetStringAsync(url + "/api/greeting", TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            return answer == "edited on the server";
+        }, seconds: 120, describe: () => $"The server answered '{answer}'. " + Diagnostics(f));
+        Assert.Equal(server, f.Shell.Debugger.ProcessId);
+
+        // 2. The page: the tick, every half second, now adds 1000, and the browser's agent says it applied it. (Only an edit
+        // to code that runs in the browser says "server and browser": the server-only edit above didn't, so this status is
+        // this edit's. A page slow to answer says it later.)
+        var counterEditor = await f.Shell.OpenFileAsync(counter, preview: false, null);
+        await ShellFixture.PumpUntil(() => counterEditor?.Controller is not null);
+        offset = counterEditor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
+        counterEditor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+        await f.RunAsync("run.applyCodeChanges");
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text
+            .Contains("(server and browser)", StringComparison.Ordinal), seconds: 120, describe: () => Diagnostics(f));
+
+        // The page runs it. The breakpoint stops before the line runs, so a stop can read the count the old code left: the
+        // tick is looked at until the edited line has run (the Mac's full run read 1 at the first stop, the page still
+        // applying the edit, run of 2026-10-30).
+        var ticks = 0;
+        StopInfo? previous = null;
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(120);
+        while (true)
+        {
+            f.Shell.Debugger.Breakpoints.Toggle(counter, Line(counter, "tick"));
+            var tick = await NextStopAsync(f, previous, 120);
+            previous = tick;
+            Assert.StartsWith("Browser:", ThreadName(f, tick), StringComparison.Ordinal);
+            ticks = int.Parse((await f.Shell.Debugger.EvaluateAsync("ticks", "watch", TestContext.Current.CancellationToken)).Result, System.Globalization.CultureInfo.InvariantCulture);
+            if (ticks >= 1000 || DateTime.UtcNow > deadline)
+            {
+                break;
+            }
+
+            f.Shell.Debugger.Breakpoints.Clear();
+            await f.RunAsync("debug.continue");
+            await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        }
+
+        Assert.True(ticks >= 1000, $"ticks is {ticks} after 120 s: the page didn't run the edit. " + Diagnostics(f));
+        Assert.DoesNotContain(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("the browser couldn't apply it", StringComparison.Ordinal));
+
+        await StopAndCheckAsync(f, server);
     }
 
     [AvaloniaFact]
@@ -245,6 +315,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
+                SkipUnderTheCodalusDebugger(f);
                 await ReportingAsync(f, () => RudeEditAsync(f, counter));
             }
             finally

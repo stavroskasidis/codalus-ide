@@ -1,5 +1,5 @@
-using System.Collections.ObjectModel;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Search;
 
 namespace Codalus.Shell.ViewModels;
@@ -49,10 +49,17 @@ public sealed class QuickPickRow(QuickPickItem item, IReadOnlyList<int> highligh
 
 /// <summary>
 /// The command palette overlay, also used as a generic picker (<see cref="ShowAsync"/>). Filtering is fuzzy;
-/// with an empty query the items keep the order they were given in (most recently used first for commands).
+/// with an empty query the items keep the order they were given in (most recently used first for commands). It shows
+/// the <see cref="MaxRows"/> best matches, and how many more there are.
 /// </summary>
 public sealed class QuickPickViewModel : ObservableObject, IDisposable
 {
+    /// <summary>
+    /// The most rows shown: the best matches, the others counted (M56: with 20,000 branches each keystroke added every
+    /// match to the list, a change at a time). Typing narrows them down.
+    /// </summary>
+    public const int MaxRows = 1000;
+
     private IReadOnlyList<QuickPickItem> _items = [];
     private Func<string, CancellationToken, Task<IReadOnlyList<QuickPickItem>>>? _provider;
     private CancellationTokenSource? _providerCts;
@@ -62,8 +69,16 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
     private string _placeholder = string.Empty;
     private bool _isOpen;
     private int _selectedIndex = -1;
+    private int _hidden;
 
-    public ObservableCollection<QuickPickRow> Rows { get; } = [];
+    /// <summary>The rows shown, replaced with one reset per query.</summary>
+    public ResettableCollection<QuickPickRow> Rows { get; } = [];
+
+    /// <summary>Whether more items match than <see cref="MaxRows"/> shows.</summary>
+    public bool HasMore => _hidden > 0;
+
+    /// <summary>How many more match than are shown.</summary>
+    public string MoreText => Localizer.Format("quickPick.moreMatches", "{0} more match: type to narrow the list down", _hidden.ToString("N0", System.Globalization.CultureInfo.CurrentCulture));
 
     public string Query
     {
@@ -159,15 +174,8 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
             }
 
             _items = items;
-            Rows.Clear();
-            foreach (var item in items)
-            {
-                Rows.Add(new QuickPickRow(item, FuzzyMatcher.Match(_query.Trim(), item.Label)?.Positions ?? []));
-            }
-
-            OnPropertyChanged(nameof(IsEmpty));
-            _selectedIndex = -1;
-            SelectedIndex = Rows.Count == 0 ? -1 : 0;
+            var query = _query.Trim();
+            Show([.. items.Take(MaxRows).Select(item => new QuickPickRow(item, FuzzyMatcher.Match(query, item.Label)?.Positions ?? []))], items.Count, 0);
         }
         catch (OperationCanceledException)
         {
@@ -218,29 +226,36 @@ public sealed class QuickPickViewModel : ObservableObject, IDisposable
     private void Filter(int activeIndex = 0)
     {
         var query = _query.Trim();
-        IEnumerable<QuickPickRow> rows;
         if (query.Length == 0)
         {
-            rows = _items.Select(i => new QuickPickRow(i, []));
-        }
-        else
-        {
-            rows = _items
-                .Select((item, index) => (item, index, match: FuzzyMatcher.Match(query, item.Label)))
-                .Where(m => m.match is not null)
-                .OrderByDescending(m => m.match!.Score)
-                .ThenBy(m => m.index)
-                .Select(m => new QuickPickRow(m.item, m.match!.Positions));
+            // In the given order; the active item shows even past the first rows.
+            List<QuickPickRow> rows = [.. _items.Take(MaxRows).Select(i => new QuickPickRow(i, []))];
+            if (activeIndex >= MaxRows && activeIndex < _items.Count)
+            {
+                rows.Add(new QuickPickRow(_items[activeIndex], []));
+                activeIndex = rows.Count - 1;
+            }
+
+            Show(rows, _items.Count, activeIndex);
+            return;
         }
 
-        Rows.Clear();
-        foreach (var row in rows)
-        {
-            Rows.Add(row);
-        }
+        var matches = _items
+            .Select((item, index) => (item, index, match: FuzzyMatcher.Match(query, item.Label)))
+            .Where(m => m.match is not null)
+            .ToList();
+        Show([.. matches.OrderByDescending(m => m.match!.Score).ThenBy(m => m.index).Take(MaxRows).Select(m => new QuickPickRow(m.item, m.match!.Positions))], matches.Count, 0);
+    }
 
+    /// <summary>Shows <paramref name="rows"/> of <paramref name="total"/> matches with one reset, <paramref name="selected"/> selected.</summary>
+    private void Show(List<QuickPickRow> rows, int total, int selected)
+    {
+        Rows.Reset(rows);
+        _hidden = total - rows.Count;
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasMore));
+        OnPropertyChanged(nameof(MoreText));
         _selectedIndex = -1;
-        SelectedIndex = Rows.Count == 0 ? -1 : Math.Clamp(query.Length == 0 ? activeIndex : 0, 0, Rows.Count - 1);
+        SelectedIndex = rows.Count == 0 ? -1 : Math.Clamp(selected, 0, rows.Count - 1);
     }
 }

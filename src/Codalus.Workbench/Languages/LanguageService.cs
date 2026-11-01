@@ -8,8 +8,13 @@ using Codalus.Workbench.Projects;
 
 namespace Codalus.Workbench.Languages;
 
-/// <summary>An open document handed to a language service. <see cref="Text"/> reads the editor's current text.</summary>
-public sealed record LanguageDocument(string Path, string LanguageId, Func<(string Text, int Version)> Text);
+/// <summary>
+/// An open document handed to a language service. <see cref="Text"/> reads the editor's current text. <see cref="Snapshot"/>,
+/// when given, takes the current version's immutable snapshot cheaply, its text made later by the function it returns
+/// (M57): a <c>didOpen</c> sends the snapshot taken when it was queued, so a request queued behind it never reads a later
+/// edit's text.
+/// </summary>
+public sealed record LanguageDocument(string Path, string LanguageId, Func<(string Text, int Version)> Text, Func<(Func<string> Text, int Version)>? Snapshot = null);
 
 /// <summary>
 /// Connects editors and the project system to language services (ADR 0005). It starts a service's host on demand
@@ -205,7 +210,7 @@ public sealed class LanguageService : IAsyncDisposable
         var descriptor = _registry.Get(server);
         foreach (var document in _documents.Values.Where(d => descriptor is { IsLinter: true } ? Takes(descriptor, d) : ServerOf(d.LanguageId) == server))
         {
-            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
+            await Open(client, document).ConfigureAwait(false);
         }
 
         return true;
@@ -228,6 +233,11 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>The running client of a language's service, without starting it.</summary>
     public LanguageHostClient? RunningClient(string languageId) =>
         ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully ? lazy.Value.Result : null;
+
+    /// <summary>Whether a language's service was started and couldn't (until it's tried again).</summary>
+    public bool HasFailed(string languageId) =>
+        ServerOf(languageId) is { } server && _clients.TryGetValue(server, out var lazy) && lazy.IsValueCreated && lazy.Value.IsCompleted
+        && (!lazy.Value.IsCompletedSuccessfully || lazy.Value.Result is null);
 
     /// <summary>Server settings for every language service (e.g. <c>{ "analysisScope": "solution" }</c>).</summary>
     public async Task ConfigureAsync(JsonElement settings)
@@ -266,7 +276,7 @@ public sealed class LanguageService : IAsyncDisposable
         {
             ProjectsProvider = () => [.. _projects.Values.Where(p => descriptor.TakesProjects(p.Language))],
             LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
-            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(State)],
+            OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(Reopened)],
             InitializationOptions = descriptor.InitializationOptions,
             ScopedConfigurationProvider = descriptor.ScopedConfiguration,
             AcceptedRequests = descriptor.AcceptedRequests,
@@ -344,6 +354,14 @@ public sealed class LanguageService : IAsyncDisposable
             stage = "started";
             return client;
         }
+        catch (OperationCanceledException)
+        {
+            // Disposed while it started: a cancelled start leaves its host running (SupervisedProcess), and no one else
+            // holds the client to end it. Each C# host left so cost ~150 MB, and a full run of the shell tests, whose
+            // windows close as soon as they pass, ran out of memory with dozens of them (docs/ci-flakes.md).
+            await client.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcConnectionLostException)
         {
             Log?.Invoke(this, $"[{languageId}] The language service could not start: {ex.Message}");
@@ -360,11 +378,21 @@ public sealed class LanguageService : IAsyncDisposable
         }
     }
 
-    private static OpenDocumentState State(LanguageDocument document)
-    {
-        var (text, version) = document.Text();
-        return new OpenDocumentState(DocumentUris.FromPath(document.Path), document.LanguageId, version, text);
-    }
+    /// <summary>
+    /// A document to open again after its server restarted, read as a document opened now is (M57 review: its text was
+    /// read when the replay began, so an edit made while earlier documents were written was lost), and not sent once closed.
+    /// </summary>
+    private ReopenedDocument Reopened(LanguageDocument document) =>
+        new(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, document.Snapshot,
+            () => _documents.TryGetValue(document.Path, out var current) && ReferenceEquals(current, document));
+
+    /// <summary>
+    /// Queues a document's <c>didOpen</c>, its text made and encoded when it is written, off the caller's thread (M57: the
+    /// UI thread built and encoded the whole text of each file it opened). It carries the snapshot taken now, when the
+    /// document gives one, so a request queued behind it reads this text and not a later edit's.
+    /// </summary>
+    private Task Open(LanguageHostClient client, LanguageDocument document) =>
+        client.DidOpenAsync(DocumentUris.FromPath(document.Path), document.LanguageId, document.Text, _lifetime.Token, document.Snapshot?.Invoke());
 
     // ------------------------------------------------------------------ documents
 
@@ -412,6 +440,7 @@ public sealed class LanguageService : IAsyncDisposable
     /// </summary>
     private async Task<bool> SendOpenAsync(LanguageHostClient client, LanguageDocument document)
     {
+        Task opened;
         await _documentNotifications.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         try
         {
@@ -420,13 +449,16 @@ public sealed class LanguageService : IAsyncDisposable
                 return false;
             }
 
-            await client.DidOpenAsync(State(document), _lifetime.Token).ConfigureAwait(false);
-            return true;
+            // Queued in order here, its text read when it is written (M57); a close queued after it follows it.
+            opened = Open(client, document);
         }
         finally
         {
             _documentNotifications.Release();
         }
+
+        await opened.ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>The running clients a document is open in: its language's service and its linters, with their ids.</summary>
@@ -495,7 +527,12 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>An open document was edited or saved (for consumers that follow source, like test discovery).</summary>
     public event EventHandler<string>? DocumentChanged;
 
-    public async Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes)
+    /// <summary>
+    /// An open document was edited to <paramref name="version"/>. <paramref name="text"/> makes that version's whole text
+    /// (the editor passes its snapshot of this change, M57), read on the writer loop for a server that syncs whole
+    /// documents; without it the text is read now, from the document.
+    /// </summary>
+    public async Task ChangeAsync(string path, int version, TextDocumentContentChangeEvent[] changes, Func<string>? text = null)
     {
         DocumentChanged?.Invoke(this, path);
         if (!_documents.TryGetValue(path, out var document))
@@ -503,17 +540,28 @@ public sealed class LanguageService : IAsyncDisposable
             return;
         }
 
+        // Every client's change is queued before anything is awaited (M57): two changes in a row reach a linter in their
+        // order too (each awaited its write before the next client's was queued, so a later change could overtake).
+        var uri = DocumentUris.FromPath(path);
+        var queued = new List<Task>();
         foreach (var (server, client) in ClientsOf(document).ToList())
         {
-            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits.
-            await (client.Capabilities?.TextDocumentSync switch
+            // Servers that sync whole documents (LSP's TextDocumentSyncKind.Full) get the text, not the edits: this
+            // change's own text, made when written, off the caller's thread, and replaced by a newer one while queued.
+            // Never the document's latest text: that could carry a later edit past a request queued before it (M57
+            // review: a completion's position read against the next key's text).
+            queued.Add(client.Capabilities?.TextDocumentSync switch
             {
                 TextDocumentSyncKind.None => Task.CompletedTask,
-                TextDocumentSyncKind.Full => client.DidChangeAsync(DocumentUris.FromPath(path), version, [new TextDocumentContentChangeEvent(null, document.Text().Text)], _lifetime.Token),
-                _ => client.DidChangeAsync(DocumentUris.FromPath(path), version, changes, _lifetime.Token),
-            }).ConfigureAwait(false);
+                TextDocumentSyncKind.Full => client.DidChangeTextAsync(uri, version, text ??= Now(document.Text().Text), _lifetime.Token),
+                _ => client.DidChangeAsync(uri, version, changes, _lifetime.Token),
+            });
             SchedulePull(server, client, path);
         }
+
+        await Task.WhenAll(queued).ConfigureAwait(false);
+
+        static Func<string> Now(string text) => () => text;
     }
 
     public async Task SavedAsync(string path)
@@ -756,7 +804,13 @@ public sealed class LanguageService : IAsyncDisposable
         _solutions.ProgressChanged -= OnLoadingProgress;
         _solutions.DesignTimeProgressChanged -= OnLoadingProgress;
         await _lifetime.CancelAsync().ConfigureAwait(false);
-        foreach (var lazy in _clients.Values.Where(l => l.IsValueCreated))
+
+        // The servers shut down together (M56): one after another, each up to its shutdown's time, a few slow ones
+        // outlasted the time the IDE's exit gives them all.
+        await Task.WhenAll(_clients.Values.Where(l => l.IsValueCreated).Select(DisposeClientAsync)).ConfigureAwait(false);
+        _lifetime.Dispose();
+
+        static async Task DisposeClientAsync(Lazy<Task<LanguageHostClient?>> lazy)
         {
             try
             {
@@ -769,7 +823,5 @@ public sealed class LanguageService : IAsyncDisposable
             {
             }
         }
-
-        _lifetime.Dispose();
     }
 }

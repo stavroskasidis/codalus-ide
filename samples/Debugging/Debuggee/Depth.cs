@@ -19,6 +19,8 @@ public static class Depth
         // A dictionary with a removed entry (the sample plugin visualizer).
         var ages = new Dictionary<string, int> { ["Ada"] = 36, ["Charles"] = 79, ["Grace"] = 85 };
         ages.Remove("Charles");
+        // A long array, whose elements netcoredbg counts and reads a page at a time (M56).
+        var readings = Enumerable.Range(0, 2_500).ToArray();
         var sum = 0; // [depth-start]
         for (var i = 1; i <= 5; i++)
         {
@@ -46,7 +48,7 @@ public static class Depth
 
         var worker = new Thread(() => Thread.Sleep(200)) { Name = "Depth worker" };
         worker.Start();
-        Console.WriteLine($"{json.Length} {xml.Length} {settings.Retries} {sum} {order.Id} {pixel.Length} {squares.Count} {orders.Length} {ages.Count}"); // [depth-end]
+        Console.WriteLine($"{json.Length} {xml.Length} {settings.Retries} {sum} {order.Id} {pixel.Length} {squares.Count} {orders.Length} {ages.Count} {readings.Length}"); // [depth-end]
         worker.Join();
 
         // Two named threads through one line (breakpoint filters, M14b).

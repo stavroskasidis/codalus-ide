@@ -98,13 +98,29 @@ public sealed record MoveItemParams(string Project, string Path, string Target, 
 /// </summary>
 public sealed record AddExistingItemsParams(string Project, string TargetFolder, string[] Files, bool AsLink);
 
-/// <summary>Everything under <see cref="Path"/> (folders first), up to <see cref="MaxEntries"/> (default 20,000).</summary>
-public sealed record ListTreeParams(string Path, int? MaxEntries = null);
+/// <summary>
+/// Everything under <see cref="Path"/> (folders first), up to <see cref="MaxEntries"/> (default 20,000). With
+/// <see cref="Folders"/>, only these folders below <see cref="Path"/> are gone into; the others are listed without what
+/// is in them (Show All Files lists a folder that isn't in its project once it's expanded, as the classic IDE does; the
+/// folder view lists each expanded folder alone, with none). <c>node_modules</c>, <c>.vs</c> and <c>.idea</c> are listed,
+/// marked <see cref="DirectoryEntry.Skipped"/>, and gone into only when <see cref="Folders"/> names them; <c>.git</c> never
+/// is (M57).
+/// </summary>
+public sealed record ListTreeParams(string Path, int? MaxEntries = null, string[]? Folders = null);
 
 public sealed record ListTreeResult(DirectoryEntry[] Entries, bool Truncated);
 
 /// <summary>Folders whose files were created, deleted or renamed.</summary>
-public sealed record FilesChangedParams(string[] Directories);
+public sealed record FilesChangedParams(string[] Directories)
+{
+    /// <summary>
+    /// The watcher dropped events (the OS's buffer overflowed, as in a large checkout): anything under the folders it
+    /// watches may have changed, deep below <see cref="Directories"/> (those folders then), so Show All Files lists every
+    /// project again. Left out when false.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Rescan { get; init; }
+}
 
 /// <summary>Folder mode: the project files under the folder.</summary>
 public sealed record DiscoverProjectsResult(string[] Projects);

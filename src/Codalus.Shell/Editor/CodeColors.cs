@@ -37,6 +37,22 @@ public static class CodeColors
         NotifyChanged();
     }
 
+    /// <summary>
+    /// Forgets the configuration whose <paramref name="languageOf"/> this is (a disposed shell's), unless another
+    /// replaced it: it would hold that shell after it was disposed.
+    /// </summary>
+    public static void Release(Func<string, string?> languageOf)
+    {
+        if (Equals(s_languageOf, languageOf))
+        {
+            s_languageOf = null;
+            s_grammarOf = null;
+            s_themeFor = null;
+            s_languages.Clear();
+            s_tokens.Clear();
+        }
+    }
+
     /// <summary>The theme or the user's colors changed.</summary>
     public static void NotifyChanged() => Changed?.Invoke(null, EventArgs.Empty);
 

@@ -31,6 +31,30 @@ public static class BlazorProjects
             .Distinct(SolutionService.PathComparer)];
     }
 
+    /// <summary>
+    /// The projects whose code runs in the browser for a Blazor Web App's server (ADR 0090): its WebAssembly clients and
+    /// the projects they reference, directly or not (a library the server shares runs in both).
+    /// </summary>
+    public static IReadOnlyList<string> BrowserProjectsOf(string server, IReadOnlyDictionary<string, ProjectInfo> projects)
+    {
+        var found = new HashSet<string>(SolutionService.PathComparer);
+        var pending = new Stack<string>(ClientsOf(server, projects));
+        while (pending.TryPop(out var project))
+        {
+            if (!found.Add(project) || !projects.TryGetValue(project, out var info))
+            {
+                continue;
+            }
+
+            foreach (var reference in info.References.Where(r => r.Kind == ReferenceKinds.Project && r.Path is not null))
+            {
+                pending.Push(reference.Path!);
+            }
+        }
+
+        return [.. found];
+    }
+
     /// <summary>Whether a project is a Blazor Web App's server: it hosts a WebAssembly client project of the solution.</summary>
     public static bool IsWebAppServer(string project, IReadOnlyDictionary<string, ProjectInfo> projects) => ClientsOf(project, projects).Count > 0;
 

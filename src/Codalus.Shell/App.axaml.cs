@@ -10,6 +10,12 @@ public sealed class App : Application
 {
     internal static ShellOptions Options { get; set; } = new();
 
+    /// <summary>
+    /// The login shell's PATH and network settings being taken (Program.Main). The window doesn't wait for it (M56): the
+    /// startup's work and the processes started meanwhile do (<see cref="ShellHost.EnvironmentReady"/>).
+    /// </summary>
+    internal static Task<bool> LoginShellImport { get; set; } = Task.FromResult(false);
+
     public ShellHost? Shell { get; private set; }
 
     public override void RegisterServices()
@@ -35,7 +41,9 @@ public sealed class App : Application
         {
             var shell = Shell = new ShellHost(this, Options);
             desktop.MainWindow = new MainWindow(shell);
-            desktop.Exit += (_, _) => shell.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(3));
+            // The main window shuts the shell down behind it when the user closes it (M56); a forced shutdown (the smoke
+            // test's, the benchmarks'), or the OS's, still waits here, as long as the shutdown may take.
+            desktop.Exit += (_, _) => shell.ShutDownAsync(ShellHost.ShutdownLimit).Wait(ShellHost.ShutdownLimit + TimeSpan.FromSeconds(2));
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -48,6 +56,16 @@ public sealed class App : Application
         {
             // Another program holds the clipboard: the editor's own Copy and Paste can't be wrapped, so say it as ours do.
             Infrastructure.SafeClipboard.ReportBusy();
+            e.Handled = true;
+            return;
+        }
+
+        if (Shell is { IsClosing: true } closing)
+        {
+            // The window is gone and the shell shuts down behind it with the UI thread free (M56): a reaction posted by the
+            // disposal's own events (a solution closing) can find its service disposed. The lifetime's Exit held the UI
+            // thread before, so such reactions never ran; a crash report for one would say the IDE crashed when it didn't.
+            closing.Workbench.Log.AppendLine($"[unhandled] During the shutdown: {e.Exception}");
             e.Handled = true;
             return;
         }

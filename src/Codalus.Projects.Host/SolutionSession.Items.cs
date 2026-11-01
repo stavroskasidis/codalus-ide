@@ -14,11 +14,6 @@ internal sealed partial class SolutionSession
     /// <summary>The environment variable that gives <c>dotnet new</c> a custom settings folder (tests).</summary>
     public const string TemplateHiveVariable = "CODALUS_TEMPLATE_HIVE";
 
-    private const int DefaultTreeEntries = 20_000;
-
-    /// <summary>Folders the tree and the project discovery never descend into.</summary>
-    private static readonly HashSet<string> s_skippedFolders = new(StringComparer.OrdinalIgnoreCase) { ".git", ".vs", ".idea", "node_modules" };
-
     private static readonly string[] s_projectExtensions = [".csproj", ".fsproj", ".vbproj"];
 
     /// <summary>Folder mode: a folder opened without a solution file (ADR 0033).</summary>
@@ -178,55 +173,8 @@ internal sealed partial class SolutionSession
 
     // ------------------------------------------------------------------ Show All Files
 
-    /// <summary>Everything under a folder, without version control, IDE and package folders, up to a limit.</summary>
-    public ListTreeResult ListTree(ListTreeParams parameters)
-    {
-        var root = new DirectoryInfo(System.IO.Path.GetFullPath(parameters.Path));
-        var max = parameters.MaxEntries is > 0 and var limit ? limit : DefaultTreeEntries;
-        var entries = new List<DirectoryEntry>();
-        if (!root.Exists)
-        {
-            return new ListTreeResult([], false);
-        }
-
-        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = OperatingSystem.IsWindows() ? FileAttributes.Hidden | FileAttributes.System : 0 };
-        var pending = new Stack<DirectoryInfo>();
-        pending.Push(root);
-        while (pending.Count > 0)
-        {
-            var directory = pending.Pop();
-            IEnumerable<FileSystemInfo> children;
-            try
-            {
-                children = [.. directory.EnumerateFileSystemInfos("*", options)];
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                continue;
-            }
-
-            foreach (var child in children)
-            {
-                if (child is DirectoryInfo sub && (s_skippedFolders.Contains(sub.Name) || (sub.Attributes & FileAttributes.ReparsePoint) != 0))
-                {
-                    continue;
-                }
-
-                if (entries.Count >= max)
-                {
-                    return new ListTreeResult([.. entries], true);
-                }
-
-                entries.Add(new DirectoryEntry(child.FullName, child is DirectoryInfo));
-                if (child is DirectoryInfo folder)
-                {
-                    pending.Push(folder);
-                }
-            }
-        }
-
-        return new ListTreeResult([.. entries], false);
-    }
+    /// <summary>Everything under a folder, without version control's folder, up to a limit (<see cref="ExplorerFiles.ListTree"/>).</summary>
+    public ListTreeResult ListTree(ListTreeParams parameters) => ExplorerFiles.ListTree(parameters);
 
     // ------------------------------------------------------------------ folder mode
 
@@ -270,32 +218,8 @@ internal sealed partial class SolutionSession
     }
 
     /// <summary>The project files under the folder (without bin, obj, version control and packages).</summary>
-    public DiscoverProjectsResult DiscoverProjects()
-    {
-        var root = IsFolder ? Path : SolutionDirectory;
-        var found = new List<string>();
-        void Walk(string directory)
-        {
-            try
-            {
-                found.AddRange(Directory.EnumerateFiles(directory).Where(f => s_projectExtensions.Contains(System.IO.Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)));
-                foreach (var sub in Directory.EnumerateDirectories(directory))
-                {
-                    var name = System.IO.Path.GetFileName(sub);
-                    if (!s_skippedFolders.Contains(name) && !name.Equals("bin", StringComparison.OrdinalIgnoreCase) && !name.Equals("obj", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Walk(sub);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-            }
-        }
-
-        Walk(root);
-        return new DiscoverProjectsResult([.. found.Order(StringComparer.OrdinalIgnoreCase)]);
-    }
+    public DiscoverProjectsResult DiscoverProjects() =>
+        new([.. ExplorerFiles.DiscoverProjects(IsFolder ? Path : SolutionDirectory, s_projectExtensions)]);
 
     /// <summary>Folder mode: the projects of the in-memory solution (loaded ones are evaluated, removed ones dropped).</summary>
     public async Task SetFolderProjectsAsync(SetFolderProjectsParams parameters, CancellationToken cancellationToken)

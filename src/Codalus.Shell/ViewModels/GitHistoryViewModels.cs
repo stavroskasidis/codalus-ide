@@ -66,6 +66,13 @@ public sealed record GitRefChip(string Name, GitRefKind Kind, bool IsCurrent)
 /// <summary>A row of the history: a commit, with its place in the graph and its branches and tags.</summary>
 public sealed class GitCommitRow : ObservableObject
 {
+    /// <summary>
+    /// The most chips the Branch / Tag column shows (M57): it's 130 px wide and a chip is at least 30, so more never show,
+    /// and every name is in its tooltip. A commit with many refs at it made controls for each, each time a branch at it was
+    /// selected in the Git Repository document: 0.5 to 1 s of UI thread for 320 refs, 4.9 s for 7,000.
+    /// </summary>
+    internal const int MaxShownRefs = 8;
+
     private IReadOnlyList<GitRefChip> _shownRefs;
 
     public GitCommitRow(GitCommit commit, bool isIncoming = false)
@@ -73,7 +80,7 @@ public sealed class GitCommitRow : ObservableObject
         Commit = commit;
         IsIncoming = isIncoming;
         RefChips = GitRefChip.Parse(commit.Refs);
-        _shownRefs = RefChips;
+        _shownRefs = RefChips.Count > MaxShownRefs ? [.. RefChips.Take(MaxShownRefs)] : RefChips;
     }
 
     public GitCommit Commit { get; }
@@ -95,7 +102,7 @@ public sealed class GitCommitRow : ObservableObject
     /// <summary>Their names (<c>main</c>, <c>origin/main</c>, <c>v1.0</c>).</summary>
     public IReadOnlyList<string> Refs => [.. RefChips.Select(r => r.Name)];
 
-    /// <summary>The ones the toolbar's toggles show (remote branches and tags can be hidden).</summary>
+    /// <summary>The ones the toolbar's toggles show (remote branches and tags can be hidden), at most <see cref="MaxShownRefs"/>.</summary>
     public IReadOnlyList<GitRefChip> ShownRefs
     {
         get => _shownRefs;
@@ -119,7 +126,8 @@ public sealed class GitCommitRow : ObservableObject
     public string AccessibleName => $"{Subject}, {Author}, {Date}, {ShortHash}{(RefChips.Count > 0 ? ", " + RefsTip : string.Empty)}";
 
     internal void ShowRefs(bool remote, bool tags) =>
-        ShownRefs = remote && tags ? RefChips : [.. RefChips.Where(r => r.Kind == GitRefKind.Local || remote && r.Kind == GitRefKind.Remote || tags && r.Kind == GitRefKind.Tag)];
+        ShownRefs = remote && tags && RefChips.Count <= MaxShownRefs ? RefChips
+            : [.. RefChips.Where(r => r.Kind == GitRefKind.Local || remote && r.Kind == GitRefKind.Remote || tags && r.Kind == GitRefKind.Tag).Take(MaxShownRefs)];
 }
 
 /// <summary>A file changed by a commit.</summary>
@@ -196,7 +204,8 @@ public sealed record GitHistorySections(string IncomingRevision, int Incoming, i
 /// every branch, a file, a folder or a range of lines, loaded in pages as it scrolls, in the classic IDE's columns
 /// (Branch / Tag, Graph, Message, Author, Date, ID), with one Filter History box (a message, an author or a commit id). A
 /// local branch with an upstream has an Incoming section above its Local History. Double-click or Enter opens a commit's
-/// details (a tab); commands on a commit go to the shell.
+/// details (a tab); commands on a commit go to the shell. Ctrl+click and Shift+click select several commits: Compare
+/// Commits compares two of them, the older on the left; Compare with Previous compares one with its first parent.
 /// </summary>
 public sealed class GitHistoryViewModel : ObservableObject, IDisposable
 {
@@ -217,6 +226,7 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
     private bool _hasMore = true;
     private bool _isLoading;
     private GitCommitRow? _selected;
+    private IReadOnlyList<GitCommitRow> _selectedRows = [];
     private string _filter = string.Empty;
     private bool _allBranches;
     private bool _showRemoteRefs = true;
@@ -258,6 +268,9 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
 
     /// <summary>Runs a section's link (Fetch, Pull…), set by its owner.</summary>
     public Func<string, Task>? RunLink { get; set; }
+
+    /// <summary>Compares two commits, the older first (Compare Commits, Compare with Previous), set by its owner.</summary>
+    public Func<GitCommit, GitCommit, Task>? CompareCommits { get; set; }
 
     /// <summary>Saves a toolbar toggle (<c>allBranches</c>, <c>remoteBranches</c>, <c>tags</c>), set by its owner.</summary>
     public Action<string, bool>? SaveToggle { get; set; }
@@ -369,8 +382,63 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
             if (SetField(ref _selected, value))
             {
                 OnPropertyChanged(nameof(SelectedItem));
+                if (value is null || !_selectedRows.Contains(value))
+                {
+                    SelectedRows = value is null ? [] : [value];
+                }
+
+                OnSelectionChanged();
             }
         }
+    }
+
+    /// <summary>Every selected commit (Ctrl+click, Shift+click), in the list's order; <see cref="Selected"/> is one of them.</summary>
+    public IReadOnlyList<GitCommitRow> SelectedRows
+    {
+        get => _selectedRows;
+        set
+        {
+            // Each row's place found once: a search of the loaded rows for each selected one was 200 million comparisons
+            // for Select All with 20,000 commits loaded.
+            var order = new Dictionary<GitCommitRow, int>();
+            foreach (var row in IncomingRows.Concat(Rows))
+            {
+                order.TryAdd(row, order.Count);
+            }
+
+            IReadOnlyList<GitCommitRow> rows = [.. value.Distinct().OrderBy(r => order.GetValueOrDefault(r, -1))];
+            if (_selectedRows.SequenceEqual(rows))
+            {
+                return;
+            }
+
+            _selectedRows = rows;
+            OnPropertyChanged();
+
+            // Not through SelectedItem: setting the list's selected item would drop the rest of its selection.
+            if (rows.Count > 0 && (_selected is null || !rows.Contains(_selected)))
+            {
+                SetField(ref _selected, rows[0], nameof(Selected));
+            }
+
+            OnSelectionChanged();
+        }
+    }
+
+    /// <summary>One commit is selected: the commands on a commit apply.</summary>
+    public bool IsSingleSelection => _selected is not null && _selectedRows.Count <= 1;
+
+    /// <summary>Compare Commits: two commits are selected.</summary>
+    public bool CanCompareCommits => _selectedRows.Count == 2;
+
+    /// <summary>Compare with Previous: one commit, with a parent, is selected.</summary>
+    public bool CanCompareWithPrevious => IsSingleSelection && _selected!.Commit.Parents.Count > 0;
+
+    private void OnSelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsSingleSelection));
+        OnPropertyChanged(nameof(CanCompareCommits));
+        OnPropertyChanged(nameof(CanCompareWithPrevious));
     }
 
     /// <summary>The list's selection: a commit; choosing a header keeps the commit selected before it.</summary>
@@ -641,6 +709,24 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
     /// rebaseInteractive, copyHash.
     /// </summary>
     public Task RunAsync(string action) => _selected is { } row ? _commitAction(action, row.Commit) : Task.CompletedTask;
+
+    /// <summary>Compare Commits: the two selected commits, the older (lower in the list) on the left.</summary>
+    public Task CompareSelectedAsync() =>
+        CanCompareCommits && CompareCommits is { } compare ? compare(_selectedRows[1].Commit, _selectedRows[0].Commit) : Task.CompletedTask;
+
+    /// <summary>Compare with Previous: the selected commit against its first parent.</summary>
+    public Task CompareWithPreviousAsync()
+    {
+        if (!CanCompareWithPrevious || CompareCommits is not { } compare)
+        {
+            return Task.CompletedTask;
+        }
+
+        var commit = _selected!.Commit;
+        var parent = IncomingRows.Concat(Rows).FirstOrDefault(r => r.Commit.Hash == commit.Parents[0])?.Commit
+            ?? new GitCommit(commit.Parents[0], [], string.Empty, string.Empty, default, [], string.Empty);
+        return compare(parent, commit);
+    }
 
     /// <summary>Double-click or Enter on a commit: its details, in a tab.</summary>
     public Task OpenSelectedAsync() => RunAsync("details");

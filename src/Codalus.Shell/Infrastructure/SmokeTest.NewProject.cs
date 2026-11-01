@@ -76,10 +76,17 @@ internal sealed partial class SmokeTest
             Screenshot("new-project-additional.png", view);
 
             // Create: the wizard writes the files and closes; the main window opens the trusted solution, asking nothing.
+            // Create is waited for as Next is: GoForwardAsync does nothing while it is disabled. (On WSL the wizard never
+            // closed after a Create that said no error, 2026-10-30: the waits say the wizard's state now.)
             var project = Path.Combine(location, "SmokeConsole", "SmokeConsole", "SmokeConsole.csproj");
+            string Wizard() => $"page {model.Page}, Create enabled {model.CanCreate}, creating {model.IsCreating}, status '{model.CreateStatus}', "
+                + $"error '{model.CreateError}', validating {model.IsValidating}, the wizard "
+                + (shell.NewProjectModel == model ? "is this one" : shell.NewProjectModel is null ? "closed" : "is another one")
+                + $", the project {(File.Exists(project) ? "written" : "not written")}";
+            await WaitAsync(() => model.CanCreate, () => "Create is enabled (" + Wizard() + ")", 60).ConfigureAwait(true);
             await model.GoForwardAsync().ConfigureAwait(true);
             Check(model.CreateError is null, $"Create succeeds ({model.CreateError})");
-            await WaitAsync(() => !shell.IsNewProjectOpen, "Create closes the wizard", 180).ConfigureAwait(true);
+            await WaitAsync(() => !shell.IsNewProjectOpen, () => "Create closes the wizard (" + Wizard() + ")", 180).ConfigureAwait(true);
             Check(File.Exists(project), $"the project is written ({project})");
             await WaitAsync(() => shell.Solutions.Solution is { Trusted: true, Projects.Length: 1 } && shell.Solutions.Projects.Count == 1, "the trusted solution opens with the project evaluated", 240).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.Model.Path == Path.Combine(location, "SmokeConsole", "SmokeConsole", "Program.cs"), "Program.cs opens", 60).ConfigureAwait(true);

@@ -1,4 +1,5 @@
 using System.Globalization;
+using Codalus.Workbench.Localization;
 using System.Text;
 
 namespace Codalus.Workbench.Git;
@@ -117,8 +118,12 @@ public sealed partial class GitService
             .Select((parts, index) => new GitStash(index, parts[0], parts[1]))];
     }
 
-    /// <summary>Stashes the changes (only <paramref name="paths"/> when given: a partial stash), with untracked files optionally.</summary>
-    public Task StashAsync(string? message, bool includeUntracked, IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Stashes the changes (only <paramref name="paths"/> when given: a partial stash, its paths resolved off the caller's
+    /// thread), with untracked files optionally. A partial stash too long for Windows' command line is refused before git
+    /// runs (<see cref="StashFitsCommandLine"/>).
+    /// </summary>
+    public async Task StashAsync(string? message, bool includeUntracked, IReadOnlyList<string>? paths = null, CancellationToken cancellationToken = default)
     {
         var arguments = new List<string> { "stash", "push" };
         if (message is { Length: > 0 })
@@ -133,12 +138,30 @@ public sealed partial class GitService
 
         if (paths is { Count: > 0 })
         {
+            var relative = await RelativeAsync(paths, cancellationToken).ConfigureAwait(false);
+            if (OperatingSystem.IsWindows() && !StashFitsCommandLine(relative))
+            {
+                throw new GitException(
+                    Localizer.Format("msg.git.stashTooManyFiles", "{0} files are too many to stash on their own on Windows: git gives their paths to the commands it runs on a command line, which holds 32,767 characters. Stash fewer files at a time, or all the changes.", relative.Count),
+                    -1);
+            }
+
+            // On the command line, not git's input: git stash gives the paths to the commands it runs on theirs anyway.
             arguments.Add("--");
-            arguments.AddRange(paths.Select(Relative));
+            arguments.AddRange(relative);
         }
 
-        return MutateAsync(arguments, cancellationToken);
+        await MutateAsync(arguments, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Whether a partial stash of <paramref name="relative"/> fits Windows' command line of 32,767 characters. git stash
+    /// gives its pathspecs to the git add and git diff-index it starts, on their command lines, each with 12 characters of
+    /// magic (<c>:(,prefix:0)</c>), whether it read them from its own command line or its input: past the limit it stored
+    /// the stash and then couldn't start them, which left the changes in the work tree and a stash of them in the list.
+    /// About 370 paths of 70 characters fit; Linux's and macOS' limits (1-2 MB) hold tens of thousands.
+    /// </summary>
+    internal static bool StashFitsCommandLine(IReadOnlyList<string> relative) => relative.Sum(p => p.Length + 15L) <= 32_000;
 
     /// <summary>Applies a stash; <paramref name="pop"/> also drops it when it applied cleanly.</summary>
     public Task ApplyStashAsync(GitStash stash, bool pop, CancellationToken cancellationToken = default) =>

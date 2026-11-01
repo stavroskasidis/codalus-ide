@@ -1196,11 +1196,9 @@ public sealed class PluginManager : IAsyncDisposable
     {
         _workbench.Settings.Changed -= OnSettingsChanged;
         _workbench.Commands.Executed -= OnCommandExecuted;
-        foreach (var host in _hosts.Values)
-        {
-            await host.DisposeAsync().ConfigureAwait(false);
-        }
 
+        // The hosts shut down together (M56): one after another, a few slow ones outlasted the time the IDE's exit gives them.
+        await Task.WhenAll(_hosts.Values.Select(host => host.DisposeAsync().AsTask())).ConfigureAwait(false);
         foreach (var gate in _activationLocks.Values)
         {
             gate.Dispose();

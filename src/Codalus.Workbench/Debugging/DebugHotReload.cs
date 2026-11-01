@@ -2,12 +2,21 @@ using System.Text.Json;
 using Codalus.Debugging;
 using Codalus.LanguageServices.Client;
 using Codalus.LanguageServices.Protocol;
+using Codalus.Workbench.Projects;
 
 namespace Codalus.Workbench.Debugging;
 
-/// <summary>What applying the edits made of a debugged program: <see cref="HotReloadOutcome.Kind"/> is one of the constants.</summary>
+/// <summary>
+/// What applying the edits made of a debugged program: <see cref="HotReloadOutcome.Kind"/> is one of the constants.
+/// <see cref="Browser"/> says what a Blazor Web App's pages made of them (null for other programs), and
+/// <see cref="HandlerErrors"/> what the program's <c>[MetadataUpdateHandler]</c>s threw (ADR 0090).
+/// </summary>
 public sealed record HotReloadOutcome(string Kind, IReadOnlyList<HotReloadDiagnostic> Diagnostics, string? Message = null)
 {
+    public HotReloadBrowserOutcome? Browser { get; init; }
+
+    public IReadOnlyList<string> HandlerErrors { get; init; } = [];
+
     /// <summary>Nothing changed since the last edit applied.</summary>
     public const string None = "none";
 
@@ -30,18 +39,35 @@ public sealed record HotReloadOutcome(string Kind, IReadOnlyList<HotReloadDiagno
 }
 
 /// <summary>
+/// What a Blazor Web App's pages made of an edit to code that runs in the browser (ADR 0090): <see cref="Unreachable"/>
+/// when no channel reaches it (an older app or SDK); else how many pages were open, the errors of those that couldn't
+/// apply it, and how many hadn't answered yet (their answers come later, <see cref="BrowserRefreshServer.LateAnswer"/>).
+/// </summary>
+public sealed record HotReloadBrowserOutcome(bool Unreachable, int Pages, IReadOnlyList<string> Errors, int Unanswered = 0);
+
+/// <summary>
 /// Hot Reload while debugging (M55, ADR 0086): while the Codalus debugger runs a program, a Hot Reload session of the
 /// language host (Roslyn's Edit and Continue service) follows the program from the build it started from.
 /// <see cref="ApplyAsync"/> asks it for the edits since, as deltas, and has every Codalus debugger of the debug
 /// session apply them (<c>codalus/applyChanges</c>); the language host then makes the next deltas from them. Rude edits
-/// and compile errors come back without anything applied. One apply at a time.
+/// and compile errors come back without anything applied. One apply at a time. Then the program's update handlers run
+/// (<see cref="HotReloadAgents"/>), and a Blazor Web App's pages get the edits to code that runs in the browser
+/// (<see cref="UseBrowser"/>, ADR 0090).
 /// </summary>
 public sealed class DebugHotReload : IAsyncDisposable
 {
     private static readonly DapJsonContext s_json = DapJsonContext.Default;
 
+    /// <summary>How long an apply waits for the program's handlers, and for each page, to say they ran.</summary>
+    private static readonly TimeSpan s_answerWait = TimeSpan.FromSeconds(10);
+
     private readonly DebugService _debugger;
     private readonly Func<LanguageHostClient?> _client;
+    private readonly HotReloadAgents _agents = new();
+    private BrowserHotReload? _browser;
+
+    /// <summary>Whether a debug session started with <see cref="_browser"/>: only its end disposes it (a late end of the one before doesn't).</summary>
+    private bool _browserInUse;
     private readonly SemaphoreSlim _applying = new(1, 1);
     private readonly Lock _gate = new();
     private Task<string?>? _starting;
@@ -52,6 +78,7 @@ public sealed class DebugHotReload : IAsyncDisposable
     {
         _debugger = debugger;
         _client = client;
+        debugger.HotReloadAgents = _agents;
         debugger.StateChanged += (_, _) => OnStateChanged();
         debugger.Ended += (_, _) => _ = EndAsync();
     }
@@ -74,6 +101,38 @@ public sealed class DebugHotReload : IAsyncDisposable
     /// <summary>The outcome of each apply that did something (on any thread).</summary>
     public event EventHandler<HotReloadOutcome>? Applied;
 
+    /// <summary>
+    /// The next debug session is a Blazor Web App's (ADR 0090): where its WebAssembly edits go, and what its browser's
+    /// runtime can apply. Set before the session starts; the session's end disposes its server.
+    /// </summary>
+    public void UseBrowser(BrowserHotReload browser)
+    {
+        BrowserHotReload? previous;
+        lock (_gate)
+        {
+            previous = _browser;
+            _browser = browser;
+            _browserInUse = false;
+        }
+
+        if (previous?.Server is { } server && !ReferenceEquals(server, browser.Server))
+        {
+            _ = server.DisposeAsync().AsTask();
+        }
+    }
+
+    /// <summary>The session's browser channel (tests, the status bar), while one is used.</summary>
+    public BrowserHotReload? Browser
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _browser;
+            }
+        }
+    }
+
     private void OnStateChanged()
     {
         if (_debugger.State is not (DebugState.Running or DebugState.Stopped) || _debugger.CodalusAdapters.Count == 0)
@@ -89,6 +148,7 @@ public sealed class DebugHotReload : IAsyncDisposable
                 _startCancel = new CancellationTokenSource();
                 var cancel = _startCancel.Token;
                 _starting = Task.Run(() => StartAsync(cancel));
+                _browserInUse = _browser is not null;
             }
         }
     }
@@ -106,14 +166,20 @@ public sealed class DebugHotReload : IAsyncDisposable
                 return null;
             }
 
-            var capabilities = await adapter.Connection.RequestAsync("codalus/hotReloadCapabilities", JsonElement.Parse("{}"), s_json.JsonElement, s_json.HotReloadCapabilitiesResponse, cancellationToken).ConfigureAwait(false);
-            if (capabilities.Capabilities.Length == 0)
+            var capabilities = (await adapter.Connection.RequestAsync("codalus/hotReloadCapabilities", JsonElement.Parse("{}"), s_json.JsonElement, s_json.HotReloadCapabilitiesResponse, cancellationToken).ConfigureAwait(false)).Capabilities;
+            if (capabilities.Length == 0)
             {
                 return null;
             }
 
+            // A Blazor Web App's edits apply in the browser too: only what both runtimes can apply.
+            if (Browser?.Capabilities is { } browser)
+            {
+                capabilities = [.. capabilities.Intersect(browser, StringComparer.Ordinal)];
+            }
+
             var session = "debug-" + Guid.NewGuid().ToString("N");
-            if (!await client.HotReloadStartAsync(session, [], capabilities.Capabilities, cancellationToken).ConfigureAwait(false))
+            if (!await client.HotReloadStartAsync(session, [], capabilities, cancellationToken).ConfigureAwait(false))
             {
                 return null;
             }
@@ -176,6 +242,11 @@ public sealed class DebugHotReload : IAsyncDisposable
                 {
                     return outcome;
                 }
+
+                if (outcome.Kind == HotReloadOutcome.Applied)
+                {
+                    outcome = await ApplyToApplicationAsync(update.Updates, outcome, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             Applied?.Invoke(this, outcome);
@@ -213,17 +284,63 @@ public sealed class DebugHotReload : IAsyncDisposable
         return applied ? HotReloadOutcome.Of(HotReloadOutcome.Applied) : HotReloadOutcome.Of(HotReloadOutcome.None);
     }
 
+    /// <summary>
+    /// After the debugger applied an edit (ADR 0090): the program's <c>[MetadataUpdateHandler]</c>s run, through its
+    /// agent, so its UI shows the new code (Blazor re-renders its components); a Blazor Web App's pages then get the
+    /// deltas of the code that runs in the browser and refresh what the server rendered. A program stopped at a
+    /// breakpoint runs its handlers when it goes on: the apply doesn't wait for them then.
+    /// </summary>
+    private async Task<HotReloadOutcome> ApplyToApplicationAsync(IReadOnlyList<HotReloadModuleUpdate> updates, HotReloadOutcome outcome, CancellationToken cancellationToken)
+    {
+        var stopped = _debugger.State == DebugState.Stopped;
+        var handlerErrors = await _agents.NotifyAsync(updates, stopped ? TimeSpan.Zero : s_answerWait, cancellationToken).ConfigureAwait(false);
+        outcome = outcome with { HandlerErrors = handlerErrors };
+        if (Browser is not { } browser)
+        {
+            return outcome;
+        }
+
+        var inBrowser = updates.Where(u => browser.Projects.Contains(u.Project, SolutionService.PathComparer)).ToList();
+        if (browser.Server is not { } server)
+        {
+            return inBrowser.Count == 0 ? outcome : outcome with { Browser = new HotReloadBrowserOutcome(Unreachable: true, 0, []) };
+        }
+
+        // Stopped, a page paused at a breakpoint answers once it goes on: it isn't waited for. A page that doesn't answer in
+        // time isn't taken for a failure either: its answer comes later.
+        var result = inBrowser.Count == 0 ? null : await server.ApplyAsync(inBrowser, stopped ? TimeSpan.Zero : s_answerWait, cancellationToken).ConfigureAwait(false);
+        if (!stopped)
+        {
+            await server.RefreshAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        // An edit to the server only (the pages refreshed what it renders) says nothing of the browser.
+        return result is null ? outcome : outcome with { Browser = new HotReloadBrowserOutcome(Unreachable: false, result.Pages, result.Errors, result.Unanswered) };
+    }
+
     private async Task EndAsync()
     {
         Task<string?>? starting;
         CancellationTokenSource? cancel;
+        BrowserHotReload? browser;
         lock (_gate)
         {
             starting = _starting;
             cancel = _startCancel;
+            browser = _browserInUse ? _browser : null;
             _starting = null;
             _startCancel = null;
             _session = null;
+            if (_browserInUse)
+            {
+                _browser = null;
+                _browserInUse = false;
+            }
+        }
+
+        if (browser?.Server is { } server)
+        {
+            await server.DisposeAsync().ConfigureAwait(false);
         }
 
         if (cancel is not null)
@@ -249,6 +366,7 @@ public sealed class DebugHotReload : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await EndAsync().ConfigureAwait(false);
+        await _agents.DisposeAsync().ConfigureAwait(false);
         _applying.Dispose();
     }
 }

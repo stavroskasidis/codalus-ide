@@ -24,6 +24,9 @@ public enum MemberKind
 
     /// <summary>A collection view's object as netcoredbg lists it.</summary>
     RawView,
+
+    /// <summary>A range of a long array's elements, <c>[1000..1999]</c> (M56): they're read when it's expanded.</summary>
+    Range,
 }
 
 /// <summary>

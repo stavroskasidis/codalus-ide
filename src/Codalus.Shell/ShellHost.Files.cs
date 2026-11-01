@@ -48,7 +48,8 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Opens a file in the hex viewer (read-only).</summary>
-    public HexDocument OpenHex(string path, bool preview = false)
+    /// <param name="activate">False to add the tab behind the active one (files opened together, M56).</param>
+    public HexDocument OpenHex(string path, bool preview = false, bool activate = true)
     {
         path = Path.GetFullPath(path);
         if (Layout.FindDocument<HexDocument>(HexDocument.IdFor(path)) is not { } document)
@@ -56,7 +57,7 @@ public sealed partial class ShellHost
             document = new HexDocument(path, EditorFont);
         }
 
-        Layout.OpenDocument(document, preview, focus: !preview);
+        Layout.OpenDocument(document, preview, focus: !preview, activate);
         return document;
     }
 
@@ -74,18 +75,19 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Opens a <c>.resx</c> file in the resource editor (deferred from M11).</summary>
-    public ResxEditorDocument OpenResx(string path, bool preview = false)
+    /// <param name="activate">False to add the tab behind the active one (files opened together, M56).</param>
+    public ResxEditorDocument OpenResx(string path, bool preview = false, bool activate = true)
     {
         path = Path.GetFullPath(path);
         if (Layout.FindDocument<ResxEditorDocument>(ResxEditorDocument.IdFor(path)) is { } open)
         {
-            Layout.OpenDocument(open, preview, focus: !preview);
+            Layout.OpenDocument(open, preview, focus: !preview, activate);
             return open;
         }
 
         var document = new ResxEditorDocument(path, file => _ = OpenFileAsync(file, preview: false, at: null, initialContent: null, textEditor: true), RunCustomToolOnSave);
         document.CloseRequested += (_, _) => _ = ConfirmCloseAsync(document);
-        Layout.OpenDocument(document, preview, focus: !preview);
+        Layout.OpenDocument(document, preview, focus: !preview, activate);
         _ = document.LoadAsync();
         return document;
     }
@@ -131,7 +133,8 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Opens an image file in the image viewer.</summary>
-    public ImageDocument OpenImage(string path, bool preview = false)
+    /// <param name="activate">False to add the tab behind the active one (files opened together, M56).</param>
+    public ImageDocument OpenImage(string path, bool preview = false, bool activate = true)
     {
         path = Path.GetFullPath(path);
         if (Layout.FindDocument<ImageDocument>(ImageDocument.IdFor(path)) is not { } document)
@@ -139,7 +142,7 @@ public sealed partial class ShellHost
             document = new ImageDocument(path);
         }
 
-        Layout.OpenDocument(document, preview, focus: !preview);
+        Layout.OpenDocument(document, preview, focus: !preview, activate);
         return document;
     }
 }

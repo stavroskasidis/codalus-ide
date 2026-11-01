@@ -124,8 +124,9 @@ public class ChromeTests
         var explorer = f.Shell.Explorer;
         await ShellFixture.PumpUntil(() => explorer.Rows.Any(r => r.Name == "App"));
 
-        // The search box keeps the matching items and their parents.
+        // The search box keeps the matching items and their parents, once typing pauses (found off the UI thread).
         explorer.Filter = "greeter";
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering);
         Assert.Contains(explorer.Rows, r => r.Name == "Greeter.cs");
         Assert.Contains(explorer.Rows, r => r.Name == "Core");
         Assert.DoesNotContain(explorer.Rows, r => r.Name == "App");

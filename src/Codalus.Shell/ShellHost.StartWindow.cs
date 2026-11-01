@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Localization;
@@ -16,6 +17,9 @@ public sealed partial class ShellHost
     public const string StartupSetting = "workbench.startup";
 
     private StartWindow? _startWindow;
+
+    /// <summary>Whether recent entries are there, off the UI thread (M56; tests replace what it asks the disk).</summary>
+    internal PathProbe RecentProbe { get; set; } = new();
 
     /// <summary>Whether the start window is open.</summary>
     public bool IsStartWindowOpen => _startWindow is not null;
@@ -41,20 +45,63 @@ public sealed partial class ShellHost
     /// </summary>
     private void ContinueStartup()
     {
-        if (!Options.StartWindow)
+        if (!Options.StartWindow || OpenedSomething)
         {
             return;
         }
 
         switch (Workbench.Settings.GetString(StartupSetting, "startWindow"))
         {
-            case "lastSolution" when Recent.Items.FirstOrDefault(p => File.Exists(p) || Directory.Exists(p)) is { } last:
-                _ = Directory.Exists(last) ? OpenFolderAsync(last) : OpenSolutionAsync(last);
+            case "lastSolution":
+                _ = OpenLastSolutionAsync();
                 break;
             case "startWindow":
-                Infrastructure.Ui.Post(ShowStartWindow);
+                Infrastructure.Ui.Post(() =>
+                {
+                    if (!IsClosing && !OpenedSomething)
+                    {
+                        ShowStartWindow();
+                    }
+                });
                 break;
         }
+    }
+
+    /// <summary>
+    /// Whether a solution, project or folder opened, or started to, since the IDE started: the OS's open-documents event
+    /// that started it, a drop, File → Open. The startup waits for the login shell's environment (M56), seconds in which
+    /// the user can open something: the start window, the first-run setup and the last solution then stay away.
+    /// </summary>
+    private bool OpenedSomething => _openRequests > 0 || Solutions.IsOpen;
+
+    /// <summary>
+    /// The last-solution startup: the first recent entry that is there, in the list's order, each checked off the UI thread
+    /// (M56: an entry on a share that is offline counts as not there once its probe's time is up). Nothing opens when the
+    /// user opened something meanwhile.
+    /// </summary>
+    private async Task OpenLastSolutionAsync()
+    {
+        var opens = _openRequests;
+        if (await FirstRecentThereAsync().ConfigureAwait(true) is not { } last || opens != _openRequests || Solutions.IsOpen)
+        {
+            return;
+        }
+
+        await (last.Kind == PathState.Folder ? OpenFolderAsync(last.Path) : OpenSolutionAsync(last.Path)).ConfigureAwait(true);
+    }
+
+    /// <summary>The first recent entry that is there, and what it is; null when none is.</summary>
+    internal async Task<(string Path, PathState Kind)?> FirstRecentThereAsync()
+    {
+        foreach (var path in Recent.Items)
+        {
+            if (await RecentProbe.KindAsync(path).ConfigureAwait(true) is var kind and (PathState.File or PathState.Folder))
+            {
+                return (path, kind);
+            }
+        }
+
+        return null;
     }
 
     public void ShowStartWindow()
@@ -79,14 +126,20 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Opens a recent entry: a folder, or a solution or project; a missing one offers to leave the list.</summary>
+    /// <summary>
+    /// Opens a recent entry (the start window's, File → Open Recent's): a folder, or a solution or project; a missing one
+    /// offers to leave the list. Checked as the start window's rows are (M56): off the UI thread, on a thread of its own,
+    /// and one that doesn't answer within <see cref="PathProbe.Timeout"/> (a share that is offline) counts as missing, so
+    /// the click says so instead of waiting for the network's timeout, or for good on a dead mount.
+    /// </summary>
     internal async Task OpenRecentEntryAsync(string path)
     {
-        if (Directory.Exists(path))
+        var kind = await RecentProbe.KindAsync(path).ConfigureAwait(true);
+        if (kind == PathState.Folder)
         {
             await OpenFolderAsync(path).ConfigureAwait(true);
         }
-        else if (File.Exists(path))
+        else if (kind == PathState.File)
         {
             await OpenSolutionAsync(path).ConfigureAwait(true);
         }

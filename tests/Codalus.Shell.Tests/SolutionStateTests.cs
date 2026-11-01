@@ -128,6 +128,60 @@ public class SolutionStateTests
     }
 
     [AvaloniaFact]
+    public async Task A_sessions_tabs_come_back_behind_the_active_one_and_make_their_editors_when_shown()
+    {
+        // Each document used to be activated in turn: every tab's editor was made at startup, each asking the language
+        // service for its colors, hints and CodeLens, for a session of twenty tabs on a large solution.
+        await using var f = ShellFixture.Create();
+        var solution = f.CopyFixture();
+        var folder = Path.GetDirectoryName(solution)!;
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        string[] paths = [Path.Combine(folder, "README.md"), Path.Combine(folder, "src", "App", "Program.cs"), Path.Combine(folder, "src", "Core", "Greeter.cs")];
+        var session = Path.Combine(folder, ".codalus", "state", "ProjectSystem.slnx", "session.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(session)!);
+        await File.WriteAllTextAsync(session, $$"""
+            { "documents": [{{string.Join(", ", paths.Select(p => $$"""{ "path": {{System.Text.Json.JsonSerializer.Serialize(p)}}, "line": 2, "character": 0 }"""))}}], "active": {{System.Text.Json.JsonSerializer.Serialize(paths[1])}} }
+            """, TestContext.Current.CancellationToken);
+
+        // The tabs are added in one pass: a layout pass between two of them made the first tab of the empty group active,
+        // and built its editor (macOS CI, run 41237010138). A job posted when the first tab lands runs only if the UI
+        // thread is let go before the last one does.
+        var added = 0;
+        var yielded = false;
+        var yieldedBeforeLast = false;
+        f.Shell.Layout.Factory.DockableAdded += (_, e) =>
+        {
+            if (e.Dockable is not Editor.CodeEditorDocument)
+            {
+                return;
+            }
+
+            if (++added == 1)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(() => yielded = true, Avalonia.Threading.DispatcherPriority.Send);
+            }
+            else if (added == paths.Length)
+            {
+                yieldedBeforeLast = yielded;
+            }
+        };
+
+        await OpenAsync(f, solution);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Name == "Program.cs");
+        Assert.Equal(paths.Length, added);
+        Assert.False(yieldedBeforeLast, "the UI thread was let go between two of the session's tabs");
+        Assert.Equal(["README.md", "Program.cs", "Greeter.cs"], f.Shell.Editors.Select(e => e.Model.Name));
+        Assert.Null(f.Shell.Editors.Single(e => e.Model.Name == "README.md").Controller);
+        Assert.Null(f.Shell.Editors.Single(e => e.Model.Name == "Greeter.cs").Controller);
+
+        // Shown, a tab makes its editor, at the line it was left on.
+        var greeter = f.Shell.Editors.Single(e => e.Model.Name == "Greeter.cs");
+        f.Shell.Layout.OpenDocument(greeter);
+        await ShellFixture.PumpUntil(() => greeter.Controller is not null);
+        Assert.Equal(3, greeter.Controller!.Caret.Line);
+    }
+
+    [AvaloniaFact]
     public async Task A_solution_folder_that_cant_be_written_keeps_the_state_in_the_user_folder()
     {
         await using var f = ShellFixture.Create();

@@ -84,6 +84,47 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         Assert.All(calls, c => Assert.StartsWith("dotnet ", c, StringComparison.Ordinal));
         Assert.Contains("--version 9.0.100", InstallPlans.For(sdk, PlatformKind.Linux, _dir, false, "fedora")!.Command, StringComparison.Ordinal);
         Assert.Contains("Microsoft.DotNet.SDK.9 ", InstallPlans.For(sdk, PlatformKind.Windows, _dir, true, null)!.Command, StringComparison.Ordinal);
+
+        // What every start checks: the required tools, without running Git LFS, Docker or Podman.
+        calls.Clear();
+        var required = await check.CheckRequiredAsync(null, TestContext.Current.CancellationToken);
+        Assert.Equal(["dotnet", "dotnet-runtime", "git"], required.Select(t => t.Id));
+        Assert.All(required, t => Assert.True(t.Required, t.Id));
+        Assert.Equal("2.51.0", required.Single(t => t.Id == "git").Version);
+        Assert.All(calls, c => Assert.Matches("^(dotnet|git) --", c));
+    }
+
+    /// <summary>
+    /// Every start checks the required tools from the UI thread (M56): looking for dotnet reads folders and starts a process,
+    /// so it runs on the thread pool. Here the first look blocks until the test lets it go, which the caller couldn't do if
+    /// the look ran on its thread.
+    /// </summary>
+    [Fact]
+    public async Task The_startup_check_looks_for_tools_off_the_callers_thread()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var calls = 0;
+        var threads = new System.Collections.Concurrent.ConcurrentBag<int>();
+        var check = new EnvironmentCheck(PlatformKind.Linux, name =>
+        {
+            threads.Add(Environment.CurrentManagedThreadId);
+            if (Interlocked.Increment(ref calls) == 1)
+            {
+                entered.Set();
+                release.Wait(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            }
+
+            return name == "PATH" ? "/usr/bin" : null;
+        }, (_, _, _, _) => Task.FromResult((1, "")), _ => false);
+        var caller = Environment.CurrentManagedThreadId;
+
+        var checking = check.CheckRequiredAsync(null, TestContext.Current.CancellationToken);
+
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        Assert.DoesNotContain(caller, threads);
+        release.Set();
+        Assert.Equal(ToolState.Missing, (await checking).Single(t => t.Id == "dotnet").State);
     }
 
     [Fact]
@@ -131,6 +172,40 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         File.WriteAllText(file, "NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\nVERSION_ID=\"24.04\"\n");
         Assert.Equal("ubuntu debian", InstallPlans.LinuxDistribution(file));
         Assert.Null(InstallPlans.LinuxDistribution(Path.Combine(_dir, "none")));
+    }
+
+    [Fact]
+    public async Task A_cancelled_run_ends_its_program()
+    {
+        // A shell's environment check, cancelled when its window closes: its probes kept running, and held the shell,
+        // until they ended by themselves.
+        var file = Path.Combine(_dir, "pid");
+        var (program, arguments) = OperatingSystem.IsWindows()
+            ? ("powershell.exe", new[] { "-NoProfile", "-Command", $"$PID | Set-Content -Path '{file}'; Start-Sleep -Seconds 300" })
+            : ("/bin/sh", ["-c", $"echo $$ > '{file}'; exec sleep 300"]);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var run = EnvironmentCheck.RunProcessAsync(program, arguments, _dir, TimeSpan.FromSeconds(120), cancel.Token);
+        var id = 0;
+        for (var i = 0; i < 300 && !(File.Exists(file) && int.TryParse(File.ReadAllText(file).Trim(), System.Globalization.CultureInfo.InvariantCulture, out id)); i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        Assert.NotEqual(0, id);
+        using var process = System.Diagnostics.Process.GetProcessById(id);
+        try
+        {
+            await cancel.CancelAsync();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
+            Assert.True(process.WaitForExit(TimeSpan.FromSeconds(10)), "The program still runs after its run was cancelled.");
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill();
+            }
+        }
     }
 
     [Fact]

@@ -95,7 +95,7 @@ public sealed partial class ShellHost
             var runner = new EnvironmentTestRunner(environment, SolutionFolder(solution), line => channel.AppendLine(line)) { Containers = ContainerEngine };
             var documents = await Task.Run(() => runner.RunAsync(projects, token), token).ConfigureAwait(true);
             var imported = documents.SelectMany(d => Trx.Import(d, "environment")).ToList();
-            var unmatched = Tests.ApplyImported(environment.Name, imported, (leaf, result) => TestNames.Matches(leaf, result.FullyQualifiedName, result.DisplayName));
+            var unmatched = Tests.ApplyImported(environment.Name, imported);
             if (imported.Count == 0)
             {
                 Workbench.Notifications.Warning($"No results came back from {environment.Name}: see the Tests output.");

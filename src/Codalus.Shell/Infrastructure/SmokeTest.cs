@@ -414,7 +414,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => greeter.Insights.EndOfLineText(classLine)?.Contains("reference", StringComparison.Ordinal) == true, "CodeLens counts Greeter's references", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.ActiveEditor?.View?.NavigationBar.Types.Any(t => t.Display == "Greeter") == true, "the navigation bar lists Greeter", 30).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId, focus: false);
-            await WaitAsync(() => shell.DocumentOutline.Roots.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
+            await WaitAsync(() => shell.DocumentOutline.Rows.Count > 0, "the Document Outline shows Greeter.cs", 30).ConfigureAwait(true);
             shell.Layout.CloseToolWindow(ViewModels.DocumentOutlineViewModel.ToolWindowId);
         }, "language.ready").ConfigureAwait(true);
 
@@ -885,6 +885,27 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => project.LineColors(1) >= 2, "the XML grammar colors the project file").ConfigureAwait(true);
         }, "packages.manage").ConfigureAwait(true);
 
+        await StepAsync("languages.markdownPreview", "M11", "A Markdown file opens beside its live preview, which collapses and shows again", async () =>
+        {
+            var markdown = Path.Combine(Work, "smoke-readme.md");
+            await File.WriteAllTextAsync(markdown, "# Smoke test\n\nSome *emphasis*, a [link](https://example.com) and a list:\n\n- one\n- two\n\n```csharp\nConsole.WriteLine(\"hi\");\n```\n").ConfigureAwait(true);
+            var editor = await OpenAsync(markdown).ConfigureAwait(true);
+            if (shell.MarkdownSplit.Collapsed)
+            {
+                shell.Run("markdown.togglePreview"); // a previous session left it collapsed
+            }
+
+            await WaitAsync(() => shell.ActiveEditor?.View?.MarkdownSplit is { IsCollapsed: false, Preview: { Rendered.Length: > 0, Bounds.Width: > 0 } }, "the preview shows beside the text").ConfigureAwait(true);
+            var split = shell.ActiveEditor!.View!.MarkdownSplit!;
+            editor.Model.Text.Insert(editor.Model.Text.TextLength, "\n## Added\n");
+            await WaitAsync(() => split.Preview.Rendered.Contains("## Added", StringComparison.Ordinal), "the preview follows an edit").ConfigureAwait(true);
+            Screenshot("smoke-test-markdown-preview.png");
+            shell.Run("markdown.togglePreview");
+            await WaitAsync(() => split.IsCollapsed && !split.Preview.IsVisible, "Toggle Preview collapses it").ConfigureAwait(true);
+            shell.Run("markdown.togglePreview");
+            await WaitAsync(() => !split.IsCollapsed && split.Preview.IsVisible, "Toggle Preview shows it again").ConfigureAwait(true);
+        }).ConfigureAwait(true);
+
         await StepAsync("web.http", "M15", "The Endpoints Explorer, and a .http request to the running web app", async () =>
         {
             var (solution, http) = PrepareWebFixture();
@@ -1058,7 +1079,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Trust.Trust(folder);
             await shell.OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Solution is { IsFolder: true } && shell.Explorer.IsFolderView && shell.Explorer.Rows.Any(r => r.Name == "README.md"), "the folder view lists the folder", 120).ConfigureAwait(true);
-            shell.Explorer.Reveal("f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj"));
+            var toolProject = "f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj");
+            shell.Explorer.Reveal(toolProject);
+            await WaitAsync(() => shell.Explorer.Selected?.Id == toolProject, "the folder view reveals Tool.csproj once the folders down to it are listed", 60).ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-folder-view.png");
 
@@ -1274,9 +1297,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
 
-            // M54: the server under the Codalus debugger (the page's debugger is the browser's either way).
+            // M54: the server under the Codalus debugger (the page's debugger is the browser's either way). Its Hot Reload
+            // doesn't use dotnet watch: the debugger launches the server, and the IDE sends the page its edits (ADR 0090).
             await StepAsync("blazor.compoundDebug.codalus", "M54", "Under the Codalus debugger: " + compoundTitle, () => UnderCodalusDebuggerAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
-            await StepAsync("blazor.compoundHotReload.codalus", "M54", "Under the Codalus debugger: " + compoundHotReloadTitle, () => UnderCodalusDebuggerAsync(CompoundHotReloadStepAsync), "blazor.compoundDebug.codalus").ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload.codalus", "ADR 0090", "Under the Codalus debugger: F5 on a Blazor Web App (SDK 10) launches the server without dotnet watch, a WebAssembly edit applies to the server and runs in the browser, and a rude edit asks to restart", () => UnderCodalusDebuggerAsync(BrowserHotReloadStepAsync), "blazor.compoundDebug.codalus").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -1474,6 +1498,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Run("debug.start");
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the debugger stops at the breakpoint", 300).ConfigureAwait(true);
         await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, $"the editor shows the current line {line}").ConfigureAwait(true);
+        shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false); // a later session's stop leaves it behind the Debug Console, which reads nothing (M56)
         await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "args"), "Locals lists args").ConfigureAwait(true);
         await WaitAsync(() => shell.CallStack.Frames.Count > 0, "the Call Stack has frames").ConfigureAwait(true);
 
@@ -1824,6 +1849,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Run("debug.start");
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped, "the generator stops at its breakpoint", 420).ConfigureAwait(true);
         Check(string.Equals(shell.Debugger.SelectedFrame?.Source?.Path, generator, OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase), $"in HelloGenerator.cs (got {shell.Debugger.SelectedFrame?.Source?.Path})");
+        shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false); // behind the Debug Console, it reads nothing (M56)
         await WaitAsync(() => shell.Locals.Roots.Any(r => r.Name == "list" && r.Value.Contains("Customer", StringComparison.Ordinal)), "Locals shows the class names the generator got").ConfigureAwait(true);
         await Task.Delay(1000).ConfigureAwait(true);
         Screenshot("smoke-test-debug-roslyn.png");
@@ -3773,6 +3799,101 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
 
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive && shell.WatchedServerDebugSession is null, "the session, dotnet watch and the server end", 120).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// A Blazor Web App's edits under the Codalus debugger (ADR 0090), on a BlazorHosted copy of its own on SDK 10 (as the
+    /// maintainer's WPoseidon; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
+    /// without dotnet watch, and stops in its prerender; the page connects to the IDE; a WebAssembly edit applies to the
+    /// server and the page, which runs it; a rude edit asks, and going on keeps the old code.
+    /// </summary>
+    private async Task BrowserHotReloadStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous session has stopped", 60).ConfigureAwait(true);
+        var target = Path.Combine(Work, "BlazorHostedSdk10");
+        if (!Directory.Exists(target))
+        {
+            Copy(Path.Combine(samples, "BlazorHosted"), target);
+            File.WriteAllText(Path.Combine(target, "global.json"), """{"sdk":{"version":"10.0.100","rollForward":"latestFeature"}}""");
+            using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            socket.Start();
+            var port = ((System.Net.IPEndPoint)socket.LocalEndpoint).Port.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            socket.Stop();
+            var settings = Path.Combine(target, "BlazorHosted", "Properties", "launchSettings.json");
+            File.WriteAllText(settings, File.ReadAllText(settings).Replace("5274", port, StringComparison.Ordinal));
+        }
+
+        await shell.OpenSolutionAsync(Path.Combine(target, "BlazorHosted.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Blazor Web App on SDK 10 is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(Path.Combine(target, "BlazorHosted", "BlazorHosted.csproj"));
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
+        int Line(string marker) => Array.FindIndex(File.ReadAllLines(counter), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
+        string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
+        string Log() => "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000);
+        string Status() => shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).FirstOrDefault(i => i.Id == "codalus.hotReload")?.Text ?? string.Empty;
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(counter, Line("initialized"));
+        shell.Run("debug.start");
+        Editor.CodeEditorDocument? editor = null;
+        try
+        {
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the launched server stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            Check(shell.Debugger.IsCompound && shell.HotReloadProgram is null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which the debugger launched (no dotnet watch): " + Thread());
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+            await WaitAsync(() => shell.DebugEdits.IsActive && shell.DebugEdits.Browser?.Server is { Pages: > 0 }, () => "the page connects to the IDE for edits (" + Log() + ")", 300).ConfigureAwait(true);
+
+            // A WebAssembly edit, from the editor: the server and the page take it, and the page runs it.
+            editor = await shell.OpenFileAsync(counter, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Counter.razor did not open.");
+            await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
+            var offset = editor.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+            shell.Run("run.applyCodeChanges");
+            await WaitAsync(() => Status().Contains("(server and browser)", StringComparison.Ordinal), () => "the edit applies to the server and the browser (status: " + Status() + "; " + Log() + ")", 120).ConfigureAwait(true);
+
+            // The breakpoint stops before the line runs, so a stop can still read the count the old code left: the tick is
+            // looked at until the edited line has run (as blazor.compoundHotReload does).
+            var ticks = string.Empty;
+            var deadline = Stopwatch.StartNew();
+            var previous = shell.Debugger.CurrentStop;
+            while (true)
+            {
+                shell.Debugger.Breakpoints.Toggle(counter, Line("tick"));
+                await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != previous && Thread().StartsWith("Browser:", StringComparison.Ordinal), () => "the page stops in the edited tick (" + Log() + ")", 180).ConfigureAwait(true);
+                previous = shell.Debugger.CurrentStop;
+                ticks = (await shell.Debugger.EvaluateAsync("ticks", "watch").ConfigureAwait(true)).Result;
+                if ((int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 1000) || deadline.Elapsed > TimeSpan.FromSeconds(90))
+                {
+                    break;
+                }
+
+                shell.Debugger.Breakpoints.Clear();
+                await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+                await Task.Delay(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+            }
+
+            Check(int.TryParse(ticks, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) && value >= 1000, $"the edit runs in the browser: ticks is {ticks} after 90 s ({Log()})");
+            Screenshot("smoke-test-blazor-browser-hot-reload.png");
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+
+            // A rude edit asks, as for other programs; going on keeps the old code running.
+            offset = editor.Model.Text.Text.IndexOf("private int ticks;", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "private int ticks;".Length, "private long ticks;");
+            shell.Run("run.applyCodeChanges");
+            await WaitAsync(() => shell.Workbench.Notifications.Items.Any(n => n.Actions.Contains("Continue with the Old Code")), () => "the rude edit asks to restart (" + Log() + ")", 120).ConfigureAwait(true);
+            shell.Workbench.Notifications.Choose(shell.Workbench.Notifications.Items.First(n => n.Actions.Contains("Continue with the Old Code")), "Continue with the Old Code");
+            await WaitAsync(() => Status().Contains("restart needed", StringComparison.Ordinal) && shell.Debugger.State == DebugState.Running, "going on keeps the old code running", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            shell.Debugger.Breakpoints.Clear();
+            await shell.Debugger.StopAsync().ConfigureAwait(true);
+            editor?.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(counter));
+        }
+
+        await WaitAsync(() => !shell.Debugger.IsActive && shell.DebugEdits.Browser is null, "the session and its browser channel end", 120).ConfigureAwait(true);
     }
 
     /// <summary>

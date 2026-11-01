@@ -35,8 +35,10 @@ public sealed class BuildTests
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Left.Any(i => i.Item.Id == "codalus.build" && i.Text.Contains("failed", StringComparison.Ordinal)));
 
         f.Shell.ErrorList.SourceFilter = 2; // IntelliSense only
+        await ShellFixture.PumpUntil(() => !f.Shell.ErrorList.IsRefreshing); // the rows are built off the UI thread
         Assert.DoesNotContain(f.Shell.ErrorList.Rows, r => r.Source == ErrorListViewModel.BuildSource);
         f.Shell.ErrorList.SourceFilter = 0;
+        await ShellFixture.PumpUntil(() => !f.Shell.ErrorList.IsRefreshing);
 
         await f.Shell.ErrorList.OpenAsync(f.Shell.ErrorList.Rows.First(r => r.Code == "CS0103"));
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is Editor.CodeEditorDocument { Title: "Greeter.cs" });

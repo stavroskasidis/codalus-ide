@@ -9,12 +9,14 @@ using Codalus.LanguageServices.Protocol;
 using Location = Codalus.LanguageServices.Protocol.Location;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Editor;
 
 /// <summary>
 /// The view of a <see cref="CodeEditorDocument"/>: a project-context bar (multi-targeted projects only), the editor
-/// with its minimap, and optionally a second editor on the same text above it (Window → Split). Built in code so the
+/// with its minimap, and optionally a second editor on the same text above it (Window → Split). A Markdown file's editors
+/// have its live preview beside them (<see cref="MarkdownSplit"/>). Built in code so the
 /// editor controls can be wired directly; colors come from theme resources. The view lives as long as its tab: Dock
 /// detaches the views of inactive tabs and the document keeps them for reuse; closing the tab disposes it.
 /// </summary>
@@ -26,12 +28,16 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly Grid _editors = new();
     private readonly ComboBox _context = new() { MinWidth = 140, Margin = new Thickness(4, 2) };
     private readonly Border _contextBar;
+    private readonly Border _largeFileBar;
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
     private readonly Popup _exception = new() { IsLightDismissEnabled = true };
     private PeekPresenter? _peek;
     private EditorParts? _primary;
     private EditorParts? _split;
     private readonly NavigationBar _navigationBar = new();
+    private readonly DockPanel _layout = new();
+    private readonly bool _markdownPreview;
+    private MarkdownSplit? _markdown;
 
     /// <summary>One editor of the view (the primary, or the split above it) and its chrome.</summary>
     private sealed record EditorParts(TextEditor Editor, CodeEditorController Controller, Minimap Minimap, StickyScroll Sticky, OverviewRuler Ruler);
@@ -44,11 +50,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
     };
     private bool _updatingContext;
 
-    public CodeEditorView(CodeEditorDocument document, IEditorServices services, EditorFont font)
+    /// <param name="markdownPreview">Whether a Markdown file gets its preview beside the text (not in Code Search's preview).</param>
+    public CodeEditorView(CodeEditorDocument document, IEditorServices services, EditorFont font, bool markdownPreview = true)
     {
         _document = document;
         _services = services;
         _font = font;
+        _markdownPreview = markdownPreview;
 
         _contextBar = new Border
         {
@@ -61,6 +69,21 @@ public sealed class CodeEditorView : UserControl, IPaneView
             IsVisible = false,
         };
         _contextBar.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
+
+        // Large-file mode (M56): what the editor leaves out of a file this large, as VS Code's notice says.
+        _largeFileBar = new Border
+        {
+            BorderThickness = new Thickness(0, 0, 0, 1),
+            Padding = new Thickness(8, 3),
+            Child = new TextBlock
+            {
+                Text = Localizer.Get("msg.editor.largeFile", "This file is large: colors, folding, CodeLens and the language service are off for it, so the editor stays responsive."),
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+            },
+            IsVisible = document.Model.IsLarge,
+        };
+        _largeFileBar.Bind(Border.BorderBrushProperty, this.GetResourceObservable("Shell.Border"));
         _lightbulb.Click += (_, _) => _ = _services.ShowCodeActionsAsync();
         AutomationProperties.SetName(_lightbulb, "Show quick actions (Ctrl+.)");
         ToolTip.SetTip(_lightbulb, "Quick actions (Ctrl+.)");
@@ -70,9 +93,11 @@ public sealed class CodeEditorView : UserControl, IPaneView
         // The editors fill the dock panel; popups sit beside it in a plain panel. (They used to be the dock panel's
         // last children: the last one took the fill, and the editors were docked left at their content's width, so the
         // minimap followed the longest line instead of the editor's right edge; M34a.)
-        var layout = new DockPanel();
+        var layout = _layout;
         DockPanel.SetDock(_contextBar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_navigationBar, Avalonia.Controls.Dock.Top);
+        DockPanel.SetDock(_largeFileBar, Avalonia.Controls.Dock.Top);
+        layout.Children.Add(_largeFileBar);
         layout.Children.Add(_contextBar);
         layout.Children.Add(_navigationBar);
         layout.Children.Add(_editors);
@@ -82,6 +107,41 @@ public sealed class CodeEditorView : UserControl, IPaneView
         root.Children.Add(_exception);
         Content = root;
         Build();
+    }
+
+    /// <summary>The Markdown preview beside the text, for a Markdown file (null otherwise).</summary>
+    public MarkdownSplit? MarkdownSplit => _markdown;
+
+    /// <summary>Adds the preview beside the text when the document is Markdown, or removes it when its language changed.</summary>
+    private void UpdateMarkdownPreview()
+    {
+        var wanted = _markdownPreview && _primary is not null && _document.Model.LanguageId == "markdown" && _services.MarkdownSplit is not null;
+        if (wanted == _markdown is not null)
+        {
+            return;
+        }
+
+        _layout.Children.Remove((Control?)_markdown ?? _editors);
+        if (_markdown is { } markdown)
+        {
+            markdown.Release();
+            markdown.Children.Remove(_editors);
+            _markdown = null;
+            _layout.Children.Add(_editors);
+            return;
+        }
+
+        // A large file opens with it collapsed (rendering it is as costly as the colors large-file mode leaves out).
+        _markdown = new MarkdownSplit(_editors, _document.Model, _services.MarkdownSplit!, _services.OpenLink, () => _primary?.Editor, startCollapsed: _document.Model.IsLarge);
+        _layout.Children.Add(_markdown);
+    }
+
+    private void OnModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CodeDocument.LanguageId))
+        {
+            Ui.Post(UpdateMarkdownPreview);
+        }
     }
 
     public TextEditor Editor => _primary?.Editor ?? throw new InvalidOperationException("The view is not attached.");
@@ -94,6 +154,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
 
     /// <summary>The type and member drop-downs (tests).</summary>
     public NavigationBar NavigationBar => _navigationBar;
+
+    /// <summary>Whether the bar saying the file opened in large-file mode shows (tests).</summary>
+    internal bool ShowsLargeFileBar => _largeFileBar.IsVisible;
 
     /// <summary>The primary editor's sticky scroll and overview ruler (tests).</summary>
     public StickyScroll StickyScroll => _primary?.Sticky ?? throw new InvalidOperationException("The view is not attached.");
@@ -172,7 +235,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _services.Options.PropertyChanged += OnOptionsChanged;
         _services.ProjectContextsChanged += OnProjectContextsChanged;
         _font.PropertyChanged += OnFontChanged;
+        _document.Model.PropertyChanged += OnModelPropertyChanged;
         UpdateProjectContext();
+        UpdateMarkdownPreview();
     }
 
     private void OnFontChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -191,10 +256,13 @@ public sealed class CodeEditorView : UserControl, IPaneView
             return;
         }
 
+        AvaloniaEditFocus.Release(this);
         _services.Options.PropertyChanged -= OnOptionsChanged;
         _services.ProjectContextsChanged -= OnProjectContextsChanged;
         _services.Diagnostics.Changed -= OnDiagnosticsChanged;
         _font.PropertyChanged -= OnFontChanged;
+        _document.Model.PropertyChanged -= OnModelPropertyChanged;
+        _markdown?.Release();
         _navigationBar.Detach();
         primary.Controller.LightbulbChanged -= OnLightbulbChanged;
         primary.Controller.Dispose();
@@ -206,11 +274,20 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _editors.Children.Clear();
     }
 
-    private void OnDiagnosticsChanged(object? sender, string path) => Ui.Post(() =>
+    private void OnDiagnosticsChanged(object? sender, string path)
     {
-        _primary?.Ruler.Invalidate();
-        _split?.Ruler.Invalidate();
-    });
+        // The ruler marks this file's problems: another file's (a background pass publishes every file's) leave it as it is.
+        if (!SolutionPaths.Comparer.Equals(path, _document.Model.Path))
+        {
+            return;
+        }
+
+        Ui.Post(() =>
+        {
+            _primary?.Ruler.InvalidateProblems();
+            _split?.Ruler.InvalidateProblems();
+        });
+    }
 
     private EditorParts CreateEditor(bool primary)
     {
@@ -246,6 +323,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();
         sticky.LinesPinned += (_, lines) => controller.KeepTokens(lines);
         var ruler = new OverviewRuler(editor, _services, () => _document.Model.Path, () => controller.GitChanges, () => controller.Search) { IsVisible = Options.OverviewRuler };
+        controller.Search.ResultsChanged += (_, _) => ruler.Invalidate();
         return new EditorParts(editor, controller, minimap, sticky, ruler);
     }
 
@@ -259,6 +337,9 @@ public sealed class CodeEditorView : UserControl, IPaneView
         {
             grid.Children.Add(new Canvas { Children = { overlay }, IsHitTestVisible = true, ClipToBounds = true, Background = null });
         }
+
+        // Quick Find in the editor's top right corner, over the text and its sticky lines.
+        grid.Children.Add(parts.Controller.Search);
 
         Grid.SetColumn(parts.Ruler, 1);
         grid.Children.Add(parts.Ruler);
@@ -324,9 +405,10 @@ public sealed class CodeEditorView : UserControl, IPaneView
     {
         var context = _services.ProjectContextOf(_document.Model);
         _contextBar.IsVisible = context is not null;
-        if (context is null)
+        if (context is null || (_context.Tag is ProjectContext shown && shown.ProjectPath == context.ProjectPath && shown.Active == context.Active
+                                && shown.Frameworks.SequenceEqual(context.Frameworks)))
         {
-            return;
+            return; // none, or the same: a burst of project changes refilled every editor's list
         }
 
         _updatingContext = true;

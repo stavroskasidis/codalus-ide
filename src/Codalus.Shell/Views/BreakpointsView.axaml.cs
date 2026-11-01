@@ -20,6 +20,7 @@ public sealed partial class BreakpointsView : UserControl, IPaneView
     public BreakpointsView()
     {
         InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
         BreakpointsViewModel? Vm() => DataContext as BreakpointsViewModel;
         NewFunction.Click += (_, _) => RunCommand?.Invoke("debug.newFunctionBreakpoint");
         Export.Click += (_, _) => RunCommand?.Invoke("debug.exportBreakpoints");

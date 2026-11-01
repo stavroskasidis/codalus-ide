@@ -66,6 +66,42 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     private readonly HashSet<string> _viewCommands = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// The shell's dispose has begun: its timers stay stopped. Set first thing in it, before <c>_disposing</c> holds its
+    /// task, so events its dispose raises (the solution closing) see it too.
+    /// </summary>
+    private bool _disposeStarted;
+
+    /// <summary><see cref="OnInteractive"/> has run.</summary>
+    private bool _interactive;
+
+    /// <summary>Cancelled when the shell is disposed: work it started for itself (the environment check) stops with it.</summary>
+    private readonly CancellationTokenSource _lifetime = new();
+
+    private readonly List<UiDebouncer> _debouncers = [];
+
+    /// <summary>
+    /// A debouncer that stops with the shell (<see cref="StopTimers"/>); one made later is stopped already. Not a
+    /// registration on the shell's lifetime: a pending read whose token is linked to it keeps that token's callbacks.
+    /// </summary>
+    internal UiDebouncer Debouncer(Action action, TimeSpan delay, TimeSpan maxDelay)
+    {
+        var debouncer = new UiDebouncer(action, delay, maxDelay);
+        lock (_debouncers)
+        {
+            if (_disposeStarted)
+            {
+                debouncer.Stop();
+            }
+            else
+            {
+                _debouncers.Add(debouncer);
+            }
+        }
+
+        return debouncer;
+    }
+
     public ShellHost(Application app, ShellOptions options)
     {
         Options = options;
@@ -75,7 +111,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Workbench = new WorkbenchServices(Paths, PlatformInfo.Current, workspaceSettingsFile: null, options.WatchFiles);
         Workbench.Context.Set("isDevelopment", options.Development || IsDebugBuild);
         LoadLocalization();
-        UseUserDotnet();
+        UseEnvironment();
         Workbench.Settings.Register([LocaleDescriptor(), .. BuiltIns.Settings(), BuiltIns.RestoreOnOpenSetting(), .. BuiltIns.EditorSettings(), .. BuiltIns.CodeSearchSettings(), .. BuiltIns.BuildSettings(), .. BuiltIns.DebugSettings(), .. BuiltIns.TestingSettings(), .. BuiltIns.PackageSettings(), .. BuiltIns.WebSettings(), .. BuiltIns.UpdateSettings(), .. BuiltIns.DataSettings(), .. BuiltIns.GitSettings(), .. BuiltIns.ContainerSettings(), .. BuiltIns.ProfilingSettings(), .. BuiltIns.RemoteSettings(), .. BuiltIns.FSharpSettings(), .. BuiltIns.WinFormsSettings(), .. BuiltIns.TemplatesSettings()]);
         InitializeTerminalProfiles();
         Theme = new ThemeService(app, Workbench, () => Plugins?.Themes ?? []);
@@ -249,7 +285,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         DiscoverPlugins();
         RestoreLayout();
-        InitializeTabColors();
+        InitializeTabs();
         UpdateStatusItems();
         ReportPreviousCrashes();
     }
@@ -347,18 +383,98 @@ public sealed partial class ShellHost : IAsyncDisposable
 
     // ------------------------------------------------------------------ startup
 
-    /// <summary>Called once the window is interactive: deferred work that must not delay the first frame.</summary>
+    /// <summary>
+    /// Completes once this process's environment is complete: the login shell's <c>PATH</c> and network settings taken
+    /// (<see cref="App.LoginShellImport"/>, started from the Finder or a desktop launcher) and the .NET root chosen with them.
+    /// The window doesn't wait for it (M56): <see cref="OnInteractive"/> does, and so does every process started
+    /// meanwhile (<see cref="Rpc.ProcessEnvironment"/>), at most <see cref="EnvironmentLimit"/>.
+    /// </summary>
+    public Task EnvironmentReady { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// How long <see cref="EnvironmentReady"/> waits for the login shell: its own 5 s, and a second to read what it printed.
+    /// Past that (an import that hangs), processes start with the environment the IDE was started with.
+    /// </summary>
+    internal static readonly TimeSpan EnvironmentLimit = TimeSpan.FromSeconds(6);
+
+    /// <summary>
+    /// The .NET root (<see cref="UseUserDotnet"/>) at once when the environment is complete, else once the login shell's
+    /// has come in: chosen before, a root put first on the PATH would end up behind the login shell's folders, and the
+    /// shells only the login shell's PATH has (Homebrew's pwsh) wouldn't be terminal profiles.
+    /// </summary>
+    private void UseEnvironment()
+    {
+        var import = App.LoginShellImport;
+        if (import.IsCompleted)
+        {
+            UseUserDotnet();
+            return;
+        }
+
+        _ = EnvironmentCheck; // made here, not on the thread that chooses the root
+        EnvironmentReady = import.WaitAsync(EnvironmentLimit).ContinueWith(
+            waited =>
+            {
+                if (waited.Exception?.InnerException is TimeoutException)
+                {
+                    Workbench.Log.AppendLine($"[setup] The login shell's environment didn't come in within {EnvironmentLimit.TotalSeconds:0} s: the processes start with the one the IDE was started with.");
+                }
+
+                UseUserDotnet();
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
+        Rpc.ProcessEnvironment.WaitFor(EnvironmentReady);
+        _ = EnvironmentReady.ContinueWith(
+            _ => Ui.Post(() =>
+            {
+                if (IsClosing)
+                {
+                    return; // the window closed meanwhile: its settings are being disposed
+                }
+
+                // The shells the login shell's PATH has: the Terminal window's list too, which copied the first ones.
+                Terminals.Profiles = Codalus.Workbench.Terminal.TerminalProfiles.Detect(PlatformInfo.Current);
+                Workbench.Settings.Register(TerminalSettings(Terminals.Profiles));
+                TerminalWindow.RefreshProfiles();
+            }),
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.Default);
+    }
+
+    /// <summary>
+    /// Called once the window is interactive and <see cref="EnvironmentReady"/>: deferred work that must not delay the first
+    /// frame. Nothing once the shell is closing (M56): the environment can come in after the user closed the window, and the
+    /// listener, the start window and the startup plugins' hosts started then would outlive the shutdown. Nothing the second
+    /// time either: a second listener for other <c>codalus</c> processes replaced the first, which was never disposed.
+    /// </summary>
     public void OnInteractive()
     {
+        if (IsClosing || _disposeStarted || _interactive)
+        {
+            return;
+        }
+
+        _interactive = true;
         _ = OfferRecoveryAsync();
         StartUpdates();
 
-        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here.
+        // The first-run setup (M46) shows before the start window; its Tools step offers what M37 offers here. Something
+        // opened while the startup waited for the environment (M56): the setup waits for a start that opens nothing, as it
+        // does for a command line that opens something.
         var setup = FirstRunDecision;
+        if (setup == SetupDecision.Show && OpenedSomething)
+        {
+            setup = SetupDecision.OpensSomething;
+        }
+
         Workbench.Log.AppendLine($"[setup] First-run setup: {setup}.");
         if (Options.SmokeTest is null && Options.Bench is null)
         {
-            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show);
+            // The required tools at every start; the first-run setup's Tools step shows them all.
+            _ = CheckEnvironmentAsync(offer: setup != SetupDecision.Show, requiredOnly: setup != SetupDecision.Show);
         }
         _ = SyncSettingsAsync(quiet: true);
         foreach (var error in Options.Errors)
@@ -411,7 +527,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         _ = ResumePluginBisectAsync();
         if (setup == SetupDecision.Show)
         {
-            Ui.Post(() => ShowSetup(firstStart: true));
+            Ui.Post(() =>
+            {
+                if (!IsClosing && !OpenedSomething)
+                {
+                    ShowSetup(firstStart: true);
+                }
+            });
         }
         else
         {
@@ -427,6 +549,14 @@ public sealed partial class ShellHost : IAsyncDisposable
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Ui.Post(async () =>
         {
+            if (IsClosing)
+            {
+                // Taken just before the listener closed (M56): unanswered, a waiting request's process (a solution's open,
+                // a merge) does the work in a window of its own, as one started a moment later does.
+                done.TrySetCanceled();
+                return;
+            }
+
             try
             {
                 if (request.Command != "openPath")
@@ -452,7 +582,7 @@ public sealed partial class ShellHost : IAsyncDisposable
                             && int.TryParse(line, System.Globalization.CultureInfo.InvariantCulture, out var l) && int.TryParse(column, System.Globalization.CultureInfo.InvariantCulture, out var c)
                             ? new LanguageServices.Protocol.Position(l, c)
                             : null;
-                        done.TrySetResult(await OpenFileAsync(openFile, at: at).ConfigureAwait(true) is not null);
+                        done.TrySetResult(await OpenTogetherAsync(openFile, at).ConfigureAwait(true));
                         break;
                     case { Command: "wait", Arguments: [var file] }:
                         done.TrySetResult(await EditAndWaitAsync(file).ConfigureAwait(true));
@@ -962,13 +1092,17 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         CodeSearch.RestoreState(state?.CodeSearch);
+        if (state?.MarkdownSplit is { } markdown)
+        {
+            MarkdownSplit.Set(markdown.Collapsed, markdown.Ratio);
+        }
     }
 
     /// <summary>Saves the layout (with the window placement) and the small state file. Called when the window closes.</summary>
     public void SaveState(WindowPlacement? placement)
     {
         WriteJson(Paths.LayoutFile, Layout.Capture(placement), ShellJsonContext.Default.LayoutSnapshot);
-        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState() }, ShellJsonContext.Default.ShellState);
+        WriteJson(StateFile, new ShellState { RecentCommands = Workbench.Commands.RecentCommandIds, CodeSearch = CodeSearch.CaptureState(), MarkdownSplit = MarkdownSplit }, ShellJsonContext.Default.ShellState);
         _ = SaveCodeSearchIndex(onlyIfChanged: true); // flushed in DisposeAsync
         SaveEditorSession(); // next to the solution, written in the background (flushed in DisposeAsync)
     }
@@ -1006,12 +1140,98 @@ public sealed partial class ShellHost : IAsyncDisposable
     private void OnClipboardBusy() => Ui.Post(() => StatusBar.ShowMessage(
         Localizer.Get("msg.clipboard.busy", "The clipboard is in use by another program. Try again in a moment."), TimeSpan.FromSeconds(6)));
 
-    public async ValueTask DisposeAsync()
+    /// <summary>How long the exit waits for the shutdown (<see cref="ShutDownAsync"/>): what hasn't finished then ends with the process.</summary>
+    public static readonly TimeSpan ShutdownLimit = TimeSpan.FromSeconds(3);
+
+    private Task? _shuttingDown;
+    private Task? _disposing;
+
+    /// <summary>
+    /// Stops taking requests from other <c>codalus</c> processes (M56): one started while this window closes opens its own
+    /// window, instead of handing its request to this one, which is about to exit.
+    /// </summary>
+    public void StopListening()
     {
+        _instance?.Dispose();
+        _instance = null;
+    }
+
+    /// <summary>
+    /// The exit (once; a later call waits for the first): the shell disposed, its hosts shutting down in parallel, for at
+    /// most <paramref name="limit"/>, whatever hasn't finished by then ending with the process. A restart that was asked for
+    /// starts after that, whether or not everything finished: last in <see cref="DisposeAsync"/>, a slow host's shutdown
+    /// left it out (M56). Its continuation doesn't need the UI thread, so the lifetime's Exit can wait for it there.
+    /// </summary>
+    public Task ShutDownAsync(TimeSpan limit) => _shuttingDown ??= ShutDownCoreAsync(limit);
+
+    /// <summary>Whether <see cref="ShutDownAsync"/> has started.</summary>
+    public bool IsShuttingDown => _shuttingDown is not null;
+
+    /// <summary>
+    /// Whether the shell is shutting down or disposed (M56): the startup's work, the OS's and other processes' requests
+    /// aren't taken any more, as the window is gone and the services they'd use are being disposed.
+    /// </summary>
+    internal bool IsClosing => _shuttingDown is not null || _disposing is not null;
+
+    private async Task ShutDownCoreAsync(TimeSpan limit)
+    {
+        var openSolution = Solutions.Solution?.Path;
+        StopListening(); // before the restart: its `codalus <solution>` would be handed to this process
+        try
+        {
+            await DisposeAsync().AsTask().WaitAsync(limit).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            Workbench.Log.AppendLine($"[exit] The shutdown took longer than {limit.TotalSeconds:0} s: what is left ends with the process.");
+        }
+        catch (Exception ex)
+        {
+            // A service that failed to stop: the process still ends, and a requested restart still starts (M56). The
+            // lifetime's Exit threw this before, which ended the process; now nothing would, with the window gone.
+            Workbench.Log.AppendLine($"[exit] The shutdown failed: {ex}");
+            Infrastructure.CrashReporter.Write("error", ex.ToString());
+        }
+
+        RestartIfRequested(openSolution);
+    }
+
+    /// <summary>Disposes the shell (once; a later call waits for the first). <see cref="ShutDownAsync"/> is the exit's.</summary>
+    public ValueTask DisposeAsync() => new(_disposing ??= DisposeCoreAsync());
+
+    /// <summary>Tests: more work the shutdown waits for with the hosts' (one that is slow to stop, or fails to).</summary>
+    internal Func<Task>? ShutdownWork { get; set; }
+
+    /// <summary>The debugger, then its Hot Reload agents' pipe (ADR 0090).</summary>
+    private async Task DisposeDebuggingAsync()
+    {
+        await Debugger.DisposeAsync().ConfigureAwait(false);
+        if (DebugEdits is not null)
+        {
+            await DebugEdits.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        _disposeStarted = true;
+        StopTimers();
+        Interlocked.Exchange(ref _syncDebounce, null)?.Cancel(); // a change's sync, due in 5 s: it held the shell, then synced a closed window
+        _proposedApi?.Dispose(); // its debounce of edited documents (500 ms) held the shell, then told the plugins
+        CloseEditors();
+        SyntaxVisualizer.Dispose();
+        CodeMetrics.Dispose();
+        StatusBar.Dispose();
+        Notifications.Dispose();
+        Theme.Dispose();
+        Editor.CodeColors.Release(Languages.LanguageIdOf);
+        ReleaseViewCallbacks();
+        Views.MenuBuilder.Release(this);
+        CrashReporter.Release(this);
         Infrastructure.SafeClipboard.Busy -= OnClipboardBusy;
         var designers = StopWinFormsDesignersAsync();
-        var openSolution = Solutions.Solution?.Path;
         ApplyUpdateOnExit();
+        _lifetime.Cancel(); // not awaited: the dispose stays on the UI thread until its first await below
         await FlushSolutionStateAsync().ConfigureAwait(false);
         if (SelfUpdate is not null)
         {
@@ -1020,7 +1240,7 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         _updateHttp.Dispose();
         await DisposeCompanionAsync().ConfigureAwait(false);
-        _instance?.Dispose();
+        StopListening();
         _mcpBridge?.Dispose();
         await McpServers.DisposeAsync().ConfigureAwait(false);
         await ExternalAgents.DisposeAsync().ConfigureAwait(false);
@@ -1030,24 +1250,124 @@ public sealed partial class ShellHost : IAsyncDisposable
         {
             _ = Interactive.DisposeAsync().AsTask();
         }
-        await Debugger.DisposeAsync().ConfigureAwait(false);
+
         Git.Dispose();
         EntityFramework.Dispose();
-        await Data.DisposeAsync().ConfigureAwait(false);
-        await DisposeProfilingAsync().ConfigureAwait(false);
-        await DisposeXamlAsync().ConfigureAwait(false);
-        await Languages.DisposeAsync().ConfigureAwait(false);
-        await Solutions.DisposeAsync().ConfigureAwait(false);
+
+        // The hosts shut down together (M56): one after another, each waiting up to its shutdown's time (the build host
+        // answers after the design-time build it's running), a few slow ones outlasted the exit's time, and a requested
+        // restart was lost with the rest. The remote server goes after them: the remote window's hosts run through it.
+        await Task.WhenAll(
+            DisposeDebuggingAsync(),
+            Data.DisposeAsync().AsTask(),
+            DisposeProfilingAsync(),
+            DisposeXamlAsync().AsTask(),
+            Languages.DisposeAsync().AsTask(),
+            Solutions.DisposeAsync().AsTask(),
+            DisposePluginsAsync(),
+            EnvironmentProbeEndedAsync(),
+            ShutdownWork?.Invoke() ?? Task.CompletedTask).ConfigureAwait(false);
         if (Remote is { } remote)
         {
             Remote = null;
             await remote.DisposeAsync().ConfigureAwait(false);
         }
 
-        await Plugins.DisposeAsync().ConfigureAwait(false);
-        Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
         await designers.ConfigureAwait(false);
         Workbench.Dispose();
-        RestartIfRequested(openSolution);
+
+        // Cancelled with the lifetime above; it needs no UI thread, so the exit can wait for this there.
+        async Task EnvironmentProbeEndedAsync() =>
+            await _environmentProbe.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+
+        async Task DisposePluginsAsync()
+        {
+            await Plugins.DisposeAsync().ConfigureAwait(false);
+            Tests.Dispose(); // after the test plugin: its last results can't schedule a notification any more
+        }
+    }
+
+    /// <summary>
+    /// Tears the open editors and their models down as closing their documents does: each editor's timers (inlay hints, CodeLens, symbols)
+    /// keep running until then, and hold the editor and this shell.
+    /// </summary>
+    private void CloseEditors()
+    {
+        foreach (var editor in Editors)
+        {
+            editor.View?.Close();
+        }
+
+        _previewView?.Close();
+
+        // The documents' models too, as closing the last editor of each does: their file watchers keep them, and they
+        // hold this shell's handlers.
+        foreach (var model in _models.Values)
+        {
+            model.Dispose();
+        }
+
+        _models.Clear();
+    }
+
+    /// <summary>
+    /// Takes back the views' static callbacks that call this shell, unless another shell set them since: a static would
+    /// hold this shell, with all it reaches, once it's disposed.
+    /// </summary>
+    private void ReleaseViewCallbacks()
+    {
+        Views.GitChangesView.ReportError = Unless(Views.GitChangesView.ReportError);
+        Views.DiffView.ReportError = Unless(Views.DiffView.ReportError);
+        Views.MergeEditorView.ReportError = Unless(Views.MergeEditorView.ReportError);
+        Views.BreakpointsView.RunCommand = Unless(Views.BreakpointsView.RunCommand);
+        Views.BreakpointsView.AskLabels = Unless(Views.BreakpointsView.AskLabels);
+        Views.VariableActions.AddWatch = Unless(Views.VariableActions.AddWatch);
+        Views.VariableActions.QuickWatch = Unless(Views.VariableActions.QuickWatch);
+        Views.VariableActions.Visualize = Unless(Views.VariableActions.Visualize);
+        Views.VariableActions.PluginVisualizers = Unless(Views.VariableActions.PluginVisualizers);
+        Views.VariableActions.VisualizeWithPlugin = Unless(Views.VariableActions.VisualizeWithPlugin);
+        Views.VariableActions.CopyText = Unless(Views.VariableActions.CopyText);
+        Views.VariableActions.AskAi = Unless(Views.VariableActions.AskAi);
+        Views.VariableActions.CanAskAi = Unless(Views.VariableActions.CanAskAi);
+    }
+
+    /// <summary>The callback, or null when it calls this shell.</summary>
+    private T? Unless<T>(T? callback)
+        where T : Delegate => callback?.Target == this ? null : callback;
+
+    /// <summary>
+    /// (Re)starts one of the shell's timers, unless the shell is being disposed: its dispose raises events (the solution
+    /// closing) whose handlers, posted to run later, would start them again after <see cref="StopTimers"/>.
+    /// </summary>
+    private void StartTimer(Avalonia.Threading.DispatcherTimer timer)
+    {
+        timer.Stop();
+        if (!_disposeStarted)
+        {
+            timer.Start();
+        }
+    }
+
+    /// <summary>
+    /// Stops the shell's timers. The dispatcher holds every enabled timer and the shell its tick calls, and a pending
+    /// one-shot timer of a dispatcher that no longer runs never ticks: the hosting status timer (every two minutes) kept
+    /// each disposed shell of the shell tests reachable, with all it reached, until a full run ran out of memory.
+    /// </summary>
+    private void StopTimers()
+    {
+        foreach (var timer in new[] { _statusTimer, _repositoryTimer, _autoRecoverTimer, _indexTimer, _codeSearchRefresh, _gitRepositoryTimer, _endpointsRefresh })
+        {
+            timer?.Stop();
+        }
+
+        lock (_debouncers)
+        {
+            foreach (var debouncer in _debouncers)
+            {
+                debouncer.Stop();
+            }
+
+            _debouncers.Clear();
+        }
     }
 }

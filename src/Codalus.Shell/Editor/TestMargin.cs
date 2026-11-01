@@ -25,6 +25,8 @@ public sealed class TestMargin : AbstractMargin
     private readonly Action<TestNode, Control> _onClick;
     private Dictionary<int, TestNode> _byLine = [];
     private bool _refreshQueued;
+    private long _version = -1; // the document's version (TestService.DocumentVersion) the glyphs show
+    private bool _changedWhileHidden;
 
     public TestMargin(Func<string> path, TestService tests, Action<TestNode, Control> onClick)
     {
@@ -38,6 +40,9 @@ public sealed class TestMargin : AbstractMargin
 
     /// <summary>The glyphs by one-based line (tests).</summary>
     internal IReadOnlyDictionary<int, TestNode> Glyphs => _byLine;
+
+    /// <summary>How many times the glyphs were found again (tests).</summary>
+    internal int Refreshes { get; private set; }
 
     /// <summary>Stops listening to the tests (the editor closed).</summary>
     public void Detach() => _tests.Changed -= OnTestsChanged;
@@ -53,21 +58,46 @@ public sealed class TestMargin : AbstractMargin
         Ui.Post(() =>
         {
             _refreshQueued = false;
-            Refresh();
+            RefreshIfChanged();
         });
+    }
+
+    /// <summary>
+    /// The glyphs are found again when the document's tests changed, and only while the editor shows: a hidden one
+    /// catches up when it's shown (its visual lines are built again). Every editor, hidden tabs too, looked through every
+    /// test of the solution at each change of any (M56).
+    /// </summary>
+    private void RefreshIfChanged()
+    {
+        if (TextView is not { IsEffectivelyVisible: true } view || TopLevel.GetTopLevel(view) is null)
+        {
+            _changedWhileHidden = true;
+            return;
+        }
+
+        _changedWhileHidden = false;
+        if (_tests.DocumentVersion(DocumentUris.FromPath(_path())) != _version)
+        {
+            Refresh();
+        }
     }
 
     public void Refresh()
     {
         var uri = DocumentUris.FromPath(_path());
-        var byLine = new Dictionary<int, TestNode>();
-        foreach (var node in _tests.InDocument(uri).OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+        _version = _tests.DocumentVersion(uri);
+        Refreshes++;
+        _byLine = _tests.InDocument(uri, nodes =>
         {
-            // The innermost item wins a line (a method over its class when both start there).
-            byLine.TryAdd(node.Range!.StartLine + 1, node);
-        }
+            var byLine = new Dictionary<int, TestNode>();
+            foreach (var node in nodes.OrderBy(n => n.Range!.EndLine - n.Range.StartLine))
+            {
+                // The innermost item wins a line (a method over its class when both start there).
+                byLine.TryAdd(node.Range!.StartLine + 1, node);
+            }
 
-        _byLine = byLine;
+            return byLine;
+        });
         InvalidateMeasure();
         InvalidateVisual();
     }
@@ -90,7 +120,17 @@ public sealed class TestMargin : AbstractMargin
         InvalidateVisual();
     }
 
-    private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnVisualLinesChanged(object? sender, EventArgs e)
+    {
+        if (_changedWhileHidden)
+        {
+            // Shown again: at once, inside the text view's layout pass, so no frame shows the glyphs from before it was
+            // hidden (glyphs that change the margin's width have it measured again).
+            RefreshIfChanged();
+        }
+
+        InvalidateVisual();
+    }
 
     public override void Render(DrawingContext context)
     {

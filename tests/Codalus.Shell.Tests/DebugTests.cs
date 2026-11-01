@@ -44,7 +44,7 @@ public sealed class DebugTests
         Assert.Contains(f.Shell.Locals.Roots, r => r is { Name: "total", Value: "1" });
         await ShellFixture.PumpUntil(() => f.Shell.CallStack.Frames.Count > 0);
         Assert.True(f.Shell.CallStack.Frames[0].IsTop);
-        await f.Shell.Watch.AddAsync("total * 10");
+        await f.Shell.AddWatchAsync("total * 10"); // as Add Watch does: the window shows, and is evaluated at each stop while it does (M56)
         Assert.Equal("10", f.Shell.Watch.Roots.Single().Value);
         f.Shell.DebugConsole.Input = "numbers.Count";
         await f.Shell.DebugConsole.SubmitAsync();

@@ -81,14 +81,17 @@ public static class Playlists
     /// </summary>
     public static IReadOnlyList<string> ImportVisualStudio(XDocument document, IReadOnlyList<TestNode> roots)
     {
+        // Names looked up, and each test's class named once: each entry went through every test, building its name (M56).
         var leaves = roots.SelectMany(r => r.Leaves()).ToList();
+        var index = TestNames.Index(leaves);
+        List<(TestNode Leaf, string? Class)>? classes = null;
         var keys = new List<string>();
         var root = document.Root ?? throw new FormatException("The playlist is empty.");
         foreach (var add in root.Descendants("Add"))
         {
             if ((string?)add.Attribute("Test") is { } test)
             {
-                keys.AddRange(leaves.Where(l => TestNames.Matches(l, test, null)).Select(l => l.Key));
+                keys.AddRange(index.Matches(test, null).Select(l => l.Key));
             }
         }
 
@@ -103,12 +106,14 @@ public static class Playlists
                 continue;
             }
 
-            keys.AddRange(leaves.Where(leaf =>
-                (!properties.TryGetValue("Project", out var project) || string.Equals(leaf.Root.Label, project, StringComparison.OrdinalIgnoreCase))
-                && (!properties.TryGetValue("Namespace", out var ns) || (TestNames.ClassName(leaf)?.StartsWith(ns + ".", StringComparison.Ordinal) ?? false))
-                && (!properties.TryGetValue("Class", out var cls) || (TestNames.ClassName(leaf) is { } c && (c == cls || c.EndsWith("." + cls, StringComparison.Ordinal))))
-                && (!properties.TryGetValue("TestWithNormalizedFullyQualifiedName", out var name) || TestNames.Matches(leaf, name, null)))
-                .Select(l => l.Key));
+            var candidates = properties.TryGetValue("TestWithNormalizedFullyQualifiedName", out var name)
+                ? index.Matches(name, null).Select(l => (Leaf: l, Class: TestNames.ClassName(l)))
+                : classes ??= [.. leaves.Select(l => (l, TestNames.ClassName(l)))];
+            keys.AddRange(candidates.Where(c =>
+                (!properties.TryGetValue("Project", out var project) || string.Equals(c.Leaf.Root.Label, project, StringComparison.OrdinalIgnoreCase))
+                && (!properties.TryGetValue("Namespace", out var ns) || (c.Class?.StartsWith(ns + ".", StringComparison.Ordinal) ?? false))
+                && (!properties.TryGetValue("Class", out var cls) || (c.Class is { } k && (k == cls || k.EndsWith("." + cls, StringComparison.Ordinal)))))
+                .Select(c => c.Leaf.Key));
         }
 
         return [.. keys.Distinct(StringComparer.Ordinal)];

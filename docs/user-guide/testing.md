@@ -14,6 +14,9 @@ Test → Test Explorer (`Ctrl+E T`). It lists every test of the solution, groupe
   themselves, so theory cases, data rows and generated tests appear too.
 - **Outcomes** are shown with an icon and a color: ✓ passed, ✗ failed, – skipped, ○ not run. Groups show the worst
   outcome under them. The summary above the list counts them.
+- **During a run**, the list and the summary catch up with the results up to five times a second, and show the final
+  state when the run ends. While the Test Explorer is closed or hidden it does no work, and it catches up when you
+  show it. Editors update their test glyphs and CodeLens the same way: for their own file's tests, once they show.
 - **Group by** project, namespace and class (the default), project, outcome, traits (xUnit traits, NUnit and MSTest
   categories) or duration.
 - **Search** filters as you type. Plain words match test names. Fields narrow further:
@@ -22,7 +25,11 @@ Test → Test Explorer (`Ctrl+E T`). It lists every test of the solution, groupe
   - `trait:Category=Integration`, or just `trait:Integration`
   - `-` excludes: `-outcome:passed`. Quotes keep words together: `"Divide by zero"`.
 - **Details** of the selected test appear below the list: the message, expected and actual values, the stack trace
-  (click a frame to open its source), the test's output and its earlier results.
+  (click a frame to open its source), the test's output and its earlier results. Long text is cut: the last 32,000 characters
+  of output and the first 32,000 of a message or value, marked with **…**; **Show full output** opens all of it in a
+  read-only editor tab, and **Copy Details** copies it. Each test keeps the last 1,000,000 characters of its output, with a
+  line saying how many earlier ones weren't kept.
+- **Output → Tests** fills while the tests run. It's cleared when a run starts with no other run going.
 - **Keys**: `Enter` runs the selection, `Ctrl+Enter` debugs it, `F12` (or double-click) opens the test,
   `Left`/`Right` collapse and expand.
 

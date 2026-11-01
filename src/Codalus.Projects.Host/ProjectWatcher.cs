@@ -22,11 +22,17 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
     private int _holding;
     private Timer? _timer;
 
-    public sealed record Changes(bool SolutionFileChanged, IReadOnlyList<string> MSBuildFiles, IReadOnlyList<string> Directories);
+    public sealed record Changes(bool SolutionFileChanged, IReadOnlyList<string> MSBuildFiles, IReadOnlyList<string> Directories)
+    {
+        /// <summary>The OS dropped events: anything under the watched folders (then in <see cref="Directories"/>) may have changed.</summary>
+        public bool Overflowed { get; init; }
+    }
 
     private sealed class Pending
     {
         public bool Solution { get; set; }
+
+        public bool Overflowed { get; set; }
 
         public HashSet<string> MSBuildFiles { get; } = new(s_pathComparer);
 
@@ -193,12 +199,17 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
         }
     }
 
-    /// <summary>The OS dropped events: treat every watched folder as changed.</summary>
-    private void OnOverflow()
+    /// <summary>
+    /// The OS dropped events: treat every watched folder as changed, and say that anything under them may have (internal
+    /// for tests). Reported as the watched folders alone, a change deep below one, in a nested project's folder, was taken
+    /// for none by whoever maps folders to projects (Show All Files, M56).
+    /// </summary>
+    internal void OnOverflow()
     {
         lock (_gate)
         {
             _pending.Solution = true;
+            _pending.Overflowed = true;
             _pending.Directories.UnionWith(_watchers.Keys);
             _timer ??= new Timer(_ => Flush());
             _timer.Change(s_debounce, Timeout.InfiniteTimeSpan);
@@ -216,7 +227,7 @@ internal sealed class ProjectWatcher(Func<ProjectWatcher.Changes, Task> onChange
 
         if (!pending.IsEmpty)
         {
-            _ = onChanged(new Changes(pending.Solution, [.. pending.MSBuildFiles], [.. pending.Directories]));
+            _ = onChanged(new Changes(pending.Solution, [.. pending.MSBuildFiles], [.. pending.Directories]) { Overflowed = pending.Overflowed });
         }
     }
 

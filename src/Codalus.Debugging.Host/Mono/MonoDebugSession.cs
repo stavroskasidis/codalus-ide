@@ -29,6 +29,9 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
     private readonly Dictionary<int, ThreadMirror> _threads = [];
     private readonly Dictionary<int, MonoFrame> _frames = [];
     private readonly Dictionary<int, Func<IReadOnlyList<Variable>>> _children = [];
+
+    /// <summary>An array's elements by page (a reference's start and count, M56): the shell shows a long array in ranges.</summary>
+    private readonly Dictionary<int, Func<int, int, IReadOnlyList<Variable>>> _pages = [];
     private readonly Dictionary<int, ObjectMirror> _exceptions = [];
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private VirtualMachine? _vm;
@@ -100,7 +103,8 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
             case "scopes":
                 return JsonSerializer.SerializeToElement(new ScopesResponse(Scopes(Read(arguments, json.ScopesArguments)!.FrameId)), json.ScopesResponse);
             case "variables":
-                return JsonSerializer.SerializeToElement(new VariablesResponse([.. Variables(Read(arguments, json.VariablesArguments)!.VariablesReference)]), json.VariablesResponse);
+                var variables = Read(arguments, json.VariablesArguments)!;
+                return JsonSerializer.SerializeToElement(new VariablesResponse([.. Variables(variables.VariablesReference, variables.Start, variables.Count)]), json.VariablesResponse);
             case "evaluate":
                 var evaluate = Read(arguments, json.EvaluateArguments)!;
                 return JsonSerializer.SerializeToElement(Evaluate(evaluate.Expression, evaluate.FrameId), json.EvaluateResponse);
@@ -723,12 +727,26 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
         return result;
     }
 
-    private IReadOnlyList<Variable> Variables(int reference)
+    /// <summary>
+    /// A reference's children; an array's from <paramref name="start"/>, <paramref name="count"/> of them, when asked
+    /// (without a count, the first 100 and how many more).
+    /// </summary>
+    private IReadOnlyList<Variable> Variables(int reference, int? start = null, int? count = null)
     {
         Func<IReadOnlyList<Variable>>? children;
+        Func<int, int, IReadOnlyList<Variable>>? page = null;
         lock (_gate)
         {
             _children.TryGetValue(reference, out children);
+            if (count is > 0)
+            {
+                _pages.TryGetValue(reference, out page);
+            }
+        }
+
+        if (page is not null)
+        {
+            return page(Math.Max(0, start ?? 0), count!.Value);
         }
 
         return children is null ? throw new DapRequestException("The variable is no longer valid: the program has run since.") : children();
@@ -757,7 +775,10 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
     }
 
     private Variable VariableOf(string name, MonoValue? value, string? evaluateName) =>
-        new(name, Format(value), TypeOf(value), ChildrenOf(value), evaluateName);
+        new(name, Format(value), TypeOf(value), ChildrenOf(value), evaluateName, IndexedVariables: Indexed(value));
+
+    /// <summary>An array's length, as DAP's indexed variables (M56); null for any other value.</summary>
+    private static int? Indexed(MonoValue? value) => value is ArrayMirror { Length: > 0 } array ? array.Length : null;
 
     private static string? TypeOf(MonoValue? value) => value switch
     {
@@ -770,23 +791,47 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
     private int ChildrenOf(MonoValue? value) => value switch
     {
         StringMirror or EnumMirror => 0,
-        ArrayMirror array => array.Length == 0 ? 0 : Handle(() => Elements(array)),
+        ArrayMirror array => array.Length == 0 ? 0 : Paged(array),
         ObjectMirror o => Handle(() => Members(o, o.Type)),
         StructMirror s when s.Type.GetFields().Any(f => !f.IsStatic) => Handle(() => StructMembers(s)),
         _ => 0,
     };
 
+    /// <summary>An array's handle: its first 100 elements unasked, any page of them asked by start and count (M56).</summary>
+    private int Paged(ArrayMirror array)
+    {
+        var handle = Handle(() => Elements(array));
+        lock (_gate)
+        {
+            _pages[handle] = (start, count) => Elements(array, start, count);
+        }
+
+        return handle;
+    }
+
+    /// <summary>The first 100 elements, and how many more: what a request without a count gets.</summary>
     private List<Variable> Elements(ArrayMirror array)
     {
         var count = Math.Min(array.Length, MaxChildren);
-        var values = array.GetValues(0, count);
-        var result = values.Select((v, i) => VariableOf($"[{i.ToString(CultureInfo.InvariantCulture)}]", v, null)).ToList();
+        var result = Elements(array, 0, count);
         if (array.Length > count)
         {
             result.Add(new Variable("…", $"{(array.Length - count).ToString(CultureInfo.InvariantCulture)} more"));
         }
 
         return result;
+    }
+
+    /// <summary><paramref name="count"/> elements from <paramref name="start"/> (fewer past the end): a page of a range (M56).</summary>
+    private List<Variable> Elements(ArrayMirror array, int start, int count)
+    {
+        var end = (int)Math.Min(array.Length, (long)start + count);
+        if (end <= start)
+        {
+            return [];
+        }
+
+        return [.. array.GetValues(start, end - start).Select((v, i) => VariableOf($"[{(start + i).ToString(CultureInfo.InvariantCulture)}]", v, null))];
     }
 
     /// <summary>An object's instance fields (an auto-property's backing field under the property's name) and its other properties, read through their getters.</summary>
@@ -948,7 +993,7 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
             value = Member(frame, value, part);
         }
 
-        return new EvaluateResponse(Format(value), TypeOf(value), ChildrenOf(value));
+        return new EvaluateResponse(Format(value), TypeOf(value), ChildrenOf(value), IndexedVariables: Indexed(value));
     }
 
     /// <summary>A member path's parts: names and <c>[index]</c>es; empty when it's something else.</summary>
@@ -1120,5 +1165,6 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
     {
         _frames.Clear();
         _children.Clear();
+        _pages.Clear();
     }
 }

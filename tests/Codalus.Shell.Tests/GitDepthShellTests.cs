@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
@@ -121,7 +122,7 @@ public sealed class GitDepthShellTests
         Assert.Equal("Ada Tester (Committer)", commit.ViewModel.Committer);
         Assert.Equal("Changes (1)", commit.ViewModel.ChangesHeader);
         Assert.Equal(["src/Greetings/Greeter.cs"], commit.ViewModel.Files.Select(file => file.RelativePath));
-        Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Tree.Single().Name);
+        Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Changes.Roots.Single().Text);
         Assert.False(commit.ViewModel.CanExplain); // AI is off
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("Howdy from", StringComparison.Ordinal)), describe: () => GitRepositoryShellTests.CommitTabState(f));
         var diff = f.Window.GetVisualDescendants().OfType<GitCommitView>().Single().DiffView!;
@@ -149,6 +150,75 @@ public sealed class GitDepthShellTests
             var documents = string.Join(", ", f.Shell.Layout.Documents.OfType<GitHistoryDocument>().Select(d => $"{d.Title}:{d.ViewModel.Lines}:{d.ViewModel.Rows.Count}"));
             throw new InvalidOperationException($"Histories: {documents}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}", ex);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Two_selected_commits_or_one_and_its_parent_are_compared()
+    {
+        var (f, _, _) = await OpenRepositoryAsync();
+        await using var fixture = f;
+
+        await f.RunAsync("git.history");
+        var history = await RepositoryHistoryAsync(f, 2);
+        var (greetings, initial) = (history.Rows[0], history.Rows[1]);
+
+        // Ctrl+click a second commit in the list: both are selected, and only the compare commands apply to two.
+        ListBox? List() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().SingleOrDefault()?.FindControl<ListBox>("List");
+        await ShellFixture.PumpUntil(() => List() is { SelectedItems: not null });
+        var list = List()!;
+        list.SelectedItems!.Clear();
+        list.SelectedItems.Add(initial);
+        list.SelectedItems.Add(greetings);
+        Assert.Equal([greetings, initial], history.SelectedRows);
+        Assert.True(history.CanCompareCommits);
+        Assert.False(history.IsSingleSelection);
+        Assert.False(history.CanCompareWithPrevious);
+
+        // Compare Commits: the older on the left.
+        await history.CompareSelectedAsync();
+        var compare = Assert.IsType<GitCompareDocument>(f.Shell.Layout.ActiveDocument);
+        await ShellFixture.PumpUntil(() => compare.ViewModel is { IsLoading: false, HasFiles: true });
+        Assert.Equal($"{initial.ShortHash} → {greetings.ShortHash}", compare.Title);
+        Assert.True(compare.ViewModel.ComparesCommits);
+        Assert.False(compare.ViewModel.CanShowHistory);
+        Assert.Equal(["src/Greetings/Greeter.cs"], compare.ViewModel.Files.Select(r => r.Status.RelativePath));
+        Assert.Equal('M', compare.ViewModel.Files.Single().Status.Index);
+
+        // One commit: Compare with Previous is the same comparison, so the same document; the first commit has no parent.
+        history.Selected = greetings;
+        Assert.Equal([greetings], history.SelectedRows);
+        Assert.True(history.IsSingleSelection);
+        Assert.False(history.CanCompareCommits);
+        Assert.True(history.CanCompareWithPrevious);
+        await history.CompareWithPreviousAsync();
+        Assert.Same(compare, Assert.Single(f.Shell.Layout.Documents.OfType<GitCompareDocument>()));
+        history.Selected = initial;
+        Assert.False(history.CanCompareWithPrevious);
+    }
+
+    /// <summary>
+    /// Select All in a long history keeps the list's order, each commit's place looked up once (M56): a search of the
+    /// loaded commits for each selected one was 3 billion comparisons with 80,000 loaded, seconds on the UI thread. The
+    /// budget is a second, many times what the lookup takes on a loaded machine and less than the search took on a fast one.
+    /// </summary>
+    [Fact]
+    public void Selecting_every_commit_of_a_long_history_keeps_the_lists_order_at_once()
+    {
+        using var git = new GitService(watch: false);
+        var history = new GitHistoryViewModel(git, new GitLogQuery(), "History", (_, _) => Task.CompletedTask);
+        var rows = Enumerable.Range(0, 80_000)
+            .Select(i => new GitCommitRow(new GitCommit($"{i:x40}", [], "Ada Tester", "ada@example.com", DateTimeOffset.UnixEpoch, [], $"Commit {i}")))
+            .ToList();
+        foreach (var row in rows)
+        {
+            history.Rows.Add(row);
+        }
+
+        var started = Stopwatch.StartNew();
+        history.SelectedRows = [.. Enumerable.Reverse(rows)];
+        var elapsed = started.Elapsed;
+        Assert.Equal(rows, history.SelectedRows);
+        Assert.True(elapsed < TimeSpan.FromSeconds(1), $"Select All took {elapsed.TotalMilliseconds:0} ms");
     }
 
     [AvaloniaFact]

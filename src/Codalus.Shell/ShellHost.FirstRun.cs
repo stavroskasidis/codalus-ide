@@ -167,7 +167,7 @@ public sealed partial class ShellHost
         ContinueStartup();
         if (!model.VisitedTools && Options.SmokeTest is null && Options.Bench is null)
         {
-            _ = CheckEnvironmentAsync(offer: true);
+            _ = CheckEnvironmentAsync(offer: true, requiredOnly: true);
         }
     }
 }

@@ -481,23 +481,18 @@ public sealed class CompletionPopup : IntelliSensePopup
         return !item.Text.StartsWith(CompletionList.Query + typed, StringComparison.CurrentCultureIgnoreCase);
     }
 
-    /// <summary>
-    /// Commits the selected item for a typed commit character (the server may change the edit for it); true when the
-    /// edit already typed the character.
-    /// </summary>
-    public bool CommitWith(char typed)
+    /// <summary>Commits the selected item for a typed commit character, which the editor then types.</summary>
+    public void CommitWith(char typed)
     {
         if (CompletionList.SelectedItem is not { } item)
         {
-            return false;
+            return;
         }
 
         item.CommitCharacter = typed;
-        item.IncludedCommitCharacter = false;
         try
         {
             Commit();
-            return item.IncludedCommitCharacter;
         }
         finally
         {

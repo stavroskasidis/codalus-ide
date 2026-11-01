@@ -88,7 +88,7 @@ public sealed class VariableRowActions : IDataTipHost
 /// </summary>
 public sealed class VariableRowList : DockPanel
 {
-    private readonly ObservableCollection<VariableRowItem> _rows = [];
+    private readonly ResettableCollection<VariableRowItem> _rows = [];
     private readonly HashSet<VariableNode> _followed = [];
     private readonly Grid _header;
     private ObservableCollection<VariableNode>? _roots;
@@ -234,12 +234,7 @@ public sealed class VariableRowList : DockPanel
         // keys (Delete, F2, the arrows) go nowhere after every evaluation of the watches and every stop (CI runs
         // 39959543059, 39959550864 and 40346124678: a watch's Delete after an edit's evaluation removed nothing).
         var focused = List.IsKeyboardFocusWithin;
-        _rows.Clear();
-        foreach (var row in rows)
-        {
-            _rows.Add(row);
-        }
-
+        _rows.Reset(rows); // one change for the list, not one per row (M56)
         if (selected is not null && rows.FirstOrDefault(r => ReferenceEquals(r.Node, selected)) is { } again)
         {
             List.SelectedItem = again;

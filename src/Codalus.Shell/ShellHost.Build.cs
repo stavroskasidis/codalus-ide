@@ -54,11 +54,13 @@ public sealed partial class ShellHost
                 _ = ConfigureLanguagesAsync(); // relative XML schema paths are from the solution's folder
             }
         });
-        Solutions.ProjectChanged += (_, _) => Ui.Post(() =>
+        // Once for a burst of evaluations: the toolbar's startup choices and the analysis scope walk every project.
+        var runState = Debouncer(() =>
         {
             UpdateRunState();
             FollowAnalysisProject();
-        });
+        }, TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(1));
+        Solutions.ProjectChanged += (_, _) => runState.Request();
         UpdateRunState();
     }
 

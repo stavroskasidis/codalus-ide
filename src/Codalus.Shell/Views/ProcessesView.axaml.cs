@@ -7,7 +7,11 @@ namespace Codalus.Shell.Views;
 /// <summary>The Processes window (M14b).</summary>
 public sealed partial class ProcessesView : UserControl
 {
-    public ProcessesView() => InitializeComponent();
+    public ProcessesView()
+    {
+        InitializeComponent();
+        ShownTracker.Track(this); // refreshed only while shown (M56)
+    }
 
     private ProcessesViewModel? ViewModel => DataContext as ProcessesViewModel;
 

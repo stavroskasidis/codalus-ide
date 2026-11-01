@@ -89,9 +89,11 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
     /// <summary>Called before the document changes: drops tokens of the edited lines, shifts later ones.</summary>
     public void OnDocumentChanging(DocumentChangeEventArgs e, TextDocument document)
     {
-        var editedLine = document.GetLineByOffset(Math.Min(e.Offset, document.TextLength)).LineNumber - 1;
-        var removedLines = CountNewlines(e.RemovedText.Text);
-        var delta = CountNewlines(e.InsertedText.Text) - removedLines;
+        // A group's edited lines: a group over most of a long document replaces all of it (DocumentEdits).
+        var (offset, removal, insertion) = DocumentEdits.EditedSpan(e);
+        var editedLine = document.GetLineByOffset(Math.Min(offset, document.TextLength)).LineNumber - 1;
+        var removedLines = CountNewlines(e.RemovedText.Text.AsSpan(offset - e.Offset, removal));
+        var delta = CountNewlines(e.InsertedText.Text.AsSpan(offset - e.Offset, insertion)) - removedLines;
         if (delta == 0 && removedLines == 0)
         {
             _lines.Remove(editedLine);
@@ -146,7 +148,7 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
         }
     }
 
-    private static int CountNewlines(string text) => text.AsSpan().Count('\n');
+    private static int CountNewlines(ReadOnlySpan<char> text) => text.Count('\n');
 
     private static string[]? s_lastLegend;
     private static int[]? s_lastMap;

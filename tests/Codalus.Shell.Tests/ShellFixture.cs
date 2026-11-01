@@ -96,9 +96,12 @@ internal sealed class ShellFixture : IAsyncDisposable
             Codalus.Workbench.Setup.OsLauncher.Current(userData), Path.Combine(userData, "os", "data"), Path.Combine(userData, "os", "config"),
             (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
         Window = new MainWindow(Shell);
+        Window.Closed += (_, _) => _closed = true;
         Window.Show();
         Pump();
     }
+
+    private bool _closed;
 
     public string UserData { get; }
 
@@ -267,6 +270,16 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// thread, and the last delay could end the wait before that job ran (PR #69's Save As Solution Filter).
     /// </summary>
     /// <param name="describe">What the shell was doing, added to the failure on a timeout.</param>
+    /// <summary>
+    /// Until the Welcome plugin, the default built-in plugin, has shown its Start view: once, at startup, in the left
+    /// column, as that column's active tab. Shown after a test had shown a tool window of that column (the Test Explorer,
+    /// the Toolbox, the Document Outline), on a busy machine where the plugin host starts seconds late, it hid that tool
+    /// window, which then did no work and, made lazily, never got its content (M56). A test that shows one soon after the
+    /// fixture starts waits for this first.
+    /// </summary>
+    public Task StartViewShownAsync() =>
+        PumpUntil(() => Shell.Layout.OpenToolWindows.Any(t => t.Id == "welcome.view"), seconds: 60);
+
     public static async Task PumpUntil(Func<bool> condition, int seconds = 30, Func<string>? describe = null)
     {
         // A monotonic clock: a machine that sleeps during the wait (a Mac with the display off) doesn't time out at once.
@@ -438,9 +451,24 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        Window.Close();
+        if (!_closed)
+        {
+            Window.CloseWithoutConfirming(); // a window with unsaved documents would ask, and stay open with its shell
+        }
+
         Pump();
-        await Shell.DisposeAsync();
+        if (Shell.IsShuttingDown)
+        {
+            // The window hides as it closes and goes for good once the shell has shut down, within the shutdown's limit
+            // (M56); then the rest of the disposal, whose failures the shutdown logs.
+            await PumpUntil(() => _closed);
+            await Shell.DisposeAsync().AsTask().ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+        }
+        else
+        {
+            await Shell.DisposeAsync(); // with unsaved changes the window asked instead, and stays
+        }
+
         try
         {
             // git writes its object files read-only.

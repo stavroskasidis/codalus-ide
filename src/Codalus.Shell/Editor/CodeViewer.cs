@@ -23,9 +23,14 @@ public sealed class CodeViewer : UserControl
 {
     private readonly IEditorServices _services;
     private readonly RangeHighlight _highlight = new();
+    private readonly LongLineCutter _longLines;
     private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
     private GrammarColorizer? _grammarColors;
     private string? _scope;
+    private bool _attached;
+
+    /// <summary>Whether the grammar's colors are installed (tests).</summary>
+    internal bool HasGrammar => _textMate is not null;
 
     public CodeViewer(IEditorServices services, EditorFont font)
     {
@@ -44,6 +49,10 @@ public sealed class CodeViewer : UserControl
         Editor.Bind(TextEditor.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         Editor.Bind(TextEditor.LineNumbersForegroundProperty, this.GetResourceObservable("Shell.Editor.LineNumbers"));
         Editor.TextArea.TextView.BackgroundRenderers.Add(_highlight);
+
+        // Long lines are cut as in the editor (M56): Peek Definition into a minified file drew its whole line at each redraw.
+        _longLines = new LongLineCutter(Editor.TextArea, () => this.TryFindResource("Shell.Editor.InlayHint.Foreground", ActualThemeVariant, out var value) && value is IBrush brush ? brush : Brushes.Gray);
+        Editor.TextArea.TextView.LineTransformers.Add(_longLines);
         AutomationProperties.SetName(Editor, "Definition (read-only)");
         Content = Editor;
         services.ThemeChanged += OnThemeChanged;
@@ -124,19 +133,11 @@ public sealed class CodeViewer : UserControl
             _scope = scope;
             _textMate?.Dispose();
             _textMate = null;
-            if (scope is not null)
-            {
-                try
-                {
-                    _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
-                    _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
-                    _textMate.SetGrammar(scope);
-                }
-                catch (Exception ex) when (ex is not OutOfMemoryException)
-                {
-                    _services.Log("TextMate: " + ex.Message);
-                }
-            }
+            InstallGrammar();
+        }
+        else
+        {
+            InstallGrammar(); // the grammar left with the viewer's last detach
         }
 
         _highlight.Brush = this.TryFindResource("Shell.Selection", ActualThemeVariant, out var resource) && resource is IBrush brush ? brush : Brushes.LightBlue;
@@ -173,6 +174,7 @@ public sealed class CodeViewer : UserControl
         {
             _grammarColors = new GrammarColorizer();
             Editor.TextArea.TextView.LineTransformers.Add(_grammarColors);
+            KeepLongLinesLast();
         }
 
         _grammarColors.Theme = _services.Theme;
@@ -183,6 +185,17 @@ public sealed class CodeViewer : UserControl
         else
         {
             _grammarColors.Clear();
+        }
+    }
+
+    /// <summary>The cut of long lines after the colorizers (a grammar's installs itself last): nothing draws past it.</summary>
+    private void KeepLongLinesLast()
+    {
+        var transformers = Editor.TextArea.TextView.LineTransformers;
+        if (transformers[^1] != _longLines)
+        {
+            transformers.Remove(_longLines);
+            transformers.Add(_longLines);
         }
     }
 
@@ -211,6 +224,50 @@ public sealed class CodeViewer : UserControl
         _services.ThemeChanged -= OnThemeChanged;
         _textMate?.Dispose();
         _textMate = null;
+        _longLines.Detach();
+    }
+
+    /// <summary>
+    /// The grammar's colors, while the viewer is in a window: TextMate's tokenizer thread waits for work for as long as
+    /// they are installed, and holds the viewer (and its window and shell) meanwhile. A viewer whose owner never releases
+    /// it (a tool window's: Code Definition, an HTTP response) kept it after its window closed.
+    /// </summary>
+    private void InstallGrammar()
+    {
+        if (_textMate is not null || _scope is not { } scope || !_attached)
+        {
+            return;
+        }
+
+        try
+        {
+            _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
+            _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
+            _textMate.SetGrammar(scope);
+            KeepLongLinesLast();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _services.Log("TextMate: " + ex.Message);
+            _textMate?.Dispose();
+            _textMate = null;
+        }
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _attached = true;
+        InstallGrammar();
+    }
+
+    /// <summary>Leaving its window (closed, or the pane moving): the grammar goes, and comes back with the next attach.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        _attached = false;
+        _textMate?.Dispose();
+        _textMate = null;
+        base.OnDetachedFromVisualTree(e);
     }
 
     private sealed class RangeHighlight : IBackgroundRenderer

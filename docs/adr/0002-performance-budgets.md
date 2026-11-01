@@ -166,3 +166,10 @@ The two latency failures each took a re-run or an accept pull request to release
   - The table shows the confirmation run's value next to the first run's.
 - **Replayed** over all 304 stored latency comparisons, the new rule fails none (7 warnings with fewer than 5 runs on the CPU), before any confirmation run.
 - **What it costs.** A regression smaller than a metric's own noise passes on hosted runners. On the macOS M1 runners, cold start's band from the 10 runs before 0.8.0 is about +94% (median 740 ms, σ 232 ms): only a near doubling fails there until steadier runs replace those in the window. The 6-launch p50s should spread much less, and the band is recomputed from the latest 10 runs. Latency smaller than the noise is the reference machine's to catch (*Enforcement in CI*, item 1).
+
+## Amendment (2026-10-31): informative scenarios
+
+M56 adds the `everyday` scenario: the everyday flows run in the real app (`--bench everyday`), each reporting how long input waited (`everyday_<flow>_stall_max_ms`, `everyday_<flow>_stall_total_ms`), with the probe the stall-budget tests use on every pull request (`UiStallMonitor`).
+- **A scenario CI hasn't measured has no budget yet**, and numbers from a local machine never set one ([benchmarks/README.md](../../benchmarks/README.md)). So `budgets.json` gets a list, `informativeScenarios`: their metrics are compared and reported like the others, but a regression is a warning, never a failure, and a run of the scenario that fails is a warning on the pipeline's run, not a failed job.
+- **A scenario leaves the list** once CI's first measurements, on every runner, have set its budgets: `TODO(issue)` in `budgets.json` for `everyday`, and in `pipeline.yml` to count its step's status then.
+- **Why not gate it at once:** the regression gate compares latency from 5 runs on the same CPU (the 2026-10-27 amendment); stall times on hosted, GPU-less runners are noisier than launch times, and a budget guessed before any CI run would either fail releases on noise or be too loose to mean anything. The stall-budget tests (no input may wait over 1 s in the headless flows) stay the guard on every pull request meanwhile.

@@ -40,6 +40,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly Dictionary<int, IClrFrame> _frames = [];
     private readonly Dictionary<Guid, List<ModuleDelta>> _pendingDeltas = [];
     private readonly Dictionary<int, Func<IReadOnlyList<Variable>>> _children = [];
+
+    /// <summary>An array's elements by page (a reference's start and count, M56): the shell shows a long array in ranges.</summary>
+    private readonly Dictionary<int, Func<int, int, IReadOnlyList<Variable>>> _pages = [];
     private readonly Dictionary<int, Lazy<Dictionary<string, IClrValue>>> _childValues = [];
     private readonly Dictionary<int, IClrValue> _exceptions = [];
     private readonly HashSet<int> _stoppedWhenThrown = [];
@@ -158,7 +161,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "scopes":
                 return JsonSerializer.SerializeToElement(new ScopesResponse(Scopes(Read(arguments, json.ScopesArguments)!.FrameId)), json.ScopesResponse);
             case "variables":
-                return JsonSerializer.SerializeToElement(new VariablesResponse([.. Variables(Read(arguments, json.VariablesArguments)!.VariablesReference)]), json.VariablesResponse);
+                var variables = Read(arguments, json.VariablesArguments)!;
+                return JsonSerializer.SerializeToElement(new VariablesResponse([.. Variables(variables.VariablesReference, variables.Start, variables.Count)]), json.VariablesResponse);
             case "evaluate":
                 var evaluate = Read(arguments, json.EvaluateArguments)!;
                 return JsonSerializer.SerializeToElement(Evaluate(evaluate.Expression, evaluate.FrameId), json.EvaluateResponse);
@@ -327,6 +331,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
             log.WriteLine($"Starting {arguments.Program} ({debugger.Runtime})…");
             _process = debugger.Launch(arguments, (category, text) => _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(text, category), DapJsonContext.Default.OutputEvent));
+        }
+
+        if (_process is CorDebugTarget target)
+        {
+            target.DescribeThreads = ThreadsOfTimedOutEval;
+            target.EvalTimedOut = log.WriteLine;
         }
 
         log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
@@ -1247,10 +1257,19 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return values;
     }
 
-    private IReadOnlyList<Variable> Variables(int reference)
+    /// <summary>
+    /// A reference's children; an array's from <paramref name="start"/>, <paramref name="count"/> of them, when asked
+    /// (without a count, the first 100 and how many more).
+    /// </summary>
+    private IReadOnlyList<Variable> Variables(int reference, int? start = null, int? count = null)
     {
         lock (_gate)
         {
+            if (count is > 0 && _pages.TryGetValue(reference, out var page))
+            {
+                return page(Math.Max(0, start ?? 0), count.Value);
+            }
+
             return _children.TryGetValue(reference, out var children) ? children() : throw new DapRequestException("The variable is no longer valid: the program has run since.");
         }
     }
@@ -1272,7 +1291,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         try
         {
-            return new(name, Types.Format(value), value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName);
+            return new(name, Types.Format(value), value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName, IndexedVariables: Indexed(value));
         }
         catch (InvalidOperationException ex)
         {
@@ -1287,6 +1306,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         _ => Types.Name(value.Type),
     };
 
+    /// <summary>An array's length, as DAP's indexed variables (M56); null for any other value.</summary>
+    private static int? Indexed(IClrValue? value) => value is { Kind: ClrValueKind.Array, Length: > 0 } ? value.Length : null;
+
     private int ChildrenOf(IClrValue? value, string? evaluateName)
     {
         if (value is null)
@@ -1297,7 +1319,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         switch (value.Kind)
         {
             case ClrValueKind.Array when value.Length > 0:
-                return Handle(() => Elements(value, evaluateName));
+                var handle = Handle(() => Elements(value, evaluateName));
+                _pages[handle] = (start, count) => Elements(value, evaluateName, start, count);
+                return handle;
             case ClrValueKind.Object:
                 var full = Types.FullName(value.Type);
                 if (full is "System.Decimal" or "System.DateTime" or "System.TimeSpan" || Types.Unboxed(value) is not null || (Types.Definition(value.Type) is { } d && Types.Info(d.Module) is { } info && info.IsEnum(d.Token)))
@@ -1311,20 +1335,30 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
     }
 
+    /// <summary>The first 100 elements, and how many more: what a request without a count gets.</summary>
     private List<Variable> Elements(IClrValue array, string? evaluateName)
     {
         var count = Math.Min(array.Length, MaxChildren);
-        var result = new List<Variable>();
-        var dimensions = array.Dimensions;
-        for (var i = 0; i < count; i++)
-        {
-            var index = dimensions.Count > 1 ? string.Join(", ", Indices(i, dimensions).Select(n => n.ToString(CultureInfo.InvariantCulture))) : i.ToString(CultureInfo.InvariantCulture);
-            result.Add(VariableOf("[" + index + "]", SafeValue(() => array.Element(i)), evaluateName is null ? null : $"{evaluateName}[{index}]"));
-        }
-
+        var result = Elements(array, evaluateName, 0, count);
         if (array.Length > count)
         {
             result.Add(new Variable("…", $"{(array.Length - count).ToString(CultureInfo.InvariantCulture)} more"));
+        }
+
+        return result;
+    }
+
+    /// <summary><paramref name="count"/> elements from <paramref name="start"/> (fewer past the end): a page of a range (M56).</summary>
+    private List<Variable> Elements(IClrValue array, string? evaluateName, int start, int count)
+    {
+        var end = (int)Math.Min(array.Length, (long)start + count);
+        var result = new List<Variable>(Math.Max(0, end - start));
+        var dimensions = array.Dimensions;
+        for (var i = start; i < end; i++)
+        {
+            var at = i;
+            var index = dimensions.Count > 1 ? string.Join(", ", Indices(at, dimensions).Select(n => n.ToString(CultureInfo.InvariantCulture))) : at.ToString(CultureInfo.InvariantCulture);
+            result.Add(VariableOf("[" + index + "]", SafeValue(() => array.Element(at)), evaluateName is null ? null : $"{evaluateName}[{index}]"));
         }
 
         return result;
@@ -1388,9 +1422,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     // As netcoredbg shows it: the exception, typed (the data tip marks the getter as having thrown) and expandable.
                     result.Add(VariableOf(property.Name, ex.Exception, path));
                 }
-                catch (TimeoutException)
+                catch (TimeoutException ex)
                 {
                     timedOut = true;
+                    log.WriteLine($"{property.Name}'s getter: " + (ex is ClrEvalTimeoutException ? "timed out (above)" : ex.Message));
                     result.Add(new Variable(property.Name, "(the getter timed out)", null, 0, path));
                 }
                 catch (InvalidOperationException ex)
@@ -1500,7 +1535,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return result switch
             {
                 LocalValue local => new EvaluateResponse(ClrTypeSystem.FormatPrimitive(local.Value), local.Value is null ? null : LocalTypeName(local.Value)),
-                RemoteValue remote => new EvaluateResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim())),
+                RemoteValue remote => new EvaluateResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim()), IndexedVariables: Indexed(remote.Value)),
                 TypeValue type => throw new DapRequestException($"'{expression.Trim()}' is a type ({Types.Name(ClrTypeSystem.TypeOf(type.Module, type.Token))}), not a value."),
                 _ => throw new DapRequestException($"'{expression.Trim()}' is a namespace, not a value."),
             };
@@ -1650,6 +1685,56 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return lines.Count == 0 ? null : string.Join(Environment.NewLine, lines);
     }
 
+    /// <summary>The frames logged per thread when a func-eval times out.</summary>
+    private const int TimedOutEvalFrames = 30;
+
+    /// <summary>
+    /// What every thread is doing while a func-eval that timed out is stopped before its abort (<see cref="CorDebugTarget.DescribeThreads"/>):
+    /// the eval thread's frames above the evaluation, and where the suspended threads are, to tell what it waits on.
+    /// </summary>
+    private string ThreadsOfTimedOutEval()
+    {
+        var text = new System.Text.StringBuilder();
+        foreach (var thread in Process.Threads())
+        {
+            var frames = SafeFrames(thread);
+            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture)).Append(':');
+            foreach (var frame in frames.Take(TimedOutEvalFrames))
+            {
+                text.AppendLine().Append("    ").Append(FrameText(frame));
+            }
+
+            if (frames.Count > TimedOutEvalFrames)
+            {
+                text.AppendLine().Append("    (").Append((frames.Count - TimedOutEvalFrames).ToString(CultureInfo.InvariantCulture)).Append(" more)");
+            }
+        }
+
+        return text.ToString();
+    }
+
+    /// <summary>A frame for the log: its method and IL offset, or what an internal or native frame is.</summary>
+    private string FrameText(IClrFrame frame)
+    {
+        if (frame.Module is not { } module)
+        {
+            return frame.Description ?? "[?]";
+        }
+
+        var token = "0x" + frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture);
+        string name;
+        try
+        {
+            name = Types.Info(module)?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] {token}";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or BadImageFormatException or ArgumentException)
+        {
+            name = $"[{Path.GetFileName(module.Path)}] {token}";
+        }
+
+        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
+    }
+
     private static IReadOnlyList<IClrFrame> SafeFrames(IClrThread thread)
     {
         try
@@ -1667,5 +1752,6 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         _frames.Clear();
         _children.Clear();
         _childValues.Clear();
+        _pages.Clear();
     }
 }

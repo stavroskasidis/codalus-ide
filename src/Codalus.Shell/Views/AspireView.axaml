@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:ae="using:AvaloniaEdit"
              x:Class="Codalus.Shell.Views.AspireView"
              x:DataType="vm:AspireViewModel">
   <DockPanel>
@@ -37,7 +38,15 @@
       <GridSplitter Grid.Column="1" ResizeDirection="Columns" />
       <TabControl Grid.Column="2" Padding="0">
         <TabItem Header="{l:T aspire.console}">
-          <TextBox x:Name="LogText" Text="{Binding Logs}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
+          <!-- The console as the Output window shows a channel (M56): a text box laid out the whole console at each line. -->
+          <ae:TextEditor x:Name="LogText"
+                         IsReadOnly="True"
+                         ShowLineNumbers="False"
+                         FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace"
+                         Background="{DynamicResource Shell.Editor.Background}"
+                         Foreground="{DynamicResource Shell.Editor.Foreground}"
+                         Padding="6,2"
+                         AutomationProperties.Name="{l:T aspire.theResourceSConsoleOutput}" />
         </TabItem>
         <TabItem Header="{l:T aspire.environment}">
           <ListBox ItemsSource="{Binding Environment}" Background="Transparent" AutomationProperties.Name="{l:T aspire.environmentVariables}">

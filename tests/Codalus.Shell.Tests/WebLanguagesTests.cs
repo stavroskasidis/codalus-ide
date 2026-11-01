@@ -78,6 +78,26 @@ public sealed class WebLanguagesTests
             var properties = await cssClient.CompletionAsync(css!.Model.Uri, css.Model.PositionAt(css.Model.Text.Text.IndexOf("col", StringComparison.Ordinal) + 3),
                 new CompletionContext(CompletionTriggerKind.Invoked, null), ShellFixture.RequestTimeout());
             Assert.Contains(properties!.Items, i => i.Label == "color");
+
+            // The navigation bar shows from an editor's first frame when the server will list types (a class, an
+            // interface, a JavaScript prototype's class, a style rule), and never for a file without them: the code
+            // doesn't move when the symbols come (NavigationBarFirstFrameTests).
+            var bars = new (string Name, string Text, bool Types)[]
+            {
+                ("shapes.ts", "export interface IShape { area(): number; }\nexport class Circle implements IShape { area() { return 1; } }\n", true),
+                ("helpers.ts", "export function twice(n: number) { return n * 2; }\nconst label = `class ${twice(1)}`;\n", false),
+                ("legacy.js", "var Store = function (state) { this.state = state; };\nStore.prototype = {\n  get: function () { return this.state; }\n};\n", true),
+                ("theme.scss", "$base: 4px;\n@mixin pad { padding: $base; }\n.card { @include pad; }\n", true),
+                ("tokens.scss", "$base: 4px;\n@mixin pad { .inner { padding: $base; } }\n", false),
+            };
+            foreach (var (name, content, types) in bars)
+            {
+                var path = Path.Combine(folder, name);
+                await File.WriteAllTextAsync(path, content, TestContext.Current.CancellationToken);
+                var (frames, bar, _, _) = await NavigationBarFirstFrameTests.OpenRecordingBarAsync(f, path);
+                Assert.True(bar.HasTypes == types, $"{name}: {bar.Types.Count} types listed");
+                Assert.True(frames.Count > 0 && frames.TrueForAll(shown => shown == types), $"{name}: the bar showed in {frames.Count(s => s)} of {frames.Count} frames");
+            }
         }
         finally
         {
