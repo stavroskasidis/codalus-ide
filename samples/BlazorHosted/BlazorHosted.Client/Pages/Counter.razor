@@ -33,7 +33,7 @@
                 while (true)
                 {
                     await Task.Delay(500, stopping.Token);
-                    Tick();
+                    await TickAsync();
                 }
             }
             catch (OperationCanceledException)
@@ -42,10 +42,14 @@
         }
     }
 
-    private void Tick()
+    // Async without an await, as handlers often are: an edit to it gives it a new state machine, which the browser's
+    // runtime takes only with AddExplicitInterfaceImplementation (an IAsyncStateMachine implementation).
+#pragma warning disable CS1998
+    private async Task TickAsync()
     {
         ticks++; // [tick]
     }
+#pragma warning restore CS1998
 
     public void Dispose() => stopping.Cancel();
 

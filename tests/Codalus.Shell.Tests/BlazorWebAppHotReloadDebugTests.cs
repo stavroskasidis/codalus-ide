@@ -244,7 +244,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
             reported = browser.Server!.CapabilitiesAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
             return reported is { Length: > 0 } && !reported.StartsWith('!');
         }, seconds: 120, describe: () => $"The page answered '{reported}'. " + Diagnostics(f));
-        var missing = browser.Capabilities!.Except(reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal).ToList();
+        // Except the one it applies without reporting it, which the tick's edit below needs (an async method without an await).
+        var missing = browser.Capabilities!.Except([.. reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), BrowserHotReload.ImpliedCapability], StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, $"The page's runtime can't apply {string.Join(", ", missing)}; it reported '{reported}'.");
 
         // 1. The server, in place, in the same process.

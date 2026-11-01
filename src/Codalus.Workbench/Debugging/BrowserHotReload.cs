@@ -19,13 +19,22 @@ public sealed record BrowserHotReload(IReadOnlyCollection<string> Projects, Brow
     /// <summary>
     /// The WebAssembly runtime's Hot Reload capabilities, as its agent reports them (<c>GetApplyUpdateCapabilities</c>):
     /// .NET 10's Mono is CoreCLR's set without <c>AddFieldRva</c>. A later runtime is taken to have at least as much
-    /// until a test of it says more (<c>BrowserHotReloadDebugTests</c> compares this with a real page's answer).
+    /// until a test of it says more (<c>BlazorWebAppHotReloadDebugTests</c> compares this with a real page's answer).
+    /// Plus <see cref="ImpliedCapability"/>, which the agent doesn't report.
     /// </summary>
     public static IReadOnlyList<string> WebAssemblyCapabilities(int major) => major < 10 ? [] :
     [
         "Baseline", "AddMethodToExistingType", "AddStaticFieldToExistingType", "NewTypeDefinition", "ChangeCustomAttributes",
         "AddInstanceFieldToExistingType", "GenericAddMethodToExistingType", "GenericUpdateMethod", "UpdateParameters", "GenericAddFieldToExistingType",
+        ImpliedCapability,
     ];
+
+    /// <summary>
+    /// What Mono, as every .NET runtime, applies without reporting it, and <c>dotnet watch</c> adds (SDK 10.0.4xx on):
+    /// an edit to an async method without an <c>await</c> gives it a new state machine, which implements
+    /// <c>IAsyncStateMachine</c> explicitly. Without it the edit was CS9346, a restart.
+    /// </summary>
+    public const string ImpliedCapability = "AddExplicitInterfaceImplementation";
 
     /// <summary>
     /// The SDK's browser refresh middleware (<c>dotnet watch</c>'s, under <c>DotnetTools/dotnet-watch/…/hotreload/</c>
