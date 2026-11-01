@@ -403,6 +403,77 @@ public sealed class RemoteServerTests
         Assert.True(RemotePathMap.Identity.IsIdentity);
     }
 
+    /// <summary>
+    /// A remote window's host connection rewrites the paths of every message it writes (<see cref="MappedJsonStream"/>):
+    /// with the writer loop (M57) that happens there, so the didOpen of a large file doesn't hold its caller (the UI
+    /// thread) for the encoding, the rewrite or a link that's slow to take it.
+    /// </summary>
+    [Fact]
+    public async Task A_large_did_open_through_the_path_rewrite_does_not_hold_its_caller()
+    {
+        var root = OperatingSystem.IsWindows() ? @"\\wsl.localhost\Ubuntu" : "/codalus-remote/ssh-pi";
+        var local = OperatingSystem.IsWindows() ? @"\\wsl.localhost\Ubuntu\home\pi\App\Big.xml" : "/codalus-remote/ssh-pi/home/pi/App/Big.xml";
+        var toRemote = new System.IO.Pipelines.Pipe();
+        var fromRemote = new System.IO.Pipelines.Pipe();
+        using var link = new ManualResetEventSlim();
+        var mapped = new MappedJsonStream(new BlockingWriteStream(toRemote.Writer.AsStream(), link), RemotePathMap.Under(root));
+        await using var connection = new JsonRpcConnection(fromRemote.Reader.AsStream(), mapped);
+        connection.Start();
+
+        var text = string.Concat(Enumerable.Repeat("<item path=\"" + local + "\">&lt;v&gt;</item>\n", 60_000)); // ~4 MB
+        var uri = new Uri(local).AbsoluteUri;
+        var queueing = Task.Factory.StartNew(() => connection.NotifyAsync(
+            LanguageServices.Protocol.Methods.DidOpen,
+            new LanguageServices.Protocol.DidOpenTextDocumentParams(new LanguageServices.Protocol.TextDocumentItem(uri, "xml", 1, text)),
+            LanguageServices.Protocol.ProtocolJsonContext.Default.DidOpenTextDocumentParams,
+            CancellationToken.None), TestContext.Current.CancellationToken, TaskCreationOptions.None, TaskScheduler.Default);
+
+        // The call returns while the link takes nothing (it blocked on its first byte before: encoded, rewritten, written).
+        var sent = await queueing.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.False(sent.IsCompleted);
+
+        link.Set();
+        var reader = new FramedMessageReader(toRemote.Reader.AsStream());
+        var message = await reader.ReadMessageAsync(Timeout());
+        await sent.WaitAsync(Timeout());
+        using var document = System.Text.Json.JsonDocument.Parse(message);
+        var item = document.RootElement.GetProperty("params").GetProperty("textDocument");
+        Assert.Equal("file:///home/pi/App/Big.xml", item.GetProperty("uri").GetString());
+        Assert.Equal(text, item.GetProperty("text").GetString()); // the text's own paths stay
+    }
+
+    /// <summary>A stream whose writes block their caller's thread until <paramref name="link"/> is set: a link that takes nothing.</summary>
+    private sealed class BlockingWriteStream(Stream inner, ManualResetEventSlim link) : Stream
+    {
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            link.Wait(TimeSpan.FromSeconds(30), cancellationToken);
+            return inner.WriteAsync(buffer, cancellationToken);
+        }
+    }
+
     [Fact]
     public void Targets_parse_from_the_command_line()
     {

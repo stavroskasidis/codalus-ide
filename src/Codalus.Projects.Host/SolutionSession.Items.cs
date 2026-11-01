@@ -173,7 +173,7 @@ internal sealed partial class SolutionSession
 
     // ------------------------------------------------------------------ Show All Files
 
-    /// <summary>Everything under a folder, without version control, IDE and package folders, up to a limit.</summary>
+    /// <summary>Everything under a folder, without version control's folder, up to a limit (<see cref="ExplorerFiles.ListTree"/>).</summary>
     public ListTreeResult ListTree(ListTreeParams parameters) => ExplorerFiles.ListTree(parameters);
 
     // ------------------------------------------------------------------ folder mode
@@ -218,32 +218,8 @@ internal sealed partial class SolutionSession
     }
 
     /// <summary>The project files under the folder (without bin, obj, version control and packages).</summary>
-    public DiscoverProjectsResult DiscoverProjects()
-    {
-        var root = IsFolder ? Path : SolutionDirectory;
-        var found = new List<string>();
-        void Walk(string directory)
-        {
-            try
-            {
-                found.AddRange(Directory.EnumerateFiles(directory).Where(f => s_projectExtensions.Contains(System.IO.Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)));
-                foreach (var sub in Directory.EnumerateDirectories(directory))
-                {
-                    var name = System.IO.Path.GetFileName(sub);
-                    if (!ExplorerFiles.SkippedFolders.Contains(name) && !name.Equals("bin", StringComparison.OrdinalIgnoreCase) && !name.Equals("obj", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Walk(sub);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-            }
-        }
-
-        Walk(root);
-        return new DiscoverProjectsResult([.. found.Order(StringComparer.OrdinalIgnoreCase)]);
-    }
+    public DiscoverProjectsResult DiscoverProjects() =>
+        new([.. ExplorerFiles.DiscoverProjects(IsFolder ? Path : SolutionDirectory, s_projectExtensions)]);
 
     /// <summary>Folder mode: the projects of the in-memory solution (loaded ones are evaluated, removed ones dropped).</summary>
     public async Task SetFolderProjectsAsync(SetFolderProjectsParams parameters, CancellationToken cancellationToken)

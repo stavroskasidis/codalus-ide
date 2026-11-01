@@ -66,6 +66,13 @@ public sealed record GitRefChip(string Name, GitRefKind Kind, bool IsCurrent)
 /// <summary>A row of the history: a commit, with its place in the graph and its branches and tags.</summary>
 public sealed class GitCommitRow : ObservableObject
 {
+    /// <summary>
+    /// The most chips the Branch / Tag column shows (M57): it's 130 px wide and a chip is at least 30, so more never show,
+    /// and every name is in its tooltip. A commit with many refs at it made controls for each, each time a branch at it was
+    /// selected in the Git Repository document: 0.5 to 1 s of UI thread for 320 refs, 4.9 s for 7,000.
+    /// </summary>
+    internal const int MaxShownRefs = 8;
+
     private IReadOnlyList<GitRefChip> _shownRefs;
 
     public GitCommitRow(GitCommit commit, bool isIncoming = false)
@@ -73,7 +80,7 @@ public sealed class GitCommitRow : ObservableObject
         Commit = commit;
         IsIncoming = isIncoming;
         RefChips = GitRefChip.Parse(commit.Refs);
-        _shownRefs = RefChips;
+        _shownRefs = RefChips.Count > MaxShownRefs ? [.. RefChips.Take(MaxShownRefs)] : RefChips;
     }
 
     public GitCommit Commit { get; }
@@ -95,7 +102,7 @@ public sealed class GitCommitRow : ObservableObject
     /// <summary>Their names (<c>main</c>, <c>origin/main</c>, <c>v1.0</c>).</summary>
     public IReadOnlyList<string> Refs => [.. RefChips.Select(r => r.Name)];
 
-    /// <summary>The ones the toolbar's toggles show (remote branches and tags can be hidden).</summary>
+    /// <summary>The ones the toolbar's toggles show (remote branches and tags can be hidden), at most <see cref="MaxShownRefs"/>.</summary>
     public IReadOnlyList<GitRefChip> ShownRefs
     {
         get => _shownRefs;
@@ -119,7 +126,8 @@ public sealed class GitCommitRow : ObservableObject
     public string AccessibleName => $"{Subject}, {Author}, {Date}, {ShortHash}{(RefChips.Count > 0 ? ", " + RefsTip : string.Empty)}";
 
     internal void ShowRefs(bool remote, bool tags) =>
-        ShownRefs = remote && tags ? RefChips : [.. RefChips.Where(r => r.Kind == GitRefKind.Local || remote && r.Kind == GitRefKind.Remote || tags && r.Kind == GitRefKind.Tag)];
+        ShownRefs = remote && tags && RefChips.Count <= MaxShownRefs ? RefChips
+            : [.. RefChips.Where(r => r.Kind == GitRefKind.Local || remote && r.Kind == GitRefKind.Remote || tags && r.Kind == GitRefKind.Tag).Take(MaxShownRefs)];
 }
 
 /// <summary>A file changed by a commit.</summary>

@@ -19,7 +19,7 @@ namespace Codalus.Shell.Tests;
 public sealed class DocumentOutlineTests
 {
     /// <summary>A namespace of <paramref name="classes"/> classes of <paramref name="members"/> methods each (two of them overloads), on their own lines.</summary>
-    private static DocumentSymbol[] Symbols(int classes, int members, int extra = 0)
+    internal static DocumentSymbol[] Symbols(int classes, int members, int extra = 0)
     {
         DocumentSymbol Symbol(string name, int kind, int start, int end, DocumentSymbol[]? children = null) =>
             new(name, kind, new Range(new Position(start, 0), new Position(end, 1)), new Range(new Position(start, 4), new Position(start, 4 + name.Length))) { Children = children, Detail = kind == SymbolKind.Method ? "()" : null };
@@ -42,7 +42,7 @@ public sealed class DocumentOutlineTests
         return [Symbol("App", SymbolKind.Namespace, 0, line, [.. types])];
     }
 
-    private static async Task<(ShellFixture Fixture, CodeEditorController Editor)> OpenAsync()
+    internal static async Task<(ShellFixture Fixture, CodeEditorController Editor)> OpenAsync()
     {
         var f = ShellFixture.Create();
         var file = Path.Combine(f.UserData, "Large.txt");
@@ -55,7 +55,7 @@ public sealed class DocumentOutlineTests
     private static string Describe(DocumentOutlineViewModel outline, int builds) =>
         $"{outline.Builds} builds (from {builds}), building {outline.IsBuilding}, shown {outline.IsShown}, {outline.Rows.Count} rows";
 
-    private static async Task ShowOutlineAsync(ShellFixture f)
+    internal static async Task ShowOutlineAsync(ShellFixture f)
     {
         // The Welcome plugin shows its Start view once at startup, as the left column's active tab: coming after the Outline
         // (the plugin host starts seconds late on a busy machine), it hid it before its content was made. It comes first.

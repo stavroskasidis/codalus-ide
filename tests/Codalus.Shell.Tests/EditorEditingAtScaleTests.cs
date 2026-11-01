@@ -470,7 +470,11 @@ public sealed class EditorEditingAtScaleTests
             Assert.Equal(FindWidget.MaxMatches, find.MatchCount);
             Assert.True(find.IsCapped);
             Assert.InRange(find.SearchesRun - searches, 1, typing.MostSearches); // once per pause in typing, not once per key
-            Assert.Equal((4, 4), (editor.Editor.SelectionStart, editor.Editor.SelectionLength)); // the first match is selected
+            // The first match from where the search began is selected: "item" at 4, or at 12 (in "items") when a search ran
+            // while the box held "items" (a loaded machine paused mid-typing), as an incremental find goes on from the match it
+            // selected (M57 validation, the whole suite: (12, 4)).
+            Assert.Equal(4, editor.Editor.SelectionLength);
+            Assert.True(editor.Editor.SelectionStart is 4 or 12, $"selected at {editor.Editor.SelectionStart}");
             Assert.EndsWith("+", find.Status);
             Assert.NotEmpty(find.MatchLines);
 

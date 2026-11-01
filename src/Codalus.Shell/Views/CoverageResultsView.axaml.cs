@@ -8,13 +8,17 @@ using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
-/// <summary>Coverage Results: double-click or Enter opens a class or method, Left/Right collapse and expand.</summary>
+/// <summary>
+/// Coverage Results: double-click or Enter opens a class or method, Left/Right collapse and expand. The list is a
+/// <see cref="TreeRowsList"/>: a tree to a screen reader (M57).
+/// </summary>
 public sealed partial class CoverageResultsView : UserControl, IPaneView
 {
     public CoverageResultsView()
     {
         InitializeComponent();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        List.ExpandRow = (row, expanded) => ViewModel?.SetExpanded((CoverageRowViewModel)row, expanded); // a screen reader's, as Left and Right
         List.DoubleTapped += (_, e) =>
         {
             if (RowAt(e.Source) is not null && !IsChevron(e.Source))

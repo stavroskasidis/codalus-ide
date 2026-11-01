@@ -28,8 +28,16 @@ public static class HostLaunchInfo
     }
 }
 
-/// <summary>An open document as the client knows it, for replay after a server restart.</summary>
+/// <summary>An open document as the client knows it.</summary>
 public sealed record OpenDocumentState(string Uri, string LanguageId, int Version, string Text);
+
+/// <summary>
+/// An open document, opened again after a server restart as a document opened now is (M57 review): <see cref="Snapshot"/>
+/// is taken when its <c>didOpen</c> is queued and <see cref="Latest"/> read when it is written, not both read when the
+/// replay starts (an edit made meanwhile, skipped because the document wasn't open there yet, was lost). It isn't sent
+/// when <see cref="IsOpen"/> says it was closed by then.
+/// </summary>
+public sealed record ReopenedDocument(string Uri, string LanguageId, Func<(string Text, int Version)> Latest, Func<(Func<string> Text, int Version)>? Snapshot, Func<bool> IsOpen);
 
 /// <summary>
 /// A supervised LSP client (ADR 0005), AOT-safe. It speaks standard LSP plus the <c>codalus/</c> extensions that a
@@ -77,8 +85,8 @@ public sealed class LanguageHostClient : IAsyncDisposable
         }
     }
 
-    /// <summary>Open documents with their current text, replayed after a restart.</summary>
-    public Func<IReadOnlyList<OpenDocumentState>>? OpenDocumentsProvider { get; set; }
+    /// <summary>The open documents, opened again after a restart.</summary>
+    public Func<IReadOnlyList<ReopenedDocument>>? OpenDocumentsProvider { get; set; }
 
     /// <summary>The current project data, replayed after a restart.</summary>
     public Func<IReadOnlyList<ProjectData>>? ProjectsProvider { get; set; }
@@ -296,11 +304,7 @@ public sealed class LanguageHostClient : IAsyncDisposable
 
         foreach (var document in OpenDocumentsProvider?.Invoke() ?? [])
         {
-            await connection.NotifyAsync(
-                Methods.DidOpen,
-                new DidOpenTextDocumentParams(new TextDocumentItem(document.Uri, document.LanguageId, document.Version, document.Text)),
-                json.DidOpenTextDocumentParams,
-                cancellationToken).ConfigureAwait(false);
+            await Open(connection, document.Uri, document.LanguageId, document.Latest, cancellationToken, document.Snapshot?.Invoke(), document.IsOpen).ConfigureAwait(false);
         }
     }
 
@@ -314,13 +318,168 @@ public sealed class LanguageHostClient : IAsyncDisposable
     }
 
     public Task DidOpenAsync(OpenDocumentState document, CancellationToken cancellationToken) =>
-        Notify(Methods.DidOpen, new DidOpenTextDocumentParams(new TextDocumentItem(document.Uri, document.LanguageId, document.Version, document.Text)), ProtocolJsonContext.Default.DidOpenTextDocumentParams, cancellationToken);
+        DidOpenAsync(document.Uri, document.LanguageId, () => (document.Text, document.Version), cancellationToken);
 
-    public Task DidChangeAsync(string uri, int version, TextDocumentContentChangeEvent[] changes, CancellationToken cancellationToken) =>
-        Notify(Methods.DidChange, new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), changes), ProtocolJsonContext.Default.DidChangeTextDocumentParams, cancellationToken);
+    /// <summary>
+    /// Opens a document whose text is made when the <c>didOpen</c> is written, on the connection's writer loop (M57), so
+    /// the caller pays nothing for the text or its JSON; the changes queued after it at or below the version it sent are
+    /// skipped. It sends <paramref name="queued"/>, the snapshot taken when it was queued, when given: a request queued
+    /// behind it then reads that text, not a later edit's. It sends <paramref name="latest"/>'s instead when the loop has
+    /// already skipped a newer change of the document because it wasn't open there (queued, from the editor's thread, just
+    /// before this was), so no edit is lost.
+    /// </summary>
+    public Task DidOpenAsync(string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null) =>
+        _process.IsRunning ? Open(_process.Connection, uri, languageId, latest, cancellationToken, queued) : Task.CompletedTask;
 
-    public Task DidCloseAsync(string uri, CancellationToken cancellationToken) =>
-        Notify(Methods.DidClose, new DidCloseTextDocumentParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DidCloseTextDocumentParams, cancellationToken);
+    /// <param name="isOpen">Whether the document is still open when the <c>didOpen</c> is written: nothing is sent when it isn't.</param>
+    private static Task Open(JsonRpcConnection connection, string uri, string languageId, Func<(string Text, int Version)> latest, CancellationToken cancellationToken, (Func<string> Text, int Version)? queued = null, Func<bool>? isOpen = null)
+    {
+        var versions = Versions(connection);
+        return connection.NotifyAsync<DidOpenTextDocumentParams>(Methods.DidOpen, () =>
+        {
+            if (isOpen?.Invoke() == false)
+            {
+                return null; // closed since the replay began: its didClose is queued, or already went out
+            }
+
+            // TODO(issue): write the snapshot's chunks into the JSON as they are, without making one big string of it.
+            var (text, version) = queued is { } snapshot && !versions.SkippedPast(uri, snapshot.Version) ? (snapshot.Text(), snapshot.Version) : latest();
+            versions.Opened(uri, version);
+            return new DidOpenTextDocumentParams(new TextDocumentItem(uri, languageId, version, text));
+        }, ProtocolJsonContext.Default.DidOpenTextDocumentParams, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Edits for a server that syncs incrementally, sent one by one; skipped when written if the server doesn't have the
+    /// document open, or already has this version (its <c>didOpen</c>, read later, carried it).
+    /// </summary>
+    public Task DidChangeAsync(string uri, int version, TextDocumentContentChangeEvent[] changes, CancellationToken cancellationToken)
+    {
+        if (!_process.IsRunning)
+        {
+            return Task.CompletedTask;
+        }
+
+        var connection = _process.Connection;
+        var versions = Versions(connection);
+        return connection.NotifyAsync(
+            Methods.DidChange,
+            () => versions.Advance(uri, version) ? new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), changes) : null,
+            ProtocolJsonContext.Default.DidChangeTextDocumentParams,
+            null,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// The whole text at <paramref name="version"/>, for a server that syncs whole documents (LSP's
+    /// <c>TextDocumentSyncKind.Full</c>), made by <paramref name="text"/> when written on the writer loop (M57): it reads
+    /// that version's immutable snapshot, never a later one, so a request queued after this change and before the next
+    /// still reads this text. A whole text still queued is replaced by this one (LSP allows the versions' gaps), and one at
+    /// or below what the server has is skipped.
+    /// </summary>
+    public Task DidChangeTextAsync(string uri, int version, Func<string> text, CancellationToken cancellationToken)
+    {
+        if (!_process.IsRunning)
+        {
+            return Task.CompletedTask;
+        }
+
+        var connection = _process.Connection;
+        var versions = Versions(connection);
+        return connection.NotifyAsync(
+            Methods.DidChange,
+            () =>
+            {
+                if (!versions.Takes(uri, version))
+                {
+                    return null; // not open there, or a newer text went first (its didOpen carried it)
+                }
+
+                var whole = text(); // before the version moves: a text that can't be made leaves the server's as it was
+                versions.Advance(uri, version);
+                return new DidChangeTextDocumentParams(new VersionedTextDocumentIdentifier(uri, version), [new TextDocumentContentChangeEvent(null, whole)]);
+            },
+            ProtocolJsonContext.Default.DidChangeTextDocumentParams,
+            "didChange " + uri,
+            cancellationToken);
+    }
+
+    public Task DidCloseAsync(string uri, CancellationToken cancellationToken)
+    {
+        if (!_process.IsRunning)
+        {
+            return Task.CompletedTask;
+        }
+
+        var connection = _process.Connection;
+        var versions = Versions(connection);
+        return connection.NotifyAsync(
+            Methods.DidClose,
+            () =>
+            {
+                versions.Closed(uri);
+                return new DidCloseTextDocumentParams(new TextDocumentIdentifier(uri));
+            },
+            ProtocolJsonContext.Default.DidCloseTextDocumentParams,
+            null,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// The version of each document a connection's server has, as its writer loop sends them (M57): a <c>didOpen</c> sets
+    /// it, a change raises it, a <c>didClose</c> removes it. Only the loop reads and writes it, one message at a time.
+    /// </summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonRpcConnection, DocumentVersions> s_versions = new();
+
+    private static DocumentVersions Versions(JsonRpcConnection connection) => s_versions.GetValue(connection, static _ => new DocumentVersions());
+
+    /// <summary>What a connection's server has of each document (see <see cref="s_versions"/>).</summary>
+    private sealed class DocumentVersions
+    {
+        private readonly Dictionary<string, int> _sent = new(StringComparer.Ordinal);
+
+        /// <summary>The newest change skipped because the document wasn't open there yet, until its <c>didOpen</c>.</summary>
+        private readonly Dictionary<string, int> _skipped = new(StringComparer.Ordinal);
+
+        public void Opened(string uri, int version)
+        {
+            _sent[uri] = version;
+            _skipped.Remove(uri);
+        }
+
+        public void Closed(string uri)
+        {
+            _sent.Remove(uri);
+            _skipped.Remove(uri);
+        }
+
+        /// <summary>Whether a change at <paramref name="version"/> goes out: the server has the document, at an older version.</summary>
+        public bool Takes(string uri, int version)
+        {
+            if (_sent.TryGetValue(uri, out var at))
+            {
+                return version > at;
+            }
+
+            _skipped[uri] = _skipped.TryGetValue(uri, out var skipped) ? Math.Max(skipped, version) : version;
+            return false;
+        }
+
+        /// <summary><see cref="Takes"/>, and the server's version moves to <paramref name="version"/> when it does.</summary>
+        public bool Advance(string uri, int version)
+        {
+            if (!Takes(uri, version))
+            {
+                return false;
+            }
+
+            _sent[uri] = version;
+            return true;
+        }
+
+        /// <summary>Whether a change newer than <paramref name="version"/> was skipped because the document wasn't open.</summary>
+        public bool SkippedPast(string uri, int version) => _skipped.TryGetValue(uri, out var skipped) && skipped > version;
+    }
 
     public Task DidSaveAsync(string uri, CancellationToken cancellationToken) =>
         Notify(Methods.DidSave, new DidSaveTextDocumentParams(new TextDocumentIdentifier(uri)), ProtocolJsonContext.Default.DidSaveTextDocumentParams, cancellationToken);

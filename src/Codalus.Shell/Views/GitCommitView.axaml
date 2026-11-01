@@ -2,9 +2,17 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.GitCommitView"
              x:DataType="vm:GitCommitViewModel">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://codalus/Views/GitChangeRows.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </UserControl.Resources>
   <Grid ColumnDefinitions="*,4,320">
     <!-- The selected file's diff against the commit's first parent. -->
     <Panel>
@@ -61,27 +69,19 @@
         <TextBlock Grid.Row="1" Grid.Column="2" Classes="muted" Text="{Binding CommitDate}" VerticalAlignment="Center" Margin="8,4,0,0" />
       </Grid>
       <TextBlock DockPanel.Dock="Top" Text="{Binding ChangesHeader}" FontWeight="SemiBold" Margin="0,0,0,4" />
-      <TreeView x:Name="Changes" ItemsSource="{Binding Tree}" SelectedItem="{Binding SelectedNode}" Background="Transparent" AutomationProperties.Name="{l:T gitCommit.changedFiles}">
-        <TreeView.Styles>
-          <Style Selector="TreeViewItem" x:DataType="vm:GitCommitTreeNode">
-            <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
-            <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
-            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+      <!-- The changes' rows (M57): Git Changes' flattened tree, read-only, in a virtualized list; only a reveal scrolls. -->
+      <views:TreeRowsList x:Name="Changes" ItemsSource="{Binding Rows}" SelectedItem="{Binding SelectedRow}" ItemTemplate="{StaticResource ReadOnlyChangeRow}" AutoScrollToSelectedItem="False"
+                          Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T gitCommit.changedFiles}">
+        <views:TreeRowsList.Styles>
+          <Style Selector="ListBoxItem" x:DataType="vm:GitChangeRow">
+            <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
           </Style>
-        </TreeView.Styles>
-        <TreeView.ItemTemplate>
-          <TreeDataTemplate x:DataType="vm:GitCommitTreeNode" ItemsSource="{Binding Children}">
-            <DockPanel Background="Transparent" ToolTip.Tip="{Binding Tip}">
-              <TextBlock DockPanel.Dock="Right" Text="{Binding Status}" FontWeight="SemiBold" Margin="8,0,4,0" VerticalAlignment="Center" />
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <controls:Icon Kind="{Binding Icon}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-              </StackPanel>
-            </DockPanel>
-          </TreeDataTemplate>
-        </TreeView.ItemTemplate>
-      </TreeView>
+        </views:TreeRowsList.Styles>
+      </views:TreeRowsList>
     </DockPanel>
   </Grid>
 </UserControl>

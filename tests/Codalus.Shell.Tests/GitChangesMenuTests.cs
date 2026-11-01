@@ -491,7 +491,7 @@ public sealed class GitChangesMenuTests
         await ShellFixture.PumpUntil(() => !compare.ViewModel.IsLoading);
         Assert.Equal("main → origin/release/0.6", compare.Title);
         Assert.Equal("3 files", compare.ViewModel.CountText);
-        Assert.Equal(["A r1.txt", "A r2.txt", "D main.txt"], compare.ViewModel.Items.Select(r => r.Letter + " " + r.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(["A r1.txt", "A r2.txt", "D main.txt"], compare.ViewModel.Files.Select(r => r.Letter + " " + r.Name).Order(StringComparer.Ordinal));
 
         // C3: the same files: no differences, with View History.
         Git(folder, "branch", "same", "main");

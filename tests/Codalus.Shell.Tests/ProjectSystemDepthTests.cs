@@ -330,7 +330,8 @@ public sealed class ProjectSystemDepthTests
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("folderMode"));
         Assert.Equal(folder, f.Shell.Recent.Items[0]);
         var tool = Path.Combine(folder, "src", "Tool", "Tool.csproj");
-        explorer.Reveal("f:" + tool);
+        explorer.Reveal("f:" + tool); // once src and src/Tool are listed: the folder view lists a folder once it's expanded (M57)
+        await ShellFixture.PumpUntil(() => explorer.Selected?.Id == "f:" + tool, seconds: 60);
         Assert.Equal("(not loaded)", explorer.Selected!.Detail);
         NavigationDepthTests.Screenshot(f, "m26a-folder-view");
 

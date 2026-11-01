@@ -13,8 +13,8 @@ using Codalus.Workbench.Projects;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The Solution Explorer: Enter or double-click opens, Left/Right collapse and expand (or move to the parent),
-/// the context menu comes from the <c>solutionExplorer/context</c> menu location, and files and folders can be
+/// The Solution Explorer: Enter or double-click opens, Left/Right collapse and expand (or move to the parent), as a
+/// screen reader's Expand and Collapse on a row do (a tree item's, M57), the context menu comes from the <c>solutionExplorer/context</c> menu location, and files and folders can be
 /// dragged onto folders and projects (Ctrl copies).
 /// </summary>
 public sealed partial class SolutionExplorerView : UserControl, IPaneView
@@ -73,6 +73,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
         DetachedFromVisualTree += (_, _) => UpdateShown(detaching: true); // still attached while the event is raised
         List.LayoutUpdated += (_, _) => UpdateShown();
         List.AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel);
+        List.ExpandRow = (row, expanded) => ViewModel?.SetExpanded((ExplorerRowViewModel)row, expanded);
         List.DoubleTapped += (_, e) =>
         {
             if (RowAt(e.Source) is { } row && !IsChevron(e.Source))

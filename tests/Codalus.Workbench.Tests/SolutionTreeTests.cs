@@ -81,7 +81,7 @@ public sealed class SolutionTreeTests
 
         var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [.. projects], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
         var time = Stopwatch.StartNew();
-        var root = SolutionTree.FolderView(solution, entries);
+        var root = SolutionTree.FolderView(solution, FolderListing.FromTree(P("ws"), entries, truncated: false));
         time.Stop();
 
         // Every node has the project it had (a sample, checked the old way): of the projects whose folder holds it, the one
@@ -115,6 +115,119 @@ public sealed class SolutionTreeTests
         Assert.True(time.Elapsed < TimeSpan.FromSeconds(1), $"the folder view of 20,000 entries and 450 projects took {time.ElapsedMilliseconds} ms");
     }
 
+    private static DirectoryEntry Dir(params string[] segments) => new(P(segments), true);
+
+    private static DirectoryEntry Doc(params string[] segments) => new(P(segments), false);
+
+    private static ExplorerNode Child(ExplorerNode node, string name) => node.Children.Single(n => n.Name == name);
+
+    [Fact]
+    public void The_folder_view_is_built_from_each_listed_folders_own_listing()
+    {
+        // Each expanded folder is listed alone (M57): the workspace folder, src and src/App here; docs and Models aren't
+        // listed, and say so. A listed folder below a project knows it, as before, carried down the folders listed.
+        var app = P("ws", "src", "App", "App.csproj");
+        var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [new SolutionProjectInfo(app, "App", null, null)], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+        var listings = new Dictionary<string, FolderListing>(SolutionService.PathComparer)
+        {
+            [P("ws")] = new([Dir("ws", "docs"), Dir("ws", "src"), Doc("ws", "README.md")], false),
+            [P("ws", "src")] = new([Dir("ws", "src", "App")], false),
+            [P("ws", "src", "App")] = new([Dir("ws", "src", "App", "Models"), Dir("ws", "src", "App", "Empty"), Doc("ws", "src", "App", "App.csproj"), Doc("ws", "src", "App", "Program.cs")], false),
+            [P("ws", "src", "App", "Empty")] = new([], false),
+        };
+
+        var root = SolutionTree.FolderView(solution, listings);
+
+        Assert.False(root.IsUnlisted);
+        Assert.Equal(["docs", "src", "README.md"], root.Children.Select(n => n.Name));
+        Assert.True(Child(root, "docs") is { IsUnlisted: true, Children.Count: 0, ProjectPath: null });
+        var appFolder = Child(Child(root, "src"), "App");
+        Assert.True(appFolder is { IsUnlisted: false, ProjectPath: var owner } && owner == app);
+        Assert.Equal(["Empty", "Models", "App.csproj", "Program.cs"], appFolder.Children.Select(n => n.Name));
+        Assert.True(Child(appFolder, "Models") is { IsUnlisted: true, ProjectPath: var models } && models == app);
+        Assert.True(Child(appFolder, "Empty") is { IsUnlisted: false, Children.Count: 0 });
+        Assert.Equal(app, Child(appFolder, "Program.cs").ProjectPath);
+        Assert.All(new[] { root, appFolder }, n => Assert.DoesNotContain(n.Children, c => c.IsMuted));
+
+        // Nothing listed yet: the workspace folder itself is unlisted.
+        Assert.True(SolutionTree.FolderView(solution, new Dictionary<string, FolderListing>()) is { IsUnlisted: true, Children.Count: 0 });
+    }
+
+    [Fact]
+    public void The_folder_view_dims_folders_listed_on_demand_and_says_where_a_listing_was_cut()
+    {
+        var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+        var listings = new Dictionary<string, FolderListing>(SolutionService.PathComparer)
+        {
+            [P("ws")] = new([Dir("ws", "node_modules") with { Skipped = true }, Dir("ws", ".vs") with { Skipped = true }, Dir("ws", "big"), Doc("ws", "package.json")], false),
+            [P("ws", "node_modules")] = new([Dir("ws", "node_modules", "left-pad"), Doc("ws", "node_modules", ".package-lock.json")], false),
+            [P("ws", "node_modules", "left-pad")] = new([Doc("ws", "node_modules", "left-pad", "index.js")], false),
+            [P("ws", "big")] = new([.. Enumerable.Range(0, 3).Select(i => Doc("ws", "big", $"F{i}.txt"))], true),
+        };
+
+        var root = SolutionTree.FolderView(solution, listings);
+
+        // node_modules and .vs are dimmed, with everything in them; the rest isn't.
+        var modules = Child(root, "node_modules");
+        Assert.True(modules.IsMuted && !modules.IsUnlisted);
+        Assert.True(Child(modules, "left-pad") is { IsMuted: true } leftPad && Child(leftPad, "index.js").IsMuted);
+        Assert.True(Child(modules, ".package-lock.json").IsMuted);
+        Assert.True(Child(root, ".vs") is { IsMuted: true, IsUnlisted: true });
+        Assert.False(Child(root, "big").IsMuted || Child(root, "package.json").IsMuted);
+
+        // big's listing was cut at the build host's limit: a muted row at its end says so, its files before it.
+        var big = Child(root, "big");
+        Assert.Equal(["F0.txt", "F1.txt", "F2.txt"], big.Children.SkipLast(1).Select(n => n.Name));
+        Assert.True(big.Children[^1] is { Kind: ExplorerNodeKind.Message, IsMuted: true } cut && cut.Id == "d:" + P("ws", "big") + SolutionTree.CutSuffix);
+        Assert.Contains("3", big.Children[^1].Name, StringComparison.Ordinal);
+        Assert.DoesNotContain(root.Children, n => n.Kind == ExplorerNodeKind.Message);
+    }
+
+    [Fact]
+    public void A_whole_listing_becomes_each_folders_listing_for_the_search_box()
+    {
+        // The search box lists the workspace folder in one go: every folder it went into has a listing, an empty one too;
+        // node_modules, which it doesn't go into, has none.
+        var entries = new[] { Dir("ws", "src"), Dir("ws", "src", "Empty"), Doc("ws", "src", "A.cs"), Dir("ws", "node_modules") with { Skipped = true }, Doc("ws", "README.md") };
+
+        var listings = FolderListing.FromTree(P("ws") + Path.DirectorySeparatorChar, entries, truncated: false);
+
+        Assert.Equal(new[] { P("ws"), P("ws", "src"), P("ws", "src", "Empty") }.Order(StringComparer.Ordinal), listings.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal([P("ws", "src"), P("ws", "node_modules"), P("ws", "README.md")], listings[P("ws")].Entries.Select(e => e.Path));
+        Assert.Equal([P("ws", "src", "Empty"), P("ws", "src", "A.cs")], listings[P("ws", "src")].Entries.Select(e => e.Path));
+        Assert.Empty(listings[P("ws", "src", "Empty")].Entries);
+        Assert.DoesNotContain(listings.Values, l => l.Truncated);
+        Assert.True(listings[P("ws")].HasFolder(P("ws", "src")) && !listings[P("ws")].HasFolder(P("ws", "README.md")));
+    }
+
+    [Fact]
+    public void A_whole_listing_cut_at_the_limit_counts_its_entries_and_leaves_the_folders_it_didnt_reach_unlisted()
+    {
+        // The build host walked the workspace folder, then src, and stopped in src at its limit: other and src/Later, listed
+        // in their parents, were never gone into. They showed as listed, empty folders, and the workspace folder's row
+        // counted its own three entries, not the listing's six (M57).
+        var entries = new[]
+        {
+            Dir("ws", "other"), Dir("ws", "src"), Doc("ws", "README.md"),
+            Dir("ws", "src", "Later"), Doc("ws", "src", "A.cs"), Doc("ws", "src", "B.cs"),
+        };
+        var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
+
+        var listings = FolderListing.FromTree(P("ws"), entries, truncated: true);
+        var root = SolutionTree.FolderView(solution, listings);
+
+        Assert.Equal(new[] { P("ws"), P("ws", "src") }.Order(StringComparer.Ordinal), listings.Keys.Order(StringComparer.Ordinal));
+        Assert.True(Child(root, "other") is { IsUnlisted: true, Children.Count: 0 });
+        var src = Child(root, "src");
+        Assert.True(Child(src, "Later") is { IsUnlisted: true });
+        var six = 6.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        foreach (var cut in new[] { root.Children[^1], src.Children[^1] })
+        {
+            Assert.True(cut is { Kind: ExplorerNodeKind.Message, IsMuted: true }, cut.Id);
+            Assert.Equal($"Only the first {six} entries are shown. Find the others with Find in Files or the terminal.", cut.Name);
+        }
+    }
+
     [Fact]
     public void Analyzers_are_missing_when_the_build_host_says_so_without_the_tree_looking_at_the_disk()
     {
@@ -136,6 +249,33 @@ public sealed class SolutionTreeTests
         Assert.Equal(
             new[] { (Path.GetFileNameWithoutExtension(elsewhere), false), (Path.GetFileNameWithoutExtension(onDisk), true) }.OrderBy(a => a.Item1, StringComparer.OrdinalIgnoreCase),
             analyzers.Children.Select(n => (n.Name, n.IsWarning)));
+    }
+
+    [Fact]
+    public void Show_All_Files_dims_node_modules_vs_and_idea_with_what_is_in_them_even_when_they_hold_items()
+    {
+        // A plain SDK project's default globs take all of node_modules as items: in Show All Files it showed at full
+        // strength, while the folder view dims it and Show All Files dims the same folder when it holds no items (M57).
+        var project = P("Web", "Web.csproj");
+        var info = new ProjectInfo(project, "Web", ProjectStates.Loaded, null, ["net10.0"], "Library",
+        [
+            new("Compile", P("Web", "Program.cs"), null, null),
+            new("None", P("Web", "node_modules", "left-pad", "index.js"), null, null),
+            new("None", P("Web", ".idea", "workspace.xml"), null, null),
+            new("Compile", P("Web", "Models", "M.cs"), null, null),
+        ], [], [], Restored: true);
+        DirectoryEntry[] disk = [Dir("Web", "node_modules") with { Skipped = true }, Dir("Web", ".idea") with { Skipped = true }, Dir("Web", ".vs") with { Skipped = true }, Dir("Web", "Models")];
+
+        var contents = SolutionTree.Contents(project, info, disk);
+        var modules = contents.Single(n => n.Name == "node_modules");
+        Assert.True(modules is { IsExcluded: false, IsMuted: true });
+        Assert.True(Child(modules, "left-pad") is { IsMuted: true } leftPad && Child(leftPad, "index.js").IsMuted);
+        Assert.True(contents.Single(n => n.Name == ".idea") is { IsExcluded: false, IsMuted: true } idea && Child(idea, "workspace.xml").IsMuted);
+        Assert.True(contents.Single(n => n.Name == ".vs").IsExcluded);
+        Assert.DoesNotContain(contents.Where(n => n.Name is "Models" or "Program.cs").SelectMany(n => n.Children.Prepend(n)), n => n.IsMuted);
+
+        // Without Show All Files, the project's items show as they are.
+        Assert.DoesNotContain(SolutionTree.Contents(project, info), n => n.IsMuted);
     }
 
     [Fact]

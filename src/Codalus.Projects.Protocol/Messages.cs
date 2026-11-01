@@ -273,7 +273,16 @@ public sealed record RestoreStateParams(string State, string? Message);
 
 public sealed record ListDirectoryParams(string Path);
 
-public sealed record DirectoryEntry(string Path, bool IsDirectory);
+public sealed record DirectoryEntry(string Path, bool IsDirectory)
+{
+    /// <summary>
+    /// <c>fs/listTree</c>: a folder the listing goes into only when <see cref="ListTreeParams.Folders"/> names it, as the
+    /// project discovery and the watcher skip it (<c>node_modules</c>, <c>.vs</c>, <c>.idea</c>); the Solution Explorer
+    /// shows it dimmed (M57). Left out when false.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Skipped { get; init; }
+}
 
 public sealed record ListDirectoryResult(DirectoryEntry[] Entries);
 

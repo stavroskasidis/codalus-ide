@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using Codalus.Shell.Docking;
 using Codalus.Shell.Infrastructure;
@@ -6,118 +5,6 @@ using Codalus.Workbench.Git;
 using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
-
-/// <summary>A folder or a file of a commit's Changes tree (a folder holding a single folder is shown with it, as <c>src\Data</c>).</summary>
-public sealed class GitCommitTreeNode : ObservableObject
-{
-    private bool _isExpanded = true;
-    private bool _isSelected;
-
-    public GitCommitTreeNode(string name, GitCommitFileRow? file)
-    {
-        Name = name;
-        File = file;
-    }
-
-    public string Name { get; private set; }
-
-    /// <summary>The file; null for a folder.</summary>
-    public GitCommitFileRow? File { get; }
-
-    public bool IsFolder => File is null;
-
-    public ObservableCollection<GitCommitTreeNode> Children { get; } = [];
-
-    public string Icon => File is null ? (_isExpanded ? "folder-open" : "folder") : "file";
-
-    /// <summary>A file's status letter (A, M, D, R).</summary>
-    public string Status => File is { } file ? file.Status.ToString() : string.Empty;
-
-    public string Tip => File?.RelativePath ?? Name;
-
-    public bool IsExpanded
-    {
-        get => _isExpanded;
-        set
-        {
-            if (SetField(ref _isExpanded, value))
-            {
-                OnPropertyChanged(nameof(Icon));
-            }
-        }
-    }
-
-    public bool IsSelected
-    {
-        get => _isSelected;
-        set => SetField(ref _isSelected, value);
-    }
-
-    public string AccessibleName => File is { } file ? file.AccessibleName : Name;
-
-    /// <summary>The files' tree: folders first, by name; single-child folders joined with their child (<c>src\Data</c>).</summary>
-    public static IReadOnlyList<GitCommitTreeNode> Build(IEnumerable<GitCommitFileRow> files)
-    {
-        var root = new GitCommitTreeNode(string.Empty, null);
-        foreach (var file in files)
-        {
-            var parts = file.RelativePath.Split('/');
-            var node = root;
-            for (var i = 0; i < parts.Length - 1; i++)
-            {
-                var folder = node.Children.FirstOrDefault(c => c.IsFolder && c.Name == parts[i]);
-                if (folder is null)
-                {
-                    folder = new GitCommitTreeNode(parts[i], null);
-                    node.Children.Add(folder);
-                }
-
-                node = folder;
-            }
-
-            node.Children.Add(new GitCommitTreeNode(parts[^1], file));
-        }
-
-        Sort(root);
-        foreach (var child in root.Children)
-        {
-            Compact(child);
-        }
-
-        return [.. root.Children];
-    }
-
-    private static void Sort(GitCommitTreeNode node)
-    {
-        var sorted = node.Children.OrderByDescending(c => c.IsFolder).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList();
-        node.Children.Clear();
-        foreach (var child in sorted)
-        {
-            Sort(child);
-            node.Children.Add(child);
-        }
-    }
-
-    private static void Compact(GitCommitTreeNode node)
-    {
-        while (node.IsFolder && node.Children is [{ IsFolder: true } only])
-        {
-            node.Name = node.Name + System.IO.Path.DirectorySeparatorChar + only.Name;
-            node.Children.Clear();
-            foreach (var child in only.Children)
-            {
-                node.Children.Add(child);
-            }
-        }
-
-        foreach (var child in node.Children)
-        {
-            Compact(child);
-        }
-    }
-
-    public IEnumerable<GitCommitTreeNode> Descendants() => Children.SelectMany(c => c.Descendants().Prepend(c));
-}
 
 /// <summary>What a commit tab asks of the shell.</summary>
 public sealed class GitCommitActions
@@ -142,10 +29,11 @@ public sealed class GitCommitViewModel : ObservableObject
     private readonly GitService _git;
     private readonly GitCommitActions _actions;
     private GitCommitDetails? _details;
-    private GitCommitTreeNode? _selectedNode;
+    private GitChangeRow? _selectedRow;
     private DiffViewModel? _diff;
     private bool _isLoading = true;
     private string? _error;
+    private IReadOnlyList<GitCommitFileRow> _files = [];
 
     public GitCommitViewModel(GitService git, string hash, GitCommitActions actions)
     {
@@ -195,10 +83,14 @@ public sealed class GitCommitViewModel : ObservableObject
     public string ChangesHeader => Localizer.Format("msg.gitCommit.changes", "Changes ({0})", _details?.Files.Count ?? 0);
 
     /// <summary>
-    /// The changed files' tree, every folder expanded. TODO(issue): built on the UI thread into a tree view that isn't
-    /// virtualized, an item per file: seconds for a commit of 10,000 files (M56; Git Changes' flattened rows are the way).
+    /// The changed files' tree, every folder expanded, as Git Changes shows its sections (M57): built off the UI thread and
+    /// shown as a virtualized list of rows that stay with the tab, so a tab switch keeps the expansion and the selection.
+    /// A tree view built on the UI thread took seconds for a commit of 10,000 files.
     /// </summary>
-    public ObservableCollection<GitCommitTreeNode> Tree { get; } = [];
+    public GitChangeTree Changes { get; } = new();
+
+    /// <summary>The rows of <see cref="Changes"/>.</summary>
+    public ResettableCollection<GitChangeRow> Rows => Changes.Rows;
 
     public bool CanExplain => _actions.Explain is not null;
 
@@ -222,18 +114,21 @@ public sealed class GitCommitViewModel : ObservableObject
 
     public bool HasError => _error is not null;
 
-    /// <summary>The Changes tree's selection: a file shows its diff on the left.</summary>
-    public GitCommitTreeNode? SelectedNode
+    /// <summary>The Changes tree's selection: a file shows its diff on the left (a folder keeps the diff shown).</summary>
+    public GitChangeRow? SelectedRow
     {
-        get => _selectedNode;
+        get => _selectedRow;
         set
         {
-            if (SetField(ref _selectedNode, value) && value is { File: { } file } && _details is { } details)
+            if (SetField(ref _selectedRow, value) && value?.Node.Row is { } file && _details is { } details)
             {
-                Diff = _actions.CreateDiff(details.Commit, file);
+                Diff = _actions.CreateDiff(details.Commit, CommitFile(file));
             }
         }
     }
+
+    /// <summary>Raised to bring a row into view (the list doesn't scroll to its selection by itself, M56).</summary>
+    public event Action<GitChangeRow>? RevealRequested;
 
     /// <summary>The selected file's diff, or null (no file selected yet, or none changed).</summary>
     public DiffViewModel? Diff
@@ -251,10 +146,10 @@ public sealed class GitCommitViewModel : ObservableObject
 
     public bool HasDiff => _diff is not null;
 
-    /// <summary>The files of the commit, flat (tests).</summary>
-    public IReadOnlyList<GitCommitFileRow> Files => [.. Tree.SelectMany(n => n.Descendants().Prepend(n)).Select(n => n.File).OfType<GitCommitFileRow>()];
+    /// <summary>The files of the commit in the tree's order (tests).</summary>
+    public IReadOnlyList<GitCommitFileRow> Files => _files;
 
-    /// <summary>Reads the commit, and selects its first file.</summary>
+    /// <summary>Reads the commit, builds its tree off the UI thread, and selects its first file.</summary>
     public async Task LoadAsync()
     {
         IsLoading = true;
@@ -268,17 +163,15 @@ public sealed class GitCommitViewModel : ObservableObject
             }
 
             var root = _git.Root ?? string.Empty;
-            Tree.Clear();
-            foreach (var node in GitCommitTreeNode.Build(details.Files.Select(f => new GitCommitFileRow(f.Status, f.Path, f.OldPath, Path.GetRelativePath(root, f.Path).Replace('\\', '/')))))
-            {
-                Tree.Add(node);
-            }
-
+            var collapsed = Changes.Collapsed;
+            var expandedChanged = Changes.ExpandedChanged;
+            var (roots, rows, files) = await Task.Run(() => Build(root, details, collapsed, expandedChanged)).ConfigureAwait(true);
+            _files = files;
+            Changes.Show(roots, rows);
             Details = details;
-            if (Tree.SelectMany(n => n.Descendants().Prepend(n)).FirstOrDefault(n => n.File is not null) is { } first)
+            if (Rows.FirstOrDefault(r => r.IsFile) is { } first)
             {
-                first.IsSelected = true;
-                SelectedNode = first;
+                SelectedRow = first;
             }
         }
         catch (GitException ex)
@@ -291,19 +184,57 @@ public sealed class GitCommitViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// The commit's tree: Git Changes' (<see cref="GitChangesViewModel.BuildTree"/>: folders first, by name, a folder with
+    /// one folder in it shown with it), without its repository node; its rows; and its files in the tree's order.
+    /// </summary>
+    private static (IReadOnlyList<GitChangeNode> Roots, IReadOnlyList<(GitChangeNode Node, int Depth)> Rows, IReadOnlyList<GitCommitFileRow> Files) Build(
+        string root, GitCommitDetails details, IReadOnlySet<string> collapsed, Action<GitChangeNode, bool> expandedChanged)
+    {
+        var rows = details.Files.Select(f =>
+        {
+            var relative = Path.GetRelativePath(root, f.Path).Replace('\\', '/');
+            return new GitFileRow(new GitFileStatus(f.Path, relative, f.Status, '.', f.OldPath), staged: true)
+            {
+                Committed = true,
+                Location = Path.GetDirectoryName(relative.Replace('/', Path.DirectorySeparatorChar)) ?? string.Empty,
+            };
+        });
+        IReadOnlyList<GitChangeNode> roots = GitChangesViewModel.BuildTree(root, rows, "commit", staged: true, collapsed, expandedChanged) is [var repository] ? [.. repository.Children] : [];
+        var files = new List<GitCommitFileRow>();
+        Collect(roots);
+        return (roots, GitChangeTree.Flatten(roots), files);
+
+        void Collect(IEnumerable<GitChangeNode> nodes)
+        {
+            foreach (var node in nodes)
+            {
+                if (node.Row is { } file)
+                {
+                    files.Add(CommitFile(file));
+                }
+
+                Collect(node.Children);
+            }
+        }
+    }
+
+    private static GitCommitFileRow CommitFile(GitFileRow file) =>
+        new(file.Status.Index, file.Status.Path, file.Status.OriginalPath, file.Status.RelativePath);
+
     /// <summary>Revert, Reset (soft, mixed, hard) and the ⋯ menu's commands.</summary>
     public Task RunAsync(string action) => _details is { } details ? _actions.Run(action, details.Commit) : Task.CompletedTask;
 
-    /// <summary>Selects a file of the commit by its path relative to the repository (tests).</summary>
+    /// <summary>Selects a file of the commit by its path relative to the repository, its folders expanded and its row brought into view (tests).</summary>
     public bool SelectFile(string relativePath)
     {
-        if (Tree.SelectMany(n => n.Descendants().Prepend(n)).FirstOrDefault(n => n.File?.RelativePath == relativePath) is not { } node)
+        if (Changes.Reveal(n => n.Row?.Status.RelativePath == relativePath) is not { } row)
         {
             return false;
         }
 
-        node.IsSelected = true;
-        SelectedNode = node;
+        SelectedRow = row;
+        RevealRequested?.Invoke(row);
         return true;
     }
 

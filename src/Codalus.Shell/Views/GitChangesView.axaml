@@ -421,8 +421,8 @@
               </StackPanel>
             </ToggleButton>
             <StackPanel IsVisible="{Binding #ConflictsToggle.IsChecked}">
-              <ListBox x:Name="ConflictTree" Classes="changeTree" ItemsSource="{Binding ConflictsRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
-                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
+              <views:TreeRowsList x:Name="ConflictTree" Classes="changeTree" ItemsSource="{Binding ConflictsRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                                  IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
               <ListBox x:Name="ConflictList" Classes="changeList" ItemsSource="{Binding ConflictsItems}" ItemTemplate="{StaticResource FileRow}" Background="Transparent" Margin="18,0,0,0"
                        IsVisible="{Binding IsListView}" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}" />
             </StackPanel>
@@ -440,8 +440,8 @@
             </DockPanel>
             <StackPanel IsVisible="{Binding #StagedToggle.IsChecked}">
               <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding StagedFilteredOut}" />
-              <ListBox x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
-                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
+              <views:TreeRowsList x:Name="StagedTree" Classes="changeTree" ItemsSource="{Binding StagedRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                                  IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.stagedChanges}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
               <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
                 <DockPanel>
@@ -489,8 +489,8 @@
             <TextBlock Classes="muted sectionEmpty" Text="{l:T gitChanges.thereAreNoUnstagedChangesIn}" IsVisible="{Binding !HasChanges}" />
             <StackPanel IsVisible="{Binding HasChanges}">
               <TextBlock Classes="muted sectionEmpty" Text="{Binding FilteredOutText}" IsVisible="{Binding ChangesFilteredOut}" />
-              <ListBox x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
-                       IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
+              <views:TreeRowsList x:Name="ChangesTree" Classes="changeTree" ItemsSource="{Binding ChangesRows}" ItemTemplate="{StaticResource NodeRow}" AutoScrollToSelectedItem="False" Background="Transparent" Margin="4,0,0,0"
+                                  IsVisible="{Binding IsTreeView}" AutomationProperties.Name="{l:T gitChanges.changes}" />
               <Grid ColumnDefinitions="2*,3*,76" Margin="18,0,4,0" IsVisible="{Binding IsListView}">
               <Button Classes="columnHeader" Tag="name" Click="OnSortColumn" AutomationProperties.Name="{l:T gitChanges.sortByName}">
                 <DockPanel>

@@ -9,6 +9,8 @@ namespace Codalus.Projects.Tests;
 /// </summary>
 public sealed class SolutionExplorerHostTests : IDisposable
 {
+    private static readonly string[] s_skipped = ["node_modules", ".vs", ".idea"];
+
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-explorer-host-" + Guid.NewGuid().ToString("N"));
 
     public SolutionExplorerHostTests() => Directory.CreateDirectory(_root);
@@ -37,6 +39,75 @@ public sealed class SolutionExplorerHostTests : IDisposable
             listed.Entries.Select(e => e.Path).Order(StringComparer.Ordinal));
         Assert.True(listed.Entries.Single(e => e.Path == P("App", "bin")).IsDirectory);
         Assert.False(listed.Truncated);
+    }
+
+    private void Files(params string[][] files)
+    {
+        foreach (var segments in files)
+        {
+            var file = P(segments);
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            File.WriteAllText(file, string.Empty);
+        }
+    }
+
+    [Fact]
+    public void The_folder_view_lists_one_folder_at_a_time()
+    {
+        // Each expanded folder is listed alone, with no folders to go into (M57): what is directly in it.
+        Files(["ws", "README.md"], ["ws", "src", "App", "App.csproj"], ["ws", "src", "App", "Models", "M.cs"], ["ws", "docs", "a.md"]);
+
+        var top = ExplorerFiles.ListTree(new ListTreeParams(P("ws"), Folders: []));
+        Assert.Equal(new[] { P("ws", "docs"), P("ws", "README.md"), P("ws", "src") }.Order(StringComparer.Ordinal), top.Entries.Select(e => e.Path).Order(StringComparer.Ordinal));
+        Assert.False(top.Truncated);
+
+        var app = ExplorerFiles.ListTree(new ListTreeParams(P("ws", "src", "App"), Folders: []));
+        Assert.Equal(new[] { P("ws", "src", "App", "App.csproj"), P("ws", "src", "App", "Models") }.Order(StringComparer.Ordinal), app.Entries.Select(e => e.Path).Order(StringComparer.Ordinal));
+        Assert.Empty(ExplorerFiles.ListTree(new ListTreeParams(P("ws", "gone"), Folders: [])).Entries);
+    }
+
+    [Fact]
+    public void A_listing_cut_at_its_limit_says_so()
+    {
+        Files([.. Enumerable.Range(0, 12).Select(i => new[] { "big", $"F{i:00}.txt" })]);
+
+        var cut = ExplorerFiles.ListTree(new ListTreeParams(P("big"), MaxEntries: 10, Folders: []));
+        Assert.True(cut.Truncated);
+        Assert.Equal(10, cut.Entries.Length);
+
+        var whole = ExplorerFiles.ListTree(new ListTreeParams(P("big"), MaxEntries: 12, Folders: []));
+        Assert.False(whole.Truncated);
+        Assert.Equal(12, whole.Entries.Length);
+    }
+
+    [Fact]
+    public void Ide_and_package_folders_are_listed_marked_and_gone_into_only_when_asked_and_git_never_is()
+    {
+        // node_modules, .vs and .idea were left out, so neither Show All Files nor the folder view showed them (M57). They're
+        // listed now, marked, and gone into only when named; .git stays out, and the project discovery still skips them all.
+        Files(["ws", "App", "App.csproj"], ["ws", "node_modules", "pkg", "pkg.csproj"], ["ws", ".vs", "ws", "v18", ".suo"], ["ws", ".idea", "workspace.xml"],
+            ["ws", ".git", "config"], ["ws", ".idea", "Hidden.csproj"], ["ws", "App", "bin", "Debug", "Out.csproj"]);
+
+        var everything = ExplorerFiles.ListTree(new ListTreeParams(P("ws")));
+        var paths = everything.Entries.Select(e => e.Path).ToList();
+        Assert.All(s_skipped, name => Assert.Contains(new DirectoryEntry(P("ws", name), true) { Skipped = true }, everything.Entries));
+        Assert.DoesNotContain(paths, p => p.StartsWith(P("ws", "node_modules") + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                                           || p.StartsWith(P("ws", ".vs") + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                                           || p.StartsWith(P("ws", ".idea") + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+        Assert.DoesNotContain(paths, p => p.Contains(".git", StringComparison.Ordinal));
+        Assert.Contains(new DirectoryEntry(P("ws", "App"), true), everything.Entries); // not marked
+
+        // Named, node_modules is gone into: what is in it isn't marked. Its own listing (the folder view's) is the same.
+        var expanded = ExplorerFiles.ListTree(new ListTreeParams(P("ws"), Folders: [P("ws", "node_modules")]));
+        Assert.Contains(new DirectoryEntry(P("ws", "node_modules", "pkg"), true), expanded.Entries);
+        Assert.Equal([new DirectoryEntry(P("ws", "node_modules", "pkg"), true)], ExplorerFiles.ListTree(new ListTreeParams(P("ws", "node_modules"), Folders: [])).Entries);
+        Assert.DoesNotContain(ExplorerFiles.ListTree(new ListTreeParams(P("ws"), Folders: [])).Entries, e => e.Path.EndsWith(".git", StringComparison.Ordinal));
+
+        Assert.Equal([P("ws", "App", "App.csproj")], ExplorerFiles.DiscoverProjects(P("ws"), [".csproj"]));
+
+        // On the wire, the mark is left out when false.
+        Assert.Equal("""{"entries":[{"path":"/a","isDirectory":true},{"path":"/b","isDirectory":true,"skipped":true}],"truncated":false}""",
+            System.Text.Json.JsonSerializer.Serialize(new ListTreeResult([new("/a", true), new("/b", true) { Skipped = true }], false), ItemJsonContext.Default.ListTreeResult));
     }
 
     [Fact]

@@ -13,7 +13,11 @@ namespace Codalus.Rpc;
 /// All serialization goes through source-generated <see cref="JsonTypeInfo{T}"/>, so it is safe under
 /// Native AOT and trimming.
 /// <list type="bullet">
-/// <item>Outgoing requests can be cancelled; cancellation sends LSP's <c>$/cancelRequest</c>.</item>
+/// <item>Every outgoing message (requests, notifications, responses) is queued in call order and serialized, written and
+/// flushed by one writer loop (M57): a caller, the UI thread too, pays only for queueing, and a request always follows
+/// the messages queued before it.</item>
+/// <item>Outgoing requests can be cancelled: one still queued is never written; one written sends LSP's
+/// <c>$/cancelRequest</c>.</item>
 /// <item>Incoming notifications are dispatched strictly in arrival order; an incoming request starts in
 /// arrival order and may complete concurrently with later messages.</item>
 /// <item>Incoming <c>$/cancelRequest</c> cancels the matching in-flight handler.</item>
@@ -31,7 +35,6 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     private readonly Stream _reader;
     private readonly Stream _writer;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
     private readonly ConcurrentDictionary<string, IncomingRequest> _incoming = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<JsonElement, CancellationToken, Task<Action<Utf8JsonWriter>?>>> _requestHandlers = new(StringComparer.Ordinal);
@@ -39,6 +42,13 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     /// <summary>Messages read and waiting for the dispatch loop, and the markers <see cref="WhenDispatchedAsync"/> queues behind them.</summary>
     private readonly Channel<Inbound> _inbox = Channel.CreateUnbounded<Inbound>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
     private readonly CancellationTokenSource _shutdown = new();
+
+    /// <summary>Messages waiting for the writer loop, in call order (M57), and what wakes the loop; both under <see cref="_queueGate"/>.</summary>
+    private readonly LinkedList<Outgoing> _queue = new();
+    private readonly object _queueGate = new(); // not Lock: the .NET 8 designer hosts compile this file too
+    private readonly Channel<bool> _wake = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite, SingleReader = true });
+    private Task? _writeLoop;
+    private bool _writesEnded;
     private Task _readLoop = Task.CompletedTask;
     private Task _dispatchLoop = Task.CompletedTask;
     private long _nextId;
@@ -53,7 +63,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private readonly ConcurrentDictionary<string, (string Method, long Started)> _running = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, bool> _reportedSlow = new(StringComparer.Ordinal);
 
-    /// <summary>Messages being written: what, when it started, and whether it got the write lock (stuck-write reports).</summary>
+    /// <summary>Messages queued or being written: what, since when, and whether the loop is writing it (stuck-write reports).</summary>
     private readonly ConcurrentDictionary<long, (string What, long Started, bool Locked)> _writing = new();
     private readonly ConcurrentDictionary<long, bool> _reportedWrites = new();
     private readonly ConcurrentDictionary<long, (string Method, long Started)> _outgoing = new();
@@ -173,20 +183,23 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         _readLoop = Task.Run(ReadLoopAsync);
     }
 
-    private void ReportSlowRequests()
+    private void ReportSlowRequests() => ReportSlow(SlowRequest);
+
+    /// <summary>What the watchdog reports, for what took longer than <paramref name="threshold"/> (tests call it directly).</summary>
+    internal void ReportSlow(TimeSpan threshold)
     {
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (var (key, (method, started)) in _running)
         {
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
-            if (elapsed > SlowRequest && _reportedSlow.TryAdd(key, true))
+            if (elapsed > threshold && _reportedSlow.TryAdd(key, true))
             {
                 Slow?.Invoke(this, $"Request {method} ({key}) has been running for {elapsed.TotalSeconds:0} s; {_running.Count} request(s) in progress.");
             }
         }
 
         if (_notification is var (notification, since) && System.Diagnostics.Stopwatch.GetElapsedTime(since, now) is var running
-            && running > SlowRequest && Interlocked.Exchange(ref _reportedNotification, since) != since)
+            && running > threshold && Interlocked.Exchange(ref _reportedNotification, since) != since)
         {
             Slow?.Invoke(this, $"Notification {notification} has been running for {running.TotalSeconds:0} s; {QueuedMessages} message(s) wait behind it.");
         }
@@ -194,11 +207,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         foreach (var (id, (what, started, locked)) in _writing)
         {
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
-            if (elapsed > SlowRequest && _reportedWrites.TryAdd(id, true))
+            if (elapsed > threshold && _reportedWrites.TryAdd(id, true))
             {
                 Slow?.Invoke(this, locked
-                    ? $"Writing {what} has been blocked in the stream for {elapsed.TotalSeconds:0} s."
-                    : $"Writing {what} has waited {elapsed.TotalSeconds:0} s for the write lock; {_writing.Count} write(s) pending.");
+                    ? $"Writing {what} has been in progress for {elapsed.TotalSeconds:0} s (making its parameters, or blocked in the stream)."
+                    : $"Writing {what} has waited {elapsed.TotalSeconds:0} s behind the messages queued before it; {_writing.Count} write(s) pending.");
             }
         }
     }
@@ -283,6 +296,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     // ------------------------------------------------------------------ outgoing
 
+    /// <remarks>
+    /// The parameters are serialized later, on the writer loop (M57): don't change them after the call. A cancellation
+    /// before the request is serialized sends nothing; after it, the connection's cancel notification.
+    /// </remarks>
     public async Task<TResult> InvokeAsync<TParams, TResult>(
         string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken)
     {
@@ -310,18 +327,37 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     private async Task<JsonElement> InvokeCoreAsync(string method, Action<Utf8JsonWriter> writeParams, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var id = Interlocked.Increment(ref _nextId);
         var completion = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = completion;
         _outgoing[id] = (method, System.Diagnostics.Stopwatch.GetTimestamp());
         try
         {
-            await WriteMessageAsync(writer =>
+            var request = new Outgoing(OutgoingKind.Request, "request " + method, writer =>
             {
                 writer.WriteNumber("id", id);
                 writer.WriteString("method", method);
                 writeParams(writer);
-            }, cancellationToken, "request " + method).ConfigureAwait(false);
+                return true;
+            }, null, cancellationToken);
+            var written = Enqueue(request);
+            try
+            {
+                await written.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Still queued, or skipped by the loop: no byte of it went out, so the peer has nothing to cancel (M57).
+                // Taken by the loop: its frame goes out whole, and the cancellation follows it.
+                if (!Unqueue(request))
+                {
+                    Observe(written);
+                    _ = CancelRemoteAsync(id);
+                }
+
+                throw;
+            }
 
             if (Volatile.Read(ref _readEnded) != 0)
             {
@@ -387,84 +423,357 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Queues a notification, in call order with every other message; the returned task completes when it is written.
+    /// The parameters are serialized on the writer loop (M57): don't change them after the call. A queued notification is
+    /// never dropped (only the connection's end fails it): the token stops the caller's wait, not the message.
+    /// </summary>
     public Task NotifyAsync<TParams>(string method, TParams parameters, JsonTypeInfo<TParams> paramsInfo, CancellationToken cancellationToken) =>
-        WriteMessageAsync(writer =>
+        Notify(new Outgoing(OutgoingKind.Notification, "notification " + method, writer =>
         {
             writer.WriteString("method", method);
             writer.WritePropertyName("params");
             JsonSerializer.Serialize(writer, parameters, paramsInfo);
-        }, cancellationToken, "notification " + method);
+            return true;
+        }, null, cancellationToken));
+
+    /// <summary>
+    /// Queues a notification whose parameters are made when it is written, on the writer loop (M57): the caller hands
+    /// over something immutable (a text snapshot) and pays nothing for the text or its JSON, while the message keeps its
+    /// place in call order. A null from <paramref name="parameters"/> sends nothing. With <paramref name="replaces"/>, it
+    /// replaces a notification with the same key still queued behind nothing but responses and cancellations (a
+    /// document's whole text, superseded by a newer one); the replaced one's task completes as if written.
+    /// </summary>
+    public Task NotifyAsync<TParams>(string method, Func<TParams?> parameters, JsonTypeInfo<TParams> paramsInfo, string? replaces, CancellationToken cancellationToken)
+        where TParams : class =>
+        Notify(new Outgoing(OutgoingKind.Notification, "notification " + method, writer =>
+        {
+            if (parameters() is not { } value)
+            {
+                return false;
+            }
+
+            writer.WriteString("method", method);
+            writer.WritePropertyName("params");
+            JsonSerializer.Serialize(writer, value, paramsInfo);
+            return true;
+        }, replaces, cancellationToken));
 
     public Task NotifyAsync(string method, CancellationToken cancellationToken) =>
-        WriteMessageAsync(writer => writer.WriteString("method", method), cancellationToken, "notification " + method);
+        Notify(new Outgoing(OutgoingKind.Notification, "notification " + method, writer =>
+        {
+            writer.WriteString("method", method);
+            return true;
+        }, null, cancellationToken));
+
+    private Task Notify(Outgoing notification)
+    {
+        if (notification.Token.IsCancellationRequested)
+        {
+            return Task.FromCanceled(notification.Token);
+        }
+
+        var written = Enqueue(notification);
+        if (!notification.Token.CanBeCanceled || written.IsCompleted)
+        {
+            return written;
+        }
+
+        // The caller may stop waiting (a shutdown's timeout); the message stays queued.
+        Observe(written);
+        return written.WaitAsync(notification.Token);
+    }
+
+    /// <summary>A write's failure that nobody may wait for any more is observed, not left to the finalizer's unobserved-task report.</summary>
+    private static void Observe(Task written) =>
+        _ = written.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
 
     private Task CancelRemoteAsync(long id) =>
         CancelNotification is not { } cancel
             ? Task.CompletedTask
-            : WriteMessageAsync(writer =>
+            : Enqueue(new Outgoing(OutgoingKind.Cancellation, "notification " + cancel.Method, writer =>
             {
                 writer.WriteString("method", cancel.Method);
                 writer.WriteStartObject("params");
                 writer.WriteNumber(cancel.IdProperty, id);
                 writer.WriteEndObject();
-            }, CancellationToken.None).ContinueWith(static _ => { }, TaskScheduler.Default);
+                return true;
+            }, null, CancellationToken.None)).ContinueWith(static _ => { }, TaskScheduler.Default);
 
-    private async Task WriteMessageAsync(Action<Utf8JsonWriter> writeBody, CancellationToken cancellationToken, string what = "a message")
-    {
-        var body = new ArrayBufferWriter<byte>(256);
-        using (var writer = new Utf8JsonWriter(body))
+    private Task WriteResponseAsync(Action<Utf8JsonWriter> writeBody) =>
+        Enqueue(new Outgoing(OutgoingKind.Response, "a response", writer =>
         {
-            writer.WriteStartObject();
-            writer.WriteString("jsonrpc", "2.0");
             writeBody(writer);
-            writer.WriteEndObject();
-        }
+            return true;
+        }, null, CancellationToken.None));
 
-        var header = Framing == JsonRpcFraming.NewlineDelimited ? null : FramedMessageWriter.Header(body.WrittenCount);
-        var write = Interlocked.Increment(ref _nextWrite);
-        _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), false);
-        try
-        {
-            await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            _writing.TryRemove(write, out _);
-            throw;
-        }
+    // ------------------------------------------------------------------ the writer loop
 
-        _writing[write] = (what, System.Diagnostics.Stopwatch.GetTimestamp(), true);
-        try
+    /// <summary>
+    /// Queues a message for the writer loop (M57); the task completes when it is written (or skipped, or replaced).
+    /// Enqueueing is synchronous, so messages go out in call order: a request always follows the edits made before it.
+    /// </summary>
+    private Task Enqueue(Outgoing message)
+    {
+        List<Outgoing>? replaced = null;
+        lock (_queueGate)
         {
-            // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops
-            // the connection. Cancellation applies while waiting for the lock only.
-            if (header is not null)
+            if (_writesEnded)
             {
-                await _writer.WriteAsync(header, CancellationToken.None).ConfigureAwait(false);
-            }
-            else
-            {
-                // Utf8JsonWriter escapes control characters in strings, so the body holds no newline of its own.
-                body.Write("\n"u8);
+                return FailLostAsync();
             }
 
-            await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            if (message.Replaces is { } key)
+            {
+                // Only past messages no state of the peer depends on: a request or another notification in between must
+                // still see what was queued before it.
+                for (var node = _queue.Last; node is not null; node = node.Previous)
+                {
+                    if (node.Value.Kind == OutgoingKind.Notification && node.Value.Replaces == key)
+                    {
+                        _queue.Remove(node);
+                        node.Value.Node = null;
+                        node.Value.State = OutgoingState.Removed;
+                        replaced = [node.Value];
+                        break;
+                    }
+
+                    if (node.Value.Kind is not (OutgoingKind.Response or OutgoingKind.Cancellation))
+                    {
+                        break;
+                    }
+                }
+            }
+
+            message.Write = Interlocked.Increment(ref _nextWrite);
+            _writing[message.Write] = (message.What, System.Diagnostics.Stopwatch.GetTimestamp(), false);
+            message.Node = _queue.AddLast(message);
+            _writeLoop ??= Task.Run(WriteLoopAsync);
+            if (message.Kind == OutgoingKind.Request && message.Token.CanBeCanceled)
+            {
+                // Under the lock, so the loop never sees the message without it (a cancellation now runs inline, and the
+                // lock is reentrant).
+                message.Registration = message.Token.Register(static state =>
+                {
+                    var (connection, request) = ((JsonRpcConnection, Outgoing))state!;
+                    connection.Unqueue(request);
+                }, (this, message));
+            }
+        }
+
+        foreach (var old in replaced ?? [])
+        {
+            Finish(old, null);
+        }
+
+        _wake.Writer.TryWrite(true);
+        return message.Written.Task;
+    }
+
+    /// <summary>
+    /// Takes a cancelled request out of the queue. True when it never goes out (taken out now or before, or skipped by
+    /// the loop), false when the loop has taken it to write.
+    /// </summary>
+    private bool Unqueue(Outgoing request)
+    {
+        lock (_queueGate)
+        {
+            if (request.State == OutgoingState.Queued)
+            {
+                _queue.Remove(request.Node!);
+                request.Node = null;
+                request.State = OutgoingState.Removed;
+            }
+            else if (request.State != OutgoingState.Removed)
+            {
+                return false;
+            }
+        }
+
+        _writing.TryRemove(request.Write, out _);
+        request.Written.TrySetCanceled(request.Token);
+        return true;
+    }
+
+    private async Task FailLostAsync() => throw await LostAsync(null).ConfigureAwait(false);
+
+    /// <summary>
+    /// The one place messages are serialized, written and flushed (M57): in queue order, each frame whole, and what was
+    /// queued meanwhile written before one flush.
+    /// </summary>
+    private async Task WriteLoopAsync()
+    {
+        var unflushed = new List<Outgoing>();
+        while (true)
+        {
+            Outgoing? message;
+            lock (_queueGate)
+            {
+                message = _queue.First?.Value;
+                if (message is not null)
+                {
+                    _queue.RemoveFirst();
+                    message.Node = null;
+                    // A request cancelled while queued sends nothing, not even its cancellation.
+                    message.State = message.Kind == OutgoingKind.Request && message.Token.IsCancellationRequested ? OutgoingState.Removed : OutgoingState.Taken;
+                }
+            }
+
+            if (message is null)
+            {
+                if (unflushed.Count > 0)
+                {
+                    if (!await FlushAsync(unflushed).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+
+                if (!await _wake.Reader.WaitToReadAsync().ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                _wake.Reader.TryRead(out _);
+                continue;
+            }
+
+            message.Registration.Dispose();
+            if (message.State == OutgoingState.Removed)
+            {
+                _writing.TryRemove(message.Write, out _);
+                message.Written.TrySetCanceled(message.Token);
+                continue;
+            }
+
+            _writing[message.Write] = (message.What, System.Diagnostics.Stopwatch.GetTimestamp(), true);
+            var body = new ArrayBufferWriter<byte>(256);
+            try
+            {
+                using var writer = new Utf8JsonWriter(body);
+                writer.WriteStartObject();
+                writer.WriteString("jsonrpc", "2.0");
+                if (!message.WriteBody(writer))
+                {
+                    Finish(message, null); // nothing to send (a document change the peer has already)
+                    continue;
+                }
+
+                writer.WriteEndObject();
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // This message's parameters couldn't be made: it fails alone, and the stream never saw a byte of it.
+                Finish(message, ex);
+                continue;
+            }
+
+            unflushed.Add(message);
+            try
+            {
+                // Never cancel a frame halfway: a header without its body corrupts the stream, and the peer drops the
+                // connection. Cancellation applies while a request is queued only.
+                if (Framing == JsonRpcFraming.NewlineDelimited)
+                {
+                    // Utf8JsonWriter escapes control characters in strings, so the body holds no newline of its own.
+                    body.Write("\n"u8);
+                }
+                else
+                {
+                    await _writer.WriteAsync(FramedMessageWriter.Header(body.WrittenCount), CancellationToken.None).ConfigureAwait(false);
+                }
+
+                await _writer.WriteAsync(body.WrittenMemory, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // Any failure of the stream ends the writes visibly, whatever its type (a remote window's path rewrite
+                // throws InvalidDataException or FormatException): part of a frame may be out, and a loop that stopped
+                // quietly would leave this message, the queued ones and every later one waiting forever.
+                await EndWritesAsync(unflushed, ex).ConfigureAwait(false);
+                return;
+            }
+        }
+    }
+
+    private async Task<bool> FlushAsync(List<Outgoing> written)
+    {
+        try
+        {
             await _writer.FlushAsync(CancellationToken.None).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // The peer is gone (e.g. a crashed host's stdin pipe closed): one exception type for callers, which says why
-            // when the supervisor knows (M49).
-            throw await LostAsync(ex).ConfigureAwait(false);
+            await EndWritesAsync(written, ex).ConfigureAwait(false); // as a failed write, whatever its type
+            return false;
         }
-        finally
+
+        foreach (var message in written)
         {
-            _writeLock.Release();
-            _writing.TryRemove(write, out _);
-            if (_reportedWrites.TryRemove(write, out _))
-            {
-                Slow?.Invoke(this, $"Writing {what} finished.");
-            }
+            Finish(message, null);
+        }
+
+        written.Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// The peer is gone (e.g. a crashed host's stdin pipe closed): what was written, what is queued and what comes later
+    /// fail with one exception type, which says why when the supervisor knows (M49).
+    /// </summary>
+    private async Task EndWritesAsync(List<Outgoing> written, Exception failure)
+    {
+        // TODO(issue): a failure that isn't the peer leaving (a remote window's path rewrite) leaves reads going, so nothing
+        // raises Disconnected and the supervisor doesn't restart the host. Ending the connection here would need the
+        // supervisor to stop the old process before starting a new one (it doesn't today, as a host whose pipe broke exits).
+        var lost = await LostAsync(failure).ConfigureAwait(false);
+        List<Outgoing> queued;
+        lock (_queueGate)
+        {
+            _writesEnded = true;
+            queued = TakeQueued();
+        }
+
+        foreach (var message in written.Concat(queued))
+        {
+            Finish(message, lost);
+        }
+
+        written.Clear();
+    }
+
+    /// <summary>Empties the queue (under <see cref="_queueGate"/>).</summary>
+    private List<Outgoing> TakeQueued()
+    {
+        var queued = new List<Outgoing>(_queue);
+        foreach (var message in queued)
+        {
+            message.Node = null;
+            message.State = OutgoingState.Removed;
+        }
+
+        _queue.Clear();
+        return queued;
+    }
+
+    private void Finish(Outgoing message, Exception? failure)
+    {
+        message.Registration.Dispose();
+        _writing.TryRemove(message.Write, out _);
+        if (_reportedWrites.TryRemove(message.Write, out _))
+        {
+            Slow?.Invoke(this, $"Writing {message.What} finished.");
+        }
+
+        if (failure is null)
+        {
+            message.Written.TrySetResult();
+        }
+        else
+        {
+            message.Written.TrySetException(failure);
         }
     }
 
@@ -672,7 +981,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 return;
             }
 
-            await WriteMessageAsync(writer =>
+            await WriteResponseAsync(writer =>
             {
                 writer.WritePropertyName("id");
                 id.WriteTo(writer);
@@ -685,7 +994,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 {
                     writeResult(writer);
                 }
-            }, CancellationToken.None).ConfigureAwait(false);
+            }).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException or JsonRpcConnectionLostException)
         {
@@ -703,7 +1012,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     }
 
     private Task WriteErrorAsync(JsonElement id, int code, string message, string? data = null) =>
-        WriteMessageAsync(writer =>
+        WriteResponseAsync(writer =>
         {
             writer.WritePropertyName("id");
             id.WriteTo(writer);
@@ -716,7 +1025,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             }
 
             writer.WriteEndObject();
-        }, CancellationToken.None);
+        });
 
     public async ValueTask DisposeAsync()
     {
@@ -730,6 +1039,25 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             await watchdog.DisposeAsync().ConfigureAwait(false);
         }
+
+        // What is still queued fails, and nothing more is queued; the message being written ends with the stream.
+        List<Outgoing> queued;
+        lock (_queueGate)
+        {
+            _writesEnded = true;
+            queued = TakeQueued();
+        }
+
+        _wake.Writer.TryComplete();
+        if (queued.Count > 0)
+        {
+            var lost = await LostAsync(null).ConfigureAwait(false);
+            foreach (var message in queued)
+            {
+                Finish(message, lost);
+            }
+        }
+
         await _writer.DisposeAsync().ConfigureAwait(false);
         await _reader.DisposeAsync().ConfigureAwait(false);
         try
@@ -742,7 +1070,48 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         _shutdown.Dispose();
-        _writeLock.Dispose();
+    }
+
+    private enum OutgoingKind
+    {
+        Request,
+        Notification,
+        Response,
+        Cancellation,
+    }
+
+    private enum OutgoingState
+    {
+        Queued,
+        Taken,
+        Removed,
+    }
+
+    /// <summary>
+    /// A message for the writer loop: its body (written on the loop; false sends nothing), the key a newer notification
+    /// replaces it by, and for a request the token that takes it out of the queue. State and node change under the queue's lock.
+    /// </summary>
+    private sealed class Outgoing(OutgoingKind kind, string what, Func<Utf8JsonWriter, bool> writeBody, string? replaces, CancellationToken token)
+    {
+        public OutgoingKind Kind { get; } = kind;
+
+        public string What { get; } = what;
+
+        public Func<Utf8JsonWriter, bool> WriteBody { get; } = writeBody;
+
+        public string? Replaces { get; } = replaces;
+
+        public CancellationToken Token { get; } = token;
+
+        public TaskCompletionSource Written { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public long Write { get; set; }
+
+        public OutgoingState State { get; set; }
+
+        public LinkedListNode<Outgoing>? Node { get; set; }
+
+        public CancellationTokenRegistration Registration { get; set; }
     }
 
     /// <summary>A message read from the peer, or (with <paramref name="Dispatched"/>) a marker that completes once the messages ahead of it are dispatched.</summary>

@@ -19,18 +19,12 @@ public sealed partial class GitChangesView : UserControl, IPaneView
     public GitChangesView()
     {
         InitializeComponent();
-        foreach (var list in new[] { StagedList, ChangesList, ConflictList, StagedTree, ChangesTree, ConflictTree })
+        foreach (var list in new[] { StagedList, ChangesList, ConflictList })
         {
             list.DoubleTapped += (_, e) =>
             {
-                // A double-click's second click raises no Tapped: on a folder's chevron it toggles again, as a tree view's
-                // expander does on each click. A hover button acts on each click.
-                if (IsChevron(e.Source) && RowAt(e.Source) is GitChangeRow folder)
-                {
-                    (DataContext as GitChangesViewModel)?.Toggle(folder);
-                    e.Handled = true;
-                }
-                else if (!InButton(e.Source) && OpenSelected(RowAt(e.Source) ?? list.SelectedItem))
+                // A hover button acts on each click.
+                if (!InButton(e.Source) && OpenSelected(RowAt(e.Source) ?? list.SelectedItem))
                 {
                     e.Handled = true;
                 }
@@ -45,24 +39,20 @@ public sealed partial class GitChangesView : UserControl, IPaneView
                     e.Handled = true;
                 }
             }, RoutingStrategies.Tunnel);
-
-            // The menu of a file, a folder or the repository node: gitChanges/context, built for the node (D38).
-            list.ContextRequested += (_, e) => OnContextRequested(list, e);
         }
 
-        // A tree's rows expand and collapse as a tree view's: the chevron, Enter, Left and Right (Ctrl: the folders under it
-        // too), + and -, * and / for every folder under it.
+        // A tree's rows expand and collapse as a tree view's, with the other trees' code (M57, TreeRows): the chevron, Enter,
+        // Left and Right (Ctrl: the folders under it too), + and -, * and / for every folder under it; Enter and a
+        // double-click open a file.
         foreach (var tree in new[] { StagedTree, ChangesTree, ConflictTree })
         {
-            tree.AddHandler(KeyDownEvent, (_, e) => OnTreeKeyDown(tree, e), RoutingStrategies.Tunnel);
-            tree.Tapped += (_, e) =>
-            {
-                if (IsChevron(e.Source) && RowAt(e.Source) is GitChangeRow row)
-                {
-                    (DataContext as GitChangesViewModel)?.Toggle(row);
-                    e.Handled = true;
-                }
-            };
+            TreeRows.Attach(tree, () => DataContext as GitChangesViewModel, row => OpenSelected(row), offRowsActivatesSelected: true);
+        }
+
+        // The menu of a file, a folder or the repository node: gitChanges/context, built for the node (D38).
+        foreach (var list in new[] { StagedList, ChangesList, ConflictList, StagedTree, ChangesTree, ConflictTree })
+        {
+            list.ContextRequested += (_, e) => OnContextRequested(list, e);
         }
 
         DataContextChanged += (_, _) =>
@@ -213,75 +203,7 @@ public sealed partial class GitChangesView : UserControl, IPaneView
         (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext;
 
     /// <summary>Whether a key or a tap comes from a row's hover button.</summary>
-    private static bool InButton(object? source) => (source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is not null;
-
-    /// <summary>The chevron of a folder's row (a file's row has a blank place for it, where a double-click opens the file).</summary>
-    private static bool IsChevron(object? source) =>
-        (source as Visual)?.FindAncestorOfType<Border>(includeSelf: true) is { } border && border.Classes.Contains("chevron")
-        && RowAt(source) is GitChangeRow { HasChildren: true };
-
-    /// <summary>
-    /// A tree's keys, as a tree view's: Left and Right collapse and expand a folder (or go to its parent), and with Ctrl the
-    /// folders under it too, as Ctrl+Enter does (Enter alone toggles a folder or opens a file, as in the lists); + and -
-    /// expand and collapse, * and / every folder under it.
-    /// </summary>
-    private void OnTreeKeyDown(ListBox tree, KeyEventArgs e)
-    {
-        // A row's hover button that has the focus takes its keys.
-        if (DataContext is not GitChangesViewModel vm || tree.SelectedItem is not GitChangeRow row || InButton(e.Source))
-        {
-            return;
-        }
-
-        var recursive = e.KeyModifiers == KeyModifiers.Control;
-        if (e.KeyModifiers != KeyModifiers.None && !recursive)
-        {
-            return;
-        }
-
-        switch (e.Key)
-        {
-            case Key.Right when row.HasChildren && recursive:
-                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: true);
-                break;
-            case Key.Left when row.HasChildren && recursive:
-                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: false);
-                break;
-            case Key.Enter when row.HasChildren && recursive:
-                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: !row.IsExpanded);
-                break;
-            case Key.Right or Key.Add when row.HasChildren && !row.IsExpanded:
-                vm.SetExpanded(row, true);
-                break;
-            case Key.Multiply when row.HasChildren:
-                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: true);
-                break;
-            case Key.Divide when row.HasChildren:
-                vm.SetExpandedUnder(row.Node.Section, row.Node.FullPath, expanded: false);
-                break;
-            case Key.Left or Key.Subtract when row.HasChildren && row.IsExpanded:
-                vm.SetExpanded(row, false);
-                break;
-            case Key.Left when !recursive && vm.RowsOf(row.Node.Section) is var rows && rows.IndexOf(row) is var index and > 0:
-                // To the parent row.
-                for (var i = index - 1; i >= 0; i--)
-                {
-                    if (rows[i].Depth < row.Depth)
-                    {
-                        tree.SelectedItem = rows[i];
-                        tree.ScrollIntoView(rows[i]);
-                        (tree.ContainerFromItem(rows[i]) as Control)?.Focus(NavigationMethod.Directional);
-                        break;
-                    }
-                }
-
-                break;
-            default:
-                return;
-        }
-
-        e.Handled = true;
-    }
+    private static bool InButton(object? source) => TreeRows.InButton(source);
 
     private readonly DispatcherTimer _completionTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
 

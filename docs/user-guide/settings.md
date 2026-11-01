@@ -186,7 +186,7 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 ## Accessibility
 
 - **Keyboard**: every function is reachable from it. `Alt+F6` and `Alt+Shift+F6` (`F6` and `Shift+F6` in the VS Code scheme) move between panes, and every command is in the command palette and the search box.
-- **Screen readers**: lists, trees and buttons have accessible names.
+- **Screen readers**: lists, trees and buttons have accessible names. The Solution Explorer, Git Changes, the Document Outline, the Git Repository tree, a commit's changed files, Compare, the Test Explorer and Coverage Results are trees to a screen reader: each row is a tree item that says whether it's expanded or collapsed, which a screen reader's own expand and collapse commands change, as `Right` and `Left` do. On macOS a folder's name also ends in "expanded" or "collapsed", for VoiceOver. On Linux (AT-SPI) a row also says its place among its siblings ("3 of 12"); on Windows and macOS the IDE doesn't pass a row's level or place yet.
 - **Color**: every theme family has a High contrast mode, and Classic has High Contrast; Follow System switches to it when the operating system's high contrast is on. Icons are monochrome there. A family's High contrast mode has black surfaces, white text with at least 7:1 contrast, and white borders around every tool window and field. Diffs mark lines with `+` and `−`, not only with color.
 
 ## Updates and network access

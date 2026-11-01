@@ -96,12 +96,12 @@ public sealed class GitChangesRowsTests
         return (ListBoxItem)tree.ContainerFromItem(row)!;
     }
 
-    /// <summary>What a row's control shows: its chevron, and its name for a screen reader.</summary>
-    private static async Task<(string? Chevron, string? Name)> ShownAsync(ListBox tree, GitChangeRow row)
+    /// <summary>What a row's control shows: its chevron, and its state for a screen reader (its tree item's, M57).</summary>
+    private static async Task<(string? Chevron, ExpandCollapseState State)> ShownAsync(ListBox tree, GitChangeRow row)
     {
         var item = await ItemAsync(tree, row);
         var chevron = item.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("chevron"));
-        return ((chevron.Child as Controls.Icon)?.Kind, AutomationProperties.GetName(item));
+        return ((chevron.Child as Controls.Icon)?.Kind, TreeRowsAutomationTests.PeerOf(tree, row).ExpandCollapseState);
     }
 
     private static void Click(TopLevel top, Visual control, int clicks = 1)
@@ -134,9 +134,9 @@ public sealed class GitChangesRowsTests
         // Collapse All on the repository: its row stays, and says it's collapsed.
         await f.ExecuteAsync("gitChanges.collapseAll", Json(folder), Json("changes"));
         Assert.Equal([repository], vm.ChangesRows);
-        var (chevron, name) = await ShownAsync(tree, repository);
+        var (chevron, state) = await ShownAsync(tree, repository);
         Assert.Equal("chevron-right", chevron);
-        Assert.EndsWith(", collapsed", name, StringComparison.Ordinal);
+        Assert.Equal(ExpandCollapseState.Collapsed, state);
 
         // Expand All: every folder's row says it's expanded, the kept one's too.
         await f.ExecuteAsync("gitChanges.expandAll", Json(folder), Json("changes"));
@@ -144,9 +144,9 @@ public sealed class GitChangesRowsTests
         Assert.Same(repository, vm.ChangesRows[0]);
         foreach (var row in vm.ChangesRows.Where(r => r.HasChildren).ToList())
         {
-            (chevron, name) = await ShownAsync(tree, row);
+            (chevron, state) = await ShownAsync(tree, row);
             Assert.Equal("chevron-down", chevron);
-            Assert.EndsWith(", expanded", name, StringComparison.Ordinal);
+            Assert.Equal(ExpandCollapseState.Expanded, state);
         }
 
         // Expand All on src with a folder under it collapsed: the folder's row, which stays, says it's expanded.
@@ -156,9 +156,9 @@ public sealed class GitChangesRowsTests
         await f.ExecuteAsync("gitChanges.expandAll", Json(Path.Combine(folder, "src")), Json("changes"));
         Assert.Equal(11, vm.ChangesRows.Count);
         Assert.Same(d001, Row("src/D001"));
-        (chevron, name) = await ShownAsync(tree, d001);
+        (chevron, state) = await ShownAsync(tree, d001);
         Assert.Equal("chevron-down", chevron);
-        Assert.EndsWith(", expanded", name, StringComparison.Ordinal);
+        Assert.Equal(ExpandCollapseState.Expanded, state);
 
         // Collapse All on src, then a refresh: its new nodes have the state Collapse All left, and the rows still say it.
         await f.ExecuteAsync("gitChanges.collapseAll", Json(Path.Combine(folder, "src")), Json("changes"));
@@ -170,9 +170,9 @@ public sealed class GitChangesRowsTests
         await ShellFixture.PumpUntil(() => vm.Changes.Count == 7 && !vm.IsRefreshing);
         Assert.Equal(3, vm.ChangesRows.Count);
         Assert.Same(src, Row("src"));
-        (chevron, name) = await ShownAsync(tree, src);
+        (chevron, state) = await ShownAsync(tree, src);
         Assert.Equal("chevron-right", chevron);
-        Assert.EndsWith(", collapsed", name, StringComparison.Ordinal);
+        Assert.Equal(ExpandCollapseState.Collapsed, state);
     }
 
     /// <summary>
@@ -250,13 +250,14 @@ public sealed class GitChangesRowsTests
         Assert.Same(Row("src/D000"), tree.SelectedItem);
 
         // The chevron toggles a folder on each click, a double-click's second too (it raises no tap); a double-click on
-        // the folder's row toggles it once.
+        // the folder's row toggles it once. The chevron selects nothing, as a tree view's expander (M57 review).
         var d002 = await ItemAsync(tree, Row("src/D002"));
         var chevron = d002.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("chevron"));
         Click(f.Window, chevron);
         Assert.False(Expanded("src/D002"));
         Click(f.Window, chevron);
         Assert.True(Expanded("src/D002"));
+        Assert.Same(Row("src/D000"), tree.SelectedItem);
         Click(f.Window, d002.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == "D002"), clicks: 2);
         Assert.False(Expanded("src/D002"));
         Click(f.Window, chevron);
@@ -426,12 +427,19 @@ public sealed class GitChangesRowsTests
         Assert.Same(row, vm.ChangesRows[5]);
         Assert.Equal(1999, vm.ChangesRows[0].Node.TotalFiles);
 
+        // Its tree items say where a row is (M57): F04.cs, its folder's fourth file of nine now, at level 4.
+        var f04 = vm.ChangesRows.Single(r => r.Node.RelativePath == "src/D150/F04.cs");
+        await ItemAsync(list, f04);
+        TreeRowsAutomationTests.AssertTreeItem(list, f04, level: 4, position: 4, size: 9, ExpandCollapseState.LeafNode);
+        TreeRowsAutomationTests.AssertTreeItem(list, vm.ChangesRows.Single(r => r.Text == "D150"), level: 3, position: 151, size: 200, ExpandCollapseState.Expanded);
+
         // Collapsing the repository hides its rows with one removal; expanding shows them with one insertion.
         rows.Clear();
         vm.SetExpanded(vm.ChangesRows[0], false);
         Assert.Single(vm.ChangesRows);
-        Assert.Contains(", collapsed", vm.ChangesRows[0].AccessibleName, StringComparison.Ordinal);
-        vm.SetExpanded(vm.ChangesRows[0], true);
+        await ItemAsync(list, vm.ChangesRows[0]);
+        TreeRowsAutomationTests.AssertTreeItem(list, vm.ChangesRows[0], level: 1, position: 1, size: 1, ExpandCollapseState.Collapsed);
+        TreeRowsAutomationTests.Invoke(list, vm.ChangesRows[0], expand: true); // a screen reader's Expand, as Right
         Assert.Equal(2201, vm.ChangesRows.Count);
         Assert.Equal([NotifyCollectionChangedAction.Remove, NotifyCollectionChangedAction.Add], rows);
 

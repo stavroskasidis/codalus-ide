@@ -53,6 +53,18 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
     /// <summary>Show All Files: a file or folder on disk that isn't part of the project (shown dimmed, ADR 0033).</summary>
     public bool IsExcluded { get; init; }
 
+    /// <summary>
+    /// The folder view: a folder (or the workspace folder) whose contents aren't listed yet; the shell gives it a
+    /// "Loading…" row, and lists it once it's expanded (M57).
+    /// </summary>
+    public bool IsUnlisted { get; init; }
+
+    /// <summary>
+    /// Shown dimmed: in the folder view and in Show All Files, a folder listed only when it's expanded
+    /// (<c>node_modules</c>, <c>.vs</c>, <c>.idea</c>) and what is in it; a listing's cut row (M57).
+    /// </summary>
+    public bool IsMuted { get; init; }
+
     public IReadOnlyList<ExplorerNode> Children { get; init; } = [];
 
     /// <summary>For <see cref="ExplorerNodeKind.Member"/>: where it is declared (zero-based line and character).</summary>
@@ -61,15 +73,99 @@ public sealed record ExplorerNode(string Id, ExplorerNodeKind Kind, string Name)
 
 /// <summary>
 /// What the Solution Explorer shows besides the projects' items (ADR 0033): with Show All Files, the files on disk of
-/// each project (<see cref="DiskEntries"/>, by project path); in folder mode's folder view, the folder's tree
-/// (<see cref="FolderEntries"/>).
+/// each project (<see cref="DiskEntries"/>, by project path); in folder mode's folder view, the folders listed
+/// (<see cref="FolderListings"/>).
 /// </summary>
 public sealed record ExplorerOptions
 {
     public IReadOnlyDictionary<string, IReadOnlyList<DirectoryEntry>>? DiskEntries { get; init; }
 
-    /// <summary>The folder view: everything under the workspace folder (null: the solution view).</summary>
-    public IReadOnlyList<DirectoryEntry>? FolderEntries { get; init; }
+    /// <summary>The folder view: each listed folder's listing, by folder (null: the solution view).</summary>
+    public IReadOnlyDictionary<string, FolderListing>? FolderListings { get; init; }
+}
+
+/// <summary>
+/// The folder view's listing of one folder (ADR 0033, M57): what is directly in it, and whether the build host cut it at
+/// its limit. Each expanded folder is listed alone, so a change lists again only the folders it names.
+/// </summary>
+public sealed class FolderListing(IReadOnlyList<DirectoryEntry> entries, bool truncated, int? listed = null)
+{
+    private HashSet<string>? _folders;
+
+    public IReadOnlyList<DirectoryEntry> Entries { get; } = entries;
+
+    public bool Truncated { get; } = truncated;
+
+    /// <summary>
+    /// The entries the build host's listing took, which a cut row counts: this folder's own, or for a folder of the search
+    /// box's listing of the whole workspace folder, that listing's.
+    /// </summary>
+    public int Listed { get; } = listed ?? entries.Count;
+
+    /// <summary>Whether <paramref name="path"/> is a folder in this one (built on the first call: one thread at a time).</summary>
+    public bool HasFolder(string path)
+    {
+        if (_folders is null)
+        {
+            var folders = new HashSet<string>(SolutionService.PathComparer);
+            foreach (var entry in Entries)
+            {
+                if (entry.IsDirectory)
+                {
+                    folders.Add(entry.Path);
+                }
+            }
+
+            _folders = folders;
+        }
+
+        return _folders.Contains(path);
+    }
+
+    /// <summary>
+    /// A listing of the whole of <paramref name="root"/> (the search box's) as listings of each folder: every folder it
+    /// went into has one, empty or not; a folder it didn't go into (<see cref="DirectoryEntry.Skipped"/>) has none. A cut
+    /// listing says so at the workspace folder and in the folder it stopped in (its last entry's), counting the whole
+    /// listing's entries; and the folders in it that have nothing in it have none, since it may have stopped before going
+    /// into them (they show unlisted, not empty). The workspace folder's row counted its own entries, and those folders
+    /// showed as empty ones (M57).
+    /// </summary>
+    public static Dictionary<string, FolderListing> FromTree(string root, IReadOnlyList<DirectoryEntry> entries, bool truncated)
+    {
+        root = System.IO.Path.TrimEndingDirectorySeparator(root);
+        var children = new Dictionary<string, List<DirectoryEntry>>(SolutionService.PathComparer) { [root] = [] };
+        foreach (var entry in entries)
+        {
+            if (entry.IsDirectory && !entry.Skipped)
+            {
+                children.TryAdd(entry.Path, []);
+            }
+        }
+
+        foreach (var entry in entries)
+        {
+            if (System.IO.Path.GetDirectoryName(entry.Path) is { } parent && children.TryGetValue(parent, out var list))
+            {
+                list.Add(entry);
+            }
+        }
+
+        var stoppedIn = truncated && entries.Count > 0 ? System.IO.Path.GetDirectoryName(entries[^1].Path) : null;
+        var listings = new Dictionary<string, FolderListing>(SolutionService.PathComparer);
+        foreach (var (folder, list) in children)
+        {
+            var isRoot = SolutionService.PathComparer.Equals(folder, root);
+            if (truncated && list.Count == 0 && !isRoot)
+            {
+                continue;
+            }
+
+            var cut = truncated && (isRoot || SolutionService.PathComparer.Equals(folder, stoppedIn));
+            listings[folder] = new FolderListing(list, cut, cut ? entries.Count : null);
+        }
+
+        return listings;
+    }
 }
 
 /// <summary>
@@ -168,9 +264,9 @@ public static class SolutionTree
         ExplorerOptions? options = null,
         SolutionTreeCache? cache = null)
     {
-        if (solution.IsFolder && options?.FolderEntries is { } entries)
+        if (solution.IsFolder && options?.FolderListings is { } listings)
         {
-            return FolderView(solution, entries);
+            return FolderView(solution, listings);
         }
 
         cache?.Begin();
@@ -216,11 +312,17 @@ public static class SolutionTree
         return root;
     }
 
+    /// <summary>The id suffix of a folder's row that says its listing was cut at the build host's limit.</summary>
+    public const string CutSuffix = "|cut";
+
     /// <summary>
     /// Folder mode's folder view (ADR 0033): the folder's files and folders as they are on disk, project files marked
-    /// (with "(not loaded)" until they are loaded). Nodes inside a loaded project know it.
+    /// (with "(not loaded)" until they are loaded). Nodes inside a loaded project know it. <paramref name="listings"/> has
+    /// what is directly in each folder listed, by folder (the workspace folder's too); a folder without one is marked
+    /// <see cref="ExplorerNode.IsUnlisted"/> (M57: each folder is listed once it's expanded), a folder the build host lists
+    /// only on demand is dimmed with what is in it, and a listing cut at the build host's limit ends with a row that says so.
     /// </summary>
-    public static ExplorerNode FolderView(SolutionInfo solution, IReadOnlyList<DirectoryEntry> entries)
+    public static ExplorerNode FolderView(SolutionInfo solution, IReadOnlyDictionary<string, FolderListing> listings)
     {
         var root = System.IO.Path.TrimEndingDirectorySeparator(solution.Directory);
         var loaded = solution.Projects.Select(p => p.Path).ToHashSet(SolutionService.PathComparer);
@@ -242,35 +344,26 @@ public static class SolutionTree
             rootOwner = Inside(folder, rootOwner);
         }
 
-        var children = new Dictionary<string, List<DirectoryEntry>>(SolutionService.PathComparer);
-        var below = Below(root);
-        foreach (var entry in entries.Where(e => IsBelow(e.Path, below)))
-        {
-            var parent = System.IO.Path.GetDirectoryName(entry.Path)!;
-            if (!children.TryGetValue(parent, out var list))
-            {
-                children[parent] = list = [];
-            }
-
-            list.Add(entry);
-        }
-
-        // owner: the project of what is in the folder.
-        IReadOnlyList<ExplorerNode> NodesOf(string folder, (string Path, int Rank)? owner) =>
+        // owner: the project of what is in the folder; muted: the folder is one listed only on demand, or inside one.
+        IReadOnlyList<ExplorerNode> NodesOf(string id, FolderListing listing, (string Path, int Rank)? owner, bool muted) =>
         [
-            .. (children.GetValueOrDefault(folder) ?? []).Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
+            .. listing.Entries.Where(e => e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
                 .Select(e =>
                 {
                     var inside = Inside(e.Path, owner);
+                    var dimmed = muted || e.Skipped;
+                    var own = listings.GetValueOrDefault(e.Path);
                     return new ExplorerNode("d:" + e.Path, ExplorerNodeKind.Folder, System.IO.Path.GetFileName(e.Path))
                     {
                         Path = e.Path,
                         ProjectPath = inside?.Path,
                         Icon = "folder",
-                        Children = NodesOf(e.Path, inside),
+                        IsMuted = dimmed,
+                        IsUnlisted = own is null,
+                        Children = own is null ? [] : NodesOf("d:" + e.Path, own, inside, dimmed),
                     };
                 }),
-            .. (children.GetValueOrDefault(folder) ?? []).Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
+            .. listing.Entries.Where(e => !e.IsDirectory).OrderBy(e => System.IO.Path.GetFileName(e.Path), Order)
                 .Select(e =>
                 {
                     var name = System.IO.Path.GetFileName(e.Path);
@@ -281,19 +374,35 @@ public static class SolutionTree
                         ProjectPath = isProject && loaded.Contains(e.Path) ? e.Path : owner?.Path,
                         Icon = isProject ? "project" : FileIcon(name),
                         Detail = isProject && !loaded.Contains(e.Path) ? "(not loaded)" : null,
+                        IsMuted = muted,
                     };
                 }),
+            .. listing.Truncated ? [CutRow(id, listing.Listed)] : Array.Empty<ExplorerNode>(),
         ];
 
         var count = solution.Projects.Length;
+        var rootListing = listings.GetValueOrDefault(root);
         return new ExplorerNode("solution", ExplorerNodeKind.Solution, $"Folder '{solution.Name}'")
         {
             Path = solution.Path,
             Icon = "folder",
             Detail = count == 1 ? "(1 project loaded)" : $"({count} projects loaded)",
-            Children = NodesOf(root, rootOwner),
+            IsUnlisted = rootListing is null,
+            Children = rootListing is null ? [] : NodesOf("solution", rootListing, rootOwner, muted: false),
         };
     }
+
+    /// <summary>
+    /// The row at the end of a folder whose listing the build host cut at its limit: what is past it isn't shown, so the
+    /// folder looked complete, or empty below (M57).
+    /// </summary>
+    private static ExplorerNode CutRow(string id, int entries) =>
+        new(id + CutSuffix, ExplorerNodeKind.Message, Localization.Localizer.Format("msg.solutionTree.listingCut",
+            "Only the first {0} entries are shown. Find the others with Find in Files or the terminal.", entries.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)))
+        {
+            Icon = "dot",
+            IsMuted = true,
+        };
 
     /// <summary>A project file (<c>.csproj</c>, <c>.fsproj</c>, <c>.vbproj</c>).</summary>
     public static bool IsProjectFile(string path) =>
@@ -378,6 +487,36 @@ public static class SolutionTree
 
     /// <summary>Whether a project's items show in their compile order rather than by name (F#, M36).</summary>
     public static bool IsOrdered(string projectPath) => projectPath.EndsWith(".fsproj", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether <paramref name="folder"/>, below <paramref name="root"/>, is or is in a folder the build host lists only
+    /// when asked (<see cref="DirectoryEntry.Skipped"/>: <c>node_modules</c>, <c>.vs</c>, <c>.idea</c>): Show All Files
+    /// goes into one only once it's expanded, even when it holds items (a plain SDK project's default globs take all of
+    /// node_modules), as the folder view does (M57).
+    /// </summary>
+    public static bool IsInOnDemandFolder(string folder, string root)
+    {
+        var below = Below(root);
+        if (!IsBelow(folder, below))
+        {
+            return false;
+        }
+
+        foreach (var segment in folder[below.Length..].Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))
+        {
+            if (IsOnDemandName(segment))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>A folder's name the build host lists only when asked: <c>node_modules</c>, <c>.vs</c>, <c>.idea</c>.</summary>
+    private static bool IsOnDemandName(string name) =>
+        name.Equals("node_modules", StringComparison.OrdinalIgnoreCase) || name.Equals(".vs", StringComparison.OrdinalIgnoreCase)
+        || name.Equals(".idea", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// The folders of a project's tree that hold its items, with the project's own folder: Show All Files lists what is
@@ -490,10 +629,15 @@ public static class SolutionTree
             }
         }
 
-        return Build(root, projectPath);
+        return Build(root, projectPath, mutesOnDemand: disk is not null, muted: false);
     }
 
-    private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath)
+    /// <summary>
+    /// A folder's nodes. With <paramref name="mutesOnDemand"/> (Show All Files), <c>node_modules</c>, <c>.vs</c> and
+    /// <c>.idea</c> show dimmed with what is in them, as in the folder view, even when they hold items: a plain SDK
+    /// project's default globs take all of <c>node_modules</c>, which showed at full strength (M57).
+    /// </summary>
+    private static List<ExplorerNode> Build(FolderBuilder folder, string projectPath, bool mutesOnDemand, bool muted)
     {
         var nodes = new List<(int Order, ExplorerNode Node)>();
         // At the project's root, Properties (My Project) and wwwroot come first, then the other folders by name.
@@ -501,13 +645,15 @@ public static class SolutionTree
         int First(FolderBuilder f) => atRoot && Array.FindIndex(s_projectFoldersFirst, n => s_names.Equals(n, f.Name)) is >= 0 and var at ? at : s_projectFoldersFirst.Length;
         foreach (var child in folder.Folders.Values.OrderBy(First).ThenBy(f => f.Name, Order))
         {
+            var childMuted = muted || (mutesOnDemand && IsOnDemandName(child.Name));
             nodes.Add((child.Order, new ExplorerNode("d:" + child.Path, ExplorerNodeKind.Folder, child.Name)
             {
                 Path = child.Path,
                 ProjectPath = projectPath,
                 Icon = "folder",
                 IsExcluded = child.Excluded,
-                Children = Build(child, projectPath),
+                IsMuted = childMuted,
+                Children = Build(child, projectPath, mutesOnDemand, childMuted),
             }));
         }
 
@@ -527,6 +673,7 @@ public static class SolutionTree
                 Icon = FileIcon(file.Name),
                 IsLinked = file.Linked,
                 IsExcluded = file.Excluded,
+                IsMuted = muted,
                 Children = nested.TryGetValue(file.Name, out var children) ? [.. children.Select(File)] : [],
             };
 
