@@ -55,10 +55,17 @@ public sealed class DiffCommandTests
         }
 
         Assert.True(sent);
-        Assert.True(SingleInstance.MayBeListening(name));
         var request = await received.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Equal("diff", request.Command);
         Assert.Equal(["left.txt", "right.txt"], request.Arguments);
+
+        // Still listening after each request it answers: the next listener is there before the answered one closes,
+        // so a codalus started right after one finds the shell (macOS CI, run 41251924698: the name was gone between).
+        for (var i = 0; i < 20; i++)
+        {
+            Assert.True(SingleInstance.TrySend(name, new InstanceRequest("ping", [])), $"request {i + 1} found no shell");
+            Assert.True(SingleInstance.MayBeListening(name), $"no listener right after request {i + 1}");
+        }
         Assert.NotEqual(name, SingleInstance.PipeName(Path.GetTempPath())); // one pipe per user-data folder
     }
 

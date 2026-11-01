@@ -100,36 +100,54 @@ public sealed class SingleInstance : IDisposable
 
     private async Task ListenAsync()
     {
+        NamedPipeServerStream? pipe = null;
         while (!_stop.IsCancellationRequested)
         {
-            NamedPipeServerStream? pipe = null;
             try
             {
-                pipe = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                pipe ??= Create();
                 await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
 
-                // Each client on its own: a waiting request (a merge) must not hold up the next one.
-                _ = ServeAsync(pipe);
+                // The next listener before this one is served: a served pipe closes when it has answered, and with no
+                // other instance the name went with it (the socket file on Linux and macOS, the pipe on Windows), so a
+                // codalus started just then found no shell and opened a new window (macOS CI, run 41251924698).
+                var connected = pipe;
                 pipe = null;
+                try
+                {
+                    pipe = Create();
+                }
+                finally
+                {
+                    // Each client on its own: a waiting request (a merge) must not hold up the next one.
+                    _ = ServeAsync(connected);
+                }
             }
             catch (OperationCanceledException)
             {
-                return;
+                break;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 // A second shell already listening on this name; keep trying quietly.
-                await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
-            }
-            finally
-            {
                 if (pipe is not null)
                 {
                     await pipe.DisposeAsync().ConfigureAwait(false);
+                    pipe = null;
                 }
+
+                await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
             }
         }
+
+        if (pipe is not null)
+        {
+            await pipe.DisposeAsync().ConfigureAwait(false);
+        }
     }
+
+    private NamedPipeServerStream Create() =>
+        new(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
     private async Task ServeAsync(NamedPipeServerStream pipe)
     {
