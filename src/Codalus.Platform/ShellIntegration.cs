@@ -42,16 +42,17 @@ public static class ShellIntegration
     }
 
     /// <summary>Shows a file or folder in Explorer, Finder or the default Linux file manager.</summary>
-    public static void RevealInFileManager(string path)
+    public static void RevealInFileManager(string path) => Start(RevealStartInfo(Path.GetFullPath(path), PlatformInfo.Current));
+
+    internal static ProcessStartInfo RevealStartInfo(string full, PlatformKind platform) => platform switch
     {
-        var full = Path.GetFullPath(path);
-        Start(PlatformInfo.Current switch
-        {
-            PlatformKind.Windows => Args("explorer.exe", $"/select,{full}"),
-            PlatformKind.MacOS => Args("open", "-R", full),
-            _ => Args("xdg-open", Directory.Exists(full) ? full : Path.GetDirectoryName(full) ?? full),
-        });
-    }
+        // Explorer reads its own command line and knows the switch only unquoted: ArgumentList would quote all of
+        // "/select,<path>" when the path has a space, and Explorer would open Documents instead. A Windows path can't
+        // contain a quote, so quoting the path alone is safe.
+        PlatformKind.Windows => new ProcessStartInfo("explorer.exe", $"/select,\"{full}\"") { UseShellExecute = false },
+        PlatformKind.MacOS => Args("open", "-R", full),
+        _ => Args("xdg-open", Directory.Exists(full) ? full : Path.GetDirectoryName(full) ?? full),
+    };
 
     private static ProcessStartInfo Args(string file, params string[] arguments)
     {

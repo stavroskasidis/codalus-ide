@@ -67,6 +67,13 @@ public sealed class ShellCollectionTests
         afterDispose: f => f.Shell.OnInteractive()); // the window's first frames came after its close: the listener for other processes kept the shell
 
     [AvaloniaFact]
+    public Task A_disposed_shell_whose_explorer_hears_of_an_edit_is_collected() => AssertCollectedAsync(
+        _ => Task.CompletedTask,
+        // An edit tells the Solution Explorer, through a post, which reads the file's members again 500 ms later: its
+        // timer, started just before the dispose or after it, held the shell until then (Linux CI, run 41236941035).
+        afterDispose: f => f.Shell.Explorer.OnFileChanged(Path.Combine(f.UserData, "notes.txt")));
+
+    [AvaloniaFact]
     public Task A_disposed_shell_whose_window_became_interactive_twice_is_collected() => AssertCollectedAsync(f =>
     {
         // The window's first frames, and a caller that asks again (tests do): a second listener for other processes

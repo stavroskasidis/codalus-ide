@@ -235,7 +235,7 @@ public sealed partial class ShellHost : IEditorServices
         Solutions.DesignTimeProgressChanged += (_, _) => Ui.Post(UpdateLanguageStatus);
         Languages.Diagnostics.Changed += (_, _) => ScheduleDiagnosticsStatus();
         // Once for a burst: each editor finds its project context again, in an index built for it.
-        var projectContexts = new UiDebouncer(() =>
+        var projectContexts = Debouncer(() =>
         {
             _contextIndex = null;
             ProjectContextsChanged?.Invoke(this, EventArgs.Empty);

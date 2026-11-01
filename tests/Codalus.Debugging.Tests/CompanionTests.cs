@@ -51,6 +51,7 @@ public sealed class Bag<T>
 }
 
 /// <summary>The debug companion host (M14b): debugger attributes from metadata, and dumps through ClrMD.</summary>
+[Collection(DumpTests.Name)]
 public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>
 {
     private static readonly string[] s_modules = [typeof(CompanionTests).Assembly.Location];
@@ -172,6 +173,52 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
             dumps.Dispose();
             await debug.StopAsync();
             File.Delete(dump);
+        }
+    }
+
+    [Fact]
+    public async Task A_dump_that_times_out_ends_its_own_createdump_only()
+    {
+        // Another program's createdump (a crash dump, written as this request runs): a stand-in by that name, started
+        // just before the request. Every createdump started since the request was ended with it, and that crash dump
+        // was cut short (macOS CI, run 41254533905).
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-createdump-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(folder);
+        var standIn = Path.Combine(folder, OperatingSystem.IsWindows() ? "createdump.exe" : "createdump");
+        File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "PING.EXE") : "/bin/sleep", standIn);
+        string[] standInArguments = OperatingSystem.IsWindows() ? ["-n", "120", "127.0.0.1"] : ["120"];
+        var wait = Path.Combine(Path.GetTempPath(), "codalus-dump-wait-" + Guid.NewGuid().ToString("N"));
+        var dump = Path.Combine(folder, "program.dmp");
+        using var process = Process.Start(new ProcessStartInfo("dotnet", [debuggee.Dll, "--wait-for", wait]) { UseShellExecute = false, RedirectStandardOutput = true })!;
+        Process? other = null;
+        try
+        {
+            var said = await process.StandardOutput.ReadLineAsync(TestContext.Current.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            Assert.Equal("waiting", said);
+
+            other = Process.Start(new ProcessStartInfo(standIn, standInArguments) { UseShellExecute = false, RedirectStandardOutput = true })!;
+            await Assert.ThrowsAsync<TimeoutException>(() => Dumps.CreateAsync(process.Id, dump, "mini", TimeSpan.FromMilliseconds(1), TestContext.Current.CancellationToken));
+            Assert.False(other.HasExited, "The other program's createdump was ended with this request.");
+        }
+        finally
+        {
+            if (other is not null)
+            {
+                ProcessTree.Kill(other);
+                await other.WaitForExitAsync(TestContext.Current.CancellationToken);
+                other.Dispose();
+            }
+
+            ProcessTree.Kill(process);
+            await process.WaitForExitAsync(TestContext.Current.CancellationToken);
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The timed-out request's dump, still being written.
+            }
         }
     }
 

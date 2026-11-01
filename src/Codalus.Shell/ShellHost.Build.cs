@@ -55,7 +55,7 @@ public sealed partial class ShellHost
             }
         });
         // Once for a burst of evaluations: the toolbar's startup choices and the analysis scope walk every project.
-        var runState = new UiDebouncer(() =>
+        var runState = Debouncer(() =>
         {
             UpdateRunState();
             FollowAnalysisProject();

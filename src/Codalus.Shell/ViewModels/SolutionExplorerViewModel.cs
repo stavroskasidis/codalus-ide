@@ -994,7 +994,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
                 }
                 else
                 {
-                    (_filterDebounce ??= new UiDebouncer(Refresh, TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(600))).Request();
+                    (_filterDebounce ??= _shell.Debouncer(Refresh, TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(600))).Request();
                 }
             }
         }
@@ -2069,7 +2069,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void OnFileChanged(string path)
     {
         _changedFiles.Add(path);
-        (_fileChanges ??= new UiDebouncer(ApplyFileChanges, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2))).Request();
+        (_fileChanges ??= _shell.Debouncer(ApplyFileChanges, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(2))).Request();
     }
 
     private readonly HashSet<string> _changedFiles = new(SolutionService.PathComparer);
