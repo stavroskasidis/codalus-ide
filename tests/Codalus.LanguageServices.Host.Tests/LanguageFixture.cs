@@ -181,3 +181,11 @@ public sealed class UntrustedLanguageFixture : LanguageFixture
 {
     protected override bool Trusted => false;
 }
+
+/// <summary>samples/VisualBasic opened without trust: its files belong to no loaded project, as before their projects load.</summary>
+public sealed class UntrustedVisualBasicFixture : LanguageFixture
+{
+    protected override bool Trusted => false;
+
+    protected override (string Sample, string Solution, int Projects) Sample => ("VisualBasic", "VisualBasic.slnx", 4);
+}

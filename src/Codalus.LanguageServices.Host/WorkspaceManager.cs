@@ -544,7 +544,7 @@ internal sealed class WorkspaceManager : IDisposable
                 solution = solution.RemoveDocument(miscId).WithDocumentText(ids, open.Text, PreservationMode.PreserveIdentity);
                 _open[path] = open with { MiscId = null };
             }
-            else if (ids.Length == 0 && open.MiscId is null)
+            else if (ids.Length == 0 && open.MiscId is null && FitsMiscellaneous(path))
             {
                 var id = DocumentId.CreateNewId(_miscId, path);
                 solution = solution.AddDocument(id, Path.GetFileName(path), open.Text, filePath: path);
@@ -557,6 +557,16 @@ internal sealed class WorkspaceManager : IDisposable
 
     private ImmutableArray<DocumentId> ProjectDocumentIds(Solution solution, string path) =>
         [.. solution.GetDocumentIdsWithFilePath(path).Where(id => id.ProjectId != _miscId && solution.ContainsDocument(id))];
+
+    /// <summary>
+    /// Whether an open file no loaded project has goes into Miscellaneous Files, a C# project: not a Visual Basic file,
+    /// which it would parse as C# (no types for the navigation bar, C# errors). Such a file is read on its own
+    /// (<see cref="IsVisualBasic"/>).
+    /// </summary>
+    private static bool FitsMiscellaneous(string path) => !IsVisualBasic(path);
+
+    /// <summary>A Visual Basic source file.</summary>
+    public static bool IsVisualBasic(string path) => path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Razor and XAML files are additional documents: the editor's text drives their source generators (ADR 0023, 0047).</summary>
     public static bool IsAdditionalText(string path) => Razor.RazorFiles.IsRazor(path) || Xaml.XamlContext.IsXaml(path);
@@ -628,7 +638,7 @@ internal sealed class WorkspaceManager : IDisposable
             {
                 solution = solution.WithDocumentText(ids, sourceText, PreservationMode.PreserveIdentity);
             }
-            else
+            else if (FitsMiscellaneous(path))
             {
                 miscId = DocumentId.CreateNewId(_miscId, path);
                 solution = solution.AddDocument(miscId, Path.GetFileName(path), sourceText, filePath: path);
