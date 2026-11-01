@@ -256,8 +256,10 @@ public sealed partial class ShellHost
             return;
         }
 
-        await OpenTextFileAsync(file(solution.Directory), template).ConfigureAwait(true);
-        Explorer.RefreshDisk();
+        // The watcher leaves .codalus out: its folder, and the workspace folder that may have it new, are listed again.
+        var path = file(solution.Directory);
+        await OpenTextFileAsync(path, template).ConfigureAwait(true);
+        Explorer.OnFilesChanged([solution.Directory, Path.GetDirectoryName(path)!]);
     }
 
     /// <summary>

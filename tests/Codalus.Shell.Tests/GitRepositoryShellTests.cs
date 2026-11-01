@@ -190,15 +190,22 @@ public sealed class GitRepositoryShellTests
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitRepositoryView>().Any());
         Assert.Same(main, vm.Selected);
 
-        // The filter keeps what matches, with its folders open; clearing it brings the remembered state back.
-        vm.Filter = "sign";
+        // The filter keeps what matches, with its folders open; clearing it brings the remembered state back. It filters
+        // after a pause, off the UI thread (M57).
+        async Task FilterAsync(string text)
+        {
+            vm.Filter = text;
+            await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
+        }
+
+        await FilterAsync("sign");
         repository = vm.Roots[0].Children.Single();
         Assert.Equal(["feature"], Texts(repository.Children));
         Assert.True(repository.Children[0].IsExpanded);
-        vm.Filter = "v1";
+        await FilterAsync("v1");
         Assert.Equal(["tags"], Texts(vm.Roots[0].Children.Single().Children));
         Assert.True(vm.Roots[0].Children.Single().Children[0].IsExpanded);
-        vm.Filter = string.Empty;
+        await FilterAsync(string.Empty);
         Assert.False(vm.Roots[0].Children.Single().Children[4].IsExpanded);
     }
 

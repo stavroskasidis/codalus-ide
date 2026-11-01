@@ -27,6 +27,48 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
     private int Line(string marker) => DebuggeeFixture.Line(fixture.Program, marker);
 
     [Fact]
+    public async Task A_func_eval_that_times_out_logs_every_threads_stack_before_its_abort()
+    {
+        // The diagnostic for DataTipDebuggerTests' throwing getter, which stalls on Windows after its catch handler is
+        // found (docs/ci-flakes.md, runs 41084559512 and 41251924698): what the eval thread waits on, and where the others are.
+        var logs = Directory.CreateTempSubdirectory("codalus-clr-dap-").FullName;
+        try
+        {
+            await using (var adapter = await DebugAdapter.StartAsync(Adapter() with { Environment = new Dictionary<string, string> { ["CODALUS_CLR_DEBUGGER_LOG"] = logs } }, Ct))
+            {
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr"), s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.SetBreakpointsAsync(fixture.Program, [new SourceBreakpoint(Line("first"))], Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+                var stop = await events.StoppedAsync();
+                var top = (await adapter.StackTraceAsync(stop.ThreadId!.Value, 1, Ct)).StackFrames[0];
+
+                // Sleep(-1) never returns: the eval times out after 5 s, and the session aborts it. (On Linux the managed wait
+                // doesn't take the abort: the eval runs on, and the program with it; TODO(issue) at CorDebugTarget.TryAbort.)
+                var error = await Assert.ThrowsAsync<DapException>(() => adapter.EvaluateAsync("System.Threading.Thread.Sleep(-1)", top.Id, "watch", Ct));
+                Assert.Contains("timed out", error.Message, StringComparison.Ordinal);
+                await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            }
+
+            var log = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(logs, "clr-dap-*.log")), Ct);
+            const string Header = "The threads before the abort, innermost frame first:";
+            Assert.True(System.Text.RegularExpressions.Regex.IsMatch(log, @"A func-eval on thread \d+ didn't return in 5 s \([^)]*abort") && log.Contains(Header, StringComparison.Ordinal), "The adapter's log:\n" + log);
+            var threads = log[(log.IndexOf(Header, StringComparison.Ordinal) + Header.Length)..];
+
+            // The eval thread: Sleep above the evaluation's frame, Main (where the program stopped) below it.
+            var evalThread = threads.Split("\n  thread ").First(t => t.Contains("[Function Evaluation]", StringComparison.Ordinal));
+            var evaluation = evalThread.IndexOf("[Function Evaluation]", StringComparison.Ordinal);
+            Assert.Contains("Sleep", evalThread[..evaluation], StringComparison.Ordinal);
+            Assert.Contains("Program", evalThread[evaluation..], StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(logs, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task A_launch_stops_on_the_first_line_and_at_breakpoints_evaluates_steps_and_ends_with_its_exit_code()
     {
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);

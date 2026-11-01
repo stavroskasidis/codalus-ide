@@ -29,6 +29,7 @@ public sealed class LineFramingTests
         var toA = new Pipe();
         await using var a = new JsonRpcConnection(toA.Reader.AsStream(), toB.Writer.AsStream(), JsonRpcFraming.NewlineDelimited) { CancelNotification = JsonRpcCancelNotification.Acp };
         var cancelled = new TaskCompletionSource();
+        var waitRead = new TaskCompletionSource();
         a.Start();
 
         // The peer, by hand: reads lines, answers "echo" at once and records the cancel of "wait".
@@ -50,6 +51,10 @@ public sealed class LineFramingTests
                     await writer.WriteAsync(Encoding.UTF8.GetBytes(answer), ct);
                     await writer.FlushAsync(ct);
                 }
+                else if (method == "wait")
+                {
+                    waitRead.TrySetResult();
+                }
                 else if (method == "$/cancel_request" && root.GetProperty("params").TryGetProperty("requestId", out _))
                 {
                     cancelled.TrySetResult();
@@ -62,6 +67,7 @@ public sealed class LineFramingTests
 
         using var stop = new CancellationTokenSource();
         var waiting = a.InvokeAsync("wait", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, stop.Token);
+        await waitRead.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken); // sent: one still queued would send nothing (M57)
         await stop.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
         await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);

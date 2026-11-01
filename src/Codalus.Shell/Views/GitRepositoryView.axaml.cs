@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
@@ -10,35 +11,76 @@ namespace Codalus.Shell.Views;
 
 /// <summary>
 /// The Git Repository document: a double-click or Enter on a branch checks it out (a pull request opens, a message's
-/// action runs); right-click, Shift+F10 or the Menu key opens a node's menu; F2 and Delete rename and delete a branch;
-/// the history beside the tree is the selected ref's (<see cref="GitHistoryView"/>).
+/// action runs), on a group or folder expands or collapses it, and the rest of a tree's keys work as in Git Changes
+/// (<see cref="TreeRows"/>); right-click, Shift+F10 or the Menu key opens a node's menu; F2 and Delete rename and delete a
+/// branch; the history beside the tree is the selected ref's (<see cref="GitHistoryView"/>). The view tells its view
+/// model whether it's shown: a document behind another tab reads nothing when git changes (M57).
 /// </summary>
 public sealed partial class GitRepositoryView : UserControl, IPaneView
 {
+    private GitRepositoryViewModel? _attached;
+
     public GitRepositoryView()
     {
         InitializeComponent();
-        Tree.DoubleTapped += (_, e) =>
+        TreeRows.Attach(Tree, () => ViewModel, row =>
         {
-            if (NodeAt(e.Source) is { } node && node.Children.Count == 0)
+            if (row is not GitRepositoryRow node)
             {
-                Activate(node);
-                e.Handled = true;
+                return false;
             }
-        };
+
+            Activate(node.Node);
+            return true;
+        });
         Tree.AddHandler(KeyDownEvent, OnTreeKeyDown, RoutingStrategies.Tunnel);
         Tree.ContextRequested += OnContextRequested;
+        ShownTracker.Track(this); // reads git only while shown (M57)
+        DataContextChanged += (_, _) => Attach(this.IsAttachedToVisualTree());
+
+        // Back in view (a tab switch builds the view again, or shows it): the selected row in view, as it was left. A view
+        // out of the tree hears nothing (Dock builds a document's view again, and the old one would stay subscribed).
+        AttachedToVisualTree += (_, _) =>
+        {
+            Attach(listen: true);
+            Dispatcher.UIThread.Post(RevealSelected, DispatcherPriority.Loaded);
+        };
+        DetachedFromVisualTree += (_, _) => Attach(listen: false);
     }
 
     private GitRepositoryViewModel? ViewModel => DataContext as GitRepositoryViewModel;
 
     public void FocusPrimary() => Tree.Focus();
 
-    private static GitRepositoryNode? NodeAt(object? source) =>
-        (source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true)?.DataContext as GitRepositoryNode;
+    private void Attach(bool listen)
+    {
+        if (_attached is not null)
+        {
+            _attached.RevealRequested -= OnRevealRequested;
+        }
+
+        _attached = listen ? ViewModel : null;
+        if (_attached is not null)
+        {
+            _attached.RevealRequested += OnRevealRequested;
+        }
+    }
+
+    private void OnRevealRequested(GitRepositoryRow row) => TreeRows.Reveal(Tree, row, focus: Tree.IsKeyboardFocusWithin);
+
+    private void RevealSelected()
+    {
+        if (ViewModel?.SelectedRow is { } row && this.IsAttachedToVisualTree())
+        {
+            Tree.ScrollIntoView(row);
+        }
+    }
+
+    private static GitRepositoryNode? NodeAt(object? source) => (TreeRows.RowAt(source) as GitRepositoryRow)?.Node;
 
     private void Activate(GitRepositoryNode node) => _ = ViewModel?.ActivateAsync(node);
 
+    /// <summary>The document's own keys (the tree's are <see cref="TreeRows"/>'): F2, Delete (Cmd+Backspace on macOS), Shift+F10 and the Menu key.</summary>
     private void OnTreeKeyDown(object? sender, KeyEventArgs e)
     {
         if (ViewModel is not { Selected: { } node } vm)
@@ -49,9 +91,6 @@ public sealed partial class GitRepositoryView : UserControl, IPaneView
         var mac = OperatingSystem.IsMacOS();
         switch (e.Key)
         {
-            case Key.Enter when node.Children.Count == 0:
-                Activate(node);
-                break;
             case Key.F2 when node.Branch is { IsRemote: false } && e.KeyModifiers == KeyModifiers.None:
                 _ = vm.RunOnNodeAsync("git.renameBranch", node);
                 break;
@@ -61,7 +100,7 @@ public sealed partial class GitRepositoryView : UserControl, IPaneView
                 break;
             case Key.F10 when e.KeyModifiers == KeyModifiers.Shift:
             case Key.Apps:
-                OpenMenu(node, Tree.ContainerFromItem(node) as Control ?? Tree, under: true);
+                OpenMenu(node, vm.SelectedRow is { } row ? Tree.ContainerFromItem(row) as Control ?? Tree : Tree, under: true);
                 break;
             default:
                 return;
@@ -78,8 +117,7 @@ public sealed partial class GitRepositoryView : UserControl, IPaneView
         }
 
         vm.Selected = node;
-        node.IsSelected = true;
-        OpenMenu(node, (e.Source as Visual)?.FindAncestorOfType<TreeViewItem>(includeSelf: true) ?? (Control)Tree, under: !e.TryGetPosition(Tree, out _));
+        OpenMenu(node, (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) ?? (Control)Tree, under: !e.TryGetPosition(Tree, out _));
         e.Handled = true;
     }
 

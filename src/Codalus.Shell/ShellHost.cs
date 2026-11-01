@@ -1265,6 +1265,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             Languages.DisposeAsync().AsTask(),
             Solutions.DisposeAsync().AsTask(),
             DisposePluginsAsync(),
+            EnvironmentProbeEndedAsync(),
             ShutdownWork?.Invoke() ?? Task.CompletedTask).ConfigureAwait(false);
         if (Remote is { } remote)
         {
@@ -1274,6 +1275,10 @@ public sealed partial class ShellHost : IAsyncDisposable
 
         await designers.ConfigureAwait(false);
         Workbench.Dispose();
+
+        // Cancelled with the lifetime above; it needs no UI thread, so the exit can wait for this there.
+        async Task EnvironmentProbeEndedAsync() =>
+            await _environmentProbe.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
 
         async Task DisposePluginsAsync()
         {

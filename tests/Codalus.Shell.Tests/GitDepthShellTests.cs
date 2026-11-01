@@ -122,7 +122,7 @@ public sealed class GitDepthShellTests
         Assert.Equal("Ada Tester (Committer)", commit.ViewModel.Committer);
         Assert.Equal("Changes (1)", commit.ViewModel.ChangesHeader);
         Assert.Equal(["src/Greetings/Greeter.cs"], commit.ViewModel.Files.Select(file => file.RelativePath));
-        Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Tree.Single().Name);
+        Assert.Equal($"src{Path.DirectorySeparatorChar}Greetings", commit.ViewModel.Changes.Roots.Single().Text);
         Assert.False(commit.ViewModel.CanExplain); // AI is off
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitCommitView>().Any(v => v.DiffView is { } d && d.RightText.Contains("Howdy from", StringComparison.Ordinal)), describe: () => GitRepositoryShellTests.CommitTabState(f));
         var diff = f.Window.GetVisualDescendants().OfType<GitCommitView>().Single().DiffView!;
@@ -181,8 +181,8 @@ public sealed class GitDepthShellTests
         Assert.Equal($"{initial.ShortHash} → {greetings.ShortHash}", compare.Title);
         Assert.True(compare.ViewModel.ComparesCommits);
         Assert.False(compare.ViewModel.CanShowHistory);
-        Assert.Equal(["src/Greetings/Greeter.cs"], compare.ViewModel.Items.Select(r => r.Status.RelativePath));
-        Assert.Equal('M', compare.ViewModel.Items.Single().Status.Index);
+        Assert.Equal(["src/Greetings/Greeter.cs"], compare.ViewModel.Files.Select(r => r.Status.RelativePath));
+        Assert.Equal('M', compare.ViewModel.Files.Single().Status.Index);
 
         // One commit: Compare with Previous is the same comparison, so the same document; the first commit has no parent.
         history.Selected = greetings;
