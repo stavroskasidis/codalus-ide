@@ -27,6 +27,12 @@ internal sealed class Releases(SiteOptions options)
     public string AssetUrl(string suffix) =>
         Offered is { } version ? $"{ReleasesUrl}/download/v{version}/{FileName(suffix)}" : ReleasesUrl;
 
+    /// <summary>
+    /// The newest stable release's Arch Linux PKGBUILD (<c>aur-codalus-bin-&lt;version&gt;.zip</c>, <c>eng/aur.sh</c>; nightlies
+    /// have none), which <c>install-arch.sh</c> builds and installs.
+    /// </summary>
+    public string ArchPackageUrl => Stable is { } version ? $"{ReleasesUrl}/download/v{version}/aur-codalus-bin-{version}.zip" : ReleasesUrl;
+
     private static string? Version(string? tag) =>
         tag is null ? null : tag.StartsWith('v') ? tag[1..] : throw new SiteException($"a release tag starts with v: {tag}");
 }

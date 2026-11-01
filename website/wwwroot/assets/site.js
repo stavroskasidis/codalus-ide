@@ -13,6 +13,18 @@
     return null;
   };
 
+  // The visitor's Linux distribution, when the browser says: Ubuntu's and Fedora's builds of Firefox name it in their
+  // user agent ("X11; Ubuntu; Linux x86_64"). Other browsers don't, and the Download page shows its first.
+  const detectDistro = () => {
+    const agent = navigator.userAgent || "";
+    if (/\b(ubuntu|debian|mint)\b/i.test(agent)) return "debian";
+    if (/\b(fedora|red hat|centos)\b/i.test(agent)) return "fedora";
+    if (/suse/i.test(agent)) return "opensuse";
+    return null;
+  };
+
+  const hash = decodeURIComponent(location.hash.slice(1));
+
   // Tabs: [data-tabs] holds a hidden [role=tablist] of buttons and its [role=tabpanel]s (all visible without script).
   for (const root of document.querySelectorAll("[data-tabs]")) {
     const list = root.querySelector('[role="tablist"]');
@@ -41,23 +53,35 @@
         else if (e.key === "End") { e.preventDefault(); select(tabs.length - 1, true); }
       });
     });
-    const wanted = root.dataset.tabsHash !== undefined
-      ? location.hash.slice(1) || (root.dataset.tabsDetect !== undefined ? detectOs() : null)
-      : null;
-    const initial = Math.max(0, tabs.findIndex((tab) => tab.dataset.key === wanted));
+    // The tab a key names: its own, or the one whose panel holds the element with that id, or a nested tab with that
+    // key (download/#zypper and download/#fedora open Linux, then its distribution).
+    const tabFor = (key) => {
+      if (!key) return -1;
+      const own = tabs.findIndex((tab) => tab.dataset.key === key);
+      if (own >= 0) return own;
+      const target = document.getElementById(key) || root.querySelector('[role="tab"][data-key="' + CSS.escape(key) + '"]');
+      return target ? panels.findIndex((panel) => panel.contains(target)) : -1;
+    };
+    let initial = root.dataset.tabsHash !== undefined ? tabFor(hash) : -1;
+    if (initial < 0 && root.dataset.tabsDetect !== undefined) initial = tabFor(detectOs());
+    if (initial < 0 && root.dataset.tabsDetectDistro !== undefined) initial = tabFor(detectDistro());
     list.hidden = false;
     root.classList.add("is-tabbed");
-    select(initial, false);
+    select(Math.max(0, initial), false);
   }
 
+  // A hash in nested tabs (download/#zypper): the panels it's in are shown now, which moved it, so back to it. A tab's
+  // own heading (download/#linux) stays put, under the tabs.
+  const anchored = hash && document.getElementById(hash);
+  if (anchored && anchored.closest("[data-tabs] [data-tabs]")) anchored.scrollIntoView();
+
   // "Download for <OS>" on the home page: the visitor's recommended file from the release (data-<os>, set when the
-  // site knows a release), else the Download page at that OS's tab.
+  // site knows a release), else the Download page at that OS's tab. Linux has no file: its tab asks for the distribution.
   const os = detectOs();
   const osNames = { windows: "Windows", macos: "macOS", linux: "Linux" };
-  const arm64 = /aarch64|arm64/i.test(navigator.userAgent || "");
   for (const link of document.querySelectorAll("[data-download-os]")) {
     if (!os) continue;
-    const file = (os === "linux" && arm64 && link.dataset.linuxArm64) || link.dataset[os];
+    const file = link.dataset[os];
     link.href = file || link.href.split("#")[0] + "#" + os;
     const label = link.querySelector("[data-label]");
     if (label) label.textContent = "Download for " + osNames[os];

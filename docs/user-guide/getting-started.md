@@ -30,17 +30,44 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 | Windows | `codalus-<version>-win-x64.zip` | A portable build: unzip anywhere and run `codalus.exe`. It doesn't update itself. |
 | macOS | `codalus-<version>-osx-arm64.pkg` | Open it and choose to install for you (`~/Applications`) or for every user (`/Applications`). The app belongs to you either way, and updates itself. |
 | macOS | `codalus-<version>-osx-arm64.app.zip` | The app on its own: unzip it and move it where you like. |
-| Linux | `.AppImage` | `chmod +x` the file and run it. It updates itself. |
-| Linux | `.deb` and `.rpm` | Install from our apt or dnf repository, so that they update with the system (the instructions are on the [download page](https://codalus.dev/download/#linux)), or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`, `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |
-| Linux (openSUSE) | `.rpm` | `zypper` installs from the same rpm repository (the [download page](https://codalus.dev/download/#zypper) has the commands), so it updates with the system. |
-| Linux (Arch) | AUR | `codalus-bin`: `yay -S codalus-bin`, or `makepkg -si` in a clone of `https://aur.archlinux.org/codalus-bin.git`. Each stable release also has its PKGBUILD (`aur-codalus-bin-<version>.zip`). |
-| Linux | `.tar.gz` | Extract it and run `codalus/codalus`. |
+| Linux (Debian, Ubuntu, Mint) | `.deb` | Install from our apt repository (the [download page](https://codalus.dev/download/#apt) has the commands), so it updates with the system, or install the file: `sudo apt install ./codalus-<version>-linux-x64.deb`. |
+| Linux (Fedora, RHEL) | `.rpm` | Install from our dnf repository ([commands](https://codalus.dev/download/#dnf)), so it updates with the system, or install the file: `sudo dnf install ./codalus-<version>-linux-x64.rpm`. |
+| Linux (openSUSE) | `.rpm` | `zypper` installs from the same rpm repository ([commands](https://codalus.dev/download/#zypper)), so it updates with the system. |
+| Linux (Arch, Manjaro, EndeavourOS) | `codalus-bin` | Run the install command ([below](#arch-linux)) as yourself: it builds and installs the package with pacman. Run it again to update. |
+| Linux (any other) | `.AppImage` | One file that runs on any distribution and updates itself; make it executable, then open it ([below](#the-appimage)). |
+| Linux | `.tar.gz` | Extract it and run `codalus/codalus`. It doesn't update itself. |
+
+The packages (and the Arch Linux install script's) add Codalus IDE to the applications menu and `codalus` to your `PATH`. The AppImage and the `.tar.gz` don't.
 
 **The installers aren't code-signed yet**, so the first start asks for confirmation:
 - **Windows** (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
 - **macOS** (Gatekeeper, "Apple could not verify…"): close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
 
 From a Windows terminal, `codalus` runs the installed app and waits for it, so `git config core.editor "codalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
+
+### Arch Linux
+
+```bash
+curl -fsSL https://codalus.dev/install-arch.sh | bash
+```
+
+The script ([read it](https://codalus.dev/install-arch.sh)) downloads the newest stable release's PKGBUILD (`aur-codalus-bin-<version>.zip`, on each release), builds it with `makepkg`, which downloads the release's `.tar.gz` and checks its SHA-256, and installs the package, `codalus-bin`, with pacman. Run it as yourself, not as root: pacman asks before it installs, and `sudo` asks for your password. It installs `fakeroot` first when `makepkg` doesn't have it.
+
+- **Updating**: run the same command again. `pacman -Syu` doesn't update it, since no repository serves it; when a release is out, Codalus IDE says so with the command, and **Copy Command** copies it.
+- **Options**, after `bash -s --`: `--version 0.10.0` installs that release, and `--noconfirm` doesn't ask (where there's no terminal to ask on, it's needed).
+- **Removing**: `sudo pacman -R codalus-bin`.
+- **By hand**: unzip the release's `aur-codalus-bin-<version>.zip` and run `makepkg -si` in its folder.
+
+The package isn't on the AUR yet, while the AUR's registrations are closed; the PKGBUILD is the one it will carry.
+
+### The AppImage
+
+1. **Make it executable**: in GNOME Files, right-click it, choose Properties and turn on **Executable as Program**; in Dolphin, Properties → Permissions → **Is executable**. Or in a terminal: `chmod +x codalus-<version>-linux-x64.AppImage`.
+2. **Open it**: double-click it, or run `./codalus-<version>-linux-x64.AppImage`.
+
+It needs FUSE, which desktop installations have: the `fuse3` package. (It doesn't need the older `libfuse2` that some AppImages ask for: its runtime has FUSE built in.) Where FUSE isn't available, in a container or a minimal installation, it stops with "Cannot mount AppImage": start it with `--appimage-extract-and-run`, or set `APPIMAGE_EXTRACT_AND_RUN=1`, and it runs from a temporary folder instead.
+
+Updates replace the file where it is, so put it where it will stay (`~/Applications`, say) before the first start. [System integration](settings.md#system-integration)'s Open with Codalus IDE starts the file from where it was when you turned it on.
 
 ### The command line
 

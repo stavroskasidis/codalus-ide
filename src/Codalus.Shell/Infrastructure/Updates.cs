@@ -35,6 +35,11 @@ internal static class Updates
         var installed = Velopack.Locators.VelopackLocator.IsCurrentSet && new UpdateManager(new SignedUpdateSource(store)).IsInstalled;
         var systemPackage = OperatingSystem.IsLinux() && AppContext.BaseDirectory.StartsWith("/opt/codalus/", StringComparison.Ordinal);
         var install = new InstallInfo(ShellInfo.Version, InstallInfo.KindOf(ShellInfo.Version, installed, systemPackage));
+        if (systemPackage && InstallInfo.IsPacmanPackage("/var/lib/pacman/local"))
+        {
+            install = install with { UpdateCommand = InstallInfo.ArchInstallCommand }; // install-arch.sh's codalus-bin
+        }
+
         if (installed && Velopack.Locators.VelopackLocator.Current.Channel is { Length: > 0 } channel && channel.StartsWith(Rid + "-", StringComparison.Ordinal))
         {
             install = install with { DefaultChannel = channel[(Rid.Length + 1)..] }; // the installed channel, <rid>-<kind>
