@@ -150,8 +150,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 // server's runtime refuses it (netcoredbg is attached) and keeps running the same process.
                 var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
                 await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-                var offset = editor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-                editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+                var offset = editor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
                 await f.RunAsync("run.applyCodeChanges");
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
@@ -270,8 +270,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // this edit's. A page slow to answer says it later.)
         var counterEditor = await f.Shell.OpenFileAsync(counter, preview: false, null);
         await ShellFixture.PumpUntil(() => counterEditor?.Controller is not null);
-        offset = counterEditor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-        counterEditor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+        offset = counterEditor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+        counterEditor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
         await f.RunAsync("run.applyCodeChanges");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text
             .Contains("(server and browser)", StringComparison.Ordinal), seconds: 120, describe: () => Diagnostics(f));
