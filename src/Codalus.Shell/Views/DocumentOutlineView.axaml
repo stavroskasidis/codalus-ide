@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
              xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.DocumentOutlineView"
              x:DataType="vm:DocumentOutlineViewModel">
@@ -10,16 +11,16 @@
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" />
     <!-- The outline's tree as rows (M56): a list box creates only the rows in view. It scrolls to the caret's symbol
          itself, not after every change to the rows. -->
-    <ListBox x:Name="List" ItemsSource="{Binding Rows}" AutoScrollToSelectedItem="False" Background="Transparent" AutomationProperties.Name="{l:T documentOutline.documentOutline}">
-      <ListBox.Styles>
+    <views:TreeRowsList x:Name="List" ItemsSource="{Binding Rows}" AutoScrollToSelectedItem="False" Background="Transparent" AutomationProperties.Name="{l:T documentOutline.documentOutline}">
+      <views:TreeRowsList.Styles>
         <Style Selector="ListBoxItem" x:DataType="vm:SymbolNodeViewModel">
           <Setter Property="Padding" Value="0" />
           <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
           <Setter Property="VerticalContentAlignment" Value="Center" />
           <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
         </Style>
-      </ListBox.Styles>
-      <ListBox.ItemTemplate>
+      </views:TreeRowsList.Styles>
+      <views:TreeRowsList.ItemTemplate>
         <DataTemplate x:DataType="vm:SymbolNodeViewModel">
           <Panel>
             <Border Classes="selectionPill" IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
@@ -35,7 +36,7 @@
             </DockPanel>
           </Panel>
         </DataTemplate>
-      </ListBox.ItemTemplate>
-    </ListBox>
+      </views:TreeRowsList.ItemTemplate>
+    </views:TreeRowsList>
   </DockPanel>
 </UserControl>

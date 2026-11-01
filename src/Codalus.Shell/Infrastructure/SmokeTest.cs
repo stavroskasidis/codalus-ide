@@ -1079,7 +1079,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             shell.Trust.Trust(folder);
             await shell.OpenFolderWorkspaceAsync(folder).ConfigureAwait(true);
             await WaitAsync(() => shell.Solutions.Solution is { IsFolder: true } && shell.Explorer.IsFolderView && shell.Explorer.Rows.Any(r => r.Name == "README.md"), "the folder view lists the folder", 120).ConfigureAwait(true);
-            shell.Explorer.Reveal("f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj"));
+            var toolProject = "f:" + Path.Combine(folder, "src", "Tool", "Tool.csproj");
+            shell.Explorer.Reveal(toolProject);
+            await WaitAsync(() => shell.Explorer.Selected?.Id == toolProject, "the folder view reveals Tool.csproj once the folders down to it are listed", 60).ConfigureAwait(true);
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-folder-view.png");
 

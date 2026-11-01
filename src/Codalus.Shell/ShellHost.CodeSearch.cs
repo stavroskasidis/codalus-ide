@@ -425,7 +425,9 @@ public sealed partial class ShellHost : ICodeSearchHost
         Dictionary<string, string> open;
         lock (_snapshots)
         {
-            open = _snapshots.Where(s => !s.Key.IsReadOnly).ToDictionary(s => s.Key.Path, s => s.Value.Text, SolutionService.PathComparer);
+            // TODO(issue): every open document's whole text is made a string here, on the UI thread; search the
+            // snapshots (immutable) inside the Task.Run below instead.
+            open = _snapshots.Where(s => !s.Key.IsReadOnly).ToDictionary(s => s.Key.Path, s => s.Value.Source.Text, SolutionService.PathComparer);
         }
 
         var regex = options.CreateRegex();

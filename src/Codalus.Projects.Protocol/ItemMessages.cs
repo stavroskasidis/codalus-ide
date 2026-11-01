@@ -101,7 +101,10 @@ public sealed record AddExistingItemsParams(string Project, string TargetFolder,
 /// <summary>
 /// Everything under <see cref="Path"/> (folders first), up to <see cref="MaxEntries"/> (default 20,000). With
 /// <see cref="Folders"/>, only these folders below <see cref="Path"/> are gone into; the others are listed without what
-/// is in them (Show All Files lists a folder that isn't in its project once it's expanded, as the classic IDE does).
+/// is in them (Show All Files lists a folder that isn't in its project once it's expanded, as the classic IDE does; the
+/// folder view lists each expanded folder alone, with none). <c>node_modules</c>, <c>.vs</c> and <c>.idea</c> are listed,
+/// marked <see cref="DirectoryEntry.Skipped"/>, and gone into only when <see cref="Folders"/> names them; <c>.git</c> never
+/// is (M57).
 /// </summary>
 public sealed record ListTreeParams(string Path, int? MaxEntries = null, string[]? Folders = null);
 

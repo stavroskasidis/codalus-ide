@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:views="using:Codalus.Shell.Views"
              x:Class="Codalus.Shell.Views.CoverageResultsView"
              x:DataType="vm:CoverageResultsViewModel">
   <DockPanel>
@@ -30,21 +31,21 @@
     </Grid>
     <Grid>
       <TextBlock Classes="emptyState" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
-      <ListBox x:Name="List"
-               ItemsSource="{Binding Rows}"
-               SelectedItem="{Binding Selected}"
-               IsVisible="{Binding HasCoverage}"
-               Background="Transparent"
-               AutomationProperties.Name="{l:T coverageResults.coverageResults}">
-        <ListBox.Styles>
+      <views:TreeRowsList x:Name="List"
+                          ItemsSource="{Binding Rows}"
+                          SelectedItem="{Binding Selected}"
+                          IsVisible="{Binding HasCoverage}"
+                          Background="Transparent"
+                          AutomationProperties.Name="{l:T coverageResults.coverageResults}">
+        <views:TreeRowsList.Styles>
           <Style Selector="ListBoxItem" x:DataType="vm:CoverageRowViewModel">
             <Setter Property="Padding" Value="0" />
             <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.TreeRow}" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
           </Style>
-        </ListBox.Styles>
-        <ListBox.ItemTemplate>
+        </views:TreeRowsList.Styles>
+        <views:TreeRowsList.ItemTemplate>
           <DataTemplate x:DataType="vm:CoverageRowViewModel">
             <Grid ColumnDefinitions="*,120,80,80" Margin="4,0" Background="Transparent">
               <StackPanel Orientation="Horizontal" Spacing="4" Margin="{Binding Indent}">
@@ -59,8 +60,8 @@
               <TextBlock Grid.Column="3" Text="{Binding BranchPercent}" HorizontalAlignment="Right" VerticalAlignment="Center" />
             </Grid>
           </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+        </views:TreeRowsList.ItemTemplate>
+      </views:TreeRowsList>
     </Grid>
   </DockPanel>
 </UserControl>

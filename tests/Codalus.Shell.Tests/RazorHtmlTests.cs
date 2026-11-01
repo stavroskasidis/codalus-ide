@@ -113,4 +113,131 @@ public sealed class RazorHtmlTests
             Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, null);
         }
     }
+
+    // ------------------------------------------------------------------ the HTML's sync, off the UI thread (M57)
+
+    /// <summary>A shell whose HTML server is the conformance server, logging to <c>html.log</c>, with a Razor file open.</summary>
+    private static async Task<(ShellFixture F, CodeEditorDocument Document, string Log)> RazorWithLoggingHtmlServerAsync(string text)
+    {
+        var f = ShellFixture.Create();
+        var log = Path.Combine(f.UserData, "html.log");
+        f.Shell.Workbench.LanguageServers.Register(new LanguageServiceDescriptor("html", "HTML (conformance)", [], null, () => Rpc.ProcessLaunchInfo.FromPath(EditorLargeTextTests.ConformanceServer, "--log", log))
+        {
+            Languages = ["html"],
+        });
+        var document = await OpenRazorAsync(f, text);
+        return (f, document, log);
+    }
+
+    private static async Task<CodeEditorDocument> OpenRazorAsync(ShellFixture f, string text)
+    {
+        var path = Path.Combine(f.UserData, "Page.razor");
+        if (!File.Exists(path))
+        {
+            await File.WriteAllTextAsync(path, text, TestContext.Current.CancellationToken);
+        }
+
+        var document = (CodeEditorDocument)(await f.Shell.OpenFileAsync(path, preview: false, null))!;
+        Assert.Equal(ShellHost.RazorLanguageId, document.Model.LanguageId);
+        return document;
+    }
+
+    /// <summary>What the HTML server has for <paramref name="embedded"/>'s document, once a hover after everything queued came back.</summary>
+    private static async Task<string> ServerHtmlAsync(EmbeddedRequest embedded, string log)
+    {
+        var hover = embedded.Client.HoverAsync(embedded.Uri, new Position(0, 1), TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => hover.IsCompleted);
+        await hover;
+        return await File.ReadAllTextAsync(log + ".text", TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Two projections overlap, the older one ending last: it is dropped, and the HTML server keeps the newer HTML at the
+    /// Razor file's version (M57: projected on the pool, each checked against the version already sent, ADR 0078's rule).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_projection_older_than_the_one_sent_is_dropped()
+    {
+        var (f, document, log) = await RazorWithLoggingHtmlServerAsync("<h1>One</h1>\n<p>text</p>\n");
+        await using var _ = f;
+        var model = document.Model;
+        using var gate = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Shell.ProjectRazorHtml = razor =>
+        {
+            if (razor.Contains("One", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                gate.Wait(TimeSpan.FromSeconds(30));
+            }
+
+            return RazorHtmlProjection.Project(razor);
+        };
+
+        var services = (IEditorServices)f.Shell;
+        var older = services.EmbeddedAsync(model, 2);
+        await ShellFixture.PumpUntil(() => entered.Task.IsCompleted);
+        model.Text.Replace(model.Text.Text.IndexOf("One", StringComparison.Ordinal), 3, "Two");
+        var newer = services.EmbeddedAsync(model, 2);
+        await ShellFixture.PumpUntil(() => newer.IsCompleted, seconds: 60);
+        gate.Set();
+        await ShellFixture.PumpUntil(() => older.IsCompleted);
+        Assert.NotNull(await older);
+
+        var embedded = (await newer)!;
+        Assert.Equal(RazorHtmlProjection.Project(model.Text.Text), await ServerHtmlAsync(embedded, log));
+        Assert.Equal([$"didOpen {model.Version} {model.Text.TextLength}", "hover"], File.ReadAllLines(log));
+    }
+
+    /// <summary>
+    /// A Razor file closed while its HTML is projected: the late projection opens nothing, and the file opened again gets
+    /// its own HTML (M57 review: the closed file's HTML was opened after its close, at a version the new model, counting
+    /// from 1 again, stayed below, so the server answered from the old text).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_projection_finishing_after_its_file_closed_opens_nothing()
+    {
+        var (f, document, log) = await RazorWithLoggingHtmlServerAsync("<h1>First</h1>\n<p>text</p>\n");
+        await using var _ = f;
+        var model = document.Model;
+        for (var i = 0; i < 5; i++)
+        {
+            model.Text.Insert(0, "<b>Edited</b>");
+        }
+
+        await f.Shell.SaveActiveDocumentAsync(); // so it closes without asking
+
+        using var gate = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        f.Shell.ProjectRazorHtml = razor =>
+        {
+            if (razor.Contains("Edited", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                gate.Wait(TimeSpan.FromSeconds(30));
+            }
+
+            return RazorHtmlProjection.Project(razor);
+        };
+
+        var services = (IEditorServices)f.Shell;
+        var late = services.EmbeddedAsync(model, 2);
+        await ShellFixture.PumpUntil(() => entered.Task.IsCompleted);
+        f.Shell.Layout.CloseDocument(document);
+        await ShellFixture.PumpUntil(() => !f.Shell.Layout.Documents.Contains(document));
+        gate.Set();
+        await ShellFixture.PumpUntil(() => late.IsCompleted);
+        Assert.Null(await late);
+
+        // Changed on disk while closed (another tool, a checkout), then opened again: a new model, from version 1.
+        const string Reopened = "<h1>Reopened</h1>\n<p>text</p>\n";
+        await File.WriteAllTextAsync(model.Path, Reopened, TestContext.Current.CancellationToken);
+        var reopened = await OpenRazorAsync(f, Reopened);
+        Assert.NotSame(model, reopened.Model);
+        Assert.Equal(Reopened, reopened.Model.Text.Text);
+        var embedded = await services.EmbeddedAsync(reopened.Model, 2);
+        Assert.NotNull(embedded);
+        Assert.Equal(RazorHtmlProjection.Project(Reopened), await ServerHtmlAsync(embedded, log));
+        Assert.Equal([$"didOpen {reopened.Model.Version} {Reopened.Length}", "hover"], File.ReadAllLines(log));
+    }
 }

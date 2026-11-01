@@ -9,7 +9,7 @@ using Codalus.Workbench.Localization;
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>One visible line of the Solution Explorer (the tree is flattened so the list can virtualize).</summary>
-public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject
+public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject, ITreeRow
 {
     private readonly Func<string, ProjectInfo?> _project = project ?? (_ => null);
     private ExplorerNode _node = node;
@@ -69,8 +69,11 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     /// <summary>Show All Files: on disk, not in the project (ADR 0033).</summary>
     public bool IsExcluded => _node.IsExcluded;
 
-    /// <summary>Shown dimmed: an unloaded project, or a file that isn't in the project.</summary>
-    public bool IsDimmed => _node.IsUnloaded || _node.IsExcluded;
+    /// <summary>
+    /// Shown dimmed: an unloaded project, a file that isn't in the project, or in the folder view and Show All Files a folder
+    /// listed only when it's expanded (node_modules, .vs, .idea) with what is in it, and a listing's cut row (M57).
+    /// </summary>
+    public bool IsDimmed => _node.IsUnloaded || _node.IsExcluded || _node.IsMuted;
 
     public bool HasChildren => _node.Children.Count > 0;
 
@@ -83,7 +86,6 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
             {
                 OnPropertyChanged(nameof(Icon));
                 OnPropertyChanged(nameof(Chevron));
-                OnPropertyChanged(nameof(AccessibleName));
             }
         }
     }
@@ -97,15 +99,18 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     public string? Chevron => HasChildren ? (_isExpanded ? "chevron-down" : "chevron-right") : null;
 
+    /// <summary>
+    /// The row's name for a screen reader: its expansion, level and place are its tree item's (<see cref="Views.TreeRowsList"/>,
+    /// M57), not words in its name.
+    /// </summary>
     public string AccessibleName
     {
         get
         {
-            var state = HasChildren ? (_isExpanded ? ", expanded" : ", collapsed") : string.Empty;
             var detail = _node.Detail is { } d ? " " + d : string.Empty;
             var warning = _node.IsWarning ? ", warning" : string.Empty;
             var excluded = _node.IsExcluded ? ", not in the project" : string.Empty;
-            return $"{_node.Name}{detail}{warning}{excluded}{state}";
+            return $"{_node.Name}{detail}{warning}{excluded}";
         }
     }
 }
@@ -114,7 +119,7 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 /// The Solution Explorer. The tree is rebuilt from the build host's model (<see cref="SolutionTree"/>) and shown as
 /// a flattened list; expansion and selection survive rebuilds by node id. Operations act on the selected row.
 /// Show All Files adds the files on disk that aren't items (ADR 0033), and in folder mode the folder view shows the
-/// folder as it is on disk. TODO(issue): multi-selection. (Open documents whose files were deleted are flagged in their tabs.)
+/// folder as it is on disk, each folder listed once it's expanded (M57). TODO(issue): multi-selection. (Open documents whose files were deleted are flagged in their tabs.)
 /// </summary>
 #pragma warning disable CA1001 // The disk listings' token sources are only cancelled (a newer listing, Show All Files off, the solution closed), never waited on: no handle to free.
 public sealed class SolutionExplorerViewModel : ObservableObject
@@ -148,11 +153,21 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private CancellationTokenSource _diskCancellation = new();
     private string? _syncWhenListed; // Sync with Active Document's file, once the listings that can bring it have come
 
-    // The folder view: the workspace folder's files on disk.
-    private IReadOnlyList<DirectoryEntry> _folderEntries = [];
-    private bool _folderQueued;
-    private int _folderGeneration;
+    // The folder view (see LoadFoldersAsync): each listed folder's own listing, one level, by folder. The workspace folder
+    // and the expanded folders are listed; a collapsed folder keeps its last listing until the workspace closes.
+    private readonly Dictionary<string, FolderListing> _folders = new(SolutionService.PathComparer);
+    private readonly HashSet<string> _folderQueue = new(SolutionService.PathComparer);
+    private HashSet<string>? _folderBatch; // the folders of the batch on its way: one at a time, the queue waits for it
+    private int _folderGeneration; // the workspace closed or the solution view shown: the batch on its way is stale
+    private CancellationTokenSource _folderCancellation = new();
+    private string? _folderRoot; // the workspace folder the listings are of
+    private readonly HashSet<FolderListing> _folderStandIns = new(ReferenceEqualityComparer.Instance); // a failed listing's empty one
     private bool _rootIsFolderView;
+
+    // The search box's listing of the whole workspace folder, kept while the box has text (see LoadFolderSearchAsync).
+    private Dictionary<string, FolderListing>? _folderSearch;
+    private int _folderSearchGeneration;
+    private bool _folderSearchLoading;
 
     /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
     private ProjectInfo? ProjectInfoOf(string path) => _shell.Solutions?.Projects.GetValueOrDefault(path);
@@ -181,6 +196,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         };
         solutions.CompilerInputsChanged += (_, _) => QueueRefresh();
         solutions.SolutionChanged += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnSolutionChangedForDisk);
+        solutions.HostRestarted += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(OnHostRestarted);
         solutions.ProjectChanged += (_, project) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             // An evaluation can change the folders that hold the project's items: its folder is listed again (and only its).
@@ -254,10 +270,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFolderView));
         if (IsFolderView)
         {
-            QueueFolderRefresh();
+            QueueShownFolders();
         }
         else
         {
+            StopFolderListings(); // what the batch on its way brings is stale; the listings stay for the folder view's return
             Refresh();
         }
     }
@@ -272,8 +289,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (_shell.Solutions.Solution is not { } solution)
         {
             ForgetListings();
-            _folderCancellation.Cancel();
-            _folderEntries = [];
+            ForgetFolderListings();
             _folderView = false;
             _analyzersFound.Clear();
             return;
@@ -288,22 +304,52 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             _diskFolders.Remove(gone);
         }
 
-        if (IsFolderView)
+        // The folder view lists nothing again for a new set of projects (Load Project), whose marks come with the tree's
+        // build the solution's change queues; another workspace folder starts over.
+        if (IsFolderView && !SolutionService.PathComparer.Equals(_folderRoot, System.IO.Path.TrimEndingDirectorySeparator(solution.Directory)))
         {
-            QueueFolderRefresh();
+            QueueShownFolders();
         }
     }
 
     /// <summary>
-    /// Folders changed on disk (the build host's watcher, which leaves out bin and obj): the folder view lists the folder
-    /// again, and Show All Files the projects whose folders hold them, or with <paramref name="rescan"/> (the watcher
-    /// dropped events, and reports only the folders it watches) every project.
+    /// The build host restarted and opened the workspace folder again: the same folder, so its change lists nothing. What
+    /// changed on disk while the build host was down went unseen, and a listing that failed meanwhile left its folder empty,
+    /// with no chevron to expand it again by. The failed listings' stand-ins go (their folders show "Loading…" and are
+    /// listed once they're shown), and every folder listed and shown is listed again, as for a rescan. Nothing listed the
+    /// folder view again until a file changed in the folder concerned (M57). (Show All Files lists each project again as it
+    /// loads.)
+    /// </summary>
+    private void OnHostRestarted()
+    {
+        foreach (var folder in _folders.Where(f => _folderStandIns.Contains(f.Value)).Select(f => f.Key).ToList())
+        {
+            _folders.Remove(folder);
+        }
+
+        _folderStandIns.Clear();
+        if (IsFolderView)
+        {
+            QueueFolderListings([.. _folders.Keys.Where(IsShownFolder)]);
+            QueueShownFolders();
+        }
+    }
+
+    /// <summary>
+    /// Folders changed on disk (the build host's watcher, which leaves out bin and obj): the folder view lists again the
+    /// folders listed and shown among them, and Show All Files the projects whose folders hold them; with
+    /// <paramref name="rescan"/> (the watcher dropped events, and reports only the folders it watches), every folder listed
+    /// and shown, and every project.
     /// </summary>
     public void OnFilesChanged(IReadOnlyList<string> directories, bool rescan = false)
     {
         if (IsFolderView)
         {
-            QueueFolderRefresh();
+            // A folder not listed, or collapsed, isn't listed again: it is once it's expanded. One whose first listing is on
+            // its way is, with the next batch: that listing may be older than the change (M57).
+            QueueFolderListings(rescan
+                ? [.. ListedOrListingFolders().Where(IsShownFolder)]
+                : [.. directories.Select(System.IO.Path.TrimEndingDirectorySeparator).Where(d => (_folders.ContainsKey(d) || IsFolderListing(d)) && IsShownFolder(d))]);
         }
 
         if (_showAllFiles)
@@ -323,14 +369,19 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Lists the disk again, when Show All Files or the folder view needs it: after a build of <paramref name="project"/>
-    /// (with the projects it references, built first; null: of every project), a new tasks.json…
+    /// Lists the disk again, when Show All Files or the folder view needs it, after a build of <paramref name="project"/>
+    /// (with the projects it references, built first; null: of every project). The folder view lists again the folders
+    /// listed and shown that the watcher leaves out (bin, obj, .vs, .idea, .codalus, and what is in them) and the built
+    /// projects' folders, which a build's new bin or obj changes unseen, as Show All Files lists the projects (M57).
+    /// TODO(issue): a build outside the IDE (a terminal's, a task's) lists none of them again, here as in Show All Files.
     /// </summary>
     public void RefreshDisk(string? project = null)
     {
         if (IsFolderView)
         {
-            QueueFolderRefresh();
+            IEnumerable<string> projects = project is null ? _shell.Solutions.Projects.Keys : WithReferences(_shell.Solutions.Projects, project);
+            var built = projects.Select(p => System.IO.Path.GetDirectoryName(p)!).ToHashSet(SolutionService.PathComparer);
+            QueueFolderListings([.. ListedOrListingFolders().Where(f => IsShownFolder(f) && (built.Contains(f) || IsUnwatched(f)))]);
         }
 
         if (_showAllFiles)
@@ -392,10 +443,130 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         QueueDiskLoad();
     }
 
-    private void QueueFolderRefresh()
+    /// <summary>Queues listings of folders (the folder view).</summary>
+    private void QueueFolderListings(IReadOnlyCollection<string> folders)
     {
-        _folderQueued = true;
-        QueueDiskLoad();
+        var queued = false;
+        foreach (var folder in folders)
+        {
+            queued |= _folderQueue.Add(folder);
+        }
+
+        if (queued)
+        {
+            QueueDiskLoad();
+        }
+    }
+
+    /// <summary>
+    /// Queues listings of the folders shown (the folder view's open, its return from the solution view): the workspace
+    /// folder and the expanded folders whose parents are shown, so the expansion restored with the folder is listed in the
+    /// first batch, with one build of the tree.
+    /// </summary>
+    private void QueueShownFolders()
+    {
+        if (_shell.Solutions.Solution is not { IsFolder: true } solution)
+        {
+            return;
+        }
+
+        EnsureFolderRoot(solution);
+        var shown = new List<string> { _folderRoot! };
+        foreach (var id in _expanded)
+        {
+            if (id.StartsWith("d:", StringComparison.Ordinal) && IsShownFolder(id[2..]))
+            {
+                shown.Add(id[2..]);
+            }
+        }
+
+        QueueFolderListings(shown);
+    }
+
+    /// <summary>The listings are of <paramref name="solution"/>'s folder: another one's are dropped.</summary>
+    private void EnsureFolderRoot(SolutionInfo solution)
+    {
+        var root = System.IO.Path.TrimEndingDirectorySeparator(solution.Directory);
+        if (!SolutionService.PathComparer.Equals(root, _folderRoot))
+        {
+            ForgetFolderListings();
+            _folderRoot = root;
+        }
+    }
+
+    /// <summary>Whether <paramref name="folder"/> shows in the folder view: the workspace folder, or expanded with its parents.</summary>
+    private bool IsShownFolder(string folder)
+    {
+        if (_folderRoot is not { } root)
+        {
+            return false;
+        }
+
+        for (var up = folder; up is not null; up = System.IO.Path.GetDirectoryName(up))
+        {
+            if (SolutionService.PathComparer.Equals(up, root))
+            {
+                return true;
+            }
+
+            if (up.Length <= root.Length || !_expanded.Contains("d:" + up))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// A folder whose changes the build host's watcher leaves out (<c>ProjectWatcher.IsBuildOutput</c>; .git isn't listed):
+    /// it, or a folder it's in below the workspace folder, is bin, obj, .vs, .idea or .codalus.
+    /// </summary>
+    private bool IsUnwatched(string folder)
+    {
+        if (_folderRoot is not { } root || folder.Length <= root.Length)
+        {
+            return false;
+        }
+
+        foreach (var segment in folder[(root.Length + 1)..].Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))
+        {
+            if (segment.Equals("bin", StringComparison.OrdinalIgnoreCase) || segment.Equals("obj", StringComparison.OrdinalIgnoreCase)
+                || segment is ".vs" or ".idea" or ".codalus")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Stops the folder view's batch on its way (what it brings is stale) and drops the search box's listing.</summary>
+    private void StopFolderListings()
+    {
+        _folderCancellation.Cancel();
+        _folderCancellation.Dispose();
+        _folderCancellation = new CancellationTokenSource();
+        _folderGeneration++;
+        _folderBatch = null;
+        _folderQueue.Clear();
+        DropFolderSearch();
+    }
+
+    /// <summary>Drops the folder view's listings (the workspace closed, or another opened).</summary>
+    private void ForgetFolderListings()
+    {
+        StopFolderListings();
+        _folders.Clear();
+        _folderStandIns.Clear();
+        _folderRoot = null;
+    }
+
+    private void DropFolderSearch()
+    {
+        _folderSearch = null;
+        _folderSearchGeneration++;
+        _folderSearchLoading = false;
     }
 
     private void QueueDiskLoad()
@@ -413,8 +584,8 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }, Avalonia.Threading.DispatcherPriority.Background);
     }
 
-    /// <summary>Lists what is queued, through the build host: the workspace folder (the folder view) and projects' folders (Show All Files).</summary>
-    public Task LoadDiskAsync() => Task.WhenAll(LoadFolderAsync(), LoadProjectsAsync());
+    /// <summary>Lists what is queued, through the build host: the folder view's folders and projects' folders (Show All Files).</summary>
+    public Task LoadDiskAsync() => Task.WhenAll(LoadFoldersAsync(), LoadProjectsAsync());
 
     /// <summary>Drops Show All Files' listings, and stops the batch on its way: what it brings is stale.</summary>
     private void ForgetListings()
@@ -435,59 +606,224 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private bool IsListing(string project) => _diskQueueAll || _diskQueue.Contains(project) || _diskBatch?.Contains(project) == true;
 
     /// <summary>Whether a listing of the disk is queued or on its way (tests).</summary>
-    internal bool IsListingDisk => _diskQueued || _folderQueued || _diskQueueAll || _diskQueue.Count > 0 || _diskBatch is not null;
+    internal bool IsListingDisk => _diskQueued || _folderQueue.Count > 0 || _folderBatch is not null || _folderSearchLoading
+                                   || _diskQueueAll || _diskQueue.Count > 0 || _diskBatch is not null;
 
-    private CancellationTokenSource _folderCancellation = new();
+    /// <summary>Whether a listing of <paramref name="folder"/> is queued or on its way (the folder view).</summary>
+    private bool IsFolderListing(string folder) => _folderQueue.Contains(folder) || _folderBatch?.Contains(folder) == true;
 
-    /// <summary>The folder view's listing of the workspace folder; the tree is built again when it changed.</summary>
-    private async Task LoadFolderAsync()
+    /// <summary>
+    /// The folders listed, and those whose first listing is on its way: a change of one of those, or a build, lists it again
+    /// with the next batch. Dropped, the batch kept a listing that could be older than the change, and nothing listed the
+    /// folder again until its next change (M57).
+    /// </summary>
+    private IEnumerable<string> ListedOrListingFolders() =>
+        _folderBatch is { } batch ? _folders.Keys.Union(batch, SolutionService.PathComparer) : _folders.Keys;
+
+    /// <summary>
+    /// The folder view's listings of the queued folders, through the build host and off the UI thread, each folder alone,
+    /// one level (M57): one batch at a time, four listings at a time in it, and what is queued meanwhile goes with the next
+    /// batch. A listing equal to the folder's last keeps its instance; the tree is built again once, with the refreshes
+    /// queued meanwhile, if any changed. A folder gone from its parent's listing loses its own. The whole workspace folder,
+    /// up to 20,000 entries, was listed again for every change of any folder, every build and every change of the loaded
+    /// projects, and its whole tree built on the UI thread; past 20,000 entries the rest showed as empty folders.
+    /// </summary>
+    private async Task LoadFoldersAsync()
     {
-        if (!_folderQueued)
+        if (_folderBatch is not null)
         {
-            return;
+            return; // the batch on its way starts the next one when it ends
         }
 
-        _folderQueued = false;
         if (!IsFolderView || _shell.Solutions.Solution is not { } solution)
         {
+            _folderQueue.Clear();
             return;
         }
 
-        var generation = ++_folderGeneration;
-        _folderCancellation.Cancel();
-        _folderCancellation.Dispose();
-        _folderCancellation = new CancellationTokenSource();
-        var cancellationToken = _folderCancellation.Token;
-        var old = _folderEntries;
-        IReadOnlyList<DirectoryEntry> entries;
+        EnsureFolderRoot(solution);
+        var below = _folderRoot + System.IO.Path.DirectorySeparatorChar;
+        var comparison = SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        var requests = _folderQueue
+            .Where(f => SolutionService.PathComparer.Equals(f, _folderRoot) || f.StartsWith(below, comparison))
+            .Select(f => (Folder: f, Old: _folders.GetValueOrDefault(f)))
+            .ToList();
+        _folderQueue.Clear();
+        if (requests.Count == 0)
+        {
+            ResolveSyncWhenListed(); // nothing on its way can bring it
+            return;
+        }
+
+        var generation = _folderGeneration;
+        _folderBatch = requests.Select(r => r.Folder).ToHashSet(SolutionService.PathComparer);
+        var listings = new System.Collections.Concurrent.ConcurrentBag<(string Folder, FolderListing? Listing, string? Error)>();
         try
         {
-            // Compared off the UI thread: an equal listing keeps the old one, and the tree isn't built again.
-            entries = await Task.Run(async () =>
+            FolderListingsOnTheirWay = Parallel.ForEachAsync(requests, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = _folderCancellation.Token }, async (r, cancellationToken) =>
+                listings.Add(await ListFolderAsync(r.Folder, r.Old, cancellationToken).ConfigureAwait(false)));
+            await FolderListingsOnTheirWay.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // The solution view shown, or the workspace closed: the generation tells.
+        }
+
+        if (generation != _folderGeneration)
+        {
+            return; // stale: a batch since has the queue
+        }
+
+        _folderBatch = null;
+        var changed = false;
+        var failed = new List<string>();
+        foreach (var (folder, listing, error) in listings)
+        {
+            FolderListings++;
+            if (error is not null)
             {
-                var tree = await _shell.ProjectItems.ListTreeAsync(solution.Directory, cancellationToken).ConfigureAwait(false);
-                return old.SequenceEqual(tree.Entries) ? old : tree.Entries;
+                // The build host restarting, its two minutes up: the folder keeps its last listing, or counts as listed with
+                // nothing, so no "Loading…" stays for good. Empty, it has no chevron: it's listed again by a change in it,
+                // a rescan, its parent's next expansion, the folder view's return (the workspace folder) or the restart.
+                failed.Add(error);
+                var standIn = new FolderListing([], false);
+                if (_folders.TryAdd(folder, standIn))
+                {
+                    _folderStandIns.Add(standIn); // listed again once the build host restarts (OnHostRestarted)
+                    changed = true;
+                }
+            }
+            else if (!_folders.TryGetValue(folder, out var old) || !ReferenceEquals(old, listing))
+            {
+                if (old is not null)
+                {
+                    _folderStandIns.Remove(old);
+                }
+
+                _folders[folder] = listing!;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            PruneFolders();
+        }
+
+        if (failed.Count > 0)
+        {
+            // One line for the batch, as Show All Files' (M56).
+            _shell.Workbench.Log.AppendLine($"[explorer] Could not list {failed.Count} folder(s) on disk: {failed[0]}");
+        }
+
+        DiskLoaded?.Invoke(this, EventArgs.Empty);
+        if (_folderQueue.Count > 0)
+        {
+            QueueDiskLoad(); // what was queued meanwhile, as the next batch
+        }
+
+        if (changed || !_rootIsFolderView)
+        {
+            QueueRefresh(); // with the refreshes queued meanwhile, one build of the tree
+        }
+        else
+        {
+            ResolveSyncWhenListed(); // the tree is as it was
+        }
+    }
+
+    /// <summary>One folder's listing, one level (off the UI thread); equal to the last one, that one.</summary>
+    private async Task<(string Folder, FolderListing? Listing, string? Error)> ListFolderAsync(string folder, FolderListing? old, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tree = await _shell.ProjectItems.ListTreeAsync(folder, cancellationToken, folders: []).ConfigureAwait(false);
+            return (folder, old is not null && old.Truncated == tree.Truncated && old.Entries.SequenceEqual(tree.Entries) ? old : new FolderListing(tree.Entries, tree.Truncated), null);
+        }
+        catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException
+                                   || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return (folder, null, ex.Message);
+        }
+    }
+
+    /// <summary>Drops the listings of folders gone from their parents' listings (parents first).</summary>
+    private void PruneFolders()
+    {
+        foreach (var folder in _folders.Keys.Where(f => !SolutionService.PathComparer.Equals(f, _folderRoot)).OrderBy(f => f.Length).ToList())
+        {
+            if (System.IO.Path.GetDirectoryName(folder) is not { } parent || !_folders.TryGetValue(parent, out var listing) || !listing.HasFolder(folder))
+            {
+                _folders.Remove(folder);
+            }
+        }
+    }
+
+    /// <summary>The folder view's listings taken so far, failed ones too (tests).</summary>
+    internal int FolderListings { get; private set; }
+
+    /// <summary>The folder view's last batch's listings, which end on the thread pool before the batch takes them (tests).</summary>
+    internal Task? FolderListingsOnTheirWay { get; private set; }
+
+    /// <summary>
+    /// The search box's listing of the whole workspace folder (the folder view), off the UI thread: the filter then finds
+    /// files in folders not listed yet, as it did when the whole folder was listed. Kept while the box has text, with the
+    /// folders' own listings over its own (it may stop at its limit before them, and goes into no node_modules); dropped
+    /// when the box is cleared. TODO(issue): a
+    /// name search in the build host without the listing's 20,000-entry limit (and Code Search indexing the folder's files
+    /// in folder mode).
+    /// </summary>
+    private async Task LoadFolderSearchAsync()
+    {
+        if (_folderSearchLoading || _folderRoot is not { } root)
+        {
+            return;
+        }
+
+        _folderSearchLoading = true;
+        var generation = _folderSearchGeneration;
+        var cancellationToken = _folderCancellation.Token;
+        var listed = new Dictionary<string, FolderListing>(_folders, SolutionService.PathComparer);
+        Dictionary<string, FolderListing> whole;
+        try
+        {
+            whole = await Task.Run(async () =>
+            {
+                var tree = await _shell.ProjectItems.ListTreeAsync(root, cancellationToken).ConfigureAwait(false);
+                // A folder listed alone is complete, where the whole listing may have stopped before it (and goes into no
+                // node_modules); the workspace folder's own entry keeps the whole listing's cut, if any.
+                var byFolder = FolderListing.FromTree(root, tree.Entries, tree.Truncated);
+                foreach (var (folder, listing) in listed)
+                {
+                    if (!SolutionService.PathComparer.Equals(folder, root))
+                    {
+                        byFolder[folder] = listing;
+                    }
+                }
+
+                return byFolder;
             }, cancellationToken).ConfigureAwait(true);
         }
         catch (Exception ex) when (ex is JsonRpcRemoteException or InvalidOperationException or JsonRpcConnectionLostException or OperationCanceledException)
         {
-            if (!cancellationToken.IsCancellationRequested)
+            if (generation == _folderSearchGeneration)
             {
-                _shell.Workbench.Log.AppendLine($"[explorer] Could not list the files on disk: {ex.Message}");
+                _folderSearchLoading = false;
+                _shell.Workbench.Log.AppendLine($"[explorer] Could not list the folder for the search: {ex.Message}");
             }
 
             return;
         }
 
-        if (generation != _folderGeneration || !IsFolderView)
+        if (generation != _folderSearchGeneration)
         {
-            return;
+            return; // the box was cleared, or the workspace closed
         }
 
-        DiskLoaded?.Invoke(this, EventArgs.Empty);
-        if (!ReferenceEquals(entries, _folderEntries) || !_rootIsFolderView)
+        _folderSearchLoading = false;
+        if (_filter.Trim().Length > 0 && IsFolderView)
         {
-            _folderEntries = entries;
+            _folderSearch = whole;
             Refresh();
         }
     }
@@ -593,13 +929,18 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     private sealed record ProjectListing(string Project, IReadOnlyList<DirectoryEntry> Entries, IReadOnlySet<string> Folders, string? Error = null);
 
-    /// <summary>A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread).</summary>
+    /// <summary>
+    /// A project's folder, going into the folders that hold its items and the expanded ones (off the UI thread); into
+    /// node_modules, .vs and .idea only once they're expanded, items or not: a plain SDK project's default globs take all of
+    /// node_modules, and each listing went through its thousands of files, up to the limit, after which the project's other
+    /// files went missing (M57).
+    /// </summary>
     private async Task<ProjectListing> ListProjectAsync(string project, ProjectInfo info, IReadOnlyList<DirectoryEntry>? old, IReadOnlyList<string> expanded, CancellationToken cancellationToken)
     {
         var directory = System.IO.Path.GetDirectoryName(project)!;
         var below = System.IO.Path.TrimEndingDirectorySeparator(directory) + System.IO.Path.DirectorySeparatorChar;
         var comparison = SolutionService.PathComparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        var folders = new HashSet<string>(SolutionTree.ItemFolders(project, info), SolutionService.PathComparer);
+        var folders = new HashSet<string>(SolutionTree.ItemFolders(project, info).Where(f => !SolutionTree.IsInOnDemandFolder(f, directory)), SolutionService.PathComparer);
         folders.UnionWith(expanded.Where(f => f.StartsWith(below, comparison)));
         try
         {
@@ -620,12 +961,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     internal Task? ListingsOnTheirWay { get; private set; }
 
     /// <summary>
-    /// Show All Files: a folder that isn't in its project, whose contents aren't listed until it's expanded (it has a
-    /// "Loading…" row, so it can be).
+    /// Show All Files: a folder that isn't in its project, or is or is in node_modules, .vs or .idea (M57), whose contents
+    /// on disk aren't listed until it's expanded (it has a "Loading…" row, so it can be). Not in the folder view, which
+    /// Show All Files can stay on in: its folders carry their projects too, and its node_modules had a "Loading…" row
+    /// after its packages, and listed its project when expanded (M57).
     /// </summary>
     private bool IsUnlisted(ExplorerNode node) =>
-        node is { Kind: ExplorerNodeKind.Folder, IsExcluded: true, Path: { } path, ProjectPath: { } project }
-        && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path);
+        !_rootIsFolderView && node is { Kind: ExplorerNodeKind.Folder, Path: { } path, ProjectPath: { } project }
+        && _diskFolders.TryGetValue(project, out var folders) && !folders.Contains(path)
+        && (node.IsExcluded || SolutionTree.IsInOnDemandFolder(path, System.IO.Path.GetDirectoryName(project)!));
 
     /// <summary>A disk listing arrived (tests wait for it).</summary>
     public event EventHandler? DiskLoaded;
@@ -660,13 +1004,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private int _filterGeneration; // a newer filter, tree or clear makes the matches being found stale
     private bool _filtering;
 
-    /// <summary>Whether a filter's matches are still being found (tests).</summary>
-    internal bool IsFiltering => _filterDebounce?.IsPending == true || _filtering;
+    /// <summary>Whether a filter's matches are still being found, or the folder view's listing for it is on its way (tests).</summary>
+    internal bool IsFiltering => _filterDebounce?.IsPending == true || _filtering || _folderSearchLoading;
 
+    /// <summary>The filter is cleared (or there's no tree to filter): its matches being found are stale, and the folder view's listing for it goes.</summary>
     private void CancelFilter()
     {
         Interlocked.Increment(ref _filterGeneration);
         _filtering = false;
+        DropFolderSearch();
     }
 
     /// <summary>Clears the search box and shows the whole tree now (Sync, Track Active Item, Home).</summary>
@@ -704,25 +1050,46 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         _syncWhenListed = null; // before the refresh below, which would reveal an earlier Sync's file first
         RefreshIfQueued(); // a project that just loaded is in the tree to find
-        if (_shell.ActiveEditor?.Model.Path is not { } path || FindByPath(path) is not { } node)
+        if (_shell.ActiveEditor?.Model.Path is not { } path)
         {
-            if (_shell.ActiveEditor?.Model.Path is { } unlisted && ListDownTo(unlisted))
-            {
-                ClearFilter();
-                _syncWhenListed = unlisted; // revealed once the listings that can bring it have come (ResolveSyncWhenListed)
-                return;
-            }
-
             ShowNotInSolution();
             return;
         }
 
-        ClearFilter();
-        Reveal(node.Id);
+        if (FindByPath(path) is not null)
+        {
+            // The folder view's search box shows the whole folder (M57): the tree it goes back to may not have it listed yet.
+            ClearFilter();
+            if (FindByPath(path) is { } node)
+            {
+                Reveal(node.Id);
+                return;
+            }
+        }
+
+        if (ListDownTo(path))
+        {
+            ClearFilter();
+            _syncWhenListed = path; // revealed once the listings that can bring it have come (ResolveSyncWhenListed)
+            return;
+        }
+
+        ShowNotInSolution(path);
     }
 
-    private void ShowNotInSolution() =>
-        _shell.StatusBar.ShowMessage(Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution."), TimeSpan.FromSeconds(4));
+    /// <summary>
+    /// The active document (<paramref name="path"/>, if any) isn't in the tree: the solution's; in folder mode, which has no
+    /// solution (M57), the folder's in the folder view or for a file outside the folder, else the loaded projects'.
+    /// </summary>
+    private void ShowNotInSolution(string? path = null)
+    {
+        var message = _shell.Solutions.Solution is not { IsFolder: true } folder
+            ? Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInThe", "The active document isn't in the solution.")
+            : IsFolderView || path is null || !IsInFolder(path, System.IO.Path.TrimEndingDirectorySeparator(folder.Directory))
+                ? Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInTheFolder", "The active document isn't in the folder.")
+                : Localizer.Get("msg.solutionExplorerViewModel.theActiveDocumentIsntInALoadedProject", "The active document isn't in a loaded project.");
+        _shell.StatusBar.ShowMessage(message, TimeSpan.FromSeconds(4));
+    }
 
     /// <summary>
     /// Show All Files: a file in a folder that isn't in its project shows once the folder is expanded and listed. This
@@ -732,6 +1099,11 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// </summary>
     private bool ListDownTo(string path)
     {
+        if (IsFolderView)
+        {
+            return ListFolderDownTo(path);
+        }
+
         if (!_showAllFiles || System.IO.Path.GetDirectoryName(path) is not { } folder
             || ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]) is not { Count: > 0 } projects)
         {
@@ -752,6 +1124,56 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         return projects.Any(IsListing);
     }
+
+    /// <summary>
+    /// The folder view (M57): a file in a folder not listed yet shows once its folder and the folders above it are listed.
+    /// This expands the folders from the workspace folder down to <paramref name="path"/>'s and queues listings of those not
+    /// listed or just expanded, in one batch; true while one of them is queued or on its way. A file outside the workspace
+    /// folder has none.
+    /// </summary>
+    private bool ListFolderDownTo(string path)
+    {
+        if (_folderRoot is not { } root || System.IO.Path.GetDirectoryName(path) is not { } folder || !IsInFolder(folder, root))
+        {
+            return false;
+        }
+
+        var chain = new List<string>();
+        for (var down = folder; down.Length > root.Length; down = System.IO.Path.GetDirectoryName(down)!)
+        {
+            if (_expanded.Add("d:" + down) || !_folders.ContainsKey(down))
+            {
+                chain.Add(down);
+            }
+        }
+
+        QueueFolderListings(chain);
+        return IsListingFolderOf(path);
+    }
+
+    /// <summary>Whether <paramref name="path"/> is <paramref name="root"/> or below it.</summary>
+    private static bool IsInFolder(string path, string root) =>
+        SolutionService.PathComparer.Equals(path, root)
+        || (path.Length > root.Length && path[root.Length] == System.IO.Path.DirectorySeparatorChar && SolutionService.PathComparer.Equals(path[..root.Length], root));
+
+    /// <summary>Whether a listing that can bring <paramref name="path"/> is queued or on its way: its folder's, or one above it.</summary>
+    private bool IsListingFolderOf(string path)
+    {
+        for (var up = System.IO.Path.GetDirectoryName(path); up is not null && _folderRoot is { } root && up.Length >= root.Length; up = System.IO.Path.GetDirectoryName(up))
+        {
+            if (IsFolderListing(up))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether a listing that can bring <paramref name="path"/> into the tree is queued or on its way.</summary>
+    private bool IsListingFor(string path) => IsFolderView
+        ? IsListingFolderOf(path)
+        : System.IO.Path.GetDirectoryName(path) is { } folder && ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]).Any(IsListing);
 
     /// <summary>
     /// Sync with Active Document's file, once a listing brought it: selected as soon as it's in the tree, else the usual
@@ -775,10 +1197,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             Reveal(node.Id); // (which drops it)
         }
-        else if (System.IO.Path.GetDirectoryName(path) is not { } folder || !ProjectsHolding(_shell.Solutions.Projects.Keys, [folder]).Any(IsListing))
+        else if (Volatile.Read(ref _refreshQueued) == 1)
+        {
+            // The tree isn't built yet with the listings that came: its build looks again. Another folder's batch, started
+            // in between, found it nowhere in the old tree and said it wasn't in the folder (M57).
+        }
+        else if (!IsListingFor(path))
         {
             _syncWhenListed = null;
-            ShowNotInSolution();
+            ShowNotInSolution(path);
         }
     }
 
@@ -849,6 +1276,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (_filter.Length > 0 && !Rows.Any(r => r.Id == node.Id))
         {
             ClearFilter();
+            if (FindByPath(path) is not { } listed)
+            {
+                // The folder view's search box showed the whole folder; the tree it went back to hasn't the file listed (M57).
+                _trackWhenFound = path;
+                ListDownTo(path);
+                return;
+            }
+
+            node = listed;
         }
 
         Reveal(node.Id);
@@ -1049,36 +1485,32 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     public void Refresh()
     {
         var solutions = _shell.Solutions;
-        _root = solutions.Solution is { } solution
-            ? SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
-            {
-                DiskEntries = _showAllFiles ? _disk : null,
-                FolderEntries = IsFolderView ? _folderEntries : null,
-            }, _treeCache)
-            : null;
-        _rootIsFolderView = _root is not null && IsFolderView;
-        Builds++;
-        _byId = null;
-        _byPath = null;
-        if (_root is null)
+        if (IsFolderView && solutions.Solution is { } folder)
         {
-            _withMembers.Clear();
-            _loadingRows.Clear();
-        }
-        OnPropertyChanged(nameof(HasSolution));
+            EnsureFolderRoot(folder);
+            if (_filter.Trim() is { Length: > 0 } search)
+            {
+                // The search box: the whole folder's tree, built and filtered off the UI thread (M57). Until its listing has
+                // come, the folders listed are filtered.
+                if (_folderSearch is { } whole)
+                {
+                    _ = FilterAsync(null, search, null, () => SolutionTree.FolderView(folder, whole));
+                    return;
+                }
 
-        // A reveal that waited for its node: its ancestors expand in this build's rows.
-        string? reveal = null;
-        if (_pendingReveal is { } pending && PathTo(pending) is { } path)
-        {
-            _pendingReveal = null;
-            reveal = pending;
-            foreach (var ancestor in path.SkipLast(1))
-            {
-                _expanded.Add(ancestor.Id);
+                _ = LoadFolderSearchAsync();
             }
         }
 
+        SetRoot(solutions.Solution is { } solution
+            ? SolutionTree.Build(solution, solutions.Projects, WithAnalyzersFound(solutions.CompilerInputs), new ExplorerOptions
+            {
+                DiskEntries = _showAllFiles ? _disk : null,
+                FolderListings = IsFolderView ? _folders : null,
+            }, _treeCache)
+            : null);
+        OnPropertyChanged(nameof(HasSolution));
+        var reveal = TakePendingReveal();
         if (_root is not null && _filter.Trim() is { Length: > 0 } filter)
         {
             _ = FilterAsync(_root, filter, reveal);
@@ -1094,6 +1526,37 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         Apply(rows);
         AfterRefresh(reveal);
+    }
+
+    private void SetRoot(ExplorerNode? root)
+    {
+        _root = root;
+        _rootIsFolderView = _root is not null && IsFolderView;
+        Builds++;
+        _byId = null;
+        _byPath = null;
+        if (_root is null)
+        {
+            _withMembers.Clear();
+            _loadingRows.Clear();
+        }
+    }
+
+    /// <summary>A reveal that waited for its node, now in the tree: its ancestors expand in this build's rows.</summary>
+    private string? TakePendingReveal()
+    {
+        if (_pendingReveal is not { } pending || PathTo(pending) is not { } path)
+        {
+            return null;
+        }
+
+        _pendingReveal = null;
+        foreach (var ancestor in path.SkipLast(1))
+        {
+            _expanded.Add(ancestor.Id);
+        }
+
+        return pending;
     }
 
     private void AfterRefresh(string? reveal)
@@ -1113,20 +1576,25 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         ResolveSyncWhenListed();
     }
 
-    /// <summary>A filter's matches, found off the UI thread and shown with one reset, unless the filter or the tree changed meanwhile.</summary>
-    private async Task FilterAsync(ExplorerNode root, string filter, string? reveal)
+    /// <summary>
+    /// A filter's matches, found off the UI thread and shown with one reset, unless the filter or the tree changed meanwhile.
+    /// With <paramref name="build"/> (the folder view's search box), the tree is built there too, and taken with the matches.
+    /// </summary>
+    private async Task FilterAsync(ExplorerNode? root, string filter, string? reveal, Func<ExplorerNode>? build = null)
     {
         var generation = Interlocked.Increment(ref _filterGeneration);
         _filtering = true;
         bool Stale() => Volatile.Read(ref _filterGeneration) != generation;
+        ExplorerNode tree;
         List<(ExplorerNode Node, int Depth)> rows;
         try
         {
-            rows = await Task.Run(() =>
+            (tree, rows) = await Task.Run(() =>
             {
+                var built = root ?? build!();
                 var matches = new List<(ExplorerNode, int)>();
-                FlattenMatching(root, 0, filter, matches, Stale);
-                return matches;
+                FlattenMatching(built, 0, filter, matches, Stale);
+                return (built, matches);
             }).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -1134,9 +1602,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        if (Stale() || !ReferenceEquals(_root, root) || _filter.Trim() != filter)
+        if (Stale() || (root is not null && !ReferenceEquals(_root, root)) || _filter.Trim() != filter)
         {
             return;
+        }
+
+        if (root is null)
+        {
+            SetRoot(tree);
+            reveal = TakePendingReveal();
         }
 
         _filtering = false;
@@ -1181,9 +1655,19 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             any |= FlattenMatching(child, depth + 1, filter, rows, stale);
         }
 
-        if (any || depth == 0 || node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+        // A listing's cut row shows with the matches: what it cut wasn't searched (M57).
+        if (any || depth == 0 || node.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || (node.Kind == ExplorerNodeKind.Message && node.Id.EndsWith(SolutionTree.CutSuffix, StringComparison.Ordinal)))
         {
             rows.Insert(at, (node, depth));
+            if (node is { Kind: ExplorerNodeKind.Folder, IsUnlisted: true })
+            {
+                // The folder view: a folder the search's listing didn't go into (node_modules, or one past its limit) has
+                // nothing to show, and showed as an empty folder (M57).
+                rows.Add((new ExplorerNode(node.Id + "|unsearched", ExplorerNodeKind.Message, Localizer.Get("msg.solutionExplorerViewModel.notSearched",
+                    "Not searched. Clear the search box and expand the folder to see what is in it.")) { Icon = "dot", IsMuted = true }, depth + 1));
+            }
+
             return true;
         }
 
@@ -1255,6 +1739,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (!row.HasChildren || (expanded ? !_expanded.Add(row.Id) : !_expanded.Remove(row.Id)))
         {
             return;
+        }
+
+        if (expanded && IsFolderView && row.Node is { Kind: ExplorerNodeKind.Folder, Path: { } folder })
+        {
+            // The folder view (M57): the folder is listed now, and so are the listed folders shown again below it, whose
+            // rows show at once from their last listings while the new ones come.
+            QueueFolderListings([folder, .. _folders.Keys.Where(f => f.Length > folder.Length && IsInFolder(f, folder) && IsShownFolder(f))]);
         }
 
         // Only the row's own rows change: the tree isn't built again (a filter shows every match expanded anyway).
@@ -1351,6 +1842,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         if (PathTo(id) is not { } path)
         {
+            // The folder view (M57): a file or folder in a folder not listed yet is revealed once the folders down to it are.
+            if (IsFolderView && id.Length > 2 && id[0] is 'f' or 'd' && id[1] == ':' && ListFolderDownTo(id[2..]))
+            {
+                _pendingReveal = id;
+            }
+
             return;
         }
 
@@ -1361,13 +1858,20 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         ExplorerNode? topmost = null;
+        var relisted = new List<string>();
         foreach (var ancestor in path.SkipLast(1))
         {
             if (_expanded.Add(ancestor.Id))
             {
                 topmost ??= ancestor;
+                if (IsFolderView && ancestor is { Kind: ExplorerNodeKind.Folder, IsUnlisted: false, Path: { } folder })
+                {
+                    relisted.Add(folder); // expanded again: its last listing shows at once, a new one refreshes it
+                }
             }
         }
+
+        QueueFolderListings(relisted);
 
         var top = topmost is null ? null : Rows.FirstOrDefault(r => r.Id == topmost.Id);
         if (_filter.Trim().Length > 0)
@@ -1431,6 +1935,19 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         if (IsAnalyzer(node))
         {
             return WithGeneratedFiles(node);
+        }
+
+        if (node.IsUnlisted)
+        {
+            // The folder view (M57): expanded (by the user, a reveal, the expansion restored) and not listed yet, it's
+            // listed now. It shows "Loading…" until its listing comes.
+            var folder = node.Kind == ExplorerNodeKind.Solution ? _folderRoot : node.Path;
+            if (folder is not null && (node.Kind == ExplorerNodeKind.Solution || _expanded.Contains(node.Id)) && !IsFolderListing(folder) && IsShownFolder(folder))
+            {
+                QueueFolderListings([folder]);
+            }
+
+            return With(node, LoadingRow(node, "|listing"));
         }
 
         if (IsUnlisted(node))

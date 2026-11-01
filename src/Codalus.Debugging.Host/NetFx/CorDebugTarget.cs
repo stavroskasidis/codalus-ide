@@ -857,8 +857,11 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 if (!completion.Task.Wait(timeout))
                 {
+                    var threads = ThreadsOfTimedOutEval();
                     var abort = TryAbort(eval, completion);
-                    throw new ClrEvalTimeoutException(EvalTimeoutDiagnostic(thread, timeout, abort));
+                    var diagnostic = EvalTimeoutDiagnostic(thread, timeout, abort) + threads;
+                    EvalTimedOut?.Invoke(diagnostic);
+                    throw new ClrEvalTimeoutException(diagnostic);
                 }
 
                 completed = completion.Task.Result;
@@ -892,7 +895,60 @@ internal sealed class CorDebugTarget : IClrProcess
         }
     }
 
+    /// <summary>
+    /// What every thread is doing, asked on the thread that waits for a func-eval that ran past its timeout, the program
+    /// stopped, before the abort (TODO(issue): DataTipDebuggerTests' throwing getter, which stalls on Windows after its
+    /// catch handler is found, docs/ci-flakes.md).
+    /// </summary>
+    public Func<string>? DescribeThreads { get; set; }
+
+    /// <summary>Told every func-eval that timed out, from any request: what it saw, how the abort went, and the threads.</summary>
+    public Action<string>? EvalTimedOut { get; set; }
+
+    /// <summary>Stops the program for <see cref="DescribeThreads"/>, then lets it run on for the abort.</summary>
+    private string ThreadsOfTimedOutEval()
+    {
+        if (DescribeThreads is not { } describe)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            Translate(() => Process.Stop(0));
+        }
+        catch (ClrException ex)
+        {
+            return " Stopping the program to read its threads failed: " + ex.Message;
+        }
+
+        try
+        {
+            return Environment.NewLine + "The threads before the abort, innermost frame first:" + Environment.NewLine + describe();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or COMException or ArgumentException)
+        {
+            return " Reading the threads failed: " + ex.Message;
+        }
+        finally
+        {
+            try
+            {
+                Generation++;
+                Translate(() => Process.Continue(false));
+            }
+            catch (ClrException)
+            {
+                // The process is ending: the abort says so.
+            }
+        }
+    }
+
     /// <summary>Aborts a func-eval that ran too long, and says how that went (the timeout's diagnostic).</summary>
+    // TODO(issue): an eval still running after the rude abort (Thread.Sleep(-1) on Linux, whose managed wait doesn't take
+    // it) leaves the program running while the session thinks it's stopped: the next evaluation fails with
+    // CORDBG_E_PROCESS_NOT_SYNCHRONIZED. Stop the program again, and refuse evaluations until it runs on, as the classic
+    // IDE does ("a previous function evaluation timed out").
     private static string TryAbort(CorDebugEval eval, TaskCompletionSource<bool> completion)
     {
         try
