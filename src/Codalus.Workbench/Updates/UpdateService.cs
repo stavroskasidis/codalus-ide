@@ -12,7 +12,10 @@ public enum InstallKind
     /// <summary>Installed by Velopack (the Setup.exe, the .pkg, the AppImage, winget): it updates itself.</summary>
     SelfUpdating,
 
-    /// <summary>A .deb or .rpm: the system's package manager updates it; the IDE only says a release is out.</summary>
+    /// <summary>
+    /// A .deb, .rpm or Arch package in <c>/opt/codalus</c>: the system's package manager updates it (or, on Arch, the
+    /// install command run again: <see cref="InstallInfo.UpdateCommand"/>); the IDE only says a release is out.
+    /// </summary>
     SystemPackage,
 
     /// <summary>The zip, the .app zip or the tar.gz: the IDE says a release is out, with a link to it.</summary>
@@ -46,6 +49,28 @@ public sealed record InstallInfo(string Version, InstallKind Kind)
 
     /// <summary>Applying an update asks for an administrator's password (macOS: an app in /Applications that an older .pkg installed as root).</summary>
     public bool NeedsAdministrator { get; init; }
+
+    /// <summary>
+    /// How a <see cref="InstallKind.SystemPackage"/> updates when no repository serves it: <see cref="ArchInstallCommand"/>
+    /// for pacman's <c>codalus-bin</c>, which <c>pacman -Syu</c> doesn't update. Null: the package manager's upgrade does.
+    /// </summary>
+    public string? UpdateCommand { get; init; }
+
+    /// <summary>The command that installs Codalus IDE on Arch Linux, and updates it when run again (<c>website/wwwroot/install-arch.sh</c>, the Download page).</summary>
+    public const string ArchInstallCommand = "curl -fsSL https://codalus.dev/install-arch.sh | bash";
+
+    /// <summary>Whether pacman installed <c>codalus-bin</c>: its local database (<c>/var/lib/pacman/local</c>) has an entry for it.</summary>
+    public static bool IsPacmanPackage(string pacmanLocalDatabase)
+    {
+        try
+        {
+            return Directory.Exists(pacmanLocalDatabase) && Directory.EnumerateDirectories(pacmanLocalDatabase, "codalus-bin-*").Any();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
 
     public static string ChannelOf(string version) => version.Contains("-nightly.", StringComparison.Ordinal) ? Nightly : Stable;
 
