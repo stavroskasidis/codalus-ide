@@ -145,7 +145,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Markdown views
 
-`Window.SetMarkdown(viewId, markdown)` supports headings, paragraphs, bulleted and numbered lists, block quotes, fenced code, horizontal rules, `**bold**`, `*italic*`, `` `code` `` and links. Link targets are `https://…` (opened in the browser) or `command:<id>` (runs a command).
+`Window.SetMarkdown(viewId, markdown)` supports headings (`#` and underlined), paragraphs and hard line breaks, bulleted, numbered and task lists (`- [x]`), block quotes, fenced code, horizontal rules, GitHub's tables (with column alignment), `**bold**`, `*italic*`, `~~strikethrough~~`, `` `code` ``, links, `<https://…>` and bare web addresses, and `<br>`. Images show as a link with their description (they aren't loaded); HTML comments are hidden, and other HTML shows as text. Link targets are `https://…` (opened in the browser) or `command:<id>` (runs a command).
 
 ### Progress
 
@@ -369,6 +369,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### Markdown tables and more (Codalus IDE 0.12, no API version change)
+
+Additive: [Markdown views](#markdown-views), like the Markdown preview, render GitHub's tables, task lists, strikethrough, underlined headings, quotes of several lines, hard line breaks, autolinks and images (as links). `PublicAPI.txt` doesn't change.
 
 ### Markdown preview in the editor (Codalus IDE 0.11, no API version change)
 
