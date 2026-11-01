@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +18,7 @@ public sealed record InstanceRequest(string Command, string[] Arguments, bool Wa
 /// domain socket on Linux and macOS). Used by <c>codalus diff</c>, so diff tools such as Verify's open their
 /// comparisons in the running window instead of a new one.
 /// </summary>
-public sealed class SingleInstance : IDisposable
+public sealed partial class SingleInstance : IDisposable
 {
     private static readonly TimeSpan s_connectTimeout = TimeSpan.FromMilliseconds(500);
     private readonly CancellationTokenSource _stop = new();
@@ -81,22 +82,33 @@ public sealed class SingleInstance : IDisposable
     /// <summary>
     /// Whether a shell may listen on the pipe: connecting where none does retries until the timeout, so every
     /// <c>codalus &lt;solution&gt;</c>, Open with… and <c>codalus file</c> with no IDE running waited half a second before
-    /// starting one. Its socket file (Linux, macOS) or its entry among the named pipes (Windows); true when that can't be
-    /// told, to connect as before.
+    /// starting one. Its socket file (Linux, macOS) or the pipe by its name (Windows); true when that can't be told, to
+    /// connect as before.
     /// </summary>
     internal static bool MayBeListening(string pipeName)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            // Looked up by name, without connecting: listing every pipe of the machine took 185 ms on a loaded runner
+            // (Windows CI, run 41233191844). Only a missing pipe is a no; a busy one waits a millisecond and is a yes.
+            return WaitNamedPipe(@"\\.\pipe\" + pipeName, 1) || Marshal.GetLastPInvokeError() != ErrorFileNotFound;
+        }
+
         try
         {
-            return OperatingSystem.IsWindows()
-                ? Directory.EnumerateFiles(@"\\.\pipe\").Any(p => string.Equals(Path.GetFileName(p), pipeName, StringComparison.OrdinalIgnoreCase))
-                : File.Exists(Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + pipeName)); // where .NET binds a pipe's socket
+            return File.Exists(Path.Combine(Path.GetTempPath(), "CoreFxPipe_" + pipeName)); // where .NET binds a pipe's socket
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return true;
         }
     }
+
+    private const int ErrorFileNotFound = 2;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "WaitNamedPipeW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WaitNamedPipe(string name, uint timeout);
 
     private async Task ListenAsync()
     {

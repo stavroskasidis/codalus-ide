@@ -108,6 +108,12 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// The latest environment check's probes (git, dotnet), off the UI thread. The dispose waits for them once it has
+    /// cancelled them: their end, after it, resumed the check on the UI thread, which held the disposed shell until then.
+    /// </summary>
+    private Task _environmentProbe = Task.CompletedTask;
+
     /// <summary>Whether <see cref="Tools"/> has every tool, not only the required ones startup checks.</summary>
     public bool ToolsComplete { get; private set; }
 
@@ -119,9 +125,14 @@ public sealed partial class ShellHost
         {
             // Off with the shell: a closed window's check kept its probes (git, dotnet) running, and the shell with them.
             var lifetime = _lifetime.Token;
+            var probe = requiredOnly
+                ? EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, lifetime)
+                : EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime);
+            _environmentProbe = probe;
+            var tools = await probe.ConfigureAwait(true);
             Tools = requiredOnly
-                ? await EnvironmentCheck.CheckRequiredAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true)
-                : [.. await EnvironmentCheck.CheckAsync(Solutions.Solution?.Directory, lifetime).ConfigureAwait(true), .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
+                ? tools
+                : [.. tools, .. await MobileToolsAsync(lifetime).ConfigureAwait(true), .. await WindowsAppToolsAsync(lifetime).ConfigureAwait(true), .. NetFrameworkTools()];
             ToolsComplete = !requiredOnly;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)

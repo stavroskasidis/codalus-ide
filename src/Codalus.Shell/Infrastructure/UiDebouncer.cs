@@ -14,12 +14,18 @@ internal sealed class UiDebouncer(Action action, TimeSpan delay, TimeSpan maxDel
     private DispatcherTimer? _timer;
     private long _firstRequest; // when the oldest request not yet served came (Stopwatch ticks), or 0
     private int _posted;
+    private volatile bool _stopped;
 
     /// <summary>Whether a request waits to be served (tests).</summary>
     internal bool IsPending => _timer?.IsEnabled == true || Volatile.Read(ref _posted) == 1;
 
     public void Request()
     {
+        if (_stopped)
+        {
+            return;
+        }
+
         if (Dispatcher.UIThread.CheckAccess())
         {
             Restart();
@@ -44,8 +50,24 @@ internal sealed class UiDebouncer(Action action, TimeSpan delay, TimeSpan maxDel
         }
     }
 
+    /// <summary>
+    /// Stops for good, on the UI thread (the window closing): a waiting request is dropped and later ones are ignored. A
+    /// running timer is the dispatcher's until it ticks, so it held a closed window's shell and then ran the action on it
+    /// (the Solution Explorer's, after an edit; Linux CI, run 41236941035).
+    /// </summary>
+    public void Stop()
+    {
+        _stopped = true;
+        _timer?.Stop();
+    }
+
     private void Restart()
     {
+        if (_stopped)
+        {
+            return; // posted from another thread before the stop
+        }
+
         if (_timer is null)
         {
             _timer = new DispatcherTimer { Interval = delay };
@@ -69,6 +91,9 @@ internal sealed class UiDebouncer(Action action, TimeSpan delay, TimeSpan maxDel
     {
         _timer!.Stop();
         _firstRequest = 0;
-        action();
+        if (!_stopped) // a tick the dispatcher queued before the stop
+        {
+            action();
+        }
     }
 }

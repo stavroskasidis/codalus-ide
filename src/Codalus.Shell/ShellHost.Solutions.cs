@@ -488,7 +488,7 @@ public sealed partial class ShellHost
         }
         else
         {
-            (_solutionStatus ??= new UiDebouncer(UpdateSolutionStatus, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500))).Request();
+            (_solutionStatus ??= Debouncer(UpdateSolutionStatus, TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(500))).Request();
         }
     }
 

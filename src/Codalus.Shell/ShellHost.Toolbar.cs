@@ -83,9 +83,11 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (solution.IsFolder && LaunchConfigurations() is { Count: > 0 } configurations)
+        // The folder's configurations, read once: the solution closes on another thread, so reading them again (as
+        // CurrentLaunchConfiguration does) could find none, and the window's dispose threw (macOS CI, run 41251237351).
+        if (solution.IsFolder && Codalus.Workbench.Projects.FolderConfiguration.ReadLaunch(solution.Directory).Configurations is { Count: > 0 } configurations)
         {
-            Toolbar.SetStartup([.. configurations.Select(c => new StartupProjectChoice(c.Name, LaunchChoicePrefix + c.Name))], LaunchChoicePrefix + CurrentLaunchConfiguration!.Name, null);
+            Toolbar.SetStartup([.. configurations.Select(c => new StartupProjectChoice(c.Name, LaunchChoicePrefix + c.Name))], LaunchChoicePrefix + CurrentOf(configurations)!.Name, null);
             return;
         }
 

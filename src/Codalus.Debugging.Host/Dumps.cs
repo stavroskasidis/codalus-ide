@@ -302,7 +302,6 @@ internal sealed class Dumps : IDisposable
             _ => DumpType.WithHeap,
         };
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var started = DateTime.Now.AddSeconds(-1);
         // The synchronous WriteDump (the call proven on every OS), on its own thread so the wait can be bounded: a
         // createdump that stalls (on macOS, while a password prompt waits) is ended after the timeout, which frees the thread.
         // A createdump that fails reading a page that went away while it ran (seen once on macOS) gets one more try.
@@ -327,8 +326,9 @@ internal sealed class Dumps : IDisposable
         {
             // Slow or stalled: what createdump had written, and whether it still ran (a dump timed out once on a loaded
             // Mac with nothing more to go on, M55's validation).
-            var progress = Progress(path, started);
-            EndCreatedump(started);
+            var progress = Progress(path, processId);
+            EndCreatedump(processId);
+            _ = write.ContinueWith(t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default); // its ended createdump's error
             if (ex is OperationCanceledException)
             {
                 throw;
@@ -340,21 +340,18 @@ internal sealed class Dumps : IDisposable
         return new CreateDumpResult(path, new FileInfo(path).Length);
     }
 
-    /// <summary>How far a dump got: its file's size so far, and the createdump processes of the request and how long they ran.</summary>
-    private static string Progress(string path, DateTime since)
+    /// <summary>How far a dump got: its file's size so far, and the request's createdump and how long it ran.</summary>
+    private static string Progress(string path, int processId)
     {
         var written = File.Exists(path) ? $"{new FileInfo(path).Length / 1024 / 1024} MB written" : "no file yet";
         var running = new List<string>();
-        foreach (var process in System.Diagnostics.Process.GetProcessesByName("createdump"))
+        foreach (var process in Createdumps(processId))
         {
             using (process)
             {
                 try
                 {
-                    if (process.StartTime >= since)
-                    {
-                        running.Add($"{(DateTime.Now - process.StartTime).TotalSeconds:0} s");
-                    }
+                    running.Add($"{(DateTime.Now - process.StartTime).TotalSeconds:0} s");
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
                 {
@@ -365,19 +362,16 @@ internal sealed class Dumps : IDisposable
         return written + (running.Count > 0 ? $", createdump running for {string.Join(", ", running)}" : ", no createdump running");
     }
 
-    /// <summary>Ends the createdump processes started for this request (none older than it).</summary>
-    private static void EndCreatedump(DateTime since)
+    /// <summary>Ends the request's createdump.</summary>
+    private static void EndCreatedump(int processId)
     {
-        foreach (var process in System.Diagnostics.Process.GetProcessesByName("createdump"))
+        foreach (var process in Createdumps(processId))
         {
             using (process)
             {
                 try
                 {
-                    if (process.StartTime >= since)
-                    {
-                        process.Kill();
-                    }
+                    process.Kill();
                 }
                 catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
                 {
@@ -385,6 +379,37 @@ internal sealed class Dumps : IDisposable
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// The createdump of a dump of <paramref name="processId"/>: the dumped process starts it, as its child. Taking every
+    /// createdump started since the request, a request that timed out also ended one writing another program's crash
+    /// dump, and that dump was cut short (macOS CI, run 41254533905).
+    /// </summary>
+    private static List<System.Diagnostics.Process> Createdumps(int processId)
+    {
+        var found = new List<System.Diagnostics.Process>();
+        foreach (var child in Codalus.Platform.ProcessTree.Children(processId))
+        {
+            try
+            {
+                var process = System.Diagnostics.Process.GetProcessById(child);
+                if (process.ProcessName == "createdump")
+                {
+                    found.Add(process);
+                }
+                else
+                {
+                    process.Dispose();
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                // Gone.
+            }
+        }
+
+        return found;
     }
 
     private Session Get(string id) => _sessions.TryGetValue(id, out var session) ? session : throw new InvalidOperationException($"No dump session {id}.");

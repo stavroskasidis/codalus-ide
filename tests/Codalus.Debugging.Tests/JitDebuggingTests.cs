@@ -9,6 +9,7 @@ namespace Codalus.Debugging.Tests;
 /// leave no registration behind), and a crash with the registration's variables writing a dump that the watcher reports
 /// and the companion opens.
 /// </summary>
+[Collection(DumpTests.Name)]
 public sealed class JitDebuggingTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>
 {
     private sealed class FakeEnvironment : IUserEnvironment
@@ -133,4 +134,14 @@ public sealed class JitDebuggingTests(DebuggeeFixture debuggee) : IClassFixture<
             Directory.Delete(folder, recursive: true);
         }
     }
+}
+
+/// <summary>
+/// The tests that write a dump run one at a time: on macOS a full dump is about 5 GB, and two written at once shared the
+/// disk until one ran out its 3 minutes (macOS CI, run 41254533905).
+/// </summary>
+[CollectionDefinition(Name)]
+public sealed class DumpTests
+{
+    public const string Name = "Dumps";
 }

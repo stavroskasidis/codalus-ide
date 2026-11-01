@@ -38,6 +38,16 @@ public sealed class DiffCommandTests
         Assert.False(SingleInstance.TrySend(name, new InstanceRequest("diff", ["a", "b"])));
         Assert.True(started.ElapsedMilliseconds < 250, $"refused after {started.ElapsedMilliseconds} ms");
 
+        // The pipe is looked up by its name, not found among all of the machine's (on Windows each listing took 185 ms on
+        // a loaded runner, CI run 41233191844; this machine's 1,600 pipes, 12 ms).
+        started.Restart();
+        for (var i = 0; i < 50; i++)
+        {
+            Assert.False(SingleInstance.MayBeListening(name));
+        }
+
+        Assert.True(started.ElapsedMilliseconds < 250, $"50 lookups took {started.ElapsedMilliseconds} ms");
+
         var received = new TaskCompletionSource<InstanceRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var server = SingleInstance.Listen(name, request =>
         {
