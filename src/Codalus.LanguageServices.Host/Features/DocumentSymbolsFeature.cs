@@ -23,6 +23,13 @@ internal static class DocumentSymbolsFeature
             : [.. Children(root, text)];
     }
 
+    /// <summary>
+    /// The symbols of an open Visual Basic file no loaded project has (an untrusted folder, or before its project loads),
+    /// from its text alone: the same syntax-only symbols its project would give.
+    /// </summary>
+    public static DocumentSymbol[] VisualBasicSymbols(SourceText text, CancellationToken cancellationToken) =>
+        [.. VisualBasicStructure.Symbols(Microsoft.CodeAnalysis.VisualBasic.VisualBasicSyntaxTree.ParseText(text, cancellationToken: cancellationToken).GetRoot(cancellationToken), text)];
+
     internal static IEnumerable<DocumentSymbol> Children(SyntaxNode node, SourceText text)
     {
         var members = node switch

@@ -226,3 +226,23 @@ public sealed class VisualBasicLanguageTests(VisualBasicLanguageFixture vb) : IC
         }
     }
 }
+
+/// <summary>
+/// A Visual Basic file no loaded project has (an untrusted folder, or one opened before its project loads) gets its
+/// document symbols from its own text, parsed as Visual Basic. Miscellaneous Files is a C# project: it parsed the file
+/// as C#, listed no types, and the navigation bar hid until the project came (macOS CI, run 41284207922).
+/// </summary>
+public sealed class UntrustedVisualBasicTests(UntrustedVisualBasicFixture vb) : IClassFixture<UntrustedVisualBasicFixture>
+{
+    [Fact]
+    public async Task A_file_outside_any_loaded_project_lists_its_visual_basic_symbols()
+    {
+        var product = vb.File("VbLibrary", "Product.vb");
+        await vb.OpenAsync(product);
+
+        var symbols = await vb.Client.DocumentSymbolsAsync(DocumentUris.FromPath(product), TestContext.Current.CancellationToken);
+        var type = Assert.Single(symbols);
+        Assert.Equal(("Product", SymbolKind.Class), (type.Name, type.Kind));
+        Assert.Contains(type.Children ?? [], s => s.Name == "Price" && s.Kind == SymbolKind.Property);
+    }
+}
