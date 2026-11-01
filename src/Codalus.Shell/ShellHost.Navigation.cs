@@ -55,7 +55,7 @@ public sealed partial class ShellHost
     /// evaluation of a large solution's open rebuilt Class View's roots, and its flag was set from the build host's thread).
     /// </summary>
     private void QueueSymbolBrowsers() =>
-        (_symbolBrowsers ??= new UiDebouncer(RefreshSymbolBrowsers, TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3))).Request();
+        (_symbolBrowsers ??= Debouncer(RefreshSymbolBrowsers, TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(3))).Request();
 
     private void RefreshSymbolBrowsers()
     {
