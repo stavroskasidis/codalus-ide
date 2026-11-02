@@ -42,6 +42,11 @@ public sealed partial class ShellHost
 
     private const int TabColors = 8;
 
+    /// <summary>The mouse wheel's last write of <see cref="TabsInMultipleRowsSetting"/> (the UI thread's), and its value.</summary>
+    private Task? _tabRowsWrite;
+
+    private bool _tabRowsWritten;
+
     private static readonly StringComparison s_pathComparison =
         SolutionService.PathComparer == StringComparer.OrdinalIgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -256,10 +261,14 @@ public sealed partial class ShellHost
             return false;
         }
 
+        // While the wheel's last write is on its way, against what it wrote: the setting changes only once the write has
+        // landed, and a wheel up before a wheel down's write landed found one row, wrote nothing, and the rows came on.
         var multiple = delta < 0;
-        if (Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false) != multiple)
+        var rows = _tabRowsWrite is { IsCompleted: false } ? _tabRowsWritten : Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false);
+        if (rows != multiple)
         {
-            _ = SetTabOptionAsync(TabsInMultipleRowsSetting, multiple);
+            _tabRowsWritten = multiple;
+            _tabRowsWrite = SetTabOptionAsync(TabsInMultipleRowsSetting, multiple);
         }
 
         return true;
