@@ -74,6 +74,36 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
   sampler=$!
 fi
 
+# The free disk, on the Linux and macOS runners. Ubuntu's others filled its runner's disk 5 minutes into the tests (the
+# 70 GB the shard leaves free), and the runner died with "No space left on device", keeping neither its log nor its
+# results; the same commit's tests used 8 GB under WSL (PR #268, run 41357428702). Below 20 GB free each sample says
+# so with the largest folders; below 5 GB the test processes are ended, so the step fails naming them and the runner
+# still uploads the log and the results.
+guard=
+if [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" != "Windows" ]]; then
+  (
+    # Not the script's -e and pipefail: head ending the listing's pipe ended the guard.
+    set +eo pipefail
+    while :; do
+      free="$(df -Pk "$PWD" 2>/dev/null | awk 'NR == 2 { print int($4 / 1048576) }')"
+      if [[ -n "$free" ]] && (( free < 20 )); then
+        # The tests are ended first: listing the folders takes a while, which a runaway writer doesn't wait for.
+        (( free < 5 )) && pkill -KILL -f 'Codalus\.[A-Za-z.]*Tests' 2>/dev/null
+        {
+          echo "[disk] $(date -u +%H:%M:%S) ${free} GB free; the largest folders:"
+          du -xk -d 3 "${TMPDIR:-/tmp}" /tmp "$HOME" "$PWD" 2>/dev/null | sort -nr | head -15 | awk '{ printf "  %d MB %s\n", $1 / 1024, $2 }'
+        } | tee -a "$results/disk.txt"
+        if (( free < 5 )); then
+          echo "::error title=$shard on ${RUNNER_OS:-?}::The disk was almost full (${free} GB free): the tests were ended. The largest folders are in the log ([disk]) and in disk.txt."
+          break
+        fi
+      fi
+      sleep 5
+    done
+  ) &
+  guard=$!
+fi
+
 # Every test command's output goes to console.txt, so the report can name the failed tests: as annotations on the run's
 # page and in the job's summary, where a failure is read first (a job that stops the run shows as cancelled, and its log
 # is thousands of lines). eng/ci-failures.sh reads them from there to tell a new failure from a known flake. A tail shows
@@ -91,6 +121,10 @@ report() {
   if [[ -n "$sampler" ]]; then
     pkill -P "$sampler" 2>/dev/null
     kill "$sampler" 2>/dev/null
+  fi
+  if [[ -n "$guard" ]]; then
+    pkill -P "$guard" 2>/dev/null
+    kill "$guard" 2>/dev/null
   fi
   sleep 2 # the tail reads the file about once a second: its last lines reach the log first
   kill "$tailer" 2>/dev/null
