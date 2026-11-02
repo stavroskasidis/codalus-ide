@@ -166,6 +166,13 @@ internal static partial class Program
             // 0.6 s, and every frame redrew the whole window since the last one's pixels were gone. Retained, the frame
             // keeps one buffer (the window's size, 8 MB at 1920x1080) and redraws only what changed.
             .With(new X11PlatformOptions { UseRetainedFramebuffer = true })
+            // Scratch experiment only (validate-bench-render): which Windows rendering path scrolls fastest without a GPU.
+            .With(Environment.GetEnvironmentVariable("CODALUS_EXP_RENDER") switch
+            {
+                "software" => new Win32PlatformOptions { RenderingMode = [Win32RenderingMode.Software], CompositionMode = [Win32CompositionMode.RedirectionSurface] },
+                "angle-redirect" => new Win32PlatformOptions { CompositionMode = [Win32CompositionMode.RedirectionSurface] },
+                _ => new Win32PlatformOptions(),
+            })
             .LogToTrace();
 
     /// <summary>A GUI-subsystem process on Windows has no console; borrow the parent's for <c>--version</c> and <c>--help</c>.</summary>

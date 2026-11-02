@@ -1,0 +1,53 @@
+# One-off experiment: which Windows rendering path scrolls fastest on a GPU-less runner (ANGLE on WARP through WinUI
+# composition, the default; Skia's software renderer; ANGLE through a redirection surface). One Native AOT publish, the
+# path picked by CODALUS_EXP_RENDER (scratch code in Program.cs), the paths rotated each round. Never merged.
+name: render-exp
+on:
+  push:
+    branches: [validate-bench-render]
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          display: true
+      - name: Generate fixtures
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
+      - name: Publish the shell
+        shell: bash
+        run: |
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          dotnet publish src/Codalus.Shell -c Release -r "$rid" -o artifacts/shell
+      - name: Build the harness
+        run: dotnet build benchmarks/Codalus.Benchmarks.Harness -c Release
+      - name: Rounds
+        timeout-minutes: 90
+        shell: bash
+        run: |
+          orders=("default software angle-redirect" "angle-redirect software default" "software default angle-redirect" "default angle-redirect software")
+          round=0
+          for order in "${orders[@]}"; do
+            round=$((round + 1))
+            for cfg in $order; do
+              for run in 1 2; do
+                echo "::group::round $round $cfg run $run"
+                CODALUS_EXP_RENDER="$cfg" dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- \
+                  run --results "exp/$cfg/$round-$run" --targets shell --scenarios self-driven --runs 1 || echo "::warning::$cfg round $round run $run failed"
+                echo "::endgroup::"
+              done
+            done
+          done
+      - name: Summary
+        if: always()
+        shell: bash
+        run: python3 .github/render-exp-summary.py exp | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: render-exp-Windows
+          path: exp
