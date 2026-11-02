@@ -70,6 +70,29 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
     }
 
     [Fact]
+    public async Task An_edit_to_an_async_method_without_an_await_applies()
+    {
+        // Roslyn gives the method a new state machine, which implements IAsyncStateMachine explicitly: the runtime doesn't
+        // report AddExplicitInterfaceImplementation, and without it the edit was CS9346, a restart (WPoseidon's report).
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        var events = new EventLog(adapter);
+        var session = "async-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await LaunchAsync(adapter, CSharp, []);
+            await WaitUntilAsync(() => events.Output.Contains("status 3", StringComparison.Ordinal), "the program's output", events);
+            await StartAsync(adapter, session, CSharp);
+            await CSharp.EditAsync("return \"status \" + i;", "return \"status edited \" + i;");
+            await ApplyAsync(adapter, session);
+            await WaitUntilAsync(() => events.Output.Contains("status edited ", StringComparison.Ordinal), "the edited output", events);
+        }
+        finally
+        {
+            await EndAsync(adapter, session);
+        }
+    }
+
+    [Fact]
     public async Task An_edit_applies_to_a_program_that_hasnt_stopped_yet()
     {
         // mscordbi reads the module's metadata for the edit through an importer a stop's stack walk creates: before the

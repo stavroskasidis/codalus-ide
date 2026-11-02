@@ -44,8 +44,18 @@
 
     private void Tick()
     {
-        ticks++; // [tick]
+        ticks += StepAsync().Result; // [tick]
     }
+
+    // Async without an await, as handlers often are: an edit to it gives it a new state machine, which the browser's
+    // runtime takes only with AddExplicitInterfaceImplementation (an IAsyncStateMachine implementation). The tests stop
+    // in Tick, which stays as built: the browser's debugger doesn't bind breakpoints in a state machine an edit added.
+#pragma warning disable CS1998
+    private async Task<int> StepAsync()
+    {
+        return 1;
+    }
+#pragma warning restore CS1998
 
     public void Dispose() => stopping.Cancel();
 

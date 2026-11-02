@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.12.0
+
+- **Hot Reload applies edits to async methods without an `await`** ([ADR 0090](docs/adr/0090-blazor-web-app-edits-under-the-codalus-debugger.md#amendment-2026-11-02-addexplicitinterfaceimplementation-which-no-runtime-reports)): under the Codalus debugger, an edit to such a method (a Blazor component's `async Task` handler whose `await`s are commented out, say) said CS9346, "Update requires emitting explicit interface implementation", and needed a restart, in the browser and on the server. The runtimes can apply it but don't say so; Codalus IDE now assumes it as `dotnet watch` does.
+
 ## 0.11.0
 
 - **Visual Basic files show their navigation bar and outline before their project loads, and in untrusted folders** ([ADR 0066](docs/adr/0066-visual-basic.md), amended): such a file was read as C#, so it listed no types (the bar came later and moved the code down) and showed C# errors while the solution loaded.

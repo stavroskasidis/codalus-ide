@@ -67,6 +67,7 @@ public sealed class BrowserHotReloadTests
 
         Assert.Empty(BrowserHotReload.WebAssemblyCapabilities(9));
         Assert.DoesNotContain("AddFieldRva", BrowserHotReload.WebAssemblyCapabilities(10));
+        Assert.Contains("AddExplicitInterfaceImplementation", BrowserHotReload.WebAssemblyCapabilities(10)); // an async method without an await
     }
 
     [Fact]

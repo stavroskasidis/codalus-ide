@@ -3757,7 +3757,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.Debugger.ContinueAsync().ConfigureAwait(true);
 
             // A WebAssembly edit: the browser runs it under the debugger; the server refuses it and says so.
-            File.WriteAllText(counter, original.Replace("ticks++;", "ticks += 1000;", StringComparison.Ordinal));
+            File.WriteAllText(counter, original.Replace("return 1;", "return 1000;", StringComparison.Ordinal));
             await WaitAsync(() => watch.HotReload!.UpdatesRefused, () => "the server refuses the update under the debugger (" + Log() + ")", 180).ConfigureAwait(true);
             // The browser applies the update on its own and nothing reports when (as in BlazorWebAppHotReloadDebugTests),
             // and the breakpoint stops before the line runs: the first stop after the update can still read the count the
@@ -3847,8 +3847,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // A WebAssembly edit, from the editor: the server and the page take it, and the page runs it.
             editor = await shell.OpenFileAsync(counter, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Counter.razor did not open.");
             await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
-            var offset = editor.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-            editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+            var offset = editor.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
             shell.Run("run.applyCodeChanges");
             await WaitAsync(() => Status().Contains("(server and browser)", StringComparison.Ordinal), () => "the edit applies to the server and the browser (status: " + Status() + "; " + Log() + ")", 120).ConfigureAwait(true);
 
