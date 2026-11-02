@@ -157,7 +157,10 @@ public class NavigationDepthTests
         // tree; here from the text (CSharpLensScanner), until the service's lenses and their counts take it.
         await using var f = ShellFixture.Create();
         f.Window.Width = 1200;
-        f.Window.Height = 1600; // every line in view, so every line's height is measured
+        // Every line in view, so every line's height is measured and every lens resolved (the editor resolves those within
+        // a few lines of the view). Linux's lines are taller: at 1600 the editor got 983 px there, lines 1 to 36, and
+        // Scale(double)'s lens on line 47 was never asked for (WSL, docs/ci-flakes.md).
+        f.Window.Height = 2400;
         var folder = await f.OpenLanguageFeaturesAsync();
         var path = Path.Combine(folder, "src", "Lib", "Shapes.cs");
         string[] declarations = ["interface IShape", "double Area();", "class Shape", "string Describe(int", "class Circle", "double Radius", "class Square", "class Geometry", "double Scale(IShape", "double Scale(double"];
@@ -218,7 +221,7 @@ public class NavigationDepthTests
             () => !shapes.Insights.HasLensEstimates && declarations.All(code => shapes.Insights.LensRowAbove(LineOf(code)) is { Length: > 0 }),
             seconds: 60,
             describe: () => string.Join("; ", declarations.Select(code => $"{code}: '{shapes.Insights.LensRowAbove(LineOf(code))}'"))
-                + $"; estimates left: {shapes.Insights.HasLensEstimates}; {shapes.Insights.DescribeLenses()}"); // TODO(issue): Scale(double)'s row stays empty on WSL (docs/ci-flakes.md)
+                + $"; estimates left: {shapes.Insights.HasLensEstimates}; {shapes.Insights.DescribeLenses()}");
         view.EnsureVisualLines();
         Assert.Contains("reference", shapes.Insights.LensRowAbove(LineOf("class Geometry")), StringComparison.Ordinal);
         Screenshot(f, "codelens-resolved");
