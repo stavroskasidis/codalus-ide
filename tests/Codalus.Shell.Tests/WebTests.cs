@@ -56,7 +56,11 @@ public sealed class WebTests
         await ShellFixture.PumpUntil(() => f.Shell.Runs.Running.Count == 1, seconds: 180);
         try
         {
-            await ShellFixture.PumpUntil(() => f.Shell.Runs.Running[0].Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 120);
+            // TODO(issue): on Windows CI (shell-2, run 41428618049) the app ran but didn't say "Now listening on" in
+            // 120 s, and the failure said nothing else: it now says whether the program still ran, whether the port was
+            // taken, and what the run printed.
+            var app = f.Shell.Runs.Running[0];
+            await ShellFixture.PumpUntil(() => app.Channel?.GetText().Contains("Now listening on", StringComparison.Ordinal) == true, seconds: 120, describe: () => Listening(f, app, port));
             await f.Shell.SendHttpRequestAsync(http, editor.Model.Text.Text, 3);
             await ShellFixture.PumpUntil(() => f.Shell.HttpResponse.History.Count == 1);
             Assert.Equal(200, f.Shell.HttpResponse.Selected!.Exchange.Response?.StatusCode);
@@ -90,6 +94,27 @@ public sealed class WebTests
         Assert.Equal("Staging", plan.Environment["ASPNETCORE_ENVIRONMENT"]);
         await f.Shell.SelectAspNetEnvironmentAsync(string.Empty);
         Assert.Null(f.Shell.Runs.EnvironmentOverride);
+    }
+
+    /// <summary>What a web app that never said it listens did: its process, the port, what the run printed.</summary>
+    private static string Listening(ShellFixture f, Workbench.Build.RunningProgram app, int port)
+    {
+        string taken;
+        try
+        {
+            using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+            probe.Start();
+            taken = "free";
+        }
+        catch (System.Net.Sockets.SocketException ex)
+        {
+            taken = $"taken ({ex.SocketErrorCode})";
+        }
+
+        var exited = app.HasExited ? $"exited with code {app.Exited.Result.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : "still running";
+        return $"{app.Name} (process {app.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)}) {exited}; port {port.ToString(System.Globalization.CultureInfo.InvariantCulture)} {taken}; "
+               + $"{f.Shell.Runs.Running.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)} program(s) running.\nRun output:\n{app.Channel?.GetText() ?? "(no channel)"}\nNotifications:\n"
+               + string.Join('\n', f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
     }
 
     [AvaloniaFact]
