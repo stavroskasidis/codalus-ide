@@ -9,6 +9,7 @@
     <ProjectReference Include="..\Codalus.Platform\Codalus.Platform.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Codalus.Debugging.Tests" />
     <InternalsVisibleTo Include="Codalus.Workbench.Tests" />
   </ItemGroup>
 </Project>
