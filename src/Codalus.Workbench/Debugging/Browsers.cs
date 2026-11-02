@@ -12,6 +12,30 @@ public sealed record Browser(string Kind, string Path)
         Browsers.Chromium => "Chromium",
         _ => System.IO.Path.GetFileNameWithoutExtension(Path),
     };
+
+    /// <summary>
+    /// The browser's version from its executable's version resource (Windows), or null: for the Debug Console, so a
+    /// launch that fails after a browser update says which version it was.
+    /// </summary>
+    public string? Version
+    {
+        get
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                return null;
+            }
+
+            try
+            {
+                return System.Diagnostics.FileVersionInfo.GetVersionInfo(Path).ProductVersion is { Length: > 0 } version ? version : null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                return null;
+            }
+        }
+    }
 }
 
 /// <summary>

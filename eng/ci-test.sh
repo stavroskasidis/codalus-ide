@@ -35,6 +35,9 @@ mkdir -p "$results"
 # which the runtime returns while an aborted func-eval is pending; netcoredbg aborts one after 5 s) left no trace of
 # the evaluation before it (DataTipDebuggerTests, run 40375629247).
 export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
+# vscode-js-debug's log of every browser debugging session, there too: on Windows js-debug twice failed to launch
+# Chrome with "Could not attach to main target" and nothing else (CompoundDebugTests, PR #279's run 41502391209).
+export CODALUS_JSDEBUG_TRACE="${CODALUS_JSDEBUG_TRACE:-$results/js-debug}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;
