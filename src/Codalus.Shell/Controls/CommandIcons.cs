@@ -442,6 +442,7 @@ public static class CommandIcons
         ["workbench.switchDocument"] = new("tab"),
         ["workbench.closeAllDocuments"] = new("close-all"),
         ["workbench.pinEditor"] = new("pin"),
+        ["workbench.tabs.options"] = new("gear"),
         ["workbench.resetLayout"] = new("layout"),
 
         // Git.

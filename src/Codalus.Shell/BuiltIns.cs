@@ -133,11 +133,47 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 2,
             },
+            SettingDescriptor.Create(ShellHost.ColorTabsBySetting, "\"none\"", SettingType.String, shell) with
+            {
+                Title = "Color Document Tabs By",
+                Category = "Appearance",
+                Description = "Mark each document tab with a color, a stripe along the tab's bottom edge: its project's, or its file extension's (each extension always has the same color). The gear beside the tabs sets it too.",
+                Enum = ["none", "project", "fileExtension"],
+                EnumDescriptions = ["None", "Project", "File extension"],
+                Scope = SettingScope.User,
+                Order = 3,
+            },
             SettingDescriptor.Create(ShellHost.ColorTabsByProjectSetting, "false", SettingType.Boolean, shell) with
             {
                 Title = "Color Document Tabs by Project",
                 Category = "Appearance",
-                Description = "Mark each document tab with its project's color, a stripe along the tab's bottom edge.",
+                Description = "Replaced by Color Document Tabs By (workbench.editor.colorTabsBy): on, it colors the tabs by project while that one isn't set.",
+                Scope = SettingScope.User,
+                Order = 3,
+            },
+            SettingDescriptor.Create(ShellHost.TabPlacementSetting, "\"top\"", SettingType.String, shell) with
+            {
+                Title = "Document Tab Placement",
+                Category = "Appearance",
+                Description = "Where every document group shows its tabs: above the documents, or in a column on their left or right. The gear beside the tabs sets it too.",
+                Enum = ["top", "left", "right"],
+                EnumDescriptions = ["Top", "Left", "Right"],
+                Scope = SettingScope.User,
+                Order = 3,
+            },
+            SettingDescriptor.Create(ShellHost.TabsInMultipleRowsSetting, "false", SettingType.Boolean, shell) with
+            {
+                Title = "Show Tabs in Multiple Rows",
+                Category = "Appearance",
+                Description = "Wrap a document group's tabs onto more rows when they don't fit, instead of leaving the last ones out (they're always in the list beside the tabs).",
+                Scope = SettingScope.User,
+                Order = 3,
+            },
+            SettingDescriptor.Create(ShellHost.MultipleRowsWithMouseWheelSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Toggle Multiple Rows with Mouse Wheel",
+                Category = "Appearance",
+                Description = "Turn Show Tabs in Multiple Rows on by scrolling down over the tabs, and off by scrolling up.",
                 Scope = SettingScope.User,
                 Order = 3,
             },

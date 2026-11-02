@@ -397,7 +397,11 @@ public sealed class GitChangesMenuTests
         var first = picker.LoadAsync();
         var newer = picker.LoadAsync();
         await first;
-        Assert.True(newer.IsCompleted);
+        // What the first load promises is the rows: read after the switch. Not that the second call has returned too: the
+        // repositories' refresh after the switch can start a third load, and the first call, resuming inline on the UI
+        // thread as that one lands, returns before the second call's continuation has run (a full local run, 2026-11-02).
+        Assert.DoesNotContain(picker.Rows, r => r.IsCurrent);
+        await newer;
         Assert.DoesNotContain(picker.Rows, r => r.IsCurrent);
         picker.IsOpen = false;
     }
