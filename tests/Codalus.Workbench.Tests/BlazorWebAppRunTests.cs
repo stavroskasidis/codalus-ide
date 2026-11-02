@@ -25,7 +25,7 @@ public sealed class BlazorWebAppRunTests
     [Fact]
     public void A_blazor_web_apps_server_is_the_default_startup_project_not_its_webassembly_client()
     {
-        // The solution lists the client first (BlazorSudoku.sln does): its WasmAppHost serves 404 at "/".
+        // The solution lists the client first (ContosoStore.sln does): its WasmAppHost serves 404 at "/".
         var projects = new Dictionary<string, ProjectInfo>
         {
             [Client] = Project(Client, "Exe", Package("Microsoft.AspNetCore.Components.WebAssembly"), ProjectReference(Engine)),
@@ -94,7 +94,7 @@ public sealed class BlazorWebAppRunTests
     [Theory]
     [InlineData("dotnet watch : Restart is needed to apply the changes.", HotReloadState.Restarting)]
     [InlineData("dotnet watch : Waiting for a file to change before restarting ...", HotReloadState.Exited)]
-    [InlineData("dotnet watch : [BlazorSudoku.Server (net10.0)] Exited with error code 134", HotReloadState.Exited)]
+    [InlineData("dotnet watch : [ContosoStore.Server (net10.0)] Exited with error code 134", HotReloadState.Exited)]
     public void Restarts_and_exits_are_told_apart(string line, HotReloadState state) =>
         Assert.Equal(state, HotReloadOutput.Parse(line)?.State);
 }
