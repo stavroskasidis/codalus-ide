@@ -19,6 +19,7 @@ namespace Codalus.Shell.Docking;
 public sealed class LayoutManager : ObservableObject
 {
     public const string DocumentsId = "Documents";
+    private const string BesideDocumentsId = "BesideDocuments";
     private const string MainId = "Main";
     private const string CenterId = "Center";
     private const string LeftId = "LeftPane";
@@ -103,14 +104,19 @@ public sealed class LayoutManager : ObservableObject
         {
             Factory.PreviewPinnedDockable(tool);
         }
-        else if (!AllDockables().Contains(tool))
-        {
-            Factory.AddDockable(GroupFor(tool), tool);
-            Factory.SetActiveDockable(tool);
-        }
         else
         {
-            Factory.SetActiveDockable(tool);
+            if (!AllDockables().Contains(tool))
+            {
+                Place(tool);
+            }
+
+            // Shown without the focus (a run that brings up Aspire, benchmarks that finish), a tool window among the
+            // documents joins the group the user is in behind its document, rather than taking the editor away.
+            if (focus || !(ReferenceEquals(tool.Owner, ActiveDocumentDock()) && tool.Owner is IDock { ActiveDockable: ShellDocument }))
+            {
+                Factory.SetActiveDockable(tool);
+            }
         }
 
         if (focus)
@@ -152,7 +158,14 @@ public sealed class LayoutManager : ObservableObject
         if (!AllDockables().Contains(tool))
         {
             var beside = OpenToolWindows.FirstOrDefault(t => t.Id == besideId && !IsPinned(t));
-            Factory.AddDockable(beside?.Owner is IToolDock group && AllDockables().Contains(group) ? group : GroupFor(tool), tool);
+            if (beside?.Owner is IDock group and (IToolDock or IDocumentDock) && AllDockables().Contains(group))
+            {
+                Factory.AddDockable(group, tool);
+            }
+            else
+            {
+                Place(tool);
+            }
         }
 
         Factory.SetActiveDockable(tool);
@@ -200,11 +213,44 @@ public sealed class LayoutManager : ObservableObject
             .Any(list => list?.Contains(dockable) == true);
 
     /// <summary>
-    /// The group a tool window that isn't in the layout opens in, as a tab: the group it was in when it closed, if that
-    /// group is still open (Dock leaves a closed dockable's owner set); else the group of its default location.
+    /// Adds a tool window that isn't in the layout as a tab of <see cref="GroupFor"/>'s group; one whose location is
+    /// <see cref="ToolWindowLocation.DocumentBeside"/>, with no group of its own left, splits the active document group
+    /// and takes the new right half (only when that group has documents to keep: an empty one just takes it).
     /// </summary>
-    private IDock GroupFor(ToolWindowDockable tool) =>
-        tool.Owner is IDock last and (IToolDock or IDocumentDock) && AllDockables().Contains(last) ? last : EnsurePane(tool.Descriptor.Location);
+    private void Place(ToolWindowDockable tool)
+    {
+        var reopened = LastGroupOf(tool) is not null;
+        var group = GroupFor(tool);
+        Factory.AddDockable(group, tool);
+        if (!reopened && tool.Descriptor.Location == ToolWindowLocation.DocumentBeside && group is IDocumentDock
+            && ReferenceEquals(group, ActiveDocumentDock()) && group.VisibleDockables is { Count: > 1 })
+        {
+            Factory.NewHorizontalDocumentDock(tool);
+
+            // The documents' own group keeps its id (documents open there after a restart's restore, ResetLayout's).
+            if (tool.Owner is IDocumentDock { Id: DocumentsId } split)
+            {
+                split.Id = BesideDocumentsId;
+            }
+        }
+    }
+
+    /// <summary>The group <paramref name="tool"/> was last in, when it is still open (Dock leaves a closed dockable's owner set).</summary>
+    private IDock? LastGroupOf(ToolWindowDockable tool) =>
+        tool.Owner is IDock last and (IToolDock or IDocumentDock) && AllDockables().Contains(last) ? last : null;
+
+    /// <summary>
+    /// The group a tool window that isn't in the layout opens in, as a tab: the group it was in when it closed, if that
+    /// group is still open (Dock leaves a closed dockable's owner set); else the group of its default location: a
+    /// side's or the bottom's pane, the active document group, or (beside the documents) the main window's other
+    /// document group when the user has split them.
+    /// </summary>
+    private IDock GroupFor(ToolWindowDockable tool) => LastGroupOf(tool) ?? tool.Descriptor.Location switch
+    {
+        ToolWindowLocation.Document => ActiveDocumentDock(),
+        ToolWindowLocation.DocumentBeside => Flatten(_root).OfType<IDocumentDock>().FirstOrDefault(d => !ReferenceEquals(d, ActiveDocumentDock())) ?? ActiveDocumentDock(),
+        _ => EnsurePane(tool.Descriptor.Location),
+    };
 
     /// <summary>
     /// The main window's group for <paramref name="location"/>: the pane with its id; or, once the user's rearranging
@@ -536,13 +582,18 @@ public sealed class LayoutManager : ObservableObject
             return;
         }
 
-        if (changed?.Owner is IDocumentDock owner)
+        // A tool window among the documents (the Plugins page, the HTTP Response beside its file) isn't a document: going
+        // to it leaves the active document as it was, as going to a side's tool window does, and files keep opening in
+        // the user's group, not beside the HTTP Response.
+        if (changed is not ToolWindowDockable && changed?.Owner is IDocumentDock owner)
         {
             _lastDocumentDock = owner;
         }
 
         var dock = _lastDocumentDock is { } last && AllDockables().Contains(last) ? last : Find<IDocumentDock>(DocumentsId);
-        ActiveDocument = dock?.ActiveDockable as ShellDocument ?? Documents.FirstOrDefault();
+        ActiveDocument = dock?.ActiveDockable as ShellDocument
+            ?? (dock?.ActiveDockable is ToolWindowDockable && _activeDocument is { } current && Documents.Contains(current) ? current : null)
+            ?? Documents.FirstOrDefault();
     }
 
     // ------------------------------------------------------------------ reset, save and restore
@@ -572,6 +623,7 @@ public sealed class LayoutManager : ObservableObject
     /// <summary>Replaces the layout with <paramref name="snapshot"/>; returns false (keeping the current layout) if it is unusable.</summary>
     public bool Restore(LayoutSnapshot snapshot)
     {
+        snapshot = snapshot.Upgraded();
         if (snapshot.Version != LayoutSnapshot.CurrentVersion || Build(snapshot.Root) is not { } root)
         {
             return false;
@@ -674,7 +726,15 @@ public sealed class LayoutManager : ObservableObject
             Active = t.ActiveDockable?.Id,
             Tools = [.. (t.VisibleDockables ?? []).OfType<ToolWindowDockable>().Select(tool => tool.Id)],
         },
-        IDocumentDock d => new LayoutNode("documents") { Id = d.Id, Proportion = Proportion(d) },
+        // The tool windows among the documents (a document location's, or dragged there); the documents themselves are the
+        // solution session's.
+        IDocumentDock d => new LayoutNode("documents")
+        {
+            Id = d.Id,
+            Proportion = Proportion(d),
+            Active = d.ActiveDockable is ToolWindowDockable active ? active.Id : null,
+            Tools = (d.VisibleDockables ?? []).OfType<ToolWindowDockable>().Select(tool => tool.Id).ToList() is { Count: > 0 } tools ? tools : null,
+        },
         _ => null,
     };
 
@@ -756,7 +816,9 @@ public sealed class LayoutManager : ObservableObject
                 dock.IsCollapsable = false;
                 dock.CanCreateDocument = false;
                 dock.Proportion = node.Proportion ?? double.NaN;
-                dock.VisibleDockables = Factory.CreateList<IDockable>();
+                var tools = (node.Tools ?? []).Select(ResolveTool).OfType<ToolWindowDockable>().Distinct().ToList();
+                dock.VisibleDockables = Factory.CreateList<IDockable>([.. tools]);
+                dock.ActiveDockable = tools.FirstOrDefault(t => t.Id == node.Active) ?? tools.FirstOrDefault();
                 return dock;
             }
 

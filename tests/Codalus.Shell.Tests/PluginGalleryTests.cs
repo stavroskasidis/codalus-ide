@@ -5,7 +5,7 @@ using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell.Tests;
 
-/// <summary>The Plugin Gallery window (M22c, ADR 0060) against a mock NuGet feed.</summary>
+/// <summary>The Plugins page's gallery (M22c, ADR 0060) against a mock NuGet feed, and its Installed tab's uninstall.</summary>
 public sealed class PluginGalleryTests
 {
     [AvaloniaFact]
@@ -32,7 +32,11 @@ public sealed class PluginGalleryTests
             return string.Join(" | ", Walk(f.Shell.GalleryRoot()));
         }
 
-        f.Shell.Layout.ShowToolWindow(ShellHost.PluginGalleryWindow);
+        f.Shell.ShowPluginsPage(ViewModels.PluginsPageViewModel.BrowseTab);
+        ShellFixture.Pump();
+        var page = Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(f.Window).OfType<Views.PluginsPageView>().Single();
+        Assert.Equal(ViewModels.PluginsPageViewModel.BrowseTab, page.Tabs.SelectedIndex);
+        Assert.IsType<ShellHost.PluginGalleryView>(page.GalleryView);
         await f.Shell.OnPluginGalleryEventAsync("query", "change", "fetch", null);
         Assert.Contains("contoso.fetcher", Text(), StringComparison.Ordinal);
         await f.Shell.OnPluginGalleryEventAsync("results", "select", null, 0);
@@ -49,14 +53,19 @@ public sealed class PluginGalleryTests
         var plugin = Assert.Single(f.Shell.Plugins.Plugins, p => p.Id == "contoso.fetcher");
         Assert.Equal(Workbench.Plugins.PluginState.Ready, plugin.State);
         Assert.Contains(settings.Descriptors, d => d.Key == "fetcher.url"); // its contributions apply at once
-        Assert.Contains("Installed from a gallery", Text(), StringComparison.Ordinal);
 
-        // Uninstall: at the next start.
-        await f.Shell.OnPluginGalleryEventAsync("installed", "select", null, 0);
-        var uninstall = f.Shell.OnPluginGalleryEventAsync("uninstall", "click", null, null);
+        // Uninstall, on its row of the Installed tab (built-in plugins have none): at the next start.
+        f.Shell.ShowPluginsPage(ViewModels.PluginsPageViewModel.InstalledTab);
+        ShellFixture.Pump();
+        Assert.Equal(ViewModels.PluginsPageViewModel.InstalledTab, page.Tabs.SelectedIndex);
+        Assert.All(f.Shell.PluginList.Plugins.Where(r => r.Id != "contoso.fetcher"), r => Assert.False(r.CanUninstall, $"{r.Id} can be uninstalled"));
+        var row = Assert.Single(f.Shell.PluginList.Plugins, r => r.Id == "contoso.fetcher");
+        Assert.True(row.CanUninstall);
+        row.UninstallCommand.Execute(null);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, seconds: 30);
         f.Shell.Dialogs.Accept();
-        await uninstall;
+        await ShellFixture.PumpUntil(() => f.Shell.PluginList.Plugins.Single(r => r.Id == "contoso.fetcher").State.Contains("uninstalled at the next start", StringComparison.Ordinal));
+        Assert.False(f.Shell.PluginList.Plugins.Single(r => r.Id == "contoso.fetcher").CanUninstall);
         Assert.Contains("Waiting for a restart", Text(), StringComparison.Ordinal);
         Assert.Contains("uninstall", Text(), StringComparison.Ordinal);
     }
