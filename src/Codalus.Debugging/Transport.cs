@@ -20,12 +20,20 @@ public sealed record DebugAdapterStartInfo(
     public const string LogVariable = "CODALUS_NETCOREDBG_LOG";
 
     /// <summary>netcoredbg at <paramref name="path"/> on this machine (logging into <c>CODALUS_NETCOREDBG_LOG</c> when set).</summary>
-    public static DebugAdapterStartInfo Local(string path)
+    public static DebugAdapterStartInfo Local(string path) => Local(path, System.Environment.GetEnvironmentVariable(LogVariable));
+
+    /// <summary>
+    /// netcoredbg at <paramref name="path"/>, logging into <paramref name="logFolder"/> when it is set. The log's path is
+    /// made absolute here: netcoredbg starts in its own folder, so a relative one (the smoke test's
+    /// <c>artifacts/smoke-test/netcoredbg</c>) named a folder that isn't there, and netcoredbg wrote no log (Linux arm64's
+    /// debug.compound, run 41374588224, kept none).
+    /// </summary>
+    internal static DebugAdapterStartInfo Local(string path, string? logFolder)
     {
         List<string> arguments = ["--interpreter=vscode"];
-        if (System.Environment.GetEnvironmentVariable(LogVariable) is { Length: > 0 } folder)
+        if (logFolder is { Length: > 0 })
         {
-            Directory.CreateDirectory(folder);
+            var folder = Directory.CreateDirectory(logFolder).FullName;
             arguments.Add("--engineLogging=" + Path.Combine(folder, $"netcoredbg-{DateTime.Now:HHmmss}-{Guid.NewGuid().ToString("N")[..6]}.log"));
         }
 
