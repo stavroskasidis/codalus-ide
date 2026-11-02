@@ -84,6 +84,16 @@ public sealed class LayoutManager : ObservableObject
 
     public IEnumerable<ShellDocument> Documents => AllDockables().OfType<ShellDocument>();
 
+    /// <summary>Shows every document group's tabs at <paramref name="layout"/>, and the groups made later too.</summary>
+    public void SetTabsLayout(DocumentTabLayout layout)
+    {
+        Factory.TabsLayout = layout;
+        foreach (var dock in AllDockables().OfType<IDocumentDock>())
+        {
+            dock.TabsLayout = layout;
+        }
+    }
+
     // ------------------------------------------------------------------ tool windows
 
     /// <summary>Shows (adding it if needed) the tool window <paramref name="id"/>. Returns null for unknown ids.</summary>

@@ -9,22 +9,27 @@ namespace Codalus.Shell.Controls;
 /// The tabs of a document group (M34e): one row at their natural widths. When they don't fit, whole tabs are left out
 /// from the right, as a classic IDE's document well does, but never a pinned tab (<see cref="DocumentTab.IsPinnedProperty"/>)
 /// or the selected one, so pinned tabs stay in view at the left instead of scrolling away. The documents left out are
-/// in the Window menu and Ctrl+Tab.
+/// in the tab list beside the tabs (<see cref="TabStripButtons"/>), the Window menu and Ctrl+Tab.
 /// With <see cref="PinnedRow"/> (<c>workbench.editor.pinnedTabsOnSeparateRow</c>), a group with pinned and unpinned
 /// tabs shows its pinned tabs on a row of their own above the others, as the classic IDE does; each row then leaves
 /// tabs out on its own, keeping only the selected one.
+/// With <see cref="MultipleRows"/> (<c>workbench.editor.tabsInMultipleRows</c>), tabs that don't fit wrap onto more rows
+/// instead of leaving (the pinned ones and the others each on rows of their own, with <see cref="PinnedRow"/>).
 /// </summary>
 public sealed class DocumentTabPanel : Panel
 {
     /// <summary>Whether pinned tabs take a row of their own above the others.</summary>
     public static readonly StyledProperty<bool> PinnedRowProperty = AvaloniaProperty.Register<DocumentTabPanel, bool>(nameof(PinnedRow));
 
+    /// <summary>Whether tabs that don't fit wrap onto more rows instead of leaving.</summary>
+    public static readonly StyledProperty<bool> MultipleRowsProperty = AvaloniaProperty.Register<DocumentTabPanel, bool>(nameof(MultipleRows));
+
     static DocumentTabPanel()
     {
         // Which tabs stay depends on the selection; which row a tab takes, and so the panel's height, on the pins.
         AffectsParentArrange<DocumentTabPanel>(TabStripItem.IsSelectedProperty);
         AffectsParentMeasure<DocumentTabPanel>(DocumentTab.IsPinnedProperty);
-        AffectsMeasure<DocumentTabPanel>(PinnedRowProperty);
+        AffectsMeasure<DocumentTabPanel>(PinnedRowProperty, MultipleRowsProperty);
     }
 
     public DocumentTabPanel() => ClipToBounds = true;
@@ -33,6 +38,12 @@ public sealed class DocumentTabPanel : Panel
     {
         get => GetValue(PinnedRowProperty);
         set => SetValue(PinnedRowProperty, value);
+    }
+
+    public bool MultipleRows
+    {
+        get => GetValue(MultipleRowsProperty);
+        set => SetValue(MultipleRowsProperty, value);
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -49,13 +60,17 @@ public sealed class DocumentTabPanel : Panel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        foreach (var child in Children.Where(c => c.IsVisible))
+        {
+            child.Measure(new Size(double.PositiveInfinity, availableSize.Height));
+        }
+
         double width = 0, height = 0;
-        foreach (var row in Rows())
+        foreach (var row in Rows(availableSize.Width))
         {
             double rowWidth = 0, rowHeight = 0;
             foreach (var child in row)
             {
-                child.Measure(new Size(double.PositiveInfinity, availableSize.Height));
                 rowWidth += child.DesiredSize.Width;
                 rowHeight = Math.Max(rowHeight, child.DesiredSize.Height);
             }
@@ -69,7 +84,7 @@ public sealed class DocumentTabPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var rows = Rows();
+        var rows = Rows(finalSize.Width);
         double y = 0;
         foreach (var row in rows)
         {
@@ -103,14 +118,64 @@ public sealed class DocumentTabPanel : Panel
         }
     }
 
-    /// <summary>The visible tabs by row: the pinned ones and the others when <see cref="PinnedRow"/> has both, else one row.</summary>
-    private List<List<Control>> Rows()
+    /// <summary>
+    /// The visible tabs by row: the pinned ones and the others when <see cref="PinnedRow"/> has both, else one row; with
+    /// <see cref="MultipleRows"/>, each wrapped to <paramref name="width"/>. The tabs must have been measured.
+    /// </summary>
+    private List<List<Control>> Rows(double width)
     {
         var children = Children.Where(c => c.IsVisible).ToList();
         var pinned = children.Where(DocumentTab.GetIsPinned).ToList();
-        return PinnedRow && pinned.Count > 0 && pinned.Count < children.Count
+        List<List<Control>> groups = PinnedRow && pinned.Count > 0 && pinned.Count < children.Count
             ? [pinned, [.. children.Where(c => !DocumentTab.GetIsPinned(c))]]
             : [children];
+        if (!MultipleRows || double.IsInfinity(width))
+        {
+            return groups;
+        }
+
+        var rows = new List<List<Control>>();
+        foreach (var group in groups)
+        {
+            var at = 0;
+            foreach (var count in Wrap([.. group.Select(c => c.DesiredSize.Width)], width))
+            {
+                rows.Add(group.GetRange(at, count));
+                at += count;
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// How many tabs each row takes when tabs of <paramref name="widths"/> wrap to <paramref name="available"/>: as many
+    /// as fit, and at least one (a tab wider than the group has a row of its own, its title cut off).
+    /// </summary>
+    public static List<int> Wrap(IReadOnlyList<double> widths, double available)
+    {
+        var rows = new List<int>();
+        double x = 0;
+        var count = 0;
+        foreach (var width in widths)
+        {
+            if (count > 0 && x + width > available + 0.5)
+            {
+                rows.Add(count);
+                x = 0;
+                count = 0;
+            }
+
+            x += width;
+            count++;
+        }
+
+        if (count > 0)
+        {
+            rows.Add(count);
+        }
+
+        return rows;
     }
 
     /// <summary>A shown tab's width at <paramref name="x"/>: its own, or what is left of <paramref name="available"/>.</summary>

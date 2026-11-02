@@ -23,6 +23,21 @@ public sealed class ShellDockFactory : Factory
         base.InitActiveDockable(dockable, owner);
     }
 
+    /// <summary>
+    /// Where every document group shows its tabs (<c>workbench.editor.tabPlacement</c>): a group takes it as it joins the
+    /// layout (a split, a floating window, a restored layout); <see cref="LayoutManager.SetTabsLayout"/> sets the others.
+    /// </summary>
+    public Dock.Model.Core.DocumentTabLayout TabsLayout { get; set; } = Dock.Model.Core.DocumentTabLayout.Top;
+
+    /// <summary>A document group's tab list button (the strip's <c>…</c>): shows its documents below the button.</summary>
+    public Action<Dock.Model.Controls.IDocumentDock, Avalonia.Controls.Control>? ShowTabList { get; set; }
+
+    /// <summary>A document group's tab options button (the strip's gear): shows the options menu at the button.</summary>
+    public Action<Avalonia.Controls.Control>? ShowTabOptions { get; set; }
+
+    /// <summary>The mouse wheel over a document group's tabs, by its vertical delta; true when it was handled.</summary>
+    public Func<double, bool>? TabStripWheel { get; set; }
+
     /// <summary>A group Dock makes gets its tab before it has a factory: it takes the tab's title when it joins the layout.</summary>
     public override void InitDockable(Dock.Model.Core.IDockable dockable, Dock.Model.Core.IDockable? owner)
     {
@@ -30,6 +45,11 @@ public sealed class ShellDockFactory : Factory
         if (dockable is Dock.Model.Core.IDock dock)
         {
             TitleFromActive(dock, dock.ActiveDockable);
+        }
+
+        if (dockable is Dock.Model.Controls.IDocumentDock documents)
+        {
+            documents.TabsLayout = TabsLayout;
         }
     }
 
