@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 using AvaloniaEdit;
 using AvaloniaEdit.Editing;
 
@@ -87,5 +88,23 @@ public sealed class CodeTextArea : TextArea
         }
 
         InvalidateMeasure();
+    }
+}
+
+/// <summary>Scrolling a text editor through its scroll viewer.</summary>
+internal static class TextEditorScrolling
+{
+    /// <summary>
+    /// Scrolls <paramref name="editor"/> so its text starts <paramref name="offset"/> pixels down, clamped to the text.
+    /// (AvaloniaEdit's <see cref="TextEditor.ScrollToVerticalOffset"/> doesn't move the scroll viewer: the minimap's
+    /// clicks and drags didn't scroll.)
+    /// </summary>
+    public static void ScrollToY(this TextEditor editor, double offset)
+    {
+        if (editor.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault() is { } scroll)
+        {
+            var bottom = Math.Max(0, scroll.Extent.Height - scroll.Viewport.Height);
+            scroll.Offset = new Avalonia.Vector(scroll.Offset.X, Math.Clamp(offset, 0, bottom));
+        }
     }
 }
