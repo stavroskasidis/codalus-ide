@@ -308,6 +308,13 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     /// <summary>How long the filter waits after a keystroke before it filters (M57): the tree is filtered once per pause.</summary>
     internal static readonly TimeSpan FilterDelay = TimeSpan.FromMilliseconds(150);
 
+    /// <summary>
+    /// The pause this document's filter waits for, <see cref="FilterDelay"/>. A test that types sets a longer one: its
+    /// waits between keystrokes pump the UI thread, and on a loaded runner one ran 161 ms, past the 150 ms, so the
+    /// filter rightly built in the middle (macOS CI, runs 41264132614, 41366742205 and 41412231293).
+    /// </summary>
+    internal TimeSpan FilterPause { get; set; } = FilterDelay;
+
     private readonly GitRepositoryActions _actions;
     private readonly Dictionary<string, bool> _expanded = new(StringComparer.Ordinal);
     private readonly Dictionary<GitService, RepositoryData> _data = [];
@@ -401,7 +408,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             {
                 if (_filterTimer is null)
                 {
-                    _filterTimer = new Avalonia.Threading.DispatcherTimer { Interval = FilterDelay };
+                    _filterTimer = new Avalonia.Threading.DispatcherTimer();
                     _filterTimer.Tick += (_, _) =>
                     {
                         _filterTimer.Stop();
@@ -410,6 +417,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                 }
 
                 _filterTimer.Stop();
+                _filterTimer.Interval = FilterPause;
                 _filterTimer.Start();
             }
         }
