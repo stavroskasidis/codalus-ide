@@ -22,6 +22,12 @@ namespace Codalus.Projects.Host;
 /// which would otherwise deadlock. The end of a build holds work off only while it runs, which takes milliseconds.
 /// Entering and leaving needn't be on the same thread.
 /// </para>
+/// <para>
+/// A cancelled build clears the cache sooner: <c>CancelAllSubmissions</c> aborts its nodes at once, and the in-process
+/// node's cleanup clears it then. So a cancellation holds the gate alone from before the abort to the build's end
+/// (<see cref="BeginExclusive"/>, <see cref="GatedCancellation"/>), and the build's own work that waits for the gate
+/// meanwhile gives up (<see cref="EnterCancellable"/>).
+/// </para>
 /// </remarks>
 internal static class StringCacheGate
 {
@@ -55,15 +61,33 @@ internal static class StringCacheGate
         }
     }
 
+    /// <summary>Whether this flow holds the gate shared now.</summary>
+    internal static bool IsHeld => s_held.Value > 0;
+
     /// <summary>Holds the gate shared until the result is disposed: around anything that loads, evaluates or edits projects.</summary>
-    public static Scope Enter()
+    public static Scope Enter() => EnterCancellable(CancellationToken.None);
+
+    /// <summary>
+    /// <see cref="Enter"/>, giving up with <see cref="OperationCanceledException"/> when <paramref name="cancellationToken"/>
+    /// is cancelled while it waits: a cancelled build's own work, which would otherwise wait for the gate that its
+    /// cancellation holds until the build ends (<see cref="GatedCancellation"/>).
+    /// </summary>
+    public static Scope EnterCancellable(CancellationToken cancellationToken)
     {
         var nested = s_held.Value > 0;
+        using var wake = cancellationToken.CanBeCanceled ? cancellationToken.UnsafeRegister(static _ =>
+        {
+            lock (s_sync)
+            {
+                Monitor.PulseAll(s_sync);
+            }
+        }, null) : default;
         lock (s_sync)
         {
             // A flow that holds the gate keeps the end of a build from starting, so it can't be running: it only waits.
             while (s_exclusive || (s_waiting > 0 && !nested))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 Monitor.Wait(s_sync);
             }
 
@@ -79,6 +103,19 @@ internal static class StringCacheGate
     /// MSBuild work holds the gate, keeping new work out until it returns. It must not enter the gate itself.
     /// </summary>
     public static void Exclusive(Action action)
+    {
+        using (BeginExclusive())
+        {
+            action();
+        }
+    }
+
+    /// <summary>
+    /// Holds the gate alone, once no MSBuild work holds it, until the result is disposed: from a build's cancellation,
+    /// whose in-process node clears the cache, to its end (<see cref="GatedCancellation"/>). Nothing in between may enter
+    /// the gate.
+    /// </summary>
+    public static ExclusiveHold BeginExclusive()
     {
         lock (s_sync)
         {
@@ -101,12 +138,25 @@ internal static class StringCacheGate
             s_exclusive = true;
         }
 
-        try
+        return new ExclusiveHold();
+    }
+
+    /// <summary>The gate held alone; leaves it once, however many times it is disposed.</summary>
+    public sealed class ExclusiveHold : IDisposable
+    {
+        private int _left;
+
+        internal ExclusiveHold()
         {
-            action();
         }
-        finally
+
+        public void Dispose()
         {
+            if (Interlocked.Exchange(ref _left, 1) != 0)
+            {
+                return;
+            }
+
             lock (s_sync)
             {
                 s_exclusive = false;
@@ -143,6 +193,103 @@ internal static class StringCacheGate
                     Monitor.PulseAll(s_sync);
                 }
             }
+        }
+    }
+}
+
+/// <summary>
+/// A build's cancellation and end through <see cref="StringCacheGate"/>. <c>BuildManager.CancelAllSubmissions</c> aborts the
+/// build's nodes at once, on the thread pool, and the in-process node's cleanup clears MSBuild's string cache there, not
+/// in <c>EndBuild</c>: an item edit evaluating meanwhile read a freed handle ("Handle is not initialized.", Linux CI,
+/// run 41539988831, after a file change cancelled a design-time build). So the cancellation first takes the gate alone,
+/// once the work in it has left, and holds it until the build has ended.
+/// </summary>
+/// <remarks>
+/// <see cref="Cancel"/> returns at once: it runs as a token's callback, which runs where the token is cancelled, under
+/// its owner's locks. A cancellation from a flow that holds the gate itself can't wait for it (that flow waits for the
+/// build), so it cancels as before, without the gate. So does a build without an in-process node
+/// (<paramref name="inProcess"/> false: a real build on MSBuild 17 and later), whose abort clears nothing here and
+/// shouldn't wait for evaluations, or hold them off while its worker nodes shut down.
+/// </remarks>
+internal sealed class GatedCancellation(Action cancel, bool inProcess = true)
+{
+    private readonly object _sync = new();
+    private Task<StringCacheGate.ExclusiveHold?>? _cancelling;
+
+    /// <summary>Calls <see cref="Cancel"/> when <paramref name="cancellationToken"/> is cancelled, in the flow that cancels it.</summary>
+    public CancellationTokenRegistration Register(CancellationToken cancellationToken) =>
+        cancellationToken.UnsafeRegister(static state => ((GatedCancellation)state!).Cancel(), this);
+
+    /// <summary>Cancels the build once it holds the gate alone (the first time only).</summary>
+    public void Cancel()
+    {
+        lock (_sync)
+        {
+            if (_cancelling is not null)
+            {
+                return;
+            }
+
+            if (!inProcess || StringCacheGate.IsHeld)
+            {
+                cancel();
+                _cancelling = Task.FromResult<StringCacheGate.ExclusiveHold?>(null);
+                return;
+            }
+
+            _cancelling = Task.Run(() =>
+            {
+                var hold = StringCacheGate.BeginExclusive();
+                try
+                {
+                    cancel();
+                }
+                catch
+                {
+                    hold.Dispose();
+                    throw;
+                }
+
+                return (StringCacheGate.ExclusiveHold?)hold;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Runs <paramref name="end"/> (the build's <c>EndBuild</c>): in the cancellation's hold when the build was cancelled,
+    /// which it then leaves, otherwise through <see cref="StringCacheGate.Exclusive"/>. Call it after the registration is
+    /// disposed, so no cancellation starts after it.
+    /// </summary>
+    public async Task EndAsync(Action end)
+    {
+        Task<StringCacheGate.ExclusiveHold?>? cancelling;
+        lock (_sync)
+        {
+            cancelling = _cancelling;
+        }
+
+        StringCacheGate.ExclusiveHold? hold = null;
+        if (cancelling is not null)
+        {
+            try
+            {
+                hold = await cancelling.ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The cancel failed and left the gate: the end takes it on its own below.
+            }
+        }
+
+        if (hold is null)
+        {
+            StringCacheGate.Exclusive(end);
+            return;
+        }
+
+        using (hold)
+        {
+            end();
         }
     }
 }
