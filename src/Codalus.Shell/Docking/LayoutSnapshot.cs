@@ -18,8 +18,17 @@ public sealed record LayoutSnapshot(int Version, LayoutNode Root)
 
     public IReadOnlyList<string>? BottomPinned { get; init; }
 
+    /// <summary>
+    /// The size each auto-hidden tool window slides out at, by id (the user's last drag of its splitter). A tool window
+    /// without one slides out at its pane's default share of the window.
+    /// </summary>
+    public Dictionary<string, PinnedSize>? PinnedSizes { get; init; }
+
     public WindowPlacement? Window { get; init; }
 }
+
+/// <summary>An auto-hidden tool window's slide-out size: a side's uses its width, the bottom's its height.</summary>
+public sealed record PinnedSize(double Width, double Height);
 
 /// <summary>A node of the layout tree. <see cref="Kind"/> is <c>proportional</c>, <c>splitter</c>, <c>tools</c> or <c>documents</c>.</summary>
 public sealed record LayoutNode(string Kind)
