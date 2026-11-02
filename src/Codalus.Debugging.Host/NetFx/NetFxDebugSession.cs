@@ -217,6 +217,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// reported for the attach (<c>11.0.0-rc.3…</c>, the runtime's folder), known before any module loads; a
     /// self-contained program's folder isn't one, and then the core library's version says it. None for the .NET
     /// Framework, whose debugger doesn't apply edits here, nor before the program has started.
+    /// <para>
+    /// Plus <c>AddExplicitInterfaceImplementation</c>, which every .NET runtime supports without reporting it, as
+    /// <c>dotnet watch</c> adds it: an edit to an async method without an <c>await</c> gives it a new state machine,
+    /// which implements <c>IAsyncStateMachine</c> explicitly, and without it was CS9346, a restart.
+    /// </para>
     /// </summary>
     private string[] HotReloadCapabilities()
     {
@@ -243,7 +248,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return [];
         }
 
-        string[] capabilities = ["Baseline", "AddMethodToExistingType", "AddStaticFieldToExistingType", "AddInstanceFieldToExistingType", "NewTypeDefinition", "ChangeCustomAttributes", "UpdateParameters"];
+        string[] capabilities = ["Baseline", "AddMethodToExistingType", "AddStaticFieldToExistingType", "AddInstanceFieldToExistingType", "NewTypeDefinition", "ChangeCustomAttributes", "UpdateParameters", "AddExplicitInterfaceImplementation"];
         if (major >= 7)
         {
             capabilities = [.. capabilities, "GenericUpdateMethod", "GenericAddMethodToExistingType", "GenericAddFieldToExistingType"];

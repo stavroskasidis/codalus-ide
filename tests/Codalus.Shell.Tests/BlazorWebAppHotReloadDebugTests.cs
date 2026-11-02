@@ -150,8 +150,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 // server's runtime refuses it (netcoredbg is attached) and keeps running the same process.
                 var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
                 await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-                var offset = editor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-                editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+                var offset = editor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
                 await f.RunAsync("run.applyCodeChanges");
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
@@ -244,7 +244,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
             reported = browser.Server!.CapabilitiesAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
             return reported is { Length: > 0 } && !reported.StartsWith('!');
         }, seconds: 120, describe: () => $"The page answered '{reported}'. " + Diagnostics(f));
-        var missing = browser.Capabilities!.Except(reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal).ToList();
+        // Except the one it applies without reporting it, which the tick's edit below needs (an async method without an await).
+        var missing = browser.Capabilities!.Except([.. reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), BrowserHotReload.ImpliedCapability], StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, $"The page's runtime can't apply {string.Join(", ", missing)}; it reported '{reported}'.");
 
         // 1. The server, in place, in the same process.
@@ -269,8 +270,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // this edit's. A page slow to answer says it later.)
         var counterEditor = await f.Shell.OpenFileAsync(counter, preview: false, null);
         await ShellFixture.PumpUntil(() => counterEditor?.Controller is not null);
-        offset = counterEditor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-        counterEditor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+        offset = counterEditor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+        counterEditor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
         await f.RunAsync("run.applyCodeChanges");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text
             .Contains("(server and browser)", StringComparison.Ordinal), seconds: 120, describe: () => Diagnostics(f));
