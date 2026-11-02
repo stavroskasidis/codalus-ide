@@ -224,6 +224,21 @@ public class GatesTests
     }
 
     [Fact]
+    public void Of_two_values_accepted_on_the_same_day_the_later_in_the_file_counts()
+    {
+        // A baseline accepted in the morning and the fix's lower value accepted the same afternoon (the scroll, 2026-11-02).
+        var before = Result("binary-size", 1, ("lshost_mb", [73.9]));
+        var accepted = new[] { Accepted("lshost_mb", 93.5, day: 2), Accepted("lshost_mb", 80, day: 2) };
+        var compared = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 3, ("lshost_mb", [93.5]))], [before], accepted));
+        Assert.True(compared.Failed);
+        Assert.Contains("(80.0)", compared.Rule, StringComparison.Ordinal);
+
+        // A newer date still wins wherever it is in the file.
+        var newest = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 4, ("lshost_mb", [93.5]))], [before], [Accepted("lshost_mb", 93.5, day: 3), .. accepted]));
+        Assert.False(newest.Failed);
+    }
+
+    [Fact]
     public void Latency_and_memory_compare_with_runs_on_the_same_cpu()
     {
         const string fast = "AMD EPYC 9V45 96-Core Processor";
