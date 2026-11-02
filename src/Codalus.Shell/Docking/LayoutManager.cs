@@ -220,9 +220,9 @@ public sealed class LayoutManager : ObservableObject
     {
         var (id, alignment, proportion) = location switch
         {
-            ToolWindowLocation.Left => (LeftId, Alignment.Left, 0.22),
-            ToolWindowLocation.Right => (RightId, Alignment.Right, 0.22),
-            _ => (BottomId, Alignment.Bottom, 0.28),
+            ToolWindowLocation.Left => (LeftId, Alignment.Left, PaneProportion(location)),
+            ToolWindowLocation.Right => (RightId, Alignment.Right, PaneProportion(location)),
+            _ => (BottomId, Alignment.Bottom, PaneProportion(location)),
         };
 
         var groups = Flatten(_root).OfType<IToolDock>().ToList();
@@ -565,6 +565,7 @@ public sealed class LayoutManager : ObservableObject
         RightPinned = PinnedIds(_root.RightPinnedDockables),
         TopPinned = PinnedIds(_root.TopPinnedDockables),
         BottomPinned = PinnedIds(_root.BottomPinnedDockables),
+        PinnedSizes = PinnedSizes(),
         Window = window,
     };
 
@@ -593,6 +594,7 @@ public sealed class LayoutManager : ObservableObject
             {
                 Factory.AddDockable(EnsurePane(location), tool);
                 Factory.PinDockable(tool);
+                SetPinnedSize(tool, snapshot.PinnedSizes?.GetValueOrDefault(tool.Id), snapshot.Window);
             }
         }
 
@@ -602,6 +604,57 @@ public sealed class LayoutManager : ObservableObject
 
     private static List<string>? PinnedIds(IList<IDockable>? pinned) =>
         pinned is { Count: > 0 } ? [.. pinned.OfType<ToolWindowDockable>().Select(t => t.Id)] : null;
+
+    private Dictionary<string, PinnedSize>? PinnedSizes()
+    {
+        var sizes = new Dictionary<string, PinnedSize>(StringComparer.Ordinal);
+        foreach (var list in new[] { _root.LeftPinnedDockables, _root.RightPinnedDockables, _root.TopPinnedDockables, _root.BottomPinnedDockables })
+        {
+            foreach (var tool in (list ?? []).OfType<ToolWindowDockable>())
+            {
+                tool.GetPinnedBounds(out _, out _, out var width, out var height);
+                if (IsSize(width) && IsSize(height))
+                {
+                    sizes[tool.Id] = new PinnedSize(width, height);
+                }
+            }
+        }
+
+        return sizes.Count > 0 ? sizes : null;
+    }
+
+    /// <summary>
+    /// Gives a restored auto-hidden tool window the size it slides out at: the saved one, else its pane's default share of
+    /// the window (<see cref="EnsurePane"/>'s). Dock takes the size from the window's bounds when the user unpins it, but a
+    /// restored one was never shown: without a size it slid out at Dock's 50 px minimum, and Dock then recorded that as
+    /// its size (the maintainer's report, 2026-11-02).
+    /// </summary>
+    private static void SetPinnedSize(ToolWindowDockable tool, PinnedSize? saved, WindowPlacement? window)
+    {
+        if (saved is { } size && IsSize(size.Width) && IsSize(size.Height))
+        {
+            tool.SetPinnedBounds(0, 0, size.Width, size.Height);
+            return;
+        }
+
+        tool.GetPinnedBounds(out _, out _, out var width, out var height);
+        if (IsSize(width) && IsSize(height))
+        {
+            return; // the size it had earlier in this session (a window layout applied again)
+        }
+
+        var (windowWidth, windowHeight) = window is { } w && IsSize(w.Width) && IsSize(w.Height) ? (w.Width, w.Height) : (DefaultWindowWidth, DefaultWindowHeight);
+        tool.SetPinnedBounds(0, 0, Math.Round(windowWidth * PaneProportion(ToolWindowLocation.Left)), Math.Round(windowHeight * PaneProportion(ToolWindowLocation.Bottom)));
+    }
+
+    private static bool IsSize(double value) => double.IsFinite(value) && value > 0;
+
+    /// <summary>The share of the window a location's pane takes when it is made.</summary>
+    private static double PaneProportion(ToolWindowLocation location) => location == ToolWindowLocation.Bottom ? 0.28 : 0.22;
+
+    // The main window's size before it was ever resized (MainWindow.axaml).
+    private const double DefaultWindowWidth = 1280;
+    private const double DefaultWindowHeight = 800;
 
     private static LayoutNode? CaptureNode(IDockable dockable) => dockable switch
     {
