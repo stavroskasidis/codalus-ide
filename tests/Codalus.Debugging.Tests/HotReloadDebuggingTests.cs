@@ -73,7 +73,7 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
     public async Task An_edit_to_an_async_method_without_an_await_applies()
     {
         // Roslyn gives the method a new state machine, which implements IAsyncStateMachine explicitly: the runtime doesn't
-        // report AddExplicitInterfaceImplementation, and without it the edit was CS9346, a restart (WPoseidon's report).
+        // report AddExplicitInterfaceImplementation, and without it the edit was CS9346, a restart (the maintainer's report).
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
         var events = new EventLog(adapter);
         var session = "async-" + Guid.NewGuid().ToString("N");
