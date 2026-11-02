@@ -24,7 +24,7 @@ public sealed class WinUILanguageFixture : LanguageFixture
         }
         catch (Xunit.Sdk.XunitException)
         {
-            Assert.Fail("The WinUI app's design-time build has no WinUI references or XAML files: "
+            Assert.Fail($"The WinUI app's design-time build has no WinUI references or XAML files (restore {RestoreState}): "
                 + string.Join("; ", Solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.State} {i.Value.Error} restored={Restored(i.Value)}"))
                 + "\n" + string.Join('\n', Log.TakeLast(40)));
         }

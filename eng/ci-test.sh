@@ -35,6 +35,10 @@ mkdir -p "$results"
 # which the runtime returns while an aborted func-eval is pending; netcoredbg aborts one after 5 s) left no trace of
 # the evaluation before it (DataTipDebuggerTests, run 40375629247).
 export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
+# And Codalus IDE's CoreCLR adapter's log of every session, in every shard: ClrDebuggerTests runs in others too, where
+# a func-eval that timed out (ToUpper, Windows, run 41459412070) left no log, so not the thread stacks the adapter
+# writes at a func-eval's timeout.
+export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;
@@ -194,11 +198,10 @@ case "$shard" in
     ;;
   debug-codalus)
     # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
-    # folder (uploaded when the shard fails), as netcoredbg's is above: ADR 0086's one silent attach failure on Linux is
+    # folder (uploaded when the shard fails; set above for every shard): ADR 0086's one silent attach failure on Linux is
     # watched for here.
     export CODALUS_DEBUG_ADAPTER=codalus
     export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
-    export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
     # One test project at a time (each line's namespace names it), every one run whatever the one before did.
     projects=()
     while IFS= read -r line; do
