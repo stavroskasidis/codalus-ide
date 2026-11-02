@@ -1,0 +1,47 @@
+# One-off diagnostic: where a scrolled frame's time goes on the GPU-less Windows runner. A JIT build of the scroll fixes
+# runs --bench scroll with dotnet-trace attached (sampled thread time and GC events) once the window is interactive.
+# Lives only on the scratch branch validate-bench-scroll-trace; never merged.
+name: scroll-trace
+on:
+  push:
+    branches: [validate-bench-scroll-trace]
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          display: true
+      - name: Generate fixtures
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
+      - name: Build the shell (JIT, for EventPipe's sampling profiler)
+        run: dotnet build src/Codalus.Shell -c Release
+      - name: Install dotnet-trace
+        run: dotnet tool install -g dotnet-trace
+      - name: Traced scroll runs
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'src/Codalus.Shell/bin/Release/net11.0/codalus.exe'
+          foreach ($i in 1..2) {
+            $work = Join-Path $env:RUNNER_TEMP "trace-$i"
+            New-Item -ItemType Directory -Force -Path (Join-Path $work 'user-data') | Out-Null
+            Copy-Item -Recurse samples/Large100k $work
+            $events = Join-Path $work 'events.jsonl'
+            $env:CODALUS_SKIP_SETUP = '1'
+            $env:CODALUS_BENCH_EVENTS = $events
+            $p = Start-Process -FilePath $exe -PassThru -ArgumentList @('--user-data-dir', (Join-Path $work 'user-data'), '--open', (Join-Path $work 'Large100k/Large.cs'), '--bench', 'scroll', '--exit-on', 'done')
+            while (-not ((Test-Path $events) -and (Select-String -Path $events -Pattern '"interactive"' -Quiet))) { Start-Sleep -Milliseconds 200 }
+            dotnet-trace collect -p $p.Id --profile dotnet-sampled-thread-time,gc-collect -o (Join-Path $work 'trace.nettrace') | Out-Null
+            $p.WaitForExit(300000) | Out-Null
+            New-Item -ItemType Directory -Force -Path "traces/$i" | Out-Null
+            Copy-Item $events, (Join-Path $work 'trace.nettrace') "traces/$i/"
+          }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: scroll-trace-Windows
+          path: traces
