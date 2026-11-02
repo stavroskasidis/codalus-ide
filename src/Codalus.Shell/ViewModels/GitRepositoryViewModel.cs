@@ -305,9 +305,6 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
 {
     public const string DocumentId = "git-repository";
 
-    /// <summary>How long the filter waits after a keystroke before it filters (M57): the tree is filtered once per pause.</summary>
-    internal static readonly TimeSpan FilterDelay = TimeSpan.FromMilliseconds(150);
-
     private readonly GitRepositoryActions _actions;
     private readonly Dictionary<string, bool> _expanded = new(StringComparer.Ordinal);
     private readonly Dictionary<GitService, RepositoryData> _data = [];
@@ -373,6 +370,9 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     /// <summary>The visible rows: each root, then the rows under it when it's expanded (M57: a virtualized list, as Git Changes').</summary>
     public ResettableCollection<GitRepositoryRow> Rows { get; } = [];
 
+    /// <summary>How long the filter waits after a keystroke before it filters (M57): the tree is filtered once per pause.</summary>
+    internal TimeSpan FilterDelay { get; set; } = TimeSpan.FromMilliseconds(150);
+
     /// <summary>How many times the tree was built (tests: none while hidden, none for refs that didn't change, one per filter pause).</summary>
     internal int TreesBuilt { get; private set; }
 
@@ -401,7 +401,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             {
                 if (_filterTimer is null)
                 {
-                    _filterTimer = new Avalonia.Threading.DispatcherTimer { Interval = FilterDelay };
+                    _filterTimer = new Avalonia.Threading.DispatcherTimer();
                     _filterTimer.Tick += (_, _) =>
                     {
                         _filterTimer.Stop();
@@ -410,6 +410,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                 }
 
                 _filterTimer.Stop();
+                _filterTimer.Interval = FilterDelay;
                 _filterTimer.Start();
             }
         }

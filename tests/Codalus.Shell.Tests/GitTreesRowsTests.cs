@@ -247,9 +247,10 @@ public sealed class GitTreesRowsTests
         Assert.Null(vm.SelectedRow);
         await ShellFixture.PumpUntil(() => vm.HasMessage);
 
-        // Typing in the filter filters once, a pause after the last keystroke, with every match's folders open.
-        // TODO(issue): two builds came while typing on macOS CI (run 41264132614, docs/ci-flakes.md): the failure says
-        // how long the keystroke really waited (the filter builds after FilterDelay) and whether git's refs were read again.
+        // Typing in the filter filters once, a pause after the last keystroke, with every match's folders open. The pause
+        // is a second here: each keystroke's 40 ms wait pumps the UI thread, and on macOS CI one ran 171 ms, past the
+        // product's 150 ms, so the filter rightly built mid-typing (runs 41264132614 and 41366742205, docs/ci-flakes.md).
+        vm.FilterDelay = TimeSpan.FromSeconds(1);
         built = vm.TreesBuilt;
         var readsBefore = vm.RefsReads;
         var since = System.Diagnostics.Stopwatch.StartNew();
@@ -262,13 +263,14 @@ public sealed class GitTreesRowsTests
             await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until);
             Assert.True(built == vm.TreesBuilt,
                 $"{vm.TreesBuilt - built} build(s) while typing, after \"{text}\": {gap} ms since the keystroke before, {since.ElapsedMilliseconds} ms since this one "
-                + $"(the filter builds {GitRepositoryViewModel.FilterDelay.TotalMilliseconds:0} ms after the last); refs read {vm.RefsReads - readsBefore} more time(s) meanwhile.");
+                + $"(the filter builds {vm.FilterDelay.TotalMilliseconds:0} ms after the last); refs read {vm.RefsReads - readsBefore} more time(s) meanwhile.");
         }
 
         await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
         Assert.Equal(built + 1, vm.TreesBuilt);
         Assert.Equal(Enumerable.Range(1200, 100).Select(i => $"t{i:00000}"), vm.Rows.Where(r => r.Node.Kind == GitRepositoryNodeKind.Tag).Select(r => r.Text));
         Assert.True(Row(vm, "tags").IsExpanded);
+        vm.FilterDelay = TimeSpan.FromMilliseconds(150);
         vm.Filter = string.Empty;
         await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
         Assert.Equal(count + 5000 - 2, vm.Rows.Count); // the tags as the user left them, expanded
