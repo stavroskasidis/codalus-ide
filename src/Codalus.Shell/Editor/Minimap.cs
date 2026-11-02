@@ -13,8 +13,9 @@ namespace Codalus.Shell.Editor;
 /// <summary>
 /// A miniature of the document beside the editor: two pixels per line, words drawn as blocks in their token colors
 /// (where the language service has colored them, otherwise the text color), with the visible area shaded. When the
-/// document is taller than the minimap, the minimap scrolls along with the editor. Click or drag to scroll. Only the
-/// lines shown are drawn, so cost doesn't grow with the document.
+/// document is taller than the minimap, the minimap scrolls along with the editor. A click centers the editor on the
+/// line clicked; the visible area drags like a scroll bar's thumb. Only the lines shown are drawn, so cost doesn't grow
+/// with the document.
 /// </summary>
 public sealed class Minimap : Control
 {
@@ -26,6 +27,9 @@ public sealed class Minimap : Control
     private readonly SemanticColorizer _colorizer;
     private readonly DispatcherTimer _redraw;
     private bool _dragging;
+
+    /// <summary>Where the pointer holds the visible area while dragging (from its top), or null until it's known.</summary>
+    private double? _grab;
 
     public Minimap(TextEditor editor, SemanticColorizer colorizer)
     {
@@ -89,9 +93,28 @@ public sealed class Minimap : Control
 
     private int Capacity => Math.Max(1, (int)(Bounds.Height / LineHeight));
 
+    /// <summary>The shaded part of the minimap: the lines the editor shows (null before its first layout).</summary>
+    internal Rect? VisibleArea
+    {
+        get
+        {
+            var view = _editor.TextArea.TextView;
+            if (!view.VisualLinesValid || view.VisualLines.Count == 0)
+            {
+                return null;
+            }
+
+            var top = view.VisualLines[0].FirstDocumentLine.LineNumber - 1 - FirstLine;
+            var count = view.VisualLines[^1].LastDocumentLine.LineNumber - view.VisualLines[0].FirstDocumentLine.LineNumber + 1;
+            return new Rect(0, top * LineHeight, Bounds.Width, Math.Max(4, count * LineHeight));
+        }
+    }
+
     public override void Render(DrawingContext context)
     {
-        var view = _editor.TextArea.TextView;
+        // A control is hit only where it draws: without this, a click where no word is drawn (beside short lines, below
+        // the end of the file) went to the document behind. Transparent, so its column keeps the card's background.
+        context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
         var first = FirstLine;
         var last = Math.Min(Document.LineCount, first + Capacity);
         var foreground = Foreground is ISolidColorBrush solid ? new ImmutableSolidColorBrush(solid.Color, 0.6) : Foreground;
@@ -123,30 +146,55 @@ public sealed class Minimap : Control
             }
         }
 
-        // The visible area.
-        if (view.VisualLinesValid && view.VisualLines.Count > 0)
+        if (VisibleArea is { } area)
         {
-            var top = view.VisualLines[0].FirstDocumentLine.LineNumber - 1 - first;
-            var count = view.VisualLines[^1].LastDocumentLine.LineNumber - view.VisualLines[0].FirstDocumentLine.LineNumber + 1;
-            context.DrawRectangle(ViewportBrush, null, new Rect(0, top * LineHeight, Bounds.Width, Math.Max(4, count * LineHeight)));
+            context.DrawRectangle(ViewportBrush, null, area);
         }
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+        {
+            return;
+        }
+
         _dragging = true;
         e.Pointer.Capture(this);
-        ScrollTo(e.GetPosition(this).Y);
+        var y = e.GetPosition(this).Y;
+        if (VisibleArea is { } area && y >= area.Top && y < area.Bottom)
+        {
+            // On the visible area: it's held where it was pressed, as a scroll bar's thumb.
+            _grab = y - area.Top;
+        }
+        else
+        {
+            // Elsewhere: the editor jumps there, and the visible area is held where it lands once laid out.
+            ScrollTo(y);
+            _grab = null;
+        }
+
         e.Handled = true;
     }
 
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
-        if (_dragging)
+        if (!_dragging)
         {
-            ScrollTo(e.GetPosition(this).Y);
+            return;
+        }
+
+        var y = e.GetPosition(this).Y;
+        if (_grab is null && VisibleArea is { } area)
+        {
+            _grab = Math.Clamp(y - area.Top, 0, area.Height);
+        }
+
+        if (_grab is { } grab)
+        {
+            DragTo(y - grab);
         }
     }
 
@@ -154,7 +202,15 @@ public sealed class Minimap : Control
     {
         base.OnPointerReleased(e);
         _dragging = false;
+        _grab = null;
         e.Pointer.Capture(null);
+    }
+
+    protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
+    {
+        base.OnPointerCaptureLost(e);
+        _dragging = false;
+        _grab = null;
     }
 
     /// <summary>Centers the editor on the line at <paramref name="y"/>.</summary>
@@ -164,6 +220,30 @@ public sealed class Minimap : Control
         var line = Math.Clamp(FirstLine + (int)(y / LineHeight), 0, Document.LineCount - 1);
         var lineHeight = view.DefaultLineHeight;
         var offset = (line * lineHeight) - (view.Bounds.Height / 2);
-        _editor.ScrollToVerticalOffset(Math.Clamp(offset, 0, Math.Max(0, view.DocumentHeight - view.Bounds.Height)));
+        _editor.ScrollToY(offset);
+    }
+
+    /// <summary>
+    /// Scrolls the editor so the visible area's top is at <paramref name="top"/>. When the minimap scrolls with the
+    /// editor, the visible area's top moves from 0 to the minimap's capacity less the editor's lines as the editor
+    /// scrolls from its top to its bottom (see <see cref="FirstLine"/>), so the pointer keeps its place on it.
+    /// </summary>
+    private void DragTo(double top)
+    {
+        var view = _editor.TextArea.TextView;
+        var scrollable = Math.Max(0, view.DocumentHeight - view.Bounds.Height);
+        var lineHeight = Math.Max(1, view.DefaultLineHeight);
+        double offset;
+        if (Document.LineCount <= Capacity)
+        {
+            offset = top / LineHeight * lineHeight;
+        }
+        else
+        {
+            var travel = Math.Max(LineHeight, (Capacity - (view.Bounds.Height / lineHeight)) * LineHeight);
+            offset = Math.Clamp(top / travel, 0, 1) * scrollable;
+        }
+
+        _editor.ScrollToY(offset);
     }
 }
