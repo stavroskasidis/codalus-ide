@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.12.0
 
+- **Smoother scrolling in large files.** Each frame of scrolling laid out every line number on screen again, drew the minimap as a few thousand rectangles with a brush each and looked up the editor's font from its name for every new run of text. The numbers are now laid out once each, the minimap is painted into one image that reads only the lines a scroll brings in, and the font is looked up once. On Linux without a GPU (a VM, a remote desktop) the window also kept its software framebuffer between frames: it was allocated anew for every frame, the whole window's size, and scrolling set off a full garbage collection every half second.
 - **Hot Reload applies edits to async methods without an `await`** ([ADR 0090](docs/adr/0090-blazor-web-app-edits-under-the-codalus-debugger.md#amendment-2026-11-02-addexplicitinterfaceimplementation-which-no-runtime-reports)): under the Codalus debugger, an edit to such a method (a Blazor component's `async Task` handler whose `await`s are commented out, say) said CS9346, "Update requires emitting explicit interface implementation", and needed a restart, in the browser and on the server. The runtimes can apply it but don't say so; Codalus IDE now assumes it as `dotnet watch` does.
 
 ## 0.11.0

@@ -101,4 +101,62 @@ public class MinimapTests
         Settle(f);
         Assert.Equal(offset, editor.Editor.TextArea.TextView.VerticalOffset);
     }
+
+    [AvaloniaFact]
+    public async Task Scrolling_reads_only_the_lines_it_brings_into_the_minimap()
+    {
+        // A frame of scrolling read every character the minimap shows; now only the lines it brings in.
+        var (f, editor, minimap) = await OpenAsync(5_000);
+        await using var _ = f;
+        var view = editor.Editor.TextArea.TextView;
+        Assert.InRange(minimap.LinesRead, 100, 5_000);
+        foreach (var lines in new[] { 3, 6, 9 })
+        {
+            var before = minimap.LinesRead;
+            editor.Editor.ScrollToY(lines * view.DefaultLineHeight);
+            Settle(f);
+            Assert.True(minimap.FirstLine > 0, "The minimap didn't scroll with the editor.");
+            Assert.InRange(minimap.LinesRead - before, 1, 10);
+        }
+
+        // An edit reads them again: lines moved.
+        var read = minimap.LinesRead;
+        editor.Editor.Document.Insert(0, "inserted\n");
+        await ShellFixture.PumpUntil(() =>
+        {
+            Settle(f);
+            return minimap.LinesRead - read > 100;
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task The_minimap_draws_each_word_where_it_is_on_its_line()
+    {
+        var (f, _, minimap) = await OpenAsync(150);
+        await using var __ = f;
+        using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window)!;
+
+        // Every line is "xN": a two-column word at the minimap's left (4 px in), nothing to the right of it.
+        for (var line = 0; line < 20; line++)
+        {
+            var y = (line * Minimap.LineHeight) + 0.5;
+            var word = Pixel(frame, minimap, new Point(5, y), f.Window);
+            var space = Pixel(frame, minimap, new Point(40, y), f.Window);
+            var gap = Pixel(frame, minimap, new Point(5, y + 1.25), f.Window);
+            Assert.True(Distance(word, space) > 60, $"line {line}: the word ({word}) isn't drawn over the background ({space})");
+            Assert.True(Distance(word, gap) > Distance(space, gap), $"line {line}: the gap below the word ({gap}) is drawn like it ({word})");
+        }
+    }
+
+    private static int Distance(Avalonia.Media.Color a, Avalonia.Media.Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
+
+    private static Avalonia.Media.Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, Visual visual, Point point, Avalonia.Controls.TopLevel top)
+    {
+        var at = visual.TranslatePoint(point, top)!.Value * top.RenderScaling;
+        using var buffer = frame.Lock();
+        var offset = ((int)at.Y * buffer.RowBytes) + ((int)at.X * 4);
+        var (b0, b1, b2, b3) = (System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 1),
+            System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 2), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 3));
+        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888 ? Avalonia.Media.Color.FromArgb(b3, b0, b1, b2) : Avalonia.Media.Color.FromArgb(b3, b2, b1, b0);
+    }
 }
