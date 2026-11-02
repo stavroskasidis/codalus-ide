@@ -82,9 +82,9 @@ public sealed class HotReloadOutputTests
     }
 
     [Theory]
-    [InlineData("[codalus-hot-reload-agent] Loaded into process 6568: /app/bin/Debug/net10.0/BlazorSudoku.Server.dll (/sdk/hotreload/net10.0/Microsoft.Extensions.DotNetDeltaApplier.dll)", 6568)]
+    [InlineData("[codalus-hot-reload-agent] Loaded into process 6568: /app/bin/Debug/net10.0/ContosoStore.Server.dll (/sdk/hotreload/net10.0/Microsoft.Extensions.DotNetDeltaApplier.dll)", 6568)]
     [InlineData("\u001b[2m[BlazorHosted (net10.0)] [codalus-hot-reload-agent] Loaded into process 42: /app/BlazorHosted.dll\u001b[0m", 42)]
-    [InlineData("[codalus-hot-reload-agent] Loaded into process: /app/bin/Debug/net10.0/BlazorSudoku.Server.dll (/sdk/10.0.401/...)", null)]
+    [InlineData("[codalus-hot-reload-agent] Loaded into process: /app/bin/Debug/net10.0/ContosoStore.Server.dll (/sdk/10.0.401/...)", null)]
     public void The_agents_line_says_the_app_started_with_its_id_from_sdk_11_on(string line, int? processId)
     {
         line = System.Text.RegularExpressions.Regex.Unescape(line);
@@ -113,9 +113,9 @@ public sealed class HotReloadOutputTests
                  {
                      "dotnet watch : Waiting for changes",
                      "dotnet watch : File updated: ../Client/Components/GameBoard.razor",
-                     "dotnet watch : [BlazorSudoku.Server (net10.0)] The runtime failed to applying the change: Assembly updates cannot be applied while a debugger is attached.",
-                     "dotnet watch : [BlazorSudoku.Server (net10.0)] Further changes won't be applied to this process.",
-                     "dotnet watch : [BlazorSudoku.Server (net10.0)] Further changes won't be applied to this process.",
+                     "dotnet watch : [ContosoStore.Server (net10.0)] The runtime failed to applying the change: Assembly updates cannot be applied while a debugger is attached.",
+                     "dotnet watch : [ContosoStore.Server (net10.0)] Further changes won't be applied to this process.",
+                     "dotnet watch : [ContosoStore.Server (net10.0)] Further changes won't be applied to this process.",
                      "dotnet watch : Files updated: /src/App/Presentation/Client/Pages/Index.razor, Layout/NavMenu.razor",
                  })
         {
@@ -140,16 +140,16 @@ public sealed class HotReloadOutputTests
         session.AppOutput += line => events.Add("app: " + line.Trim());
         foreach (var line in new[]
                  {
-                     "  BlazorSudoku.Server -> /app/bin/Debug/net10.0/BlazorSudoku.Server.dll", // the build's, before the app
-                     "[codalus-hot-reload-agent] Loaded into process 7594: /app/bin/Debug/net10.0/BlazorSudoku.Server.dll",
+                     "  ContosoStore.Server -> /app/bin/Debug/net10.0/ContosoStore.Server.dll", // the build's, before the app
+                     "[codalus-hot-reload-agent] Loaded into process 7594: /app/bin/Debug/net10.0/ContosoStore.Server.dll",
                      "dotnet watch : Waiting for changes",
                      "info: Microsoft.Hosting.Lifetime[14]",
                      "      Now listening on: http://localhost:5004",
                      "dotnet watch : File updated: /app/Client/Components/GameBoard.razor",
                      "dotnet watch : Restart is needed to apply the changes.",
-                     "dotnet watch : [BlazorSudoku.Server (net10.0)] Exited",
-                     "  BlazorSudoku.Server -> /app/bin/Debug/net10.0/BlazorSudoku.Server.dll",
-                     "dotnet watch : [BlazorSudoku.Server (net10.0)] Exited with error code 134",
+                     "dotnet watch : [ContosoStore.Server (net10.0)] Exited",
+                     "  ContosoStore.Server -> /app/bin/Debug/net10.0/ContosoStore.Server.dll",
+                     "dotnet watch : [ContosoStore.Server (net10.0)] Exited with error code 134",
                      "dotnet watch : Waiting for a file to change before restarting ...",
                  })
         {

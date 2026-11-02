@@ -15,7 +15,7 @@ public enum GitRepositoryNodeKind
     /// <summary>Branches / Tags, Pull Requests, Submodules, a remote's or the tags' folder.</summary>
     Group,
 
-    /// <summary>A repository, "WPoseidon (develop)".</summary>
+    /// <summary>A repository, "Contoso.Web (develop)".</summary>
     Repository,
 
     /// <summary>A part of branch names before a <c>/</c> (<c>feature</c>).</summary>

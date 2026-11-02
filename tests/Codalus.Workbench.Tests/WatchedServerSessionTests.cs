@@ -336,14 +336,14 @@ public sealed class WatchedServerSessionTests
         var port = FreePort();
         var hotReload = new HotReloadSession();
         var tree = new Dictionary<int, int[]> { [10] = [11], [11] = [12, 13] }; // dotnet watch → dotnet run → (msbuild, the app)
-        var names = new Dictionary<int, string> { [11] = "dotnet", [12] = "MSBuild", [13] = "BlazorSudoku.Se" }; // Linux's 15 characters
-        var app = new WatchedApp(hotReload, new TaskCompletionSource().Task, 10, "BlazorSudoku.Server", new Uri($"http://localhost:{port}/"))
+        var names = new Dictionary<int, string> { [11] = "dotnet", [12] = "MSBuild", [13] = "ContosoStore.Se" }; // Linux's 15 characters
+        var app = new WatchedApp(hotReload, new TaskCompletionSource().Task, 10, "ContosoStore.Server", new Uri($"http://localhost:{port}/"))
         {
             IsAlive = names.ContainsKey,
             Children = pid => tree.GetValueOrDefault(pid, []),
             NameOf = pid => names.GetValueOrDefault(pid),
         };
-        hotReload.OnLine("[codalus-hot-reload-agent] Loaded into process: /src/App/bin/Debug/net10.0/BlazorSudoku.Server.dll");
+        hotReload.OnLine("[codalus-hot-reload-agent] Loaded into process: /src/App/bin/Debug/net10.0/ContosoStore.Server.dll");
         var wait = WatchedServer.WaitForAppAsync(app, previousPid: 99, TimeSpan.FromSeconds(10), Ct);
         await Task.Delay(400, Ct);
         Assert.False(wait.IsCompleted);
@@ -370,15 +370,15 @@ public sealed class WatchedServerSessionTests
     [Fact]
     public void The_apps_process_name_is_its_apphosts()
     {
-        // GetFileNameWithoutExtension would make BlazorSudoku.Server "BlazorSudoku" (seen on SDK 10, whose agent doesn't say the id).
+        // GetFileNameWithoutExtension would make ContosoStore.Server "ContosoStore" (seen on SDK 10, whose agent doesn't say the id).
         LaunchPlan Plan(string file) => new(file, string.Empty, "/src", new Dictionary<string, string>(), null);
-        Assert.Equal("BlazorSudoku.Server", WatchedServer.AppNameOf(Plan("/src/Server/bin/Debug/net10.0/BlazorSudoku.Server")));
-        Assert.Equal("BlazorSudoku.Server", WatchedServer.AppNameOf(Plan(@"C:\src\Server\bin\Debug\net10.0\BlazorSudoku.Server.exe".Replace('\\', Path.DirectorySeparatorChar))));
+        Assert.Equal("ContosoStore.Server", WatchedServer.AppNameOf(Plan("/src/Server/bin/Debug/net10.0/ContosoStore.Server")));
+        Assert.Equal("ContosoStore.Server", WatchedServer.AppNameOf(Plan(@"C:\src\Server\bin\Debug\net10.0\ContosoStore.Server.exe".Replace('\\', Path.DirectorySeparatorChar))));
         Assert.Null(WatchedServer.AppNameOf(Plan("/usr/share/dotnet/dotnet")));
-        Assert.True(WatchedServer.IsApp("BlazorSudoku.Se", "BlazorSudoku.Server"));
-        Assert.True(WatchedServer.IsApp("BlazorSudoku.Server", "BlazorSudoku.Server"));
-        Assert.False(WatchedServer.IsApp("BlazorSudoku.Cl", "BlazorSudoku.Server"));
-        Assert.False(WatchedServer.IsApp("dotnet", "BlazorSudoku.Server"));
+        Assert.True(WatchedServer.IsApp("ContosoStore.Se", "ContosoStore.Server"));
+        Assert.True(WatchedServer.IsApp("ContosoStore.Server", "ContosoStore.Server"));
+        Assert.False(WatchedServer.IsApp("ContosoStore.Cl", "ContosoStore.Server"));
+        Assert.False(WatchedServer.IsApp("dotnet", "ContosoStore.Server"));
     }
 
     [Fact]

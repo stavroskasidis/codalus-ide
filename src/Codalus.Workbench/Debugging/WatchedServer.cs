@@ -129,7 +129,7 @@ public static class WatchedServer
 
     /// <summary>
     /// The process name of the program a plan starts: its apphost's file name without <c>.exe</c> (a name such as
-    /// <c>BlazorSudoku.Server</c> has no other extension); null for <c>dotnet App.dll</c>.
+    /// <c>ContosoStore.Server</c> has no other extension); null for <c>dotnet App.dll</c>.
     /// </summary>
     public static string? AppNameOf(LaunchPlan plan)
     {

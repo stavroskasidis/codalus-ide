@@ -316,7 +316,7 @@ public sealed record GitStash(int Index, string Name, string Message)
     /// <summary>The repository it is in, when Git Changes shows every repository of the solution (ADR 0085); else null.</summary>
     public string? Repository { get; init; }
 
-    /// <summary>"stash@{0}", or "stash@{0} · WPylon" with its repository.</summary>
+    /// <summary>"stash@{0}", or "stash@{0} · Contoso.Web" with its repository.</summary>
     public string Label => Repository is { } root ? $"{Name} · {Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))}" : Name;
 }
 
