@@ -74,11 +74,11 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
   sampler=$!
 fi
 
-# The free disk, on the Linux and macOS runners. Ubuntu's others filled its runner's disk 5 minutes into the tests (the
-# 70 GB the shard leaves free), and the runner died with "No space left on device", keeping neither its log nor its
-# results; the same commit's tests used 8 GB under WSL (PR #268, run 41357428702). Below 20 GB free each sample says
-# so with the largest folders; below 5 GB the test processes are ended, so the step fails naming them and the runner
-# still uploads the log and the results.
+# The free disk, on the Linux and macOS runners. Ubuntu's others filled its runner's disk, and the runner died with "No
+# space left on device", keeping neither its log nor its results (PR #268, run 41357428702): a runner with a 72 GB disk,
+# 6 GB free once the solution was built (run 41365055187, which this guard caught; .github/actions/setup now makes room
+# there). Below 20 GB free each sample says so with the largest folders; below 5 GB the test processes are ended, so
+# the step fails naming them and the runner still uploads the log and the results.
 guard=
 if [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" != "Windows" ]]; then
   (
