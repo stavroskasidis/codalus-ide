@@ -14,7 +14,7 @@ internal static partial class BuiltIns
     [
         new(PullRequestsViewModel.ToolWindowId, "Pull Requests", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "pull-request" },
         new(WorkItemsViewModel.ToolWindowId, "Work Items", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "issue" },
-        new(WorktreesViewModel.ToolWindowId, "Worktrees", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "worktree" },
+        new(WorktreesViewModel.ToolWindowId, "Worktrees", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "worktree" },
     ];
 
     public static IReadOnlyList<SettingDescriptor> HostingSettings()

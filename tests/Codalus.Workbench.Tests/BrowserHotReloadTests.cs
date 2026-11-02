@@ -54,7 +54,7 @@ public sealed class BrowserHotReloadTests
         Assert.Null(BrowserHotReload.FrameworkMajor("net48"));
         Assert.Null(BrowserHotReload.FrameworkMajor("netstandard2.1"));
 
-        // WPoseidon's case: SDK 10.0.303, below dotnet watch's 10.0.400 for debugging, is enough here.
+        // The maintainer's case: SDK 10.0.303, below dotnet watch's 10.0.400 for debugging, is enough here.
         Assert.Null(BrowserHotReload.UnsupportedReason(["net10.0"], "10.0.303", "/sdk/middleware.dll"));
         Assert.Contains("older than 10", BrowserHotReload.UnsupportedReason(["net10.0", "net9.0"], "10.0.303", "/sdk/middleware.dll"), StringComparison.Ordinal);
         Assert.Contains("9.0.300", BrowserHotReload.UnsupportedReason(["net10.0"], "9.0.300", "/sdk/middleware.dll"), StringComparison.Ordinal);

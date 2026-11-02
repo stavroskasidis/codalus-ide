@@ -2274,7 +2274,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
             window.Selected = window.Resources.Single(r => r.Name == "api");
             await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
-            // The website's picture (aspire.png): the AppHost's code above its resources, not an earlier step's document.
+            // The website's picture (aspire.png): the resources' page in front of the AppHost's code, not an earlier step's document.
             await OpenAsync(Path.Combine(target, "Aspire", "AppHost", "AppHost.cs")).ConfigureAwait(true);
             shell.ShowAspire();
             await RenderedAsync().ConfigureAwait(true);
@@ -3803,7 +3803,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     /// <summary>
     /// A Blazor Web App's edits under the Codalus debugger (ADR 0090), on a BlazorHosted copy of its own on SDK 10 (as the
-    /// maintainer's WPoseidon; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
+    /// maintainer's app; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
     /// without dotnet watch, and stops in its prerender; the page connects to the IDE; a WebAssembly edit applies to the
     /// server and the page, which runs it; a rude edit asks, and going on keeps the old code.
     /// </summary>
