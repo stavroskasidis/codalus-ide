@@ -37,6 +37,17 @@
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <!-- The history: two-line rows, the selected one with the accent on its left edge. -->
+    <!-- The splitter's rule: down beside the history, across above it (a narrow window). -->
+    <Style Selector="GridSplitter#HistorySplitter /template/ Border#Rule">
+      <Setter Property="Width" Value="1" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="GridSplitter#HistorySplitter.rows /template/ Border#Rule">
+      <Setter Property="Width" Value="NaN" />
+      <Setter Property="Height" Value="1" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
     <Style Selector="ListBox#HistoryList ListBoxItem">
       <Setter Property="Padding" Value="10,4,12,4" />
       <Setter Property="BorderThickness" Value="2,0,0,0" />
@@ -53,23 +64,20 @@
     </Style>
   </UserControl.Styles>
 
-  <Grid x:Name="Root" ColumnDefinitions="*,5,360">
+  <!-- Side by side, or (a narrow window, FitHistory) the history under the response: the HTTP Response beside its file. -->
+  <Grid x:Name="Root" ColumnDefinitions="*,5,360" RowDefinitions="*">
     <!-- The selected exchange. -->
-    <DockPanel MinWidth="0">
+    <DockPanel x:Name="ResponsePane" MinWidth="0">
       <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="12,10,12,8" IsVisible="{Binding HasExchange}">
-        <DockPanel>
-          <controls:ToolbarPanel DockPanel.Dock="Right" Margin="8,0,0,0" VerticalAlignment="Center">
-            <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="play" Content="{l:T httpResponse.sendAgain}" Command="{Binding SendAgainCommand}" ToolTip.Tip="{l:T httpResponse.sendTheRequestAgainFromIts}" />
-            <Border Classes="toolbarSeparator" />
-            <Button x:Name="CopyBody" Classes="toolbar icon" controls:ButtonIcon.Kind="copy" IsEnabled="{Binding HasBody}" ToolTip.Tip="{l:T httpResponse.copyResponseBody}" AutomationProperties.Name="{l:T httpResponse.copyResponseBody}" />
-            <Button Classes="toolbar icon" controls:ButtonIcon.Kind="save" Command="{Binding SaveBodyCommand}" ToolTip.Tip="{l:T httpResponse.saveResponseBody}" AutomationProperties.Name="{l:T httpResponse.saveResponseBody}" />
-            <Button Classes="toolbar icon" controls:ButtonIcon.Kind="link-external" Command="{Binding OpenBodyCommand}" ToolTip.Tip="{l:T httpResponse.openInEditor}" AutomationProperties.Name="{l:T httpResponse.openInEditor}" />
-          </controls:ToolbarPanel>
-          <Border DockPanel.Dock="Left" Classes="chip large" Classes.success="{Binding IsStatusSuccess}" Classes.warning="{Binding IsStatusRedirect}"
-                  Classes.error="{Binding IsStatusError}" Classes.info="{Binding IsStatusInfo}" Margin="0,0,10,0">
+        <!-- The status chip, then its version, time and size, and the toolbar at the right. A narrow response puts the
+             details on a line of their own (FitHeader), and the toolbar's buttons go into its overflow menu: nothing
+             draws under anything else. -->
+        <Grid x:Name="Header" ColumnDefinitions="Auto,Auto,*" RowDefinitions="Auto,Auto">
+          <Border Classes="chip large" Classes.success="{Binding IsStatusSuccess}" Classes.warning="{Binding IsStatusRedirect}"
+                  Classes.error="{Binding IsStatusError}" Classes.info="{Binding IsStatusInfo}" Margin="0,0,10,0" VerticalAlignment="Center">
             <TextBlock x:Name="StatusChip" Text="{Binding StatusText}" AutomationProperties.LiveSetting="Polite" />
           </Border>
-          <WrapPanel VerticalAlignment="Center" IsVisible="{Binding HasResponse}">
+          <StackPanel x:Name="StatusDetails" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding HasResponse}">
             <TextBlock Classes="meta" Text="{Binding Version}" />
             <Ellipse Classes="dot" />
             <StackPanel Orientation="Horizontal" ToolTip.Tip="{l:T httpResponse.time}">
@@ -81,9 +89,17 @@
               <controls:Icon Classes="meta" Kind="download" />
               <TextBlock Classes="meta" Text="{Binding Size}" />
             </StackPanel>
-          </WrapPanel>
-          <TextBlock Classes="error" Text="{Binding Error}" IsVisible="{Binding !HasResponse}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Error}" />
-        </DockPanel>
+          </StackPanel>
+          <controls:ToolbarPanel x:Name="ResponseTools" Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Center">
+            <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="play" Content="{l:T httpResponse.sendAgain}" Command="{Binding SendAgainCommand}" ToolTip.Tip="{l:T httpResponse.sendTheRequestAgainFromIts}" />
+            <Border Classes="toolbarSeparator" />
+            <Button x:Name="CopyBody" Classes="toolbar icon" controls:ButtonIcon.Kind="copy" IsEnabled="{Binding HasBody}" ToolTip.Tip="{l:T httpResponse.copyResponseBody}" AutomationProperties.Name="{l:T httpResponse.copyResponseBody}" />
+            <Button Classes="toolbar icon" controls:ButtonIcon.Kind="save" Command="{Binding SaveBodyCommand}" ToolTip.Tip="{l:T httpResponse.saveResponseBody}" AutomationProperties.Name="{l:T httpResponse.saveResponseBody}" />
+            <Button Classes="toolbar icon" controls:ButtonIcon.Kind="link-external" Command="{Binding OpenBodyCommand}" ToolTip.Tip="{l:T httpResponse.openInEditor}" AutomationProperties.Name="{l:T httpResponse.openInEditor}" />
+          </controls:ToolbarPanel>
+          <!-- A failed request's error, under the chip: the whole message, wrapped. -->
+          <SelectableTextBlock Grid.Row="1" Grid.ColumnSpan="3" Classes="error" Text="{Binding Error}" IsVisible="{Binding !HasResponse}" TextWrapping="Wrap" Margin="0,6,0,0" />
+        </Grid>
         <DockPanel>
           <Border DockPanel.Dock="Left" Classes="chip square mono" Classes.info="{Binding IsMethodOther}" Classes.success="{Binding IsMethodCreate}" Classes.error="{Binding IsMethodDelete}" Margin="0,0,8,0">
             <TextBlock Text="{Binding Method}" />
@@ -152,7 +168,7 @@
       <GridSplitter.Template>
         <ControlTemplate>
           <Border Background="Transparent">
-            <Border Width="1" HorizontalAlignment="Center" Background="{DynamicResource Shell.Border}" />
+            <Border x:Name="Rule" Background="{DynamicResource Shell.Border}" />
           </Border>
         </ControlTemplate>
       </GridSplitter.Template>
