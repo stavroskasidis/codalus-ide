@@ -26,9 +26,9 @@ public sealed class ToolWindowDockingTests
     // Bottom tool windows opened on demand by commands and events, and a plugin's.
     private static readonly string[] s_bottomWindows =
     [
-        ShellHost.PluginGalleryWindow, CoverageResultsViewModel.ToolWindowId, CodeMetricsViewModel.ToolWindowId,
+        CoverageResultsViewModel.ToolWindowId, CodeMetricsViewModel.ToolWindowId, QueryResultsViewModel.ToolWindowId,
         CallStackViewModel.ToolWindowId, VariablesViewModel.LocalsWindowId, DebugConsoleViewModel.ToolWindowId,
-        FindResultsViewModel.ToolWindowId, TaskListViewModel.ToolWindowId, BuiltIns.NotificationsWindow, PluginView,
+        FindResultsViewModel.ToolWindowId, TaskListViewModel.ToolWindowId, BookmarksViewModel.ToolWindowId, PluginView,
     ];
 
     [AvaloniaFact]
@@ -83,16 +83,16 @@ public sealed class ToolWindowDockingTests
     {
         await using var f = ShellFixture.Create();
         var layout = f.Shell.Layout;
-        var gallery = layout.ShowToolWindow(ShellHost.PluginGalleryWindow, focus: false)!;
+        var metrics = layout.ShowToolWindow(CodeMetricsViewModel.ToolWindowId, focus: false)!;
         var right = Owner(layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false)!);
-        Assert.NotSame(right, Owner(gallery));
+        Assert.NotSame(right, Owner(metrics));
 
         // Moved to the right pane by the user, closed and shown again: back in the right pane, not its default place.
-        Assert.True(new DockManager(new DockService()).ValidateDockable(gallery, right, DragAction.Move, DockOperation.Fill, bExecute: true));
-        layout.CloseToolWindow(ShellHost.PluginGalleryWindow);
+        Assert.True(new DockManager(new DockService()).ValidateDockable(metrics, right, DragAction.Move, DockOperation.Fill, bExecute: true));
+        layout.CloseToolWindow(CodeMetricsViewModel.ToolWindowId);
         ShellFixture.Pump();
-        Assert.False(layout.IsVisible(ShellHost.PluginGalleryWindow));
-        Assert.Same(right, Owner(layout.ShowToolWindow(ShellHost.PluginGalleryWindow, focus: false)!));
+        Assert.False(layout.IsVisible(CodeMetricsViewModel.ToolWindowId));
+        Assert.Same(right, Owner(layout.ShowToolWindow(CodeMetricsViewModel.ToolWindowId, focus: false)!));
     }
 
     [AvaloniaFact]
@@ -106,8 +106,8 @@ public sealed class ToolWindowDockingTests
         var settings = layout.Documents.Single();
         var documents = Owner(settings);
 
-        // The Output and the Plugin Gallery dragged onto the documents' tab strip.
-        var tools = new[] { BuiltIns.OutputWindow, ShellHost.PluginGalleryWindow }.Select(id => layout.ShowToolWindow(id, focus: false)!).ToList();
+        // The Output and the Code Metrics Results dragged onto the documents' tab strip.
+        var tools = new[] { BuiltIns.OutputWindow, CodeMetricsViewModel.ToolWindowId }.Select(id => layout.ShowToolWindow(id, focus: false)!).ToList();
         foreach (var tool in tools)
         {
             Assert.True(manager.ValidateDockable(tool, documents, DragAction.Move, DockOperation.Fill, bExecute: true));
@@ -135,7 +135,7 @@ public sealed class ToolWindowDockingTests
         var bottom = Owner(errorList);
         Assert.False(manager.ValidateDockable(settings, bottom, DragAction.Move, DockOperation.Fill, bExecute: true));
 
-        // In floating windows too: a documents' group with the Plugin Gallery, and the bottom group.
+        // In floating windows too: a documents' group with the Code Metrics Results, and the bottom group.
         var gallery = tools[1];
         layout.Factory.NewHorizontalDocumentDock(gallery);
         ShellFixture.Pump();

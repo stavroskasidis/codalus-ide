@@ -61,7 +61,7 @@ public sealed class OutputViewModel : ObservableObject
     public ICommand ClearCommand { get; }
 }
 
-public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff, Action<string, bool>? setTurnedOff, long? hostMemory = null)
+public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff, Action<string, bool>? setTurnedOff, long? hostMemory = null, PluginRowActions? actions = null)
 {
     public string Name => plugin.DisplayName;
 
@@ -69,10 +69,23 @@ public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff,
 
     public string Version => plugin.Manifest?.Version ?? "?";
 
-    /// <summary>The state, and what changes at the next start when the user turned the plugin off or on (M23b).</summary>
-    public string State => turnedOff == (plugin.State == PluginState.Disabled)
-        ? plugin.State.ToString()
-        : $"{plugin.State}, turned {(turnedOff ? "off" : "on")} from the next start";
+    /// <summary>
+    /// The state, and what changes at the next start: the user turned the plugin off or on (M23b), or uninstalled or
+    /// updated it from the gallery.
+    /// </summary>
+    public string State => actions?.Pending?.Invoke(plugin.Id) switch
+    {
+        PluginPendingChange.Uninstall => $"{plugin.State}, uninstalled at the next start",
+        PluginPendingChange.Update => $"{plugin.State}, updated at the next start",
+        _ => turnedOff == (plugin.State == PluginState.Disabled)
+            ? plugin.State.ToString()
+            : $"{plugin.State}, turned {(turnedOff ? "off" : "on")} from the next start",
+    };
+
+    /// <summary>Installed from a gallery and not already on its way out: it can be uninstalled (at the next start).</summary>
+    public bool CanUninstall => actions?.CanUninstall?.Invoke(plugin.Id) == true && actions.Pending?.Invoke(plugin.Id) != PluginPendingChange.Uninstall;
+
+    public ICommand UninstallCommand => new RelayCommand(_ => actions?.Uninstall?.Invoke(plugin.Id));
 
     public string ToggleTitle => turnedOff ? "Turn On" : "Turn Off";
 
@@ -119,16 +132,29 @@ public sealed class PluginRowViewModel(PluginDescription plugin, bool turnedOff,
     public string AccessibleName => $"{Name}, {State}";
 }
 
-/// <summary>The Plugins tool window: installed plugins, their state and why a plugin was not loaded.</summary>
+/// <summary>A change to a plugin that waits for the next start (the gallery's, ADR 0060).</summary>
+public enum PluginPendingChange
+{
+    None,
+    Uninstall,
+    Update,
+}
+
+/// <summary>What an installed plugin's row can do besides turning it off: the gallery's uninstall, and its waiting change.</summary>
+public sealed record PluginRowActions(Func<string, bool>? CanUninstall, Action<string>? Uninstall, Func<string, PluginPendingChange>? Pending);
+
+/// <summary>The Plugins page's Installed tab: installed plugins, their state and why a plugin was not loaded.</summary>
 public sealed class PluginsViewModel : ObservableObject
 {
     private readonly PluginManager _manager;
     private readonly Action<string, bool>? _setTurnedOff;
+    private readonly PluginRowActions? _actions;
 
-    public PluginsViewModel(PluginManager manager, Action<string, bool>? setTurnedOff = null)
+    public PluginsViewModel(PluginManager manager, Action<string, bool>? setTurnedOff = null, PluginRowActions? actions = null)
     {
         _manager = manager;
         _setTurnedOff = setTurnedOff;
+        _actions = actions;
         manager.PluginsChanged += (_, _) => Ui.Post(Refresh);
         Refresh();
     }
@@ -142,10 +168,33 @@ public sealed class PluginsViewModel : ObservableObject
         Plugins.Clear();
         foreach (var plugin in _manager.Plugins.OrderBy(p => p.DisplayName, StringComparer.CurrentCultureIgnoreCase))
         {
-            Plugins.Add(new PluginRowViewModel(plugin, _manager.IsTurnedOff(plugin.Id), _setTurnedOff, plugin.State == PluginState.Active ? _manager.HostMemory(plugin.HostGroup) : null));
+            Plugins.Add(new PluginRowViewModel(plugin, _manager.IsTurnedOff(plugin.Id), _setTurnedOff, plugin.State == PluginState.Active ? _manager.HostMemory(plugin.HostGroup) : null, _actions));
         }
 
         OnPropertyChanged(nameof(IsEmpty));
+    }
+}
+
+/// <summary>
+/// The Plugins page, among the documents: the installed plugins (turn off or on, uninstall) and the Plugin Gallery
+/// (search, install, updates, the changes that wait for a restart), one tab each.
+/// </summary>
+public sealed class PluginsPageViewModel(PluginsViewModel installed, ShellHost.PluginGalleryContent gallery) : ObservableObject
+{
+    public const int InstalledTab = 0;
+    public const int BrowseTab = 1;
+
+    private int _tabIndex;
+
+    public PluginsViewModel Installed { get; } = installed;
+
+    /// <summary>The gallery's content (a declarative view the view locator makes).</summary>
+    public ShellHost.PluginGalleryContent Gallery { get; } = gallery;
+
+    public int TabIndex
+    {
+        get => _tabIndex;
+        set => SetField(ref _tabIndex, value);
     }
 }
 

@@ -203,8 +203,8 @@ internal static partial class BuiltIns
     {
         var shell = ContributionSource.Shell;
         yield return new ToolWindowDescriptor(OutputWindow, "Output", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "output", VisibleByDefault = true };
-        yield return new ToolWindowDescriptor(NotificationsWindow, "Notifications", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "bell" };
-        yield return new ToolWindowDescriptor(PluginsWindow, "Plugins", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "extensions" };
+        yield return new ToolWindowDescriptor(NotificationsWindow, "Notifications", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "bell" };
+        yield return new ToolWindowDescriptor(PluginsWindow, "Plugins", ToolWindowLocation.Document, ToolWindowKind.BuiltIn, shell) { Icon = "extensions" };
         yield return new ToolWindowDescriptor(ViewModels.SolutionExplorerViewModel.ToolWindowId, "Solution Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "solution", VisibleByDefault = true };
         yield return new ToolWindowDescriptor(ViewModels.PropertiesWindowViewModel.ToolWindowId, "Properties", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "properties" };
         yield return new ToolWindowDescriptor(ViewModels.ErrorListViewModel.ToolWindowId, "Error List", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "error", VisibleByDefault = true };
