@@ -431,23 +431,39 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => services.Client(editor.Model) is not null, seconds: 60);
         Assert.Equal(LanguageServices.Protocol.TextDocumentSyncKind.Full, services.Client(editor.Model)!.Capabilities!.TextDocumentSync);
 
+        // TODO(issue): 110 ms "in no posted job" on macOS CI (run 41412231293, docs/ci-flakes.md), with only 10 probes
+        // answered in the window (about 45 here). A key costs about 12 ms of UI thread here (the insert 1 ms, a frame
+        // 4 ms, the jobs after it), and 22-76 ms beside four busy loops on four cores. Each step is named, and the
+        // failure says how long the window took and how much CPU this process used in it, so a starved machine (the UI
+        // thread runnable but not run) tells itself apart from the UI thread's own work.
         using var monitor = new UiStallMonitor();
         async Task TypeAsync()
         {
             editor.Editor.CaretOffset = 0;
             for (var i = 0; i < 20; i++)
             {
+                monitor.Step = $"key {i + 1}";
                 editor.Editor.TextArea.PerformTextInput("z");
+                monitor.Step = $"the jobs and the frame after key {i + 1}";
                 ShellFixture.Pump();
             }
 
+            monitor.Step = "the pause after typing";
             await PumpForAsync(300);
+            monitor.Step = null;
         }
 
         await TypeAsync(); // for the JIT
         monitor.Reset();
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var cpuBefore = process.TotalProcessorTime;
+        var window = System.Diagnostics.Stopwatch.StartNew();
         await TypeAsync();
-        monitor.AssertResponsive("typing 20 keys in a 15 MB file under a whole-text server", LanguageServiceBudget);
+        process.Refresh();
+        var cpu = process.TotalProcessorTime - cpuBefore;
+        monitor.AssertResponsive(
+            $"typing 20 keys in a 15 MB file under a whole-text server (the window took {window.ElapsedMilliseconds} ms; this process used {cpu.TotalMilliseconds:0} ms of CPU in it, on {Environment.ProcessorCount} cores)",
+            LanguageServiceBudget);
 
         // The server ends on the editor's text, at its version, whatever was replaced on the way.
         var client = services.Client(editor.Model)!;

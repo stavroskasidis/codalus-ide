@@ -317,7 +317,6 @@ public sealed class CodeEditorView : UserControl, IPaneView
             _services.ShowMessage($"Zoom {controller.Zoom:P0}");
         };
         var minimap = new Minimap(editor, controller.Colorizer) { IsVisible = Options.Minimap };
-        minimap.Bind(BackgroundProperty, this.GetResourceObservable("Shell.Editor.Background"));
         minimap.Bind(Minimap.ForegroundProperty, this.GetResourceObservable("Shell.Editor.Foreground"));
         var sticky = new StickyScroll(editor, () => controller.Insights.Symbols, () => controller.Folding) { Enabled = Options.StickyScroll };
         controller.Insights.SymbolsChanged += (_, _) => sticky.Update();

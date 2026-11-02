@@ -441,6 +441,13 @@ internal sealed partial class BenchDriver(Window window, ShellHost shell)
         await typing.ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// One frame of <c>--bench scroll</c>: the text <paramref name="elapsed"/> into the scroll at its speed. (Through the
+    /// scroll viewer: TextEditor.ScrollToVerticalOffset didn't move it, so the scroll measured frames that showed the
+    /// same lines.)
+    /// </summary>
+    internal static void ScrollFrame(AvaloniaEdit.TextEditor editor, TimeSpan elapsed) => editor.ScrollToY(elapsed.TotalSeconds * ScrollPixelsPerSecond);
+
     private async Task ScrollAsync(CodeEditorController controller)
     {
         var editor = controller.Editor;
@@ -452,7 +459,7 @@ internal sealed partial class BenchDriver(Window window, ShellHost shell)
         void Frame(TimeSpan _)
         {
             var elapsed = Stopwatch.GetElapsedTime(start);
-            editor.ScrollToVerticalOffset(elapsed.TotalSeconds * ScrollPixelsPerSecond);
+            ScrollFrame(editor, elapsed);
             compositor?.RequestCompositionBatchCommitAsync().Rendered.ContinueWith(_ =>
             {
                 var now = Stopwatch.GetTimestamp();
