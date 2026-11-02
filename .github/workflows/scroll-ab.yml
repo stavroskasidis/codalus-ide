@@ -1,0 +1,70 @@
+# One-off same-runner A/B of the self-driven scroll (benchmarks/README.md, "Comparing versions"): A is develop before the
+# scroll fixes, B the fixes. Each OS's job publishes both and runs self-driven in alternating rounds on one runner
+# (ABBA ABBA: 4 rounds of 5 runs for each version). Lives only on the scratch branch validate-bench-scroll; never merged.
+name: scroll-ab
+on:
+  push:
+    branches: [validate-bench-scroll]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    env:
+      A_SHA: 5920f1e5fa5ac92406e3c790e632c87e183a9997
+      B_SHA: 98bae7c66fcfe5831298e68dcae4cc0a26aa9cb7
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          display: true
+      - name: Linux dependencies (Native AOT toolchain)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang zlib1g-dev libfontconfig1
+      - name: Generate fixtures
+        run: dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -c Release -- all samples
+      - name: Publish A and B
+        shell: bash
+        run: |
+          rid=$(dotnet --info | awk '/RID:/ {print $2; exit}')
+          for v in A B; do
+            sha_var="${v}_SHA"
+            git worktree add "../src-$v" "${!sha_var}"
+            dotnet publish "../src-$v/src/Codalus.Shell" -c Release -r "$rid" -o "$PWD/artifacts/shell-$v"
+          done
+      - name: Build the harness
+        run: dotnet build benchmarks/Codalus.Benchmarks.Harness -c Release
+      - name: Run ABBA ABBA
+        timeout-minutes: 120
+        shell: bash
+        run: |
+          slot=0
+          for v in A B B A A B B A; do
+            slot=$((slot + 1))
+            echo "::group::slot $slot: $v"
+            # One harness run per launch, so each result file is one run (the harness pools a call's runs).
+            for run in 1 2 3 4 5; do
+              CODALUS_BENCH_SHELL_DIR="$PWD/artifacts/shell-$v" dotnet run --project benchmarks/Codalus.Benchmarks.Harness -c Release --no-build -- \
+                run --results "ab/$v/$slot-$run" --targets shell --scenarios self-driven --runs 1 || echo "::warning::slot $slot ($v) run $run failed"
+            done
+            echo "::endgroup::"
+          done
+      - name: Summary
+        if: always()
+        shell: bash
+        run: python3 .github/scroll-ab-summary.py ab "$RUNNER_OS" | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: scroll-ab-${{ runner.os }}
+          path: ab
