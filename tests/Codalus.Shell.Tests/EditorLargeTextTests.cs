@@ -404,12 +404,29 @@ public sealed class EditorLargeTextTests
 
         // The language service's part of the editor's open, as Track does it: from the UI thread, with the service
         // running, so nothing before the didOpen yields (the rest of the open is M56's, measured there).
+        // TODO(issue): 128 and 124 ms "in no posted job" on macOS CI (runs 41436887375 and 41448210970,
+        // docs/ci-flakes.md). The UI thread only queues the didOpen: its 19 MB text and JSON are made on the writer
+        // loop, and the service reads it, both off this thread. Each step is named, and the failure says how long the
+        // window took and how much CPU this process used in it, so a starved machine (the UI thread runnable but not
+        // run) tells itself apart from the UI thread's own work, as in the typing test below.
         using var monitor = new UiStallMonitor();
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var cpuBefore = process.TotalProcessorTime;
+        var window = System.Diagnostics.Stopwatch.StartNew();
+        monitor.Step = "queuing the didOpen";
         Assert.True(await f.Shell.Languages.OpenAsync(new Workbench.Languages.LanguageDocument(path, "xml", () => (snapshot.Text, 1))));
         var client = services.Client(small.Model)!;
+        monitor.Step = "a hover queued after the didOpen, until its answer";
         await client.HoverAsync(LanguageServices.Protocol.DocumentUris.FromPath(path), new LanguageServices.Protocol.Position(0, 1), TestContext.Current.CancellationToken); // after the didOpen
+        monitor.Step = "the second after the hover";
         await PumpForAsync(1000);
-        monitor.AssertResponsive("a 19 MB XML document's didOpen", LanguageServiceBudget);
+        monitor.Step = null;
+        process.Refresh();
+        var cpu = process.TotalProcessorTime - cpuBefore;
+        monitor.AssertResponsive(
+            $"a 19 MB XML document's didOpen (the window took {window.ElapsedMilliseconds} ms; this process used {cpu.TotalMilliseconds:0} ms of CPU in it, on {Environment.ProcessorCount} cores)",
+            LanguageServiceBudget);
+        TestContext.Current.TestOutputHelper?.WriteLine($"the longest wait {monitor.Report().Describe()}; the window took {window.ElapsedMilliseconds} ms, {cpu.TotalMilliseconds:0} ms of CPU");
         await f.Shell.Languages.CloseAsync(path);
     }
 

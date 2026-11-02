@@ -1,0 +1,16 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:views="using:Codalus.Shell.Views"
+             x:Class="Codalus.Shell.Views.PluginsPageView"
+             x:DataType="vm:PluginsPageViewModel">
+  <TabControl x:Name="Tabs" Padding="0" SelectedIndex="{Binding TabIndex}">
+    <TabItem Header="{l:T plugins.installed}" AutomationProperties.Name="{l:T plugins.installedPlugins}">
+      <views:PluginsView DataContext="{Binding Installed}" />
+    </TabItem>
+    <TabItem Header="{l:T plugins.browse}" AutomationProperties.Name="{l:T plugins.pluginGallery}">
+      <ContentControl x:Name="Gallery" />
+    </TabItem>
+  </TabControl>
+</UserControl>

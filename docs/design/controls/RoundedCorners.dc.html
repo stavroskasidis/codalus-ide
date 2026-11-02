@@ -317,7 +317,7 @@
 <sc-if value="{{sheet}}">
 <header>
   <h1>Rounded corners: cards, tabs and controls like the classic IDE's</h1>
-  <div class="lead">Task #84, the design before it is built. The user: "Add rounded corners for tabs/panels/windows etc (screenshot 4 comparison again)". In that screenshot the classic IDE's current look sits behind Codalus: its tool windows, the document well and the toolbar are cards with about 4.5 px corners on a darker window, 6 px apart; the selected tab is a rounded outline that flows into a 1 px frame around the active document; drop-downs, the search box and toggled toolbar buttons have the same corners. Codalus in front has square panels flush against each other, an accent-filled square tab and 2 px control corners (D33). This page draws the whole window now and proposed, then each part close up, on the user's BlazorSudoku solution. Most shapes are token values and styles; the frame's top edge beside the selected tab needs a small control (C). The cards also move a few Classic Light and Dark colors (the toolbar, the tab strip, the selected tab, the focused caption), listed in the colors card at the end; #83 reworks Classic's colors in parallel and may retune them. Only Classic changes shape; the other families take only the shared popup radii. {{t.name}}, {{t.p.family}} family{{familyNote}}.</div>
+  <div class="lead">Task #84, the design before it is built. The user: "Add rounded corners for tabs/panels/windows etc (screenshot 4 comparison again)". In that screenshot the classic IDE's current look sits behind Codalus: its tool windows, the document well and the toolbar are cards with about 4.5 px corners on a darker window, 6 px apart; the selected tab is a rounded outline that flows into a 1 px frame around the active document; drop-downs, the search box and toggled toolbar buttons have the same corners. Codalus in front has square panels flush against each other, an accent-filled square tab and 2 px control corners (D33). This page draws the whole window now and proposed, then each part close up, on the user's ContosoStore solution. Most shapes are token values and styles; the frame's top edge beside the selected tab needs a small control (C). The cards also move a few Classic Light and Dark colors (the toolbar, the tab strip, the selected tab, the focused caption), listed in the colors card at the end; #83 reworks Classic's colors in parallel and may retune them. Only Classic changes shape; the other families take only the shared popup radii. {{t.name}}, {{t.p.family}} family{{familyNote}}.</div>
   <div class="navs">
     <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
     <nav class="themes" aria-label="States"><span class="lbl">One picture:</span><sc-for list="{{stateLinks}}" as="sl"><a href="?theme={{themeQ}}&amp;state={{sl.q}}">{{sl.q}}</a></sc-for></nav>
@@ -342,7 +342,7 @@
     <div class="ttl" style="{{s.tr.style}}">
       <svg class="logo" aria-hidden="true"><use href="#i-rc-logo"></use></svg>
       <sc-for list="{{s.tr.menus}}" as="m"><span class="m {{m.cls}}">{{m.t}}</span></sc-for>
-      <sc-if value="{{s.tr.search}}"><span class="search"><svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>Search (Ctrl+Q)</span><span class="sol">BlazorSudoku</span></sc-if>
+      <sc-if value="{{s.tr.search}}"><span class="search"><svg class="i" aria-hidden="true"><use href="#i-search"></use></svg>Search (Ctrl+Q)</span><span class="sol">ContosoStore</span></sc-if>
       <sc-if value="{{s.tr.wbs}}"><span class="wbs" aria-hidden="true"><span><svg><use href="#i-minus"></use></svg></span><span><svg><use href="#i-rc-maximize"></use></svg></span><span><svg><use href="#i-close"></use></svg></span></span></sc-if>
     </div>
     </sc-if>
@@ -417,13 +417,13 @@
     <sc-if value="{{s.drag}}">
       <div class="dropzone" style="{{s.drag.zone}}"></div>
       <sc-for list="{{s.drag.targets}}" as="dg"><span class="dtg {{dg.cls}}" style="{{dg.style}}" aria-hidden="true"><i><b style="{{dg.fill}}"></b></i></span></sc-for>
-      <div class="dragchip" style="{{s.drag.chip}}"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg><span>GameCell.cs</span></div>
+      <div class="dragchip" style="{{s.drag.chip}}"><svg class="i md" aria-hidden="true"><use href="#i-cs-file"></use></svg><span>ProductCell.cs</span></div>
     </sc-if>
 
     <sc-if value="{{s.toast}}">
     <section class="toast" style="{{s.toast.style}}" role="status" aria-label="Notification">
       <svg class="i c-blue" aria-hidden="true" style="margin-top:1px"><use href="#i-info"></use></svg>
-      <span>Hot Reload applied the change to BlazorSudoku.Server.</span>
+      <span>Hot Reload applied the change to ContosoStore.Server.</span>
       <span class="tb sm" role="button" aria-label="Dismiss" style="margin:-3px -6px 0 0"><svg class="i c-fg" aria-hidden="true"><use href="#i-close"></use></svg></span>
       <span class="meta"><span class="muted">Hot Reload</span><span class="muted">14:06</span></span>
       <span class="acts"><span class="btn" role="button">Show Output</span></span>
@@ -470,12 +470,12 @@
         <span class="tb" role="button" aria-label="Refresh"><svg class="i c-green" aria-hidden="true"><use href="#i-refresh"></use></svg></span>
         <span class="tb is-hover" role="button" aria-label="Filter"><svg class="i c-purple" aria-hidden="true"><use href="#i-filter"></use></svg></span>
         <span class="tb is-checked" role="button" aria-pressed="true" aria-label="Show All Files"><svg class="i c-fg" aria-hidden="true"><use href="#i-copy"></use></svg></span>
-        <span class="split is-hover"><span class="tb text" role="button"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>BlazorSudoku.Server</span><span class="tb" role="button" aria-label="More"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span>
+        <span class="split is-hover"><span class="tb text" role="button"><svg class="i c-green" aria-hidden="true"><use href="#i-play"></use></svg>ContosoStore.Server</span><span class="tb" role="button" aria-label="More"><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span></span>
       </span>
       <span class="field" style="width:120px"><span class="value">Startup.cs</span></span>
       <span class="field" style="width:190px"><span class="ph">Search Solution Explorer (Ctrl+;)</span><svg class="i c-fg" aria-hidden="true"><use href="#i-search"></use></svg></span>
       <span class="field combo" style="width:96px"><span class="value">Debug</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
-      <span class="field sm combo" style="width:170px"><svg class="i c-orange" aria-hidden="true"><use href="#i-rc-class"></use></svg><span class="value">BlazorSudoku.Server.Startup</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
+      <span class="field sm combo" style="width:170px"><svg class="i c-orange" aria-hidden="true"><use href="#i-rc-class"></use></svg><span class="value">ContosoStore.Server.Startup</span><svg class="chev" aria-hidden="true"><use href="#i-chevron-down"></use></svg></span>
       <span class="seg" role="group" aria-label="View"><button class="on" aria-pressed="true">Code</button><button aria-pressed="false">Design</button></span>
       <span class="chk on"><span class="box"><svg aria-hidden="true"><use href="#i-check"></use></svg></span>Rename references</span>
       <span class="chk"><span class="box"></span>Preview changes</span>
@@ -640,8 +640,8 @@ class Component extends DCLogic {
       { i: 'rc-back', c: 'c-blue', tip: 'Navigate Backward' }, { i: 'rc-forward', c: 'c-blue', tip: 'Navigate Forward' }, { sep: true },
       { i: 'folder-open', c: 'c-folder', tip: 'Open' }, { i: 'save', c: 'c-blue', tip: 'Save' }, { i: 'rc-save-all', c: 'c-blue', tip: 'Save All' }, { sep: true },
       { i: 'rc-undo', c: 'c-blue', tip: 'Undo' }, { i: 'rc-redo', c: 'c-blue', tip: 'Redo' }, { sep: true },
-      { combo: 'Debug', w: 86, tip: 'Configuration' }, { combo: 'Any CPU', w: 86, tip: 'Platform' }, { combo: 'BlazorSudoku.Server', w: 168, tip: 'Startup project' },
-      { i: 'play', c: 'c-green', text: 'BlazorSudoku.Server', cls: 'text run', tip: 'Start Debugging' }, { i: 'play-outline', c: 'c-green', tip: 'Start Without Debugging' },
+      { combo: 'Debug', w: 86, tip: 'Configuration' }, { combo: 'Any CPU', w: 86, tip: 'Platform' }, { combo: 'ContosoStore.Server', w: 168, tip: 'Startup project' },
+      { i: 'play', c: 'c-green', text: 'ContosoStore.Server', cls: 'text run', tip: 'Start Debugging' }, { i: 'play-outline', c: 'c-green', tip: 'Start Without Debugging' },
       { i: 'rc-fire', c: 'c-orange', chev: true, cls: 'text', tip: 'Hot Reload' }, { sep: true }, { i: 'more', c: 'c-fg', tip: 'More' }
     ];
     const MENUS = ['File', 'Edit', 'View', 'Git', 'Project', 'Build', 'Debug', 'Test', 'Analyze', 'Tools', 'Window', 'Help'];
@@ -680,8 +680,8 @@ class Component extends DCLogic {
         : { n, lens: '', toks: C.csharp(src), cls: n === cur ? 'cur' : '' });
     };
     const NAV = [
-      { i: 'cl-project-csharp', c: 'c-outline', t: 'BlazorSudoku.Server', a: 'Project' },
-      { i: 'rc-class', c: 'c-orange', t: 'BlazorSudoku.Server.Startup', a: 'Type' },
+      { i: 'cl-project-csharp', c: 'c-outline', t: 'ContosoStore.Server', a: 'Project' },
+      { i: 'rc-class', c: 'c-orange', t: 'ContosoStore.Server.Startup', a: 'Type' },
       { i: 'method', c: 'c-purple', t: 'Configure(IApplicationBuilder app, IWebHostEnvironment env)', a: 'Member' }
     ];
     // Tabs: the user's five documents, Startup.cs selected.
@@ -695,13 +695,13 @@ class Component extends DCLogic {
         x: true, stripe: o.stripe || '', style: o.w ? `width:${o.w}px` : '', tip: o.tip || ''
       };
     };
-    const TABS = () => [tab('Program.cs'), tab('SudokuGame.cs'), tab('GameCell.cs'), tab('launchSettings.json'), tab('Startup.cs', { on: true })];
+    const TABS = () => [tab('Program.cs'), tab('ShoppingCart.cs'), tab('ProductCell.cs'), tab('launchSettings.json'), tab('Startup.cs', { on: true })];
     const SE_TREE = [
-      [4, 'chevron-down', 'cl-solution', 'c-outline', "Solution 'BlazorSudoku' (7 of 7 projects)"],
+      [4, 'chevron-down', 'cl-solution', 'c-outline', "Solution 'ContosoStore' (7 of 7 projects)"],
       [18, 'chevron-right', 'cl-folder', 'c-folder', 'Engine'],
       [18, 'chevron-down', 'cl-folder-open', 'c-folder', 'Presentation'],
-      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Client'],
-      [32, 'chevron-down', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Server', 'b'],
+      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'ContosoStore.Client'],
+      [32, 'chevron-down', 'cl-project-csharp', 'c-outline', 'ContosoStore.Server', 'b'],
       [46, 'chevron-right', 'plug', 'c-blue', 'Connected Services'],
       [46, 'chevron-right', 'cl-dependencies', 'c-outline', 'Dependencies'],
       [46, 'chevron-right', 'cl-folder-properties', 'c-outline', 'Properties'],
@@ -711,7 +711,7 @@ class Component extends DCLogic {
       [46, 'chevron-right', 'cl-json', 'c-outline', 'appsettings.json'],
       [46, '', 'cl-csharp', 'c-green', 'Program.cs'],
       [46, '', 'cl-csharp', 'c-green', 'Startup.cs', 'sel-i'],
-      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'BlazorSudoku.Shared'],
+      [32, 'chevron-right', 'cl-project-csharp', 'c-outline', 'ContosoStore.Shared'],
       [18, 'chevron-right', 'cl-folder', 'c-folder', 'Tests'],
       [18, 'chevron-right', 'cl-folder', 'c-folder', 'Tools']
     ].map(([ind, ex, i, c, tx, cls]) => ({ ind, ex, i, c, t: tx, cls: cls || '' }));
@@ -731,13 +731,13 @@ class Component extends DCLogic {
     const PROPS = { head: 'Startup.cs File Properties', rows: [
       { cat: 'Advanced' }, { n: 'Build Action', v: 'Compile', combo: true }, { n: 'Copy to Output Directory', v: 'Do not copy', combo: true },
       { n: 'Custom Tool', v: '' }, { n: 'Custom Tool Namespace', v: '' }, { cat: 'Misc' }, { n: 'File Name', v: 'Startup.cs' },
-      { n: 'Full Path', v: 'D:\\Projects\\BlazorSudoku\\BlazorSudoku.Server\\Startup.cs' }, { n: 'Included By', v: 'A wildcard (default items)' }] };
+      { n: 'Full Path', v: 'D:\\Projects\\ContosoStore\\ContosoStore.Server\\Startup.cs' }, { n: 'Included By', v: 'A wildcard (default items)' }] };
     const props = (style) => ({ t: 'Properties', style, tb: [{ i: 'list', c: 'c-fg', cls: 'is-checked', tip: 'Categorized' }, { i: 'arrow-sort', c: 'c-fg', tip: 'Alphabetical' }], props: PROPS });
     const OUT = [
       { t: 'Build started at 14:02...' }, { t: '  Determining projects to restore...' }, { t: '  All projects are up-to-date for restore.' },
-      { t: '  BlazorSudoku.Shared -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Shared\\bin\\Debug\\net8.0\\BlazorSudoku.Shared.dll' },
-      { t: '  BlazorSudoku.Client -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Client\\bin\\Debug\\net8.0\\BlazorSudoku.Client.dll' },
-      { t: '  BlazorSudoku.Server -> D:\\Projects\\BlazorSudoku\\BlazorSudoku.Server\\bin\\Debug\\net8.0\\BlazorSudoku.Server.dll' },
+      { t: '  ContosoStore.Shared -> D:\\Projects\\ContosoStore\\ContosoStore.Shared\\bin\\Debug\\net8.0\\ContosoStore.Shared.dll' },
+      { t: '  ContosoStore.Client -> D:\\Projects\\ContosoStore\\ContosoStore.Client\\bin\\Debug\\net8.0\\ContosoStore.Client.dll' },
+      { t: '  ContosoStore.Server -> D:\\Projects\\ContosoStore\\ContosoStore.Server\\bin\\Debug\\net8.0\\ContosoStore.Server.dll' },
       { t: 'Build succeeded in 4.2 s.', cls: 'ok' }
     ];
     const TTABS = (sel) => ['Error List', 'Output', 'Find Results'].map((x) => ({ t: x, cls: x === sel ? 'on' : '', selA: String(x === sel) }));
@@ -828,14 +828,14 @@ class Component extends DCLogic {
       return s;
     };
     const STATE_TABS = () => [
-      tab('SudokuGame.cs', { pinned: true, tip: 'Pinned' }), tab('Program.cs'), tab('GameCell.cs', { dirty: true }), tab('launchSettings.json', { hov: true }),
+      tab('ShoppingCart.cs', { pinned: true, tip: 'Pinned' }), tab('Program.cs'), tab('ProductCell.cs', { dirty: true }), tab('launchSettings.json', { hov: true }),
       tab('Startup.cs', { on: true }), tab('Index.razor', { prev: true })
     ];
     const sTabs = { ...tabsScene({ wells: [{ style: px(6, 10, 1228, 74), cls: '', tabs: STATE_TABS(), nav: NAV, lines: null }] }), w: 1240, h: 94 };
     const sTabsIdle = { ...tabsScene({ wells: [{ style: px(6, 10, 1228, 74), cls: 'idle', tabs: STATE_TABS(), nav: NAV, lines: null }] }), w: 1240, h: 94 };
     const sGroups = { ...tabsScene({ wells: [
       { style: px(6, 8, 611, 190), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 7, 43) },
-      { style: px(623, 8, 611, 190), cls: 'idle', tabs: [tab('GameCell.cs', { on: true }), tab('SudokuGame.cs')], nav: [{ i: 'cl-project-csharp', c: 'c-outline', t: 'BlazorSudoku.Shared', a: 'Project' }, { i: 'rc-class', c: 'c-orange', t: 'BlazorSudoku.Shared.GameCell', a: 'Type' }], lines: null }
+      { style: px(623, 8, 611, 190), cls: 'idle', tabs: [tab('ProductCell.cs', { on: true }), tab('ShoppingCart.cs')], nav: [{ i: 'cl-project-csharp', c: 'c-outline', t: 'ContosoStore.Shared', a: 'Project' }, { i: 'rc-class', c: 'c-orange', t: 'ContosoStore.Shared.ProductCell', a: 'Type' }], lines: null }
     ] }), w: 1240, h: 206 };
     // The frame's top edge beside the selected tab, 3 x. mode: feet (TabStripEdge with the feet), square (TabStripEdge
     // without them), closed and notop (what tokens and styles alone give).
@@ -847,12 +847,12 @@ class Component extends DCLogic {
       return s;
     };
     const sColored = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 74), cls: '', tabs: [
-      tab('Program.cs', { stripe: 'var(--ic-blue)' }), tab('SudokuGame.cs', { stripe: 'var(--ic-green)' }), tab('Startup.cs', { on: true, stripe: 'var(--ic-blue)' }), tab('GameCell.cs', { stripe: 'var(--ic-orange)' })
+      tab('Program.cs', { stripe: 'var(--ic-blue)' }), tab('ShoppingCart.cs', { stripe: 'var(--ic-green)' }), tab('Startup.cs', { on: true, stripe: 'var(--ic-blue)' }), tab('ProductCell.cs', { stripe: 'var(--ic-orange)' })
     ], nav: null, lines: null }] }), w: 613, h: 94 };
-    const sTabsHc = { ...nested({ ...base(hcName, 'new'), wells: [{ style: px(6, 10, 598, 74), cls: '', tabs: [tab('Program.cs'), tab('GameCell.cs', { hov: true }), tab('Startup.cs', { on: true }), tab('Index.razor', { prev: true })], nav: null, lines: null }] }, hcName), w: 613, h: 94 };
+    const sTabsHc = { ...nested({ ...base(hcName, 'new'), wells: [{ style: px(6, 10, 598, 74), cls: '', tabs: [tab('Program.cs'), tab('ProductCell.cs', { hov: true }), tab('Startup.cs', { on: true }), tab('Index.razor', { prev: true })], nav: null, lines: null }] }, hcName), w: 613, h: 94 };
     // Tabs that don't fit leave from the right (DocumentTabPanel); the edge still runs to the strip's right end.
     const sOverflow = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 120), cls: '', tabs: [
-      tab('SudokuGame.cs', { pinned: true }), tab('Program.cs'), tab('GameCell.cs'), tab('Startup.cs', { on: true })
+      tab('ShoppingCart.cs', { pinned: true }), tab('Program.cs'), tab('ProductCell.cs'), tab('Startup.cs', { on: true })
     ], nav: NAV.slice(0, 2), lines: lines(41, 2, 0) }] }), w: 613, h: 140 };
     // No document open: the card stays (Dock keeps the strip as a drop target), the frame falls back to Shell.Border.
     const sEmpty = { ...tabsScene({ wells: [{ style: px(6, 10, 598, 120), cls: 'idle', tabs: [], nav: null, lines: null }] }), w: 613, h: 140 };
@@ -887,28 +887,28 @@ class Component extends DCLogic {
     };
     // Auto-hidden tool windows (Factory.PinDockable): the left strip and Test Explorer slid out over the documents.
     const TE_TREE = [
-      [4, 'chevron-down', 'beaker', 'c-blue', 'BlazorSudoku.Tests (12)'],
-      [18, 'chevron-down', 'check-circle', 'c-green', 'BlazorSudoku.Tests.Engine (8)'],
+      [4, 'chevron-down', 'beaker', 'c-blue', 'ContosoStore.Tests (12)'],
+      [18, 'chevron-down', 'check-circle', 'c-green', 'ContosoStore.Tests.Engine (8)'],
       [32, 'chevron-right', 'check-circle', 'c-green', 'SolverTests (5)'],
-      [32, 'chevron-down', 'check-circle', 'c-green', 'GameCellTests (3)'],
+      [32, 'chevron-down', 'check-circle', 'c-green', 'ProductCellTests (3)'],
       [46, '', 'check-circle', 'c-green', 'Set_value_marks_cell_filled', 'sel'],
       [46, '', 'check-circle', 'c-green', 'Clear_resets_candidates'],
       [46, '', 'check-circle', 'c-green', 'Invalid_value_throws'],
-      [18, 'chevron-right', 'check-circle', 'c-green', 'BlazorSudoku.Tests.Presentation (4)']
+      [18, 'chevron-right', 'check-circle', 'c-green', 'ContosoStore.Tests.Presentation (4)']
     ].map(([ind, ex, i, c, tx, cls]) => ({ ind, ex, i, c, t: tx, cls: cls || '' }));
     const sAutoHide = (() => {
       const s = base(D, 'new');
       s.ahs = [{ style: 'left:0;top:6px;width:24px', tabs: [{ t: 'Test Explorer', cls: 'on', selA: 'true' }, { t: 'Toolbox', cls: 'hov', selA: 'false' }, { t: 'Git Changes', cls: '', selA: 'false' }] }];
-      s.wells = [{ style: px(30, 6, 577, 288), cls: 'idle', tabs: [tab('Program.cs'), tab('GameCell.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
+      s.wells = [{ style: px(30, 6, 577, 288), cls: 'idle', tabs: [tab('Program.cs'), tab('ProductCell.cs'), tab('Startup.cs', { on: true })], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
       s.pans = [{ t: 'Test Explorer', style: px(30, 6, 262, 288), cls: 'slide focus', capCls: 'act',
         tb: [{ i: 'run-all', c: 'c-green', tip: 'Run All Tests' }, { i: 'play', c: 'c-green', tip: 'Run' }, { sep: true }, { i: 'filter', c: 'c-purple', tip: 'Filter' }],
         search: 'Search Test Explorer (Ctrl+E)', tree: TE_TREE }];
       return s;
     })();
-    // Dragging GameCell.cs to the right half of the group: Dock's drag preview, the drop area and the dock targets.
+    // Dragging ProductCell.cs to the right half of the group: Dock's drag preview, the drop area and the dock targets.
     const sDrag = (() => {
       const s = base(D, 'new');
-      s.wells = [{ style: px(6, 6, 601, 288), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true }), tab('SudokuGame.cs')], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
+      s.wells = [{ style: px(6, 6, 601, 288), cls: '', tabs: [tab('Program.cs'), tab('Startup.cs', { on: true }), tab('ShoppingCart.cs')], nav: NAV.slice(0, 2), lines: lines(39, 12, 0) }];
       const cx = 292, cy = 150, T = (x, y, fill, cls) => ({ style: `left:${x}px;top:${y}px`, fill, cls: cls || '' });
       s.drag = { zone: px(308, 38, 296, 253), chip: 'left:404px;top:128px', targets: [
         T(cx, cy, 'inset:0'), T(cx - 36, cy, 'left:0;top:0;bottom:0;width:45%'), T(cx + 36, cy, 'right:0;top:0;bottom:0;width:45%', 'on'),
@@ -981,7 +981,7 @@ class Component extends DCLogic {
       s.codeSearch = { style: 'left:110px;top:40px;width:392px', rows: [
         { i: 'method', c: 'c-purple', t: 'UseStaticFiles(this IApplicationBuilder app)', w: 'StaticFileExtensions', cls: 'sel' },
         { i: 'method', c: 'c-purple', t: 'UseStaticFiles(this IApplicationBuilder app, string requestPath)', w: 'StaticFileExtensions' },
-        { i: 'cl-csharp', c: 'c-green', t: 'Startup.cs', w: 'BlazorSudoku.Server' },
+        { i: 'cl-csharp', c: 'c-green', t: 'Startup.cs', w: 'ContosoStore.Server' },
         { i: 'method', c: 'c-purple', t: 'UseStaticWebAssets(this IWebHostBuilder builder)', w: 'HostingAbstractionsWebHostBuilderExtensions' }] };
       return s;
     })();
@@ -1002,7 +1002,7 @@ class Component extends DCLogic {
       'r4': ['4 px: proposed for Classic', 'The classic IDE\'s, measured 4 to 5 px', 'Cards and tabs at 4 px, 2 x. The classic IDE uses one radius on everything.', () => ({ ...radiusScene(4), w: 405, h: 168 })],
       'r6': ['6 px', 'Reads at a glance', 'Rounder, still dense; stops matching the screenshot.', () => ({ ...radiusScene(6), w: 405, h: 168 })],
       'r8': ['8 px', 'For comparison (Ember has 10)', 'Starts to look like Ember, which has 10 px cards on 8 px gutters.', () => ({ ...radiusScene(8), w: 404, h: 168 })],
-      tabs: ['Tab states, active group', 'DocumentTabStripItem styles (ShellStyles.axaml:105-143)', 'From the left: SudokuGame.cs pinned (the pin upright, pinned tabs first), Program.cs, GameCell.cs modified (●), launchSettings.json under the pointer (Shell.Tab.Hover, top corners), Startup.cs selected in the active group (outline, pin lying down, close), Index.razor previewing (italic, Shell.Tab.Preview).', () => sTabs],
+      tabs: ['Tab states, active group', 'DocumentTabStripItem styles (ShellStyles.axaml:105-143)', 'From the left: ShoppingCart.cs pinned (the pin upright, pinned tabs first), Program.cs, ProductCell.cs modified (●), launchSettings.json under the pointer (Shell.Tab.Hover, top corners), Startup.cs selected in the active group (outline, pin lying down, close), Index.razor previewing (italic, Shell.Tab.Preview).', () => sTabs],
       'tabs-idle': ['The same tabs, the group not active', 'DocumentTabStripItem:selected:not(:active) /template/ Border#PART_TabGutter (a new style)', 'The focus is in a tool window: the selected tab keeps its shape, outlined in a new Shell.Tab.Selected.IndicatorBrush that reaches 3:1 against the strip (#75757C in Dark, #80838F in Light), its title semibold; the frame and the edge fall back to Shell.Border.', () => sTabsIdle],
       'two-groups': ['Two groups side by side', 'A vertical split: two document wells, 6 px apart', 'The left group has the focus (accent outline, edge and frame); the right one outlines its selected tab in Shell.Tab.Selected.IndicatorBrush.', () => sGroups],
       'edge-feet': ['Recommended: TabStripEdge, with the feet, 3 x', 'Controls/TabStripEdge.cs (new), in DocumentTabStrip.BottomContent', 'A 1 px row under the tabs, drawn by code: the frame\'s top edge from the strip\'s left end to the selected tab and from the tab to the right end; the tab\'s sides and fill continued through the row, so the tab opens into its document; and the two feet (quarter circles of the tab\'s radius) above it.', () => ({ ...footScene('feet'), w: 613, h: 216 })],
@@ -1022,7 +1022,7 @@ class Component extends DCLogic {
       'float-11': ['Floating: Windows 11 and macOS', 'Dock\'s HostWindow, a system frame', 'The system rounds the frame (8 px on Windows 11, about 10 on macOS). Inside, the tool window fills the client area: no margin, no second set of corners.', () => ({ ...floatScene(true), w: 298, h: 220 })],
       'float-10': ['Floating: Windows 10, some Linux desktops', 'Linux: whatever the window manager draws', 'Square frames; Codalus doesn\'t fake rounded ones (a transparent window would need a compositor and lose the system\'s shadow and snapping).', () => ({ ...floatScene(false), w: 298, h: 220 })],
       autohide: ['Auto-hidden tool windows', 'Dock\'s pinned dockables (Factory.PinDockable, LayoutManager.cs:471): the side strip and the sliding panel', 'The strip\'s tabs are text on the window\'s color with a 3 px bar on the side they open towards (Shell.Border, the accent for the open one) and the control radius under the pointer (Toolbox). Test Explorer slides out as a card with the popup shadow and, with the focus, the accent frame. The dock area starts 6 px after the strip.', () => ({ ...sAutoHide, w: 613, h: 300 })],
-      drag: ['Dragging a tab', 'Dock\'s drag preview (DockDragPreviewCornerRadius, 4 already) and dock targets', 'GameCell.cs follows the pointer as a 4 px card outlined in the accent; the drop area (the right half) takes the card radius; the five dock targets are 4 px squares with the popup shadow, the one under the pointer outlined in the accent.', () => ({ ...sDrag, w: 613, h: 300 })],
+      drag: ['Dragging a tab', 'Dock\'s drag preview (DockDragPreviewCornerRadius, 4 already) and dock targets', 'ProductCell.cs follows the pointer as a 4 px card outlined in the accent; the drop area (the right half) takes the card radius; the five dock targets are 4 px squares with the popup shadow, the one under the pointer outlined in the accent.', () => ({ ...sDrag, w: 613, h: 300 })],
       toast: ['A notification', 'NotificationCard Floating (Border.overlay, Shell.CornerRadius.Overlay)', 'Toasts keep the overlay radius, 6 px, as menus do; their buttons and the close button take the control radius.', () => ({ ...sToast, w: 613, h: 300 })],
       menu: ['A menu', 'Fluent\'s MenuFlyoutPresenter: OverlayCornerRadius 5 → Shell.CornerRadius.Overlay 6', 'The menu bar\'s open item and the menu\'s rows take the control radius, inset 4 px; the menu 6 px.', () => ({ ...sMenu, w: 298, h: 340 })],
       ctx: ['A context menu', 'ContextMenu, the same presenter', 'The same shape as the menus.', () => ({ ...sCtx, w: 298, h: 340 })],
@@ -1036,7 +1036,7 @@ class Component extends DCLogic {
 
     const SECTIONS = [
       fam === 'Classic'
-        ? { title: 'A. The whole window', lead: 'The user\'s window: Startup.cs open among Program.cs, SudokuGame.cs, GameCell.cs and launchSettings.json, Solution Explorer and Properties docked right, Output at the bottom.', rows: [['now'], ['proposed']] }
+        ? { title: 'A. The whole window', lead: 'The user\'s window: Startup.cs open among Program.cs, ShoppingCart.cs, ProductCell.cs and launchSettings.json, Solution Explorer and Properties docked right, Output at the bottom.', rows: [['now'], ['proposed']] }
         : { title: 'A. The whole window', lead: `The user's window in ${t.name} as Harbor keeps it, then ${D} proposed. Only Classic changes shape (Q3), so sections B to I draw ${D}.`, rows: [['proposed'], ['compare']] },
       { title: 'B. Sizes', lead: 'The classic IDE has one radius, about 4.5 px, on cards, tabs and controls, and 6 px between cards. Avalonia draws a corner\'s outer edge at the radius, so 4 renders as the measured shape with its border.', rows: [['zoom'], ['r4', 'r6', 'r8']] },
       { title: 'C. Document tabs', lead: 'The strip lives inside the well\'s card. Only the selected tab has a shape of its own; the others are text until the pointer is over them. Dock\'s DocumentControl stacks the strip, a 2 px separator and a whole Border, so the frame\'s top edge beside the selected tab needs a new control, TabStripEdge: tokens and styles alone can only run the frame under the tab or drop its top edge (the two "tokens alone" pictures).', rows: [['tabs'], ['tabs-idle'], ['two-groups'], ['edge-feet', 'edge-square'], ['tok-closed', 'tok-open'], ['overflow', 'empty'], ['colored', 'tabs-hc']] },

@@ -17,6 +17,7 @@ public class LanguageFixture : IAsyncLifetime
 
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-language-" + Guid.NewGuid().ToString("N"));
     private readonly Dictionary<string, (string Text, int Version)> _texts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
 
     public string Fixture { get; private set; } = null!;
 
@@ -26,7 +27,15 @@ public class LanguageFixture : IAsyncLifetime
 
     public LanguageHostClient Client => Languages.RunningClient("csharp") ?? throw new InvalidOperationException("The C# service is not running.");
 
+    /// <summary>
+    /// The build host's, the language host's and the restore's lines, each with the seconds since the fixture started
+    /// (the restore's too: a WinUI fixture that waited for its restore in vain logged nothing of it; Windows others,
+    /// run 41459412070).
+    /// </summary>
     public List<string> Log { get; } = [];
+
+    /// <summary>The restore's last state as the build host reported it (failure messages).</summary>
+    public string RestoreState => Solutions.RestoreState ?? "none reported";
 
     protected virtual bool Trusted => true;
 
@@ -46,6 +55,8 @@ public class LanguageFixture : IAsyncLifetime
         registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "razor", "axaml", "xaml", "vb"], MoreProjectLanguages = ["VB"] });
         Languages = new LanguageService(registry, Solutions, policy);
         Solutions.Log += (_, line) => Record("[build] " + line);
+        Solutions.RestoreOutput += (_, line) => Record("[restore] " + line);
+        Solutions.RestoreStateChanged += (_, e) => Record("[restore] " + e.State + (e.Message is { Length: > 0 } message ? ": " + message : string.Empty));
         Languages.Log += (_, line) => Record("[lang] " + line);
 
         using var cts = new CancellationTokenSource(Timeout);
@@ -60,7 +71,7 @@ public class LanguageFixture : IAsyncLifetime
             }
             catch (Xunit.Sdk.XunitException)
             {
-                Assert.Fail($"The {Sample.Sample} fixture didn't load: language status {Languages.Status("csharp")}; design-time builds: "
+                Assert.Fail($"The {Sample.Sample} fixture didn't load in {_clock.Elapsed.TotalSeconds:0} s: language status {Languages.Status("csharp")}; restore {RestoreState}; design-time builds: "
                     + string.Join("; ", Solutions.CompilerInputs.Select(i => $"{Path.GetFileName(i.Key)} {i.Value.Language} {i.Value.State} {i.Value.Error}"))
                     + "\n" + string.Join('\n', Log.TakeLast(40)));
             }
@@ -79,7 +90,7 @@ public class LanguageFixture : IAsyncLifetime
     {
         lock (Log)
         {
-            Log.Add(line);
+            Log.Add($"+{_clock.Elapsed.TotalSeconds:0.0}s {line}");
         }
     }
 

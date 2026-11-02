@@ -13,12 +13,14 @@
   <Styles.Resources>
     <!--
       Dock's document tab strip takes its panel from this resource (a style can't replace it): ours fits (M34e), with
-      pinned tabs on a row of their own while Shell.PinnedTabsOnSeparateRow is on (the shell sets it from the setting
-      workbench.editor.pinnedTabsOnSeparateRow in the application's resources, which floating windows see too).
+      pinned tabs on a row of their own while Shell.PinnedTabsOnSeparateRow is on, and tabs that don't fit on more rows
+      while Shell.TabsInMultipleRows is on (the shell sets them from the settings workbench.editor.pinnedTabsOnSeparateRow
+      and workbench.editor.tabsInMultipleRows in the application's resources, which floating windows see too).
     -->
     <x:Boolean x:Key="Shell.PinnedTabsOnSeparateRow">True</x:Boolean>
+    <x:Boolean x:Key="Shell.TabsInMultipleRows">False</x:Boolean>
     <ItemsPanelTemplate x:Key="DockDocumentTabStripHorizontalItemsPanel">
-      <controls:DocumentTabPanel PinnedRow="{DynamicResource Shell.PinnedTabsOnSeparateRow}" />
+      <controls:DocumentTabPanel PinnedRow="{DynamicResource Shell.PinnedTabsOnSeparateRow}" MultipleRows="{DynamicResource Shell.TabsInMultipleRows}" />
     </ItemsPanelTemplate>
     <!-- The tab's close button: a 16 px square, as the pin beside it (Dock's was 14). -->
     <x:Double x:Key="DockCloseButtonSize">16</x:Double>
@@ -204,12 +206,38 @@
   <Style Selector="DocumentTabStripItem:selected">
     <Setter Property="FontWeight" Value="{DynamicResource Shell.Tab.Selected.FontWeight}" />
   </Style>
-  <Style Selector="DocumentTabStrip">
+  <!--
+    The tab list and tab options beside the tabs (TabStripButtons, as the classic IDE's): at the right of a row of tabs,
+    above a column of them (workbench.editor.tabPlacement left or right), whose frame edge isn't drawn.
+  -->
+  <Style Selector="DocumentTabStrip[Orientation=Horizontal]">
     <Setter Property="BottomContent">
       <Template>
         <controls:TabStripEdge />
       </Template>
     </Setter>
+    <Setter Property="RightContent">
+      <Template>
+        <controls:TabStripButtons />
+      </Template>
+    </Setter>
+  </Style>
+  <Style Selector="DocumentTabStrip[Orientation=Vertical]">
+    <Setter Property="TopContent">
+      <Template>
+        <controls:TabStripButtons Margin="2" />
+      </Template>
+    </Setter>
+    <Setter Property="MaxWidth" Value="280" />
+  </Style>
+  <!-- The tab list's rows show their close button under the pointer and on the selected row. -->
+  <Style Selector="controls|TabList Button.tabListClose">
+    <Setter Property="Opacity" Value="0" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+  <Style Selector="controls|TabList ListBoxItem:pointerover Button.tabListClose, controls|TabList ListBoxItem:selected Button.tabListClose">
+    <Setter Property="Opacity" Value="1" />
+    <Setter Property="IsHitTestVisible" Value="True" />
   </Style>
   <Style Selector="controls|TabStripEdge">
     <Setter Property="Height" Value="{DynamicResource Shell.TabStripEdge.Height}" />

@@ -94,7 +94,7 @@ public sealed partial class ShellHost
 
     private void InitializeComponentsPage()
     {
-        Workbench.ToolWindows.Register(new ToolWindowDescriptor(ComponentsWindow, "Components", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "package" });
+        Workbench.ToolWindows.Register(new ToolWindowDescriptor(ComponentsWindow, "Components", ToolWindowLocation.Document, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "package" });
         Workbench.Commands.Register(
             new CommandDescriptor("components.show", "Components…", ContributionSource.Shell) { Category = "Tools" },
             (_, _) =>

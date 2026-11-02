@@ -52,7 +52,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         var folder = f.CopySample("BlazorHosted");
         if (sdk10)
         {
-            // As WPoseidon's: SDK 11's browser tools aren't supported yet (BrowserHotReload.UnsupportedReason).
+            // As the maintainer's app: SDK 11's browser tools aren't supported yet (BrowserHotReload.UnsupportedReason).
             await File.WriteAllTextAsync(Path.Combine(folder, "global.json"), "{\"sdk\":{\"version\":\"10.0.100\",\"rollForward\":\"latestFeature\"}}", TestContext.Current.CancellationToken);
         }
 
@@ -199,7 +199,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     /// <summary>
-    /// ADR 0090, the maintainer's report on WPoseidon (SDK 10.0.303): under the Codalus debugger F5 launches the server
+    /// ADR 0090, the maintainer's report on their app (SDK 10.0.303): under the Codalus debugger F5 launches the server
     /// itself, with no dotnet watch, and the IDE is the browser refresh server the SDK's middleware points the page at.
     /// An edit to the server applies in place, in the same process; an edit to a WebAssembly component applies to the
     /// server's copy and in the browser, whose agent answers, and the page runs it. The page's runtime can apply at least

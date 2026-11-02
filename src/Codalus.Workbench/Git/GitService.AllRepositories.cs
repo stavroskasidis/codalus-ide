@@ -11,7 +11,7 @@ public sealed partial class GitService
     private readonly List<GitService> _siblings = [];
     private readonly SemaphoreSlim _siblingsGate = new(1, 1);
 
-    /// <summary>The repository's folder name (<c>WPylon</c>), or empty when none is open.</summary>
+    /// <summary>The repository's folder name (<c>Contoso.Web</c>), or empty when none is open.</summary>
     public string Name => Root is { } root ? Path.GetFileName(root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) : string.Empty;
 
     /// <summary>The solution's other repositories, open while every repository is shown (none otherwise).</summary>
@@ -199,6 +199,6 @@ public sealed record GitRepositoryFailure(string Root, string Message)
 {
     public string Name => Path.GetFileName(Root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 
-    /// <summary>"WPylon: git's message", one line per failure in a summary.</summary>
+    /// <summary>"Contoso.Web: git's message", one line per failure in a summary.</summary>
     public override string ToString() => $"{Name}: {Message}";
 }

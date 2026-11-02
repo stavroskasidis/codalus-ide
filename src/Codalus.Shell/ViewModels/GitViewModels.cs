@@ -1216,7 +1216,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         ? string.Empty
         : status.Branch ?? Localizer.Format("msg.gitChanges.detachedAt", "(detached at {0})", status.Head?[..Math.Min(7, status.Head.Length)]);
 
-    /// <summary>The branch button's tooltip: the branch, or each repository's ("WPylon: develop") with all shown.</summary>
+    /// <summary>The branch button's tooltip: the branch, or each repository's ("Contoso.Web: develop") with all shown.</summary>
     public string BranchTooltip => _isAllRepositories
         ? string.Join(Environment.NewLine, Services.Select(s => $"{s.Name}: {BranchOf(s.Status)}"))
         : BranchName;
@@ -1268,7 +1268,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
             ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
             : string.Empty;
 
-    /// <summary>What the counts mean: one repository's, or with all shown a line for each ("WPylon: 1 outgoing / 0 incoming (tracking origin/develop)").</summary>
+    /// <summary>What the counts mean: one repository's, or with all shown a line for each ("Contoso.Web: 1 outgoing / 0 incoming (tracking origin/develop)").</summary>
     public string OutgoingIncomingTooltip => _isAllRepositories
         ? string.Join(Environment.NewLine, Services.Select(s => s.Name + ": " + TrackingOf(s.Status)))
         : TrackingOf(_git.Status);
@@ -1881,7 +1881,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         }
     }
 
-    /// <summary>"1 of 2 repositories failed:" and a line for each ("WPylon: git's message").</summary>
+    /// <summary>"1 of 2 repositories failed:" and a line for each ("Contoso.Web: git's message").</summary>
     public static string FailureSummary(IReadOnlyList<GitRepositoryFailure> failures, int total) =>
         Localizer.Format("msg.gitChanges.repositoriesFailed", "{0} of {1} repositories failed:", failures.Count, total)
         + Environment.NewLine + string.Join(Environment.NewLine, failures);

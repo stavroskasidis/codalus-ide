@@ -8,7 +8,53 @@ namespace Codalus.Shell.Docking;
 /// </summary>
 public sealed record LayoutSnapshot(int Version, LayoutNode Root)
 {
-    public const int CurrentVersion = 1;
+    /// <summary>2 (0.x, 2026-11): the tool windows of <see cref="RehomedInVersion2"/> moved to other default locations.</summary>
+    public const int CurrentVersion = 2;
+
+    /// <summary>
+    /// The tool windows whose default location changed in version 2: the Plugins page (with the Plugin Gallery, whose
+    /// window is gone), Components, Aspire and Benchmarks among the documents, the HTTP Response beside them, and
+    /// Notifications, Worktrees, the Task Runner Explorer and .NET Counters on the right.
+    /// </summary>
+    public static readonly IReadOnlySet<string> RehomedInVersion2 = new HashSet<string>(StringComparer.Ordinal)
+    {
+        BuiltIns.PluginsWindow, "plugins.gallery", ShellHost.ComponentsWindow, ViewModels.AspireViewModel.ToolWindowId,
+        ViewModels.BenchmarksViewModel.ToolWindowId, ViewModels.HttpResponseViewModel.ToolWindowId, BuiltIns.NotificationsWindow,
+        ViewModels.WorktreesViewModel.ToolWindowId, ViewModels.TaskRunnerViewModel.ToolWindowId, ViewModels.CountersViewModel.ToolWindowId,
+    };
+
+    /// <summary>
+    /// This layout in the current version. A version 1 layout keeps everything the user arranged but the windows of
+    /// <see cref="RehomedInVersion2"/>, which open in their new places when they're next shown; other versions are
+    /// returned as they are (and not restored).
+    /// </summary>
+    public LayoutSnapshot Upgraded()
+    {
+        if (Version != 1)
+        {
+            return this;
+        }
+
+        static IReadOnlyList<string>? Keep(IReadOnlyList<string>? ids) => ids?.Where(id => !RehomedInVersion2.Contains(id)).ToList();
+
+        static LayoutNode Strip(LayoutNode node) => node with
+        {
+            Tools = Keep(node.Tools),
+            Active = node.Active is { } active && RehomedInVersion2.Contains(active) ? null : node.Active,
+            Children = node.Children?.Select(Strip).ToList(),
+        };
+
+        return this with
+        {
+            Version = 2,
+            Root = Strip(Root),
+            LeftPinned = Keep(LeftPinned),
+            RightPinned = Keep(RightPinned),
+            TopPinned = Keep(TopPinned),
+            BottomPinned = Keep(BottomPinned),
+            PinnedSizes = PinnedSizes?.Where(p => !RehomedInVersion2.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal),
+        };
+    }
 
     public IReadOnlyList<string>? LeftPinned { get; init; }
 

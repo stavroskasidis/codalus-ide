@@ -489,7 +489,7 @@ Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, 
 
 Additive (manifests for 0.2.0–0.2.8 keep working):
 - [Manifest translation](#translating-the-manifest): `%key%` placeholders with `codalus-plugin.nls.json` and `codalus-plugin.nls.<locale>.json`.
-- Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins window edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
+- Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins page's Installed tab edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
 - Shell commands `workbench.restart`, `workbench.customize`, `workbench.profiles.switch`, `.new`, `.delete`, `.export` and `.import`, and `settingsSync.turnOn`, `.syncNow` and `.turnOff`. The context keys `profile` (the active profile's name) and `locale` (the display language).
 - The settings `workbench.locale`, `workbench.commandBarCustomizations` (the user's menu and toolbar changes; a plugin's menu items can be removed and moved like the shell's), `settingsSync.target` and `settingsSync.ignoredSettings`. The settings, keyboard shortcuts and snippets that a profile holds include a plugin's own settings.
 
