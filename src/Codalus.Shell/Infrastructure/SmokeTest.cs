@@ -3805,7 +3805,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     /// <summary>
     /// A Blazor Web App's edits under the Codalus debugger (ADR 0090), on a BlazorHosted copy of its own on SDK 10 (as the
-    /// maintainer's WPoseidon; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
+    /// maintainer's app; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
     /// without dotnet watch, and stops in its prerender; the page connects to the IDE; a WebAssembly edit applies to the
     /// server and the page, which runs it; a rude edit asks, and going on keeps the old code.
     /// </summary>

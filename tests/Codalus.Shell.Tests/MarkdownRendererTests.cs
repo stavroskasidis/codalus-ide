@@ -21,10 +21,10 @@ public sealed class MarkdownRendererTests
 
         | App | Notes |
         |---|---|
-        | `DemoStandardApp` | wStandard web app. Login: UserName + Password, submit `#btnLogin`. Runs on http://localhost:5100 against its own database, migrated on start. |
-        | `DemoApp` | wPoseidon web app. Login: WorkArea + UserName + Password, submit `#btnLogin`. Work area `Dev1` is a cloud server (no local one needed). |
-        | `DemoAppLite` | wPoseidon Lite (mobile). Two front ends over one backend. |
-        | `DemoStandardAppLite` | wStandard Lite (no wPoseidon). |
+        | `StoreApp` | Contoso web store. Login: UserName + Password, submit `#btnLogin`. Runs on http://localhost:5100 against its own database, migrated on start. |
+        | `PortalApp` | Contoso portal. Login: Tenant + UserName + Password, submit `#btnLogin`. Tenant `Test` is a cloud server (no local one needed). |
+        | `PortalAppLite` | Contoso portal Lite (mobile). Two front ends over one backend. |
+        | `StoreAppLite` | Contoso store Lite (no portal). |
         | `DocumentationApp` | Documents and showcases the framework. |
 
         ### Dev auto login
@@ -64,7 +64,7 @@ public sealed class MarkdownRendererTests
         var table = Assert.Single(s.Content.GetVisualDescendants().OfType<MarkdownTable>());
         Assert.Equal(2, table.Columns);
         Assert.Equal(12, table.Children.Count);
-        string[] apps = ["App", "DemoStandardApp", "DemoApp", "DemoAppLite", "DemoStandardAppLite", "DocumentationApp"];
+        string[] apps = ["App", "StoreApp", "PortalApp", "PortalAppLite", "StoreAppLite", "DocumentationApp"];
         Assert.Equal(apps, table.Children.Where((_, k) => k % 2 == 0).Select(c => Plain((TextBlock)((Border)c).Child!)));
 
         // The header: semibold on Shell.Hover; the cells bordered in Shell.Border.

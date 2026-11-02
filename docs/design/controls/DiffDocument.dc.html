@@ -201,7 +201,7 @@
 
 <header>
   <h1>Git diff document: syntax colors and the classic layout</h1>
-  <div class="lead">Task #86, a design before it is built. The document that Git Changes, Compare with Unmodified, Compare with Branch or Commit, a commit's files in History, codalus diff and plugin source control open (DiffView.cs), redrawn on the classic IDE's diff layout, with syntax colors. The file is Startup.cs from the screenshots (BlazorSudoku.Server, two lines added at 47 and 48), then a second edit with four changes. The code uses the editor's own colors (EditorTheme; Classic's are Roslyn's scheme): the C# grammar colors the index side, and the C# host's semantic tokens color the working-tree side, because that side is the open document. The working-tree side shows the open buffer with its unsaved edits, so every Stage and Discard saves the file first, and what is staged is exactly what is drawn. {{t.name}}, {{t.p.family}} family.</div>
+  <div class="lead">Task #86, a design before it is built. The document that Git Changes, Compare with Unmodified, Compare with Branch or Commit, a commit's files in History, codalus diff and plugin source control open (DiffView.cs), redrawn on the classic IDE's diff layout, with syntax colors. The file is Startup.cs from the screenshots (ContosoStore.Server, two lines added at 47 and 48), then a second edit with four changes. The code uses the editor's own colors (EditorTheme; Classic's are Roslyn's scheme): the C# grammar colors the index side, and the C# host's semantic tokens color the working-tree side, because that side is the open document. The working-tree side shows the open buffer with its unsaved edits, so every Stage and Discard saves the file first, and what is staged is exactly what is drawn. {{t.name}}, {{t.p.family}} family.</div>
   <nav class="themes" aria-label="Themes"><sc-for list="{{themes}}" as="th"><a href="?theme={{th.q}}" class="{{th.cls}}">{{th.name}}</a></sc-for></nav>
 </header>
 
@@ -518,11 +518,11 @@ class Component extends DCLogic {
       return { rows, a, b, changes: block + 1, added: rows.filter((r) => r.n && r.k !== ' ').length, removed: rows.filter((r) => r.o && r.k !== ' ').length };
     };
 
-    // ---- The files: Startup.cs as the index holds it (BlazorSudoku.Server, the screenshots' file), and its edits.
+    // ---- The files: Startup.cs as the index holds it (ContosoStore.Server, a placeholder Blazor app), and its edits.
     const OLD = [
       'using Microsoft.AspNetCore.Builder;', 'using Microsoft.AspNetCore.Hosting;', 'using Microsoft.AspNetCore.ResponseCompression;',
       'using Microsoft.Extensions.Configuration;', 'using Microsoft.Extensions.DependencyInjection;', 'using Microsoft.Extensions.Hosting;',
-      'using BlazorSudoku.Server.Services;', 'using BlazorSudoku.Shared;', '', 'namespace BlazorSudoku.Server', '{', '    public class Startup', '    {',
+      'using ContosoStore.Server.Services;', 'using ContosoStore.Shared;', '', 'namespace ContosoStore.Server', '{', '    public class Startup', '    {',
       '        public Startup(IConfiguration configuration)', '        {', '            Configuration = configuration;', '        }', '',
       '        public IConfiguration Configuration { get; }', '',
       '        // This method gets called by the runtime. Use this method to add services to the container.',
@@ -791,7 +791,7 @@ class Component extends DCLogic {
         rows: a8.rows, h: a8.h, vs: null, st: null, menus: [], scopes: [], tips: [], cls: 'two', two: true, stg: true, paneCls: '' }] }) };
 
     // The confirmations.
-    const CTX = 'BlazorSudoku.Server · Startup.cs (Working tree)';
+    const CTX = 'ContosoStore.Server · Startup.cs (Working tree)';
     const A9 = { id: 'A9', w: 610, title: 'Discard Change… asks first', src: 'DialogRequest(Discard, Cancel), Cancel the default · save, then git apply -R',
       cap: 'Today Discard Hunk and Discard Selected Lines run without asking; here both ask, naming the lines. With unsaved edits, the dialog says the file is saved first. Discard Selected Lines… asks the same way: "Discard line 48 of Startup.cs?" and "This added line will be removed from the working tree. This can\'t be undone."',
       dlg: { h: 290, title: 'Discard lines 47–48 of Startup.cs?', ctx: CTX, msg: 'These 2 added lines will be removed from the working tree. This can\'t be undone.',

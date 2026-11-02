@@ -64,7 +64,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
             launched.Resume();
             if (!attached.Task.Wait(RuntimeStartTimeout))
             {
-                throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program?");
+                throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => LoadedRuntime(shim, id))}");
             }
 
             return attached.Task.Result;
@@ -139,6 +139,40 @@ internal sealed class DbgShimDebugger : IClrDebugger
         finally
         {
             shim.TryCloseCLREnumeration(clrs);
+        }
+    }
+
+    /// <summary>
+    /// What a launched program was doing when its runtime's startup wasn't reported in time: ended, or still running (how
+    /// long, on how much processor time) with or without a .NET runtime loaded. On Windows CI the first two launches of a
+    /// shard waited out the 30 seconds while every later one started in about a second (run 41442485548,
+    /// docs/ci-flakes.md), and the message didn't say whether the program was stuck before its runtime or the startup
+    /// callback never came.
+    /// </summary>
+    /// <param name="loadedRuntime">The path of the CoreCLR library a process loaded, or null.</param>
+    internal static string StartState(int processId, Func<int, string?> loadedRuntime)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            if (process.HasExited)
+            {
+                return $"The program ended (exit code {process.ExitCode.ToString(CultureInfo.InvariantCulture)}).";
+            }
+
+            var age = (DateTime.Now - process.StartTime).TotalSeconds;
+            var processor = process.TotalProcessorTime.TotalSeconds;
+            var threads = process.Threads.Count;
+            var runtime = loadedRuntime(processId) is { } path ? $"has loaded {path}" : "hasn't loaded a .NET runtime";
+            return string.Create(CultureInfo.InvariantCulture, $"The program still runs ({age:0.0} s old, {processor:0.0} s of processor time, {threads} threads) and {runtime}.");
+        }
+        catch (ArgumentException)
+        {
+            return "The program ended.";
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or DebugException)
+        {
+            return $"The program's state couldn't be read ({ex.Message}).";
         }
     }
 
