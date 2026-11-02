@@ -217,7 +217,8 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(
             () => !shapes.Insights.HasLensEstimates && declarations.All(code => shapes.Insights.LensRowAbove(LineOf(code)) is { Length: > 0 }),
             seconds: 60,
-            describe: () => string.Join("; ", declarations.Select(code => $"{code}: '{shapes.Insights.LensRowAbove(LineOf(code))}'")));
+            describe: () => string.Join("; ", declarations.Select(code => $"{code}: '{shapes.Insights.LensRowAbove(LineOf(code))}'"))
+                + $"; estimates left: {shapes.Insights.HasLensEstimates}; {shapes.Insights.DescribeLenses()}"); // TODO(issue): Scale(double)'s row stays empty on WSL (docs/ci-flakes.md)
         view.EnsureVisualLines();
         Assert.Contains("reference", shapes.Insights.LensRowAbove(LineOf("class Geometry")), StringComparison.Ordinal);
         Screenshot(f, "codelens-resolved");
