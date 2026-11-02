@@ -134,29 +134,31 @@ public class MinimapTests
     {
         var (f, _, minimap) = await OpenAsync(150);
         await using var __ = f;
-        using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(f.Window)!;
 
-        // Every line is "xN": a two-column word at the minimap's left (4 px in), nothing to the right of it.
+        // The minimap alone, not the window's frame: whatever the window draws over it (an overlay fading in under load)
+        // isn't its drawing.
+        using var drawn = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)minimap.Bounds.Width, (int)minimap.Bounds.Height));
+        drawn.Render(minimap);
+        var pixels = new uint[drawn.PixelSize.Width * drawn.PixelSize.Height];
+        var pinned = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            drawn.CopyPixels(new PixelRect(drawn.PixelSize), pinned.AddrOfPinnedObject(), pixels.Length * sizeof(uint), drawn.PixelSize.Width * sizeof(uint));
+        }
+        finally
+        {
+            pinned.Free();
+        }
+
+        byte Alpha(int x, int y) => (byte)(pixels[(y * drawn.PixelSize.Width) + x] >> 24);
+
+        // Every line is "xN": a two-column word 4 px in, only the visible area's shade to the right of it, and a gap below.
         for (var line = 0; line < 20; line++)
         {
-            var y = (line * Minimap.LineHeight) + 0.5;
-            var word = Pixel(frame, minimap, new Point(5, y), f.Window);
-            var space = Pixel(frame, minimap, new Point(40, y), f.Window);
-            var gap = Pixel(frame, minimap, new Point(5, y + 1.25), f.Window);
-            Assert.True(Distance(word, space) > 60, $"line {line}: the word ({word}) isn't drawn over the background ({space})");
-            Assert.True(Distance(word, gap) > Distance(space, gap), $"line {line}: the gap below the word ({gap}) is drawn like it ({word})");
+            var y = (int)(line * Minimap.LineHeight);
+            Assert.True(Alpha(5, y) > 100, $"line {line}: the word isn't drawn (alpha {Alpha(5, y)})");
+            Assert.True(Alpha(40, y) <= 0x30, $"line {line}: something is drawn right of the word (alpha {Alpha(40, y)}; the visible area's shade is 0x30)");
+            Assert.True(Alpha(5, y + 1) < Alpha(5, y), $"line {line}: the gap below the word (alpha {Alpha(5, y + 1)}) is drawn like it ({Alpha(5, y)})");
         }
-    }
-
-    private static int Distance(Avalonia.Media.Color a, Avalonia.Media.Color b) => Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
-
-    private static Avalonia.Media.Color Pixel(Avalonia.Media.Imaging.WriteableBitmap frame, Visual visual, Point point, Avalonia.Controls.TopLevel top)
-    {
-        var at = visual.TranslatePoint(point, top)!.Value * top.RenderScaling;
-        using var buffer = frame.Lock();
-        var offset = ((int)at.Y * buffer.RowBytes) + ((int)at.X * 4);
-        var (b0, b1, b2, b3) = (System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 1),
-            System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 2), System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + 3));
-        return buffer.Format == Avalonia.Platform.PixelFormat.Rgba8888 ? Avalonia.Media.Color.FromArgb(b3, b0, b1, b2) : Avalonia.Media.Color.FromArgb(b3, b2, b1, b0);
     }
 }
