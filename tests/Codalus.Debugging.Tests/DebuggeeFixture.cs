@@ -73,12 +73,16 @@ public sealed class DebuggeeFixture : IAsyncLifetime
         return watch.Elapsed;
     }
 
-    /// <summary>netcoredbg on macOS reports every exit code as 0 (a known gap, ADR 0007); elsewhere it is exact.</summary>
-    public static void AssertExitCode(int expected, int? actual)
+    /// <summary>
+    /// netcoredbg on macOS reports every exit code as 0 (a known gap, ADR 0007); elsewhere it is exact. A wrong code says
+    /// what the program wrote (<paramref name="output"/>): whether it ran to its end (Linux arm64 CI, run 41547730079,
+    /// reported 0 where the program returns 15, and the log couldn't say).
+    /// </summary>
+    public static void AssertExitCode(int expected, int? actual, string? output = null)
     {
         if (!OperatingSystem.IsMacOS())
         {
-            Assert.Equal(expected, actual);
+            Assert.True(expected == actual, $"The program's exit code was {actual?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "not reported"}, not {expected}. Its output:\n{output ?? "(not captured)"}");
         }
     }
 
