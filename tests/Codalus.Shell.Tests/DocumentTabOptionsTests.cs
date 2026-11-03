@@ -93,14 +93,13 @@ public sealed class DocumentTabOptionsTests
     public async Task Tabs_in_multiple_rows_all_show_and_the_mouse_wheel_turns_them_on_and_off()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it moves the documents right (see Wheel)
         await OpenAsync(f, "rows", 12);
         f.Window.Width = 900;
         ShellFixture.Pump();
         f.Window.UpdateLayout();
         ShellFixture.Pump();
         var strip = Strip(f);
-
-        await SettleAsync(f, strip);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
@@ -165,10 +164,10 @@ public sealed class DocumentTabOptionsTests
     public async Task A_wheel_up_right_after_a_wheel_down_leaves_one_row()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it moves the documents right (see Wheel)
         await OpenAsync(f, "quick", 3);
         ShellFixture.Pump();
         var strip = Strip(f);
-        await SettleAsync(f, strip);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
 
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
@@ -329,7 +328,9 @@ public sealed class DocumentTabOptionsTests
     /// returns its point. The wheels went to a tool window's title, and the shell never saw them: the tests took the point
     /// once, from the strip's first layout, and the strip moved (205 px right, Windows CI run 41608511009); and the
     /// pointer's hit test reads the last rendered frame, not the layout (PR #291's Linux run 41616893942;
-    /// docs/ci-flakes.md). So a frame of the layout is rendered first, and the point must be over the strip.
+    /// docs/ci-flakes.md). So a frame of the layout is rendered first, and the point must be over the strip. What moved
+    /// it: the Welcome plugin's Start page, which opens the left column once the plugin host runs, seconds late on a
+    /// busy runner (PR #296's run 41666516531, at (27, 85.5) over its title); the tests wait for it first.
     /// </summary>
     private static Point Wheel(ShellFixture f, DocumentTabStrip strip, double delta, Point? at = null)
     {
@@ -344,29 +345,6 @@ public sealed class DocumentTabOptionsTests
         Assert.True(under is not null && (ReferenceEquals(under, strip) || strip.IsVisualAncestorOf(under)), $"the wheel's point {point} is over {Chain(under)}, not the tab strip");
         f.Window.MouseWheel(point, new Vector(0, delta));
         return point;
-    }
-
-    /// <summary>
-    /// Waits until the strip stays put for a second. The tool windows can still be arriving: one docking at the left moves
-    /// the strip right, and the window's MouseWheel runs the pending layout before it delivers the wheel, so a point read
-    /// just before (<see cref="Wheel"/>) still missed the strip (Windows CI: run 41624195564 at the multiple-rows test's
-    /// wheel down, the wheel on a ToolChromeControl; run 41703043049 at the race test's second wheel, its point over one).
-    /// </summary>
-    private static async Task SettleAsync(ShellFixture f, DocumentTabStrip strip)
-    {
-        var placed = strip.TranslatePoint(default, f.Window);
-        var still = System.Diagnostics.Stopwatch.StartNew();
-        await ShellFixture.PumpUntil(() =>
-        {
-            var now = strip.TranslatePoint(default, f.Window);
-            if (now != placed)
-            {
-                placed = now;
-                still.Restart();
-            }
-
-            return still.Elapsed >= TimeSpan.FromSeconds(1);
-        }, describe: () => $"the strip keeps moving: at {placed}");
     }
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>

@@ -275,7 +275,8 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// column, as that column's active tab. Shown after a test had shown a tool window of that column (the Test Explorer,
     /// the Toolbox, the Document Outline), on a busy machine where the plugin host starts seconds late, it hid that tool
     /// window, which then did no work and, made lazily, never got its content (M56). A test that shows one soon after the
-    /// fixture starts waits for this first.
+    /// fixture starts waits for this first, and so does one that points at the documents, which the column moves right
+    /// (the tab strip's wheel tests).
     /// </summary>
     public Task StartViewShownAsync() =>
         PumpUntil(() => Shell.Layout.OpenToolWindows.Any(t => t.Id == "welcome.view"), seconds: 60);
