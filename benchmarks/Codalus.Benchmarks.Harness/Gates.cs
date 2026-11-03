@@ -209,9 +209,11 @@ internal static class Gates
                         continue;
                     }
 
+                    // The newest; of two on the same day, the later in the file (entries are appended).
                     var acceptance = accepted?
                         .Where(a => a.Os == result.Machine.Os && a.Target == result.Target && a.Scenario == result.Scenario && a.Metric == metric && a.Stat == stat)
-                        .MaxBy(a => a.Date);
+                        .OrderBy(a => a.Date)
+                        .LastOrDefault();
                     var history = runs
                         .Where(r => acceptance is null || DateOnly.FromDateTime(r.StartedAt.UtcDateTime) > acceptance.Date)
                         .Select(r => (Result: r, Value: r.Summary.TryGetValue(metric, out var d) ? Stat(d, stat) : null))
