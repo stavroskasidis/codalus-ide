@@ -99,6 +99,25 @@ public sealed class DocumentTabOptionsTests
         f.Window.UpdateLayout();
         ShellFixture.Pump();
         var strip = Strip(f);
+
+        // The tool windows can still be arriving: one docking at the left moves the strip right, and the window's MouseWheel
+        // runs the pending layout before it delivers the wheel, so a point read just before still missed the strip (Windows
+        // CI, run 41624195564: the point over a tab before the wheel, the wheel on a ToolChromeControl). Wait until the
+        // strip stays put; each point is also read just before its wheel (Over, below).
+        var placed = strip.TranslatePoint(default, f.Window);
+        var still = System.Diagnostics.Stopwatch.StartNew();
+        await ShellFixture.PumpUntil(() =>
+        {
+            var now = strip.TranslatePoint(default, f.Window);
+            if (now != placed)
+            {
+                placed = now;
+                still.Restart();
+            }
+
+            return still.Elapsed >= TimeSpan.FromSeconds(1);
+        }, describe: () => $"the strip keeps moving: at {placed}");
+
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
