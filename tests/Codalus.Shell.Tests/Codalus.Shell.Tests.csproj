@@ -27,5 +27,6 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" />
+    <PackageReference Include="Microsoft.Diagnostics.Runtime" />
   </ItemGroup>
 </Project>
