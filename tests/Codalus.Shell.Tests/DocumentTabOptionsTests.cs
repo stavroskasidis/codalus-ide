@@ -250,9 +250,13 @@ public sealed class DocumentTabOptionsTests
         Assert.Equal([false, true, false], entries.Take(3).Select(e => e.IsChecked));
         Assert.False(entries[4].IsChecked);
         Assert.True(entries[5].IsChecked);
+        // A submenu's entries are made as it opens (MenuBuilder).
+        entries[3].Open();
+        ShellFixture.Pump();
         var colorBy = entries[3].Items.OfType<MenuItem>().ToList();
         Assert.Equal(["None", "Project", "File Extension"], colorBy.Select(e => AutomationName(e)));
         Assert.Equal([true, false, false], colorBy.Select(e => e.IsChecked));
+        entries[3].Close();
 
         // Options… opens Settings on the tab settings.
         await f.RunAsync("workbench.tabs.options");

@@ -202,7 +202,9 @@ public sealed class EditorInsights : IDisposable
     /// <summary>The CodeLens state, for a test's failure message.</summary>
     internal string DescribeLenses() =>
         $"listed {_lensesListed} (version {_lensVersion} of {Model.Version}), {_lenses.Count} lenses, {_estimates?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no"} estimates, "
-        + $"CodeLens {Options.CodeLens}, expected {_services.ExpectsCodeLens(Model)}, language {Model.LanguageId}";
+        + $"CodeLens {Options.CodeLens}, expected {_services.ExpectsCodeLens(Model)}, language {Model.LanguageId}, "
+        + $"lines {VisibleLines()} in view ({_editor.TextArea.TextView.Bounds.Height:0} px) of {_editor.Document.LineCount}; "
+        + string.Join(", ", _lenses.Select(l => $"line {_editor.Document.GetLineByOffset(l.StartOffset).LineNumber} {l.Lens.Data?.GetRawText()?.Split(',')[^1].Trim('"', ']')}: {(l.Resolved ? $"'{l.Title}'" : l.Title is null ? "unresolved" : $"unresolved, kept '{l.Title}'")}"));
 
     /// <summary>
     /// Keeps the room of the CodeLens rows the service will list until it does: the declarations
