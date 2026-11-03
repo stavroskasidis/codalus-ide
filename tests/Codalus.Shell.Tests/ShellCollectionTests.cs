@@ -141,7 +141,11 @@ public sealed class ShellCollectionTests
                 GC.Collect();
             }
 
-            Assert.Fail($"The disposed shell is still reachable{(shell.IsAlive ? " 30 s later too" : $" (collected {clock.Elapsed.TotalSeconds:0.0} s later)")}. The test host's child processes then: {children}");
+            // Kept for good: what keeps it (Windows CI, run 41601353003, kept one 30 s with no child process left).
+            var holders = shell.IsAlive
+                ? "\nWhat holds a disposed shell: " + HeapRootPaths.Describe(typeof(ShellHost).FullName!, o => !o.ReadObjectField("_disposing").IsNull)
+                : string.Empty;
+            Assert.Fail($"The disposed shell is still reachable{(shell.IsAlive ? " 30 s later too" : $" (collected {clock.Elapsed.TotalSeconds:0.0} s later)")}. The test host's child processes then: {children}{holders}");
         }
 
         Assert.False(window.IsAlive, "The closed main window is still reachable.");
