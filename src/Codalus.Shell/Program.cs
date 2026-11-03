@@ -165,7 +165,11 @@ internal static partial class Program
             // much memory pressure: scrolling the 100k-line file at 230 lines/s set off a full garbage collection every
             // 0.6 s, and every frame redrew the whole window since the last one's pixels were gone. Retained, the frame
             // keeps one buffer (the window's size, 8 MB at 1920x1080) and redraws only what changed.
-            .With(new X11PlatformOptions { UseRetainedFramebuffer = true })
+            .With(Infrastructure.Rendering.X11(Environment.GetEnvironmentVariable(Infrastructure.Rendering.Variable)))
+            // Without a GPU, Windows draws in software rather than through ANGLE on WARP, twice as fast (Rendering).
+            .With(OperatingSystem.IsWindows()
+                ? Infrastructure.Rendering.Windows(Environment.GetEnvironmentVariable(Infrastructure.Rendering.Variable), Infrastructure.Rendering.FirstAdapterIsSoftware)
+                : new Win32PlatformOptions())
             .LogToTrace();
 
     /// <summary>A GUI-subsystem process on Windows has no console; borrow the parent's for <c>--version</c> and <c>--help</c>.</summary>
