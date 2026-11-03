@@ -25,6 +25,7 @@ internal sealed class UiStallMonitor : IDisposable
     private double _longestGc;
     private string? _longestJob;
     private string? _longestStep;
+    private string? _longestCollections;
     private volatile string? _step;
     private int _probes;
     private int _stalls;
@@ -61,7 +62,7 @@ internal sealed class UiStallMonitor : IDisposable
     {
         lock (_gate)
         {
-            return new UiStallReport(_probes, _longest, _longestGc, _longestJob, _stalls, _stalled, _longestStep);
+            return new UiStallReport(_probes, _longest, _longestGc, _longestJob, _stalls, _stalled, _longestStep, _longestCollections);
         }
     }
 
@@ -73,6 +74,7 @@ internal sealed class UiStallMonitor : IDisposable
             _longestGc = 0;
             _longestJob = null;
             _longestStep = null;
+            _longestCollections = null;
             _probes = 0;
             _stalls = 0;
             _stalled = 0;
@@ -87,7 +89,7 @@ internal sealed class UiStallMonitor : IDisposable
         {
             using var answered = new ManualResetEventSlim();
             var sent = Stopwatch.GetTimestamp();
-            var gcBefore = GC.GetTotalPauseDuration();
+            var gcMark = GcReport.Mark();
             long ran = 0;
             Dispatcher.UIThread.Post(() =>
             {
@@ -111,7 +113,7 @@ internal sealed class UiStallMonitor : IDisposable
                 steps[step] = steps.GetValueOrDefault(step) + 1;
             }
 
-            var gc = (GC.GetTotalPauseDuration() - gcBefore).TotalMilliseconds;
+            var gc = (GC.GetTotalPauseDuration() - gcMark.Paused).TotalMilliseconds;
             var waited = Stopwatch.GetElapsedTime(sent, Volatile.Read(ref ran)).TotalMilliseconds - gc;
             lock (_gate)
             {
@@ -128,6 +130,7 @@ internal sealed class UiStallMonitor : IDisposable
                     _longestGc = gc;
                     _longestJob = jobs.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault();
                     _longestStep = steps.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault() ?? stepSent;
+                    _longestCollections = GcReport.Since(gcMark);
                 }
             }
 
@@ -146,11 +149,15 @@ internal sealed class UiStallMonitor : IDisposable
 /// <summary>
 /// What a <see cref="UiStallMonitor"/> measured: the probes answered, the longest wait (without the GC's pauses, which are
 /// <see cref="LongestGcMilliseconds"/>), the posted job the UI thread ran most during it and the flow's step then, and the
-/// waits over <see cref="UiStallMonitor.StallMilliseconds"/>: how many, and their sum (each without its GC pauses).
+/// waits over <see cref="UiStallMonitor.StallMilliseconds"/>: how many, and their sum (each without its GC pauses). The
+/// collections during the longest wait are named (<see cref="GcReport"/>): a wait of 1011 ms in no posted job with only 135 ms
+/// of pauses, under a whole local run of the shell tests (the Git Repository's filter flow, 0 ms alone), could be the UI
+/// thread held by a background collection, which the pauses don't count (docs/ci-flakes.md).
 /// </summary>
-internal readonly record struct UiStallReport(int Probes, double LongestMilliseconds, double LongestGcMilliseconds, string? LongestJob, int Stalls, double StalledMilliseconds, string? LongestStep = null)
+internal readonly record struct UiStallReport(int Probes, double LongestMilliseconds, double LongestGcMilliseconds, string? LongestJob, int Stalls, double StalledMilliseconds, string? LongestStep = null, string? LongestCollections = null)
 {
-    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it.</summary>
+    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it, the collections then.</summary>
     public string Describe() =>
-        $"{LongestMilliseconds:0} ms (and {LongestGcMilliseconds:0} ms of GC pauses) in {LongestJob ?? "no posted job (layout, rendering, input or a handler)"}{(LongestStep is null ? string.Empty : $" at {LongestStep}")}, over {Probes} probes";
+        $"{LongestMilliseconds:0} ms (and {LongestGcMilliseconds:0} ms of GC pauses) in {LongestJob ?? "no posted job (layout, rendering, input or a handler)"}{(LongestStep is null ? string.Empty : $" at {LongestStep}")}, over {Probes} probes"
+        + (LongestCollections is null ? string.Empty : $"; during it, {LongestCollections}");
 }

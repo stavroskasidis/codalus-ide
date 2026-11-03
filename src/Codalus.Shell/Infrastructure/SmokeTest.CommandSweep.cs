@@ -55,6 +55,12 @@ internal sealed partial class SmokeTest
     private static TimeSpan SweepStallLimit(bool firstRun) =>
         TimeSpan.FromMilliseconds(Environment.GetEnvironmentVariable("CI") != "true" ? 500 : firstRun ? 2000 : 1000);
 
+    /// <summary>
+    /// A run whose GC pauses add up to this much says which collections they were (<see cref="GcReport"/>): a 1.4 s pause
+    /// on Windows (2026-11-02, docs/ci-flakes.md) came with only its length, and the sweep's other pauses stay under 200 ms.
+    /// </summary>
+    private const double SweepGcReportMilliseconds = 100;
+
     /// <summary>The commands that have run from an entry point (the next run of each is warm).</summary>
     private readonly HashSet<string> _sweepRan = new(StringComparer.Ordinal);
 
@@ -137,6 +143,9 @@ internal sealed partial class SmokeTest
 
         /// <summary>How long the garbage collector paused the process during the run: a stall it explains isn't the command's code.</summary>
         public double GcPauseMilliseconds { get; init; }
+
+        /// <summary>The collections behind a long GC pause (<see cref="SweepGcReportMilliseconds"/>), even when the UI didn't stall: which, and why.</summary>
+        public string? Gc { get; init; }
 
         public string? Saw { get; init; }
 
@@ -968,7 +977,7 @@ internal sealed partial class SmokeTest
         var clock = Stopwatch.StartNew();
         var enabled = SweepContextWatch.Read(command.Enablement, shell.Workbench.Context);
         _sweepStall!.Reset();
-        var gcBefore = GC.GetTotalPauseDuration();
+        var gcMark = GcReport.Mark();
         string? problem = null;
         try
         {
@@ -1024,7 +1033,8 @@ internal sealed partial class SmokeTest
 
         var milliseconds = clock.Elapsed.TotalMilliseconds;
         var stall = _sweepStall.MaxMilliseconds;
-        var gcPause = (GC.GetTotalPauseDuration() - gcBefore).TotalMilliseconds;
+        var gcPause = (GC.GetTotalPauseDuration() - gcMark.Paused).TotalMilliseconds;
+        var gc = gcPause >= SweepGcReportMilliseconds ? GcReport.Since(gcMark) : null;
         if (problem is null && executed.Task.IsCompleted && executed.Task.Result.Error is { } error)
         {
             problem = $"the command threw {error.GetType().Name}: {error.Message}";
@@ -1059,7 +1069,7 @@ internal sealed partial class SmokeTest
         var stallLimit = SweepStallLimit(firstRun);
         if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run; it ran {_sweepStall.JobOfMax ?? "unsampled"})";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run{(gc is null ? string.Empty : ": " + gc)}; it ran {_sweepStall.JobOfMax ?? "unsampled"})";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
@@ -1083,7 +1093,7 @@ internal sealed partial class SmokeTest
         var known = s_sweepKnown.ContainsKey($"{command.Id}|{entry}") || s_sweepKnown.ContainsKey($"{command.Id}|*");
         lock (saw)
         {
-            Sweep(command.Id, entry, problem is null ? "pass" : "fail", problem, location, milliseconds, stall, saw.Count > 0 ? string.Join(" | ", saw.Distinct()) : null, screenshot, known, gcPause);
+            Sweep(command.Id, entry, problem is null ? "pass" : "fail", problem, location, milliseconds, stall, saw.Count > 0 ? string.Join(" | ", saw.Distinct()) : null, screenshot, known, gcPause, gc);
         }
     }
 
@@ -1640,11 +1650,12 @@ internal sealed partial class SmokeTest
 
     // ------------------------------------------------------------------ report
 
-    private void Sweep(string command, string entry, string outcome, string? reason, string? location = null, double milliseconds = 0, double stall = 0, string? saw = null, string? screenshot = null, bool known = false, double gcPause = 0)
+    private void Sweep(string command, string entry, string outcome, string? reason, string? location = null, double milliseconds = 0, double stall = 0, string? saw = null, string? screenshot = null, bool known = false, double gcPause = 0, string? gc = null)
     {
         var row = new SweepRow(command, entry, outcome, reason)
         {
             GcPauseMilliseconds = Math.Round(gcPause),
+            Gc = gc,
             Location = location,
             Scenario = _sweepScenario.ToString(),
             Milliseconds = Math.Round(milliseconds),
@@ -1716,6 +1727,8 @@ internal sealed partial class SmokeTest
             {
                 json.WriteNumber("gcPauseMs", r.GcPauseMilliseconds);
             }
+
+            Write("gc", r.Gc);
 
             Write("saw", r.Saw);
             Write("screenshot", r.Screenshot);
