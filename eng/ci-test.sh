@@ -39,6 +39,9 @@ export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
 # a func-eval that timed out (ToUpper, Windows, run 41459412070) left no log, so not the thread stacks the adapter
 # writes at a func-eval's timeout.
 export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
+# vscode-js-debug's log of every browser debugging session, there too: on Windows js-debug twice failed to launch
+# Chrome with "Could not attach to main target" and nothing else (CompoundDebugTests, PR #279's run 41502391209).
+export CODALUS_JSDEBUG_TRACE="${CODALUS_JSDEBUG_TRACE:-$results/js-debug}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;

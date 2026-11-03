@@ -2274,8 +2274,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
             window.Selected = window.Resources.Single(r => r.Name == "api");
             await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
-            // The website's picture (aspire.png): the resources' page in front of the AppHost's code, not an earlier step's document.
+            // The website's picture (aspire.png): the resources' page in front of the AppHost's code, not an earlier step's document,
+            // across the documents' width: web.http's HTTP Response, beside the documents, would take half of it.
             await OpenAsync(Path.Combine(target, "Aspire", "AppHost", "AppHost.cs")).ConfigureAwait(true);
+            shell.Layout.CloseToolWindow(HttpResponseViewModel.ToolWindowId);
             shell.ShowAspire();
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-aspire.png");
