@@ -103,9 +103,8 @@ public sealed class DocumentTabOptionsTests
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
 
-        // Every wheel event: where it went, whether it passed through the strip, and whether the shell took it (Windows and
-        // macOS CI timed out waiting for the second wheel to turn multiple rows off, runs 41518626383 and 41524121911; the
-        // cause isn't known yet, TODO(issue)).
+        // Every wheel event: where it went, whether the strip saw it and whether the shell took it, for the failure at the
+        // wheel up below (its cause isn't known yet, TODO(issue)).
         var wheels = new List<string>();
         strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
@@ -132,14 +131,16 @@ public sealed class DocumentTabOptionsTests
             frame!.Save(Path.Combine(snapshots, "document-tabs-multiple-rows.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
         }
 
-        // Up: one row again.
+        // Up: one row again. (Windows and macOS CI, runs 41518626383 and 41524121911: this wheel left the rows on, while it
+        // passes on Linux; the failure says what the wheel reached and did.)
+        var before = Under(f, over);
         f.Window.MouseWheel(over, new Vector(0, 1));
         await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () =>
-            $"multiple rows: the setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, the resource "
-            + $"{Avalonia.Application.Current!.Resources["Shell.TabsInMultipleRows"]}, the panel {panel.MultipleRows} ({(TopLevel.GetTopLevel(panel) is null ? "detached" : "attached")}, "
-            + $"{(ReferenceEquals(Strip(f), strip) ? "the same strip" : "another strip")}); wheels: [{string.Join("; ", wheels)}]; "
-            + $"at {over} now: {Chain(InputExtensions.GetInputElementsAt(f.Window, over).FirstOrDefault() as Visual)}; "
-            + $"the strip at {strip.TranslatePoint(default, f.Window)}, {strip.Bounds.Size}; "
+            $"the tabs stayed in multiple rows: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
+            + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
+            + $"{f.Shell.LastTabStripWheel}), the wheel events: [{string.Join("; ", wheels)}], the panel's still the strip's "
+            + $"{ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())} ({(TopLevel.GetTopLevel(panel) is null ? "detached" : "attached")}), "
+            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}; "
             + $"the overlay: [{string.Join(", ", OverlayLayer.GetOverlayLayer(f.Window)?.Children.Select(c => $"{c.GetType().Name} {c.Bounds}") ?? [])}]");
         f.Window.UpdateLayout();
         ShellFixture.Pump();
@@ -307,10 +308,13 @@ public sealed class DocumentTabOptionsTests
 
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
 
+    /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
+    private static string Under(ShellFixture f, Point point) => Chain(InputExtensions.InputHitTest(f.Window, point) as Visual);
+
     /// <summary>Whether the panel arranged the tab inside itself (a tab left out is arranged past its right edge).</summary>
     private static bool Shown(TabStripItem tab, DocumentTabPanel panel) => tab.Bounds.Right <= panel.Bounds.Width + 0.5 && tab.Bounds.Width > 0;
 
-    /// <summary>A visual and its ancestors up to the document group, by type.</summary>
+    /// <summary>A visual and its ancestors up to the document group, by type, innermost first.</summary>
     private static string Chain(Visual? visual) =>
         visual is null ? "nothing" : string.Join(" < ", visual.GetSelfAndVisualAncestors().TakeWhile(v => v is not DocumentDockControl).Take(12).Select(v => v.GetType().Name));
 

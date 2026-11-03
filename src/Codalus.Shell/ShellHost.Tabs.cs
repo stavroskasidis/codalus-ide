@@ -256,21 +256,46 @@ public sealed partial class ShellHost
     /// </summary>
     private bool OnTabStripWheel(double delta)
     {
+        TabStripWheels++;
         if (!Workbench.Settings.GetBoolean(MultipleRowsWithMouseWheelSetting, true))
         {
+            LastTabStripWheel = $"wheel {delta}: turned off";
             return false;
         }
 
         // While the wheel's last write is on its way, against what it wrote: the setting changes only once the write has
         // landed, and a wheel up before a wheel down's write landed found one row, wrote nothing, and the rows came on.
         var multiple = delta < 0;
-        var rows = _tabRowsWrite is { IsCompleted: false } ? _tabRowsWritten : Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false);
-        if (rows != multiple)
+        var current = _tabRowsWrite is { IsCompleted: false } ? _tabRowsWritten : Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false);
+        LastTabStripWheel = $"wheel {delta}: tabs in multiple rows {current} → {multiple}";
+        if (current != multiple)
         {
             _tabRowsWritten = multiple;
-            _tabRowsWrite = SetTabOptionAsync(TabsInMultipleRowsSetting, multiple);
+            _tabRowsWrite = SetMultipleRowsAsync(multiple);
         }
 
         return true;
     }
+
+    /// <summary>
+    /// The wheel's change of <see cref="TabsInMultipleRowsSetting"/>, which nothing awaits: a write that fails says so in
+    /// the log instead of leaving the tabs as they were without a word.
+    /// </summary>
+    private async Task SetMultipleRowsAsync(bool multiple)
+    {
+        try
+        {
+            await SetTabOptionAsync(TabsInMultipleRowsSetting, multiple).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            LastTabStripWheel += $" (the setting couldn't be written: {ex.Message})";
+            Workbench.Log.AppendLine($"[tabs] Tabs in multiple rows couldn't be turned {(multiple ? "on" : "off")}: {ex.Message}");
+        }
+    }
+
+    /// <summary>The wheel events the tab strips passed to the shell, and what the last one did (tests' failure messages).</summary>
+    internal int TabStripWheels { get; private set; }
+
+    internal string? LastTabStripWheel { get; private set; }
 }

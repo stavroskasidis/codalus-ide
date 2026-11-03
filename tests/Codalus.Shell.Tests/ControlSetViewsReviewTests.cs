@@ -40,6 +40,19 @@ public sealed class ControlSetViewsReviewTests
         return server;
     }
 
+    /// <summary>A control's bounds in its window.</summary>
+    private static Rect InWindow(Visual visual) => visual.GetTransformedBounds() is { } t ? t.Bounds.TransformToAABB(t.Transform) : default;
+
+    private static void Snapshot(Window window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
+            frame!.Save(Path.Combine(snapshots, name), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+    }
+
     private static Window Host(Control content, double width, double height)
     {
         var window = new Window { Width = width, Height = height, Content = content };
@@ -120,9 +133,38 @@ public sealed class ControlSetViewsReviewTests
             window.Width = 1200;
             ShellFixture.Pump();
             Assert.Equal(250, view.HistoryColumnWidth);
-            window.Width = 280;
+            window.Width = 760;
             ShellFixture.Pump();
-            Assert.True(view.HistoryColumnWidth <= 224, $"{view.HistoryColumnWidth}");
+            Assert.True(view.HistoryColumnWidth <= 608, $"{view.HistoryColumnWidth}");
+
+            // Narrower (the HTTP Response beside its .http file, half the documents' width), the history goes under the
+            // response, and the status's version, time and size under its chip: nothing draws under the toolbar.
+            window.Width = 380;
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            Snapshot(window, "http-response-narrow.png");
+            Assert.True(view.IsHistoryBelow);
+            Assert.True(view.HistoryRowHeight is > 0 and <= 220, $"{view.HistoryRowHeight}");
+            Assert.True(view.AreStatusDetailsBelow);
+            var sendAgain = view.GetVisualDescendants().OfType<ToolbarPanel>().Single(t => t.Name == "ResponseTools");
+            var chip = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == "StatusChip");
+            var chipBounds = InWindow(chip);
+            Assert.True(chip.IsEffectivelyVisible && chipBounds.Width > 0, "the status chip shows");
+            var viewBounds = InWindow(view);
+            foreach (var button in sendAgain.GetVisualChildren().OfType<Button>().Where(b => b.IsEffectivelyVisible))
+            {
+                var bounds = InWindow(button);
+                Assert.False(chipBounds.Intersects(bounds), $"the status chip is clear of {button.Content ?? AutomationProperties.GetName(button)}");
+                Assert.True(bounds.Right <= viewBounds.Right + 1, $"{button.Content ?? AutomationProperties.GetName(button)} stays inside the view");
+            }
+
+            // Wide again: beside, with the user's width, and the details back beside the chip.
+            window.Width = 1200;
+            ShellFixture.Pump();
+            ShellFixture.Pump();
+            Assert.False(view.IsHistoryBelow);
+            Assert.Equal(250, view.HistoryColumnWidth);
+            Assert.False(view.AreStatusDetailsBelow);
 
             // Narrow, Pretty or Raw and Word Wrap move into the overflow menu instead of disappearing.
             window.Width = 600;
