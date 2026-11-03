@@ -254,7 +254,7 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
     public int Depth { get; } = depth;
 
     /// <summary>The indentation of its level, 16 px each, as the tree view's.</summary>
-    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     public bool IsFile => _node.IsFile;
 

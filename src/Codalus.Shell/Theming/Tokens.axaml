@@ -4393,6 +4393,8 @@
   <x:Double x:Key="Shell.Size.Row">22</x:Double>
   <!-- Hierarchy trees (Solution Explorer, Test Explorer and the other tree tool windows) breathe a little more: 24 px, as the classic IDE (0.9). -->
   <x:Double x:Key="Shell.Size.TreeRow">24</x:Double>
+  <!-- Each tree level's indent: 12 px, the classic IDE's (TreeMetrics.IndentPerLevel); Fluent's TreeViewItem reads it for the TreeViews (Options, Code Metrics, Syntax Visualizer). -->
+  <x:Double x:Key="TreeViewItemIndent">12</x:Double>
   <x:Double x:Key="Shell.Size.ToolWindowMinWidth">280</x:Double>
   <x:Double x:Key="Shell.FontSize.Body">12</x:Double>
   <x:Double x:Key="Shell.FontSize.Small">11</x:Double>
