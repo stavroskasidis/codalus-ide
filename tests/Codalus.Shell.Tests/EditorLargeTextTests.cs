@@ -195,7 +195,7 @@ public sealed class EditorLargeTextTests
         DocumentEdits.Apply(document, [(document.GetLineByNumber(9).Offset, 0, "/**/"), .. LineTenEdits()]);
         Assert.True(lineTen.IsDeleted);
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
 
         // A group from line 1 to the end replaces all of the text, which rebuilds every line but the first; and its undo.
         var edits = new List<(int Offset, int Length, string Text)>();
@@ -215,10 +215,10 @@ public sealed class EditorLargeTextTests
         DocumentEdits.Apply(document, edits);
         Assert.NotSame(last, document.GetLineByNumber(document.LineCount)); // the whole text replaced, not the edits' span
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
         document.UndoStack.Undo();
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
 
         // Away from line 10, the usual cut again.
         editor.Editor.CaretOffset = document.GetLineByNumber(11).Offset;
@@ -254,6 +254,9 @@ public sealed class EditorLargeTextTests
             Assert.IsType<LongLineCutter.Marker>(drawn.Elements[^1]);
         }
 
+        // Where the caret is drawn. Not to the last bit: 12,000 columns of a monospace font whose advance binary can't hold
+        // exactly (7.8 px on WSL) sum to a position that moves in its 14th digit as the edits regroup the line's runs
+        // (WSL, PR #268's validation and 2026-11-02's, the same two values each time).
         double CaretX() => view.GetVisualPosition(editor.Editor.TextArea.Caret.Position, VisualYPosition.LineMiddle).X;
     }
 

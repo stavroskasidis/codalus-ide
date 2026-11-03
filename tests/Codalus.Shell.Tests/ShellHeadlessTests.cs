@@ -45,8 +45,8 @@ public class ShellHeadlessTests
 
     /// <summary>
     /// A document of another kind keeps the menu bar when the bar shows the same menus, and each menu's entries are made
-    /// as it opens: rebuilding the whole bar (about 600 entries) at each change of kind held the UI thread for 200 ms as
-    /// the WCF Test Client opened from the code editor.
+    /// as it opens, a submenu's as it opens: rebuilding the whole bar (about 600 entries) at each change of kind held the
+    /// UI thread for 200 ms as the WCF Test Client opened from the code editor.
     /// </summary>
     [AvaloniaFact]
     public async Task Another_kind_of_document_keeps_the_menu_bar_and_a_menu_fills_as_it_opens()
@@ -70,6 +70,24 @@ public class ShellHeadlessTests
         ShellFixture.Pump();
         Assert.Contains(tools.Items.OfType<MenuItem>(), i => AutomationProperties.GetName(i) == "WCF Test Client");
         tools.Close();
+
+        // A submenu's entries are made as it opens too, not with its menu's (Edit made all of them: 130 ms on Windows, up
+        // to 600 ms under WSLg).
+        var edit = before.Single(m => AutomationProperties.GetName(m) == "Edit");
+        edit.Open();
+        ShellFixture.Pump();
+        var submenus = edit.Items.OfType<MenuItem>().Where(i => i.ItemCount > 0).ToList();
+        Assert.NotEmpty(submenus);
+        foreach (var submenu in submenus)
+        {
+            Assert.Empty(submenu.Items.OfType<MenuItem>());
+            submenu.Open();
+            ShellFixture.Pump();
+            Assert.NotEmpty(submenu.Items.OfType<MenuItem>());
+            submenu.Close();
+        }
+
+        edit.Close();
     }
 
     [AvaloniaFact]

@@ -111,6 +111,9 @@ public sealed class TreeRowsAutomationTests
             }
         }
 
+        /// <summary>Says <paramref name="property"/> changed, as a row does when its children come or go.</summary>
+        public void Changed(string property) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
+
         /// <summary>How many tree items follow the row (the bindings' own handler is weak, Avalonia's).</summary>
         public int Watchers => PropertyChanged?.GetInvocationList().Count(d => d.Target is TreeRowItemAutomationPeer) ?? 0;
 
@@ -398,7 +401,9 @@ public sealed class TreeRowsAutomationTests
             {
                 foreach (var container in list.GetRealizedContainers())
                 {
+                    // A recycled container's tree item has the pattern for the row it shows now, a folder's, not a file's.
                     var peer = Assert.IsType<TreeRowItemAutomationPeer>(ControlAutomationPeer.CreatePeerForElement(container));
+                    Assert.Equal(container.DataContext is Row { HasChildren: true }, peer.GetProvider<IExpandCollapseProvider>() is not null);
                     if (peers.Add(peer))
                     {
                         peer.PropertyChanged += (_, e) =>
@@ -445,6 +450,53 @@ public sealed class TreeRowsAutomationTests
                 .First();
             folder.IsExpanded = true;
             Assert.Equal([$"{folder.Name}: Collapsed -> Expanded"], announced);
+        }
+        finally
+        {
+            window.Close();
+        }
+    }
+
+    /// <summary>
+    /// A folder that loses its children (a project unloaded, the smoke test's <c>projects.properties</c>) is a leaf, and its
+    /// tree item loses the ExpandCollapse pattern; one that gets them back has it again. A change of expansion is raised
+    /// only while the pattern is there: Avalonia.Native reads the pattern's state as the change is raised, without asking
+    /// whether the peer has it (an <c>InvalidOperationException</c> in a native callback ended the app on macOS).
+    /// </summary>
+    [AvaloniaFact]
+    public void A_folder_that_loses_its_children_becomes_a_leaf_without_a_change_of_expansion_raised()
+    {
+        var b = new Row("B", 0, new Row("b1", 1)) { IsExpanded = true };
+        var rows = new ObservableCollection<Row> { new("A", 0), b, b.Children[0], new("C", 0) };
+        var (list, window) = Show(rows, height: 300);
+        try
+        {
+            // What the native peer does with a change of expansion: reads the state from the peer's pattern.
+            var peer = PeerOf(list, b);
+            var raised = new List<(ExpandCollapseState New, ExpandCollapseState? Read)>();
+            peer.PropertyChanged += (_, e) =>
+            {
+                if (e.Property == ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty)
+                {
+                    raised.Add(((ExpandCollapseState)e.NewValue!, peer.GetProvider<IExpandCollapseProvider>()?.ExpandCollapseState));
+                }
+            };
+
+            // Its children go: a leaf, with no pattern and nothing raised.
+            b.Children.Clear();
+            rows.RemoveAt(2);
+            b.Changed(nameof(Row.HasChildren));
+            ShellFixture.Pump();
+            Assert.Empty(raised);
+            AssertTreeItem(list, b, level: 1, position: 2, size: 3, ExpandCollapseState.LeafNode);
+
+            // They come back (collapsed): a folder again, its pattern there when its state is raised.
+            b.IsExpanded = false;
+            b.Children.Add(new Row("b1", 1));
+            b.Changed(nameof(Row.HasChildren));
+            ShellFixture.Pump();
+            Assert.Equal([(ExpandCollapseState.Collapsed, ExpandCollapseState.Collapsed)], raised);
+            AssertTreeItem(list, b, level: 1, position: 2, size: 3, ExpandCollapseState.Collapsed);
         }
         finally
         {
