@@ -79,6 +79,31 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
     done
   ) &
   sampler=$!
+elif [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" == "Windows" ]]; then
+  # How busy the runner is: three processes stalled for minutes at once in Windows others (a design-time build of one
+  # project took 54 s, the language host never reported, the desktop CLR never stopped at its breakpoint; PR #296's run
+  # 41685545193), and nothing said whether the machine was starved or by what. Each sample: the CPU in use, the free
+  # memory, the threads waiting for a CPU and for the disk, and the busiest processes (percent of one core), in the log
+  # ([load]) and in load.txt in the results.
+  (
+    set +eo pipefail
+    while :; do
+      {
+        now="$(date -u +%H:%M:%S)"
+        load="$(typeperf '\Processor(_Total)\% Processor Time' '\Memory\Available MBytes' '\System\Processor Queue Length' \
+          '\PhysicalDisk(_Total)\Current Disk Queue Length' -sc 1 2> /dev/null | tr -d '\r' | awk -F'","' '/^"[0-9]/ { sub(/"$/, ""); printf "cpu=%d%% free=%dM cpu-queue=%d disk-queue=%d", $2, $3, $4, $5 }')"
+        busiest="$(typeperf '\Process(*)\% Processor Time' -sc 1 2> /dev/null | tr -d '\r' | awk -F'","' '
+          /PDH-CSV/ { for (i = 2; i <= NF; i++) { n = $i; sub(/.*Process\(/, "", n); sub(/\).*/, "", n); name[i] = n } }
+          /^"[0-9]/ { for (i = 2; i <= NF; i++) { v = $i; gsub(/"/, "", v); if (name[i] !~ /^(_Total|Idle|)$/ && v + 0 >= 5) printf "%d %s\n", v, name[i] } }' | sort -nr | head -5 | awk '{ printf " %d%% %s", $1, $2 }')"
+        echo "$now $load busiest:$busiest" >> "$results/load.txt"
+        echo "[load] $now $load busiest:$busiest"
+      } 2> /dev/null || true
+      # A second at a time: the report ends this loop with kill, and a sleep it leaves behind holds the step's log open
+      # until it ends (the report then waits 2 s).
+      for _ in {1..15}; do sleep 1; done
+    done
+  ) &
+  sampler=$!
 fi
 
 # The free disk, on the Linux and macOS runners. Ubuntu's others filled its runner's disk, and the runner died with "No
@@ -180,6 +205,9 @@ report() {
     local oom
     oom="$(sudo -n dmesg 2>/dev/null | grep -i "out of memory\|killed process\|oom-kill" | tail -20)"
     if [[ -n "$oom" ]]; then echo "$oom"; else echo "  none"; fi
+  elif [[ -s "$results/load.txt" ]]; then
+    echo "The busiest moments while the tests ran (most threads waiting for a CPU; every 15 seconds: load.txt in the results):"
+    awk '{ v = $4; sub("cpu-queue=", "", v); print v " " $0 }' "$results/load.txt" | sort -nr | head -3 | cut -d' ' -f2-
   fi
 }
 trap report EXIT

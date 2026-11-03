@@ -185,10 +185,10 @@ public sealed class GitTreesRowsTests
         await using var f = ShellFixture.Create();
         var (vm, tree, folder) = await ShowRepositoryAsync(f, tags: 5000, branches: 2000);
 
-        // The branches in their folders, folders first, with the tags collapsed: a row for each node shown, 16 px a level.
+        // The branches in their folders, folders first, with the tags collapsed: a row for each node shown, 12 px a level.
         Assert.Equal(["Branches / Tags", Path.GetFileName(folder) + " (main)", "team00", "b0000"], vm.Rows.Take(4).Select(r => r.Text));
         Assert.Equal([0, 1, 2, 3], vm.Rows.Take(4).Select(r => r.Depth));
-        Assert.Equal(new Thickness(48, 0, 0, 0), vm.Rows[3].Indent);
+        Assert.Equal(new Thickness(36, 0, 0, 0), vm.Rows[3].Indent);
         Assert.True(Row(vm, "team19").IsExpanded);
         Assert.Equal("main", vm.Rows[2 + (20 * 101)].Text); // after the 20 folders of 100 branches
         Assert.False(Row(vm, "tags").IsExpanded);

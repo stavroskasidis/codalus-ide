@@ -55,7 +55,7 @@ public sealed class TestRowViewModel(TestGroup group, int depth, bool expanded) 
 
     public int Depth { get; } = depth;
 
-    public Thickness Indent => new(4 + (Depth * 16), 0, 0, 0);
+    public Thickness Indent => new(4 + (Depth * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     public string Label => _group.Label;
 

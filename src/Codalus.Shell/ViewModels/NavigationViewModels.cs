@@ -31,7 +31,7 @@ public sealed class SymbolNodeViewModel : ObservableObject, ITreeRow
 
     public int Depth { get; }
 
-    public Avalonia.Thickness Indent => new(4 + (Depth * 16), 0, 0, 0);
+    public Avalonia.Thickness Indent => new(4 + (Depth * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     /// <summary>The symbol, the latest the language service sent for the row (its range follows the edits).</summary>
     public DocumentSymbol Symbol => _symbol;

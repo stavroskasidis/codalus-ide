@@ -306,11 +306,11 @@ public sealed class PropertyRowViewModel : ObservableObject
         }
     }
 
-    /// <summary>The name's left padding: 16 px per level after the categories' gutter (D41 question 3).</summary>
-    public Thickness NameIndent => new(4 + (_depth * 16), 0, 0, 0);
+    /// <summary>The name's left padding: 12 px per level after the categories' gutter (D41 question 3; it was 16 px before 0.12).</summary>
+    public Thickness NameIndent => new(4 + (_depth * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     /// <summary>The chevron's place: the gutter for a property, the level's indent for a part.</summary>
-    public Thickness ChevronMargin => new(2 + (_depth * 16), 0, 0, 0);
+    public Thickness ChevronMargin => new(2 + (_depth * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     public string Chevron => _isExpanded ? "chevron-down" : "chevron-right";
 
