@@ -103,8 +103,8 @@ public sealed class DocumentTabOptionsTests
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
 
-        // Every wheel event: where it went, whether the strip saw it and whether the shell took it, for the failures at the
-        // wheels below (their cause isn't known yet, TODO(issue)).
+        // Every wheel event: where it went, whether the strip saw it and whether the shell took it, for a failure's message
+        // (the wheels below failed when the frame they were hit-tested against was older than the layout, see Wheel).
         var wheels = new List<string>();
         strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
@@ -120,7 +120,7 @@ public sealed class DocumentTabOptionsTests
         // Wheel down over the tabs: multiple rows, for every group, saved. (Windows CI, run 41554892222: this wheel left one
         // row.)
         var beforeDown = Under(f, over);
-        f.Window.MouseWheel(over, new Vector(0, -1));
+        Wheel(f, strip, over, -1);
         await ShellFixture.PumpUntil(() => panel.MultipleRows, describe: () => Wheeled("stayed in one row", beforeDown));
         Assert.True(f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting));
         f.Window.UpdateLayout();
@@ -143,7 +143,7 @@ public sealed class DocumentTabOptionsTests
         // Up: one row again. (Windows and macOS CI, runs 41518626383 and 41524121911: this wheel left the rows on, while it
         // passes on Linux; the failure says what the wheel reached and did.)
         var before = Under(f, over);
-        f.Window.MouseWheel(over, new Vector(0, 1));
+        Wheel(f, strip, over, 1);
         await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () => Wheeled("stayed in multiple rows", before));
         f.Window.UpdateLayout();
         ShellFixture.Pump();
@@ -152,7 +152,7 @@ public sealed class DocumentTabOptionsTests
         // Turned off, the wheel leaves the rows alone.
         await f.RunAsync("workbench.tabs.toggleMultipleRowsWithMouseWheel");
         await ShellFixture.PumpUntil(() => !f.Shell.Workbench.Settings.GetBoolean(ShellHost.MultipleRowsWithMouseWheelSetting, true));
-        f.Window.MouseWheel(over, new Vector(0, -1));
+        Wheel(f, strip, over, -1);
         ShellFixture.Pump();
         Assert.False(panel.MultipleRows);
 
@@ -174,16 +174,16 @@ public sealed class DocumentTabOptionsTests
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
         // wait while the test holds their lock (on Windows a small write often lands before the wheel's handler returns).
         var settings = f.Shell.Workbench.Settings;
-        // Every wheel event and what the shell did with each wheel: the up's write never landed on Linux CI (PR #281's run
-        // 41608511009, the setting stayed true), whether the up didn't reach the shell or its write lost isn't known yet.
+        // Every wheel event and what the shell did with each wheel, for a failure's message (PR #281's run 41608511009: the
+        // setting stayed true; #291's run 41616893942: neither wheel reached the strip, see Wheel).
         var wheels = new List<string>();
         strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
         var writes = WriteLock(settings);
         await writes.WaitAsync(TestContext.Current.CancellationToken);
-        f.Window.MouseWheel(over, new Vector(0, -1));
+        Wheel(f, strip, over, -1);
         var down = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
-        f.Window.MouseWheel(over, new Vector(0, 1));
+        Wheel(f, strip, over, 1, render: false); // right after the down, in the frame it went through
         var up = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
         writes.Release();
         await ShellFixture.PumpUntil(() => settings.IsModified(ShellHost.TabsInMultipleRowsSetting) && !settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting),
@@ -319,6 +319,24 @@ public sealed class DocumentTabOptionsTests
         [.. f.Window.GetVisualDescendants().OfType<DocumentTabStrip>().Select(s => s.DataContext).OfType<IDocumentDock>()];
 
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
+
+    /// <summary>
+    /// The mouse wheel at <paramref name="point"/>, which must be over the strip. The pointer's hit test reads the last
+    /// rendered frame, not the layout, so a frame is rendered first: without one, both wheels of a test went to a tool
+    /// window's title in the frame before the documents' layout, and the shell never saw them (PR #291's Linux run
+    /// 41616893942; the wheel failures in docs/ci-flakes.md).
+    /// </summary>
+    private static void Wheel(ShellFixture f, DocumentTabStrip strip, Point point, double delta, bool render = true)
+    {
+        if (render)
+        {
+            ShellFixture.RenderFrame(f.Window);
+        }
+
+        var under = InputExtensions.InputHitTest(f.Window, point) as Visual;
+        Assert.True(under is not null && (ReferenceEquals(under, strip) || strip.IsVisualAncestorOf(under)), $"the wheel's point {point} is over {Chain(under)}, not the tab strip");
+        f.Window.MouseWheel(point, new Vector(0, delta));
+    }
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
     private static string Under(ShellFixture f, Point point) => Chain(InputExtensions.InputHitTest(f.Window, point) as Visual);
