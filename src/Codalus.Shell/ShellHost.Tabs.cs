@@ -251,17 +251,43 @@ public sealed partial class ShellHost
     /// </summary>
     private bool OnTabStripWheel(double delta)
     {
+        TabStripWheels++;
         if (!Workbench.Settings.GetBoolean(MultipleRowsWithMouseWheelSetting, true))
         {
+            LastTabStripWheel = $"wheel {delta}: turned off";
             return false;
         }
 
         var multiple = delta < 0;
-        if (Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false) != multiple)
+        var current = Workbench.Settings.GetBoolean(TabsInMultipleRowsSetting, false);
+        LastTabStripWheel = $"wheel {delta}: tabs in multiple rows {current} → {multiple}";
+        if (current != multiple)
         {
-            _ = SetTabOptionAsync(TabsInMultipleRowsSetting, multiple);
+            _ = SetMultipleRowsAsync(multiple);
         }
 
         return true;
     }
+
+    /// <summary>
+    /// The wheel's change of <see cref="TabsInMultipleRowsSetting"/>, which nothing awaits: a write that fails says so in
+    /// the log instead of leaving the tabs as they were without a word.
+    /// </summary>
+    private async Task SetMultipleRowsAsync(bool multiple)
+    {
+        try
+        {
+            await SetTabOptionAsync(TabsInMultipleRowsSetting, multiple).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            LastTabStripWheel += $" (the setting couldn't be written: {ex.Message})";
+            Workbench.Log.AppendLine($"[tabs] Tabs in multiple rows couldn't be turned {(multiple ? "on" : "off")}: {ex.Message}");
+        }
+    }
+
+    /// <summary>The wheel events the tab strips passed to the shell, and what the last one did (tests' failure messages).</summary>
+    internal int TabStripWheels { get; private set; }
+
+    internal string? LastTabStripWheel { get; private set; }
 }

@@ -101,4 +101,64 @@ public class MinimapTests
         Settle(f);
         Assert.Equal(offset, editor.Editor.TextArea.TextView.VerticalOffset);
     }
+
+    [AvaloniaFact]
+    public async Task Scrolling_reads_only_the_lines_it_brings_into_the_minimap()
+    {
+        // A frame of scrolling read every character the minimap shows; now only the lines it brings in.
+        var (f, editor, minimap) = await OpenAsync(5_000);
+        await using var _ = f;
+        var view = editor.Editor.TextArea.TextView;
+        Assert.InRange(minimap.LinesRead, 100, 5_000);
+        foreach (var lines in new[] { 3, 6, 9 })
+        {
+            var before = minimap.LinesRead;
+            editor.Editor.ScrollToY(lines * view.DefaultLineHeight);
+            Settle(f);
+            Assert.True(minimap.FirstLine > 0, "The minimap didn't scroll with the editor.");
+            Assert.InRange(minimap.LinesRead - before, 1, 10);
+        }
+
+        // An edit reads them again: lines moved.
+        var read = minimap.LinesRead;
+        editor.Editor.Document.Insert(0, "inserted\n");
+        await ShellFixture.PumpUntil(() =>
+        {
+            Settle(f);
+            return minimap.LinesRead - read > 100;
+        });
+    }
+
+    [AvaloniaFact]
+    public async Task The_minimap_draws_each_word_where_it_is_on_its_line()
+    {
+        var (f, _, minimap) = await OpenAsync(150);
+        await using var __ = f;
+
+        // The minimap alone, not the window's frame: whatever the window draws over it (an overlay fading in under load)
+        // isn't its drawing.
+        using var drawn = new Avalonia.Media.Imaging.RenderTargetBitmap(new PixelSize((int)minimap.Bounds.Width, (int)minimap.Bounds.Height));
+        drawn.Render(minimap);
+        var pixels = new uint[drawn.PixelSize.Width * drawn.PixelSize.Height];
+        var pinned = System.Runtime.InteropServices.GCHandle.Alloc(pixels, System.Runtime.InteropServices.GCHandleType.Pinned);
+        try
+        {
+            drawn.CopyPixels(new PixelRect(drawn.PixelSize), pinned.AddrOfPinnedObject(), pixels.Length * sizeof(uint), drawn.PixelSize.Width * sizeof(uint));
+        }
+        finally
+        {
+            pinned.Free();
+        }
+
+        byte Alpha(int x, int y) => (byte)(pixels[(y * drawn.PixelSize.Width) + x] >> 24);
+
+        // Every line is "xN": a two-column word 4 px in, only the visible area's shade to the right of it, and a gap below.
+        for (var line = 0; line < 20; line++)
+        {
+            var y = (int)(line * Minimap.LineHeight);
+            Assert.True(Alpha(5, y) > 100, $"line {line}: the word isn't drawn (alpha {Alpha(5, y)})");
+            Assert.True(Alpha(40, y) <= 0x30, $"line {line}: something is drawn right of the word (alpha {Alpha(40, y)}; the visible area's shade is 0x30)");
+            Assert.True(Alpha(5, y + 1) < Alpha(5, y), $"line {line}: the gap below the word (alpha {Alpha(5, y + 1)}) is drawn like it ({Alpha(5, y)})");
+        }
+    }
 }

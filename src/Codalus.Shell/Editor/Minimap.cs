@@ -4,6 +4,8 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using AvaloniaEdit;
 using AvaloniaEdit.Document;
@@ -17,6 +19,7 @@ namespace Codalus.Shell.Editor;
 /// line clicked; the visible area drags like a scroll bar's thumb. Only the lines shown are drawn, so cost doesn't grow
 /// with the document.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "A control: its bitmap is disposed when it leaves the window (OnDetachedFromVisualTree).")]
 public sealed class Minimap : Control
 {
     public const double LineHeight = 2;
@@ -110,40 +113,45 @@ public sealed class Minimap : Control
         }
     }
 
+    /// <summary>The words of a line drawn: columns and token type (-1: the text color).</summary>
+    private readonly record struct Word(int Start, int Length, int Type);
+
+    /// <summary>
+    /// The words of the lines last drawn (zero-based), kept while the text and its tokens stay the same: scrolling reads
+    /// only the lines it brings in. Each frame read every character shown, one at a time from the document's rope.
+    /// </summary>
+    private Dictionary<int, Word[]> _words = [];
+    private Dictionary<int, Word[]> _spareWords = [];
+    private (ITextSourceVersion? Text, int Tokens) _wordsOf;
+
+    /// <summary>
+    /// The miniature, painted pixel by pixel and drawn as one image. It was a rectangle per word, a few thousand a frame,
+    /// each with a brush of its own: a tenth of the UI thread's time while the 100k-line file scrolled, and as many
+    /// shapes for the compositor to rasterize.
+    /// </summary>
+    private WriteableBitmap? _bitmap;
+    private readonly Dictionary<int, uint> _colors = [];
+
+    /// <summary>The lines whose words were read (tests: scrolling reads only the lines it brings in).</summary>
+    internal int LinesRead { get; private set; }
+
     public override void Render(DrawingContext context)
     {
         // A control is hit only where it draws: without this, a click where no word is drawn (beside short lines, below
         // the end of the file) went to the document behind. Transparent, so its column keeps the card's background.
         context.FillRectangle(Brushes.Transparent, new Rect(Bounds.Size));
-        var first = FirstLine;
-        var last = Math.Min(Document.LineCount, first + Capacity);
-        var foreground = Foreground is ISolidColorBrush solid ? new ImmutableSolidColorBrush(solid.Color, 0.6) : Foreground;
-        for (var line = first; line < last; line++)
+        var scale = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1;
+        var size = new PixelSize((int)Math.Ceiling(Bounds.Width * scale), (int)Math.Ceiling(Bounds.Height * scale));
+        if (size.Width > 0 && size.Height > 0)
         {
-            var documentLine = Document.GetLineByNumber(line + 1);
-            var y = (line - first) * LineHeight;
-            var length = Math.Min(documentLine.Length, MaxColumns);
-            var column = 0;
-            while (column < length)
+            if (_bitmap is null || _bitmap.PixelSize != size || Math.Abs(_bitmap.Dpi.X - (96 * scale)) > 0.001)
             {
-                while (column < length && char.IsWhiteSpace(Document.GetCharAt(documentLine.Offset + column)))
-                {
-                    column++;
-                }
-
-                var start = column;
-                while (column < length && !char.IsWhiteSpace(Document.GetCharAt(documentLine.Offset + column)))
-                {
-                    column++;
-                }
-
-                if (column > start)
-                {
-                    var type = _colorizer.TokenAt(line, start);
-                    var brush = type >= 0 && _colorizer.Theme.Token(type) is ISolidColorBrush token ? new ImmutableSolidColorBrush(token.Color, 0.8) : foreground;
-                    context.DrawRectangle(brush, null, new Rect(start * CharWidth + 4, y, (column - start) * CharWidth, LineHeight - 0.5));
-                }
+                // The last frame's may still be drawn: it's left to the garbage collector, not disposed.
+                _bitmap = new WriteableBitmap(size, new Vector(96 * scale, 96 * scale), PixelFormat.Bgra8888, AlphaFormat.Premul);
             }
+
+            Paint(_bitmap, scale);
+            context.DrawImage(_bitmap, new Rect(0, 0, size.Width / scale, size.Height / scale));
         }
 
         if (VisibleArea is { } area)
@@ -151,6 +159,125 @@ public sealed class Minimap : Control
             context.DrawRectangle(ViewportBrush, null, area);
         }
     }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _bitmap?.Dispose();
+        _bitmap = null;
+        _words.Clear();
+    }
+
+    private unsafe void Paint(WriteableBitmap bitmap, double scale)
+    {
+        // The text's version changes with every edit and is another document's when the document is.
+        if (_wordsOf.Text != Document.Version || _wordsOf.Tokens != _colorizer.Version)
+        {
+            _wordsOf = (Document.Version, _colorizer.Version);
+            _words.Clear();
+        }
+
+        _colors.Clear();
+        var foreground = Foreground is ISolidColorBrush solid ? Premultiplied(solid.Color, 0.6) : Premultiplied(Colors.Gray, 0.6);
+        var first = FirstLine;
+        var last = Math.Min(Document.LineCount, first + Capacity);
+        using var buffer = bitmap.Lock();
+        var stride = buffer.RowBytes / sizeof(uint);
+        var pixels = new Span<uint>((void*)buffer.Address, stride * buffer.Size.Height);
+        pixels.Clear();
+        var shown = _spareWords;
+        for (var line = first; line < last; line++)
+        {
+            if (!_words.TryGetValue(line, out var words))
+            {
+                words = Words(line);
+            }
+
+            shown[line] = words;
+            var top = (line - first) * LineHeight * scale;
+            var bottom = top + ((LineHeight - 0.5) * scale);
+            foreach (var word in words)
+            {
+                var color = word.Type < 0 ? foreground : TokenColor(word.Type, foreground);
+                Fill(pixels, stride, buffer.Size, ((word.Start * CharWidth) + 4) * scale, ((word.Start + word.Length) * CharWidth + 4) * scale, top, bottom, color);
+            }
+        }
+
+        _words.Clear();
+        (_words, _spareWords) = (shown, _words);
+    }
+
+    private Word[] Words(int line)
+    {
+        LinesRead++;
+        var documentLine = Document.GetLineByNumber(line + 1);
+        var text = Document.GetText(documentLine.Offset, Math.Min(documentLine.Length, MaxColumns));
+        var words = new List<Word>();
+        var column = 0;
+        while (column < text.Length)
+        {
+            while (column < text.Length && char.IsWhiteSpace(text[column]))
+            {
+                column++;
+            }
+
+            var start = column;
+            while (column < text.Length && !char.IsWhiteSpace(text[column]))
+            {
+                column++;
+            }
+
+            if (column > start)
+            {
+                words.Add(new Word(start, column - start, _colorizer.TokenAt(line, start)));
+            }
+        }
+
+        return [.. words];
+    }
+
+    /// <summary>A token type's color, as drawn: the theme's, or the text color for a type the theme doesn't color.</summary>
+    private uint TokenColor(int type, uint foreground)
+    {
+        if (!_colors.TryGetValue(type, out var color))
+        {
+            _colors[type] = color = _colorizer.Theme.Token(type) is ISolidColorBrush token ? Premultiplied(token.Color, 0.8) : foreground;
+        }
+
+        return color;
+    }
+
+    private static uint Premultiplied(Color color, double opacity)
+    {
+        var alpha = color.A / 255.0 * opacity;
+        return Pack(alpha, color.R / 255.0 * alpha, color.G / 255.0 * alpha, color.B / 255.0 * alpha);
+    }
+
+    private static uint Pack(double a, double r, double g, double b) =>
+        ((uint)Math.Round(a * 255) << 24) | ((uint)Math.Round(r * 255) << 16) | ((uint)Math.Round(g * 255) << 8) | (uint)Math.Round(b * 255);
+
+    /// <summary>
+    /// Fills a rectangle in device pixels, its edges' pixels in proportion to how much of them it covers, as a vector
+    /// rectangle is drawn (words never overlap: whitespace and the gap between lines part them).
+    /// </summary>
+    private static void Fill(Span<uint> pixels, int stride, PixelSize size, double left, double right, double top, double bottom, uint color)
+    {
+        right = Math.Min(right, size.Width);
+        bottom = Math.Min(bottom, size.Height);
+        for (var y = (int)top; y < bottom; y++)
+        {
+            var rowCoverage = Math.Min(bottom, y + 1) - Math.Max(top, y);
+            var row = pixels.Slice(y * stride, size.Width);
+            for (var x = (int)left; x < right; x++)
+            {
+                var coverage = rowCoverage * (Math.Min(right, x + 1) - Math.Max(left, x));
+                row[x] = coverage >= 0.999 ? color : Scale(color, coverage);
+            }
+        }
+    }
+
+    private static uint Scale(uint color, double coverage) =>
+        Pack((color >> 24) / 255.0 * coverage, ((color >> 16) & 0xFF) / 255.0 * coverage, ((color >> 8) & 0xFF) / 255.0 * coverage, (color & 0xFF) / 255.0 * coverage);
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {

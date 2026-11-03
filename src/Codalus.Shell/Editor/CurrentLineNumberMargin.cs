@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Media;
+using Avalonia.Media.TextFormatting;
 using AvaloniaEdit;
 using AvaloniaEdit.Editing;
 using AvaloniaEdit.Rendering;
@@ -94,6 +95,18 @@ public sealed class CurrentLineNumberMargin : LineNumberMargin
         }
     }
 
+    /// <summary>
+    /// The numbers shown, laid out once: a frame of scrolling formatted (shaped) every number on screen again, twice (its
+    /// width, then its drawing), about a seventh of the UI thread's time while the 100k-line file scrolled. Only the
+    /// last frame's are kept, and all are dropped when the font or the colors change.
+    /// </summary>
+    private Dictionary<(int Number, IBrush? Brush), TextLayout> _numbers = [];
+    private Dictionary<(int Number, IBrush? Brush), TextLayout> _spare = [];
+    private (Typeface Typeface, double EmSize, CultureInfo Culture) _numbersFont;
+
+    /// <summary>How many numbers were laid out (tests: scrolling lays out only the new lines').</summary>
+    internal int NumbersLaidOut { get; private set; }
+
     public override void Render(DrawingContext drawingContext)
     {
         var textView = TextView;
@@ -102,13 +115,31 @@ public sealed class CurrentLineNumberMargin : LineNumberMargin
             return;
         }
 
+        var font = (Typeface, EmSize, CultureInfo.CurrentCulture);
+        if (font != _numbersFont)
+        {
+            _numbersFont = font;
+            _numbers.Clear();
+        }
+
         var width = Bounds.Width;
+        var shown = _spare;
         foreach (var visualLine in textView.VisualLines)
         {
             var number = visualLine.FirstDocumentLine.LineNumber;
-            var text = new FormattedText(number.ToString(CultureInfo.CurrentCulture), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Typeface, EmSize, BrushFor(number));
+            var key = (number, BrushFor(number));
+            if (!_numbers.TryGetValue(key, out var text))
+            {
+                text = new TextLayout(number.ToString(CultureInfo.CurrentCulture), Typeface, EmSize, key.Item2);
+                NumbersLaidOut++;
+            }
+
+            shown[key] = text;
             var y = visualLine.GetTextLineVisualYPosition(visualLine.TextLines[0], VisualYPosition.TextTop);
-            drawingContext.DrawText(text, new Point(width - text.Width, y - textView.VerticalOffset));
+            text.Draw(drawingContext, new Point(width - text.Width, y - textView.VerticalOffset));
         }
+
+        _numbers.Clear();
+        (_numbers, _spare) = (shown, _numbers);
     }
 }

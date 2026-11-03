@@ -80,7 +80,7 @@ public sealed partial class ShellHost
             return null;
         }
 
-        DebugLog.AppendLine($"Debugging in {browser.Display} ({browser.Path}) through vscode-js-debug {JsDebug.Version}.");
+        DebugLog.AppendLine($"Debugging in {browser.Display}{(browser.Version is { } version ? " " + version : "")} ({browser.Path}) through vscode-js-debug {JsDebug.Version}.");
         try
         {
             await JsDebug.EnsureAsync(new Progress<string>(line => DebugLog.AppendLine(line)), CancellationToken.None).ConfigureAwait(true);
