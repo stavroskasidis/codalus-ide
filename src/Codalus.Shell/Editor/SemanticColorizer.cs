@@ -23,11 +23,27 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
 
     public bool HasTokens => _lines.Count > 0;
 
+    /// <summary>Changes each time the tokens do (the minimap keeps what it drew of each line until then).</summary>
+    public int Version { get; private set; }
+
     /// <summary>The token type at a zero-based line and character, or -1.</summary>
-    public int TokenAt(int line, int character) =>
-        _lines.TryGetValue(line, out var tokens) && tokens.FirstOrDefault(t => character >= t.Start && character < t.Start + t.Length) is { Length: > 0 } token
-            ? token.Type
-            : -1;
+    public int TokenAt(int line, int character)
+    {
+        if (!_lines.TryGetValue(line, out var tokens))
+        {
+            return -1;
+        }
+
+        foreach (var token in tokens)
+        {
+            if (token.Length > 0 && character >= token.Start && character < token.Start + token.Length)
+            {
+                return token.Type;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>
     /// Replaces the token window with LSP-encoded <paramref name="data"/> covering lines [start, end). The tokens of
@@ -46,6 +62,7 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
 
         _lines = lines;
         _covered = (start, end);
+        Version++;
     }
 
     /// <summary>
@@ -58,8 +75,11 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
     public bool Knows(int line) => _lines.ContainsKey(line) || (line >= _covered.Start && line < _covered.End);
 
     /// <summary>Adds the tokens of one zero-based <paramref name="line"/> from LSP-encoded <paramref name="data"/> (a range request for it).</summary>
-    public void ApplyLine(int line, int[] data) =>
+    public void ApplyLine(int line, int[] data)
+    {
         _lines[line] = Parse(data).TryGetValue(line, out var tokens) ? tokens : [];
+        Version++;
+    }
 
     private static Dictionary<int, LineToken[]> Parse(int[] data)
     {
@@ -84,12 +104,14 @@ public sealed class SemanticColorizer : DocumentColorizingTransformer
     {
         _lines = [];
         _covered = (0, 0);
+        Version++;
     }
 
     /// <summary>Called before the document changes: drops tokens of the edited lines, shifts later ones.</summary>
     public void OnDocumentChanging(DocumentChangeEventArgs e, TextDocument document)
     {
         // A group's edited lines: a group over most of a long document replaces all of it (DocumentEdits).
+        Version++;
         var (offset, removal, insertion) = DocumentEdits.EditedSpan(e);
         var editedLine = document.GetLineByOffset(Math.Min(offset, document.TextLength)).LineNumber - 1;
         var removedLines = CountNewlines(e.RemovedText.Text.AsSpan(offset - e.Offset, removal));
