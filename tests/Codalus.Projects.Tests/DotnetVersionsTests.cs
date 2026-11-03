@@ -88,9 +88,15 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         await WaitUntilAsync(() => _solutions.RestoreState == "succeeded" && _solutions.CompilerInputs.ContainsKey(app));
         Assert.Contains(_solutions.CompilerInputs[app].Arguments, a => a.Replace('\\', '/').Contains("/Microsoft.NETCore.App.Ref/11.0.", StringComparison.Ordinal));
 
-        var builds = new BuildService(_solutions, _output);
+        // With a binary log: the build ran out its 3 minutes on the Windows runner, Components and Shapes.Tests (net11.0)
+        // unfinished, and its output said nothing of what they were doing (PR #281's run 41580245030, docs/ci-flakes.md).
+        var binlog = Path.Combine(_root, "build.binlog");
+        var builds = new BuildService(_solutions, _output) { Options = () => new BuildOptions { UpToDateCheck = false, BinaryLog = binlog } };
         var result = await builds.BuildAsync(BuildTargets.Build, null, Timeout());
-        Assert.True(result.Succeeded, builds.Channel.GetText());
+        if (!result.Succeeded)
+        {
+            Assert.Fail(builds.Channel.GetText() + Environment.NewLine + KeepBinaryLog(binlog));
+        }
 
         using var runs = new RunService(_solutions, _output, _ => { });
         var (info, _, error) = await runs.GetProfilesAsync(app, Timeout());
@@ -100,6 +106,27 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         Assert.Equal(0, await program.Exited.WaitAsync(Timeout()));
         await WaitUntilAsync(() => program.Channel!.GetText().Contains("has exited", StringComparison.Ordinal));
         Assert.Contains("runtime=11 library=net11.0 area=12.57", program.Channel!.GetText(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A failed build's binary log, copied where CI uploads a failed shard's MSBuild files (<c>MSBUILDDEBUGPATH</c>,
+    /// eng/ci-test.sh) when that's set: the fixture's temp folder goes with the runner.
+    /// </summary>
+    private static string KeepBinaryLog(string binlog)
+    {
+        if (!File.Exists(binlog))
+        {
+            return "No binary log was written.";
+        }
+
+        if (Environment.GetEnvironmentVariable("MSBUILDDEBUGPATH") is not { Length: > 0 } folder)
+        {
+            return "The binary log: " + binlog;
+        }
+
+        var kept = Path.Combine(folder, $"{nameof(DotnetVersionsTests)}-{Guid.NewGuid():N}.binlog");
+        File.Copy(binlog, kept);
+        return "The binary log, uploaded with the shard's results: " + kept;
     }
 
     [Fact]
