@@ -111,9 +111,11 @@ internal sealed class SolutionBuilder : IDisposable
             DisableInProcNode = !InProcess,
             ShutdownInProcNodeOnBuildFinish = true,
         });
+        // In process, the abort's node clears MSBuild's string cache at once: through the gate (GatedCancellation).
+        var cancellation = new GatedCancellation(_manager.CancelAllSubmissions, InProcess);
         try
         {
-            await using var registration = cancellationToken.Register(_manager.CancelAllSubmissions).ConfigureAwait(false);
+            await using var registration = cancellation.Register(cancellationToken).ConfigureAwait(false);
             if (restore && target != BuildTargets.Clean)
             {
                 var restoreProperties = new Dictionary<string, string>(globalProperties, StringComparer.OrdinalIgnoreCase)
@@ -151,7 +153,7 @@ internal sealed class SolutionBuilder : IDisposable
         finally
         {
             // With an in-process node, it clears MSBuild's string cache here (StringCacheGate).
-            StringCacheGate.Exclusive(_manager.EndBuild);
+            await cancellation.EndAsync(_manager.EndBuild).ConfigureAwait(false);
         }
 
         // A failed build always says why in the Error List: one that logged no error (a task that returned false
