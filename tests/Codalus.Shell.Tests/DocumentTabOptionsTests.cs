@@ -3,6 +3,8 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Workbench.Settings;
@@ -101,10 +103,25 @@ public sealed class DocumentTabOptionsTests
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
 
-        // Wheel down over the tabs: multiple rows, for every group, saved.
+        // Every wheel event: where it went, whether the strip saw it and whether the shell took it, for the failures at the
+        // wheels below (their cause isn't known yet, TODO(issue)).
+        var wheels = new List<string>();
+        strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
+        f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
         var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+        string Wheeled(string rows, string before) =>
+            $"the tabs {rows}: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
+            + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
+            + $"{f.Shell.LastTabStripWheel}), the wheel events: [{string.Join("; ", wheels)}], the panel's still the strip's "
+            + $"{ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())} ({(TopLevel.GetTopLevel(panel) is null ? "detached" : "attached")}), "
+            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}; "
+            + $"the overlay: [{string.Join(", ", OverlayLayer.GetOverlayLayer(f.Window)?.Children.Select(c => $"{c.GetType().Name} {c.Bounds}") ?? [])}]";
+
+        // Wheel down over the tabs: multiple rows, for every group, saved. (Windows CI, run 41554892222: this wheel left one
+        // row.)
+        var beforeDown = Under(f, over);
         f.Window.MouseWheel(over, new Vector(0, -1));
-        await ShellFixture.PumpUntil(() => panel.MultipleRows);
+        await ShellFixture.PumpUntil(() => panel.MultipleRows, describe: () => Wheeled("stayed in one row", beforeDown));
         Assert.True(f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting));
         f.Window.UpdateLayout();
         ShellFixture.Pump();
@@ -127,11 +144,7 @@ public sealed class DocumentTabOptionsTests
         // passes on Linux; the failure says what the wheel reached and did.)
         var before = Under(f, over);
         f.Window.MouseWheel(over, new Vector(0, 1));
-        await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () =>
-            $"the tabs stayed in multiple rows: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
-            + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
-            + $"{f.Shell.LastTabStripWheel}), the panel's still the strip's {ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())}, "
-            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}");
+        await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () => Wheeled("stayed in multiple rows", before));
         f.Window.UpdateLayout();
         ShellFixture.Pump();
         Assert.Equal(oneRow, panel.Bounds.Height, 0.5);
@@ -146,6 +159,29 @@ public sealed class DocumentTabOptionsTests
         // The menu's entry turns them on too.
         await f.RunAsync("workbench.tabs.toggleMultipleRows");
         await ShellFixture.PumpUntil(() => panel.MultipleRows);
+    }
+
+    [AvaloniaFact]
+    public async Task A_wheel_up_right_after_a_wheel_down_leaves_one_row()
+    {
+        await using var f = ShellFixture.Create();
+        await OpenAsync(f, "quick", 3);
+        ShellFixture.Pump();
+        var strip = Strip(f);
+        var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
+        var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+
+        // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
+        // wait while the test holds their lock (on Windows a small write often lands before the wheel's handler returns).
+        var settings = f.Shell.Workbench.Settings;
+        var writes = WriteLock(settings);
+        await writes.WaitAsync(TestContext.Current.CancellationToken);
+        f.Window.MouseWheel(over, new Vector(0, -1));
+        f.Window.MouseWheel(over, new Vector(0, 1));
+        writes.Release();
+        await ShellFixture.PumpUntil(() => settings.IsModified(ShellHost.TabsInMultipleRowsSetting) && !settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting),
+            describe: () => $"the up's write (the setting {(settings.IsModified(ShellHost.TabsInMultipleRowsSetting) ? settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting) : "not written")})");
+        await ShellFixture.PumpUntil(() => !panel.MultipleRows);
     }
 
     [AvaloniaFact]
@@ -250,6 +286,9 @@ public sealed class DocumentTabOptionsTests
         await ShellFixture.PumpUntil(() => f.Shell.TabColorBy == "none");
     }
 
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_writeLock")]
+    private static extern ref SemaphoreSlim WriteLock(SettingsService settings);
+
     private static async Task<List<string>> OpenAsync(ShellFixture f, string folderName, int count)
     {
         var folder = Path.Combine(f.UserData, folderName);
@@ -273,13 +312,14 @@ public sealed class DocumentTabOptionsTests
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
-    private static string Under(ShellFixture f, Point point) =>
-        Avalonia.Input.InputExtensions.InputHitTest(f.Window, point) is Visual hit
-            ? string.Join(" < ", hit.GetSelfAndVisualAncestors().Take(10).Select(v => v.GetType().Name))
-            : "nothing";
+    private static string Under(ShellFixture f, Point point) => Chain(InputExtensions.InputHitTest(f.Window, point) as Visual);
 
     /// <summary>Whether the panel arranged the tab inside itself (a tab left out is arranged past its right edge).</summary>
     private static bool Shown(TabStripItem tab, DocumentTabPanel panel) => tab.Bounds.Right <= panel.Bounds.Width + 0.5 && tab.Bounds.Width > 0;
+
+    /// <summary>A visual and its ancestors up to the document group, by type, innermost first.</summary>
+    private static string Chain(Visual? visual) =>
+        visual is null ? "nothing" : string.Join(" < ", visual.GetSelfAndVisualAncestors().TakeWhile(v => v is not DocumentDockControl).Take(12).Select(v => v.GetType().Name));
 
     private static string? AutomationName(MenuItem item) => Avalonia.Automation.AutomationProperties.GetName(item);
 }

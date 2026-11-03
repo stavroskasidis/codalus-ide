@@ -13,5 +13,7 @@
   <ItemGroup>
     <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
     <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
+    <!-- A Blazor app's answer for its WebAssembly debugging proxy. -->
+    <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
 </Project>

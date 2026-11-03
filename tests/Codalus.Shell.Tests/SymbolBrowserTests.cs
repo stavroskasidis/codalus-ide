@@ -63,7 +63,9 @@ public sealed class SymbolBrowserTests
         await ShellFixture.PumpUntil(() => browser.Roots.Any(r => r.Name == "IsNullOrWhiteSpace"), seconds: 60);
         var member = browser.Roots.First(r => r.Name == "IsNullOrWhiteSpace");
         browser.Selected = member;
-        await ShellFixture.PumpUntil(() => browser.Declaration?.Contains("IsNullOrWhiteSpace", StringComparison.Ordinal) == true, seconds: 30);
+        // How the description went, when it doesn't come: it timed out on Windows CI (run 41549374686) with nothing to say why.
+        await ShellFixture.PumpUntil(() => browser.Declaration?.Contains("IsNullOrWhiteSpace", StringComparison.Ordinal) == true, seconds: 30,
+            describe: () => $"the declaration is {(browser.Declaration is null ? "empty" : $"'{browser.Declaration}'")}; the description request {browser.DescribeState}; the C# service {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}");
         Assert.Contains("Member of System.String", browser.Description, StringComparison.Ordinal);
 
         // Library code opens read-only (decompiled or from its PDB).
