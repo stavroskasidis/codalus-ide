@@ -495,11 +495,14 @@ public class EverydayResponsivenessTests
         {
             foreach (var text in new[] { "t", "t0", "t01", "t012", "b", "b01", string.Empty })
             {
+                monitor.Step = $"typing \"{text}\"";
                 vm.Filter = text;
                 await WaitAsync(60);
             }
 
+            monitor.Step = "waiting for the last build";
             await ShellFixture.PumpUntil(() => !vm.IsRebuilding && vm.Rows.Count > 7000, seconds: 60);
+            monitor.Step = null;
         });
 
         var deleted = 0;
