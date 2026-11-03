@@ -104,9 +104,11 @@ public class EditorTests
         // popup that couldn't show or closed at once (the editor hidden or unfocused) all look the same here.
         await ShellFixture.PumpUntil(() => program.SignatureWindow is not null, describe: () =>
             $"client {f.Shell.Languages.RunningClient("csharp") is not null}, editor visible {program.Editor.TextArea.TextView.IsEffectivelyVisible}, focused {program.Editor.TextArea.IsKeyboardFocusWithin}, " +
-            $"active {f.Shell.Layout.ActiveDocument?.Title}, text near caret '{program.Model.Text.GetText(Math.Max(0, program.Editor.CaretOffset - 20), 20)}'. Log:\n" +
+            $"active {f.Shell.Layout.ActiveDocument?.Title}, text near caret '{program.Model.Text.GetText(Math.Max(0, program.Editor.CaretOffset - 20), 20)}', " +
+            $"signature help {program.SignatureHelpOutcome} (caret {program.Editor.CaretOffset}). Log:\n" +
             f.Shell.Workbench.Output.GetOrCreate("codalus.languages", "Language Services").GetText());
         Assert.Equal(2, program.SignatureWindow!.Count);
+        Assert.EndsWith("with 2 signature(s)", program.SignatureHelpOutcome, StringComparison.Ordinal);
 
         // F12 on Circle opens Shapes.cs at the class; Navigate Backward returns.
         MoveCaret(program, "new Circle", "new C".Length);
