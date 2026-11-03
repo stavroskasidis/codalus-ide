@@ -43,7 +43,13 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     public int Depth { get; } = depth;
 
-    public Thickness Indent => new(4 + (Depth * 16), 0, 0, 0);
+    /// <summary>
+    /// How far each level is indented: 12 px, the classic IDE's, so a deep tree stays compact (it was 16, and a project's
+    /// files five levels down sat 20 px further right).
+    /// </summary>
+    public const double IndentPerLevel = 12;
+
+    public Thickness Indent => new(4 + (Depth * IndentPerLevel), 0, 0, 0);
 
     public string Name => _node.Name;
 
