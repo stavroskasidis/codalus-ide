@@ -108,20 +108,19 @@ public sealed class DocumentTabOptionsTests
         var wheels = new List<string>();
         strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
-        var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
-        string Wheeled(string rows, string before) =>
+        var over = default(Point);
+        string Wheeled(string rows) =>
             $"the tabs {rows}: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
             + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
             + $"{f.Shell.LastTabStripWheel}), the wheel events: [{string.Join("; ", wheels)}], the panel's still the strip's "
             + $"{ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())} ({(TopLevel.GetTopLevel(panel) is null ? "detached" : "attached")}), "
-            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}; "
+            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, the last wheel at {over}, now over {Under(f, over)}; "
             + $"the overlay: [{string.Join(", ", OverlayLayer.GetOverlayLayer(f.Window)?.Children.Select(c => $"{c.GetType().Name} {c.Bounds}") ?? [])}]";
 
         // Wheel down over the tabs: multiple rows, for every group, saved. (Windows CI, run 41554892222: this wheel left one
         // row.)
-        var beforeDown = Under(f, over);
-        Wheel(f, strip, over, -1);
-        await ShellFixture.PumpUntil(() => panel.MultipleRows, describe: () => Wheeled("stayed in one row", beforeDown));
+        over = Wheel(f, strip, -1);
+        await ShellFixture.PumpUntil(() => panel.MultipleRows, describe: () => Wheeled("stayed in one row"));
         Assert.True(f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting));
         f.Window.UpdateLayout();
         ShellFixture.Pump();
@@ -142,9 +141,8 @@ public sealed class DocumentTabOptionsTests
 
         // Up: one row again. (Windows and macOS CI, runs 41518626383 and 41524121911: this wheel left the rows on, while it
         // passes on Linux; the failure says what the wheel reached and did.)
-        var before = Under(f, over);
-        Wheel(f, strip, over, 1);
-        await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () => Wheeled("stayed in multiple rows", before));
+        over = Wheel(f, strip, 1);
+        await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () => Wheeled("stayed in multiple rows"));
         f.Window.UpdateLayout();
         ShellFixture.Pump();
         Assert.Equal(oneRow, panel.Bounds.Height, 0.5);
@@ -152,7 +150,7 @@ public sealed class DocumentTabOptionsTests
         // Turned off, the wheel leaves the rows alone.
         await f.RunAsync("workbench.tabs.toggleMultipleRowsWithMouseWheel");
         await ShellFixture.PumpUntil(() => !f.Shell.Workbench.Settings.GetBoolean(ShellHost.MultipleRowsWithMouseWheelSetting, true));
-        Wheel(f, strip, over, -1);
+        Wheel(f, strip, -1);
         ShellFixture.Pump();
         Assert.False(panel.MultipleRows);
 
@@ -169,7 +167,6 @@ public sealed class DocumentTabOptionsTests
         ShellFixture.Pump();
         var strip = Strip(f);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
-        var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
 
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
         // wait while the test holds their lock (on Windows a small write often lands before the wheel's handler returns).
@@ -181,9 +178,9 @@ public sealed class DocumentTabOptionsTests
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
         var writes = WriteLock(settings);
         await writes.WaitAsync(TestContext.Current.CancellationToken);
-        Wheel(f, strip, over, -1);
+        var over = Wheel(f, strip, -1);
         var down = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
-        Wheel(f, strip, over, 1, render: false); // right after the down, in the frame it went through
+        Wheel(f, strip, 1, at: over); // right after the down, at its point, in the frame it went through
         var up = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
         writes.Release();
         await ShellFixture.PumpUntil(() => settings.IsModified(ShellHost.TabsInMultipleRowsSetting) && !settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting),
@@ -321,21 +318,25 @@ public sealed class DocumentTabOptionsTests
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
 
     /// <summary>
-    /// The mouse wheel at <paramref name="point"/>, which must be over the strip. The pointer's hit test reads the last
-    /// rendered frame, not the layout, so a frame is rendered first: without one, both wheels of a test went to a tool
-    /// window's title in the frame before the documents' layout, and the shell never saw them (PR #291's Linux run
-    /// 41616893942; the wheel failures in docs/ci-flakes.md).
+    /// The mouse wheel over the strip's first tab where the strip is now, or at <paramref name="at"/> in the last frame;
+    /// returns its point. The wheels went to a tool window's title, and the shell never saw them: the tests took the point
+    /// once, from the strip's first layout, and the strip moved (205 px right, Windows CI run 41608511009); and the
+    /// pointer's hit test reads the last rendered frame, not the layout (PR #291's Linux run 41616893942;
+    /// docs/ci-flakes.md). So a frame of the layout is rendered first, and the point must be over the strip.
     /// </summary>
-    private static void Wheel(ShellFixture f, DocumentTabStrip strip, Point point, double delta, bool render = true)
+    private static Point Wheel(ShellFixture f, DocumentTabStrip strip, double delta, Point? at = null)
     {
-        if (render)
+        if (at is not { } point)
         {
             ShellFixture.RenderFrame(f.Window);
+            var tab = strip.GetVisualDescendants().OfType<DocumentTabStripItem>().First(t => t.Bounds is { Width: > 0, Height: > 0 });
+            point = tab.TranslatePoint(new Point(Math.Min(20, tab.Bounds.Width / 2), tab.Bounds.Height / 2), f.Window)!.Value;
         }
 
         var under = InputExtensions.InputHitTest(f.Window, point) as Visual;
         Assert.True(under is not null && (ReferenceEquals(under, strip) || strip.IsVisualAncestorOf(under)), $"the wheel's point {point} is over {Chain(under)}, not the tab strip");
         f.Window.MouseWheel(point, new Vector(0, delta));
+        return point;
     }
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
