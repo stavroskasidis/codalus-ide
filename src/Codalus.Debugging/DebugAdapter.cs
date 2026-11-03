@@ -558,6 +558,10 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
                 if (waited.Elapsed >= LateRuntimeWait)
                 {
+                    // Where it stands, before the program is ended: stopped (T), its transport there or not, and what its
+                    // threads and netcoredbg's wait on. A launch on Linux CI (run 41579219667) got E_FAIL from
+                    // configurationDone and then a program that ran the whole minute without its runtime's transport.
+                    Log?.Invoke(this, $"Still no runtime after {Seconds(waited)} seconds: {Describe()}");
                     if (_attachedTo is null)
                     {
                         KillProgram(program);

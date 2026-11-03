@@ -59,8 +59,18 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
                 .Select(d => Path.Combine(d, OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet"))
                 .First(File.Exists);
 
-    private Task LaunchAsync() =>
-        _debug.LaunchAsync(new LaunchPlan(DotnetHost, $"exec \"{debuggee.Dll}\" --depth", debuggee.Folder, new Dictionary<string, string>(), null), TestContext.Current.CancellationToken);
+    private async Task LaunchAsync()
+    {
+        try
+        {
+            await _debug.LaunchAsync(new LaunchPlan(DotnetHost, $"exec \"{debuggee.Dll}\" --depth", debuggee.Folder, new Dictionary<string, string>(), null), TestContext.Current.CancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The adapter's log says what the start waited on (Linux CI, run 41579219667: no runtime within 65 s).
+            throw new InvalidOperationException($"{ex.Message}\nOutput:\n{Output}", ex);
+        }
+    }
 
     private async Task<StopInfo> NextStopAsync()
     {

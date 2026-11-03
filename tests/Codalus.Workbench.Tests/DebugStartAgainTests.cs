@@ -314,6 +314,15 @@ public sealed class DebugStartAgainTests : IDisposable
         lock (log)
         {
             Assert.Contains("waiting for it (up to 2 seconds more)", log.ToString(), StringComparison.Ordinal);
+
+            // Where the start stood before the program was ended: netcoredbg's process, the program's, the connection.
+            var described = Assert.Single(log.ToString().Split('\n'), l => l.StartsWith("Still no runtime after ", StringComparison.Ordinal));
+            Assert.Contains("; program ", described, StringComparison.Ordinal);
+            Assert.Contains("request(s) unanswered", described, StringComparison.Ordinal);
+            if (OperatingSystem.IsLinux())
+            {
+                Assert.Contains(" in state ", described, StringComparison.Ordinal);
+            }
         }
 
         var (ids, running) = LeftPrograms();
