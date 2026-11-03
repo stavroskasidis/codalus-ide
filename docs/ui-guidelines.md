@@ -8,7 +8,7 @@ Review a surface against each line, in Classic and every theme family (Harbor, G
 
 - **Layout**
   - Spacing comes from the 4 px grid (`Shell.Space.*`, `Shell.Padding.*`); no one-off margins.
-  - Lists use rows of `Shell.Size.Row` (22 px) with `Shell.Padding.Row`; hierarchy trees (Solution Explorer, Test Explorer and the other tree tool windows) use `Shell.Size.TreeRow` (24 px).
+  - Lists use rows of `Shell.Size.Row` (22 px) with `Shell.Padding.Row`; hierarchy trees (Solution Explorer, Test Explorer and the other tree tool windows) use `Shell.Size.TreeRow` (24 px). The Solution Explorer indents each level 12 px, the classic IDE's, so a deep tree stays compact (`ExplorerRowViewModel.IndentPerLevel`).
   - Tables keep their column widths: in a narrow pane the header and the rows scroll sideways together (a `ScrollViewer` with horizontal scrolling around a `DockPanel` with a `MinWidth`), never squeezed into each other.
   - The in-window dialog sizes to its content, except a preview of changes: three quarters of the window, at least 640 × 400 where the window has room (`DialogView.PreviewSize`, M34h), so the diff is readable.
   - Code shown outside an editor (a template's preview, a definition) is a `CodeViewer`, in the editor's colors, never plain text in a text box.
