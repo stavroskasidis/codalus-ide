@@ -90,16 +90,19 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
                 EnableNodeReuse = false,
                 DisableInProcNode = false,
             });
+            // A cancelled batch (a file change pauses design-time builds) aborts its nodes, whose in-process one clears MSBuild's
+            // string cache right then: the cancellation holds the gate from before that until the batch has ended.
+            var cancellation = new GatedCancellation(_manager.CancelAllSubmissions);
             try
             {
-                await using var registration = cancellationToken.Register(_manager.CancelAllSubmissions).ConfigureAwait(false);
+                await using var registration = cancellation.Register(cancellationToken).ConfigureAwait(false);
                 var pending = requests.Select(r => BuildOneAsync(r, solutionProperties, errors, completed, cancellationToken)).ToList();
                 await Task.WhenAll(pending).ConfigureAwait(false);
             }
             finally
             {
                 // The in-process node clears MSBuild's string cache here: not while this process evaluates (StringCacheGate).
-                StringCacheGate.Exclusive(_manager.EndBuild);
+                await cancellation.EndAsync(_manager.EndBuild).ConfigureAwait(false);
             }
         }
         finally
@@ -201,7 +204,8 @@ internal sealed class DesignTimeBuilder(ProjectCollection collection, SemaphoreS
             if (request.IgnoreMissingImports)
             {
                 ProjectInstance instance;
-                using (StringCacheGate.Enter())
+                // Cancellable: a cancelled batch's cancellation holds the gate until the batch ends (GatedCancellation).
+                using (StringCacheGate.EnterCancellable(cancellationToken))
                 {
                     instance = s_hasProjectOptions ? LoadWithOptions(request.Path, global, collection) : LoadWithProject(request.Path, global, collection);
                 }
