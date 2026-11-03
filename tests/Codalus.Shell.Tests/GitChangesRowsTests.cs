@@ -451,10 +451,12 @@ public sealed class GitChangesRowsTests
         Assert.Equal(2191, vm.ChangesRows.Count);
         Assert.False(vm.ChangesRows.Single(r => r.Text == "D010").IsExpanded);
 
-        // The same Git LFS state again (read after every status read) refreshes nothing.
+        // The same Git LFS state again (read after every status read) refreshes nothing. A refresh was running here on
+        // Windows (shell-1, run 41549374686), which the same state can't start: the message says what started it.
         var built = vm.ViewsBuilt;
+        var cause = vm.LastRefreshCause;
         vm.Lfs = new GitLfsStatus(false, false, [], [], null);
-        Assert.False(vm.IsRefreshing);
+        Assert.False(vm.IsRefreshing, $"A refresh is running: the last one asked for by {vm.LastRefreshCause} (before setting the Git LFS state: {cause}); the window's Git LFS state {vm.Lfs}.");
         Assert.Equal(built, vm.ViewsBuilt);
     }
 }

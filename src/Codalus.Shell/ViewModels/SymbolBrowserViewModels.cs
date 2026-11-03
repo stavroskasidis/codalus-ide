@@ -303,6 +303,12 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
         ];
     }
 
+    /// <summary>
+    /// How the last description request went (tests' failure messages): the selected member's declaration never came on
+    /// Windows CI (run 41549374686), and an answer without one, a failed request and one still waiting all left it empty.
+    /// </summary>
+    internal string DescribeState { get; private set; } = "none";
+
     private async Task DescribeAsync(SymbolBrowserNode? node)
     {
         _describeCts?.Cancel();
@@ -310,10 +316,13 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
         {
             Declaration = null;
             Description = null;
+            DescribeState = node?.Id is null ? "no node id" : "no language service";
             return;
         }
 
         var cts = _describeCts = new CancellationTokenSource();
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        DescribeState = $"waiting for {node.Name} ({id})";
         try
         {
             var described = await client.DescribeAsync(node.Project, id, cts.Token).ConfigureAwait(true);
@@ -324,11 +333,16 @@ public sealed class SymbolBrowserViewModel : ObservableObject, IDisposable
 
             Declaration = described?.Declaration;
             Description = described is null ? null : string.Join("\n", new[] { described.Container, described.Assembly is { } assembly ? Localizer.Format("msg.symbolBrowser.assembly", "Assembly: {0}", assembly) : null, described.Summary }.OfType<string>());
+            DescribeState = $"answered for {node.Name} in {watch.ElapsedMilliseconds} ms: " + (described is null ? "nothing" : described.Declaration is null ? "no declaration" : "a declaration");
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException)
         {
             Declaration = null;
             Description = null;
+            if (!cts.IsCancellationRequested)
+            {
+                DescribeState = $"failed for {node.Name} after {watch.ElapsedMilliseconds} ms: {ex.GetType().Name}: {ex.Message}";
+            }
         }
     }
 
