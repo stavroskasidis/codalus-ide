@@ -25,6 +25,15 @@ Moved: the Plugins page (with the gallery), Components, Aspire and Benchmarks am
 
 A layout saves the tool windows in each document group (a `documents` node's `tools` and `active`), so a page among the documents comes back after a restart like any other tool window; the documents themselves are still the solution session's. The group `DocumentBeside` makes isn't the documents' own (`BesideDocuments`), so a restore and Reset Layout put the documents back in theirs.
 
+### The HTTP Response beside its file, narrow (2026-11-02, the maintainer's review of the first CI pictures)
+
+At the default 1280 × 800 window the group beside the file is about 380 px wide. The response's toolbar drew over its status (the time and size under Send Again, the chip gone) and its history took two fifths of it.
+
+| Question | Options | Verdict |
+|---|---|---|
+| The place | Beside, the view made to fit; back to the bottom group; a tab among the documents | **Beside, the view made to fit.** Narrower than 720 px the history goes under the response (at most 220 px, or two fifths of the height, its splitter across); the width the user dragged it to comes back with a wider window. A response narrower than 520 px shows its version, time and size on a line under the status chip, and the toolbar's buttons go into its overflow menu. A failed request's error has a line of its own, wrapped. |
+| The website's Aspire picture | As the smoke test leaves the window; HTTP Response closed first | **Closed first**: the smoke step closes web.http's HTTP Response before Aspire's picture, so the page has the documents' width. |
+
 ## Consequences
 
 - The website's Aspire and HTTP pictures (`aspire.png`, `web-http.png`) show the new places once a CI run's smoke pictures are copied in.
