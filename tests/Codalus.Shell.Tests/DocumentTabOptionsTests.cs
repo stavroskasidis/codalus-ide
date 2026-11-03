@@ -109,13 +109,17 @@ public sealed class DocumentTabOptionsTests
         strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
         f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
         var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+        // The tool windows beside the documents: on macOS CI the strip had moved 198 px right by the wheel up, a tool
+        // window's title under the wheel's point (run 41621106416).
+        var toolDocksBefore = ToolDocks(f);
         string Wheeled(string rows, string before) =>
             $"the tabs {rows}: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
             + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
             + $"{f.Shell.LastTabStripWheel}), the wheel events: [{string.Join("; ", wheels)}], the panel's still the strip's "
             + $"{ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())} ({(TopLevel.GetTopLevel(panel) is null ? "detached" : "attached")}), "
             + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}; "
-            + $"the overlay: [{string.Join(", ", OverlayLayer.GetOverlayLayer(f.Window)?.Children.Select(c => $"{c.GetType().Name} {c.Bounds}") ?? [])}]";
+            + $"the overlay: [{string.Join(", ", OverlayLayer.GetOverlayLayer(f.Window)?.Children.Select(c => $"{c.GetType().Name} {c.Bounds}") ?? [])}]; "
+            + $"the tool docks: [{ToolDocks(f)}] (before the wheels: [{toolDocksBefore}])";
 
         // Wheel down over the tabs: multiple rows, for every group, saved. (Windows CI, run 41554892222: this wheel left one
         // row.)
@@ -310,6 +314,10 @@ public sealed class DocumentTabOptionsTests
         [.. f.Window.GetVisualDescendants().OfType<DocumentTabStrip>().Select(s => s.DataContext).OfType<IDocumentDock>()];
 
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
+
+    /// <summary>The tool docks shown, with their tool windows, place and size (failure messages).</summary>
+    private static string ToolDocks(ShellFixture f) => string.Join("; ", f.Window.GetVisualDescendants().OfType<ToolDockControl>().Where(c => c.IsEffectivelyVisible)
+        .Select(c => $"{string.Join(", ", (c.DataContext as IDock)?.VisibleDockables?.Select(d => d.Title) ?? [])} at {c.TranslatePoint(default, f.Window)} {c.Bounds.Size}"));
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
     private static string Under(ShellFixture f, Point point) => Chain(InputExtensions.InputHitTest(f.Window, point) as Visual);
