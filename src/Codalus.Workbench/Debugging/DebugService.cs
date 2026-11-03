@@ -1031,7 +1031,7 @@ public sealed class DebugService : IAsyncDisposable
         return environment;
     }
 
-    private async Task StartAsync<TAdapter>(
+    internal async Task StartAsync<TAdapter>(
         Func<CancellationToken, Task<TAdapter>> create,
         Func<TAdapter, Task> start,
         bool attached,
@@ -1133,10 +1133,15 @@ public sealed class DebugService : IAsyncDisposable
         try
         {
             adapter = await create(cancellationToken).ConfigureAwait(false);
-            adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e);
+            // Its terminated event and its end end only its own session: each comes again after the first ends it (the
+            // other one, or EndAsync's own dispose closing it), on the thread pool, and one that runs late, after the
+            // next session started, ended that session as it started (the smoke sweep's Start Debugging right after a
+            // session ran to its end, Linux CI run 41641994303).
+            var started = adapter;
+            adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e, started);
             adapter.Log += (_, line) => Output?.Invoke(this, new DebugOutput("console", line + "\n"));
             _adapter = adapter;
-            _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+            _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(started), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
 
             // DAP's order: launch, and configure while it runs. Some adapters (js-debug) answer the launch only after
             // configurationDone.
@@ -1994,7 +1999,7 @@ public sealed class DebugService : IAsyncDisposable
 
     // ------------------------------------------------------------------ events
 
-    private async Task OnEventAsync(DapEvent e)
+    private async Task OnEventAsync(DapEvent e, IDebugAdapter source)
     {
         switch (e.Name)
         {
@@ -2017,7 +2022,7 @@ public sealed class DebugService : IAsyncDisposable
                 Output?.Invoke(this, new DebugOutput("console", $"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:
-                _ = Task.Run(EndAsync);
+                _ = Task.Run(() => EndAsync(source));
                 break;
             case DapEvents.Process when DebugAdapter.Read(e.Body, DapJsonContext.Default.ProcessEvent) is { SystemProcessId: { } pid }:
                 OnProcess(pid);
