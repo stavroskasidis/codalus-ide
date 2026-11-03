@@ -264,9 +264,19 @@ internal static class MenuBuilder
             group = item.Group;
             if (item.Submenu is { } submenu)
             {
+                // Made as it opens, as a menu bar menu is: Edit made every submenu's entries and icons with its own, and
+                // took 130 ms of the UI thread to open on Windows and up to 600 ms under WSLg's software rendering (the
+                // command sweep, docs/ci-flakes.md). The menus list a submenu only when it has entries (MenuRegistry).
                 var child = new MenuItem { Header = item.Title };
                 AutomationProperties.SetName(child, item.Title);
-                Fill(child.Items, submenu, shell, shape);
+                child.Items.Add(new Separator());
+                child.SubmenuOpened += (_, e) =>
+                {
+                    if (e.Source == child)
+                    {
+                        Fill(child.Items, submenu, shell, shape);
+                    }
+                };
                 items.Add(child);
                 continue;
             }
