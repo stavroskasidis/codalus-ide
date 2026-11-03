@@ -100,24 +100,7 @@ public sealed class DocumentTabOptionsTests
         ShellFixture.Pump();
         var strip = Strip(f);
 
-        // The tool windows can still be arriving: one docking at the left moves the strip right, and the window's MouseWheel
-        // runs the pending layout before it delivers the wheel, so a point read just before still missed the strip (Windows
-        // CI, run 41624195564: the point over a tab before the wheel, the wheel on a ToolChromeControl). Wait until the
-        // strip stays put; each point is also read just before its wheel (Wheel, below).
-        var placed = strip.TranslatePoint(default, f.Window);
-        var still = System.Diagnostics.Stopwatch.StartNew();
-        await ShellFixture.PumpUntil(() =>
-        {
-            var now = strip.TranslatePoint(default, f.Window);
-            if (now != placed)
-            {
-                placed = now;
-                still.Restart();
-            }
-
-            return still.Elapsed >= TimeSpan.FromSeconds(1);
-        }, describe: () => $"the strip keeps moving: at {placed}");
-
+        await SettleAsync(f, strip);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
@@ -185,6 +168,7 @@ public sealed class DocumentTabOptionsTests
         await OpenAsync(f, "quick", 3);
         ShellFixture.Pump();
         var strip = Strip(f);
+        await SettleAsync(f, strip);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
 
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
@@ -360,6 +344,29 @@ public sealed class DocumentTabOptionsTests
         Assert.True(under is not null && (ReferenceEquals(under, strip) || strip.IsVisualAncestorOf(under)), $"the wheel's point {point} is over {Chain(under)}, not the tab strip");
         f.Window.MouseWheel(point, new Vector(0, delta));
         return point;
+    }
+
+    /// <summary>
+    /// Waits until the strip stays put for a second. The tool windows can still be arriving: one docking at the left moves
+    /// the strip right, and the window's MouseWheel runs the pending layout before it delivers the wheel, so a point read
+    /// just before (<see cref="Wheel"/>) still missed the strip (Windows CI: run 41624195564 at the multiple-rows test's
+    /// wheel down, the wheel on a ToolChromeControl; run 41703043049 at the race test's second wheel, its point over one).
+    /// </summary>
+    private static async Task SettleAsync(ShellFixture f, DocumentTabStrip strip)
+    {
+        var placed = strip.TranslatePoint(default, f.Window);
+        var still = System.Diagnostics.Stopwatch.StartNew();
+        await ShellFixture.PumpUntil(() =>
+        {
+            var now = strip.TranslatePoint(default, f.Window);
+            if (now != placed)
+            {
+                placed = now;
+                still.Restart();
+            }
+
+            return still.Elapsed >= TimeSpan.FromSeconds(1);
+        }, describe: () => $"the strip keeps moving: at {placed}");
     }
 
     /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
