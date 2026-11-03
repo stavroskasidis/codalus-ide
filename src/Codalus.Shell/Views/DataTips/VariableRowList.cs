@@ -343,7 +343,7 @@ public sealed record VariableRowItem(VariableNode Node, int Depth);
 /// <summary>A variable window's row: the indent, chevron, icon and name; the View button and the value; the type.</summary>
 public sealed class VariableListRow : Grid
 {
-    public const double IndentPerLevel = 16;
+    public const double IndentPerLevel = ViewModels.TreeMetrics.IndentPerLevel;
 
     private readonly VariableRowList _list;
     private readonly TextBlock _value;

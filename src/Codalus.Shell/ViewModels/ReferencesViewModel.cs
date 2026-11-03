@@ -63,7 +63,7 @@ public sealed record ReferenceRow(string Path, int Line, int Column, string Text
     public int Span => IsHeader ? ReferencesViewModel.ColumnCount : 1;
 
     /// <summary>A header by its depth (chevron, icon, text); a reference under its group's text.</summary>
-    public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * 18) : Depth == 0 ? 8 : 40 + ((Depth - 1) * 18), 0, 0, 0);
+    public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * TreeMetrics.IndentPerLevel) : Depth == 0 ? 8 : 40 + ((Depth - 1) * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     /// <summary>The File column, once: the search looks in it for every reference at each keystroke.</summary>
     public string FileName { get; } = IsHeader ? string.Empty : System.IO.Path.GetFileName(Path);

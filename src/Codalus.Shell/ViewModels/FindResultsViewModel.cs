@@ -60,7 +60,7 @@ public sealed record FindResultRow(string Path, int Line, int Column, int Length
     /// The row's indent: a header by its depth (its chevron, icon and text after it), a match under its group's text
     /// (M34h, the mockup's: folder, file, then the code where the file's name starts).
     /// </summary>
-    public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * 18) : Depth == 0 ? 8 : 40 + ((Depth - 1) * 18), 0, 0, 0);
+    public Avalonia.Thickness Indent => new(IsHeader ? 4 + (Depth * TreeMetrics.IndentPerLevel) : Depth == 0 ? 8 : 40 + ((Depth - 1) * TreeMetrics.IndentPerLevel), 0, 0, 0);
 
     /// <summary>The Code column: the line's text; a header's text with its count.</summary>
     public string Code => IsHeader && Count > 0 ? $"{Text} ({Count})" : Text;
@@ -965,10 +965,6 @@ public static class FindResultsStyles
 {
     public static Avalonia.Data.Converters.IValueConverter Weight { get; } =
         new Avalonia.Data.Converters.FuncValueConverter<bool, Avalonia.Media.FontWeight>(header => header ? Avalonia.Media.FontWeight.SemiBold : Avalonia.Media.FontWeight.Normal);
-
-    /// <summary>A row sits under its group's header.</summary>
-    public static Avalonia.Data.Converters.IValueConverter Indent { get; } =
-        new Avalonia.Data.Converters.FuncValueConverter<int, Avalonia.Thickness>(depth => new Avalonia.Thickness(depth * 16, 0, 0, 0));
 
     /// <summary>A match that Replace changed is dimmed.</summary>
     public static Avalonia.Data.Converters.IValueConverter ReplacedOpacity { get; } =

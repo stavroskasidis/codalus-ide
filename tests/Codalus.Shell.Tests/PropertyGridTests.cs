@@ -72,7 +72,7 @@ public sealed class PropertyGridTests
         Assert.Equal(["#Accessibility", "AccessibleName", "AccessibleRole", "#Appearance", "BackColor", "Font", "  Name", "  Size", "  Bold", "Text", "#Design", "(Name)", "#Layout", "Location"], Names(grid));
         Assert.Equal("Collapse Font", font.ExpanderName);
         Assert.Equal(1, grid.Find("Font.Bold")!.Depth);
-        Assert.Equal(16 + 4, grid.Find("Font.Bold")!.NameIndent.Left);
+        Assert.Equal(12 + 4, grid.Find("Font.Bold")!.NameIndent.Left);
         grid.Toggle(font);
         Assert.DoesNotContain(grid.Items, i => i is PropertyRowViewModel { Depth: > 0 });
 

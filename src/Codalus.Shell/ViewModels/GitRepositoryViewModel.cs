@@ -219,7 +219,7 @@ public sealed class GitRepositoryRow(GitRepositoryNode node, int depth) : Observ
     public int Depth { get; } = depth;
 
     /// <summary>The indentation of its level, 16 px each, as the tree view's.</summary>
-    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     /// <summary>A group, a repository or a folder with something in it: it expands and collapses.</summary>
     public bool HasChildren => _node.Children.Count > 0;
