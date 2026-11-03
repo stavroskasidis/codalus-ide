@@ -93,6 +93,7 @@ public sealed class DocumentTabOptionsTests
     public async Task Tabs_in_multiple_rows_all_show_and_the_mouse_wheel_turns_them_on_and_off()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it moves the documents right (see Wheel)
         await OpenAsync(f, "rows", 12);
         f.Window.Width = 900;
         ShellFixture.Pump();
@@ -163,6 +164,7 @@ public sealed class DocumentTabOptionsTests
     public async Task A_wheel_up_right_after_a_wheel_down_leaves_one_row()
     {
         await using var f = ShellFixture.Create();
+        await f.StartViewShownAsync(); // it moves the documents right (see Wheel)
         await OpenAsync(f, "quick", 3);
         ShellFixture.Pump();
         var strip = Strip(f);
@@ -326,7 +328,9 @@ public sealed class DocumentTabOptionsTests
     /// returns its point. The wheels went to a tool window's title, and the shell never saw them: the tests took the point
     /// once, from the strip's first layout, and the strip moved (205 px right, Windows CI run 41608511009); and the
     /// pointer's hit test reads the last rendered frame, not the layout (PR #291's Linux run 41616893942;
-    /// docs/ci-flakes.md). So a frame of the layout is rendered first, and the point must be over the strip.
+    /// docs/ci-flakes.md). So a frame of the layout is rendered first, and the point must be over the strip. What moved
+    /// it: the Welcome plugin's Start page, which opens the left column once the plugin host runs, seconds late on a
+    /// busy runner (PR #296's run 41666516531, at (27, 85.5) over its title); the tests wait for it first.
     /// </summary>
     private static Point Wheel(ShellFixture f, DocumentTabStrip strip, double delta, Point? at = null)
     {
