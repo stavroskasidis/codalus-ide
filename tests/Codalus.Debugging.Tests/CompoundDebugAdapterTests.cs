@@ -649,7 +649,7 @@ public sealed class CompoundDebugAdapterTests
     }
 
     /// <summary>An adapter that records its requests: thread 1, frame 7, scope reference 9.</summary>
-    private sealed class FakeAdapter(DapThread[] threads) : IDebugAdapter
+    internal sealed class FakeAdapter(DapThread[] threads) : IDebugAdapter
     {
         private readonly TaskCompletionSource _closed = new();
         private int _nextBreakpoint = 100;
@@ -673,6 +673,11 @@ public sealed class CompoundDebugAdapterTests
         public int[] LastBreakpointIds { get; private set; } = [];
 
         public bool Disposed { get; private set; }
+
+        /// <summary>Its end (<see cref="Closed"/>) comes with its dispose; when false, only with <see cref="Close"/>.</summary>
+        public bool ClosesOnDispose { get; init; } = true;
+
+        public void Close() => _closed.TrySetResult();
 
         public Task DisconnectGate { get; init; } = Task.CompletedTask;
 
@@ -791,7 +796,11 @@ public sealed class CompoundDebugAdapterTests
         public ValueTask DisposeAsync()
         {
             Disposed = true;
-            _closed.TrySetResult();
+            if (ClosesOnDispose)
+            {
+                _closed.TrySetResult();
+            }
+
             return ValueTask.CompletedTask;
         }
     }
