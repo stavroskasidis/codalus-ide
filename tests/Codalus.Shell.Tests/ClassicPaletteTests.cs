@@ -226,4 +226,41 @@ public sealed class ClassicPaletteTests
         margin = editor.TextArea.LeftMargins.OfType<CurrentLineNumberMargin>().Single();
         Assert.Equal(Color.Parse("#3F3F3F"), Of(margin.BrushFor(margin.CaretLine)));
     }
+
+    [AvaloniaFact]
+    public async Task Scrolling_lays_out_only_the_numbers_it_brings_in()
+    {
+        // Every frame of scrolling formatted every number on screen again (twice: its width, then its drawing).
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(f.UserData, "numbers.txt");
+        await File.WriteAllTextAsync(path, string.Concat(Enumerable.Range(0, 2_000).Select(i => $"line {i}\n")), TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenFileAsync(path, preview: false);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        var editor = document!.Controller!.Editor;
+        var margin = editor.TextArea.LeftMargins.OfType<CurrentLineNumberMargin>().Single();
+        var view = editor.TextArea.TextView;
+        await ShellFixture.PumpUntil(() =>
+        {
+            ShellFixture.RenderFrame(f.Window);
+            return view.VisualLinesValid && view.VisualLines.Count > 10 && margin.NumbersLaidOut >= view.VisualLines.Count;
+        });
+
+        foreach (var lines in new[] { 2, 4, 6 })
+        {
+            var before = margin.NumbersLaidOut;
+            var first = view.VisualLines[0].FirstDocumentLine.LineNumber;
+            editor.ScrollToY(lines * view.DefaultLineHeight);
+            ShellFixture.RenderFrame(f.Window);
+            var moved = view.VisualLines[0].FirstDocumentLine.LineNumber - first;
+            Assert.True(moved > 0, "The text didn't scroll.");
+            Assert.InRange(margin.NumbersLaidOut - before, 1, moved + 1);
+        }
+
+        // The caret's line changes color: its number and the one it left are laid out again in their new brushes.
+        var laidOut = margin.NumbersLaidOut;
+        editor.TextArea.Caret.Line = view.VisualLines[5].FirstDocumentLine.LineNumber;
+        ShellFixture.RenderFrame(f.Window);
+        Assert.InRange(margin.NumbersLaidOut - laidOut, 1, 2);
+    }
 }
+

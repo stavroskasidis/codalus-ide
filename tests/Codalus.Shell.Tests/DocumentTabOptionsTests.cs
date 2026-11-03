@@ -123,9 +123,15 @@ public sealed class DocumentTabOptionsTests
             frame!.Save(Path.Combine(snapshots, "document-tabs-multiple-rows.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
         }
 
-        // Up: one row again.
+        // Up: one row again. (Windows and macOS CI, runs 41518626383 and 41524121911: this wheel left the rows on, while it
+        // passes on Linux; the failure says what the wheel reached and did.)
+        var before = Under(f, over);
         f.Window.MouseWheel(over, new Vector(0, 1));
-        await ShellFixture.PumpUntil(() => !panel.MultipleRows);
+        await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () =>
+            $"the tabs stayed in multiple rows: setting {f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting)}, resource "
+            + $"{Avalonia.Application.Current?.Resources["Shell.TabsInMultipleRows"]}, wheels the shell got {f.Shell.TabStripWheels} (the last: "
+            + $"{f.Shell.LastTabStripWheel}), the panel's still the strip's {ReferenceEquals(panel, Strip(f).GetVisualDescendants().OfType<DocumentTabPanel>().FirstOrDefault())}, "
+            + $"strip {strip.Bounds.Height:0} px high at {strip.TranslatePoint(default, f.Window)}, under {over} before the wheel: {before}; now: {Under(f, over)}");
         f.Window.UpdateLayout();
         ShellFixture.Pump();
         Assert.Equal(oneRow, panel.Bounds.Height, 0.5);
@@ -265,6 +271,12 @@ public sealed class DocumentTabOptionsTests
         [.. f.Window.GetVisualDescendants().OfType<DocumentTabStrip>().Select(s => s.DataContext).OfType<IDocumentDock>()];
 
     private static List<TabStripItem> Tabs(DocumentTabPanel panel) => [.. panel.Children.OfType<TabStripItem>()];
+
+    /// <summary>What the pointer hits at <paramref name="point"/>, innermost first (failure messages).</summary>
+    private static string Under(ShellFixture f, Point point) =>
+        Avalonia.Input.InputExtensions.InputHitTest(f.Window, point) is Visual hit
+            ? string.Join(" < ", hit.GetSelfAndVisualAncestors().Take(10).Select(v => v.GetType().Name))
+            : "nothing";
 
     /// <summary>Whether the panel arranged the tab inside itself (a tab left out is arranged past its right edge).</summary>
     private static bool Shown(TabStripItem tab, DocumentTabPanel panel) => tab.Bounds.Right <= panel.Bounds.Width + 0.5 && tab.Bounds.Width > 0;

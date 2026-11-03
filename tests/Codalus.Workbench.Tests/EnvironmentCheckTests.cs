@@ -194,7 +194,30 @@ public sealed partial class EnvironmentCheckTests : IDisposable
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
-        Assert.NotNull(id);
+        if (id is null)
+        {
+            // No pid in 30 s (Windows others, run 41459412070): whether the program ended, and how, or still runs. Then its
+            // run is cancelled, so the program doesn't hold the test's folder and add a second error to the first.
+            var state = "is still running";
+            if (run.IsCompleted)
+            {
+                try
+                {
+                    var (exitCode, printed) = await run;
+                    state = $"ended with exit code {exitCode}: {printed}";
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    state = $"ended with {ex.GetBaseException().Message}";
+                }
+            }
+
+            var written = File.Exists(file) ? $"the file holds {new FileInfo(file).Length} bytes" : "no file";
+            await cancel.CancelAsync();
+            await ((Task)run).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+            Assert.Fail($"{program} wrote no process id to {file} in 30 s ({written}); its run {state}.");
+        }
+
         using var process = System.Diagnostics.Process.GetProcessById(id.Value);
         try
         {

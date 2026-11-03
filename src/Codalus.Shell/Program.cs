@@ -160,6 +160,16 @@ internal static partial class Program
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            // Without a GPU (a VM, a remote desktop, Xvfb; Mesa's llvmpipe is on GLX's blacklist) X11 draws into a software
+            // framebuffer. Not retained, it is allocated for every frame, the whole window's size, and each one adds that
+            // much memory pressure: scrolling the 100k-line file at 230 lines/s set off a full garbage collection every
+            // 0.6 s, and every frame redrew the whole window since the last one's pixels were gone. Retained, the frame
+            // keeps one buffer (the window's size, 8 MB at 1920x1080) and redraws only what changed.
+            .With(Infrastructure.Rendering.X11(Environment.GetEnvironmentVariable(Infrastructure.Rendering.Variable)))
+            // Without a GPU, Windows draws in software rather than through ANGLE on WARP, twice as fast (Rendering).
+            .With(OperatingSystem.IsWindows()
+                ? Infrastructure.Rendering.Windows(Environment.GetEnvironmentVariable(Infrastructure.Rendering.Variable), Infrastructure.Rendering.FirstAdapterIsSoftware)
+                : new Win32PlatformOptions())
             .LogToTrace();
 
     /// <summary>A GUI-subsystem process on Windows has no console; borrow the parent's for <c>--version</c> and <c>--help</c>.</summary>
