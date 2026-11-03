@@ -32,6 +32,14 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     /// <summary>The family and style lookups the platform had no font for, so it isn't asked again.</summary>
     private readonly ConcurrentDictionary<(string Family, FontCollectionKey Key), byte> _missing = new();
 
+    /// <summary>
+    /// Each family and style asked for, as the family and style looked up (<see cref="Typeface.Normalize"/>: "Segoe UI
+    /// Semibold" is "Segoe UI" in semibold). The font manager asks here for every text run that has no glyph typeface yet,
+    /// and working it out made a typeface and parsed its family name each time, a twentieth of the UI thread's time while
+    /// the 100k-line file scrolled.
+    /// </summary>
+    private readonly ConcurrentDictionary<(string Family, FontCollectionKey Key), (string Family, FontCollectionKey Key)> _normalized = new();
+
     public ShellSystemFonts(IFontManagerImpl platform)
     {
         _platform = platform;
@@ -52,8 +60,11 @@ internal sealed class ShellSystemFonts : FontCollectionBase
 
     public override bool TryGetGlyphTypeface(string familyName, FontStyle style, FontWeight weight, FontStretch stretch, [NotNullWhen(true)] out GlyphTypeface? glyphTypeface)
     {
-        var typeface = new Typeface(familyName, style, weight, stretch).Normalize(out familyName);
-        var key = new FontCollectionKey(typeface.Style, typeface.Weight, typeface.Stretch);
+        (familyName, var key) = _normalized.GetOrAdd((familyName, new FontCollectionKey(style, weight, stretch)), static asked =>
+        {
+            var typeface = new Typeface(asked.Family, asked.Key.Style, asked.Key.Weight, asked.Key.Stretch).Normalize(out var family);
+            return (family, new FontCollectionKey(typeface.Style, typeface.Weight, typeface.Stretch));
+        });
         if (TryGetGlyphTypeface(familyName, key, allowNearestMatch: false, out glyphTypeface))
         {
             return true;

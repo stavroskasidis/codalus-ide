@@ -115,7 +115,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         Assert.True(_debug.Breakpoints.StateOf(_debug.Breakpoints.All.Single())?.Verified);
 
         await _debug.ContinueAsync();
-        DebuggeeFixture.AssertExitCode(15, await EndedAsync());
+        DebuggeeFixture.AssertExitCode(15, await EndedAsync(), Output);
         Assert.Equal(DebugState.Idle, _debug.State);
         Assert.Contains("total=15 Ada is 36", Output, StringComparison.Ordinal);
     }
@@ -126,7 +126,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, Line("loop"), LogMessage: "i={i} total={total} in $FUNCTION"));
         await _debug.LaunchAsync(Plan(), TestContext.Current.CancellationToken);
 
-        DebuggeeFixture.AssertExitCode(15, await EndedAsync());
+        DebuggeeFixture.AssertExitCode(15, await EndedAsync(), Output);
         Assert.Contains("i=0 total=0 in", Output, StringComparison.Ordinal);
         Assert.Contains("i=4 total=10 in", Output, StringComparison.Ordinal);
         Assert.False(_stops.Reader.TryRead(out _));
@@ -160,7 +160,7 @@ public sealed class DebugServiceTests(DebuggeeFixture debuggee) : IClassFixture<
         Assert.Contains(mainLocals, v => v.Name == "total");
         await _debug.SetVariableAsync(reference, "total", "100");
         await _debug.ContinueAsync();
-        DebuggeeFixture.AssertExitCode(100, await EndedAsync());
+        DebuggeeFixture.AssertExitCode(100, await EndedAsync(), Output);
         Assert.Contains("total=100", Output, StringComparison.Ordinal);
     }
 
