@@ -174,6 +174,8 @@ public sealed class DocumentTabOptionsTests
         var strip = Strip(f);
         var panel = strip.GetVisualDescendants().OfType<DocumentTabPanel>().Single();
         var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+        var toolDocksBefore = ToolDocks(f);
+        var underBefore = Under(f, over);
 
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
         // wait while the test holds their lock (on Windows a small write often lands before the wheel's handler returns).
@@ -184,7 +186,11 @@ public sealed class DocumentTabOptionsTests
         f.Window.MouseWheel(over, new Vector(0, 1));
         writes.Release();
         await ShellFixture.PumpUntil(() => settings.IsModified(ShellHost.TabsInMultipleRowsSetting) && !settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting),
-            describe: () => $"the up's write (the setting {(settings.IsModified(ShellHost.TabsInMultipleRowsSetting) ? settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting) : "not written")})");
+            describe: () => $"the up's write (the setting {(settings.IsModified(ShellHost.TabsInMultipleRowsSetting) ? settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting) : "not written")}): "
+                // Linux CI, run 41642565541: neither wheel's write came (TODO(issue)); what the wheels reached, and the tool
+                // docks, which on macOS CI had moved the strip from under the point (run 41621106416).
+                + $"wheels the shell got {f.Shell.TabStripWheels} (the last: {f.Shell.LastTabStripWheel}), strip at {strip.TranslatePoint(default, f.Window)}, "
+                + $"under {over} before the wheels: {underBefore}; now: {Under(f, over)}; the tool docks: [{ToolDocks(f)}] (before the wheels: [{toolDocksBefore}])");
         await ShellFixture.PumpUntil(() => !panel.MultipleRows);
     }
 
