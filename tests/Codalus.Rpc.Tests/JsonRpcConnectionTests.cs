@@ -585,6 +585,16 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
         await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         gate.Set();
         await Task.WhenAll(held, third, echo, fourth, other, fifth).WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        // A notification's task ends once it's written, and WhenDispatchedAsync waits only for what the other side has
+        // read: v4, "other" and v5, written after the request, weren't read yet when it returned (Linux others, run
+        // 41586224697). So until the six have come, then for their handlers.
+        var until = DateTime.UtcNow + s_timeout;
+        while (received.Count < 6 && DateTime.UtcNow < until)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
         await _b.WhenDispatchedAsync();
 
         // v3 stays before the request that followed it; past "another doc"'s text, v5 can't replace v4.
