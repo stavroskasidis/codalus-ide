@@ -38,6 +38,28 @@ public sealed class ShellCollectionTests
     });
 
     [AvaloniaFact]
+    public void The_failure_lists_the_dispatchers_running_timers_by_what_their_ticks_call()
+    {
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+        timer.Tick += OnTick;
+        timer.Start();
+        try
+        {
+            Assert.Matches($@"(^|, )300000 ms: {System.Text.RegularExpressions.Regex.Escape(typeof(ShellCollectionTests).FullName!)}\.[^,]*{nameof(OnTick)}", DispatcherTimers());
+        }
+        finally
+        {
+            timer.Stop();
+        }
+
+        Assert.DoesNotContain(nameof(OnTick), DispatcherTimers(), StringComparison.Ordinal);
+
+        static void OnTick(object? sender, EventArgs e)
+        {
+        }
+    }
+
+    [AvaloniaFact]
     public async Task A_code_viewer_releases_its_grammar_when_its_window_closes()
     {
         // A tool window's viewer (Code Definition, an HTTP response), which its owner never releases: its grammar's
@@ -131,6 +153,7 @@ public sealed class ShellCollectionTests
             // What ran then, and whether the shell goes later (work that ends by itself) or never (something keeps it): on
             // the macOS runner this told the application menu's entries from the shell's own git (docs/ci-flakes.md).
             var children = ChildProcesses();
+            var timers = DispatcherTimers();
             var clock = System.Diagnostics.Stopwatch.StartNew();
             while (shell.IsAlive && clock.Elapsed < TimeSpan.FromSeconds(30))
             {
@@ -145,10 +168,33 @@ public sealed class ShellCollectionTests
             var holders = shell.IsAlive
                 ? "\nWhat holds a disposed shell: " + HeapRootPaths.Describe(typeof(ShellHost).FullName!, o => !o.ReadObjectField("_disposing").IsNull)
                 : string.Empty;
-            Assert.Fail($"The disposed shell is still reachable{(shell.IsAlive ? " 30 s later too" : $" (collected {clock.Elapsed.TotalSeconds:0.0} s later)")}. The test host's child processes then: {children}{holders}");
+            Assert.Fail($"The disposed shell is still reachable{(shell.IsAlive ? " 30 s later too" : $" (collected {clock.Elapsed.TotalSeconds:0.0} s later)")}. The test host's child processes then: {children}. "
+                + $"The dispatcher's running timers then: {timers}; 30 s later: {DispatcherTimers()}{holders}");
         }
 
         Assert.False(window.IsAlive, "The closed main window is still reachable.");
+    }
+
+    /// <summary>
+    /// The dispatcher's running timers, by what their ticks call (failure messages). A running timer holds what its handler
+    /// reaches until it ticks, and a test's dispatcher stops ticking at its end: every cause of this class's failures so far
+    /// was one (a debouncer, the plugins' batch of edits, a settings sync). Linux CI kept a shell 30 s, past any of those
+    /// (PR #291's run 41616893942). Read through reflection: Avalonia doesn't list them.
+    /// </summary>
+    internal static string DispatcherTimers()
+    {
+        const System.Reflection.BindingFlags Fields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var dispatcher = Avalonia.Threading.Dispatcher.UIThread;
+        if (typeof(Avalonia.Threading.Dispatcher).GetFields(Fields).Select(f => f.GetValue(dispatcher)).OfType<IEnumerable<Avalonia.Threading.DispatcherTimer>>().FirstOrDefault() is not { } timers)
+        {
+            return "unknown (the dispatcher has no list of timers)";
+        }
+
+        var tick = typeof(Avalonia.Threading.DispatcherTimer).GetField(nameof(Avalonia.Threading.DispatcherTimer.Tick), Fields);
+        var running = timers.ToList();
+        return running.Count == 0
+            ? "none"
+            : string.Join(", ", running.Select(t => $"{t.Interval.TotalMilliseconds:0} ms: {string.Join(" + ", ((tick?.GetValue(t) as Delegate)?.GetInvocationList() ?? []).Select(d => $"{d.Method.DeclaringType?.FullName}.{d.Method.Name}"))}"));
     }
 
     /// <summary>The test host's child processes, with their command lines on Unix.</summary>
