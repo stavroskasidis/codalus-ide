@@ -229,7 +229,8 @@ public sealed class TreeRowsListAutomationPeer(TreeRowsList owner) : ListBoxAuto
 /// A tree item for a row of a <see cref="TreeRowsList"/> (M57). Its name is the row's (<c>AutomationProperties.Name</c>;
 /// on macOS a folder's says its state too, <see cref="TreeRowsList.NamesCarryState"/>); a folder has the ExpandCollapse
 /// pattern, whose Expand and Collapse are the list's <see cref="TreeRowsList.ExpandRow"/>, and whose state follows the row
-/// (a file has none: Avalonia's AT-SPI calls anything with the pattern expandable). Its <see cref="Level"/>,
+/// (a file has none: Avalonia's AT-SPI calls anything with the pattern expandable; a folder that loses its children loses
+/// it, and raises no change of expansion). Its <see cref="Level"/>,
 /// <see cref="PositionInSet"/> and <see cref="SizeOfSet"/> come from the flattened rows; the container is recycled as the
 /// list scrolls, so it reads the row it shows now.
 /// </summary>
@@ -339,7 +340,14 @@ public sealed class TreeRowItemAutomationPeer : ListItemAutomationPeer, IExpandC
         {
             var old = _reported;
             _reported = state;
-            RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty, old, state);
+
+            // The expansion is the pattern's: raised only while the row has it. A folder that lost its children (a project
+            // unloaded) is a leaf with no pattern, and Avalonia.Native reads the pattern's state as it's raised, without
+            // asking whether the peer has it: an exception in a native callback, which ended the app on macOS.
+            if (state != ExpandCollapseState.LeafNode)
+            {
+                RaisePropertyChangedEvent(ExpandCollapsePatternIdentifiers.ExpandCollapseStateProperty, old, state);
+            }
             if (List is { NamesCarryState: true })
             {
                 var name = base.GetNameCore();
