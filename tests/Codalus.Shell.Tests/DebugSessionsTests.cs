@@ -152,11 +152,44 @@ public sealed class DebugSessionsTests
         await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("debugCanDetach"), true));
         Assert.True(f.Shell.Workbench.Commands.IsEnabled("debug.detachAll"));
 
+        // After Detach All the program never ended on Linux arm64 under the Codalus debugger (PR #289's run
+        // 41635351447), with nothing said: the failure says whether it's still there and how (stopped, still traced), and
+        // what the terminal and the Debug Console show, to tell a program left stopped from an exit the terminal missed.
+        var id = f.Shell.Debugger.Processes is [{ Id: { } pid }] ? pid : (int?)null;
         await f.RunAsync("debug.detachAll");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
-        await ShellFixture.PumpUntil(() => session.ExitCode is not null, seconds: 120);
+        await ShellFixture.PumpUntil(() => session.ExitCode is not null, seconds: 120,
+            describe: () => $"the program ({id}) after Detach All: {ProcessState(id)}; terminal:\n{Screen()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
         Assert.True(session.ExitCode == 15, $"exit code {session.ExitCode}; terminal:\n{Screen()}\nDebug Console:\n{f.Shell.DebugLog.GetText()}");
         Assert.Contains("done", Screen(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Whether a process is still there, and on Linux its state and tracer (<c>/proc/[pid]/status</c>): "t (tracing stop)"
+    /// or a tracer left is a program a debugger didn't let go of (failure messages).
+    /// </summary>
+    private static string ProcessState(int? id)
+    {
+        if (id is not { } pid)
+        {
+            return "no process id";
+        }
+
+        try
+        {
+            if (OperatingSystem.IsLinux())
+            {
+                var status = File.ReadAllLines($"/proc/{pid}/status");
+                return string.Join(", ", status.Where(l => l.StartsWith("State:", StringComparison.Ordinal) || l.StartsWith("TracerPid:", StringComparison.Ordinal)).Select(l => l.Replace('\t', ' ')));
+            }
+
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return process.HasExited ? "exited" : "running";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            return "gone (" + ex.GetType().Name + ")";
+        }
     }
 
     [AvaloniaFact]
