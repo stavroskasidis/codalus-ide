@@ -174,13 +174,22 @@ public sealed class DocumentTabOptionsTests
         // Down, then up before the down's write has landed (a trackpad's flick and back): the up wins. The settings' writes
         // wait while the test holds their lock (on Windows a small write often lands before the wheel's handler returns).
         var settings = f.Shell.Workbench.Settings;
+        // Every wheel event and what the shell did with each wheel: the up's write never landed on Linux CI (PR #281's run
+        // 41608511009, the setting stayed true), whether the up didn't reach the shell or its write lost isn't known yet.
+        var wheels = new List<string>();
+        strip.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"strip {e.Delta.Y} handled {e.Handled}"), RoutingStrategies.Tunnel, handledEventsToo: true);
+        f.Window.AddHandler(InputElement.PointerWheelChangedEvent, (_, e) => wheels.Add($"{e.Delta.Y} on {Chain(e.Source as Visual)} handled {e.Handled}"), RoutingStrategies.Bubble, handledEventsToo: true);
         var writes = WriteLock(settings);
         await writes.WaitAsync(TestContext.Current.CancellationToken);
         f.Window.MouseWheel(over, new Vector(0, -1));
+        var down = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
         f.Window.MouseWheel(over, new Vector(0, 1));
+        var up = $"{f.Shell.TabStripWheels} wheel(s), the last: {f.Shell.LastTabStripWheel}";
         writes.Release();
         await ShellFixture.PumpUntil(() => settings.IsModified(ShellHost.TabsInMultipleRowsSetting) && !settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting),
-            describe: () => $"the up's write (the setting {(settings.IsModified(ShellHost.TabsInMultipleRowsSetting) ? settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting) : "not written")})");
+            describe: () => $"the up's write (the setting {(settings.IsModified(ShellHost.TabsInMultipleRowsSetting) ? settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting) : "not written")}); "
+                + $"the shell after the down: {down}; after the up: {up}; now: {f.Shell.TabStripWheels}, the last: {f.Shell.LastTabStripWheel}; "
+                + $"the wheel events: [{string.Join("; ", wheels)}]; the user settings file: {(File.Exists(settings.UserFile) ? ShellFixture.ReadText(settings.UserFile) : "none")}");
         await ShellFixture.PumpUntil(() => !panel.MultipleRows);
     }
 
