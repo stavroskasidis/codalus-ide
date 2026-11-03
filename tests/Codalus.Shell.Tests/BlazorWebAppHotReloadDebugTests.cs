@@ -71,7 +71,10 @@ public sealed class BlazorWebAppHotReloadDebugTests
 
     private static string Diagnostics(ShellFixture f) =>
         $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}"
-        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty) + ".\n"
+        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty)
+        // What the status bar says of the last edit: the page's edit was never applied on macOS CI (run 41621106416; TODO(issue):
+        // what the browser refresh server sent and got back for each edit).
+        + $"; the status bar: '{f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).SingleOrDefault(i => i.Id == "codalus.hotReload")?.Text}'.\n"
         + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
 
     /// <summary>

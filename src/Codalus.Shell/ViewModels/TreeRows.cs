@@ -17,6 +17,17 @@ public interface ITreeRow
     bool IsExpanded { get; }
 }
 
+/// <summary>The sizes every tree shares.</summary>
+public static class TreeMetrics
+{
+    /// <summary>
+    /// How far each level is indented: 12 px, the classic IDE's, so a deep tree stays compact horizontally. Every tree
+    /// uses it: the flattened ones (<see cref="ITreeRow"/>), the <c>TreeView</c>s (its <c>TreeViewItemIndent</c>), the
+    /// variable windows, the property grid, the result lists' groups and the WCF Test Client's and profiler's trees.
+    /// </summary>
+    public const double IndentPerLevel = 12;
+}
+
 /// <summary>What owns a tree's rows: it shows or hides the rows under one when it expands or collapses.</summary>
 public interface ITreeRowsOwner
 {

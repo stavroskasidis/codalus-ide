@@ -800,10 +800,20 @@ public sealed class AcpAgentTests : IAsyncDisposable
             Assert.True(client.CanLogout);
             var status = await client.WaitForAuthStatusAsync(TimeSpan.FromSeconds(10), Ct);
             Assert.Equal(("subscription", "Claude Max", "tester@example.com"), (status!.Kind, status.Label, status.Detail));
-            var changed = new TaskCompletionSource<AcpAuthStatus>();
-            client.AuthStatusChanged += (_, s) => changed.TrySetResult(s);
+            // The logout's push says signed out. The handler waits for that one: the first push completes the wait above
+            // before it raises the event, so a handler added here can still hear that first push, signed in (Linux CI,
+            // run 41700416710).
+            var signedOut = new TaskCompletionSource<AcpAuthStatus>();
+            client.AuthStatusChanged += (_, s) =>
+            {
+                if (s.IsSignedOut)
+                {
+                    signedOut.TrySetResult(s);
+                }
+            };
             await client.LogoutAsync(Ct);
-            Assert.True((await changed.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct)).IsSignedOut);
+            await signedOut.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+            Assert.True(client.AuthStatus!.IsSignedOut);
             Assert.Single(Received("logout"));
         }
 
