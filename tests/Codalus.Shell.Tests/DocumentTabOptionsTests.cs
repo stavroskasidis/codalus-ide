@@ -101,8 +101,18 @@ public sealed class DocumentTabOptionsTests
         var oneRow = panel.Bounds.Height;
         Assert.Contains(Tabs(panel), t => !Shown(t, panel));
 
+        // Over the tabs, read just before each wheel from a rendered frame (what the wheel's hit test reads): a tool window
+        // that docks at the left while the test runs moves the strip right, and a point read earlier is then over the
+        // tool window (Windows and macOS CI, runs 41518626383, 41524121911, 41554892222 and 41581838078: "wheels the shell
+        // got 1", the point left of the strip).
+        Point Over()
+        {
+            ShellFixture.RenderFrame(f.Window);
+            return strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+        }
+
         // Wheel down over the tabs: multiple rows, for every group, saved.
-        var over = strip.TranslatePoint(new Point(20, strip.Bounds.Height / 2), f.Window)!.Value;
+        var over = Over();
         f.Window.MouseWheel(over, new Vector(0, -1));
         await ShellFixture.PumpUntil(() => panel.MultipleRows);
         Assert.True(f.Shell.Workbench.Settings.GetBoolean(ShellHost.TabsInMultipleRowsSetting));
@@ -123,8 +133,8 @@ public sealed class DocumentTabOptionsTests
             frame!.Save(Path.Combine(snapshots, "document-tabs-multiple-rows.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
         }
 
-        // Up: one row again. (Windows and macOS CI, runs 41518626383 and 41524121911: this wheel left the rows on, while it
-        // passes on Linux; the failure says what the wheel reached and did.)
+        // Up: one row again.
+        over = Over();
         var before = Under(f, over);
         f.Window.MouseWheel(over, new Vector(0, 1));
         await ShellFixture.PumpUntil(() => !panel.MultipleRows, describe: () =>
@@ -139,6 +149,7 @@ public sealed class DocumentTabOptionsTests
         // Turned off, the wheel leaves the rows alone.
         await f.RunAsync("workbench.tabs.toggleMultipleRowsWithMouseWheel");
         await ShellFixture.PumpUntil(() => !f.Shell.Workbench.Settings.GetBoolean(ShellHost.MultipleRowsWithMouseWheelSetting, true));
+        over = Over();
         f.Window.MouseWheel(over, new Vector(0, -1));
         ShellFixture.Pump();
         Assert.False(panel.MultipleRows);
