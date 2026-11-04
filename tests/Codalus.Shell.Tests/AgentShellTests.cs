@@ -83,6 +83,6 @@ public sealed class AgentShellTests
         await ShellFixture.PumpUntil(() => f.Shell.IsMcpServerListening);
         Assert.Equal("No solution is open.", await client.CallAsync("get_solution", empty.RootElement, CancellationToken.None));
         Assert.Equal("No errors or warnings.", await client.CallAsync("get_diagnostics", empty.RootElement, CancellationToken.None));
-        Assert.Contains("MCP server: get_diagnostics", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+        Assert.Contains("IDE tool (codalus mcp): get_diagnostics", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
     }
 }

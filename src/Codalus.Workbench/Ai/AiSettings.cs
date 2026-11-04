@@ -99,6 +99,35 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 21,
         },
+        SettingDescriptor.Create(Ide.IdeTools.ActionsSetting, "\"askOncePerSession\"", SettingType.String, source) with
+        {
+            Title = "Agent IDE Actions",
+            Category = "AI",
+            Description = "How an agent's IDE actions are approved: building, running tests, running or debugging the program, and driving the web app's browser (AI Chat's agents and codalus mcp). Reading code and the IDE's state never asks; edits always go through the preview and shell commands always ask. Read from your user settings only.",
+            Enum = ["askOncePerSession", "ask", "allow"],
+            EnumDescriptions =
+            [
+                "Ask at the first action of a chat, with Allow for This Chat; then run the rest of that chat's actions.",
+                "Ask before every action.",
+                "Run actions without asking (trusted folders only).",
+            ],
+            Scope = SettingScope.User,
+            Order = 22,
+        },
+        SettingDescriptor.Create(AiChat.DensitySetting, "\"compact\"", SettingType.String, source) with
+        {
+            Title = "AI Chat Density",
+            Category = "AI",
+            Description = "How AI Chat shows an agent's work: compact folds each answer's steps into one summary line and its thinking into a short line (each opens on a click); detailed shows every step.",
+            Enum = ["compact", "detailed"],
+            EnumDescriptions =
+            [
+                "One summary line per answer for its steps, and a short line for its thinking.",
+                "Every step, with its details, and the thinking.",
+            ],
+            Scope = SettingScope.User,
+            Order = 26,
+        },
         SettingDescriptor.Create(Mcp.McpServers.ServersSetting, "{}", SettingType.Object, source) with
         {
             Title = "MCP Servers",
@@ -127,7 +156,7 @@ public static class AiSettings
         {
             Title = "MCP Server",
             Category = "AI",
-            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the solution, the open files, the Error List and the build output; a build asks you first. For your user only; off by default.",
+            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the IDE's tools for code intelligence (symbols, references, callers, the Error List), builds, tests, running and debugging; actions follow Agent IDE Actions. For your user only; off by default.",
             Scope = SettingScope.User,
             Order = 23,
         },

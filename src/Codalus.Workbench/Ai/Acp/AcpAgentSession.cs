@@ -696,6 +696,12 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         _ => $"[{block.Type}]",
     };
 
+    /// <summary>
+    /// A tool call's title or raw input with its secrets replaced: an agent's title is often the command it runs, which
+    /// can carry a token the user typed or the agent read (a <c>$pat = "…"</c> line), and it shows in the chat and the log.
+    /// </summary>
+    private string? Redacted(string? text) => text is null ? null : SecretRedactor.Redact(text, Config.SecretValues.Values).Text;
+
     private void OnToolCall(AiChatTurn turn, AcpToolCall call)
     {
         var locations = call.Locations?.Select(l => new AiAgentLocation(l.Path, l.Line is { } line ? Math.Max(1, line) : null)).ToList();
@@ -705,7 +711,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         var existing = turn.FindStep(call.ToolCallId);
         if (existing is null)
         {
-            var title = call.Title ?? call.Kind ?? "tool call";
+            var title = Redacted(call.Title) ?? call.Kind ?? "tool call";
             var step = new AiAgentStep(call.Kind ?? "other", title, null)
             {
                 Id = call.ToolCallId,
@@ -726,7 +732,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             {
                 Tool = call.Kind ?? step.Tool,
                 Kind = call.Kind ?? step.Kind,
-                Target = call.Title ?? step.Target,
+                Target = Redacted(call.Title) ?? step.Target,
                 Status = call.Status ?? step.Status,
                 Locations = locations ?? step.Locations,
                 Diffs = diffs ?? step.Diffs,
@@ -942,9 +948,9 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
         // Allow always isn't offered (ADR 0063: no always-allow yet).
         var offered = options.Where(o => o.Kind is "allow_once" or "reject_once" or "reject_always").ToList();
-        var title = call.Title ?? CurrentTurn()?.FindStep(call.ToolCallId)?.Target ?? call.Kind ?? "a tool call";
+        var title = Redacted(call.Title) ?? CurrentTurn()?.FindStep(call.ToolCallId)?.Target ?? call.Kind ?? "a tool call";
         var diffs = call.Content?.Where(c => c.Type == "diff" && c.Path is { Length: > 0 }).Select(c => new AiStepDiff(c.Path!, c.OldText, c.NewText ?? "", Reviewed: false)).ToList() ?? [];
-        var raw = call.RawInput is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } input ? Pretty(input) : null;
+        var raw = call.RawInput is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } input ? Redacted(Pretty(input)) : null;
         _ai.LogAgent(Name, $"{AcpMethods.SessionRequestPermission} {call.Kind ?? "other"} \"{Short(title)}\"");
 
         var turnToken = TurnToken;

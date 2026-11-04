@@ -30,7 +30,9 @@ public static partial class SecretRedactor
             count++;
             return Placeholder;
         });
+        result = AuthorizationHeader().Replace(result, Value);
         result = QuotedValue().Replace(result, Value);
+        result = PatValue().Replace(result, Value);
         result = PlainValue().Replace(result, Value);
         return (result, count);
 
@@ -84,10 +86,24 @@ public static partial class SecretRedactor
     private static partial Regex PrivateKey();
 
     // GitHub (ghp_, gho_, ghu_, ghs_, ghr_, github_pat_), GitLab (glpat-), OpenAI and Anthropic (sk-…), AWS access keys,
-    // Slack (xox?-), Azure storage account keys in connection strings, Google API keys, JWTs.
+    // Slack (xox?-), Azure storage account keys in connection strings, Google API keys, JWTs, and Azure DevOps personal
+    // access tokens: the older 52 characters of lowercase base32 (with a digit, so a long lowercase word stays) and the
+    // newer 84 with "AZDO" at the 77th.
     [GeneratedRegex(
-        @"\b(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|glpat-[A-Za-z0-9_\-]{20,}|sk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}|A[KS]IA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35}|eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,})")]
+        @"\b(gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|glpat-[A-Za-z0-9_\-]{20,}|sk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}|A[KS]IA[0-9A-Z]{16}|xox[abposr]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35}|eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}|(?=[a-z]*[2-7])[a-z2-7]{52}|[A-Za-z0-9]{76}AZDO[A-Za-z0-9]{4})\b")]
     private static partial Regex Tokens();
+
+    // An HTTP Authorization value: "Basic <base64>" or "Bearer <token>" with a digit or a base64 sign in it, so prose
+    // ("Basic authentication") stays.
+    [GeneratedRegex(@"\b(?:Basic|Bearer)\s+(?<value>(?=[A-Za-z0-9._~+/\-]*[0-9+/=])[A-Za-z0-9._~+/\-]{16,}=*)")]
+    private static partial Regex AuthorizationHeader();
+
+    // A personal access token by its name: PAT, $pat, AZURE_DEVOPS_PAT, my-pat, then = or :, then a quoted literal. Only
+    // "pat" as a whole name or after a separator, so "compat" stays.
+    [GeneratedRegex(
+        @"(?<![A-Za-z0-9])\$?(?:[\w.\-]*[_.\-])?pat[""']?\s*(?:=|:)\s*(?<quote>[""'])(?<value>[^""'\r\n]+)\k<quote>",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex PatValue();
 
     // A key that names a secret, then = or :, then a quoted literal: "password": "x", password = "x", Password='x'.
     [GeneratedRegex(

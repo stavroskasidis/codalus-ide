@@ -79,7 +79,12 @@ internal static partial class Program
             var notListening = options.AgentSession is { Length: > 0 } ? "The AI Chat session of Codalus IDE that started this agent has ended." : null;
             var input = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
             var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(input, output, (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallAsync(pipe, tool, arguments, notListening, ct));
+            // The tools are the running IDE's (its plugins' too, ADR 0092); the built-in list when it doesn't answer.
+            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(
+                input,
+                output,
+                ct => Codalus.Workbench.Ai.Mcp.McpBridge.ListToolsAsync(pipe, notListening, ct),
+                (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallToolAsync(pipe, tool, arguments, notListening, ct));
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }

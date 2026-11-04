@@ -39,8 +39,14 @@ public sealed record AgentToolResult(string Text, bool IsError = false, string? 
     public static AgentToolResult Error(string message) => new(message, IsError: true, Summary: message);
 }
 
-/// <summary>A tool that isn't built in (an MCP server's): its definition, and how to call it.</summary>
-public sealed record ExternalAgentTool(ChatToolDto Definition, string Source, Func<JsonElement, CancellationToken, Task<string>> Call);
+/// <summary>
+/// A tool that isn't one of agent mode's own (an MCP server's, or the IDE's, ADR 0092): its definition, and how to call
+/// it. <see cref="ApprovesItself"/>: the IDE's tool asks by itself (<c>ai.agent.ideActions</c>), so agent mode doesn't.
+/// </summary>
+public sealed record ExternalAgentTool(ChatToolDto Definition, string Source, Func<JsonElement, CancellationToken, Task<string>> Call)
+{
+    public bool ApprovesItself { get; init; }
+}
 
 /// <summary>
 /// Agent mode's tools (M28c, ADR 0063). Reading tools run without asking but only inside the workspace and never on
@@ -62,6 +68,12 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
     public TimeSpan CommandTimeout { get; init; } = TimeSpan.FromMinutes(2);
 
     public string Root => _root;
+
+    /// <summary>Agent mode's own tools' names; the IDE's tools of the same names (ADR 0092) are left out for it.</summary>
+    public static IReadOnlySet<string> OwnToolNames { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "read_file", "list_files", "search_text", "get_diagnostics", "get_build_output", "build", "edit_file", "create_file", "run_command",
+    };
 
     /// <summary>The tools offered to the model.</summary>
     public IReadOnlyList<ChatToolDto> Definitions =>
@@ -359,7 +371,7 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
 
     private async Task<AgentToolResult> ExternalAsync(ExternalAgentTool tool, JsonElement args, CancellationToken cancellationToken)
     {
-        if (!await host.ApproveAsync($"Call {tool.Definition.Name}?", $"The AI agent wants to call the tool '{tool.Definition.Name}' of the MCP server '{tool.Source}' with:", [args.GetRawText()], cancellationToken).ConfigureAwait(false))
+        if (!tool.ApprovesItself && !await host.ApproveAsync($"Call {tool.Definition.Name}?", $"The AI agent wants to call the tool '{tool.Definition.Name}' of the MCP server '{tool.Source}' with:", [args.GetRawText()], cancellationToken).ConfigureAwait(false))
         {
             return new AgentToolResult("The user didn't allow the call.", IsError: true, Summary: "not allowed");
         }

@@ -1,30 +1,46 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using Codalus.Workbench.Ai.Ide;
 
 namespace Codalus.Workbench.Ai.Mcp;
 
 /// <summary>
-/// The MCP server <c>codalus mcp</c> runs for an external agent (M28c, ADR 0063): newline-delimited JSON-RPC 2.0 on
-/// standard input and output. It offers the IDE's tools (<see cref="Tools"/>) and relays each call to the running IDE
-/// through <see cref="McpBridge"/>; without one, a call answers with what to do.
+/// The MCP server <c>codalus mcp</c> runs for an external agent (M28c, ADR 0063, ADR 0092): newline-delimited JSON-RPC 2.0
+/// on standard input and output. It lists the IDE's tools (<see cref="IdeTools"/>, and the plugins' tools, asked of the
+/// running IDE) and relays each call to it through <see cref="McpBridge"/>; without one, a call answers with what to do.
+/// Its <c>initialize</c> answer carries <see cref="IdeTools.Instructions"/>, so an agent prefers the IDE's tools to grep.
 /// </summary>
-public sealed class McpStdioServer(TextReader input, TextWriter output, Func<string, JsonElement, CancellationToken, Task<string>> call)
+public sealed class McpStdioServer
 {
-    /// <summary>The tools: name, description, input schema.</summary>
-    public static readonly IReadOnlyList<(string Name, string Description, string Schema)> Tools =
-    [
-        ("get_solution", "The solution open in Codalus IDE: its path and its projects, with their target frameworks, output types and whether they are test projects.", """{"type":"object","properties":{}}"""),
-        ("get_open_files", "The files open in Codalus IDE's editor, the active one, and its selected text.", """{"type":"object","properties":{}}"""),
-        ("get_diagnostics", "The errors and warnings in Codalus IDE's Error List, of one file or all.", """{"type":"object","properties":{"path":{"type":"string","description":"A file path; empty for all."}}}"""),
-        ("get_build_output", "The end of the last build's output in Codalus IDE.", """{"type":"object","properties":{}}"""),
-        ("build", "Build the solution in Codalus IDE (the user approves it there first) and return the result with its errors and warnings.", """{"type":"object","properties":{}}"""),
-    ];
+    private readonly TextReader _input;
+    private readonly TextWriter _output;
+    private readonly Func<CancellationToken, Task<IReadOnlyList<IdeToolDefinition>>> _list;
+    private readonly Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> _call;
+    private IReadOnlyList<IdeToolDefinition> _listed = IdeTools.BuiltIn;
+
+    /// <summary>A server whose tools are the built-in ones and whose calls answer text (tests, and older callers).</summary>
+    public McpStdioServer(TextReader input, TextWriter output, Func<string, JsonElement, CancellationToken, Task<string>> call)
+        : this(input, output, _ => Task.FromResult(IdeTools.BuiltIn), async (tool, args, ct) => new IdeToolResult(await call(tool, args, ct).ConfigureAwait(false)))
+    {
+    }
+
+    /// <summary>A server that asks <paramref name="list"/> for its tools (the IDE's, with its plugins') and relays calls to <paramref name="call"/>.</summary>
+    public McpStdioServer(TextReader input, TextWriter output, Func<CancellationToken, Task<IReadOnlyList<IdeToolDefinition>>> list, Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> call)
+    {
+        _input = input;
+        _output = output;
+        _list = list;
+        _call = call;
+    }
+
+    /// <summary>The built-in tools: name, description, input schema.</summary>
+    public static IReadOnlyList<(string Name, string Description, string Schema)> Tools { get; } = [.. IdeTools.BuiltIn.Select(t => (t.Name, t.Description, t.Schema))];
 
     /// <summary>Answers requests until the input ends.</summary>
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        while (await input.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        while (await _input.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
         {
             if (line.Trim().Length == 0)
             {
@@ -64,22 +80,33 @@ public sealed class McpStdioServer(TextReader input, TextWriter output, Func<str
                         r.WriteString("name", "codalus");
                         r.WriteString("version", typeof(McpStdioServer).Assembly.GetName().Version?.ToString() ?? "0");
                         r.WriteEndObject();
+                        r.WriteString("instructions", IdeTools.Instructions);
                     })).ConfigureAwait(false);
                     break;
                 case "ping":
                     await WriteAsync(w => Result(w, id, _ => { })).ConfigureAwait(false);
                     break;
                 case "tools/list":
+                    try
+                    {
+                        // The running IDE's list (its plugins' tools too); the built-in list when it doesn't answer.
+                        _listed = await _list(cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex) when (ex is McpException or IOException or TimeoutException or JsonException)
+                    {
+                        _listed = IdeTools.BuiltIn;
+                    }
+
                     await WriteAsync(w => Result(w, id, r =>
                     {
                         r.WriteStartArray("tools");
-                        foreach (var (name, description, schema) in Tools)
+                        foreach (var tool in _listed)
                         {
                             r.WriteStartObject();
-                            r.WriteString("name", name);
-                            r.WriteString("description", description);
+                            r.WriteString("name", tool.Name);
+                            r.WriteString("description", tool.Description);
                             r.WritePropertyName("inputSchema");
-                            using var document = JsonDocument.Parse(schema);
+                            using var document = JsonDocument.Parse(tool.Schema);
                             document.RootElement.WriteTo(r);
                             r.WriteEndObject();
                         }
@@ -90,17 +117,16 @@ public sealed class McpStdioServer(TextReader input, TextWriter output, Func<str
                 case "tools/call":
                     var tool = args.ValueKind == JsonValueKind.Object && args.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
                     var arguments = args.ValueKind == JsonValueKind.Object && args.TryGetProperty("arguments", out var a) ? a : default;
-                    string text;
-                    var isError = false;
+                    IdeToolResult result;
                     try
                     {
-                        text = Tools.Any(t => t.Name == tool) ? await call(tool, arguments, cancellationToken).ConfigureAwait(false) : $"There is no tool '{tool}'.";
-                        isError = !Tools.Any(t => t.Name == tool);
+                        // Every name is relayed, a plugin's tool added since the list was read too: the IDE knows its
+                        // tools and answers an unknown one with an error.
+                        result = await _call(tool, arguments, cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is McpException or IOException or TimeoutException)
                     {
-                        text = ex.Message;
-                        isError = true;
+                        result = IdeToolResult.Error(ex.Message);
                     }
 
                     await WriteAsync(w => Result(w, id, r =>
@@ -108,10 +134,19 @@ public sealed class McpStdioServer(TextReader input, TextWriter output, Func<str
                         r.WriteStartArray("content");
                         r.WriteStartObject();
                         r.WriteString("type", "text");
-                        r.WriteString("text", text);
+                        r.WriteString("text", result.Text);
                         r.WriteEndObject();
+                        foreach (var image in result.Images)
+                        {
+                            r.WriteStartObject();
+                            r.WriteString("type", "image");
+                            r.WriteString("data", image.Data);
+                            r.WriteString("mimeType", image.MimeType);
+                            r.WriteEndObject();
+                        }
+
                         r.WriteEndArray();
-                        r.WriteBoolean("isError", isError);
+                        r.WriteBoolean("isError", result.IsError);
                     })).ConfigureAwait(false);
                     break;
                 default:
@@ -129,8 +164,8 @@ public sealed class McpStdioServer(TextReader input, TextWriter output, Func<str
             write(writer);
         }
 
-        await output.WriteLineAsync(Encoding.UTF8.GetString(buffer.ToArray())).ConfigureAwait(false);
-        await output.FlushAsync().ConfigureAwait(false);
+        await _output.WriteLineAsync(Encoding.UTF8.GetString(buffer.ToArray())).ConfigureAwait(false);
+        await _output.FlushAsync().ConfigureAwait(false);
     }
 
     private static void Result(Utf8JsonWriter w, JsonElement id, Action<Utf8JsonWriter> result)
@@ -170,16 +205,20 @@ public sealed class McpStdioServer(TextReader input, TextWriter output, Func<str
 /// <summary>
 /// The pipe between <c>codalus mcp</c> and the running IDE (M28c, ADR 0063): for the current user only, open only while
 /// <c>ai.mcpServer.enabled</c> is on. A call is one line of JSON, <c>{"tool": …, "arguments": …}</c>, and the answer one
-/// line, <c>{"text": …}</c> or <c>{"error": …}</c>.
+/// line, <c>{"text": …, "isError"?: true, "images"?: [{"data", "mimeType"}]}</c> or <c>{"error": …}</c>. The tool
+/// <see cref="ListToolsCall"/> answers the IDE's tools as <see cref="IdeTools.ToJson"/>'s array (ADR 0092).
 /// </summary>
 public sealed class McpBridge : IDisposable
 {
     private static readonly TimeSpan s_connectTimeout = TimeSpan.FromSeconds(2);
     private readonly CancellationTokenSource _stop = new();
     private readonly string _pipeName;
-    private readonly Func<string, JsonElement, CancellationToken, Task<string>> _handler;
+    private readonly Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> _handler;
 
-    private McpBridge(string pipeName, Func<string, JsonElement, CancellationToken, Task<string>> handler)
+    /// <summary>The call that lists the IDE's tools (its plugins' too) instead of calling one.</summary>
+    public const string ListToolsCall = "$tools/list";
+
+    private McpBridge(string pipeName, Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> handler)
     {
         _pipeName = pipeName;
         _handler = handler;
@@ -203,14 +242,26 @@ public sealed class McpBridge : IDisposable
     public static string NewSessionToken() => Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(6)).ToLowerInvariant();
 
     /// <summary>Answers calls with <paramref name="handler"/> (on a background thread) until disposed.</summary>
-    public static McpBridge Listen(string pipeName, Func<string, JsonElement, CancellationToken, Task<string>> handler) => new(pipeName, handler);
+    public static McpBridge Listen(string pipeName, Func<string, JsonElement, CancellationToken, Task<string>> handler) =>
+        new(pipeName, async (tool, args, ct) => new IdeToolResult(await handler(tool, args, ct).ConfigureAwait(false)));
+
+    /// <summary>Answers calls with results that may be errors or carry images.</summary>
+    public static McpBridge Listen(string pipeName, Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> handler) => new(pipeName, handler);
+
+    /// <summary>The running IDE's tools; throws <see cref="McpException"/> when none answers.</summary>
+    public static async Task<IReadOnlyList<IdeToolDefinition>> ListToolsAsync(string pipeName, string? notListening, CancellationToken cancellationToken) =>
+        IdeTools.FromJson((await CallToolAsync(pipeName, ListToolsCall, default, notListening, cancellationToken).ConfigureAwait(false)).Text);
 
     /// <summary>Sends a call to the running IDE; throws <see cref="McpException"/> when none answers or the call fails.</summary>
     public static Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, CancellationToken cancellationToken) =>
         CallAsync(pipeName, tool, arguments, null, cancellationToken);
 
     /// <summary>A call, with what to say when nobody listens on the pipe (an agent's session that ended).</summary>
-    public static async Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, string? notListening, CancellationToken cancellationToken)
+    public static async Task<string> CallAsync(string pipeName, string tool, JsonElement arguments, string? notListening, CancellationToken cancellationToken) =>
+        (await CallToolAsync(pipeName, tool, arguments, notListening, cancellationToken).ConfigureAwait(false)).Text;
+
+    /// <summary>A call whose result keeps whether it failed and its images.</summary>
+    public static async Task<IdeToolResult> CallToolAsync(string pipeName, string tool, JsonElement arguments, string? notListening, CancellationToken cancellationToken)
     {
         try
         {
@@ -231,8 +282,16 @@ public sealed class McpBridge : IDisposable
             await writer.WriteLineAsync(Encoding.UTF8.GetString(buffer.ToArray())).ConfigureAwait(false);
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) ?? throw new McpException("Codalus IDE closed the connection.");
             using var answer = JsonDocument.Parse(line);
-            return answer.RootElement.TryGetProperty("error", out var error) ? throw new McpException(error.GetString() ?? "The call failed.")
-                : answer.RootElement.TryGetProperty("text", out var text) ? text.GetString() ?? "" : "";
+            var root = answer.RootElement;
+            if (root.TryGetProperty("error", out var error))
+            {
+                throw new McpException(error.GetString() ?? "The call failed.");
+            }
+
+            var images = root.TryGetProperty("images", out var list) && list.ValueKind == JsonValueKind.Array
+                ? [.. list.EnumerateArray().Select(i => new IdeToolImage(i.GetProperty("data").GetString() ?? "", i.GetProperty("mimeType").GetString() ?? "image/png"))]
+                : Array.Empty<IdeToolImage>();
+            return new IdeToolResult(root.TryGetProperty("text", out var text) ? text.GetString() ?? "" : "", root.TryGetProperty("isError", out var e) && e.ValueKind == JsonValueKind.True) { Images = images };
         }
         catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
@@ -294,14 +353,14 @@ public sealed class McpBridge : IDisposable
                     return;
                 }
 
-                string? text = null;
+                IdeToolResult? result = null;
                 string? error = null;
                 try
                 {
                     using var request = JsonDocument.Parse(line);
                     var tool = request.RootElement.TryGetProperty("tool", out var t) ? t.GetString() ?? "" : "";
                     var arguments = request.RootElement.TryGetProperty("arguments", out var a) ? a.Clone() : default;
-                    text = await _handler(tool, arguments, _stop.Token).ConfigureAwait(false);
+                    result = await _handler(tool, arguments, _stop.Token).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is JsonException or McpException or InvalidOperationException)
                 {
@@ -318,7 +377,25 @@ public sealed class McpBridge : IDisposable
                     }
                     else
                     {
-                        json.WriteString("text", text);
+                        json.WriteString("text", result?.Text);
+                        if (result is { IsError: true })
+                        {
+                            json.WriteBoolean("isError", true);
+                        }
+
+                        if (result is { Images.Count: > 0 })
+                        {
+                            json.WriteStartArray("images");
+                            foreach (var image in result.Images)
+                            {
+                                json.WriteStartObject();
+                                json.WriteString("data", image.Data);
+                                json.WriteString("mimeType", image.MimeType);
+                                json.WriteEndObject();
+                            }
+
+                            json.WriteEndArray();
+                        }
                     }
 
                     json.WriteEndObject();
