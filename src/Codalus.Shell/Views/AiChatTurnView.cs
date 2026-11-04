@@ -158,6 +158,7 @@ internal sealed class AiChatTurnView : StackPanel
             MinHeight = 0,
         };
         toggle.Classes.Add("toolbar");
+        toggle.Classes.Add("disclosure");
         toggle.Classes.Add("small");
         toggle.Classes.Add("muted");
         toggle.IsCheckedChanged += (_, _) => chevron.RenderTransform = toggle.IsChecked == true ? new RotateTransform(90) : null;

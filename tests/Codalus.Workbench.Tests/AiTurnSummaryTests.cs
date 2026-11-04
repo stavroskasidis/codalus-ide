@@ -37,6 +37,10 @@ public sealed class AiTurnSummaryTests
             new AiAgentStep("browser_screenshot", "", "done"),
         };
         Assert.Equal("Used the browser once · used the debugger once · ran 1 command · searched once", AiTurnSummary.Describe(builtIn));
+
+        // An external agent's MCP calls of the IDE's tools, which its adapter calls "other", by the tool they name.
+        var mcp = new[] { Acp("other", "mcp__codalus__find_references"), Acp("other", "mcp__codalus__run_tests"), Acp("other", "mcp__github__create_issue"), Acp("other", "Load skill") };
+        Assert.Equal("2 other steps · ran 1 command · searched once", AiTurnSummary.Describe(mcp));
     }
 
     [Fact]

@@ -60,6 +60,16 @@
       <Setter Property="TextElement.FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
       <Setter Property="TextElement.Foreground" Value="{DynamicResource Shell.MutedForeground}" />
     </Style>
+    <!-- A turn's disclosures (its steps' line, its thought, ADR 0092): open is the chevron turned down, not a checked toggle's box. -->
+    <Style Selector="ToggleButton.disclosure:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Foreground" Value="{DynamicResource Shell.MutedForeground}" />
+    </Style>
+    <Style Selector="ToggleButton.disclosure:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    </Style>
     <Style Selector="Border.composerArea">
       <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />

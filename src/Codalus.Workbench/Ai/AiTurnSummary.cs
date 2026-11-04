@@ -18,8 +18,19 @@ public static class AiTurnSummary
 {
     /// <summary>What a step did, by its ACP kind or the built-in tool's name.</summary>
     public static string KindOf(AiAgentStep step) => step.Id is not null
-        ? step.Kind is null or "other" or "switch_mode" ? "other" : step.Kind
+        ? step.Kind is null or "other" or "switch_mode" ? McpToolKind(step.Target) : step.Kind
         : ToolKind(step.Tool);
+
+    /// <summary>
+    /// An external agent's MCP tool call by its title (Claude's adapter names one <c>mcp__codalus__find_references</c>,
+    /// with the kind <c>other</c>): the kind of the IDE's tool it names, or <c>other</c>.
+    /// </summary>
+    private static string McpToolKind(string title)
+    {
+        var name = title.Split(' ', 2)[0];
+        var at = name.LastIndexOf("__", StringComparison.Ordinal);
+        return name.StartsWith("mcp__", StringComparison.Ordinal) && at > 4 ? ToolKind(name[(at + 2)..]) : "other";
+    }
 
     private static string ToolKind(string tool) => tool switch
     {
