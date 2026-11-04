@@ -154,13 +154,17 @@ public sealed class AiChatViewTests
         Assert.True(second.StepsShown);
         Assert.Single(second.GetVisualDescendants().OfType<AiStepView>(), v => v.IsEffectivelyVisible);
 
-        // The toolbar's toggle: detailed shows every step without the line, and is kept in the user's settings.
+        // The toolbar's toggle: detailed opens every turn's steps under their line (so they don't read as the thought's), and
+        // is kept in the user's settings; back to compact, they fold again.
         var toggle = window.GetVisualDescendants().OfType<ToggleButton>().Single(b => b.Name == "DensityToggle");
+        summary.IsChecked = false;
         toggle.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         await ShellFixture.PumpUntil(() => !chat.IsCompact);
         Assert.Equal("detailed", f.Shell.Workbench.Settings.GetString(AiChat.DensitySetting, ""));
-        Assert.Equal("", TurnView(window, 1).StepsSummary);
-        Assert.True(TurnView(window, 1).StepsShown);
+        await ShellFixture.PumpUntil(() => TurnView(window, 1).StepsShown);
+        Assert.Equal("Read 1 file", TurnView(window, 1).StepsSummary);
+        toggle.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => chat.IsCompact && !TurnView(window, 1).StepsShown);
         window.Close();
     }
 
@@ -283,8 +287,7 @@ public sealed class AiChatViewTests
 
         // No context chips (ADR 0092): what goes with a question is what it @-mentions, and the input says so.
         Assert.DoesNotContain(view.GetVisualDescendants().OfType<ToggleButton>(), b => b.Classes.Contains("chip"));
-        var questionBox = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
-        Assert.Contains("@", questionBox.PlaceholderText, StringComparison.Ordinal);
+        Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Enter sends · Shift+Enter new line · @ adds context · paste an image");
         Assert.Equal("Show every step (detailed)", AutomationProperties.GetName(view.GetVisualDescendants().OfType<ToggleButton>().Single(b => b.Name == "DensityToggle")));
 
         // Agent mode is a switch with its own place in the toolbar.
@@ -298,7 +301,7 @@ public sealed class AiChatViewTests
 
         // Send: the primary icon button, disabled until there is a question; Enter sends it, Shift+Enter is a new line.
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
-        Assert.Equal("Ask about your code; @ mentions a file, the selection or errors", input.PlaceholderText);
+        Assert.Equal("Ask about your code", input.PlaceholderText);
         var send = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send the question");
         var stop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopButton" && AutomationProperties.GetName(b) == "Stop the answer");
         Assert.Contains("accent", send.Classes);

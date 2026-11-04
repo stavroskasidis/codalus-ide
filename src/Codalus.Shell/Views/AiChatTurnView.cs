@@ -34,9 +34,10 @@ internal sealed class AiChatTurnView : StackPanel
     private readonly SelectableTextBlock _thoughtText = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false };
     private readonly ToggleButton _summary;
     private readonly TextBlock _summaryText = new() { TextTrimming = TextTrimming.CharacterEllipsis };
-    private readonly StackPanel _changes = new() { Spacing = 2, IsVisible = false };
+    private readonly StackPanel _changes = new() { Spacing = 2, IsVisible = false, Margin = new Thickness(0, 6, 0, 0) };
     private readonly HashSet<string> _reverted = new(StringComparer.Ordinal);
     private string? _renderedChanges;
+    private bool? _renderedCompact;
     private readonly StackPanel _plan = new() { Spacing = 1, IsVisible = false };
     private readonly StackPanel _notices = new() { Spacing = 2, IsVisible = false };
     private readonly WrapPanel _status = new() { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4 };
@@ -92,7 +93,6 @@ internal sealed class AiChatTurnView : StackPanel
             // An external agent (M48, ADR 0079): its own program, provider and data policy.
             var external = new Border { Child = new TextBlock { Text = Localizer.Get("msg.acp.externalAgentChip", "External agent") } };
             external.Classes.Add("chip");
-            external.Classes.Add("warning");
             ToolTip.SetTip(external, Localizer.Get("aiChat.externalAgentUsesItsOwn", "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for."));
             who.Children.Add(external);
         }
@@ -124,7 +124,7 @@ internal sealed class AiChatTurnView : StackPanel
         // Compact (ADR 0092): the steps fold into one line ("Read 3 files · ran 2 commands ▸") that opens them.
         _summary = Disclosure(_summaryText);
         _summary.IsVisible = false;
-        _summary.IsCheckedChanged += (_, _) => _stepsRail.IsVisible = _steps.Count > 0 && (_summary.IsChecked == true || !IsCompact);
+        _summary.IsCheckedChanged += (_, _) => _stepsRail.IsVisible = _steps.Count > 0 && _summary.IsChecked == true;
         AutomationProperties.SetName(_summary, Localizer.Get("msg.ai.whatTheAssistantDid", "What the assistant did"));
         AutomationProperties.SetName(_changes, Localizer.Get("msg.ai.changedFilesName", "Changed files"));
         var body = new StackPanel { Spacing = 6, Children = { who, _thought, _thoughtText, _plan, _summary, _stepsRail, _answer, _changes, _notices, _status } };
@@ -149,11 +149,16 @@ internal sealed class AiChatTurnView : StackPanel
     private static ToggleButton Disclosure(TextBlock label)
     {
         label.VerticalAlignment = VerticalAlignment.Center;
-        var chevron = new Icon { Kind = "chevron-right", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = RelativePoint.Center };
+        label.Classes.Add("muted");
+        var chevron = new Icon { Kind = "chevron-right", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = RelativePoint.Center, Margin = new Thickness(0, 0, 6, 0) };
+        DockPanel.SetDock(chevron, Avalonia.Controls.Dock.Left);
+
+        // A dock panel, not a stack: the label gets the width there is, so a long line ends in an ellipsis.
         var toggle = new ToggleButton
         {
-            Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { chevron, label } },
+            Content = new DockPanel { Children = { chevron, label } },
             HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
             Padding = new Thickness(2, 1),
             MinHeight = 0,
         };
@@ -259,15 +264,23 @@ internal sealed class AiChatTurnView : StackPanel
             _steps.RemoveAt(_steps.Count - 1);
         }
 
-        // Compact: one line for the steps, with the one running now while the turn streams; detailed: every step.
+        // One line for the steps, with the one running now while the turn streams: folded in compact, open in detailed
+        // (where it heads the steps, so they don't read as the thought's), and either way a click flips it.
         var compact = IsCompact;
-        _summary.IsVisible = compact && _steps.Count > 0;
+        if (compact != _renderedCompact)
+        {
+            _renderedCompact = compact;
+            _summary.IsChecked = !compact;
+        }
+
+        _summary.IsVisible = _steps.Count > 0;
         if (_summary.IsVisible)
         {
             var line = AiTurnSummary.Describe(steps);
             if (streaming && AiTurnSummary.Current(steps) is { } current)
             {
-                line += " · " + Localizer.Format("msg.ai.summary.now", "now: {0}", current.Target.Length > 80 ? current.Target[..80] + "…" : current.Target);
+                var running = AiStepItem.McpTitle(current.Target).Split('\n', 2)[0];
+                line += " · " + Localizer.Format("msg.ai.summary.now", "now: {0}", running.Length > 40 ? running[..40] + "…" : running);
             }
 
             if (_summaryText.Text != line)
@@ -277,7 +290,7 @@ internal sealed class AiChatTurnView : StackPanel
             }
         }
 
-        _stepsRail.IsVisible = _steps.Count > 0 && (!compact || _summary.IsChecked == true);
+        _stepsRail.IsVisible = _steps.Count > 0 && _summary.IsChecked == true;
     }
 
     /// <summary>
@@ -325,11 +338,13 @@ internal sealed class AiChatTurnView : StackPanel
             }
             else
             {
+                row.Children.Add(Muted("·"));
                 var diff = new Button { Content = Localizer.Get("msg.ai.diff", "Diff") };
                 diff.Classes.Add("link");
                 AutomationProperties.SetName(diff, Localizer.Format("msg.ai.diffOf", "Compare {0} with before", change.Path));
                 diff.Click += (_, _) => _ = _owner.ViewModel?.OpenChangeDiffAsync(change);
                 row.Children.Add(diff);
+                row.Children.Add(Muted("·"));
                 var revert = new Button { Content = Localizer.Get("msg.ai.revert", "Revert") };
                 revert.Classes.Add("link");
                 AutomationProperties.SetName(revert, Localizer.Format("msg.ai.revertOf", "Revert {0}", change.Path));

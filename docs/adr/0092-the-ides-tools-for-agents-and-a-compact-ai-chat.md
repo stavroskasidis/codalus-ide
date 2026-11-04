@@ -97,7 +97,7 @@ The browser stops at New Chat, when the workspace changes, and at exit. A Blazor
 
 ### AI Chat
 
-- **Density.** Compact (the default) folds a turn's steps into one line that opens them, for example "Read 3 files · searched twice · edited Program.cs · ran 2 commands". While the turn streams, the line ends with the step that runs now. Thinking is a short "Thought" line that opens on a click; it is never a box. Detailed shows every step as before. Both modes show a step's long or multi-line title as its first line and put the whole of it in the step's details.
+- **Density.** Compact (the default) folds a turn's steps into one line that opens them, for example "Read 3 files · searched twice · edited Program.cs · ran 2 commands". While the turn streams, the line ends with the step that runs now. Thinking is a short "Thought" line that opens on a click; it is never a box. Detailed opens the steps under the same line, which heads them so they don't read as part of the thought. MCP calls of the IDE's tools (`mcp__codalus__find_references`) show and count as the tool they name. Both modes show a step's long or multi-line title as its first line and put the whole of it in the step's details.
 - **@-mentions.** The chips are gone, and only what a question mentions goes with it:
   - `@selection`, `@file` (the active file), `@open`, `@errors`, `@build` and `@solution`;
   - `@path` for a file of the workspace.

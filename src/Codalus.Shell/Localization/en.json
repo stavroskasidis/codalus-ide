@@ -39,7 +39,7 @@
   "aiChat.agentModeTheAiMayRead": "Agent mode: the AI may read and search the workspace and build; every change shows in a preview first, and every command asks you first",
   "aiChat.agentPicker": "Agent",
   "aiChat.askAQuestionAboutYourSolution": "Ask a question about your solution. What goes with it is listed above the box, and you can turn each part off.",
-  "aiChat.askAboutYourCodeMention": "Ask about your code; @ mentions a file, the selection or errors",
+  "aiChat.askAboutYourCode": "Ask about your code",
   "aiChat.attachedImages": "Images sent with the question",
   "aiChat.chooseAProviderAndAModel": "Choose a provider and a model to start. Nothing is sent until you do.",
   "aiChat.chooseProvider": "Choose Provider…",

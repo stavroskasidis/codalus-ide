@@ -27,7 +27,7 @@ Type a question in the box at the bottom and press `Enter` or click **Send** (`S
 
 **The toolbar.** **New Chat**, the provider and model (click to change them), the **Agent** switch ([agent mode](#agent-mode)), **Compact or detailed**, the request log, and **Configure**.
 
-**Compact or detailed.** By default (`ai.chat.density`: `compact`) an answer's steps fold into one line, such as "Read 3 files · searched twice · edited Program.cs · ran 2 commands", which shows the step running now while the answer streams. Click the line to see the steps. An agent's thinking is a short **Thought** line that opens on a click. The toolbar's list button switches to **detailed**, which shows every step, and back; the choice is kept in your settings. In both, a step whose title is a long or multi-line command shows its first line, and the whole command is under the step's chevron.
+**Compact or detailed.** By default (`ai.chat.density`: `compact`) an answer's steps fold into one line, such as "Read 3 files · searched twice · edited Program.cs · ran 2 commands", which shows the step running now while the answer streams. Click the line to see the steps. An agent's thinking is a short **Thought** line that opens on a click. The toolbar's list button switches to **detailed**, which opens every answer's steps under that line, and back; the choice is kept in your settings. In both, a step whose title is a long or multi-line command shows its first line, and the whole command is under the step's chevron.
 
 **What goes with your question.** Only your question, and what it mentions with `@` (typing `@` lists them):
 - `@selection`: the text selected in the editor.

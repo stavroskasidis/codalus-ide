@@ -70,6 +70,15 @@
       <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
     </Style>
+    <!-- The input's suggestions (slash commands, @-mentions): a raised list; its first row is what Tab takes. -->
+    <Style Selector="ListBox.suggestions">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+    </Style>
+    <Style Selector="ListBox.suggestions ListBoxItem:nth-child(1)">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    </Style>
     <Style Selector="Border.composerArea">
       <Setter Property="Background" Value="{DynamicResource Shell.Panel}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
@@ -220,8 +229,8 @@
                 Background="{DynamicResource Shell.Status.Info}" BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
           <DockPanel>
             <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
-            <TextBlock x:Name="ExternalAgentLabel" Classes="small" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextTrimming="CharacterEllipsis" MaxLines="1"
-                       ToolTip.Tip="{l:T aiChat.externalAgentUsesItsOwn}" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="ExternalAgentLabel" Classes="small" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap"
+                       Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
           </DockPanel>
         </Border>
         <Border Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsAgentBlocked}"
@@ -232,7 +241,7 @@
           </DockPanel>
         </Border>
         <!-- An external agent's slash commands matching what's typed after / (Tab or a click takes one). -->
-        <ListBox x:Name="CommandList" Classes="rows" ItemsSource="{Binding CommandSuggestions}" IsVisible="{Binding HasCommandSuggestions}" MaxHeight="140" AutomationProperties.Name="{l:T aiChat.theAgentSCommands}">
+        <ListBox x:Name="CommandList" Classes="rows suggestions" ItemsSource="{Binding CommandSuggestions}" IsVisible="{Binding HasCommandSuggestions}" MaxHeight="140" AutomationProperties.Name="{l:T aiChat.theAgentSCommands}">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AiCommandSuggestion">
               <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Text}" />
@@ -263,7 +272,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" DragDrop.AllowDrop="True"
-                     PlaceholderText="{l:T aiChat.askAboutYourCodeMention}" AutomationProperties.Name="{l:T aiChat.question}" />
+                     PlaceholderText="{l:T aiChat.askAboutYourCode}" AutomationProperties.Name="{l:T aiChat.question}" />
             <DockPanel>
               <Panel DockPanel.Dock="Right">
                 <StackPanel Orientation="Horizontal" Spacing="4">
