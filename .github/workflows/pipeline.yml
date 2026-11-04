@@ -177,11 +177,16 @@ jobs:
             echo "Develop's run passed on ${HEAD_SHA::7}, which has all of master: test and smoke run again in the release run on master, not here." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  # The tests in three shards per OS on separate runners at the same time (eng/ci-test.sh): the Shell tests in two
-  # halves (they take 15 to 25 minutes on their own) and every other project. With the smoke test on a runner of its
-  # own, a run takes as long as its longest job, not the sum of them (it took 55 minutes on Windows). A fourth,
-  # debug-codalus, runs the debugger classes under Codalus IDE's own CoreCLR adapter (M54, ADR 0086), on Linux arm64
-  # too, where it is the only shard (the M54 plan: the other shards' coverage there is the packages' smoke test).
+  # The tests in shards (eng/ci-test.sh) on separate runners at the same time: the Shell tests in two halves (they take 15
+  # to 25 minutes on their own) and every other project with, after it, debug-codalus, the debugger classes under Codalus
+  # IDE's own CoreCLR adapter (M54, ADR 0086). With the smoke test on a runner of its own, a run takes as long as its
+  # longest job, not the sum of them (it took 55 minutes on Windows). Linux arm64 runs debug-codalus alone (the M54 plan:
+  # the other shards' coverage there is the packages' smoke test).
+  # macOS runs every shard one after another in one job (the maintainer's decision, 2026-11-04, ADR 0028): GitHub runs
+  # five macOS jobs at a time, which one run's four shards and smoke took, so a few pull requests queued their macOS jobs
+  # for hours. One job takes about 75 minutes, the longest of a run. A job GitHub can't place for want of macOS arm64
+  # capacity it abandons after 15 minutes (its annotations say so; ci reads "abandoned"), whatever the layout, and that
+  # fails ci (docs/ci-flakes.md).
   test:
     name: test (${{ matrix.os }}, ${{ matrix.shard }})
     needs: gate
@@ -192,14 +197,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        shard: [shell-1, shell-2, others, debug-codalus]
+        # shards: what the job runs, in order, each in a step of its own (below); a shard not listed is skipped.
         include:
-          - { os: ubuntu-24.04-arm, shard: debug-codalus }
+          - { os: ubuntu-latest, shard: shell-1, shards: shell-1, timeout: 50 }
+          - { os: ubuntu-latest, shard: shell-2, shards: shell-2, timeout: 50 }
+          - { os: ubuntu-latest, shard: others, shards: others debug-codalus, timeout: 70 }
+          - { os: windows-latest, shard: shell-1, shards: shell-1, timeout: 50 }
+          - { os: windows-latest, shard: shell-2, shards: shell-2, timeout: 50 }
+          - { os: windows-latest, shard: others, shards: others debug-codalus, timeout: 70 }
+          # About 20 + 23 + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
+          - { os: macos-latest, shard: all, shards: shell-1 shell-2 others debug-codalus, timeout: 150 }
+          - { os: ubuntu-24.04-arm, shard: debug-codalus, shards: debug-codalus, timeout: 50 }
     runs-on: ${{ matrix.os }}
-    # macOS runners are the slowest and vary most: a Shell shard that takes 16 to 24 minutes on one ran past 40 on a slow
-    # one (0.6.0's release run; develop's run 40241261003, M50), so macOS gets 20 minutes more.
-    timeout-minutes: ${{ matrix.os == 'macos-latest' && 70 || 50 }}
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
       - uses: actions/checkout@v7
       # The display is for tests that run real windowed apps (the Live Visual Tree's Avalonia app).
@@ -216,8 +226,8 @@ jobs:
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
-        # The others shard restores every project, as the rest do. Pull requests only restore what develop saved.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && matrix.shard == 'others' && steps.setup.outputs.nuget-cache-hit != 'true'
+        # The job with the others shard restores every project, as the rest do. Pull requests only restore what develop saved.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.nuget/packages
@@ -225,17 +235,35 @@ jobs:
       - name: Stack traces for a hang (dotnet-stack)
         # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
         run: dotnet tool install -g dotnet-stack || true
-      - name: Test (${{ matrix.shard }})
+      # One step per shard of matrix.shards, in the order macOS runs them all. A shard runs only when the ones before it
+      # passed: the first failure stops the run (the last step), so the rest wouldn't finish anyway.
+      # A hang is reported and ended by 15 minutes (eng/ci-test.sh): a step's limit is the last resort, leaving the job time
+      # for the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
+      # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
+      # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS debug-codalus
+      # (7 to 13 minutes) too: its runner was lost 44.5 minutes into this step (run 41115971500). Both stop at 30: the
+      # runners went silent 35 to 45 minutes into the step, before a stop at 40 could act (runs 40862137560 and
+      # 41129614137), and shell-2 takes about 20.
+      - name: Test (shell-1)
+        if: contains(format(' {0} ', matrix.shards), ' shell-1 ')
         shell: bash
-        # A hang is reported and ended by 15 minutes (eng/ci-test.sh): this is the last resort, leaving the job time for
-        # the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
-        # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
-        # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS debug-codalus
-        # (7 to 13 minutes) too: its runner was lost 44.5 minutes into this step (run 41115971500). Both stop at 30: the
-        # runners went silent 35 to 45 minutes into the step, before a stop at 40 could act (runs 40862137560 and
-        # 41129614137), and shell-2 takes about 20.
-        timeout-minutes: ${{ matrix.os == 'macos-latest' && ((matrix.shard == 'shell-2' || matrix.shard == 'debug-codalus') && 30 || 60) || 40 }}
-        run: bash eng/ci-test.sh ${{ matrix.shard }}
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
+        run: bash eng/ci-test.sh shell-1
+      - name: Test (shell-2)
+        if: contains(format(' {0} ', matrix.shards), ' shell-2 ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        run: bash eng/ci-test.sh shell-2
+      - name: Test (others)
+        if: contains(format(' {0} ', matrix.shards), ' others ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
+        run: bash eng/ci-test.sh others
+      - name: Test (debug-codalus)
+        if: contains(format(' {0} ', matrix.shards), ' debug-codalus ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        run: bash eng/ci-test.sh debug-codalus
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded
         if: always() && steps.setup.outputs.downloads-hit != 'true'
@@ -290,7 +318,9 @@ jobs:
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
-  # of its own (it needs the machine to itself), alongside the tests.
+  # of its own (it needs the machine to itself), alongside the tests. Not on macOS in a pull request (the maintainer's
+  # decision, 2026-11-04, ADR 0028): its runners are the scarce ones, and develop's run (every nightly) and master's (every
+  # release) smoke-test macOS before anything is published, as packages does the installed app.
   smoke:
     name: smoke (${{ matrix.os }})
     needs: gate
@@ -301,7 +331,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "windows-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
     runs-on: ${{ matrix.os }}
     # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40: at 60, a slow runner ran out
     # of time in the middle of a passing smoke test (#111, run 39668401109).
