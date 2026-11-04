@@ -184,7 +184,9 @@ jobs:
   # the other shards' coverage there is the packages' smoke test).
   # macOS runs every shard one after another in one job (the maintainer's decision, 2026-11-04, ADR 0028): GitHub runs
   # five macOS jobs at a time, which one run's four shards and smoke took, so a few pull requests queued their macOS jobs
-  # for hours and GitHub cancelled them unrun (docs/ci-flakes.md). One job takes about 75 minutes, the longest of a run.
+  # for hours. One job takes about 75 minutes, the longest of a run. A job GitHub can't place for want of macOS arm64
+  # capacity it abandons after 15 minutes (its annotations say so; ci reads "abandoned"), whatever the layout, and that
+  # fails ci (docs/ci-flakes.md).
   test:
     name: test (${{ matrix.os }}, ${{ matrix.shard }})
     needs: gate
