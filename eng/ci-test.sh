@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Runs one shard of the tests (CI runs the shards on separate runners at the same time; pipeline.yml):
+# Runs one shard of the tests (CI runs the shards on separate runners at the same time, and macOS all four in one job;
+# pipeline.yml):
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
-#   others   every other test project
+#   others   every other test project (CI runs debug-codalus after it, in the same job)
 #   debug-codalus  the debugger classes in eng/ci-debug-codalus.txt, under Codalus IDE's own CoreCLR adapter (M54)
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
