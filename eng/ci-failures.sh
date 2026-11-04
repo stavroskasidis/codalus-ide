@@ -28,6 +28,11 @@ api() {
   return 1
 }
 
+# gh 2.102 prints nothing (an error on stderr) for a response with terminal escape sequences, which every job's log has
+# (the test runner's colors), unless allowed; an older gh doesn't know the option.
+log_options=()
+gh api --help 2>&1 | grep -q -- --allow-escape-sequences && log_options=(--allow-escape-sequences)
+
 # One line per failure of a job: "<kind>\t<what>".
 job_failures() {
   local job="$1" log="$cache/$1.log" notes
@@ -36,7 +41,7 @@ job_failures() {
     grep "lost communication with the server\|exceeded the maximum execution time" <<< "$notes" | head -1 | sed 's/^/runner\t/'
   fi
   if [[ ! -s "$log" ]]; then
-    api "repos/$repo/actions/jobs/$job/logs" 2> /dev/null | awk '{ sub(/^[0-9T:.-]+Z /, ""); gsub(/\033\[[0-9;]*m/, ""); print }' > "$log" || true
+    api "repos/$repo/actions/jobs/$job/logs" "${log_options[@]}" 2> /dev/null | awk '{ sub(/^[0-9T:.-]+Z /, ""); gsub(/\033\[[0-9;]*m/, ""); print }' > "$log" || true
     grep -q "BlobNotFound" "$log" && : > "$log"
   fi
   [[ -s "$log" ]] || return 0

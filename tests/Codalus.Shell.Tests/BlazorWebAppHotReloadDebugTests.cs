@@ -52,7 +52,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         var folder = f.CopySample("BlazorHosted");
         if (sdk10)
         {
-            // As WPoseidon's: SDK 11's browser tools aren't supported yet (BrowserHotReload.UnsupportedReason).
+            // As the maintainer's app: SDK 11's browser tools aren't supported yet (BrowserHotReload.UnsupportedReason).
             await File.WriteAllTextAsync(Path.Combine(folder, "global.json"), "{\"sdk\":{\"version\":\"10.0.100\",\"rollForward\":\"latestFeature\"}}", TestContext.Current.CancellationToken);
         }
 
@@ -71,7 +71,10 @@ public sealed class BlazorWebAppHotReloadDebugTests
 
     private static string Diagnostics(ShellFixture f) =>
         $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}"
-        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty) + ".\n"
+        + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty)
+        // What the status bar says of the last edit: the page's edit was never applied on macOS CI (run 41621106416; TODO(issue):
+        // what the browser refresh server sent and got back for each edit).
+        + $"; the status bar: '{f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).SingleOrDefault(i => i.Id == "codalus.hotReload")?.Text}'.\n"
         + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
 
     /// <summary>
@@ -150,8 +153,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
                 // server's runtime refuses it (netcoredbg is attached) and keeps running the same process.
                 var editor = await f.Shell.OpenFileAsync(counter, preview: false, null);
                 await ShellFixture.PumpUntil(() => editor?.Controller is not null);
-                var offset = editor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-                editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+                var offset = editor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+                editor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
                 await f.RunAsync("run.applyCodeChanges");
                 await ShellFixture.PumpUntil(() => watch.HotReload!.UpdatesRefused, seconds: 120, describe: () => Diagnostics(f));
                 Assert.Equal(0, watch.HotReload!.Restarts);
@@ -199,7 +202,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
     }
 
     /// <summary>
-    /// ADR 0090, the maintainer's report on WPoseidon (SDK 10.0.303): under the Codalus debugger F5 launches the server
+    /// ADR 0090, the maintainer's report on their app (SDK 10.0.303): under the Codalus debugger F5 launches the server
     /// itself, with no dotnet watch, and the IDE is the browser refresh server the SDK's middleware points the page at.
     /// An edit to the server applies in place, in the same process; an edit to a WebAssembly component applies to the
     /// server's copy and in the browser, whose agent answers, and the page runs it. The page's runtime can apply at least
@@ -244,7 +247,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
             reported = browser.Server!.CapabilitiesAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken).GetAwaiter().GetResult();
             return reported is { Length: > 0 } && !reported.StartsWith('!');
         }, seconds: 120, describe: () => $"The page answered '{reported}'. " + Diagnostics(f));
-        var missing = browser.Capabilities!.Except(reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal).ToList();
+        // Except the one it applies without reporting it, which the tick's edit below needs (an async method without an await).
+        var missing = browser.Capabilities!.Except([.. reported!.Split(' ', StringSplitOptions.RemoveEmptyEntries), BrowserHotReload.ImpliedCapability], StringComparer.Ordinal).ToList();
         Assert.True(missing.Count == 0, $"The page's runtime can't apply {string.Join(", ", missing)}; it reported '{reported}'.");
 
         // 1. The server, in place, in the same process.
@@ -269,8 +273,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // this edit's. A page slow to answer says it later.)
         var counterEditor = await f.Shell.OpenFileAsync(counter, preview: false, null);
         await ShellFixture.PumpUntil(() => counterEditor?.Controller is not null);
-        offset = counterEditor!.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-        counterEditor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+        offset = counterEditor!.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+        counterEditor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
         await f.RunAsync("run.applyCodeChanges");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text
             .Contains("(server and browser)", StringComparison.Ordinal), seconds: 120, describe: () => Diagnostics(f));

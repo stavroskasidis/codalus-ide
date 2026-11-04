@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Codalus.Shell.Infrastructure;
+using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Plugins;
 
 namespace Codalus.Shell;
@@ -74,7 +75,7 @@ public sealed partial class ShellHost
             }
             else
             {
-                Layout.ShowToolWindow(BuiltIns.PluginsWindow, focus: true);
+                ShowPluginsPage(PluginsPageViewModel.InstalledTab);
             }
         }
     }

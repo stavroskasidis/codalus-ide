@@ -1818,6 +1818,13 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Opens (or updates) signature help at the caret (Ctrl+Shift+Space, or a typed trigger).</summary>
     public void ShowSignatureHelp() => _ = SignatureHelpAsync(null, retrigger: false);
 
+    /// <summary>
+    /// How the last signature help request ended (tests): a wait without a popup was a request still unanswered, one
+    /// answered with no signatures, one a newer request replaced, or one that failed, which all looked the same (Windows
+    /// CI's EditorTests, runs 40318855483 and 41600182224).
+    /// </summary>
+    internal string SignatureHelpOutcome { get; private set; } = "not asked";
+
     private async Task SignatureHelpAsync(string? triggerCharacter, bool retrigger)
     {
         var cancellationToken = Restart(ref _signatureCts).Token;
@@ -1825,16 +1832,21 @@ public sealed partial class CodeEditorController : IDisposable
         {
             if (Client is not { } client)
             {
+                SignatureHelpOutcome = "not asked: no language client";
                 return;
             }
 
             var context = new SignatureHelpContext(triggerCharacter is null ? 1 : 2, triggerCharacter, retrigger);
-            var help = await client.SignatureHelpAsync(Model.Uri, Model.PositionAt(Editor.CaretOffset), context, cancellationToken).ConfigureAwait(true);
+            var caret = Editor.CaretOffset;
+            SignatureHelpOutcome = $"asked at {caret.ToString(System.Globalization.CultureInfo.InvariantCulture)}, unanswered";
+            var help = await client.SignatureHelpAsync(Model.Uri, Model.PositionAt(caret), context, cancellationToken).ConfigureAwait(true);
             if (cancellationToken.IsCancellationRequested || _disposed)
             {
+                SignatureHelpOutcome = $"answered at {caret.ToString(System.Globalization.CultureInfo.InvariantCulture)} after a newer request (or the editor closed)";
                 return;
             }
 
+            SignatureHelpOutcome = $"answered at {caret.ToString(System.Globalization.CultureInfo.InvariantCulture)} with {(help?.Signatures.Length ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture)} signature(s)";
             if (help is null || help.Signatures.Length == 0)
             {
                 _signature?.Hide();
@@ -1852,6 +1864,7 @@ public sealed partial class CodeEditorController : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
+            SignatureHelpOutcome = $"failed: {ex.GetType().Name}: {ex.Message}";
             Report(ex);
         }
     }

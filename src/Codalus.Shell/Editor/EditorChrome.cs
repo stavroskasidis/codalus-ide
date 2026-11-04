@@ -553,9 +553,10 @@ public sealed class StickyScroll : Border
 /// <summary>
 /// The overview ruler beside the scroll bar (the classic IDE's map mode, M12a): errors, warnings, Git changes,
 /// breakpoints, find results and the caret, positioned by line over the whole document, with the document's health at
-/// the top (click: next problem). Clicking elsewhere scrolls there. It draws on every keystroke and caret move, so the
-/// marks are worked out only when what they show changes, one per pixel row, and each brush is looked up once a frame
-/// (M56: thousands of diagnostics were sorted, and their brushes looked up, on every frame).
+/// the top (click: next problem). Clicking elsewhere scrolls there. It marks, but doesn't shade, the lines in view: the
+/// scroll bar and the minimap show those. It draws on every keystroke and caret move, so the marks are worked out only
+/// when what they show changes, one per pixel row, and each brush is looked up once a frame (M56: thousands of
+/// diagnostics were sorted, and their brushes looked up, on every frame).
 /// </summary>
 public sealed class OverviewRuler : Control
 {
@@ -652,14 +653,8 @@ public sealed class OverviewRuler : Control
         context.FillRectangle(errors > 0 ? error : warnings > 0 ? warning : added, new Rect(3, 3, RulerWidth - 5, HealthHeight - 5), 2);
         ToolTip.SetTip(this, errors + warnings == 0 ? "No problems" : $"{errors} errors, {warnings} warnings (F8: next problem)");
 
-        // The visible area.
-        var view = _editor.TextArea.TextView;
-        if (view.VisualLinesValid && view.VisualLines.Count > 0)
-        {
-            var first = view.VisualLines[0].FirstDocumentLine.LineNumber;
-            var last = view.VisualLines[^1].LastDocumentLine.LineNumber;
-            context.FillRectangle(new SolidColorBrush(Colors.Gray, 0.15), new Rect(1, Y(first), RulerWidth - 1, Math.Max(2, Y(last + 1) - Y(first))));
-        }
+        // No shade for the visible area: beside the scroll bar's thumb and the minimap's, a third read as a second scroll
+        // bar. The caret's line below still says where the editor is.
 
         // Git changes on the left third.
         var removed = Brush("Shell.Diff.Removed");

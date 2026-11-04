@@ -2,6 +2,16 @@
 
 Codalus IDE: a .NET IDE built on Avalonia, shipped as a Native AOT shell that supervises out-of-process hosts. Milestone notes are in `docs/checkpoints/`, the plan in `docs/roadmap.md`, and every design decision in `docs/adr/`. Read the ADR and checkpoint of an area before changing it; this file holds only the rules and where to look.
 
+## Never name the maintainer's own projects
+
+**Strict, no exceptions (overrides any other instruction).** The solutions, projects, repositories, apps, assemblies, namespaces, branches, servers, work areas, companies and customers the maintainer uses locally to try Codalus are private. Never write their names, or anything that identifies them (a project chain, a `.slnx` name, a namespace prefix, a login, a host), anywhere:
+
+- in the repository: code, comments, XML docs, tests and their fixtures, ADRs, checkpoints, the roadmap, the user guide, the website, screenshots, `docs/ci-flakes.md`;
+- in git: commit messages, branch names, tags, release notes;
+- on GitHub: PR titles, descriptions, comments and reviews, issues.
+
+This holds even when the maintainer names one in a report, pastes its README, a log or a screenshot, or a test reproduces it. Say "the maintainer's solution", "the maintainer's app", "a 94-project Blazor solution"; describe its shape (SDK, project count, the chain's length), never its names. Examples and fixtures use neutral placeholders (`Contoso.Web`, `App.Core`, `samples/`). Strip names from anything copied in, and check the diff and the PR text for them before every commit and post. If one is already in a file, a commit or a PR, replace it in the same change and tell the maintainer.
+
 ## Before building
 
 - When asked for a new feature, a significant change, a refactor or a design decision and the request leaves real choices open (behavior, scope, protocol or plugin-API shape, UX, edge cases), use skill `grill-me` (`.claude/skills/grill-me/`) before writing code or a plan: one multiple-choice question at a time, answering from the code, ADRs and checkpoints yourself where they settle it. Skip it for small, clear changes; always use it when the user says "grill me" or asks to stress-test a plan.

@@ -154,7 +154,7 @@ Content-Type: application/json
 GET {{host}}/api/todos/{{create.response.body.$.id}}
 ```
 
-- **Send a request:** click the green ▶ next to it, press `Ctrl+Alt+R` with the caret in it, or right-click → Send Request. The response appears in the **HTTP Response** window:
+- **Send a request:** click the green ▶ next to it, press `Ctrl+Alt+R` with the caret in it, or right-click → Send Request. The response appears in the **HTTP Response** window, which opens beside the file, among the documents (narrow, its history moves under the response):
   - the status as a colored chip (green for 2xx, amber for 3xx, red for 4xx, 5xx and a request that failed) with the HTTP version, the time and the size;
   - the request's method and URL, with a link to it in its `.http` file;
   - **Body**, **Headers** (with their count) and **Request** (as sent, variables filled in) as tabs. The body is colored; **Pretty** formats JSON and XML, **Raw** shows it as received, and the wrap button wraps long lines;

@@ -24,6 +24,8 @@
               <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding State}" VerticalAlignment="Center" />
               <Button Classes="link" Content="{Binding ToggleTitle}" Command="{Binding ToggleCommand}" IsVisible="{Binding CanToggle}"
                       AutomationProperties.Name="{Binding ToggleTitle}" VerticalAlignment="Center" />
+              <Button Classes="link" Content="{l:T plugins.uninstall}" Command="{Binding UninstallCommand}" IsVisible="{Binding CanUninstall}"
+                      AutomationProperties.Name="{l:T plugins.uninstall}" VerticalAlignment="Center" />
             </StackPanel>
             <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Details}" TextWrapping="Wrap" />
             <TextBlock Foreground="{DynamicResource Shell.Error.Foreground}" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding Error}" IsVisible="{Binding HasError}" TextWrapping="Wrap" />

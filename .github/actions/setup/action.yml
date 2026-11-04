@@ -51,6 +51,22 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Room on a small Linux runner's disk
+      # Some ubuntu-latest jobs get a runner with a 72 GB disk (a "Hosted Compute Agent" on AWS, /dev/mapper/cow-root)
+      # instead of 145 GB: after restore and build 67 GB were used, so others filled it in its first minute (PR #268,
+      # runs 41357428702, where the runner died, and 41365055187, where eng/ci-test.sh's disk guard ended the tests).
+      # There, toolchains the repository doesn't use go (about 15 GB); Android's stays, as ANDROID_HOME points at it.
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        free="$(df -Pk / | awk 'NR == 2 { print int($4 / 1048576) }')"
+        if (( free >= 40 )); then
+          echo "${free} GB free: nothing to remove."
+          exit 0
+        fi
+        echo "${free} GB free on a small runner: removing toolchains the repository doesn't use."
+        sudo rm -rf /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/julia* /opt/az /usr/share/miniconda || true
+        df -h /
     # The SDK of global.json, spelled out: setup-dotnet reads global.json's "latestFeature" as the channel's newest
     # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
     # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.

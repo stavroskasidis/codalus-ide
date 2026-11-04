@@ -93,11 +93,16 @@ public sealed class ProfilerShellTests
         await report.ZoomOutAsync();
         Assert.Equal(report.Total, report.FlameTotal);
 
-        // A time range filters every view.
+        // A time range filters every view: the first half of where the app's samples are, not of the trace, which starts
+        // before the held runtime resumes (on a loaded runner its startup took more than half the trace, and the trace's
+        // first half had no samples: Windows CI, run 41699346517).
         var all = report.Total;
-        await report.SelectRangeAsync(0, 0.5);
+        var timeline = report.Timeline!.ToList();
+        var first = timeline.FindIndex(n => n > 0);
+        var last = timeline.FindLastIndex(n => n > 0);
+        await report.SelectRangeAsync((double)first / timeline.Count, (first + last + 1) / 2.0 / timeline.Count);
         await ShellFixture.PumpUntil(() => !report.IsLoading);
-        Assert.InRange(report.Total, 1, all - 1);
+        Assert.True(report.Total > 0 && report.Total < all, $"{report.Total} of {all} samples in {report.RangeText}; the timeline: {string.Join(' ', timeline)}");
         Assert.True(report.HasRange);
         await report.SelectRangeAsync(double.NaN, double.NaN);
         await ShellFixture.PumpUntil(() => !report.IsLoading && report.Total == all);

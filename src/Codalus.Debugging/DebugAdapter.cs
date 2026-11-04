@@ -369,17 +369,71 @@ public sealed partial class DebugAdapter : IDebugAdapter
     public string Describe()
     {
         var adapter = _process.Id is { } id
-            ? $"netcoredbg {id.ToString(System.Globalization.CultureInfo.InvariantCulture)}{(_process.Exited.IsCompleted ? $" (exited, code {ExitCode()})" : string.Empty)}"
+            ? $"netcoredbg {id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+              + (_process.Exited.IsCompleted ? $" (exited, code {ExitCode()})" : ThreadWaits(id) is { } adapterWaits ? $" ({adapterWaits})" : string.Empty)
             : "netcoredbg on another machine";
         string program;
         using (var running = RunningProgram())
         {
             program = running is null ? "no program running"
                 : $"program {running.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)}"
-                  + (ProcStat(running.Id) is { } stat ? $" in state {stat.State}, {(HasRuntimeTransport(running, _programTemp) ? "its runtime's debugger transport there" : "no runtime debugger transport")}" : string.Empty);
+                  + (ProcStat(running.Id) is { } stat ? $" in state {stat.State}, {(HasRuntimeTransport(running, _programTemp) ? "its runtime's debugger transport there" : "no runtime debugger transport")}" : string.Empty)
+                  + (ThreadWaits(running.Id) is { } waits ? $" ({waits})" : string.Empty);
         }
 
         return $"{adapter}; {program}; {_connection.Describe()}";
+    }
+
+    /// <summary>
+    /// Where a Linux process's threads wait in the kernel, from <c>/proc/&lt;pid&gt;/task/*/wchan</c>, grouped with the
+    /// threads' distinct names: "9 threads: futex_wait_queue ×7 (Debuggee, .NET SigHandler, …), fifo_open ×1 (.NET Debugger)".
+    /// Elsewhere, or when the process is gone, null. A launched program attached to netcoredbg that never loaded a
+    /// module, in state S and with no stop (Linux arm64's debug.compound, run 41374588224, and debug.depth, run
+    /// 40241261003), said nothing of what its runtime or netcoredbg waited on; a FIFO open (the transport's race,
+    /// <see cref="WaitForRuntimeAsync"/>), a futex or a pipe read tells them apart.
+    /// </summary>
+    internal static string? ThreadWaits(int processId)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return null;
+        }
+
+        var tasks = $"/proc/{processId.ToString(System.Globalization.CultureInfo.InvariantCulture)}/task";
+        string[] threads;
+        try
+        {
+            threads = Directory.GetDirectories(tasks);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+
+        static string Read(string path)
+        {
+            try
+            {
+                return File.ReadAllText(path).Trim();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return string.Empty;
+            }
+        }
+
+        var groups = threads
+            .Select(t => (Wait: Read(Path.Combine(t, "wchan")) is { Length: > 0 } w && w != "0" ? w : "running", Name: Read(Path.Combine(t, "comm"))))
+            .GroupBy(t => t.Wait, StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g =>
+            {
+                var names = g.Select(t => t.Name).Where(n => n.Length > 0).Distinct(StringComparer.Ordinal).ToList();
+                return $"{g.Key} \u00d7{g.Count().ToString(System.Globalization.CultureInfo.InvariantCulture)}"
+                       + (names.Count > 0 ? $" ({string.Join(", ", names)})" : string.Empty);
+            });
+        return $"{threads.Length.ToString(System.Globalization.CultureInfo.InvariantCulture)} threads: {string.Join(", ", groups)}";
     }
 
     /// <summary>
@@ -504,6 +558,10 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
                 if (waited.Elapsed >= LateRuntimeWait)
                 {
+                    // Where it stands, before the program is ended: stopped (T), its transport there or not, and what its
+                    // threads and netcoredbg's wait on. A launch on Linux CI (run 41579219667) got E_FAIL from
+                    // configurationDone and then a program that ran the whole minute without its runtime's transport.
+                    Log?.Invoke(this, $"Still no runtime after {Seconds(waited)} seconds: {Describe()}");
                     if (_attachedTo is null)
                     {
                         KillProgram(program);

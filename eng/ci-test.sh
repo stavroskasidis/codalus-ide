@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Runs one shard of the tests (CI runs the shards on separate runners at the same time; pipeline.yml):
+# Runs one shard of the tests (CI runs the shards on separate runners at the same time, and macOS all four in one job;
+# pipeline.yml):
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
-#   others   every other test project
+#   others   every other test project (CI runs debug-codalus after it, in the same job)
 #   debug-codalus  the debugger classes in eng/ci-debug-codalus.txt, under Codalus IDE's own CoreCLR adapter (M54)
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
@@ -35,6 +36,13 @@ mkdir -p "$results"
 # which the runtime returns while an aborted func-eval is pending; netcoredbg aborts one after 5 s) left no trace of
 # the evaluation before it (DataTipDebuggerTests, run 40375629247).
 export CODALUS_NETCOREDBG_LOG="${CODALUS_NETCOREDBG_LOG:-$results/netcoredbg}"
+# And Codalus IDE's CoreCLR adapter's log of every session, in every shard: ClrDebuggerTests runs in others too, where
+# a func-eval that timed out (ToUpper, Windows, run 41459412070) left no log, so not the thread stacks the adapter
+# writes at a func-eval's timeout.
+export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
+# vscode-js-debug's log of every browser debugging session, there too: on Windows js-debug twice failed to launch
+# Chrome with "Could not attach to main target" and nothing else (CompoundDebugTests, PR #279's run 41502391209).
+export CODALUS_JSDEBUG_TRACE="${CODALUS_JSDEBUG_TRACE:-$results/js-debug}"
 
 # Why an MSBuild worker node dies mid-build. The build host's builds failed now and then on the macOS runner with
 # "MSB4166: Child node "2" exited prematurely" and nothing else (DotNetTestRunControlTests, BuildIntegrationTests;
@@ -72,6 +80,61 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
     done
   ) &
   sampler=$!
+elif [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" == "Windows" ]]; then
+  # How busy the runner is: three processes stalled for minutes at once in Windows others (a design-time build of one
+  # project took 54 s, the language host never reported, the desktop CLR never stopped at its breakpoint; PR #296's run
+  # 41685545193), and nothing said whether the machine was starved or by what. Each sample: the CPU in use, the free
+  # memory, the threads waiting for a CPU and for the disk, and the busiest processes (percent of one core), in the log
+  # ([load]) and in load.txt in the results.
+  (
+    set +eo pipefail
+    while :; do
+      {
+        now="$(date -u +%H:%M:%S)"
+        load="$(typeperf '\Processor(_Total)\% Processor Time' '\Memory\Available MBytes' '\System\Processor Queue Length' \
+          '\PhysicalDisk(_Total)\Current Disk Queue Length' -sc 1 2> /dev/null | tr -d '\r' | awk -F'","' '/^"[0-9]/ { sub(/"$/, ""); printf "cpu=%d%% free=%dM cpu-queue=%d disk-queue=%d", $2, $3, $4, $5 }')"
+        busiest="$(typeperf '\Process(*)\% Processor Time' -sc 1 2> /dev/null | tr -d '\r' | awk -F'","' '
+          /PDH-CSV/ { for (i = 2; i <= NF; i++) { n = $i; sub(/.*Process\(/, "", n); sub(/\).*/, "", n); name[i] = n } }
+          /^"[0-9]/ { for (i = 2; i <= NF; i++) { v = $i; gsub(/"/, "", v); if (name[i] !~ /^(_Total|Idle|)$/ && v + 0 >= 5) printf "%d %s\n", v, name[i] } }' | sort -nr | head -5 | awk '{ printf " %d%% %s", $1, $2 }')"
+        echo "$now $load busiest:$busiest" >> "$results/load.txt"
+        echo "[load] $now $load busiest:$busiest"
+      } 2> /dev/null || true
+      # A second at a time: the report ends this loop with kill, and a sleep it leaves behind holds the step's log open
+      # until it ends (the report then waits 2 s).
+      for _ in {1..15}; do sleep 1; done
+    done
+  ) &
+  sampler=$!
+fi
+
+# The free disk, on the Linux and macOS runners. Ubuntu's others filled its runner's disk, and the runner died with "No
+# space left on device", keeping neither its log nor its results (PR #268, run 41357428702): a runner with a 72 GB disk,
+# 6 GB free once the solution was built (run 41365055187, which this guard caught; .github/actions/setup now makes room
+# there). Below 20 GB free each sample says so with the largest folders; below 5 GB the test processes are ended, so
+# the step fails naming them and the runner still uploads the log and the results.
+guard=
+if [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" != "Windows" ]]; then
+  (
+    # Not the script's -e and pipefail: head ending the listing's pipe ended the guard.
+    set +eo pipefail
+    while :; do
+      free="$(df -Pk "$PWD" 2>/dev/null | awk 'NR == 2 { print int($4 / 1048576) }')"
+      if [[ -n "$free" ]] && (( free < 20 )); then
+        # The tests are ended first: listing the folders takes a while, which a runaway writer doesn't wait for.
+        (( free < 5 )) && pkill -KILL -f 'Codalus\.[A-Za-z.]*Tests' 2>/dev/null
+        {
+          echo "[disk] $(date -u +%H:%M:%S) ${free} GB free; the largest folders:"
+          du -xk -d 3 "${TMPDIR:-/tmp}" /tmp "$HOME" "$PWD" 2>/dev/null | sort -nr | head -15 | awk '{ printf "  %d MB %s\n", $1 / 1024, $2 }'
+        } | tee -a "$results/disk.txt"
+        if (( free < 5 )); then
+          echo "::error title=$shard on ${RUNNER_OS:-?}::The disk was almost full (${free} GB free): the tests were ended. The largest folders are in the log ([disk]) and in disk.txt."
+          break
+        fi
+      fi
+      sleep 5
+    done
+  ) &
+  guard=$!
 fi
 
 # Every test command's output goes to console.txt, so the report can name the failed tests: as annotations on the run's
@@ -91,6 +154,10 @@ report() {
   if [[ -n "$sampler" ]]; then
     pkill -P "$sampler" 2>/dev/null
     kill "$sampler" 2>/dev/null
+  fi
+  if [[ -n "$guard" ]]; then
+    pkill -P "$guard" 2>/dev/null
+    kill "$guard" 2>/dev/null
   fi
   sleep 2 # the tail reads the file about once a second: its last lines reach the log first
   kill "$tailer" 2>/dev/null
@@ -139,6 +206,9 @@ report() {
     local oom
     oom="$(sudo -n dmesg 2>/dev/null | grep -i "out of memory\|killed process\|oom-kill" | tail -20)"
     if [[ -n "$oom" ]]; then echo "$oom"; else echo "  none"; fi
+  elif [[ -s "$results/load.txt" ]]; then
+    echo "The busiest moments while the tests ran (most threads waiting for a CPU; every 15 seconds: load.txt in the results):"
+    awk '{ v = $4; sub("cpu-queue=", "", v); print v " " $0 }' "$results/load.txt" | sort -nr | head -3 | cut -d' ' -f2-
   fi
 }
 trap report EXIT
@@ -160,11 +230,10 @@ case "$shard" in
     ;;
   debug-codalus)
     # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
-    # folder (uploaded when the shard fails), as netcoredbg's is above: ADR 0086's one silent attach failure on Linux is
+    # folder (uploaded when the shard fails; set above for every shard): ADR 0086's one silent attach failure on Linux is
     # watched for here.
     export CODALUS_DEBUG_ADAPTER=codalus
     export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
-    export CODALUS_CLR_DEBUGGER_LOG="${CODALUS_CLR_DEBUGGER_LOG:-$results/clr-dap}"
     # One test project at a time (each line's namespace names it), every one run whatever the one before did.
     projects=()
     while IFS= read -r line; do

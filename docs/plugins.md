@@ -145,7 +145,7 @@ Implement `ITreeDataProvider<T>`: `GetChildrenAsync(element)` (null means the ro
 
 ### Markdown views
 
-`Window.SetMarkdown(viewId, markdown)` supports headings, paragraphs, bulleted and numbered lists, block quotes, fenced code, horizontal rules, `**bold**`, `*italic*`, `` `code` `` and links. Link targets are `https://…` (opened in the browser) or `command:<id>` (runs a command).
+`Window.SetMarkdown(viewId, markdown)` supports headings (`#` and underlined), paragraphs and hard line breaks, bulleted, numbered and task lists (`- [x]`), block quotes, fenced code, horizontal rules, GitHub's tables (with column alignment), `**bold**`, `*italic*`, `~~strikethrough~~`, `` `code` ``, links, `<https://…>` and bare web addresses, and `<br>`. Images show as a link with their description (they aren't loaded); HTML comments are hidden, and other HTML shows as text. Link targets are `https://…` (opened in the browser) or `command:<id>` (runs a command).
 
 ### Progress
 
@@ -370,6 +370,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 
 ## Changelog
 
+### Markdown tables and more (Codalus IDE 0.12, no API version change)
+
+Additive: [Markdown views](#markdown-views), like the Markdown preview, render GitHub's tables, task lists, strikethrough, underlined headings, quotes of several lines, hard line breaks, autolinks and images (as links). `PublicAPI.txt` doesn't change.
+
 ### Markdown preview in the editor (Codalus IDE 0.11, no API version change)
 
 Additive: the shell command `markdown.togglePreview` collapses the active Markdown editor's preview, or shows it again ([ADR 0016](adr/0016-language-platform.md#decision)). `PublicAPI.txt` doesn't change.
@@ -485,7 +489,7 @@ Additive (plugins built for 0.2.0–0.2.8 keep working): `context.Localize(key, 
 
 Additive (manifests for 0.2.0–0.2.8 keep working):
 - [Manifest translation](#translating-the-manifest): `%key%` placeholders with `codalus-plugin.nls.json` and `codalus-plugin.nls.<locale>.json`.
-- Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins window edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
+- Users can turn plugins off: the setting `plugins.disabled` (ids), which the Plugins page's Installed tab edits. A turned-off plugin is discovered but its contributions aren't applied, and it doesn't activate. It applies at the next start (File → Restart).
 - Shell commands `workbench.restart`, `workbench.customize`, `workbench.profiles.switch`, `.new`, `.delete`, `.export` and `.import`, and `settingsSync.turnOn`, `.syncNow` and `.turnOff`. The context keys `profile` (the active profile's name) and `locale` (the display language).
 - The settings `workbench.locale`, `workbench.commandBarCustomizations` (the user's menu and toolbar changes; a plugin's menu items can be removed and moved like the shell's), `settingsSync.target` and `settingsSync.ignoredSettings`. The settings, keyboard shortcuts and snippets that a profile holds include a plugin's own settings.
 

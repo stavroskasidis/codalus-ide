@@ -4,22 +4,22 @@ using Avalonia.Controls;
 using Codalus.Plugins.Protocol;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Infrastructure;
+using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Menus;
 using Codalus.Workbench.Plugins;
 using Codalus.Workbench.Settings;
-using Codalus.Workbench.ToolWindows;
 
 namespace Codalus.Shell;
 
 /// <summary>
 /// The Plugin Gallery (M22c, ADR 0060): plugins from NuGet sources, searched, installed with their permissions shown
 /// first, updated (automatically once a day with <c>plugins.autoUpdate</c>) and uninstalled. A declarative view, like
-/// the Source Control Providers window. Updates and uninstalls apply at the next start.
+/// the Source Control Providers window, in the Plugins page's Browse tab; uninstalling is on the Installed tab's rows.
+/// Updates and uninstalls apply at the next start.
 /// </summary>
 public sealed partial class ShellHost
 {
-    public const string PluginGalleryWindow = "plugins.gallery";
     public const string PluginSourcesSetting = "plugins.sources";
     public const string PluginSignatureSetting = "plugins.requireSignature";
     public const string PluginAutoUpdateSetting = "plugins.autoUpdate";
@@ -39,7 +39,6 @@ public sealed partial class ShellHost
         public int Selected = -1;
         public string? Version;
         public IReadOnlyList<PluginUpdate> Updates = [];
-        public int SelectedInstalled = -1;
         public int SelectedPending = -1;
         public string? Status;
         public bool Busy;
@@ -57,6 +56,39 @@ public sealed partial class ShellHost
 
     private PluginGalleryContent PluginGallery() => _galleryContent ??= new PluginGalleryContent(this);
 
+    private PluginsPageViewModel? _pluginsPage;
+
+    /// <summary>The Plugins page (a tool window among the documents): the installed plugins and the gallery.</summary>
+    public PluginsPageViewModel PluginsPage => _pluginsPage ??= new PluginsPageViewModel(PluginList, PluginGallery());
+
+    /// <summary>Shows the Plugins page on <paramref name="tab"/> (<see cref="PluginsPageViewModel.InstalledTab"/> or <see cref="PluginsPageViewModel.BrowseTab"/>).</summary>
+    public void ShowPluginsPage(int tab)
+    {
+        PluginsPage.TabIndex = tab;
+        Layout.ShowToolWindow(BuiltIns.PluginsWindow, focus: true);
+    }
+
+    private bool IsPluginFromGallery(string id) => _pluginStore?.FromGalleries.Any(p => string.Equals(p.Plugin.Id, id, StringComparison.OrdinalIgnoreCase)) == true;
+
+    private PluginPendingChange PendingPluginChange(string id) =>
+        _pluginStore?.Pending.FirstOrDefault(p => string.Equals(p.Key, id, StringComparison.OrdinalIgnoreCase)) is { Key: not null } pending
+            ? pending.Value is null ? PluginPendingChange.Uninstall : PluginPendingChange.Update
+            : PluginPendingChange.None;
+
+    /// <summary>Uninstalls a plugin installed from a gallery, at the next start, once the user confirms.</summary>
+    public async Task UninstallPluginAsync(string id)
+    {
+        if (_pluginStore is not { } store || store.FromGalleries.FirstOrDefault(p => string.Equals(p.Plugin.Id, id, StringComparison.OrdinalIgnoreCase)).Plugin is not { } target)
+        {
+            return;
+        }
+
+        if (await Dialogs.ConfirmAsync($"Uninstall {target.DisplayName}?", "It is removed at the next start.", "Uninstall", danger: true).ConfigureAwait(true))
+        {
+            store.Uninstall(target.Id);
+        }
+    }
+
     /// <summary>The installer and store (before plugins are discovered: pending changes apply first), settings, commands and the window.</summary>
     private void InitializePluginGallery()
     {
@@ -69,7 +101,11 @@ public sealed partial class ShellHost
             SignaturePolicy = () => Workbench.Settings.GetString(PluginSignatureSetting, "nugetOrg"),
             Prerelease = () => Workbench.Settings.GetBoolean(PluginPrereleaseSetting),
         };
-        _pluginStore.Changed += (_, _) => Ui.Post(() => _gallery.Changed?.Invoke());
+        _pluginStore.Changed += (_, _) => Ui.Post(() =>
+        {
+            _gallery.Changed?.Invoke();
+            PluginList.Refresh(); // a row's waiting change, and whether it can still be uninstalled
+        });
 
         Workbench.Settings.Register(
         [
@@ -97,12 +133,11 @@ public sealed partial class ShellHost
             },
         ]);
 
-        Workbench.ToolWindows.Register(new ToolWindowDescriptor(PluginGalleryWindow, "Plugin Gallery", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "extensions" });
         Workbench.Commands.Register(
             new CommandDescriptor("plugins.browse", "Browse Plugins…", ContributionSource.Shell) { Category = "Plugins" },
             (_, _) =>
             {
-                Ui.Post(() => Layout.ShowToolWindow(PluginGalleryWindow, focus: true));
+                Ui.Post(() => ShowPluginsPage(PluginsPageViewModel.BrowseTab));
                 return Task.FromResult<JsonElement?>(null);
             });
         Workbench.Commands.Register(
@@ -189,7 +224,7 @@ public sealed partial class ShellHost
             var notification = Workbench.Notifications.Info($"Plugin updates are available: {string.Join(", ", updates.Select(u => $"{u.Id} {u.Available}"))}.", "Show Updates");
             if (await notification.Result.ConfigureAwait(true) == "Show Updates")
             {
-                Layout.ShowToolWindow(PluginGalleryWindow, focus: true);
+                ShowPluginsPage(PluginsPageViewModel.BrowseTab);
             }
         }
     }
@@ -294,15 +329,6 @@ public sealed partial class ShellHost
             children.Add(new ViewNodeDto("button") { Id = "updateAll", Text = "Update All", Disabled = _gallery.Busy });
         }
 
-        var fromGalleries = store.FromGalleries;
-        if (fromGalleries.Count > 0)
-        {
-            children.Add(new ViewNodeDto("separator"));
-            children.Add(new ViewNodeDto("text") { Text = "Installed from a gallery", Style = "heading" });
-            children.Add(new ViewNodeDto("table") { Id = "installed", Columns = ["Plugin", "Version", "Source"], Rows = [.. fromGalleries.Select(p => new[] { p.Plugin.DisplayName, p.Plugin.Manifest!.Version, p.Source })] });
-            children.Add(new ViewNodeDto("button") { Id = "uninstall", Text = "Uninstall", Disabled = _gallery.SelectedInstalled < 0 || _gallery.SelectedInstalled >= fromGalleries.Count });
-        }
-
         var waiting = store.Pending;
         if (waiting.Count > 0)
         {
@@ -351,18 +377,6 @@ public sealed partial class ShellHost
                 break;
             case ("updateAll", "click"):
                 await StagePluginUpdatesAsync(_gallery.Updates).ConfigureAwait(true);
-                break;
-            case ("installed", "select" or "activate"):
-                _gallery.SelectedInstalled = row ?? -1;
-                break;
-            case ("uninstall", "click") when store.FromGalleries is var installedPlugins && _gallery.SelectedInstalled >= 0 && _gallery.SelectedInstalled < installedPlugins.Count:
-                var target = installedPlugins[_gallery.SelectedInstalled].Plugin;
-                if (await Dialogs.ConfirmAsync($"Uninstall {target.DisplayName}?", "It is removed at the next start.", "Uninstall", danger: true).ConfigureAwait(true))
-                {
-                    store.Uninstall(target.Id);
-                    _gallery.SelectedInstalled = -1;
-                }
-
                 break;
             case ("pending", "select" or "activate"):
                 _gallery.SelectedPending = row ?? -1;

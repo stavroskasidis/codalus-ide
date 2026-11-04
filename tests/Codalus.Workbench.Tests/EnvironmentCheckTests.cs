@@ -185,14 +185,40 @@ public sealed partial class EnvironmentCheckTests : IDisposable
             : ("/bin/sh", ["-c", $"echo $$ > '{file}'; exec sleep 300"]);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var run = EnvironmentCheck.RunProcessAsync(program, arguments, _dir, TimeSpan.FromSeconds(120), cancel.Token);
-        var id = 0;
-        for (var i = 0; i < 300 && !(File.Exists(file) && int.TryParse(File.ReadAllText(file).Trim(), System.Globalization.CultureInfo.InvariantCulture, out id)); i++)
+        // Read as the debugger's terminal launch reads its pid file: on Windows a read while Set-Content still writes
+        // the file is a sharing violation, which threw out of the poll, and the program, left running in the test's
+        // folder, kept it from being deleted (Windows others, run 41423281887).
+        int? id = null;
+        for (var i = 0; i < 300 && (id = await Debugging.HeldLaunch.ReadProcessIdAsync(file, TestContext.Current.CancellationToken)) is null; i++)
         {
             await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
-        Assert.NotEqual(0, id);
-        using var process = System.Diagnostics.Process.GetProcessById(id);
+        if (id is null)
+        {
+            // No pid in 30 s (Windows others, run 41459412070): whether the program ended, and how, or still runs. Then its
+            // run is cancelled, so the program doesn't hold the test's folder and add a second error to the first.
+            var state = "is still running";
+            if (run.IsCompleted)
+            {
+                try
+                {
+                    var (exitCode, printed) = await run;
+                    state = $"ended with exit code {exitCode}: {printed}";
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    state = $"ended with {ex.GetBaseException().Message}";
+                }
+            }
+
+            var written = File.Exists(file) ? $"the file holds {new FileInfo(file).Length} bytes" : "no file";
+            await cancel.CancelAsync();
+            await ((Task)run).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ContinueOnCapturedContext);
+            Assert.Fail($"{program} wrote no process id to {file} in 30 s ({written}); its run {state}.");
+        }
+
+        using var process = System.Diagnostics.Process.GetProcessById(id.Value);
         try
         {
             await cancel.CancelAsync();

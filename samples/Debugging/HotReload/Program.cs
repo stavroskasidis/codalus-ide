@@ -1,4 +1,4 @@
-// Hot Reload while debugging (M55): the tests edit Greeter.Message while the program runs or is stopped, and read
+// Hot Reload while debugging (M55): the tests edit Greeter's methods while the program runs or is stopped, and read
 // what it prints. With an argument, it waits for that file before its loop (attach tests).
 [assembly: System.Reflection.Metadata.MetadataUpdateHandler(typeof(UpdateHandler))]
 
@@ -15,6 +15,7 @@ var later = Path.Combine(AppContext.BaseDirectory, "later");
 for (var i = 0; i < 2000; i++)
 {
     Console.WriteLine(Greeter.Message(i)); // [call]
+    Console.WriteLine(Greeter.StatusAsync(i).Result);
     if (File.Exists(later))
     {
         Greeter.CallLater();
@@ -34,6 +35,14 @@ static class Greeter
         var text = "hello " + i; // [message]
         return text;
     }
+
+    // Async without an await: an edit to it gives it a new state machine, an IAsyncStateMachine implementation.
+#pragma warning disable CS1998
+    public static async Task<string> StatusAsync(int i)
+    {
+        return "status " + i;
+    }
+#pragma warning restore CS1998
 }
 
 // Called after each edit the debugger applies, through the startup hook's agent (ADR 0090), as dotnet watch's calls it.

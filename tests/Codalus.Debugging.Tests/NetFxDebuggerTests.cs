@@ -62,7 +62,16 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
         await adapter.ConfigurationDoneAsync(Ct);
 
         // The breakpoint in Cart.Total, bound when the module loaded.
-        var stopped = await NextAsync(events, DapEvents.Stopped, log);
+        var stopped = await NextAsync(events, DapEvents.Stopped, log, () =>
+        {
+            string printed;
+            lock (output)
+            {
+                printed = output.ToString();
+            }
+
+            return $"the program printed [{printed}]; {Debuggees(fixture.Exe!)}";
+        });
         Assert.Equal("breakpoint", stopped.GetProperty("reason").GetString());
         Assert.Contains(id!.Value, stopped.GetProperty("hitBreakpointIds").EnumerateArray().Select(e => e.GetInt32()));
         var thread = stopped.GetProperty("threadId").GetInt32();
@@ -222,10 +231,44 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
         }
     }
 
-    private static async Task<JsonElement> NextAsync(Channel<DapEvent> events, string name, System.Collections.Concurrent.ConcurrentQueue<string> log)
+    /// <summary>The running copies of the program, with the CPU time each used and its threads (failure messages): one that
+    /// used none never ran, one still using it ran without stopping.</summary>
+    private static string Debuggees(string exe)
+    {
+        var processes = Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe));
+        try
+        {
+            return processes.Length == 0
+                ? "the program isn't running"
+                : "the program: " + string.Join(", ", processes.Select(p =>
+                {
+                    try
+                    {
+                        return $"process {p.Id}, {p.TotalProcessorTime.TotalMilliseconds:0} ms of CPU, {p.Threads.Count} thread(s), started {(DateTime.Now - p.StartTime).TotalSeconds:0} s ago";
+                    }
+                    catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+                    {
+                        return $"process {p.Id} ({ex.Message})";
+                    }
+                }));
+        }
+        finally
+        {
+            foreach (var process in processes)
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    /// <param name="describe">The program's side, added to a timeout's failure: the first stop never came in Windows
+    /// others while two other test processes stalled too (PR #296's run 41685545193), and the log said only that the
+    /// program started.</param>
+    private static async Task<JsonElement> NextAsync(Channel<DapEvent> events, string name, System.Collections.Concurrent.ConcurrentQueue<string> log, Func<string>? describe = null)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
+        var others = new List<string>();
         try
         {
             while (true)
@@ -240,11 +283,13 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
                 {
                     Assert.Fail("The program ended before stopping.\n" + string.Join('\n', log));
                 }
+
+                others.Add(e.Name);
             }
         }
         catch (OperationCanceledException) when (!Ct.IsCancellationRequested)
         {
-            Assert.Fail($"No '{name}' event within 120 s.\n" + string.Join('\n', log));
+            Assert.Fail($"No '{name}' event within 120 s; the events meanwhile: [{string.Join(", ", others)}]{(describe is null ? string.Empty : "; " + describe())}.\n" + string.Join('\n', log));
             throw;
         }
     }

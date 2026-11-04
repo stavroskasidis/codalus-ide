@@ -34,8 +34,8 @@ internal static partial class BuiltIns
     public static IEnumerable<ToolWindowDescriptor> ProfilingToolWindows()
     {
         yield return new ToolWindowDescriptor(DiagnosticToolsViewModel.ToolWindowId, "Diagnostic Tools", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
-        yield return new ToolWindowDescriptor(CountersViewModel.ToolWindowId, ".NET Counters", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
-        yield return new ToolWindowDescriptor(BenchmarksViewModel.ToolWindowId, "Benchmarks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
+        yield return new ToolWindowDescriptor(CountersViewModel.ToolWindowId, ".NET Counters", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
+        yield return new ToolWindowDescriptor(BenchmarksViewModel.ToolWindowId, "Benchmarks", ToolWindowLocation.Document, ToolWindowKind.BuiltIn, ContributionSource.Shell) { Icon = "flame" };
     }
 
     public static void RegisterProfilingCommands(ShellHost shell)

@@ -195,7 +195,7 @@ public sealed class EditorLargeTextTests
         DocumentEdits.Apply(document, [(document.GetLineByNumber(9).Offset, 0, "/**/"), .. LineTenEdits()]);
         Assert.True(lineTen.IsDeleted);
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
 
         // A group from line 1 to the end replaces all of the text, which rebuilds every line but the first; and its undo.
         var edits = new List<(int Offset, int Length, string Text)>();
@@ -215,10 +215,10 @@ public sealed class EditorLargeTextTests
         DocumentEdits.Apply(document, edits);
         Assert.NotSame(last, document.GetLineByNumber(document.LineCount)); // the whole text replaced, not the edits' span
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
         document.UndoStack.Undo();
         DrawnToCaret();
-        Assert.Equal(caret, CaretX());
+        Assert.Equal(caret, CaretX(), tolerance: 0.01);
 
         // Away from line 10, the usual cut again.
         editor.Editor.CaretOffset = document.GetLineByNumber(11).Offset;
@@ -254,6 +254,9 @@ public sealed class EditorLargeTextTests
             Assert.IsType<LongLineCutter.Marker>(drawn.Elements[^1]);
         }
 
+        // Where the caret is drawn. Not to the last bit: 12,000 columns of a monospace font whose advance binary can't hold
+        // exactly (7.8 px on WSL) sum to a position that moves in its 14th digit as the edits regroup the line's runs
+        // (WSL, PR #268's validation and 2026-11-02's, the same two values each time).
         double CaretX() => view.GetVisualPosition(editor.Editor.TextArea.Caret.Position, VisualYPosition.LineMiddle).X;
     }
 
@@ -404,12 +407,29 @@ public sealed class EditorLargeTextTests
 
         // The language service's part of the editor's open, as Track does it: from the UI thread, with the service
         // running, so nothing before the didOpen yields (the rest of the open is M56's, measured there).
+        // TODO(issue): 128 and 124 ms "in no posted job" on macOS CI (runs 41436887375 and 41448210970,
+        // docs/ci-flakes.md). The UI thread only queues the didOpen: its 19 MB text and JSON are made on the writer
+        // loop, and the service reads it, both off this thread. Each step is named, and the failure says how long the
+        // window took and how much CPU this process used in it, so a starved machine (the UI thread runnable but not
+        // run) tells itself apart from the UI thread's own work, as in the typing test below.
         using var monitor = new UiStallMonitor();
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var cpuBefore = process.TotalProcessorTime;
+        var window = System.Diagnostics.Stopwatch.StartNew();
+        monitor.Step = "queuing the didOpen";
         Assert.True(await f.Shell.Languages.OpenAsync(new Workbench.Languages.LanguageDocument(path, "xml", () => (snapshot.Text, 1))));
         var client = services.Client(small.Model)!;
+        monitor.Step = "a hover queued after the didOpen, until its answer";
         await client.HoverAsync(LanguageServices.Protocol.DocumentUris.FromPath(path), new LanguageServices.Protocol.Position(0, 1), TestContext.Current.CancellationToken); // after the didOpen
+        monitor.Step = "the second after the hover";
         await PumpForAsync(1000);
-        monitor.AssertResponsive("a 19 MB XML document's didOpen", LanguageServiceBudget);
+        monitor.Step = null;
+        process.Refresh();
+        var cpu = process.TotalProcessorTime - cpuBefore;
+        monitor.AssertResponsive(
+            $"a 19 MB XML document's didOpen (the window took {window.ElapsedMilliseconds} ms; this process used {cpu.TotalMilliseconds:0} ms of CPU in it, on {Environment.ProcessorCount} cores)",
+            LanguageServiceBudget);
+        TestContext.Current.TestOutputHelper?.WriteLine($"the longest wait {monitor.Report().Describe()}; the window took {window.ElapsedMilliseconds} ms, {cpu.TotalMilliseconds:0} ms of CPU");
         await f.Shell.Languages.CloseAsync(path);
     }
 
@@ -431,23 +451,39 @@ public sealed class EditorLargeTextTests
         await ShellFixture.PumpUntil(() => services.Client(editor.Model) is not null, seconds: 60);
         Assert.Equal(LanguageServices.Protocol.TextDocumentSyncKind.Full, services.Client(editor.Model)!.Capabilities!.TextDocumentSync);
 
+        // TODO(issue): 110 ms "in no posted job" on macOS CI (run 41412231293, docs/ci-flakes.md), with only 10 probes
+        // answered in the window (about 45 here). A key costs about 12 ms of UI thread here (the insert 1 ms, a frame
+        // 4 ms, the jobs after it), and 22-76 ms beside four busy loops on four cores. Each step is named, and the
+        // failure says how long the window took and how much CPU this process used in it, so a starved machine (the UI
+        // thread runnable but not run) tells itself apart from the UI thread's own work.
         using var monitor = new UiStallMonitor();
         async Task TypeAsync()
         {
             editor.Editor.CaretOffset = 0;
             for (var i = 0; i < 20; i++)
             {
+                monitor.Step = $"key {i + 1}";
                 editor.Editor.TextArea.PerformTextInput("z");
+                monitor.Step = $"the jobs and the frame after key {i + 1}";
                 ShellFixture.Pump();
             }
 
+            monitor.Step = "the pause after typing";
             await PumpForAsync(300);
+            monitor.Step = null;
         }
 
         await TypeAsync(); // for the JIT
         monitor.Reset();
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var cpuBefore = process.TotalProcessorTime;
+        var window = System.Diagnostics.Stopwatch.StartNew();
         await TypeAsync();
-        monitor.AssertResponsive("typing 20 keys in a 15 MB file under a whole-text server", LanguageServiceBudget);
+        process.Refresh();
+        var cpu = process.TotalProcessorTime - cpuBefore;
+        monitor.AssertResponsive(
+            $"typing 20 keys in a 15 MB file under a whole-text server (the window took {window.ElapsedMilliseconds} ms; this process used {cpu.TotalMilliseconds:0} ms of CPU in it, on {Environment.ProcessorCount} cores)",
+            LanguageServiceBudget);
 
         // The server ends on the editor's text, at its version, whatever was replaced on the way.
         var client = services.Client(editor.Model)!;

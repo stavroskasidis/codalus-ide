@@ -172,7 +172,7 @@ public class GatesTests
             Assert.True(a.Os is "linux" or "windows" or "macos", a.Os);
             Assert.False(string.IsNullOrWhiteSpace(a.Reason));
             Assert.True(a.Value > 0);
-            Assert.Equal("p50", a.Stat);
+            Assert.True(a.Stat is "p50" or "p99", a.Stat); // the stats the gate compares
         });
         Assert.Contains(accepted, a => a is { Os: "linux", Target: "shell", Scenario: "binary-size", Metric: "lshost_mb" } && Math.Abs(a.Value - 93.5) < 0.05);
         Assert.Contains(accepted, a => a is { Os: "windows", Metric: "lshost_mb" } && Math.Abs(a.Value - 92.6) < 0.05);
@@ -185,6 +185,15 @@ public class GatesTests
                 Assert.Contains(accepted, a => a.Os == os && a.Metric == metric && a.Date == new DateOnly(2026, 10, 18) && a.Commit is not null && a.Run is not null);
             }
         }
+        // The first real-scrolling numbers (the scroll benchmark didn't move the text before 0.12.0): p50 and p99 per OS.
+        foreach (var os in new[] { "linux", "windows", "macos" })
+        {
+            foreach (var stat in new[] { "p50", "p99" })
+            {
+                Assert.Contains(accepted, a => a is { Scenario: "self-driven", Metric: "selfdriven_scroll_frame_ms", Run: "41446543050", Cpu: not null } && a.Os == os && a.Stat == stat);
+            }
+        }
+
         Assert.Empty(Gates.LoadAccepted(Path.Combine(root, "benchmarks", "no-such-file.json")));
     }
 
@@ -212,6 +221,21 @@ public class GatesTests
 
         // An acceptance older than every run changes nothing.
         Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 3, ("lshost_mb", [93.5]))], [before], [Accepted("lshost_mb", 93.5, day: -1)])).Failed);
+    }
+
+    [Fact]
+    public void Of_two_values_accepted_on_the_same_day_the_later_in_the_file_counts()
+    {
+        // A baseline accepted in the morning and the fix's lower value accepted the same afternoon (the scroll, 2026-11-02).
+        var before = Result("binary-size", 1, ("lshost_mb", [73.9]));
+        var accepted = new[] { Accepted("lshost_mb", 93.5, day: 2), Accepted("lshost_mb", 80, day: 2) };
+        var compared = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 3, ("lshost_mb", [93.5]))], [before], accepted));
+        Assert.True(compared.Failed);
+        Assert.Contains("(80.0)", compared.Rule, StringComparison.Ordinal);
+
+        // A newer date still wins wherever it is in the file.
+        var newest = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 4, ("lshost_mb", [93.5]))], [before], [Accepted("lshost_mb", 93.5, day: 3), .. accepted]));
+        Assert.False(newest.Failed);
     }
 
     [Fact]

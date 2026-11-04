@@ -62,7 +62,18 @@ public sealed class WcfServiceIntegrationTests : IAsyncLifetime
         var listening = await StartServiceAsync(output, ct);
 
         using var client = new WcfTestClient(new HttpClient { Timeout = TimeSpan.FromSeconds(60) });
-        var found = await client.DiscoverAsync([(project, _output.ToString())], ct);
+        string printed;
+        lock (_output)
+        {
+            printed = _output.ToString();
+        }
+
+        var found = await client.DiscoverAsync([(project, printed)], ct);
+        if (found.Count == 0)
+        {
+            Assert.Fail(await DescribeEmptyDiscoveryAsync(project, listening, ct));
+        }
+
         // CoreWCF answers ?wsdl at the BasicHttpBinding endpoint only (the SOAP 1.2 one wants POSTs); it lists both.
         Assert.Equal([listening + "/CalculatorService.svc?wsdl"], found.Select(s => s.MetadataUrl));
 
@@ -115,6 +126,40 @@ public sealed class WcfServiceIntegrationTests : IAsyncLifetime
     }
 
     /// <summary>Starts the service on port 0 and waits for "Now listening on:"; returns the address.</summary>
+    /// <summary>
+    /// Why discovery found nothing, which it doesn't say (it drops every failed or timed-out request): what it read from the
+    /// program's output, and what the metadata address answers without its 5-second limit (Windows others, run 41459412070).
+    /// </summary>
+    private async Task<string> DescribeEmptyDiscoveryAsync(string project, string listening, CancellationToken ct)
+    {
+        string output;
+        lock (_output)
+        {
+            output = _output.ToString();
+        }
+
+        var addresses = WcfServiceDiscovery.ListeningAddresses(output);
+        var paths = WcfServiceDiscovery.EndpointPaths(Path.GetDirectoryName(project)!);
+        var url = listening + "/CalculatorService.svc?wsdl";
+        var watch = Stopwatch.StartNew();
+        string answer;
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+            using var response = await http.GetAsync(url, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            answer = $"{(int)response.StatusCode} {response.StatusCode} after {watch.ElapsedMilliseconds} ms, {body.Length} characters: {body[..Math.Min(200, body.Length)]}";
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException)
+        {
+            answer = $"{ex.GetType().Name} after {watch.ElapsedMilliseconds} ms: {ex.Message}";
+        }
+
+        return $"Discovery found no service (the service {(_service is { HasExited: true } ? "has exited" : "still runs")}). "
+            + $"Listening addresses read from its output: [{string.Join(", ", addresses)}]; endpoint paths: [{string.Join(", ", paths)}]; "
+            + $"{url} answers {answer}\nThe service's output:\n{output}";
+    }
+
     private async Task<string> StartServiceAsync(string dll, CancellationToken ct)
     {
         var psi = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(dll)! };

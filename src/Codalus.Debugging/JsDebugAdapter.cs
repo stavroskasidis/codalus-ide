@@ -43,6 +43,9 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     /// </summary>
     private int _attaching;
 
+    /// <summary>1 once the app was asked about a WebAssembly debugging proxy js-debug couldn't open (<see cref="WebAssemblyDebugProxy"/>).</summary>
+    private int _proxyAsked;
+
     private JsDebugAdapter(Process server, int port, string adapterId, TcpClient client)
     {
         _server = server;
@@ -165,6 +168,11 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         if (line is { Length: > 0 } && !line.Contains("DeprecationWarning", StringComparison.Ordinal))
         {
             Log?.Invoke(this, line);
+            if (WebAssemblyDebugProxy.UnopenedAddress(line) is { } proxy && Interlocked.Exchange(ref _proxyAsked, 1) == 0)
+            {
+                // The Debug Console says what the app answers there, once: the error repeats in js-debug's output.
+                _ = Task.Run(async () => Log?.Invoke(this, await WebAssemblyDebugProxy.DescribeAsync(proxy, CancellationToken.None).ConfigureAwait(false)));
+            }
         }
     }
 

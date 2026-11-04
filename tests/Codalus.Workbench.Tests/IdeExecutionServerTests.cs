@@ -37,6 +37,23 @@ public sealed class IdeExecutionServerTests
         }
     }
 
+    /// <summary>
+    /// The state a failure describes says when disposal reached each step of its teardown: a disposal that took over 10 s
+    /// on Windows CI said nothing of which step (PR #300's run 41849511374).
+    /// </summary>
+    [Fact]
+    public async Task The_state_lists_when_disposal_reached_each_step_of_its_teardown()
+    {
+        var server = new IdeExecutionServer((_, _) => Task.FromResult<IIdeRunSession>(new FakeSession()));
+        server.Start();
+        Assert.DoesNotContain("teardown", server.DescribeState(), StringComparison.Ordinal);
+
+        await server.DisposeAsync().AsTask().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        var state = server.DescribeState();
+        Assert.Matches(@"teardown [0-9.]+ s in: sessions stopped at [0-9.]+ s, teardown started at [0-9.]+ s, cancelled at [0-9.]+ s, listener closed at [0-9.]+ s, accept loop ended at [0-9.]+ s, sockets aborted at [0-9.]+ s, connections aborted at [0-9.]+ s$", state);
+    }
+
     [Fact]
     public async Task Disposal_ends_the_sessions_and_closes_a_listening_notification_socket_without_waiting_for_it()
     {

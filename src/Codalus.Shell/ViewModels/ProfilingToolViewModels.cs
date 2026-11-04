@@ -95,7 +95,7 @@ public sealed record ActivityRow(ActivityItem Item, double TraceDuration)
 
     public string? Detail => Item.Status is { } status ? (Item.Detail is { } detail ? status + " · " + detail : status) : Item.Detail;
 
-    public Avalonia.Thickness Indent => new(Item.Depth * 14, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Item.Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     public double BarStart => TraceDuration <= 0 ? 0 : Item.Start / TraceDuration;
 

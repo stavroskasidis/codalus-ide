@@ -254,7 +254,7 @@ public sealed class GitChangeRow(GitChangeNode node, int depth) : ObservableObje
     public int Depth { get; } = depth;
 
     /// <summary>The indentation of its level, 16 px each, as the tree view's.</summary>
-    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     public bool IsFile => _node.IsFile;
 
@@ -520,7 +520,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         {
             if (SetField(ref _filterText, value ?? string.Empty))
             {
-                (_filterRefresh ??= new UiDebouncer(Refresh, TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(600))).Request();
+                (_filterRefresh ??= new UiDebouncer(() => Refresh("the filter"), TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(600))).Request();
             }
         }
     }
@@ -937,6 +937,12 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     /// <summary>How many times the trees and lists were built (tests: none while the window is hidden).</summary>
     internal int ViewsBuilt { get; private set; }
 
+    /// <summary>
+    /// What asked for the last refresh, and when (tests' failure messages): one started that a test didn't expect, between
+    /// a refresh ending and its next assertion, with nothing to say what started it (Windows shell-1, run 41549374686).
+    /// </summary>
+    internal string LastRefreshCause { get; private set; } = "none";
+
     /// <summary>Whether a refresh is waiting or running (tests).</summary>
     internal bool IsRefreshing => _computing || Volatile.Read(ref _refreshPosted) == 1 || _filterRefresh?.IsPending == true;
 
@@ -959,7 +965,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     }
 
     /// <summary>A refresh for a status read, from any thread: one for a burst, after the input waiting (at background priority).</summary>
-    private void RequestRefresh(bool stashes)
+    private void RequestRefresh(bool stashes, [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
         if (stashes)
         {
@@ -972,7 +978,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
             {
                 Volatile.Write(ref _refreshPosted, 0);
                 _stashesStale |= Interlocked.Exchange(ref _stashesRequested, 0) == 1;
-                Refresh();
+                Refresh("a status read", line);
             }, Avalonia.Threading.DispatcherPriority.Background);
         }
     }
@@ -984,8 +990,9 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     /// applied in place (a view built for an older status, filter or expansion is dropped and built again). On the UI
     /// thread this took 0.2-3 s per status read with 10,000-50,000 changed files, shown or not.
     /// </summary>
-    public void Refresh()
+    public void Refresh([System.Runtime.CompilerServices.CallerMemberName] string caller = "", [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
+        LastRefreshCause = $"{caller} (line {line}) at {DateTime.UtcNow:HH:mm:ss.fff}";
         _generation++;
         _ = RefreshInBackgroundAsync();
     }
@@ -1216,7 +1223,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         ? string.Empty
         : status.Branch ?? Localizer.Format("msg.gitChanges.detachedAt", "(detached at {0})", status.Head?[..Math.Min(7, status.Head.Length)]);
 
-    /// <summary>The branch button's tooltip: the branch, or each repository's ("WPylon: develop") with all shown.</summary>
+    /// <summary>The branch button's tooltip: the branch, or each repository's ("Contoso.Web: develop") with all shown.</summary>
     public string BranchTooltip => _isAllRepositories
         ? string.Join(Environment.NewLine, Services.Select(s => $"{s.Name}: {BranchOf(s.Status)}"))
         : BranchName;
@@ -1268,7 +1275,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
             ? string.Create(System.Globalization.CultureInfo.CurrentCulture, $"{status.Ahead} / {status.Behind}")
             : string.Empty;
 
-    /// <summary>What the counts mean: one repository's, or with all shown a line for each ("WPylon: 1 outgoing / 0 incoming (tracking origin/develop)").</summary>
+    /// <summary>What the counts mean: one repository's, or with all shown a line for each ("Contoso.Web: 1 outgoing / 0 incoming (tracking origin/develop)").</summary>
     public string OutgoingIncomingTooltip => _isAllRepositories
         ? string.Join(Environment.NewLine, Services.Select(s => s.Name + ": " + TrackingOf(s.Status)))
         : TrackingOf(_git.Status);
@@ -1881,7 +1888,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         }
     }
 
-    /// <summary>"1 of 2 repositories failed:" and a line for each ("WPylon: git's message").</summary>
+    /// <summary>"1 of 2 repositories failed:" and a line for each ("Contoso.Web: git's message").</summary>
     public static string FailureSummary(IReadOnlyList<GitRepositoryFailure> failures, int total) =>
         Localizer.Format("msg.gitChanges.repositoriesFailed", "{0} of {1} repositories failed:", failures.Count, total)
         + Environment.NewLine + string.Join(Environment.NewLine, failures);

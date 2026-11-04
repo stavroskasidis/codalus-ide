@@ -50,7 +50,7 @@ public sealed class GitBranchRow : ObservableObject
     /// <summary>How far it's indented: under All branches, a repository's header (1) and its branches (2).</summary>
     public int Depth { get; private init; }
 
-    public Avalonia.Thickness Indent => new(Depth * 12, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     /// <summary>Identifies the row across reloads: <c>l:main</c>, <c>r:origin/main</c>, <c>h:…</c>.</summary>
     public string Key { get; }

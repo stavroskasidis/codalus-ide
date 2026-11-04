@@ -15,7 +15,7 @@ public enum GitRepositoryNodeKind
     /// <summary>Branches / Tags, Pull Requests, Submodules, a remote's or the tags' folder.</summary>
     Group,
 
-    /// <summary>A repository, "WPoseidon (develop)".</summary>
+    /// <summary>A repository, "Contoso.Web (develop)".</summary>
     Repository,
 
     /// <summary>A part of branch names before a <c>/</c> (<c>feature</c>).</summary>
@@ -219,7 +219,7 @@ public sealed class GitRepositoryRow(GitRepositoryNode node, int depth) : Observ
     public int Depth { get; } = depth;
 
     /// <summary>The indentation of its level, 16 px each, as the tree view's.</summary>
-    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     /// <summary>A group, a repository or a folder with something in it: it expands and collapses.</summary>
     public bool HasChildren => _node.Children.Count > 0;
@@ -307,6 +307,13 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
 
     /// <summary>How long the filter waits after a keystroke before it filters (M57): the tree is filtered once per pause.</summary>
     internal static readonly TimeSpan FilterDelay = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>
+    /// The pause this document's filter waits for, <see cref="FilterDelay"/>. A test that types sets a longer one: its
+    /// waits between keystrokes pump the UI thread, and on a loaded runner one ran 161 ms, past the 150 ms, so the
+    /// filter rightly built in the middle (macOS CI, runs 41264132614, 41366742205 and 41412231293).
+    /// </summary>
+    internal TimeSpan FilterPause { get; set; } = FilterDelay;
 
     private readonly GitRepositoryActions _actions;
     private readonly Dictionary<string, bool> _expanded = new(StringComparer.Ordinal);
@@ -401,7 +408,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             {
                 if (_filterTimer is null)
                 {
-                    _filterTimer = new Avalonia.Threading.DispatcherTimer { Interval = FilterDelay };
+                    _filterTimer = new Avalonia.Threading.DispatcherTimer();
                     _filterTimer.Tick += (_, _) =>
                     {
                         _filterTimer.Stop();
@@ -410,6 +417,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                 }
 
                 _filterTimer.Stop();
+                _filterTimer.Interval = FilterPause;
                 _filterTimer.Start();
             }
         }

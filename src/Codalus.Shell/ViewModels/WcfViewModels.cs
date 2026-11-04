@@ -43,7 +43,7 @@ public sealed class SoapFieldRow : ObservableObject
 
     public int Depth { get; }
 
-    public Thickness Indent => new(Depth * 18, 0, 0, 0);
+    public Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
     public string Name => Field.Name.LocalName;
 

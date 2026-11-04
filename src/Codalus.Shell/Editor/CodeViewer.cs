@@ -152,9 +152,9 @@ public sealed class CodeViewer : UserControl
             Editor.ScrollTo(line.LineNumber, 1);
             Avalonia.Threading.Dispatcher.UIThread.Post(() =>
             {
-                // Center the definition: a few lines of context above it.
-                var top = Math.Max(0, (line.LineNumber - 4) * Editor.TextArea.TextView.DefaultLineHeight);
-                Editor.ScrollToVerticalOffset(top);
+                // The definition near the top, with three lines of context above it. (TextEditor.ScrollToVerticalOffset
+                // did nothing: the definition was the first line shown.)
+                Editor.ScrollToY((line.LineNumber - 4) * Editor.TextArea.TextView.DefaultLineHeight);
             }, Avalonia.Threading.DispatcherPriority.Background);
         }
         else

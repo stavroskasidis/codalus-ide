@@ -72,6 +72,9 @@ public sealed class DebugService : IAsyncDisposable
     private bool _attached;
     private volatile bool _stopRequested;
     private int _exitCode;
+
+    /// <summary>Whether the adapter sent the program's <c>exited</c> event in this session.</summary>
+    private volatile bool _exitReported;
     private CancellationTokenSource _session = new();
 
     /// <summary>Completes when the current session has ended (and when there is none).</summary>
@@ -1031,7 +1034,7 @@ public sealed class DebugService : IAsyncDisposable
         return environment;
     }
 
-    private async Task StartAsync<TAdapter>(
+    internal async Task StartAsync<TAdapter>(
         Func<CancellationToken, Task<TAdapter>> create,
         Func<TAdapter, Task> start,
         bool attached,
@@ -1060,6 +1063,7 @@ public sealed class DebugService : IAsyncDisposable
         _attached = attached && !owned;
         _stopRequested = false;
         _exitCode = 0;
+        _exitReported = false;
         ProcessId = null;
         _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
@@ -1133,10 +1137,15 @@ public sealed class DebugService : IAsyncDisposable
         try
         {
             adapter = await create(cancellationToken).ConfigureAwait(false);
-            adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e);
+            // Its terminated event and its end end only its own session: each comes again after the first ends it (the
+            // other one, or EndAsync's own dispose closing it), on the thread pool, and one that runs late, after the
+            // next session started, ended that session as it started (the smoke sweep's Start Debugging right after a
+            // session ran to its end, Linux CI run 41641994303).
+            var started = adapter;
+            adapter.EventReceived += e => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : OnEventAsync(e, started);
             adapter.Log += (_, line) => Output?.Invoke(this, new DebugOutput("console", line + "\n"));
             _adapter = adapter;
-            _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+            _ = adapter.Closed.ContinueWith(_ => Volatile.Read(ref abandoned.Value) ? Task.CompletedTask : EndAsync(started), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
 
             // DAP's order: launch, and configure while it runs. Some adapters (js-debug) answer the launch only after
             // configurationDone.
@@ -1253,6 +1262,7 @@ public sealed class DebugService : IAsyncDisposable
 
         SetState(DebugState.Starting);
         _exitCode = 0;
+        _exitReported = false;
         ProcessId = null;
         _process = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_gate)
@@ -1451,6 +1461,15 @@ public sealed class DebugService : IAsyncDisposable
         {
             await _ended.Task.ConfigureAwait(false);
             return;
+        }
+
+        // A launched program's session that ends without the adapter saying how the program exited reports exit code 0,
+        // the initial one: so it says so, with what the adapter's process did. netcoredbg (Linux CI, PR #300's run
+        // 41898116148) and Codalus IDE's adapter (Linux arm64 CI, run 41547730079) both went silent after the program's
+        // end, without exited or terminated, and the session ended on the connection closing. TODO(issue): why.
+        if (!_exitReported && !_stopRequested && !_attached)
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));
         }
 
         await _session.CancelAsync().ConfigureAwait(false);
@@ -1994,7 +2013,7 @@ public sealed class DebugService : IAsyncDisposable
 
     // ------------------------------------------------------------------ events
 
-    private async Task OnEventAsync(DapEvent e)
+    private async Task OnEventAsync(DapEvent e, IDebugAdapter source)
     {
         switch (e.Name)
         {
@@ -2013,11 +2032,12 @@ public sealed class DebugService : IAsyncDisposable
                 break;
             case DapEvents.Exited when DebugAdapter.Read(e.Body, DapJsonContext.Default.ExitedEvent) is { } exited:
                 _exitCode = exited.ExitCode;
+                _exitReported = true;
                 var program = _adapter is CompoundDebugAdapter { Independent: true } programs ? $"[{programs.PartNames[0]}] " : string.Empty;
                 Output?.Invoke(this, new DebugOutput("console", $"{program}The program has exited with code {exited.ExitCode.ToString(CultureInfo.InvariantCulture)} (0x{exited.ExitCode:x}).\n"));
                 break;
             case DapEvents.Terminated:
-                _ = Task.Run(EndAsync);
+                _ = Task.Run(() => EndAsync(source));
                 break;
             case DapEvents.Process when DebugAdapter.Read(e.Body, DapJsonContext.Default.ProcessEvent) is { SystemProcessId: { } pid }:
                 OnProcess(pid);

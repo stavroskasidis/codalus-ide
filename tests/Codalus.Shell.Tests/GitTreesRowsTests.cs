@@ -185,10 +185,10 @@ public sealed class GitTreesRowsTests
         await using var f = ShellFixture.Create();
         var (vm, tree, folder) = await ShowRepositoryAsync(f, tags: 5000, branches: 2000);
 
-        // The branches in their folders, folders first, with the tags collapsed: a row for each node shown, 16 px a level.
+        // The branches in their folders, folders first, with the tags collapsed: a row for each node shown, 12 px a level.
         Assert.Equal(["Branches / Tags", Path.GetFileName(folder) + " (main)", "team00", "b0000"], vm.Rows.Take(4).Select(r => r.Text));
         Assert.Equal([0, 1, 2, 3], vm.Rows.Take(4).Select(r => r.Depth));
-        Assert.Equal(new Thickness(48, 0, 0, 0), vm.Rows[3].Indent);
+        Assert.Equal(new Thickness(36, 0, 0, 0), vm.Rows[3].Indent);
         Assert.True(Row(vm, "team19").IsExpanded);
         Assert.Equal("main", vm.Rows[2 + (20 * 101)].Text); // after the 20 folders of 100 branches
         Assert.False(Row(vm, "tags").IsExpanded);
@@ -247,9 +247,12 @@ public sealed class GitTreesRowsTests
         Assert.Null(vm.SelectedRow);
         await ShellFixture.PumpUntil(() => vm.HasMessage);
 
-        // Typing in the filter filters once, a pause after the last keystroke, with every match's folders open.
-        // TODO(issue): two builds came while typing on macOS CI (run 41264132614, docs/ci-flakes.md): the failure says
-        // how long the keystroke really waited (the filter builds after FilterDelay) and whether git's refs were read again.
+        // Typing in the filter filters once, a pause after the last keystroke, with every match's folders open. The
+        // keystrokes come 40 ms apart, but each wait pumps the UI thread and ran 161 ms on macOS CI (runs 41366742205 and
+        // 41412231293, docs/ci-flakes.md), past FilterDelay's 150 ms: the filter rightly built after it. So the pause here
+        // is 2 s, far above any such wait; the failure still says how long each keystroke waited and whether the refs
+        // were read again.
+        vm.FilterPause = TimeSpan.FromSeconds(2);
         built = vm.TreesBuilt;
         var readsBefore = vm.RefsReads;
         var since = System.Diagnostics.Stopwatch.StartNew();
@@ -262,11 +265,12 @@ public sealed class GitTreesRowsTests
             await ShellFixture.PumpUntil(() => DateTime.UtcNow >= until);
             Assert.True(built == vm.TreesBuilt,
                 $"{vm.TreesBuilt - built} build(s) while typing, after \"{text}\": {gap} ms since the keystroke before, {since.ElapsedMilliseconds} ms since this one "
-                + $"(the filter builds {GitRepositoryViewModel.FilterDelay.TotalMilliseconds:0} ms after the last); refs read {vm.RefsReads - readsBefore} more time(s) meanwhile.");
+                + $"(the filter builds {vm.FilterPause.TotalMilliseconds:0} ms after the last); refs read {vm.RefsReads - readsBefore} more time(s) meanwhile.");
         }
 
         await ShellFixture.PumpUntil(() => !vm.IsRebuilding);
         Assert.Equal(built + 1, vm.TreesBuilt);
+        vm.FilterPause = GitRepositoryViewModel.FilterDelay;
         Assert.Equal(Enumerable.Range(1200, 100).Select(i => $"t{i:00000}"), vm.Rows.Where(r => r.Node.Kind == GitRepositoryNodeKind.Tag).Select(r => r.Text));
         Assert.True(Row(vm, "tags").IsExpanded);
         vm.Filter = string.Empty;

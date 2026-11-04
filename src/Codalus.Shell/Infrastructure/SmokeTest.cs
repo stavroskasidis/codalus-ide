@@ -2274,8 +2274,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(answer.StartsWith("Frontend: Sunny, from the api", StringComparison.Ordinal), "the frontend answers through the api: " + answer);
             window.Selected = window.Resources.Single(r => r.Name == "api");
             await WaitAsync(() => window.Logs.Contains("Now listening on", StringComparison.Ordinal), "the api's console output is shown", 60).ConfigureAwait(true);
-            // The website's picture (aspire.png): the AppHost's code above its resources, not an earlier step's document.
+            // The website's picture (aspire.png): the resources' page in front of the AppHost's code, not an earlier step's document,
+            // across the documents' width: web.http's HTTP Response, beside the documents, would take half of it.
             await OpenAsync(Path.Combine(target, "Aspire", "AppHost", "AppHost.cs")).ConfigureAwait(true);
+            shell.Layout.CloseToolWindow(HttpResponseViewModel.ToolWindowId);
             shell.ShowAspire();
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-aspire.png");
@@ -3757,7 +3759,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await shell.Debugger.ContinueAsync().ConfigureAwait(true);
 
             // A WebAssembly edit: the browser runs it under the debugger; the server refuses it and says so.
-            File.WriteAllText(counter, original.Replace("ticks++;", "ticks += 1000;", StringComparison.Ordinal));
+            File.WriteAllText(counter, original.Replace("return 1;", "return 1000;", StringComparison.Ordinal));
             await WaitAsync(() => watch.HotReload!.UpdatesRefused, () => "the server refuses the update under the debugger (" + Log() + ")", 180).ConfigureAwait(true);
             // The browser applies the update on its own and nothing reports when (as in BlazorWebAppHotReloadDebugTests),
             // and the breakpoint stops before the line runs: the first stop after the update can still read the count the
@@ -3803,7 +3805,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     /// <summary>
     /// A Blazor Web App's edits under the Codalus debugger (ADR 0090), on a BlazorHosted copy of its own on SDK 10 (as the
-    /// maintainer's WPoseidon; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
+    /// maintainer's app; SDK 11's browser tools aren't supported yet): F5 launches the server under the debugger,
     /// without dotnet watch, and stops in its prerender; the page connects to the IDE; a WebAssembly edit applies to the
     /// server and the page, which runs it; a rude edit asks, and going on keeps the old code.
     /// </summary>
@@ -3847,8 +3849,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             // A WebAssembly edit, from the editor: the server and the page take it, and the page runs it.
             editor = await shell.OpenFileAsync(counter, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Counter.razor did not open.");
             await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
-            var offset = editor.Model.Text.Text.IndexOf("ticks++;", StringComparison.Ordinal);
-            editor.Model.Text.Replace(offset, "ticks++;".Length, "ticks += 1000;");
+            var offset = editor.Model.Text.Text.IndexOf("return 1;", StringComparison.Ordinal);
+            editor.Model.Text.Replace(offset, "return 1;".Length, "return 1000;");
             shell.Run("run.applyCodeChanges");
             await WaitAsync(() => Status().Contains("(server and browser)", StringComparison.Ordinal), () => "the edit applies to the server and the browser (status: " + Status() + "; " + Log() + ")", 120).ConfigureAwait(true);
 

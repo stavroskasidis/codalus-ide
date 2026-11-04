@@ -208,6 +208,9 @@ public sealed class DiffDocumentTests
     {
         var (f, _, file) = await RepositoryAsync();
         await using var fixture = f;
+        // The Start page opens its column seconds late on a busy runner and moves the diff's panes: between the frame
+        // and its pixels' points, the removed line's point landed on white (Linux CI, run 41699509674).
+        await f.StartViewShownAsync();
         await File.WriteAllTextAsync(file, Original.Replace("string Greet(", "string Hail(", StringComparison.Ordinal).Replace("    public static string Wave() => \"o/\";\n", string.Empty, StringComparison.Ordinal));
         await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
         var document = await f.Shell.OpenDiffAsync(file, staged: false);
