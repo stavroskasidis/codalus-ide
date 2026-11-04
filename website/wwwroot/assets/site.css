@@ -146,7 +146,7 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 
 /* Home: hero */
 
-.hero { padding-top: clamp(56px, 8vw, 112px); display: flex; flex-wrap: wrap; align-items: flex-end; gap: 40px 64px; }
+.hero { padding-top: 56px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 40px 64px; }
 .hero-main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
 .hero .lead { max-width: 640px; }
 .pill {
