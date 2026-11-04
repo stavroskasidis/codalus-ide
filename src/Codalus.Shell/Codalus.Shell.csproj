@@ -85,6 +85,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="..\..\assets\logo\codalus.ico" Link="Assets\codalus.ico" />
+    <AvaloniaResource Include="..\..\assets\logo\png\codalus-128.png" Link="Assets\codalus-128.png" />
     <!-- Built-in snippets, one file per language (M12b). -->
     <EmbeddedResource Include="Editor\Snippets\*.json" LogicalName="Codalus.Shell.Snippets.%(Filename).json" />
     <EmbeddedResource Include="Localization\*.json" LogicalName="Codalus.Shell.Localization.%(Filename).json" />

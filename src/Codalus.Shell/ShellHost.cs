@@ -1015,8 +1015,6 @@ public sealed partial class ShellHost : IAsyncDisposable
         return Workbench.Settings.SetAsync(args[0].GetString()!, value, SettingScope.User, cancellationToken);
     }
 
-    public void ShowAbout() => Workbench.Notifications.Info(ShellInfo.VersionText.Replace("\n", " · ", StringComparison.Ordinal));
-
     // ------------------------------------------------------------------ status bar and settings
 
     private void UpdateStatusItems()
