@@ -45,6 +45,7 @@ public sealed partial class ShellHost : IAiChatHost
     {
         Workbench.Settings.Register(AiSettings.Descriptors(ContributionSource.Shell));
         LanguageModels = new LanguageModelService(Plugins);
+        PluginAiTools = new Codalus.Workbench.Ai.Ide.PluginAiTools(Plugins);
         Ai = new AiService(Workbench.Settings, LanguageModels, Workbench.Output, () => Solutions.Solution?.Directory, () => Solutions.Solution?.Trusted ?? true);
         InitializeExternalAgents();
         AiChat = new AiChatViewModel(this);

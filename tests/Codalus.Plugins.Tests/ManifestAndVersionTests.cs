@@ -137,6 +137,25 @@ public sealed class ManifestValidationTests : IDisposable
     }
 
     [Fact]
+    public void Ai_tools_activate_their_plugin_implicitly_and_bad_ones_are_ignored()
+    {
+        var plugin = PluginDescription.Read(Variant("aitools", m => m["contributes"]!["aiTools"] = JsonNode.Parse("""
+            [
+              { "name": "count_words", "description": "Counts words.", "inputSchema": { "type": "object", "properties": { "text": { "type": "string" } } } },
+              { "name": "no_schema", "description": "Takes nothing." },
+              { "name": "Not-Snake", "description": "Bad name." },
+              { "name": "no_description", "description": "" },
+              { "name": "array_schema", "description": "Bad schema.", "inputSchema": { "type": "array" } }
+            ]
+            """)), isBuiltIn: false, PlatformKind.Windows);
+        Assert.Equal(PluginState.Ready, plugin.State);
+        Assert.Contains("onAiTool:count_words", plugin.ActivationEvents);
+        Assert.Contains("onAiTool:no_schema", plugin.ActivationEvents);
+        Assert.Equal(3, plugin.Warnings.Count(w => w.StartsWith("Ignoring AI tool", StringComparison.Ordinal)));
+        Assert.DoesNotContain(plugin.ActivationEvents, e => e is "onAiTool:Not-Snake" or "onAiTool:no_description" or "onAiTool:array_schema");
+    }
+
+    [Fact]
     public void Property_providers_external_tool_macros_and_custom_tools_are_contributed()
     {
         var dir = Variant("projectsystem", m =>

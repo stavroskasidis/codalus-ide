@@ -1,5 +1,7 @@
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
+using Codalus.Debugging;
+using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Ai;
 using Codalus.Workbench.Ai.Ide;
 using Codalus.Workbench.Settings;
@@ -123,5 +125,92 @@ public sealed class IdeToolsShellTests
         Assert.Equal("src/Hello/Program.cs:3", (await CallAsync(f, "debug_list_breakpoints")).Text);
         Assert.True((await CallAsync(f, "debug_evaluate", """{"expression":"1+1"}""")).IsError);
         Assert.Contains("No web app is running", (await CallAsync(f, "browser_get_page")).Text, StringComparison.Ordinal);
+    }
+    [AvaloniaFact]
+    public async Task Agents_run_tests_and_read_their_failures()
+    {
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.DotNetTest"));
+        await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "allow", SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("Testing");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Testing.slnx"));
+
+        var run = await CallAsync(f, "run_tests", """{"project":"XunitV2Tests","filter":"CalculatorTests"}""");
+        Assert.False(run.IsError, run.Text);
+        Assert.Contains("this run:", run.Text, StringComparison.Ordinal);
+        Assert.Contains("FAILED ", run.Text, StringComparison.Ordinal);
+        Assert.Contains("Fails", run.Text, StringComparison.Ordinal);
+        Assert.Contains("Assert.Equal() Failure", run.Text, StringComparison.Ordinal);
+        Assert.Contains("CalculatorTests.cs", run.Text, StringComparison.Ordinal);
+
+        var results = (await CallAsync(f, "get_test_results")).Text;
+        Assert.Contains("FAILED ", results, StringComparison.Ordinal);
+        Assert.DoesNotContain("passed Codalus", results, StringComparison.Ordinal); // failures only by default
+        Assert.True((await CallAsync(f, "run_tests", """{"filter":"NoSuchTestAnywhere"}""")).IsError);
+    }
+
+    [AvaloniaFact]
+    public async Task Agents_debug_with_breakpoints_variables_evaluation_and_steps()
+    {
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "allow", SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("Debugging");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Debugging.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 1 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 90);
+        var program = Path.Combine(folder, "Debuggee", "Program.cs");
+        var loop = Array.FindIndex(File.ReadAllLines(program), l => l.Contains("// [loop]", StringComparison.Ordinal)) + 1;
+
+        Assert.False((await CallAsync(f, "debug_set_breakpoint", $$"""{"path":"Debuggee/Program.cs","line":{{loop}},"condition":"i == 1"}""")).IsError);
+        var started = await CallAsync(f, "debug_start");
+        Assert.False(started.IsError, started.Text);
+        var stop = (await CallAsync(f, "debug_wait_for_stop", """{"timeoutSeconds":180}""")).Text;
+        Assert.Contains("State: stopped", stop, StringComparison.Ordinal);
+        Assert.Contains($"Debuggee/Program.cs:{loop} → total += numbers[i];", stop, StringComparison.Ordinal);
+
+        var variables = (await CallAsync(f, "debug_get_variables")).Text;
+        Assert.Contains("i = 1", variables, StringComparison.Ordinal);
+        Assert.Contains("total = 1", variables, StringComparison.Ordinal);
+        Assert.StartsWith("10", (await CallAsync(f, "debug_evaluate", """{"expression":"total * 10"}""")).Text, StringComparison.Ordinal);
+        Assert.Contains("numbers", (await CallAsync(f, "debug_get_variables", """{"expand":"numbers"}""")).Text, StringComparison.Ordinal);
+
+        var stepped = (await CallAsync(f, "debug_step")).Text;
+        Assert.Contains("State: stopped", stepped, StringComparison.Ordinal);
+
+        Assert.Equal("Every breakpoint removed.", (await CallAsync(f, "debug_remove_breakpoint")).Text);
+        Assert.StartsWith("Continued.", (await CallAsync(f, "debug_continue")).Text, StringComparison.Ordinal);
+        Assert.StartsWith("The program ended (exit code", (await CallAsync(f, "debug_wait_for_stop", """{"timeoutSeconds":60}""")).Text, StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+    }
+    [AvaloniaFact]
+    public async Task A_plugins_tool_is_listed_beside_the_ides_and_asks_before_every_call()
+    {
+        await using var f = ShellFixture.Create(builtInPlugins: Path.Combine(ShellFixture.RepoRoot, "samples", "plugins", "WordCount", "bin", ShellFixture.Configuration, "net10.0"));
+        await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "allow", SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.IdeToolDefinitions.Any(t => t.Name == "count_words"), seconds: 30);
+        var tool = f.Shell.IdeToolDefinitions.Single(t => t.Name == "count_words");
+        Assert.Equal((IdeToolKind.Plugin, "codalus-samples.word-count"), (tool.Kind, tool.Source));
+        Assert.Contains("count_words", IdeTools.ToJson(f.Shell.IdeToolDefinitions), StringComparison.Ordinal);
+
+        // ideActions doesn't cover a plugin's tool: it asks every time, Reject the default, without Allow for This Chat.
+        var refused = CallAsync(f, "count_words", """{"text":"to be or not to be"}""");
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
+        Assert.Equal(["Allow", "Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label).Order(StringComparer.Ordinal));
+        Assert.Contains(f.Shell.Dialogs.Details, d => d.Text.Contains("codalus-samples.word-count", StringComparison.Ordinal));
+        f.Shell.Dialogs.Accept();
+        Assert.True((await refused).IsError);
+
+        // Allowed, the plugin activates at its first call and answers; its own error is the call's.
+        var counting = CallAsync(f, "count_words", """{"text":"to be or not to be"}""");
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Allow").Command.Execute(null);
+        var counted = await counting;
+        Assert.Equal((false, "6 word(s); the most frequent is 'be' (2)."), (counted.IsError, counted.Text));
+        var failing = CallAsync(f, "count_words", "{}");
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Allow").Command.Execute(null);
+        var failed = await failing;
+        Assert.Equal((true, "count_words needs a text."), (failed.IsError, failed.Text));
     }
 }

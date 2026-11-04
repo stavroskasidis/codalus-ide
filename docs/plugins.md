@@ -106,6 +106,7 @@ A manifest string that is a whole `%key%` (VS Code's convention) is replaced whe
 - **debuggers** (since 1.0): debug adapters speaking DAP over stdio, `{ type, label, command, args, languages }`. `launch.json` configurations whose `type` is `type` start `command` (a file in the plugin's folder, a `.dll` running with `dotnet`, or a program on `PATH`; `${pluginDir}` is the plugin's folder), and the configuration, with `${workspaceFolder}` and the other variables expanded, is sent as the `launch` request. The session uses the debugger's windows like netcoredbg's: breakpoints, call stack, variables, the Debug Console.
 - **customEditors** (since 1.0): `{ viewType, displayName, filenamePatterns }`. Files whose names match open in the plugin's editor, a [declarative view](#declarative-views-and-custom-editors), unless the user picks Open With → Text Editor.
 - **authentication** (since 1.0): `{ id, label }` of the [authentication providers](#authentication) the plugin offers. The Accounts page lists them before the plugin loads.
+- **aiTools** (Codalus IDE 0.13, proposed API): tools for AI agents, `{ name, description, inputSchema }`. Agents see them before the plugin runs; it activates at a tool's first call (`onAiTool:<name>`). See [AI tools](#ai-tools-proposed).
 - **customTools** (since 0.2.8): custom tools (single-file generators, ADR 0035), `{ name, command, extension, description }`. A project item whose `Generator` metadata is `name` runs the command on Run Custom Tool and when it is saved: the command gets `{ path, content, namespace, project }` and returns the generated text, or `{ content, extension }`. The output is written next to the input with the extension (default `.cs`) and nested under it, as for the built-in `ResXFileCodeGenerator` and `TextTemplatingFileGenerator`.
 
 ### When-clauses
@@ -321,6 +322,26 @@ Your plugin activates only when the user picks the provider (`onLanguageModelPro
 
 The IDE decides what is sent: your provider never reads the workspace. The built-in providers (`src/Plugins/Codalus.Plugins.OpenAI`, `Codalus.Plugins.Anthropic`) are examples.
 
+### AI tools (proposed)
+
+`context.Proposed().AiTools.RegisterTool(tool)` gives AI agents a tool of your plugin ([ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md)): AI Chat's built-in agent, external agents, and agents that reach the IDE through `codalus mcp` see it beside the IDE's own tools. Declare it in the manifest, so agents see it before your plugin runs:
+
+```json
+"contributes": {
+  "aiTools": [
+    {
+      "name": "count_words",
+      "description": "Count the words of a text, and its most frequent word.",
+      "inputSchema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": [ "text" ] }
+    }
+  ]
+}
+```
+
+A name is snake_case (lower case letters, digits and underscores, starting with a letter, at most 64 characters) and can't be one of the IDE's own tools; `inputSchema` is a JSON schema of type `object` (an empty one when left out). Your plugin activates at the tool's first call (`onAiTool:count_words`, implicit). Derive from `AiTool` and return an `AiToolResult` (text, and whether it failed) from `InvokeAsync(arguments, cancellationToken)`; throw `AiToolException` for a failure the agent should read. The arguments come from a model: check them.
+
+The user allows every call first (the approval names your plugin), and what you return is redacted before an agent sees it. `samples/plugins/WordCount` is an example.
+
 ## Testing plugins
 
 `Codalus.Plugins.Testing` (since M22b) runs a plugin in memory, with no IDE and no plugin host, so its tests are ordinary unit tests:
@@ -369,6 +390,10 @@ Plugins are NuGet packages of type `CodalusPlugin` ([ADR 0060](adr/0060-plugin-d
 - An update is a new version: installed copies update at their next start.
 
 ## Changelog
+
+### AI tools (Codalus IDE 0.13, proposed API)
+
+Additive and proposed: [AI tools](#ai-tools-proposed), `IProposedApi.AiTools` (`IAiTools.RegisterTool`, `AiTool`, `AiToolResult`, `AiToolException`), the manifest's `contributes.aiTools` and the implicit activation event `onAiTool:<name>`; protocol messages `aiTools/registerTool`, `aiTools/unregisterTool` and `aiTools/invoke` ([plugin protocol](plugin-protocol.md#ai-tools)). `PublicAPI.txt` lists the new types; the API version stays 1.2.0, as proposed APIs aren't versioned.
 
 ### Markdown tables and more (Codalus IDE 0.12, no API version change)
 

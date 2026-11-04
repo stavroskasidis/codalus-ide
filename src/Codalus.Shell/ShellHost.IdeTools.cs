@@ -34,6 +34,7 @@ public sealed partial class ShellHost
     private readonly HashSet<string> _ideActionGrants = new(StringComparer.Ordinal);
     private AgentBrowser? _agentBrowser;
     private string? _debugAppUrl;
+    private string? _debugEnded;
 
     /// <summary>Every tool an agent sees: the built-in ones, then the plugins'.</summary>
     public IReadOnlyList<IdeToolDefinition> IdeToolDefinitions => [.. IdeTools.BuiltIn, .. PluginIdeTools()];
@@ -54,6 +55,16 @@ public sealed partial class ShellHost
             ForgetIdeActionGrants();
             _ = StopAgentBrowserAsync();
         });
+
+        // How the last session ended, for a wait that starts after it did.
+        Debugger.Ended += (_, code) => _debugEnded = code is { } exit ? string.Create(CultureInfo.InvariantCulture, $"The program ended (exit code {exit}).") : "The program ended.";
+        Debugger.StateChanged += (_, _) =>
+        {
+            if (Debugger.State == DebugState.Starting)
+            {
+                _debugEnded = null;
+            }
+        };
 
         // The address a web app under the debugger listens on, for the agent's browser.
         Debugger.Output += (_, output) =>
@@ -289,7 +300,7 @@ public sealed partial class ShellHost
             case "debug_wait_for_stop":
                 return new(await WaitForStopTextAsync(TimeSpan.FromSeconds(Math.Clamp(Int(args, "timeoutSeconds") ?? 30, 1, 600)), root, cancellationToken).ConfigureAwait(true));
             case "debug_get_state":
-                return new(DebugStateText(root));
+                return new(await DebugStateTextAsync(root).ConfigureAwait(true));
             case "debug_get_variables":
                 return new(await VariablesTextAsync(Int(args, "frame") ?? 0, Str(args, "expand"), cancellationToken).ConfigureAwait(true));
             case "debug_evaluate":
@@ -918,41 +929,47 @@ public sealed partial class ShellHost
         }
 
         ActivateTestProviders();
-        var deadline = DateTime.UtcNow.AddSeconds(60);
-        while (Tests.Read(r => r.Sum(n => n.Leaves().Count())) == 0 && DateTime.UtcNow < deadline)
-        {
-            await Task.Delay(200).ConfigureAwait(true);
-        }
-
         List<string>? keys = null;
         var project = Str(args, "project");
         var filter = Str(args, "filter");
         var failedOnly = Bool(args, "failedOnly") ?? false;
-        if (project is { Length: > 0 } || filter is { Length: > 0 } || failedOnly)
+        var selective = project is { Length: > 0 } || filter is { Length: > 0 } || failedOnly;
+        var parsed = TestFilter.Parse(string.Join(' ', new[]
         {
-            var terms = new List<string>();
-            if (project is { Length: > 0 })
-            {
-                terms.Add("project:\"" + project + "\"");
-            }
+            project is { Length: > 0 } ? "project:" + (project.Contains(' ', StringComparison.Ordinal) ? "\"" + project + "\"" : project) : null,
+            failedOnly ? "outcome:failed" : null,
+        }.Where(t => t is not null)));
 
-            if (failedOnly)
-            {
-                terms.Add("outcome:failed");
-            }
-
-            var parsed = TestFilter.Parse(string.Join(' ', terms));
-            keys = Tests.Read(r => r.SelectMany(n => n.Leaves())
+        // Discovery fills the tree a project at a time: wait (a minute at most) for the tests asked for to appear.
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            var found = Tests.Read(r => r.SelectMany(n => n.Leaves())
                 .Where(l => parsed.Matches(l) && (filter is not { Length: > 0 } || l.FullLabel.Contains(filter, StringComparison.OrdinalIgnoreCase)))
                 .Select(l => l.Key).ToList());
-            if (keys.Count == 0)
+            if (found.Count > 0 || DateTime.UtcNow > deadline || (failedOnly && Tests.Read(r => r.Sum(n => n.Leaves().Count())) > 0))
             {
-                return IdeToolResult.Error("No test matches. get_test_results lists the tests the IDE knows.");
+                keys = selective ? found : null;
+                break;
             }
+
+            await Task.Delay(200).ConfigureAwait(true);
+        }
+
+        if (keys is { Count: 0 })
+        {
+            return IdeToolResult.Error("No test matches. get_test_results lists the tests the IDE knows.");
         }
 
         var started = DateTimeOffset.Now;
         await RunTestsAsync(TestRunKind.Run, keys).ConfigureAwait(true);
+
+        // The last results can land just after the run's task ends.
+        for (var i = 0; i < 600 && Tests.IsRunning; i++)
+        {
+            await Task.Delay(100).ConfigureAwait(true);
+        }
+
         return new(TestResultsText(failedOnly: true, since: started, root, keys));
     }
 
@@ -1041,7 +1058,7 @@ public sealed partial class ShellHost
     {
         var running = LastRunning();
         var channel = running?.Channel
-            ?? (Debugger.IsActive ? Workbench.Output.Channels.FirstOrDefault(c => c.Id == "codalus.debug") : null)
+            ?? (Debugger.IsActive || _debugEnded is not null ? Workbench.Output.Channels.FirstOrDefault(c => c.Id == "codalus.debug") : null)
             ?? Workbench.Output.Channels.LastOrDefault(c => c.Id.StartsWith("codalus.run.", StringComparison.Ordinal));
         if (channel is null)
         {
@@ -1112,14 +1129,14 @@ public sealed partial class ShellHost
 
         return Debugger.State == DebugState.Idle
             ? IdeToolResult.Error("The debug session didn't start; read get_build_output or get_run_output.")
-            : new("The debug session is " + Debugger.State.ToString().ToLowerInvariant() + ". " + (Debugger.State == DebugState.Stopped ? DebugStateText(root) : "Use debug_wait_for_stop."));
+            : new("The debug session is " + Debugger.State.ToString().ToLowerInvariant() + ". " + (Debugger.State == DebugState.Stopped ? await DebugStateTextAsync(root).ConfigureAwait(true) : "Use debug_wait_for_stop."));
     }
 
     private async Task<string> WaitForStopTextAsync(TimeSpan timeout, string? root, CancellationToken cancellationToken)
     {
         if (!Debugger.IsActive)
         {
-            return "No debug session is running.";
+            return _debugEnded is { } ended ? ended + " " + RunOutputText(30) : "No debug session is running.";
         }
 
         if (Debugger.State != DebugState.Stopped)
@@ -1150,10 +1167,10 @@ public sealed partial class ShellHost
             await Task.Yield();
         }
 
-        return Debugger.IsActive ? DebugStateText(root) : "The program ended. " + RunOutputText(30);
+        return Debugger.IsActive ? await DebugStateTextAsync(root).ConfigureAwait(true) : (_debugEnded ?? "The program ended.") + " " + RunOutputText(30);
     }
 
-    private string DebugStateText(string? root)
+    private async Task<string> DebugStateTextAsync(string? root)
     {
         if (!Debugger.IsActive)
         {
@@ -1193,7 +1210,7 @@ public sealed partial class ShellHost
                 if (frame.Source?.Path is { } path && IsInWorkspace(path, root))
                 {
                     sb.Append(string.Create(CultureInfo.InvariantCulture, $" at {Relative(path, root)}:{frame.Line}"));
-                    if (i == 0 && lines.LineAsync(path, frame.Line - 1, CancellationToken.None) is { IsCompletedSuccessfully: true } read && read.Result is { } text)
+                    if (i == 0 && await lines.LineAsync(path, frame.Line - 1, CancellationToken.None).ConfigureAwait(true) is { } text)
                     {
                         sb.Append(" → ").Append(text.Trim());
                     }
