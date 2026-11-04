@@ -124,6 +124,9 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     public string? CurrentModeId => Volatile.Read(ref _modeId);
 
+    /// <summary>Whether the agent takes images in a prompt (<c>promptCapabilities.image</c>, ADR 0092).</summary>
+    public bool TakesImages => _client?.Info?.AgentCapabilities?.PromptCapabilities?.Image == true;
+
     /// <summary>
     /// The choices the agent offers for the session (M51): its model, mode, effort and other selects, from its config
     /// options or, without them, its modes and models; empty when it offers none.
@@ -348,7 +351,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     /// reason. Cancelling sends <c>session/cancel</c>, answers pending permissions with <c>cancelled</c>, kills the turn's
     /// commands, and waits a little for the agent to confirm. A crash throws <see cref="AcpException"/>.
     /// </summary>
-    public async Task<string> PromptAsync(string text, AiChatTurn turn, Action changed, CancellationToken cancellationToken)
+    public async Task<string> PromptAsync(string text, AiChatTurn turn, Action changed, CancellationToken cancellationToken, IReadOnlyList<AiImageAttachment>? images = null)
     {
         if (!IsAlive || _client is not { } client)
         {
@@ -378,7 +381,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             AcpPromptResponse response;
             try
             {
-                response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+                response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, PromptBlocks(text, images)), giveUp.Token).ConfigureAwait(false);
             }
             catch (AcpAuthRequiredException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -398,7 +401,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
                 _ai.LogAgent(Name, "session/prompt (sent again after the sign-in)");
                 try
                 {
-                    response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+                    response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, PromptBlocks(text, images)), giveUp.Token).ConfigureAwait(false);
                 }
                 catch (AcpAuthRequiredException)
                 {
@@ -695,6 +698,10 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         "resource" => block.Resource?.Text ?? $"[{block.Resource?.Uri}]",
         _ => $"[{block.Type}]",
     };
+
+    /// <summary>The prompt: the text, then the images when the agent takes them (the chat refuses them otherwise).</summary>
+    private List<AcpContentBlock> PromptBlocks(string text, IReadOnlyList<AiImageAttachment>? images) =>
+        [AcpContentBlock.FromText(text), .. TakesImages ? (images ?? []).Select(AcpContentBlock.FromImage) : []];
 
     /// <summary>
     /// A tool call's title or raw input with its secrets replaced: an agent's title is often the command it runs, which

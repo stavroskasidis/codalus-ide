@@ -205,8 +205,17 @@ public sealed class AiStepItem : ObservableObject
             details.Add(Localizer.Get("msg.acp.output", "Output") + "\n" + output);
         }
 
+        // A long title (a script the agent runs) shows its first line; the whole of it opens with the details (ADR 0092).
+        var shown = step.Target;
+        var firstLine = shown.Split('\n', 2)[0].TrimEnd('\r');
+        if (firstLine.Length > 120 || firstLine.Length < shown.Length)
+        {
+            details.Insert(0, shown);
+            shown = (firstLine.Length > 120 ? firstLine[..120] : firstLine) + " …";
+        }
+
         var running = step.TerminalId is not null && status is AiStepStatus.Running or AiStepStatus.Pending && step.Output is { Length: > 0 };
-        return new AiStepItem(step.Kind ?? "other", step.Target, status)
+        return new AiStepItem(step.Kind ?? "other", shown, status)
         {
             Locations = [.. step.Locations.Select(l => new AiStepLocation(l.Path, l.Line))],
             Details = details.Count == 0 ? null : string.Join("\n\n", details),

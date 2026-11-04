@@ -5,6 +5,13 @@ using Codalus.Plugins.Protocol;
 namespace Codalus.Workbench.Ai;
 
 /// <summary>One question and its answer.</summary>
+/// <summary>An image pasted or dropped into AI Chat's input (ADR 0092): its bytes as base64, its type and a name.</summary>
+public sealed record AiImageAttachment(string Data, string MimeType, string Name)
+{
+    /// <summary>The largest image AI Chat takes (5 MB of bytes), as agents' providers refuse bigger ones.</summary>
+    public const int MaxBytes = 5 * 1024 * 1024;
+}
+
 public sealed class AiChatTurn
 {
     private readonly StringBuilder _answer = new();
@@ -28,6 +35,9 @@ public sealed class AiChatTurn
 
     /// <summary>The caller's own data (the shell keeps where the selection was).</summary>
     public object? Tag { get; init; }
+
+    /// <summary>The images that went with the question (ADR 0092).</summary>
+    public IReadOnlyList<AiImageAttachment> Images { get; init; } = [];
 
     /// <summary>The answer so far.</summary>
     public string Answer
@@ -428,7 +438,7 @@ public sealed class AiChat(AiService ai)
                     TurnChanged?.Invoke(this, turn);
                     var result = await tools.RunAsync(call, cancellationToken).ConfigureAwait(false);
                     Ai.LogToolCall(call.Name, target, result.Summary ?? (result.IsError ? "error" : "done"));
-                    turn.UpdateLastStep(step => step with { Outcome = result.Summary ?? (result.IsError ? "failed" : "done"), IsError = result.IsError });
+                    turn.UpdateLastStep(step => step with { Outcome = result.Summary ?? (result.IsError ? "failed" : "done"), IsError = result.IsError, Diffs = result.Diff is { } diff ? [diff] : step.Diffs });
                     TurnChanged?.Invoke(this, turn);
                     exchange.Add(new ChatMessageDto("tool", result.Text, null, call.Id, result.IsError));
                 }
@@ -468,11 +478,11 @@ public sealed class AiChat(AiService ai)
     /// the agent's session is started or reused (AI on, a trusted workspace), and the turn streams its messages, thoughts,
     /// plan and tool calls. Why it can't run, or why it stopped, is the turn's error.
     /// </summary>
-    public async Task<AiChatTurn> SendExternalAsync(string question, IEnumerable<AiContextItem> items, Acp.AcpAgents agents, string agent, Acp.IAcpHost host, CancellationToken cancellationToken, object? tag = null)
+    public async Task<AiChatTurn> SendExternalAsync(string question, IEnumerable<AiContextItem> items, Acp.AcpAgents agents, string agent, Acp.IAcpHost host, CancellationToken cancellationToken, object? tag = null, IReadOnlyList<AiImageAttachment>? images = null)
     {
         var context = await Ai.PrepareAsync(items.ToList(), cancellationToken).ConfigureAwait(false);
         var selection = context.Included.FirstOrDefault(i => i.Kind == AiContextKind.Selection);
-        var turn = new AiChatTurn(question, context, selection) { IsStreaming = true, Tag = tag, IsAgent = true, ExternalAgent = agent };
+        var turn = new AiChatTurn(question, context, selection) { IsStreaming = true, Tag = tag, IsAgent = true, ExternalAgent = agent, Images = images ?? [] };
         lock (_gate)
         {
             _turns.Add(turn);
@@ -485,7 +495,7 @@ public sealed class AiChat(AiService ai)
             var session = await agents.GetOrStartAsync(agent, host, cancellationToken).ConfigureAwait(false);
             var text = AiService.ComposeUserMessage(question, context);
             Ai.LogExternalPrompt(agent, text.Length, context);
-            var stop = await session.PromptAsync(text, turn, () => TurnChanged?.Invoke(this, turn), cancellationToken).ConfigureAwait(false);
+            var stop = await session.PromptAsync(text, turn, () => TurnChanged?.Invoke(this, turn), cancellationToken, turn.Images).ConfigureAwait(false);
             turn.FinishReason = stop switch
             {
                 "end_turn" => "stop",

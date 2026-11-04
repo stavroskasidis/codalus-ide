@@ -30,7 +30,7 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class AiChatViewTests
 {
-    private const string Question = "Greet should reject an empty name. How do I report that to the client?";
+    private const string Question = "Greet should reject an empty name. How do I report that to the client? @selection";
 
     private const string Answer = """
         ### Throw a typed fault
@@ -93,8 +93,9 @@ public sealed class AiChatViewTests
         editor.Editor.Select(Service.IndexOf(greet, StringComparison.Ordinal), greet.Length);
 
         var chat = f.Shell.AiChat;
-        chat.IncludeCurrentFile = false;
-        chat.IncludeSolution = false;
+
+        // The detailed density: the steps one by one (the compact line has its own test).
+        await f.Shell.Workbench.Settings.SetAsync(AiChat.DensitySetting, "detailed", Workbench.Settings.SettingScope.User, CancellationToken.None);
         chat.Input = Question;
         await chat.SendAsync();
         await ShellFixture.PumpUntil(() => chat.Turns.Count == 1 && !chat.Turns[0].Turn.IsStreaming);
@@ -128,6 +129,39 @@ public sealed class AiChatViewTests
             using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
             frame!.Save(Path.Combine(snapshots, name + ".png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Compact_folds_the_steps_into_a_line_that_opens_them_and_detailed_shows_them()
+    {
+        await using var server = DesignServer();
+        var (f, _, _) = await ConversationAsync(server);
+        await using var fixture = f;
+        var chat = f.Shell.AiChat;
+        await f.Shell.Workbench.Settings.SetAsync(AiChat.DensitySetting, "compact", Workbench.Settings.SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => chat.IsCompact);
+        var window = Show(chat, 556, 1600);
+        Snapshot(window, "aichat-compact");
+
+        // Compact: the agent's turn shows one line for its steps, and no step until it's opened.
+        var second = TurnView(window, 1);
+        Assert.Equal("Read 1 file", second.StepsSummary);
+        Assert.False(second.StepsShown);
+        Assert.DoesNotContain(second.GetVisualDescendants().OfType<AiStepView>(), v => v.IsEffectivelyVisible);
+        var summary = second.GetVisualDescendants().OfType<ToggleButton>().Single(b => AutomationProperties.GetName(b) == "What the assistant did");
+        summary.IsChecked = true;
+        ShellFixture.Pump();
+        Assert.True(second.StepsShown);
+        Assert.Single(second.GetVisualDescendants().OfType<AiStepView>(), v => v.IsEffectivelyVisible);
+
+        // The toolbar's toggle: detailed shows every step without the line, and is kept in the user's settings.
+        var toggle = window.GetVisualDescendants().OfType<ToggleButton>().Single(b => b.Name == "DensityToggle");
+        toggle.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => !chat.IsCompact);
+        Assert.Equal("detailed", f.Shell.Workbench.Settings.GetString(AiChat.DensitySetting, ""));
+        Assert.Equal("", TurnView(window, 1).StepsSummary);
+        Assert.True(TurnView(window, 1).StepsShown);
+        window.Close();
     }
 
     [AvaloniaFact]
@@ -247,15 +281,11 @@ public sealed class AiChatViewTests
         var window = Show(chat, 556, 700);
         var view = (AiChatView)window.Content!;
 
-        // The context as chips (pill toggles), each named for what it sends.
-        var chips = view.GetVisualDescendants().OfType<ToggleButton>().Where(b => b.Classes.Contains("chip")).ToList();
-        Assert.Equal(6, chips.Count);
-        Assert.All(chips, c => Assert.Equal(22, c.Bounds.Height));
-        var selection = chips.Single(c => AutomationProperties.GetName(c) == "Send the selection");
-        Assert.True(selection.IsChecked);
-        selection.IsChecked = false;
-        Assert.False(chat.IncludeSelection);
-        Assert.Equal(Brush(window, "Shell.Toolbar.Checked"), ((ISolidColorBrush)Presenter(chips.Single(c => AutomationProperties.GetName(c) == "Send the errors and warnings of the open files")).Background!).Color);
+        // No context chips (ADR 0092): what goes with a question is what it @-mentions, and the input says so.
+        Assert.DoesNotContain(view.GetVisualDescendants().OfType<ToggleButton>(), b => b.Classes.Contains("chip"));
+        var questionBox = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
+        Assert.Contains("@", questionBox.PlaceholderText, StringComparison.Ordinal);
+        Assert.Equal("Show every step (detailed)", AutomationProperties.GetName(view.GetVisualDescendants().OfType<ToggleButton>().Single(b => b.Name == "DensityToggle")));
 
         // Agent mode is a switch with its own place in the toolbar.
         var agent = Assert.Single(view.GetVisualDescendants().OfType<ToggleSwitch>());
@@ -268,7 +298,7 @@ public sealed class AiChatViewTests
 
         // Send: the primary icon button, disabled until there is a question; Enter sends it, Shift+Enter is a new line.
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
-        Assert.Equal("Ask about your code", input.PlaceholderText);
+        Assert.Equal("Ask about your code; @ mentions a file, the selection or errors", input.PlaceholderText);
         var send = view.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == "Send the question");
         var stop = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StopButton" && AutomationProperties.GetName(b) == "Stop the answer");
         Assert.Contains("accent", send.Classes);
@@ -312,7 +342,6 @@ public sealed class AiChatViewTests
         var host = new AgentChatHost(f.Shell, folder, tools);
         using var chat = new AiChatViewModel(host) { IsAgent = true };
         host.Chat = chat;
-        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
         var window = Show(chat, 556, 700);
         var view = (AiChatView)window.Content!;
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
@@ -327,25 +356,34 @@ public sealed class AiChatViewTests
         await ShellFixture.PumpUntil(() => tools.Building.Task.IsCompleted && !chat.IsBusy && chat.IsAnswering && stop.IsEffectivelyVisible);
         Assert.False(chat.CanSend);
 
-        // Enter in the input box, Send and SendAsync all leave the running turn alone and keep the next question.
+        // Enter in the input box queues the next question (ADR 0092): the running turn is left alone, and the question
+        // waits under the conversation with Stop still beside the input.
+        Assert.False(chat.CanSend);
         window.KeyTextInput("And again");
         window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         Pump(4);
-        Assert.Equal("And again", chat.Input);
-        send.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        await chat.SendAsync();
-        Pump(4);
+        Assert.Equal("", chat.Input);
+        Assert.Equal(["And again"], chat.Queued.Select(q => q.Text));
         Assert.Equal(1, host.Runs);
         Assert.Single(chat.Turns);
-        Assert.Single(chat.Chat.Turns);
-        Assert.Equal("And again", chat.Input);
+        Assert.True(stop.IsEffectivelyVisible);
 
-        // Stop still reaches the agent's turn: the build is cancelled and the turn says it stopped.
+        // A queued question goes back into the input to change it, and back into the queue.
+        chat.EditQueued(chat.Queued[0]);
+        Assert.Equal(("And again", 0), (chat.Input, chat.Queued.Count));
+        await chat.SendAsync();
+        Assert.Equal(["And again"], chat.Queued.Select(q => q.Text));
+
+        // Stop still reaches the agent's turn: the build is cancelled, the turn says it stopped, and the queue waits.
         stop.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         await ShellFixture.PumpUntil(() => !chat.IsAnswering && send.IsEffectivelyVisible);
         Assert.True(tools.Cancelled);
         Assert.Equal("stopped", chat.Turns[^1].Turn.FinishReason);
-        Assert.True(chat.CanSend);
+        Pump(4);
+        Assert.Equal(1, host.Runs);
+        Assert.Single(chat.Queued);
+        chat.RemoveQueued(chat.Queued[0]);
+        Assert.False(chat.HasQueued);
         window.Close();
     }
 
@@ -361,7 +399,6 @@ public sealed class AiChatViewTests
         await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
         await EnableAsync(f, server);
         var chat = f.Shell.AiChat;
-        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
         var window = Show(chat, 556, 700);
         var view = (AiChatView)window.Content!;
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
@@ -579,7 +616,7 @@ public sealed class AiChatViewTests
 
         int At(string name) => names.IndexOf(name) is >= 0 and var at ? at : throw new Xunit.Sdk.XunitException($"Tab never reached '{name}': {string.Join(", ", names)}");
         Assert.True(At("Start a new chat") < At("Agent mode") && At("Agent mode") < At("Copy the code") && At("Copy the code") < At("faults in contracts")
-            && At("faults in contracts") < At("Send the selection") && At("Send the selection") < At("Question") && At("Question") < At("Send the question"), string.Join(", ", names));
+            && At("faults in contracts") < At("Question") && At("Question") < At("Send the question"), string.Join(", ", names));
         window.Close();
     }
 
@@ -626,7 +663,6 @@ public sealed class AiChatViewTests
         var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"));
         await EnableAsync(f, server);
         var chat = f.Shell.AiChat;
-        chat.IncludeCurrentFile = chat.IncludeSelection = chat.IncludeErrors = chat.IncludeSolution = false;
         for (var i = 0; i < turns; i++)
         {
             chat.Input = i % 3 == 0 && i < turns - 1 ? $"A long question {i}" : $"A short question {i}";
@@ -933,6 +969,20 @@ public sealed class AiChatViewTests
         }
 
         public Task OpenAiLocationAsync(string path, int? line) => Task.CompletedTask;
+
+        public void ShowAiMessage(string message)
+        {
+        }
+
+        public IReadOnlyList<string> MentionableFiles() => [];
+
+        public string ChatDensity => "compact";
+
+        public Task SetChatDensityAsync(string density) => Task.CompletedTask;
+
+        public Task OpenAiChangeDiffAsync(AiChangedFile change) => Task.CompletedTask;
+
+        public Task<bool> RevertAiChangeAsync(AiChangedFile change) => Task.FromResult(false);
     }
 
     /// <summary>The agent's view of the files, from the disk.</summary>

@@ -67,10 +67,8 @@ public sealed class AiChatTests
 
         var view = await ShowChatAsync(f);
         var chat = f.Shell.AiChat;
-        chat.IncludeCurrentFile = false;
-        chat.IncludeSolution = false;
-        Assert.True(chat.ContextPreview.Contains("Calc.cs", StringComparison.Ordinal), $"preview: '{chat.ContextPreview}', active: {f.Shell.ActiveEditor?.Model.Path}, selection: {editor.Editor.SelectionLength}, state: {f.Shell.Ai.State}");
-        chat.Input = "Make it shorter";
+        // Only what the question @-mentions goes with it (ADR 0092).
+        chat.Input = "Make it shorter @selection";
         await chat.SendAsync();
         var turn = Assert.Single(chat.Chat.Turns);
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
@@ -82,7 +80,7 @@ public sealed class AiChatTests
         {
             var question = body.RootElement.GetProperty("messages").EnumerateArray().Last().GetProperty("content").GetString()!;
             Assert.Contains("return a + b;", question, StringComparison.Ordinal);
-            Assert.EndsWith("Make it shorter", question, StringComparison.Ordinal);
+            Assert.EndsWith("Make it shorter @selection", question, StringComparison.Ordinal);
         }
 
         await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Apply the code after a preview"));

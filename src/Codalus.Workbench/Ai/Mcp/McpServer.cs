@@ -90,6 +90,7 @@ public sealed class McpStdioServer
                     try
                     {
                         // The running IDE's list (its plugins' tools too); the built-in list when it doesn't answer.
+                        // TODO(issue): notifications/tools/list_changed when plugins' tools come and go.
                         _listed = await _list(cancellationToken).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is McpException or IOException or TimeoutException or JsonException)

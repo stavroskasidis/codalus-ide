@@ -11,13 +11,38 @@ namespace Codalus.Shell.ViewModels;
 /// <param name="Text">Its text.</param>
 public sealed record AiSelectionAnchor(string Path, int Offset, string Text);
 
-/// <summary>Which context goes with the next question (the chips above the input).</summary>
-public sealed record AiContextChoice(bool Selection, bool CurrentFile, bool OpenFiles, bool Errors, bool BuildOutput, bool Solution);
+/// <summary>
+/// Which context goes with a question: the parts the IDE gathers, and files by their path (relative to the workspace).
+/// AI Chat sends only what the question @-mentions (ADR 0092); actions such as Explain choose their own.
+/// </summary>
+public sealed record AiContextChoice(bool Selection, bool CurrentFile, bool OpenFiles, bool Errors, bool BuildOutput, bool Solution)
+{
+    /// <summary>Files the question mentions, relative to the workspace.</summary>
+    public IReadOnlyList<string> Files { get; init; } = [];
 
-/// <summary>An external agent's slash command, offered in the input (M48).</summary>
-/// <param name="Name">The command, without its slash.</param>
-/// <param name="Text">How the list shows it: <c>/name — description</c>.</param>
-public sealed record AiCommandSuggestion(string Name, string Text);
+    /// <summary>Nothing but the question.</summary>
+    public static AiContextChoice None { get; } = new(false, false, false, false, false, false);
+
+    public bool IsEmpty => !Selection && !CurrentFile && !OpenFiles && !Errors && !BuildOutput && !Solution && Files.Count == 0;
+}
+
+/// <summary>
+/// A suggestion in the input (M48, ADR 0092): an external agent's slash command, or an @-mention (a part of the IDE's
+/// state or a file).
+/// </summary>
+/// <param name="Name">The command without its slash, or the mention without its @.</param>
+/// <param name="Text">How the list shows it: <c>/name — description</c>, <c>@errors — the Error List</c>.</param>
+public sealed record AiCommandSuggestion(string Name, string Text)
+{
+    /// <summary>An @-mention rather than a slash command.</summary>
+    public bool IsMention { get; init; }
+}
+
+/// <summary>A question waiting for the running turn to end (ADR 0092).</summary>
+public sealed record AiQueuedQuestion(string Text, IReadOnlyList<AiImageAttachment> Images)
+{
+    public string AccessibleName => Localizer.Format("msg.ai.queuedQuestion", "Queued: {0}", Text);
+}
 
 /// <summary>What the chat window needs from the shell: context, applying code, and the provider prompts.</summary>
 public interface IAiChatHost
@@ -72,6 +97,24 @@ public interface IAiChatHost
 
     /// <summary>Why agents can't be connected here (a remote window), or null.</summary>
     string? WhyAgentsCantConnect { get; }
+
+    /// <summary>A short message for the user (the status bar).</summary>
+    void ShowAiMessage(string message);
+
+    /// <summary>The solution's files, relative to the workspace, for @-mentions.</summary>
+    IReadOnlyList<string> MentionableFiles();
+
+    /// <summary>How AI Chat shows an agent's work: <c>compact</c> or <c>detailed</c> (<c>ai.chat.density</c>).</summary>
+    string ChatDensity { get; }
+
+    /// <summary>Writes <c>ai.chat.density</c> to the user's settings.</summary>
+    Task SetChatDensityAsync(string density);
+
+    /// <summary>Compares a file a turn changed with what it was before the turn.</summary>
+    Task OpenAiChangeDiffAsync(AiChangedFile change);
+
+    /// <summary>Puts a file a turn changed back as it was before the turn (after asking); true when it did.</summary>
+    Task<bool> RevertAiChangeAsync(AiChangedFile change);
 }
 
 /// <summary>An agent AI Chat offers to connect in one click (D43): its template's id and name.</summary>
@@ -118,14 +161,9 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _cts;
     private bool _sending;
     private string _input = string.Empty;
-    private bool _selection = true;
-    private bool _currentFile = true;
-    private bool _openFiles;
-    private bool _errors = true;
-    private bool _buildOutput;
-    private bool _solution = true;
-    private string _contextPreview = string.Empty;
     private bool _agent;
+    private bool _stopped;
+    private IReadOnlyList<string>? _mentionableFiles;
     private readonly HashSet<AiChatTurn> _known = [];
     private int _agentIndex;
     private bool _picked;
@@ -248,8 +286,14 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>A question can go now: AI is on and idle, no turn is being answered, there is a question, and a chosen external agent may run.</summary>
-    public bool CanSend => !IsBusy && !IsAnswering && !IsOff && Input.Trim().Length > 0 && !IsAgentBlocked;
+    /// <summary>
+    /// A question can go now: AI is on, there is a question, and a chosen external agent may run. While a turn is answered
+    /// it waits in the queue (ADR 0092) and goes when the turn ends.
+    /// </summary>
+    public bool CanSend => !IsOff && Input.Trim().Length > 0 && !IsAgentBlocked && (!IsBusy || IsAnswering);
+
+    /// <summary>Send queues the question: a turn is being answered.</summary>
+    public bool WillQueue => IsAnswering;
 
     /// <summary>Agent mode (M28c): the model may read, search, build, propose edits and ask to run commands.</summary>
     public bool IsAgent
@@ -258,49 +302,136 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         set => SetField(ref _agent, value);
     }
 
-    public bool IncludeSelection { get => _selection; set => SetChip(ref _selection, value); }
+    // ------------------------------------------------------------------ density (ADR 0092)
 
-    public bool IncludeCurrentFile { get => _currentFile; set => SetChip(ref _currentFile, value); }
+    /// <summary>Compact (the default): each turn's steps fold into one line, and its thinking into a short one.</summary>
+    public bool IsCompact => _host.ChatDensity != "detailed";
 
-    public bool IncludeOpenFiles { get => _openFiles; set => SetChip(ref _openFiles, value); }
+    public string DensityToggleName => IsCompact
+        ? Localizer.Get("msg.ai.showDetails", "Show every step (detailed)")
+        : Localizer.Get("msg.ai.showCompact", "Fold the steps (compact)");
 
-    public bool IncludeErrors { get => _errors; set => SetChip(ref _errors, value); }
-
-    public bool IncludeBuildOutput { get => _buildOutput; set => SetChip(ref _buildOutput, value); }
-
-    public bool IncludeSolution { get => _solution; set => SetChip(ref _solution, value); }
-
-    /// <summary>What would go with the next question now (names only), shown under the chips.</summary>
-    public string ContextPreview
+    /// <summary>The toolbar's toggle: compact ⇄ detailed, kept in the user's settings.</summary>
+    public async Task ToggleDensityAsync()
     {
-        get => _contextPreview;
-        private set => SetField(ref _contextPreview, value);
+        await _host.SetChatDensityAsync(IsCompact ? "detailed" : "compact").ConfigureAwait(true);
+        OnDensityChanged();
     }
 
-    public AiContextChoice Choice => new(_selection, _currentFile, _openFiles, _errors, _buildOutput, _solution);
-
-    private void SetChip(ref bool field, bool value, [System.Runtime.CompilerServices.CallerMemberName] string? name = null)
+    /// <summary>The setting changed: the toggle and the turns follow.</summary>
+    public void OnDensityChanged()
     {
-        if (SetField(ref field, value, name))
+        OnPropertyChanged(nameof(IsCompact));
+        OnPropertyChanged(nameof(DensityToggleName));
+        DensityChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The density changed (UI thread): the turns render again.</summary>
+    public event EventHandler? DensityChanged;
+
+    // ------------------------------------------------------------------ the queue (ADR 0092)
+
+    /// <summary>Questions sent while a turn ran, in order; the first goes when it ends (not after Stop).</summary>
+    public System.Collections.ObjectModel.ObservableCollection<AiQueuedQuestion> Queued { get; } = [];
+
+    public bool HasQueued => Queued.Count > 0;
+
+    /// <summary>Takes a queued question out of the queue.</summary>
+    public void RemoveQueued(AiQueuedQuestion question)
+    {
+        if (Queued.Remove(question))
         {
-            UpdateContextPreview();
+            OnPropertyChanged(nameof(HasQueued));
         }
     }
 
-    /// <summary>Reads the context the chips choose and lists it (the editor's selection or files changed).</summary>
-    public void UpdateContextPreview()
+    /// <summary>Takes a queued question back into the input to change it (what's typed there goes in the queue first).</summary>
+    public void EditQueued(AiQueuedQuestion question)
     {
-        if (IsOff)
+        if (!Queued.Contains(question))
         {
-            ContextPreview = string.Empty;
             return;
         }
 
-        var (items, _) = _host.GatherAiContext(Choice);
-        ContextPreview = items.Count == 0
-            ? Localizer.Get("msg.ai.noContext", "Only your question is sent.")
-            : Localizer.Format("msg.ai.contextPreview", "Sent with your question: {0}", string.Join(", ", items.Select(i => i.Label).Distinct(StringComparer.Ordinal)));
+        var typed = Input.Trim();
+        var at = Queued.IndexOf(question);
+        Queued.RemoveAt(at);
+        if (typed.Length > 0)
+        {
+            Queued.Insert(at, new AiQueuedQuestion(typed, [.. Images]));
+        }
+
+        Images.Clear();
+        foreach (var image in question.Images)
+        {
+            Images.Add(image);
+        }
+
+        Input = question.Text;
+        OnPropertyChanged(nameof(HasQueued));
+        OnImagesChanged();
     }
+
+    // ------------------------------------------------------------------ images (ADR 0092)
+
+    /// <summary>Images pasted or dropped into the input, sent with the next question.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<AiImageAttachment> Images { get; } = [];
+
+    public bool HasImages => Images.Count > 0;
+
+    /// <summary>
+    /// Whether the chosen agent takes images (an external agent whose <c>promptCapabilities.image</c> is true).
+    /// TODO(issue): the built-in assistant, once the provider API carries image parts.
+    /// </summary>
+    public bool CanAttachImages => Session is { TakesImages: true };
+
+    /// <summary>Why the images can't go, while there are some: the assistant or agent doesn't take them.</summary>
+    public string? ImagesNotTakenMessage => HasImages && !CanAttachImages
+        ? IsExternal
+            ? Localizer.Format("msg.ai.agentTakesNoImages", "{0} doesn't take images: they won't be sent.", SelectedAgentDisplayName)
+            : Localizer.Get("msg.ai.assistantTakesNoImages", "The built-in assistant doesn't take images: they won't be sent. An external agent that takes them (such as Claude) can.")
+        : null;
+
+    public bool HasImagesNotTakenMessage => ImagesNotTakenMessage is not null;
+
+    /// <summary>Adds an image to the next question; false (and nothing added) when it is too big.</summary>
+    public bool AddImage(AiImageAttachment image)
+    {
+        if (image.Data.Length / 4 * 3 > AiImageAttachment.MaxBytes)
+        {
+            return false;
+        }
+
+        Images.Add(image);
+        OnImagesChanged();
+        return true;
+    }
+
+    /// <summary>An image over <see cref="AiImageAttachment.MaxBytes"/> wasn't added: the chat says so.</summary>
+    public void ShowImageTooBig(string name) =>
+        _host.ShowAiMessage(Localizer.Format("msg.ai.imageTooBig", "{0} is larger than 5 MB, so it wasn't added.", name));
+
+    public void RemoveImage(AiImageAttachment image)
+    {
+        if (Images.Remove(image))
+        {
+            OnImagesChanged();
+        }
+    }
+
+    private void OnImagesChanged()
+    {
+        OnPropertyChanged(nameof(HasImages));
+        OnPropertyChanged(nameof(CanAttachImages));
+        OnPropertyChanged(nameof(ImagesNotTakenMessage));
+        OnPropertyChanged(nameof(HasImagesNotTakenMessage));
+    }
+
+    // ------------------------------------------------------------------ the turn's changes (ADR 0092)
+
+    public Task OpenChangeDiffAsync(AiChangedFile change) => _host.OpenAiChangeDiffAsync(change);
+
+    public Task<bool> RevertChangeAsync(AiChangedFile change) => _host.RevertAiChangeAsync(change);
 
     // ------------------------------------------------------------------ external agents (M48, ADR 0079)
 
@@ -462,22 +593,48 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private void UpdateSuggestions()
     {
         var typed = Input;
+
+        // An @-mention being typed: the word at the end that starts with @ (ADR 0092).
+        var start = typed.LastIndexOfAny([' ', '\n', '\t']) + 1;
+        if (start < typed.Length && typed[start] == '@' && IsOn)
+        {
+            var prefix = typed[(start + 1)..];
+            _mentionableFiles ??= _host.MentionableFiles();
+            CommandSuggestions = [.. AiMentions.Suggest(prefix, _mentionableFiles)];
+            return;
+        }
+
+        if (typed.Length == 0)
+        {
+            _mentionableFiles = null; // read again at the next @: files come and go
+        }
+
         if (Session is not { } session || !typed.StartsWith('/') || typed.Any(char.IsWhiteSpace))
         {
             CommandSuggestions = [];
             return;
         }
 
-        var prefix = typed[1..];
+        var command = typed[1..];
         CommandSuggestions = [.. session.Commands
-            .Where(c => c.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Where(c => c.Name.StartsWith(command, StringComparison.OrdinalIgnoreCase))
             .Select(c => new AiCommandSuggestion(c.Name, "/" + c.Name + (c.Description is { Length: > 0 } d ? " — " + d : "") + (c.Input?.Hint is { Length: > 0 } hint ? " (" + hint + ")" : "")))];
     }
 
-    /// <summary>Puts a suggested command in the input, ready for its argument.</summary>
+    /// <summary>Puts a suggested command in the input, ready for its argument, or completes the @-mention being typed.</summary>
     public void UseCommand(AiCommandSuggestion suggestion)
     {
-        Input = "/" + suggestion.Name + " ";
+        if (suggestion.IsMention)
+        {
+            var typed = Input;
+            var start = typed.LastIndexOfAny([' ', '\n', '\t']) + 1;
+            Input = typed[..start] + "@" + suggestion.Name + " ";
+        }
+        else
+        {
+            Input = "/" + suggestion.Name + " ";
+        }
+
         CommandSuggestions = [];
     }
 
@@ -569,6 +726,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnChoicesChanged();
         OnPropertyChanged(nameof(CanSend));
         OnStatesChanged();
+        OnImagesChanged();
         UpdateSuggestions();
     }
 
@@ -589,7 +747,6 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ProviderLabel));
         OnPropertyChanged(nameof(CanSend));
         OnStatesChanged();
-        UpdateContextPreview();
     }
 
     private void OnTurnsChanged()
@@ -603,6 +760,7 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsAnswering));
         OnPropertyChanged(nameof(CanSend));
+        OnPropertyChanged(nameof(WillQueue));
     }
 
     private void OnStatesChanged()
@@ -620,42 +778,64 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Sends the input with the chosen context. Nothing is sent while a turn is answered (Enter included): AI isn't busy
-    /// between an agent's steps, and a second question would take Stop away from the running turn.
+    /// Sends the input with what it @-mentions (ADR 0092: nothing else goes with it). While a turn is answered (between an
+    /// agent's steps too) the question waits in the queue, and goes when that turn ends; Stop pauses the queue.
     /// </summary>
     public async Task SendAsync()
     {
         var question = Input.Trim();
-        if (question.Length == 0 || IsBusy || IsAnswering || IsOff)
+        if (question.Length == 0 || IsOff || (IsExternal && IsAgentBlocked))
         {
             return;
         }
 
-        if (IsExternal)
+        if (IsAnswering || IsBusy)
         {
-            if (IsAgentBlocked)
-            {
-                return;
-            }
+            Queued.Add(new AiQueuedQuestion(question, [.. Images]));
+            Input = string.Empty;
+            Images.Clear();
+            OnImagesChanged();
+            OnPropertyChanged(nameof(HasQueued));
+            return;
         }
-        else if (NeedsProvider)
+
+        var images = CanAttachImages ? Images.ToList() : [];
+        Input = string.Empty;
+        Images.Clear();
+        OnImagesChanged();
+        await AskNowAsync(question, images).ConfigureAwait(true);
+    }
+
+    private async Task AskNowAsync(string question, IReadOnlyList<AiImageAttachment> images)
+    {
+        if (!IsExternal && NeedsProvider)
         {
             await _host.ChooseAiProviderAsync().ConfigureAwait(true);
             if (NeedsProvider || IsAnswering)
             {
+                Input = question;
                 return;
             }
         }
 
-        var (items, anchor) = _host.GatherAiContext(Choice);
+        var (items, anchor) = _host.GatherAiContext(AiMentions.Parse(question));
         var agent = IsAgent;
-        Input = string.Empty;
         var external = SelectedAgent;
+        _stopped = false;
         await AnswerAsync(token => external is { } selected
-            ? Chat.SendExternalAsync(question, items, _host.ExternalAgents, selected, _host.AcpHost, token, anchor)
+            ? Chat.SendExternalAsync(question, items, _host.ExternalAgents, selected, _host.AcpHost, token, anchor, images)
             : agent
                 ? _host.RunAgentAsync(question, items, anchor, token)
                 : Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
+
+        // The next queued question goes once this turn has ended, unless Stop paused the queue or AI went off.
+        if (!_stopped && !IsOff && !IsAnswering && Queued.Count > 0 && !(IsExternal && IsAgentBlocked))
+        {
+            var next = Queued[0];
+            Queued.RemoveAt(0);
+            OnPropertyChanged(nameof(HasQueued));
+            await AskNowAsync(next.Text, CanAttachImages ? next.Images : []).ConfigureAwait(true);
+        }
     }
 
     /// <summary>Asks <paramref name="question"/> with <paramref name="items"/> chosen by an action (not the chips), in this chat.</summary>
@@ -696,7 +876,12 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
     }
 
-    public void Stop() => _cts?.Cancel();
+    /// <summary>Stops the running turn; queued questions stay, paused, until the next Send.</summary>
+    public void Stop()
+    {
+        _stopped = true;
+        _cts?.Cancel();
+    }
 
     public void Dispose()
     {
@@ -708,6 +893,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     public void NewChat()
     {
         Stop();
+        Queued.Clear();
+        OnPropertyChanged(nameof(HasQueued));
         Chat.Clear();
         _ = _host.ExternalAgents.StopAsync();
     }

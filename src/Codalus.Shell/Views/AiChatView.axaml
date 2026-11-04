@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:Codalus.Shell.Controls"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:ai="using:Codalus.Workbench.Ai"
              x:Class="Codalus.Shell.Views.AiChatView"
              x:DataType="vm:AiChatViewModel">
   <!--
@@ -10,7 +11,7 @@
     model, who answers (the built-in assistant or an external agent, M48) and its mode, Agent mode, the request log,
     Configure), the conversation (your messages as bubbles with what went with them,
     the assistant's turns with an avatar, its steps, Markdown and code blocks in the editor's colors), and the composer
-    (what goes with the next question, the question, Send or Stop). The turns are built in code (AiChatTurnView) and
+    (queued questions, images, the question with its @-mentions, Send, Queue or Stop; ADR 0092). The turns are built in code (AiChatTurnView) and
     virtualized.
   -->
   <UserControl.Styles>
@@ -89,6 +90,9 @@
       <ToggleSwitch x:Name="AgentSwitch" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" Margin="4,0"
                     ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
       <Border Classes="toolbarSeparator" Height="16" />
+      <!-- Compact (the default) folds each answer's steps into a line; detailed shows every step (ADR 0092). -->
+      <ToggleButton x:Name="DensityToggle" Classes="toolbar icon" controls:ButtonIcon.Kind="list" IsChecked="{Binding !IsCompact, Mode=OneWay}"
+                    ToolTip.Tip="{Binding DensityToggleName}" AutomationProperties.Name="{Binding DensityToggleName}" />
       <Button x:Name="Log" Classes="toolbar icon" controls:ButtonIcon.Kind="history"
               ToolTip.Tip="{l:T aiChat.whatWasSentAndWhenIn}" AutomationProperties.Name="{l:T aiChat.showTheRequestLog}" />
       <Button x:Name="Configure" Classes="toolbar icon" controls:ButtonIcon.Kind="gear" IsVisible="{Binding ShowBuiltInControls}"
@@ -173,30 +177,41 @@
     <!-- The composer: what goes with the next question, the question, and Send (Stop while a turn runs). -->
     <Border Grid.Row="3" Classes="composerArea" IsVisible="{Binding IsOn}">
       <StackPanel Spacing="8">
-        <WrapPanel x:Name="ContextChips" ItemSpacing="3" LineSpacing="3" AutomationProperties.Name="{l:T aiChat.whatGoesWithYourQuestion}">
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="select-expand" IsChecked="{Binding IncludeSelection}" Content="{l:T aiChat.selection}"
-                        ToolTip.Tip="{l:T aiChat.sendTheSelection}" AutomationProperties.Name="{l:T aiChat.sendTheSelection}" />
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="document-text" IsChecked="{Binding IncludeCurrentFile}" Content="{l:T aiChat.currentFile}"
-                        ToolTip.Tip="{l:T aiChat.sendTheCurrentFile}" AutomationProperties.Name="{l:T aiChat.sendTheCurrentFile}" />
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="files" IsChecked="{Binding IncludeOpenFiles}" Content="{l:T aiChat.openFiles}"
-                        ToolTip.Tip="{l:T aiChat.sendTheOtherOpenFiles}" AutomationProperties.Name="{l:T aiChat.sendTheOtherOpenFiles}" />
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="clear-all" IsChecked="{Binding IncludeErrors}" Content="{l:T aiChat.errors}"
-                        ToolTip.Tip="{l:T aiChat.sendTheErrorsAndWarnings}" AutomationProperties.Name="{l:T aiChat.sendTheErrorsAndWarnings}" />
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="build" IsChecked="{Binding IncludeBuildOutput}" Content="{l:T aiChat.buildOutput}"
-                        ToolTip.Tip="{l:T aiChat.sendTheLastBuildSOutput}" AutomationProperties.Name="{l:T aiChat.sendTheLastBuildSOutput}" />
-          <ToggleButton Classes="chip" controls:ButtonIcon.Kind="solution" IsChecked="{Binding IncludeSolution}" Content="{l:T aiChat.solution}"
-                        ToolTip.Tip="{l:T aiChat.sendTheSolutionSProjects}" AutomationProperties.Name="{l:T aiChat.sendTheSolutionSProjects}" />
-        </WrapPanel>
-        <TextBlock Classes="muted small" Text="{Binding ContextPreview}" TextWrapping="Wrap" />
+        <!--
+          Questions sent while a turn runs (ADR 0092): they go in order when it ends; a click takes one back into the input
+          to change it, × removes it. Stop pauses the queue until the next Send.
+        -->
+        <ItemsControl x:Name="QueuedList" ItemsSource="{Binding Queued}" IsVisible="{Binding HasQueued}" AutomationProperties.Name="{l:T aiChat.queuedQuestions}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Spacing="3" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:AiQueuedQuestion">
+              <Border Classes="chip">
+                <DockPanel>
+                  <Button DockPanel.Dock="Right" Classes="toolbar icon" controls:ButtonIcon.Kind="close" Click="OnRemoveQueuedClick" Tag="{Binding}"
+                          ToolTip.Tip="{l:T aiChat.removeFromQueue}" AutomationProperties.Name="{l:T aiChat.removeFromQueue}" />
+                  <controls:Icon DockPanel.Dock="Left" Kind="clock" Width="12" Height="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+                  <Button Classes="link" Click="OnEditQueuedClick" Tag="{Binding}" ToolTip.Tip="{l:T aiChat.editQueued}" AutomationProperties.Name="{Binding AccessibleName}">
+                    <TextBlock Text="{Binding Text}" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                  </Button>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
         <!--
           An external agent (M48, ADR 0079): the label whenever one is chosen, and why it can't run here, as notices on
           the control set's status tints (outlined in High contrast, like its chips).
         -->
-        <Border x:Name="ExternalAgentBanner" Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsExternal}"
+        <Border x:Name="ExternalAgentBanner" Padding="8,3" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsExternal}"
                 Background="{DynamicResource Shell.Status.Info}" BorderBrush="{DynamicResource Shell.Status.Info.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
           <DockPanel>
             <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,8,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
-            <TextBlock x:Name="ExternalAgentLabel" Classes="small" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="ExternalAgentLabel" Classes="small" Text="{l:T aiChat.externalAgentUsesItsOwn}" TextTrimming="CharacterEllipsis" MaxLines="1"
+                       ToolTip.Tip="{l:T aiChat.externalAgentUsesItsOwn}" Foreground="{DynamicResource Shell.Status.Info.Foreground}" AutomationProperties.LiveSetting="Polite" />
           </DockPanel>
         </Border>
         <Border Padding="8,6" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding IsAgentBlocked}"
@@ -214,18 +229,44 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
+        <!-- Images pasted or dropped into the input (ADR 0092), and why they won't go when the agent doesn't take them. -->
+        <TextBlock x:Name="ImagesNotTaken" Classes="small" Foreground="{DynamicResource Shell.Status.Warning.Foreground}" Text="{Binding ImagesNotTakenMessage}" IsVisible="{Binding HasImagesNotTakenMessage}" TextWrapping="Wrap" />
         <Border Classes="composer">
           <StackPanel Spacing="6">
-            <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160"
-                     PlaceholderText="{l:T aiChat.askAboutYourCode}" AutomationProperties.Name="{l:T aiChat.question}" />
+            <ItemsControl x:Name="ImageList" ItemsSource="{Binding Images}" IsVisible="{Binding HasImages}" AutomationProperties.Name="{l:T aiChat.attachedImages}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel ItemSpacing="4" LineSpacing="4" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ai:AiImageAttachment">
+                  <Border Classes="chip">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <controls:Icon Kind="attach" Width="12" Height="12" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Name}" MaxWidth="160" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="close" Click="OnRemoveImageClick" Tag="{Binding}"
+                              ToolTip.Tip="{l:T aiChat.removeImage}" AutomationProperties.Name="{l:T aiChat.removeImage}" />
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBox x:Name="InputBox" Text="{Binding Input}" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="160" DragDrop.AllowDrop="True"
+                     PlaceholderText="{l:T aiChat.askAboutYourCodeMention}" AutomationProperties.Name="{l:T aiChat.question}" />
             <DockPanel>
               <Panel DockPanel.Dock="Right">
-                <Button x:Name="Send" Classes="accent icon" controls:ButtonIcon.Kind="send" IsEnabled="{Binding CanSend}" IsVisible="{Binding !IsAnswering}"
-                        ToolTip.Tip="{l:T aiChat.sendEnter}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />
-                <Button x:Name="StopButton" Classes="icon" controls:ButtonIcon.Kind="stop" IsVisible="{Binding IsAnswering}"
-                        ToolTip.Tip="{l:T aiChat.stop}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <!-- While a turn runs, Send queues the question (ADR 0092); Stop stays beside it. -->
+                  <Button x:Name="QueueButton" Classes="icon" controls:ButtonIcon.Kind="clock" IsEnabled="{Binding CanSend}" IsVisible="{Binding WillQueue}"
+                          ToolTip.Tip="{l:T aiChat.queueEnter}" AutomationProperties.Name="{l:T aiChat.queueTheQuestion}" />
+                  <Button x:Name="Send" Classes="accent icon" controls:ButtonIcon.Kind="send" IsEnabled="{Binding CanSend}" IsVisible="{Binding !IsAnswering}"
+                          ToolTip.Tip="{l:T aiChat.sendEnter}" AutomationProperties.Name="{l:T aiChat.sendTheQuestion}" />
+                  <Button x:Name="StopButton" Classes="icon" controls:ButtonIcon.Kind="stop" IsVisible="{Binding IsAnswering}"
+                          ToolTip.Tip="{l:T aiChat.stop}" AutomationProperties.Name="{l:T aiChat.stopTheAnswer}" />
+                </StackPanel>
               </Panel>
-              <TextBlock Classes="muted small" Text="{l:T aiChat.enterSendsShiftEnterNewLine}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
+              <TextBlock Classes="muted small" Text="{l:T aiChat.mentionHint}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,8,0" />
             </DockPanel>
           </StackPanel>
         </Border>

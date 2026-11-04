@@ -49,6 +49,7 @@ public sealed partial class ShellHost : IAiChatHost
         Ai = new AiService(Workbench.Settings, LanguageModels, Workbench.Output, () => Solutions.Solution?.Directory, () => Solutions.Solution?.Trusted ?? true);
         InitializeExternalAgents();
         AiChat = new AiChatViewModel(this);
+        InitializeAiChatChanges();
         AiCompletions = new AiCompletions(Ai, Workbench.Settings);
         AiNextEdit = new AiNextEdit(Ai, Workbench.Settings);
         Ai.Changed += (_, _) => Ui.Post(UpdateAiStatus);
@@ -385,6 +386,43 @@ public sealed partial class ShellHost : IAiChatHost
             }
 
             items.Add(new AiContextItem(AiContextKind.Solution, Path.GetFileName(solution.Path), sb.ToString()));
+        }
+
+        // Files the question @-mentions (ADR 0092): as the editor has them, else from the disk; only inside the workspace.
+        foreach (var mentioned in choice.Files)
+        {
+            if (Solutions.Solution?.Directory is not { } root)
+            {
+                break;
+            }
+
+            string path;
+            try
+            {
+                path = WorkspacePath(mentioned, root);
+            }
+            catch (Codalus.Workbench.Ai.Ide.IdeToolException)
+            {
+                continue;
+            }
+
+            var open = openModels.FirstOrDefault(m => SolutionPaths.Comparer.Equals(m.Path, path));
+            string? text = open?.Text.Text;
+            if (text is null && File.Exists(path) && new FileInfo(path).Length <= 1_000_000)
+            {
+                try
+                {
+                    text = File.ReadAllText(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
+            if (text is not null && !text.Contains('\0', StringComparison.Ordinal))
+            {
+                items.Add(new AiContextItem(AiContextKind.OpenFile, Path.GetFileName(path), text) { Path = path, Language = open?.LanguageId });
+            }
         }
 
         return (items, anchor);
