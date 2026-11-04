@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Globalization;
 using System.Net;
 using System.Net.WebSockets;
@@ -491,9 +492,24 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             return string.Create(
                 CultureInfo.InvariantCulture,
-                $"sessions [{string.Join(", ", _sessions.Keys)}]; notification sockets [{string.Join(", ", _sockets.Keys.Select(s => s.State))}]; {_waiting.Count} notification(s) waiting for a socket; {(Volatile.Read(ref _disposed) != 0 ? "disposed" : "not disposed")}");
+                $"sessions [{string.Join(", ", _sessions.Keys)}]; notification sockets [{string.Join(", ", _sockets.Keys.Select(s => s.State))}]; {_waiting.Count} notification(s) waiting for a socket; {(Volatile.Read(ref _disposed) != 0 ? "disposed" : "not disposed")}{(_teardownClock.IsRunning ? "; " + DescribeTeardown() : string.Empty)}");
         }
     }
+
+    /// <summary>
+    /// When disposal reached each step of the teardown, from its start: a disposal that took longer than the test allows
+    /// (over 10 s, Windows CI, PR #300's run 41849511374, with the runner's CPU at 99%) said nothing of which step took
+    /// the time. TODO(issue): the cause, once a failure names the step.
+    /// </summary>
+    private readonly Stopwatch _teardownClock = new();
+
+    private readonly ConcurrentQueue<string> _teardownSteps = new();
+
+    private void TeardownStep(string step) =>
+        _teardownSteps.Enqueue(string.Create(CultureInfo.InvariantCulture, $"{step} at {_teardownClock.Elapsed.TotalSeconds:0.0} s"));
+
+    private string DescribeTeardown() =>
+        string.Create(CultureInfo.InvariantCulture, $"teardown {_teardownClock.Elapsed.TotalSeconds:0.0} s in: {string.Join(", ", _teardownSteps)}");
 
     /// <summary>How long disposal waits for the sockets and the listener to close before it leaves them to the thread pool.</summary>
     private static readonly TimeSpan s_teardownLimit = TimeSpan.FromSeconds(15);
@@ -505,7 +521,9 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             return;
         }
 
+        _teardownClock.Start();
         StopAll();
+        TeardownStep("sessions stopped");
 
         // The sockets and the listener close on the thread pool, and disposal waits for that a bounded time: on Windows,
         // HttpListener's WebSocket takes its locks to abort and to dispose, and a pending read's cancellation callback
@@ -520,7 +538,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
         catch (TimeoutException)
         {
-            Log?.Invoke($"The notification sockets didn't close within {s_teardownLimit.TotalSeconds:0} s: they are left to close in the background.");
+            Log?.Invoke($"The notification sockets didn't close within {s_teardownLimit.TotalSeconds:0} s: they are left to close in the background ({DescribeTeardown()}).");
             return; // the teardown still uses the lifetime
         }
 
@@ -531,23 +549,29 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         // Bounded, like the loop below: cancelling runs the notification sockets' pending reads' callbacks, which an
         // HttpListener WebSocket on Windows can block in.
+        TeardownStep("teardown started");
         try
         {
             await _lifetime.CancelAsync().WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TeardownStep("cancelled");
         }
         catch (TimeoutException)
         {
+            TeardownStep("the cancellation's 5 s ran out");
         }
 
         CloseListener(_listener);
+        TeardownStep("listener closed");
 
         try
         {
             await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TeardownStep("accept loop ended");
         }
         catch (TimeoutException)
         {
             // A listener that won't stop doesn't hold whoever disposes it.
+            TeardownStep("the accept loop's 5 s ran out");
         }
 
         foreach (var socket in _sockets.Keys)
@@ -556,6 +580,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             socket.Dispose();
         }
 
+        TeardownStep("sockets aborted");
         foreach (var socket in _connections.Keys)
         {
             if (_connections.TryRemove(socket, out var context))
@@ -563,5 +588,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
                 AbortConnection(context);
             }
         }
+
+        TeardownStep("connections aborted");
     }
 }
