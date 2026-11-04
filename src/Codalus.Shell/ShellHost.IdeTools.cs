@@ -313,7 +313,6 @@ public sealed partial class ShellHost
             case "debug_step":
             {
                 StoppedFrame(0);
-                var since = DateTime.UtcNow;
                 await (Str(args, "kind") switch
                 {
                     "into" => Debugger.StepIntoAsync(),
@@ -328,7 +327,11 @@ public sealed partial class ShellHost
                 await Debugger.ContinueAsync().ConfigureAwait(true);
                 return new("Continued. Use debug_wait_for_stop to wait for the next stop.");
             case "browser_get_page":
-                return new((await BrowserAsync(null, cancellationToken).ConfigureAwait(true)).GetPageAsync(Str(args, "selector"), cancellationToken) is var page ? await page.ConfigureAwait(true) : "");
+            {
+                var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
+                return new(await browser.GetPageAsync(Str(args, "selector"), cancellationToken).ConfigureAwait(true));
+            }
+
             case "browser_screenshot":
             {
                 var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
