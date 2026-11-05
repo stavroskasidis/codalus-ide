@@ -31,10 +31,35 @@ namespace Codalus.Shell;
 public sealed partial class ShellHost
 {
     private const int MaxIdeToolText = 30_000;
+
+    /// <summary>How long the run and browser tools wait for a web app that is starting to listen.</summary>
+    private static readonly TimeSpan s_webAppWait = TimeSpan.FromSeconds(90);
+
+    /// <summary>How long debug_start waits for the launch (the build, the launch profile, the debugger, the page).</summary>
+    private static readonly TimeSpan s_debugLaunchWait = TimeSpan.FromMinutes(10);
+
     private readonly HashSet<string> _ideActionGrants = new(StringComparer.Ordinal);
     private AgentBrowser? _agentBrowser;
     private string? _debugAppUrl;
     private string? _debugEnded;
+
+    /// <summary>The launch debug_start or run_project started, while it runs: the app is starting.</summary>
+    private Task? _agentLaunch;
+
+    /// <summary>
+    /// The address the program being debugged was told to listen on (its launch profile's <c>applicationUrl</c>), set
+    /// at every debug launch: a web app is expected, even when its logging filters "Now listening on".
+    /// </summary>
+    private string? _debugLaunchUrl;
+
+    /// <summary>
+    /// The profile of the browser the debug session's page runs in, which has the DevTools Protocol on a port, while the
+    /// session has a page: the agent's browser tools drive that page, so its breakpoints stop (ADR 0092, 2026-11-05).
+    /// </summary>
+    private string? _debugBrowserProfile;
+
+    /// <summary>The address a program run_project started was told to listen on, by program.</summary>
+    private (RunningProgram Program, string? Url)? _runLaunchUrl;
 
     /// <summary>Every tool an agent sees: the built-in ones, then the plugins'.</summary>
     public IReadOnlyList<IdeToolDefinition> IdeToolDefinitions => [.. IdeTools.BuiltIn, .. PluginIdeTools()];
@@ -57,12 +82,17 @@ public sealed partial class ShellHost
         });
 
         // How the last session ended, for a wait that starts after it did.
-        Debugger.Ended += (_, code) => _debugEnded = code is { } exit ? string.Create(CultureInfo.InvariantCulture, $"The program ended (exit code {exit}).") : "The program ended.";
+        Debugger.Ended += (_, code) =>
+        {
+            _debugEnded = code is { } exit ? string.Create(CultureInfo.InvariantCulture, $"The program ended (exit code {exit}).") : "The program ended.";
+            _debugBrowserProfile = null;
+        };
         Debugger.StateChanged += (_, _) =>
         {
             if (Debugger.State == DebugState.Starting)
             {
                 _debugEnded = null;
+                _debugAppUrl = null;
             }
         };
 
@@ -71,7 +101,7 @@ public sealed partial class ShellHost
         {
             if (ListeningUrl().Match(output.Text) is { Success: true } match)
             {
-                _debugAppUrl = match.Groups["url"].Value.Replace("://0.0.0.0", "://localhost", StringComparison.Ordinal).Replace("://[::]", "://localhost", StringComparison.Ordinal);
+                _debugAppUrl = LocalUrl(match.Groups["url"].Value.TrimEnd('/', '.', ',', ';', ')'));
             }
         };
     }
@@ -93,8 +123,18 @@ public sealed partial class ShellHost
         }
     }
 
-    [GeneratedRegex(@"Now listening on:\s*(?<url>https?://\S+)")]
+    // Without quotes: a Serilog template without :lj renders the address quoted.
+    [GeneratedRegex(@"Now listening on:\s*[""']?(?<url>https?://[^\s""'<>]+)")]
     private static partial Regex ListeningUrl();
+
+    /// <summary>The first address of a launch's <c>ASPNETCORE_URLS</c> (a web app's), with a wildcard host as localhost.</summary>
+    internal static string? WebAppUrl(Codalus.Workbench.Build.LaunchPlan plan) =>
+        plan.Environment.TryGetValue("ASPNETCORE_URLS", out var urls) && Codalus.Workbench.Build.LaunchPlanner.BrowserUrl(urls, null) is { } url
+            ? LocalUrl(url)
+            : null;
+
+    private static string LocalUrl(string url) =>
+        url.Replace("://0.0.0.0", "://localhost", StringComparison.Ordinal).Replace("://[::]", "://localhost", StringComparison.Ordinal);
 
     /// <summary>
     /// A call of an IDE tool (on the UI thread). <paramref name="caller"/> names who asks: an external agent, the built-in
@@ -147,19 +187,34 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// Asks before an action or a plugin's tool. Actions follow <c>ai.agent.ideActions</c>: <c>allow</c> runs them,
-    /// <c>ask</c> asks every time, <c>askOncePerSession</c> asks once per chat with "Allow for this chat". A plugin's tool
-    /// asks every time, as an MCP server's does (ADR 0063).
+    /// The workspaces whose actions run without asking ("Always Allow in This Workspace"), in the user's state, never in
+    /// the repository, so a cloned repository can't allow itself.
+    /// </summary>
+    internal Codalus.Workbench.Projects.TrustStore IdeActionWorkspaces => _ideActionWorkspaces ??= new(Path.Combine(Paths.State, "ai-ide-actions-allowed.json"));
+
+    private Codalus.Workbench.Projects.TrustStore? _ideActionWorkspaces;
+
+    /// <summary>
+    /// Asks before an action or a plugin's tool. Actions follow <c>ai.agent.ideActions</c>: <c>allow</c> (the default) runs
+    /// them; <c>ask</c> asks every time and <c>askOncePerSession</c> once per chat ("Allow for This Chat"), and both offer
+    /// "Always Allow in This Workspace". A plugin's tool asks every time, as an MCP server's does (ADR 0063).
     /// </summary>
     private async Task<bool> ApproveIdeToolAsync(IdeToolDefinition definition, JsonElement args, string? caller, CancellationToken cancellationToken)
     {
         var grantKey = caller ?? "codalus mcp";
         // Only the user's settings decide (a cloned repository's settings can't allow actions for itself).
         var userValue = Workbench.Settings.GetLayerValue(IdeTools.ActionsSetting, Codalus.Workbench.Settings.SettingScope.User);
-        var approval = definition.Kind == IdeToolKind.Action
+        var isAction = definition.Kind == IdeToolKind.Action;
+        var approval = isAction
             ? IdeTools.ParseApproval(userValue is { ValueKind: JsonValueKind.String } value ? value.GetString() : null)
             : IdeActionApproval.Ask;
         if (approval == IdeActionApproval.Allow)
+        {
+            return true;
+        }
+
+        var workspace = Solutions.Solution?.Directory;
+        if (isAction && workspace is not null && IdeActionWorkspaces.IsTrusted(workspace))
         {
             return true;
         }
@@ -174,6 +229,7 @@ public sealed partial class ShellHost
 
         var allow = Localizer.Get("msg.ideTools.allow", "Allow");
         var allowChat = Localizer.Get("msg.ideTools.allowForChat", "Allow for This Chat");
+        var allowWorkspace = Localizer.Get("msg.ideTools.allowForWorkspace", "Always Allow in This Workspace");
         var reject = Localizer.Get("msg.ai.reject", "Reject");
         var who = caller ?? Localizer.Get("msg.ideTools.anAgent", "An AI agent (codalus mcp)");
         var details = new List<DetailLine> { new(definition.Name, "header") };
@@ -187,11 +243,22 @@ public sealed partial class ShellHost
             details.Add(new DetailLine(Localizer.Format("msg.ideTools.fromPlugin", "A tool of the plugin {0}.", definition.Source), "note"));
         }
 
-        var buttons = approval == IdeActionApproval.AskOncePerSession ? new[] { allow, allowChat, reject } : [allow, reject];
+        var buttons = new List<string> { allow };
+        if (approval == IdeActionApproval.AskOncePerSession)
+        {
+            buttons.Add(allowChat);
+        }
+
+        if (isAction && workspace is not null)
+        {
+            buttons.Add(allowWorkspace);
+        }
+
+        buttons.Add(reject);
         var choice = await ShowCancellableAsync(new DialogRequest(
             Localizer.Format("msg.ideTools.approveTitle", "Allow {0}?", definition.Name),
             Localizer.Format("msg.ideTools.approveMessage", "{0} asks the IDE to {1}", who, ActionDescription(definition)),
-            buttons)
+            [.. buttons])
         {
             DefaultButton = reject,
             Details = details,
@@ -204,6 +271,12 @@ public sealed partial class ShellHost
                 _ideActionGrants.Add(grantKey);
             }
 
+            return true;
+        }
+
+        if (choice.Button == allowWorkspace && workspace is not null)
+        {
+            IdeActionWorkspaces.Trust(workspace);
             return true;
         }
 
@@ -260,13 +333,13 @@ public sealed partial class ShellHost
             case "get_test_results":
                 return new(TestResultsText(Bool(args, "failedOnly") ?? true, null, root));
             case "run_project":
-                return await RunProjectToolAsync(args, debug: false).ConfigureAwait(true);
+                return await RunProjectToolAsync(args, cancellationToken).ConfigureAwait(true);
             case "get_run_output":
                 return new(RunOutputText(Int(args, "lines") ?? 200));
             case "stop_run":
                 return await StopRunToolAsync().ConfigureAwait(true);
             case "debug_start":
-                return await DebugStartToolAsync(args, root).ConfigureAwait(true);
+                return await DebugStartToolAsync(args, root, cancellationToken).ConfigureAwait(true);
             case "debug_set_breakpoint":
             {
                 var path = RequiredPath(args, "path", root);
@@ -327,39 +400,33 @@ public sealed partial class ShellHost
                 await Debugger.ContinueAsync().ConfigureAwait(true);
                 return new("Continued. Use debug_wait_for_stop to wait for the next stop.");
             case "browser_get_page":
-            {
-                var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
-                return new(await browser.GetPageAsync(Str(args, "selector"), cancellationToken).ConfigureAwait(true));
-            }
-
+                return new((await BrowserCallAsync(null, (b, ct) => b.GetPageAsync(Str(args, "selector"), ct), root, cancellationToken).ConfigureAwait(true)).Text);
             case "browser_screenshot":
             {
-                var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
-                var data = await browser.ScreenshotAsync(cancellationToken).ConfigureAwait(true);
-                return new IdeToolResult("A screenshot of the page.") { Images = [new IdeToolImage(data, "image/png")] };
+                var shot = await BrowserCallAsync(null, (b, ct) => b.ScreenshotAsync(ct), root, cancellationToken).ConfigureAwait(true);
+                return shot.Interrupted ? new(shot.Text) : new IdeToolResult("A screenshot of the page.") { Images = [new IdeToolImage(shot.Text, "image/png")] };
             }
 
             case "browser_console":
             {
-                var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
+                var (browser, _) = await BrowserAsync(cancellationToken).ConfigureAwait(true);
                 var lines = browser.Console(Math.Clamp(Int(args, "lines") ?? 100, 1, 500));
                 return new(lines.Count == 0 ? "No console messages." : string.Join('\n', lines));
             }
 
             case "browser_evaluate":
             {
-                var browser = await BrowserAsync(null, cancellationToken).ConfigureAwait(true);
                 var script = Str(args, "script") ?? throw new IdeToolException("A script is needed.");
                 // A function body (with return or await) runs as an async function; an expression as it is.
                 var expression = script.Contains("return", StringComparison.Ordinal) || script.Contains(';', StringComparison.Ordinal) ? "(async () => {" + script + "\n})()" : script;
-                return new(await browser.EvaluateAsync(expression, cancellationToken).ConfigureAwait(true));
+                return new((await BrowserCallAsync(null, (b, ct) => b.EvaluateAsync(expression, ct), root, cancellationToken).ConfigureAwait(true)).Text);
             }
 
             case "browser_navigate":
             {
                 var target = Str(args, "url") ?? throw new IdeToolException("An address is needed.");
-                var browser = await BrowserAsync(target, cancellationToken).ConfigureAwait(true);
-                return new("Opened. " + (await browser.GetPageAsync(null, cancellationToken).ConfigureAwait(true)).Split('\n', 3) switch { [var url, var title, ..] => url + " — " + title, var other => string.Join(' ', other) });
+                var page = await BrowserCallAsync(target, (b, ct) => b.GetPageAsync(null, ct), root, cancellationToken).ConfigureAwait(true);
+                return new(page.Interrupted ? page.Text : "Opened. " + page.Text.Split('\n', 3) switch { [var url, var title, ..] => url + " — " + title, var other => string.Join(' ', other) });
             }
 
             default:
@@ -1033,27 +1100,64 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ running
 
-    private async Task<IdeToolResult> RunProjectToolAsync(JsonElement args, bool debug)
+    private async Task<IdeToolResult> RunProjectToolAsync(JsonElement args, CancellationToken cancellationToken)
     {
         var project = Str(args, "project") is { Length: > 0 } name ? ProjectPath(name) : null;
-        _debugAppUrl = null;
-        if (debug)
+        var before = LastRunning();
+        var launch = StartWithoutDebuggingAsync(project);
+        _agentLaunch = launch;
+        await launch.WaitAsync(cancellationToken).ConfigureAwait(true);
+        if (LastRunning() is not { } running || running == before)
         {
-            await StartDebuggingAsync(project).ConfigureAwait(true);
+            return IdeToolResult.Error("It didn't start. " + LaunchFailureText());
+        }
+
+        // A web app: until it listens (or ends). Anything else: a moment, to see a failure at its start.
+        var expected = await RunLaunchUrlAsync(running).ConfigureAwait(true);
+        string? app = null;
+        if (expected is not null)
+        {
+            app = await WebAppAsync(s_webAppWait, cancellationToken).ConfigureAwait(true);
         }
         else
         {
-            await StartWithoutDebuggingAsync(project).ConfigureAwait(true);
+            await Task.WhenAny(running.Exited, Task.Delay(TimeSpan.FromSeconds(3), cancellationToken)).ConfigureAwait(true);
         }
 
-        // Give the program a moment to say where it listens (a web app) or to fail at once.
-        for (var i = 0; i < 20 && LastRunning() is { } running && !running.Listening.IsCompleted && !running.HasExited; i++)
-        {
-            await Task.Delay(250).ConfigureAwait(true);
-        }
-
-        return new((debug ? "Debugging started." : Runs.Running.Count > 0 ? "Started." : "It didn't start; read get_build_output or get_run_output.") + "\n" + RunOutputText(40));
+        var state = running.HasExited ? "It started and has exited." + (running.Exited.IsCompletedSuccessfully ? string.Create(CultureInfo.InvariantCulture, $" (exit code {running.Exited.Result})") : "")
+            : app is not null ? "Started. The web app listens at " + app + "; browser_* opens it (a path such as /counter is relative to it)."
+            : expected is not null ? string.Create(CultureInfo.InvariantCulture, $"Started, but nothing listens at {expected} after {s_webAppWait.TotalSeconds:0} s: read the output below.")
+            : "Started.";
+        return new(state + "\n" + RunOutputText(40));
     }
+
+    /// <summary>The address <paramref name="program"/> was told to listen on (its launch profile's), found once.</summary>
+    private async Task<string?> RunLaunchUrlAsync(RunningProgram program)
+    {
+        if (_runLaunchUrl is { } known && known.Program == program)
+        {
+            return known.Url;
+        }
+
+        string? url = null;
+        try
+        {
+            var (plan, _, _) = await Runs.PlanAsync(program.Project, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(true);
+            url = WebAppUrl(plan);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or IOException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException)
+        {
+            // Not a project with a launch profile: no address is expected.
+        }
+
+        _runLaunchUrl = (program, url);
+        return url;
+    }
+
+    /// <summary>Why a launch didn't start: the build's errors, or the end of the run or debug output.</summary>
+    private string LaunchFailureText() =>
+        Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } } ? "The build failed:\n" + BuildOutputText()
+        : "Read the output below, and get_build_output.\n" + RunOutputText(30);
 
     private RunningProgram? LastRunning() => Runs.Running is { Count: > 0 } running ? running[^1] : null;
 
@@ -1094,14 +1198,16 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ debugging
 
-    private async Task<IdeToolResult> DebugStartToolAsync(JsonElement args, string? root)
+    private async Task<IdeToolResult> DebugStartToolAsync(JsonElement args, string? root, CancellationToken cancellationToken)
     {
         if (Debugger.IsActive)
         {
             return IdeToolResult.Error("A debug session is running already: use debug_get_state, or stop_run first.");
         }
 
-        if (Str(args, "test") is { Length: > 0 } test)
+        Task launch;
+        var test = Str(args, "test") is { Length: > 0 } name ? name : null;
+        if (test is not null)
         {
             ActivateTestProviders();
             var keys = Tests.Read(r => r.SelectMany(n => n.Leaves()).Where(l => l.FullLabel.Equals(test, StringComparison.Ordinal) || l.FullLabel.EndsWith("." + test, StringComparison.Ordinal)).Select(l => l.Key).ToList());
@@ -1110,36 +1216,112 @@ public sealed partial class ShellHost
                 return IdeToolResult.Error($"No test named '{test}'. get_test_results lists them.");
             }
 
-            _ = RunTestsAsync(TestRunKind.Debug, keys);
+            launch = RunTestsAsync(TestRunKind.Debug, keys);
         }
         else
         {
-            var project = Str(args, "project") is { Length: > 0 } name ? ProjectPath(name) : null;
-            _debugAppUrl = null;
-            _ = StartDebuggingAsync(project);
+            var project = Str(args, "project") is { Length: > 0 } projectName ? ProjectPath(projectName) : null;
+            launch = StartDebuggingAsync(project);
         }
 
-        // Until the session runs (it builds first) or stops at a breakpoint.
-        var deadline = DateTime.UtcNow.AddMinutes(5);
-        while (Debugger.State is DebugState.Idle or DebugState.Starting && DateTime.UtcNow < deadline)
+        _agentLaunch = launch;
+
+        // A project: until its launch has finished (the build, the launch profile, the debugger, and a web app's page),
+        // which says whether it started; it can take minutes on a large solution. A test: until its session runs (the
+        // test run ends only with it).
+        var deadline = DateTime.UtcNow + s_debugLaunchWait;
+        while (!launch.IsCompleted && DateTime.UtcNow < deadline
+            && Debugger.State != DebugState.Stopped
+            && !(test is not null && Debugger.State == DebugState.Running))
         {
-            await Task.Delay(200).ConfigureAwait(true);
-            if (Debugger.State == DebugState.Idle && !Builds.IsBuilding && !Tests.IsRunning && DateTime.UtcNow > deadline.AddMinutes(-4.5))
-            {
-                break;
-            }
+            await Task.WhenAny(launch, Task.Delay(200, cancellationToken)).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
-        return Debugger.State == DebugState.Idle
-            ? IdeToolResult.Error("The debug session didn't start; read get_build_output or get_run_output.")
-            : new("The debug session is " + Debugger.State.ToString().ToLowerInvariant() + ". " + (Debugger.State == DebugState.Stopped ? await DebugStateTextAsync(root).ConfigureAwait(true) : "Use debug_wait_for_stop."));
+        if (launch is { IsFaulted: true, Exception: { } failed })
+        {
+            return IdeToolResult.Error("The debug session didn't start: " + failed.GetBaseException().Message);
+        }
+
+        if (Debugger.State == DebugState.Idle)
+        {
+            return IdeToolResult.Error(launch.IsCompleted
+                ? (_debugEnded is { } ended ? "The debug session started and ended. " + ended + "\n" + RunOutputText(30) : "The debug session didn't start. " + LaunchFailureText())
+                : string.Create(CultureInfo.InvariantCulture, $"The debug session hasn't started after {s_debugLaunchWait.TotalMinutes:0} minutes (the build or the launch is still going). Use debug_wait_for_stop to wait for it, or get_build_output."));
+        }
+
+        // A web app: until it listens, unless something stops it first.
+        string? app = null;
+        if (test is null && Debugger.State == DebugState.Running && _debugLaunchUrl is not null)
+        {
+            app = await WebAppAsync(s_webAppWait, cancellationToken).ConfigureAwait(true);
+        }
+
+        var sb = new StringBuilder();
+        if (Debugger.State == DebugState.Stopped)
+        {
+            sb.Append("The debug session started and stopped.\n").Append(await DebugStateTextAsync(root).ConfigureAwait(true));
+        }
+        else if (!Debugger.IsActive)
+        {
+            sb.Append("The debug session started and ended. ").Append(_debugEnded).Append('\n').Append(RunOutputText(30));
+            return new(sb.ToString());
+        }
+        else
+        {
+            sb.Append("The debug session is running.");
+            if (app is not null)
+            {
+                sb.Append(" The web app listens at ").Append(app).Append(_debugBrowserProfile is not null
+                    ? "; its page is open in the IDE's debugging browser, which browser_* drives (its breakpoints stop there)."
+                    : "; browser_* opens it.");
+            }
+            else if (_debugLaunchUrl is { } expected)
+            {
+                sb.Append(string.Create(CultureInfo.InvariantCulture, $" Nothing listens at {expected} after {s_webAppWait.TotalSeconds:0} s: read get_run_output."));
+            }
+
+            sb.Append(" Make the program reach a breakpoint (a web app: browser_navigate or browser_evaluate), then debug_wait_for_stop.");
+        }
+
+        sb.Append('\n').Append(BreakpointsText(root));
+        return new(sb.ToString().TrimEnd());
+    }
+
+    /// <summary>The breakpoints and whether the debugger bound them (and why not), for the agent to check its plan.</summary>
+    private string BreakpointsText(string? root)
+    {
+        if (Debugger.Breakpoints.All.Count == 0)
+        {
+            return "No breakpoints are set.";
+        }
+
+        var sb = new StringBuilder("Breakpoints:\n");
+        foreach (var b in Debugger.Breakpoints.All.Take(30))
+        {
+            sb.Append(string.Create(CultureInfo.InvariantCulture, $"  {Relative(b.Path, root)}:{b.Line}"));
+            sb.AppendLine(!b.Enabled ? " — disabled"
+                : Debugger.Breakpoints.StateOf(b) is { Verified: false } state ? " — not bound" + (state.Message is { Length: > 0 } m ? ": " + m : " yet (its code hasn't loaded, or no code is on that line)")
+                : Debugger.IsActive ? " — bound" : "");
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     private async Task<string> WaitForStopTextAsync(TimeSpan timeout, string? root, CancellationToken cancellationToken)
     {
+        var deadline = DateTime.UtcNow + timeout;
+        if (!Debugger.IsActive && _agentLaunch is { IsCompleted: false } launch)
+        {
+            // debug_start's launch is still building: wait for the session first.
+            await WaitUntilAsync(() => Debugger.IsActive || launch.IsCompleted, deadline, cancellationToken).ConfigureAwait(true);
+        }
+
         if (!Debugger.IsActive)
         {
-            return _debugEnded is { } ended ? ended + " " + RunOutputText(30) : "No debug session is running.";
+            return _debugEnded is { } ended ? ended + " " + RunOutputText(30)
+                : _agentLaunch is { IsCompleted: false } ? string.Create(CultureInfo.InvariantCulture, $"The debug session is still being launched (building) after {timeout.TotalSeconds:0} s; wait again.")
+                : "No debug session is running.";
         }
 
         if (Debugger.State != DebugState.Stopped)
@@ -1149,21 +1331,36 @@ public sealed partial class ShellHost
             void OnEnded(object? s, int? e) => stopped.TrySetResult();
             Debugger.Stopped += OnStopped;
             Debugger.Ended += OnEnded;
+
+            // A web app that doesn't listen yet: its start ends the wait too, since nothing stops it before a request.
+            using var readyStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var ready = _debugLaunchUrl is not null && ListeningAddress() is null
+                ? WaitForWebAppAsync(readyStop.Token)
+                : new TaskCompletionSource<string?>().Task;
             try
             {
                 if (Debugger.State != DebugState.Stopped && Debugger.IsActive)
                 {
-                    await stopped.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(true);
+                    var remaining = deadline - DateTime.UtcNow;
+                    var first = await Task.WhenAny(stopped.Task, ready).WaitAsync(remaining > TimeSpan.Zero ? remaining : TimeSpan.Zero, cancellationToken).ConfigureAwait(true);
+                    if (first == ready && ready.IsCompletedSuccessfully && ready.Result is { } app && Debugger.State == DebugState.Running)
+                    {
+                        return "The web app has started and listens at " + app + "; nothing has stopped it yet. Request the code with a breakpoint (browser_navigate, browser_evaluate), then debug_wait_for_stop.\n" + BreakpointsText(root);
+                    }
                 }
             }
             catch (TimeoutException)
             {
-                return string.Create(CultureInfo.InvariantCulture, $"The program is still running after {timeout.TotalSeconds:0} s (nothing stopped it). Interact with it (the browser tools for a web app), then wait again.");
+                var app = ListeningAddress();
+                return string.Create(CultureInfo.InvariantCulture, $"The program is still running after {timeout.TotalSeconds:0} s (nothing stopped it).")
+                    + (app is not null ? " The web app listens at " + app + ": request the code with a breakpoint (browser_navigate, browser_evaluate), then wait again." : " Make it reach a breakpoint, then wait again.")
+                    + "\n" + BreakpointsText(root);
             }
             finally
             {
                 Debugger.Stopped -= OnStopped;
                 Debugger.Ended -= OnEnded;
+                await readyStop.CancelAsync().ConfigureAwait(true);
             }
 
             // The stack is read before Stopped is raised; let the UI-thread handlers finish.
@@ -1171,6 +1368,14 @@ public sealed partial class ShellHost
         }
 
         return Debugger.IsActive ? await DebugStateTextAsync(root).ConfigureAwait(true) : (_debugEnded ?? "The program ended.") + " " + RunOutputText(30);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, DateTime deadline, CancellationToken cancellationToken)
+    {
+        while (!condition() && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(200, cancellationToken).ConfigureAwait(true);
+        }
     }
 
     private async Task<string> DebugStateTextAsync(string? root)
@@ -1275,41 +1480,202 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ the browser
 
+    /// <summary>What a browser call returned, or, when <see cref="Interrupted"/>, why it didn't (the program stopped).</summary>
+    private readonly record struct BrowserOutcome(string Text, bool Interrupted);
+
     /// <summary>
-    /// The agent's browser, started at the web app's address when it isn't running: the address a program the IDE runs or
-    /// debugs listens on. <paramref name="navigate"/> opens an address (relative to the app's) first.
+    /// The address a web app the IDE runs or debugs listens on, now: the last running program's "Now listening on", or
+    /// the debug session's.
     /// </summary>
-    private async Task<AgentBrowser> BrowserAsync(string? navigate, CancellationToken cancellationToken)
+    private string? ListeningAddress() =>
+        Runs.Running.LastOrDefault(r => r.Listening.IsCompletedSuccessfully && !r.HasExited)?.Listening.Result
+        ?? (Debugger.IsActive ? _debugAppUrl : null);
+
+    /// <summary>The address the web app being run or debugged was told to listen on, when one is expected.</summary>
+    private async Task<string?> ExpectedAddressAsync()
     {
-        var app = Runs.Running.LastOrDefault(r => r.Listening.IsCompletedSuccessfully)?.Listening.Result ?? _debugAppUrl;
+        if (Debugger.IsActive)
+        {
+            return _debugLaunchUrl;
+        }
+
+        return LastRunning() is { HasExited: false } running ? await RunLaunchUrlAsync(running).ConfigureAwait(true) : null;
+    }
+
+    /// <summary>
+    /// The web app's address once it accepts requests, waiting at most <paramref name="wait"/> while it is starting: a
+    /// launch still building, a debug session starting, or a program that was told an address and doesn't answer there
+    /// yet. Null when no web app is starting or it didn't listen in time; it returns at once when the debugger stops it.
+    /// </summary>
+    private async Task<string?> WebAppAsync(TimeSpan wait, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + wait;
+        while (true)
+        {
+            if (ListeningAddress() is { } listening)
+            {
+                return listening;
+            }
+
+            var expected = await ExpectedAddressAsync().ConfigureAwait(true);
+            if (expected is not null && await AcceptsAsync(expected, cancellationToken).ConfigureAwait(true))
+            {
+                return expected; // its logging may filter the host's "Now listening on"
+            }
+
+            var starting = _agentLaunch is { IsCompleted: false }
+                || Debugger.State == DebugState.Starting
+                || (expected is not null && (Debugger.State == DebugState.Running || LastRunning() is { HasExited: false }));
+            if (!starting || Debugger.State == DebugState.Stopped || DateTime.UtcNow >= deadline)
+            {
+                return null;
+            }
+
+            await Task.Delay(500, cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Until a web app listens (debug_wait_for_stop's other end), however long that takes.</summary>
+    private async Task<string?> WaitForWebAppAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            if (await WebAppAsync(TimeSpan.Zero, cancellationToken).ConfigureAwait(true) is { } app)
+            {
+                return app;
+            }
+
+            await Task.Delay(500, cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>Whether something accepts a connection at <paramref name="url"/>'s host and port (within a second).</summary>
+    private static async Task<bool> AcceptsAsync(string url, CancellationToken cancellationToken)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(1));
+        using var client = new System.Net.Sockets.TcpClient();
+        try
+        {
+            await client.ConnectAsync(uri.Host, uri.Port, timeout.Token).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is System.Net.Sockets.SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The browser agents drive, and the web app's address (null when none listens):
+    /// <list type="bullet">
+    /// <item>while a debug session has a page (a Blazor Web App, a web app whose page is debugged with it), that page, in
+    /// the IDE's debugging browser, so the page's own breakpoints (WebAssembly components, scripts) stop;</item>
+    /// <item>otherwise a browser of the agent's own, started at the web app's address, waiting for a web app that is
+    /// starting.</item>
+    /// </list>
+    /// </summary>
+    private async Task<(AgentBrowser Browser, string? App)> BrowserAsync(CancellationToken cancellationToken)
+    {
+        var app = await WebAppAsync(s_webAppWait, cancellationToken).ConfigureAwait(true);
+        if (Debugger.IsActive && _debugBrowserProfile is { } profile)
+        {
+            if (_agentBrowser is { IsRunning: true, IsAttached: true } attached)
+            {
+                return (attached, app);
+            }
+
+            await StopAgentBrowserAsync().ConfigureAwait(true);
+            var origin = app is not null && Uri.TryCreate(app, UriKind.Absolute, out var appUri) ? appUri.GetLeftPart(UriPartial.Authority) : null;
+            _agentBrowser = await AgentBrowser.AttachAsync(profile, origin, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(true);
+            return (_agentBrowser, app);
+        }
+
+        if (_agentBrowser is { IsRunning: true, IsAttached: false } running)
+        {
+            return (running, app);
+        }
+
+        await StopAgentBrowserAsync().ConfigureAwait(true);
+        var start = app ?? throw new IdeToolException(NoWebAppText());
+        var browser = Browsers.Find(Workbench.Settings.GetString(Browsers.SettingKey, "auto")) ?? throw new IdeToolException("No Chromium browser (Chrome, Edge or Chromium) was found; set debug.browser to one.");
+        var ownProfile = Path.Combine(Paths.State, "agent-browser");
+        _agentBrowser = await AgentBrowser.StartAsync(browser.Path, ownProfile, start, Browsers.Headless, cancellationToken).ConfigureAwait(true);
+        return (_agentBrowser, app);
+    }
+
+    /// <summary>Why the browser tools have no web app: nothing runs, it is stopped, or it doesn't listen.</summary>
+    private string NoWebAppText() =>
+        Debugger.State == DebugState.Stopped
+            ? "The debugged program is stopped (debug_get_state says where) before its web app listens: debug_continue, then try again."
+        : _agentLaunch is { IsCompleted: false }
+            ? string.Create(CultureInfo.InvariantCulture, $"The app is still being built and launched after {s_webAppWait.TotalSeconds:0} s: try again, or read get_build_output.")
+        : Debugger.IsActive || LastRunning() is { HasExited: false }
+            ? string.Create(CultureInfo.InvariantCulture, $"A program runs, but no web app listens after {s_webAppWait.TotalSeconds:0} s: read get_run_output (is it a web app, and did it start?).")
+        : "No web app is running in the IDE. Start it with run_project or debug_start, then use the browser tools.";
+
+    /// <summary>
+    /// Calls the agent's browser, after opening <paramref name="navigate"/> (an address relative to the web app's) when
+    /// given. When the debugger stops the program meanwhile (a breakpoint the call's click reached), it returns at once
+    /// with where it stopped, and the call finishes when the program goes on. A page the debugger has paused doesn't
+    /// answer: the call says so after a few seconds instead of waiting.
+    /// </summary>
+    private async Task<BrowserOutcome> BrowserCallAsync(string? navigate, Func<AgentBrowser, CancellationToken, Task<string>> call, string? root, CancellationToken cancellationToken)
+    {
+        var (browser, app) = await BrowserAsync(cancellationToken).ConfigureAwait(true);
         string? target = null;
         if (navigate is { Length: > 0 })
         {
             target = Uri.TryCreate(navigate, UriKind.Absolute, out var absolute) && absolute.Scheme is "http" or "https" ? absolute.AbsoluteUri
                 : app is not null && Uri.TryCreate(new Uri(app), navigate, out var relative) ? relative.AbsoluteUri
-                : throw new IdeToolException("No web app is running in the IDE, so a relative address has nothing to be relative to. Start it with run_project or debug_start.");
+                : throw new IdeToolException(NoWebAppText() + " A full address (http://localhost:port/path) opens without one.");
             if (new Uri(target) is { IsLoopback: false })
             {
                 throw new IdeToolException("The agent's browser only opens the web app on this machine (localhost).");
             }
         }
 
-        if (_agentBrowser is { IsRunning: true } running)
+        var stoppedBefore = Debugger.State == DebugState.Stopped;
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnStopped(object? s, StopInfo e) => stopped.TrySetResult();
+        Debugger.Stopped += OnStopped;
+        try
         {
-            if (target is not null)
+            var work = Task.Run(async () =>
             {
-                await running.NavigateAsync(target, cancellationToken).ConfigureAwait(true);
+                if (target is not null)
+                {
+                    await browser.NavigateAsync(target, cancellationToken, retryFor: TimeSpan.FromSeconds(30)).ConfigureAwait(false);
+                }
+
+                return await call(browser, cancellationToken).ConfigureAwait(false);
+            }, cancellationToken);
+            var paused = stoppedBefore && browser.IsAttached ? Task.Delay(TimeSpan.FromSeconds(5), cancellationToken) : Task.Delay(Timeout.Infinite, cancellationToken);
+            var first = await Task.WhenAny(work, stopped.Task, paused).ConfigureAwait(true);
+            if (first == work)
+            {
+                return new(await work.ConfigureAwait(true), false);
             }
 
-            return running;
-        }
+            cancellationToken.ThrowIfCancellationRequested();
+            _ = work.ContinueWith(t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            if (first == stopped.Task)
+            {
+                await Task.Yield(); // the stack is read before Stopped is raised
+                return new("The debugged program stopped while the page was busy (the page waits for it):\n" + await DebugStateTextAsync(root).ConfigureAwait(true), true);
+            }
 
-        await StopAgentBrowserAsync().ConfigureAwait(true);
-        var start = target ?? app ?? throw new IdeToolException("No web app is running in the IDE. Start it with run_project or debug_start, then use the browser tools.");
-        var browser = Browsers.Find(Workbench.Settings.GetString(Browsers.SettingKey, "auto")) ?? throw new IdeToolException("No Chromium browser (Chrome, Edge or Chromium) was found; set debug.browser to one.");
-        var profile = Path.Combine(Paths.State, "agent-browser");
-        _agentBrowser = await AgentBrowser.StartAsync(browser.Path, profile, start, Browsers.Headless, cancellationToken).ConfigureAwait(true);
-        return _agentBrowser;
+            return new("The page doesn't answer: the debugged program is stopped, which pauses the page. Read it (debug_get_state, debug_get_variables), then debug_continue or debug_step.", true);
+        }
+        finally
+        {
+            Debugger.Stopped -= OnStopped;
+        }
     }
 
     // ------------------------------------------------------------------ arguments and paths

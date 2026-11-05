@@ -102,8 +102,27 @@ public sealed partial class ShellHost
             DebugLog.AppendLine("vscode-js-debug's log: " + trace);
         }
 
-        return new(browser.LaunchType, url, webRoot, inspectUri, browser.Path, Browsers.Headless ? ["--headless=new"] : null, Trace: trace is null ? null : new JsDebugTrace(trace));
+        // A profile of its own in the state folder, and the DevTools Protocol on a loopback port besides js-debug's
+        // connection (js-debug keeps a port the arguments give), so an agent's browser tools drive the very page being
+        // debugged and its breakpoints stop (ADR 0092, 2026-11-05). The port is the first line of DevToolsActivePort.
+        var profile = DebugBrowserProfile;
+        Directory.CreateDirectory(profile);
+        try
+        {
+            File.Delete(Path.Combine(profile, "DevToolsActivePort"));
+        }
+        catch (IOException)
+        {
+            // A browser still running on that profile: the new one opens in it, as before.
+        }
+
+        _debugBrowserProfile = profile;
+        string[] arguments = ["--user-data-dir=" + profile, "--remote-debugging-port=0", .. Browsers.Headless ? new[] { "--headless=new" } : []];
+        return new(browser.LaunchType, url, webRoot, inspectUri, browser.Path, arguments, UserDataDir: false, Trace: trace is null ? null : new JsDebugTrace(trace));
     }
+
+    /// <summary>The profile of the browser pages are debugged in (it keeps the page's sign-ins between sessions).</summary>
+    internal string DebugBrowserProfile => Path.Combine(Paths.State, "debug-browser");
 
     private Func<CancellationToken, Task<JsDebugAdapter>> StartJsDebug(Browser browser) =>
         ct => JsDebugAdapter.StartAsync(JsDebug.NodePath, JsDebug.ServerScript, browser.LaunchType, ct);

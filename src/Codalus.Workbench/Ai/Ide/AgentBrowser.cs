@@ -13,11 +13,13 @@ namespace Codalus.Workbench.Ai.Ide;
 /// runs or debugs. It reads the page (text or a selector's HTML), takes screenshots, runs JavaScript, navigates, and keeps
 /// the page's console messages and uncaught errors. The port listens on the loopback interface only, and the browser
 /// stops with the chat session, the workspace or the IDE. One page: the first one the browser opens.
+/// <see cref="AttachAsync"/> drives instead a page of a browser someone else started (the page the IDE debugs, whose
+/// browser has the protocol on a port too), and leaves that browser running when it lets go.
 /// </summary>
 public sealed class AgentBrowser : IAsyncDisposable
 {
     private const int MaxConsole = 500;
-    private readonly Process _process;
+    private readonly Process? _process;
     private readonly ClientWebSocket _socket = new();
     private readonly CancellationTokenSource _stop = new();
     private readonly Dictionary<int, TaskCompletionSource<JsonElement>> _pending = [];
@@ -27,13 +29,38 @@ public sealed class AgentBrowser : IAsyncDisposable
     private int _nextId;
     private Task? _receive;
 
-    private AgentBrowser(Process process)
+    private AgentBrowser(Process? process)
     {
         _process = process;
     }
 
     /// <summary>Whether the browser still runs.</summary>
-    public bool IsRunning => !_process.HasExited && _socket.State == WebSocketState.Open;
+    public bool IsRunning => _process is not { HasExited: true } && _socket.State == WebSocketState.Open && !_stop.IsCancellationRequested;
+
+    /// <summary>Whether this drives a browser someone else started (<see cref="AttachAsync"/>).</summary>
+    public bool IsAttached => _process is null;
+
+    /// <summary>
+    /// Drives a page of the browser whose profile is <paramref name="profileFolder"/>, started by someone else with
+    /// <c>--remote-debugging-port</c> (the page the IDE debugs): its port is the first line of the profile's
+    /// <c>DevToolsActivePort</c>. The page is the first one whose address starts with <paramref name="origin"/>, else the
+    /// first page. Disposing it lets go of the page; the browser keeps running.
+    /// </summary>
+    public static async Task<AgentBrowser> AttachAsync(string profileFolder, string? origin, TimeSpan wait, CancellationToken cancellationToken)
+    {
+        var port = await PortAsync(Path.Combine(profileFolder, "DevToolsActivePort"), null, wait, cancellationToken).ConfigureAwait(false);
+        var browser = new AgentBrowser(null);
+        try
+        {
+            await browser.ConnectAsync(port, origin, cancellationToken).ConfigureAwait(false);
+            return browser;
+        }
+        catch
+        {
+            await browser.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
 
     /// <summary>
     /// Starts <paramref name="executable"/> with a fresh profile in <paramref name="profileFolder"/> at <paramref name="url"/>,
@@ -82,31 +109,8 @@ public sealed class AgentBrowser : IAsyncDisposable
         var browser = new AgentBrowser(process);
         try
         {
-            // The port the browser chose is the first line of DevToolsActivePort once it listens.
-            var deadline = DateTime.UtcNow.AddSeconds(30);
-            int port;
-            while (true)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (process.HasExited)
-                {
-                    throw new IdeToolException(string.Create(CultureInfo.InvariantCulture, $"The browser exited at once (exit code {process.ExitCode})."));
-                }
-
-                if (File.Exists(portFile) && (await File.ReadAllLinesAsync(portFile, cancellationToken).ConfigureAwait(false)) is [var first, ..] && int.TryParse(first, NumberStyles.None, CultureInfo.InvariantCulture, out port) && port > 0)
-                {
-                    break;
-                }
-
-                if (DateTime.UtcNow > deadline)
-                {
-                    throw new IdeToolException("The browser didn't open its DevTools port within 30 seconds.");
-                }
-
-                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
-            }
-
-            await browser.ConnectAsync(port, cancellationToken).ConfigureAwait(false);
+            var port = await PortAsync(portFile, process, TimeSpan.FromSeconds(30), cancellationToken).ConfigureAwait(false);
+            await browser.ConnectAsync(port, null, cancellationToken).ConfigureAwait(false);
             await browser.NavigateAsync(url, cancellationToken).ConfigureAwait(false);
             return browser;
         }
@@ -117,7 +121,40 @@ public sealed class AgentBrowser : IAsyncDisposable
         }
     }
 
-    private async Task ConnectAsync(int port, CancellationToken cancellationToken)
+    /// <summary>The port a browser chose: the first line of its <c>DevToolsActivePort</c> once it listens.</summary>
+    private static async Task<int> PortAsync(string portFile, Process? process, TimeSpan wait, CancellationToken cancellationToken)
+    {
+        var deadline = DateTime.UtcNow + wait;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (process is { HasExited: true })
+            {
+                throw new IdeToolException(string.Create(CultureInfo.InvariantCulture, $"The browser exited at once (exit code {process.ExitCode})."));
+            }
+
+            try
+            {
+                if (File.Exists(portFile) && (await File.ReadAllLinesAsync(portFile, cancellationToken).ConfigureAwait(false)) is [var first, ..] && int.TryParse(first, NumberStyles.None, CultureInfo.InvariantCulture, out var port) && port > 0)
+                {
+                    return port;
+                }
+            }
+            catch (IOException)
+            {
+                // The browser is writing it.
+            }
+
+            if (DateTime.UtcNow > deadline)
+            {
+                throw new IdeToolException(string.Create(CultureInfo.InvariantCulture, $"The browser didn't open its DevTools port within {wait.TotalSeconds:0} seconds."));
+            }
+
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private async Task ConnectAsync(int port, string? origin, CancellationToken cancellationToken)
     {
         using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false }) { Timeout = TimeSpan.FromSeconds(10) };
         string? socketUrl = null;
@@ -126,10 +163,13 @@ public sealed class AgentBrowser : IAsyncDisposable
         {
             var list = await http.GetStringAsync(new Uri(string.Create(CultureInfo.InvariantCulture, $"http://127.0.0.1:{port}/json/list")), cancellationToken).ConfigureAwait(false);
             using var targets = JsonDocument.Parse(list);
-            socketUrl = targets.RootElement.EnumerateArray()
-                .Where(t => t.TryGetProperty("type", out var type) && type.GetString() == "page")
-                .Select(t => t.GetProperty("webSocketDebuggerUrl").GetString())
-                .FirstOrDefault();
+            var pages = targets.RootElement.EnumerateArray()
+                .Where(t => t.TryGetProperty("type", out var type) && type.GetString() == "page" && t.TryGetProperty("webSocketDebuggerUrl", out _))
+                .Select(t => (Url: t.TryGetProperty("url", out var u) ? u.GetString() ?? "" : "", Socket: t.GetProperty("webSocketDebuggerUrl").GetString()))
+                .Where(t => !t.Url.StartsWith("devtools://", StringComparison.Ordinal))
+                .ToList();
+            socketUrl = (origin is not null ? pages.FirstOrDefault(p => p.Url.StartsWith(origin, StringComparison.OrdinalIgnoreCase)).Socket : null)
+                ?? pages.FirstOrDefault().Socket;
             if (socketUrl is null)
             {
                 if (DateTime.UtcNow > deadline)
@@ -148,10 +188,32 @@ public sealed class AgentBrowser : IAsyncDisposable
         await SendAsync("Page.enable", null, cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Opens <paramref name="url"/> and waits for its load event (at most 30 seconds).</summary>
-    public async Task NavigateAsync(string url, CancellationToken cancellationToken)
+    /// <summary>
+    /// Opens <paramref name="url"/> and waits until the document has loaded (at most 30 seconds). A server that doesn't
+    /// answer yet (connection refused or reset: a web app still starting) is tried again until
+    /// <paramref name="retryFor"/> has passed; any other failure, or that one after the wait, is an
+    /// <see cref="IdeToolException"/> that says what the browser said.
+    /// </summary>
+    public async Task NavigateAsync(string url, CancellationToken cancellationToken, TimeSpan retryFor = default)
     {
-        await SendAsync("Page.navigate", w => w.WriteString("url", url), cancellationToken).ConfigureAwait(false);
+        var retryUntil = DateTime.UtcNow + retryFor;
+        while (true)
+        {
+            var result = await SendAsync("Page.navigate", w => w.WriteString("url", url), cancellationToken).ConfigureAwait(false);
+            if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("errorText", out var error) && error.GetString() is { Length: > 0 } text)
+            {
+                if (IsNotListeningYet(text) && DateTime.UtcNow < retryUntil)
+                {
+                    await Task.Delay(500, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                throw new IdeToolException($"The browser couldn't open {url}: {text}" + (IsNotListeningYet(text) ? " (nothing answers at that address: is the web app running?)." : "."));
+            }
+
+            break;
+        }
+
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (DateTime.UtcNow < deadline)
         {
@@ -163,6 +225,13 @@ public sealed class AgentBrowser : IAsyncDisposable
             await Task.Delay(100, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    /// <summary>Chromium's errors for an address where nothing listens yet.</summary>
+    internal static bool IsNotListeningYet(string errorText) =>
+        errorText.Contains("ERR_CONNECTION_REFUSED", StringComparison.Ordinal)
+        || errorText.Contains("ERR_CONNECTION_RESET", StringComparison.Ordinal)
+        || errorText.Contains("ERR_CONNECTION_CLOSED", StringComparison.Ordinal)
+        || errorText.Contains("ERR_EMPTY_RESPONSE", StringComparison.Ordinal);
 
     /// <summary>The page's address, title and visible text, or the outer HTML of what <paramref name="selector"/> matches.</summary>
     public async Task<string> GetPageAsync(string? selector, CancellationToken cancellationToken)
@@ -369,9 +438,9 @@ public sealed class AgentBrowser : IAsyncDisposable
         }
 
         _socket.Dispose();
-        if (!_process.HasExited)
+        if (_process is { HasExited: false })
         {
-            ProcessTree.Kill(_process);
+            ProcessTree.Kill(_process); // an attached browser is someone else's and keeps running
         }
 
         if (_receive is not null)
@@ -379,7 +448,7 @@ public sealed class AgentBrowser : IAsyncDisposable
             await _receive.ConfigureAwait(false);
         }
 
-        _process.Dispose();
+        _process?.Dispose();
         _stop.Dispose();
         _send.Dispose();
     }

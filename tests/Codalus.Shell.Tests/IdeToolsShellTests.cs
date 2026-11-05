@@ -10,8 +10,9 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// The IDE's tools for agents in the shell (ADR 0092): code intelligence from the C# language service and Code Search's
-/// index, confined to the workspace and its exclusions; and actions approved as <c>ai.agent.ideActions</c> says, with
-/// "Allow for This Chat" lasting until New Chat, and a workspace that can't allow them for itself.
+/// index, confined to the workspace and its exclusions; and actions approved as <c>ai.agent.ideActions</c> says (allowed
+/// by default), with "Allow for This Chat" lasting until New Chat, "Always Allow in This Workspace" in the user's state,
+/// and a workspace that can't allow them for itself.
 /// </summary>
 public sealed class IdeToolsShellTests
 {
@@ -73,20 +74,28 @@ public sealed class IdeToolsShellTests
     }
 
     [AvaloniaFact]
-    public async Task Actions_ask_once_per_chat_and_a_workspace_cannot_allow_them()
+    public async Task Actions_run_by_default_ask_when_set_to_and_a_workspace_cannot_allow_them()
     {
         await using var f = ShellFixture.Create();
         var folder = f.CopySample("BuildAndRun");
         Directory.CreateDirectory(Path.Combine(folder, ".codalus"));
-        File.WriteAllText(Path.Combine(folder, ".codalus", "settings.json"), """{ "ai.agent.ideActions": "allow" }""");
+        File.WriteAllText(Path.Combine(folder, ".codalus", "settings.json"), """{ "ai.agent.ideActions": "ask" }""");
         f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2, seconds: 90);
 
-        // The workspace's "allow" doesn't count: the first build asks, and Reject is the default.
+        // The default is allow, and the workspace's "ask" doesn't count either way: the build runs without asking.
+        var built = await CallAsync(f, "build");
+        Assert.False(f.Shell.Dialogs.IsOpen);
+        Assert.False(built.IsError, built.Text);
+        Assert.StartsWith("The build succeeded: 0 error(s)", built.Text, StringComparison.Ordinal);
+
+        // askOncePerSession in the user's settings: the first build asks, and Reject is the default.
+        await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "askOncePerSession", SettingScope.User, CancellationToken.None);
+        File.WriteAllText(Path.Combine(folder, ".codalus", "settings.json"), """{ "ai.agent.ideActions": "allow" }""");
         var building = CallAsync(f, "build");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
-        Assert.Equal(["Allow", "Allow for This Chat", "Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label).Order(StringComparer.Ordinal));
+        Assert.Equal(["Allow", "Allow for This Chat", "Always Allow in This Workspace", "Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label).Order(StringComparer.Ordinal));
         f.Shell.Dialogs.Accept();
         var refused = await building;
         Assert.True(refused.IsError);
@@ -96,9 +105,8 @@ public sealed class IdeToolsShellTests
         building = CallAsync(f, "build", """{"project":"Greetings"}""");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
         f.Shell.Dialogs.Buttons.Single(b => b.Label == "Allow for This Chat").Command.Execute(null);
-        var built = await building;
+        built = await building;
         Assert.False(built.IsError, built.Text);
-        Assert.StartsWith("The build succeeded: 0 error(s)", built.Text, StringComparison.Ordinal);
         built = await CallAsync(f, "build");
         Assert.False(f.Shell.Dialogs.IsOpen);
         Assert.False(built.IsError, built.Text);
@@ -109,10 +117,21 @@ public sealed class IdeToolsShellTests
         f.Shell.Dialogs.Cancel();
         await other;
         f.Shell.AiChat.NewChat();
+
+        // ask: every action asks, and Always Allow in This Workspace lasts beyond the chat, in the user's state only.
+        await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "ask", SettingScope.User, CancellationToken.None);
         building = CallAsync(f, "build");
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
-        f.Shell.Dialogs.Cancel();
-        await building;
+        Assert.Equal(["Allow", "Always Allow in This Workspace", "Reject"], f.Shell.Dialogs.Buttons.Select(b => b.Label).Order(StringComparer.Ordinal));
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Always Allow in This Workspace").Command.Execute(null);
+        Assert.False((await building).IsError);
+        f.Shell.AiChat.NewChat();
+        built = await CallAsync(f, "build");
+        Assert.False(f.Shell.Dialogs.IsOpen);
+        Assert.False(built.IsError, built.Text);
+        Assert.True(f.Shell.IdeActionWorkspaces.IsTrusted(folder));
+        Assert.False(File.Exists(Path.Combine(folder, ".codalus", "ai-ide-actions-allowed.json")));
+        f.Shell.IdeActionWorkspaces.Revoke(f.Shell.IdeActionWorkspaces.Folders.Single());
 
         // allow in the user's settings runs actions without asking.
         await f.Shell.Workbench.Settings.SetAsync(IdeTools.ActionsSetting, "allow", SettingScope.User, CancellationToken.None);
@@ -183,6 +202,96 @@ public sealed class IdeToolsShellTests
         Assert.StartsWith("The program ended (exit code", (await CallAsync(f, "debug_wait_for_stop", """{"timeoutSeconds":60}""")).Text, StringComparison.Ordinal);
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
     }
+    /// <summary>
+    /// The maintainer's report (2026-11-05): an agent debugging a Blazor Web App's WebAssembly counter called debug_start,
+    /// which said it hadn't started while the app was still launching; browser_navigate failed for want of an address;
+    /// and its clicks in a browser of its own never reached the breakpoint, which only the page the IDE debugs hits.
+    /// Here every step waits for what it needs and says the state it left, and the agent drives the debugged page.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Agents_debug_a_web_app_through_its_debugged_page_and_each_step_waits_until_it_can()
+    {
+        Assert.SkipWhen(Codalus.Workbench.Node.NodeRuntime.Platform is null, "No Node.js build for this platform.");
+        Assert.SkipWhen(Browsers.Find() is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, Path.Combine(Path.GetTempPath(), "codalus-test-node-cache"));
+        Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, "1");
+        try
+        {
+            await using var f = ShellFixture.Create();
+            var folder = f.CopySample("BlazorHosted");
+            var port = FreePort();
+            var settings = Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json");
+            File.WriteAllText(settings, File.ReadAllText(settings).Replace("5274", port.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal));
+            f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+            await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BlazorHosted.slnx"));
+            await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+            f.Shell.Runs.SetStartupProject(Path.Combine(folder, "BlazorHosted", "BlazorHosted.csproj"));
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, false, SettingScope.User, CancellationToken.None);
+            string Diagnostics() => "\nDebug Console:\n" + f.Shell.DebugLog.GetText();
+
+            // Nothing runs yet: the browser tools say so at once instead of waiting.
+            Assert.Contains("No web app is running", (await CallAsync(f, "browser_navigate", """{"url":"/counter"}""")).Text, StringComparison.Ordinal);
+
+            var counter = Path.Combine(folder, "BlazorHosted.Client", "Pages", "Counter.razor");
+            var increment = Array.FindIndex(File.ReadAllLines(counter), l => l.Contains("// [increment]", StringComparison.Ordinal)) + 1;
+            Assert.False((await CallAsync(f, "debug_set_breakpoint", $$"""{"path":"BlazorHosted.Client/Pages/Counter.razor","line":{{increment}}}""")).IsError);
+
+            // debug_start returns once the server listens and its page is open in the debugging browser.
+            var started = await CallAsync(f, "debug_start");
+            Assert.False(started.IsError, started.Text + Diagnostics());
+            Assert.Contains("The debug session is running. The web app listens at http://localhost:" + port.ToString(System.Globalization.CultureInfo.InvariantCulture), started.Text, StringComparison.Ordinal);
+            Assert.Contains("the IDE's debugging browser, which browser_* drives", started.Text, StringComparison.Ordinal);
+            Assert.Contains("BlazorHosted.Client/Pages/Counter.razor:" + increment.ToString(System.Globalization.CultureInfo.InvariantCulture), started.Text, StringComparison.Ordinal);
+
+            // A path relative to the app's address, in the page being debugged (not a browser of the agent's own).
+            var opened = await CallAsync(f, "browser_navigate", """{"url":"/counter"}""");
+            Assert.False(opened.IsError, opened.Text + Diagnostics());
+            Assert.StartsWith("Opened. http://localhost:", opened.Text, StringComparison.Ordinal);
+            Assert.True(f.Shell.AgentBrowser is { IsAttached: true });
+
+            // The component runs in WebAssembly once the count says 1 (OnInitialized in the browser).
+            for (var i = 0; i < 240 && !(await CallAsync(f, "browser_get_page")).Text.Contains("Current count: 1", StringComparison.Ordinal); i++)
+            {
+                await Task.Delay(500, TestContext.Current.CancellationToken);
+            }
+
+            // The click reaches the breakpoint in the browser's runtime: the call returns with where it stopped (or, when
+            // the click went on asynchronously, debug_wait_for_stop finds the stop).
+            var clicked = await CallAsync(f, "browser_evaluate", """{"script":"document.querySelector('button.btn').click()"}""");
+            Assert.False(clicked.IsError, clicked.Text + Diagnostics());
+            var stop = clicked.Text.Contains("stopped", StringComparison.Ordinal) ? clicked.Text : (await CallAsync(f, "debug_wait_for_stop", """{"timeoutSeconds":120}""")).Text;
+            Assert.Contains("State: stopped", stop, StringComparison.Ordinal);
+            Assert.Contains("Counter.razor:" + increment.ToString(System.Globalization.CultureInfo.InvariantCulture), stop, StringComparison.Ordinal);
+
+            // The paused page doesn't answer: the tool says so instead of waiting a minute.
+            var paused = await CallAsync(f, "browser_get_page");
+            Assert.Contains("the debugged program is stopped", paused.Text, StringComparison.Ordinal);
+
+            Assert.StartsWith("Continued.", (await CallAsync(f, "debug_continue")).Text, StringComparison.Ordinal);
+            for (var i = 0; i < 60 && !(await CallAsync(f, "browser_get_page")).Text.Contains("Current count: 2", StringComparison.Ordinal); i++)
+            {
+                await Task.Delay(500, TestContext.Current.CancellationToken);
+            }
+
+            Assert.Contains("Current count: 2", (await CallAsync(f, "browser_get_page")).Text, StringComparison.Ordinal);
+            Assert.Contains("Stopped the debug session", (await CallAsync(f, "stop_run")).Text, StringComparison.Ordinal);
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(Browsers.HeadlessVariable, null);
+            Environment.SetEnvironmentVariable(ShellHost.NodeCacheVariable, null);
+        }
+    }
+
+    private static int FreePort()
+    {
+        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        socket.Start();
+        return ((System.Net.IPEndPoint)socket.LocalEndpoint).Port;
+    }
+
     [AvaloniaFact]
     public async Task A_plugins_tool_is_listed_beside_the_ides_and_asks_before_every_call()
     {

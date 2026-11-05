@@ -236,6 +236,7 @@ public sealed partial class ShellHost
     /// <summary>F5 from the start: the build, then the debug session; Stop meanwhile cancels it (<paramref name="launch"/>).</summary>
     private async Task StartDebuggingAsync(string? argument, Launch launch)
     {
+        _debugLaunchUrl = null;
         if (argument is null && await StartFolderLaunchAsync(debug: true).ConfigureAwait(true))
         {
             return; // a folder's launch configuration (ADR 0033)
@@ -318,6 +319,7 @@ public sealed partial class ShellHost
             }
 
             var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
+            _debugLaunchUrl = WebAppUrl(plan); // a web app is expected to listen there (the agent's tools wait for it)
             DebugLog.Clear();
             if (error is not null)
             {
