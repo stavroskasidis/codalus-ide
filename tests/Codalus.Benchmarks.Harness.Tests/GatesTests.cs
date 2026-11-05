@@ -215,8 +215,31 @@ public class GatesTests
                 Assert.Contains(accepted, a => a is { Scenario: "self-driven", Metric: "selfdriven_scroll_frame_ms", Run: "41446543050", Cpu: not null } && a.Os == os && a.Stat == stat);
             }
         }
+        // binary-size without Native AOT's symbols (ADR 0002, 2026-11-05): 0.12.0's release run re-sets Linux's and macOS's shell.
+        foreach (var os in new[] { "linux", "macos" })
+        {
+            foreach (var metric in new[] { "shell_mb", "shell_zip_mb" })
+            {
+                Assert.Contains(accepted, a => a is { Scenario: "binary-size", Run: "42005574912", Commit: "014cb5b4" } && a.Os == os && a.Metric == metric && a.Date == new DateOnly(2026, 11, 5));
+            }
+        }
 
         Assert.Empty(Gates.LoadAccepted(Path.Combine(root, "benchmarks", "no-such-file.json")));
+    }
+
+    [Fact]
+    public void The_symbol_inflated_size_runs_no_longer_leave_the_shell_room_to_grow()
+    {
+        var root = typeof(GatesTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusRepoRoot").Value!;
+        var accepted = Gates.LoadAccepted(Path.Combine(root, "benchmarks", "accepted.json"));
+        var day = new DateOnly(2026, 11, 5).DayNumber - s_epoch.DayNumber;
+        // 0.11.0's release run counted codalus.dbg: 419.2 MB, against which up to 440 MB would have passed.
+        ScenarioResult[] earlier = [Result("binary-size", day - 4, ("shell_mb", [419.249]))];
+
+        Assert.False(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [233.0]))], earlier, accepted)).Failed);
+        var grown = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [245.0]))], earlier, accepted));
+        Assert.True(grown.Failed);
+        Assert.Contains("the value accepted on 2026-11-05 (232.7)", grown.Rule, StringComparison.Ordinal);
     }
 
     [Fact]
