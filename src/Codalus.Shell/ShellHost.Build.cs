@@ -37,7 +37,15 @@ public sealed partial class ShellHost
     {
         Builds = new BuildService(Solutions, Workbench.Output);
         Runs = new RunService(Solutions, Workbench.Output, uri => OpenExternalUrl(uri));
-        Builds.Started += (_, request) => Ui.Post(() => OnBuildStarted(request));
+        Builds.Started += (_, request) =>
+        {
+            if (Volatile.Read(ref _launch) is { IsCanceled: true })
+            {
+                Builds.Cancel(); // Stop was pressed before the launch's build started
+            }
+
+            Ui.Post(() => OnBuildStarted(request));
+        };
         Builds.Finished += (_, completed) => Ui.Post(() => OnBuildFinished(completed));
         Runs.RunningChanged += (_, _) => Ui.Post(UpdateRunState);
         Runs.StartupChanged += (_, _) => Ui.Post(() =>
@@ -163,6 +171,11 @@ public sealed partial class ShellHost
         Workbench.Context.Set("buildRunning", true);
         var what = request.Project is { } project ? Path.GetFileNameWithoutExtension(project) : "solution";
         var verb = request.Target switch { BuildTargets.Rebuild => "Rebuilding", BuildTargets.Clean => "Cleaning", BuildTargets.Pack => "Packing", _ => "Building" };
+        if (_launch is { IsCanceled: false })
+        {
+            Toolbar?.SetLaunching(Localizer.Format("msg.build.launchBuilding", "Building {0}…", what));
+        }
+
         Workbench.StatusBar.Set(new StatusBarItem(BuildStatusItem, $"$(refresh) {verb} {what}…", StatusBarAlignment.Left, 45, ContributionSource.Shell.Id)
         {
             Command = "build.cancel",
@@ -173,6 +186,11 @@ public sealed partial class ShellHost
     private void OnBuildFinished(BuildCompleted completed)
     {
         Workbench.Context.Set("buildRunning", false);
+        if (_launch is { IsCanceled: false } launch)
+        {
+            Toolbar?.SetLaunching(launch.Status);
+        }
+
         var result = completed.Result;
         var verb = completed.Request.Target switch { BuildTargets.Rebuild => "Rebuild", BuildTargets.Clean => "Clean", BuildTargets.Pack => "Pack", _ => "Build" };
         var text = result.Canceled ? $"$(warning) {verb} cancelled"
@@ -198,6 +216,19 @@ public sealed partial class ShellHost
     /// or the <c>run.hotReload</c> setting, it runs under <c>dotnet watch</c> (M15b).
     /// </summary>
     public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
+    {
+        if (BeginLaunch(argument) is not { } launch)
+        {
+            return;
+        }
+
+        using (launch)
+        {
+            await StartWithoutDebuggingAsync(argument, hotReload, launch).ConfigureAwait(true);
+        }
+    }
+
+    private async Task StartWithoutDebuggingAsync(string? argument, bool hotReload, Launch launch)
     {
         var hotReloadSetting = Workbench.Settings.GetBoolean(HotReloadSetting, false);
         if (argument is null && !hotReload && !hotReloadSetting && await StartFolderLaunchAsync(debug: false).ConfigureAwait(true))
@@ -253,9 +284,9 @@ public sealed partial class ShellHost
             return; // a packaged WinUI 3 app (M44): registered, then started by Windows
         }
 
-        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
+        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true) || launch.IsCanceled)
         {
-            if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
+            if (!launch.IsCanceled && Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.build.theBuildFailedSoTheProgram", "The build failed, so the program was not started."), TimeSpan.FromSeconds(6));
             }
@@ -299,6 +330,11 @@ public sealed partial class ShellHost
                 return;
             }
 
+            if (launch.IsCanceled)
+            {
+                return;
+            }
+
             var program = await Runs.StartAsync(project, RunsInConsoleWindow, CancellationToken.None, hotReload).ConfigureAwait(true);
             if (withoutHotReload is not null)
             {
@@ -320,8 +356,92 @@ public sealed partial class ShellHost
     /// <summary>Stops the running programs without waiting for them to end (a process tree's end can take seconds).</summary>
     public void StopRunning() => Runs.StopAll();
 
-    /// <summary>Stops the running programs; completes once they are ended, without blocking the UI thread.</summary>
-    public Task StopRunningAsync() => Runs.StopAllAsync();
+    /// <summary>
+    /// Stops the running programs, and a Start still building or starting one; completes once they are ended, without
+    /// blocking the UI thread.
+    /// </summary>
+    public Task StopRunningAsync()
+    {
+        CancelLaunch();
+        return Runs.StopAllAsync();
+    }
+
+    // ------------------------------------------------------------------ launching
+
+    private Launch? _launch;
+
+    /// <summary>
+    /// A Start (F5, Ctrl+F5, Hot Reload) from the click until its program runs or its debug session starts: saving, the
+    /// build, reading the launch profile. Meanwhile the toolbar shows Stop, which cancels it, and what it's doing.
+    /// </summary>
+    private sealed class Launch(ShellHost shell, string status) : IDisposable
+    {
+        private readonly CancellationTokenSource _cancel = new();
+
+        /// <summary>What the toolbar says while it isn't building: "Starting App…".</summary>
+        public string Status { get; } = status;
+
+        public bool IsCanceled => _cancel.IsCancellationRequested;
+
+        public void Cancel() => _cancel.Cancel();
+
+        public void Dispose()
+        {
+            shell.EndLaunch(this);
+            _cancel.Dispose();
+        }
+    }
+
+    /// <summary>A Start is building or starting its program (Stop cancels it).</summary>
+    public bool IsLaunching => _launch is not null;
+
+    /// <summary>Starts a launch, or null (with a message) while another one is under way.</summary>
+    private Launch? BeginLaunch(string? argument)
+    {
+        if (_launch is not null)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.build.alreadyStarting", "A program is already starting: Stop (Shift+F5) cancels it."), TimeSpan.FromSeconds(4));
+            return null;
+        }
+
+        var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
+        var name = project is not null && (argument is not null || !Runs.MultipleStartup) ? Path.GetFileNameWithoutExtension(project) : null;
+        var status = name is null ? Localizer.Get("msg.build.launchStarting", "Starting…") : Localizer.Format("msg.build.launchStartingProject", "Starting {0}…", name);
+        var launch = new Launch(this, status);
+        Volatile.Write(ref _launch, launch);
+        Workbench.Context.Set("programStarting", true);
+        Toolbar?.SetLaunching(status);
+        return launch;
+    }
+
+    private void EndLaunch(Launch launch)
+    {
+        if (Interlocked.CompareExchange(ref _launch, null, launch) != launch)
+        {
+            return;
+        }
+
+        Workbench.Context.Set("programStarting", false);
+        Toolbar?.SetLaunching(null);
+        UpdateRunState(); // the program or debug session it started, read now: their own updates are posted
+        if (launch.IsCanceled)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.build.startCancelled", "Start cancelled."), TimeSpan.FromSeconds(4));
+        }
+    }
+
+    /// <summary>Stop during a Start: its build is cancelled, and its program doesn't start.</summary>
+    private void CancelLaunch()
+    {
+        if (_launch is not { IsCanceled: false } launch)
+        {
+            return;
+        }
+
+        launch.Cancel();
+        Builds.Cancel();
+        Toolbar?.SetLaunching(Localizer.Get("msg.build.launchCancelling", "Cancelling…"));
+    }
 
     public async Task SelectStartupProjectAsync()
     {
