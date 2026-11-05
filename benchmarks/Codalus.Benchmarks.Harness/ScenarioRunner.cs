@@ -837,7 +837,7 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
                 result.Add($"{Path.GetFileName(helper)}_mb", DirectorySize(helper, exclude: []) / 1048576.0);
             }
 
-            result.Notes.Add($"Debug symbols (*.pdb) excluded. Helper processes (language service host, plugin host) need the .NET {Environment.Version.Major} runtime or later.");
+            result.Notes.Add($"Debug symbols (*.pdb, Native AOT's *.dbg and *.dSYM) excluded, as in the packages. Helper processes (language service host, plugin host) need the .NET {Environment.Version.Major} runtime or later.");
         }
         else
         {
@@ -849,11 +849,22 @@ internal sealed class ScenarioRunner(string repoRoot, RunOptions options)
     private static long DirectorySize(string dir, IReadOnlyList<string> exclude) =>
         Files(dir, exclude).Sum(f => new FileInfo(f).Length);
 
-    /// <summary>Shipped files: everything but debug symbols and the <paramref name="exclude"/>d folders.</summary>
-    private static IEnumerable<string> Files(string dir, IReadOnlyList<string> exclude) =>
+    /// <summary>
+    /// Shipped files: everything but debug symbols and the <paramref name="exclude"/>d folders. The symbols are the
+    /// .NET ones (<c>*.pdb</c>) and Native AOT's (<c>*.dbg</c> on Linux, a <c>*.dSYM</c> bundle on macOS), which the
+    /// packages leave out (<c>eng/package.sh</c> publishes with <c>DebugType=none</c>). Counting them, Linux's
+    /// <c>shell_mb</c> was 421.4 MB, 188.7 MB of it <c>codalus.dbg</c> (0.12.0's release run, 41937217669).
+    /// </summary>
+    internal static IEnumerable<string> Files(string dir, IReadOnlyList<string> exclude) =>
         Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories)
-            .Where(f => !f.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+            .Where(f => !IsDebugSymbols(Path.GetRelativePath(dir, f))
                         && !exclude.Any(e => f.StartsWith(e + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
+
+    private static bool IsDebugSymbols(string relativePath) =>
+        relativePath.EndsWith(".pdb", StringComparison.OrdinalIgnoreCase)
+        || relativePath.EndsWith(".dbg", StringComparison.OrdinalIgnoreCase)
+        || relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Any(part => part.EndsWith(".dSYM", StringComparison.OrdinalIgnoreCase));
 
     private long ZipSize(string dir, IReadOnlyList<string> exclude)
     {
