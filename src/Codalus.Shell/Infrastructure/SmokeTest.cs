@@ -4144,7 +4144,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             shell.ShowAiChat();
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
-            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            // Only what the question @-mentions goes with it (ADR 0092).
+            shell.AiChat.Input = "What does this do? Can it be shorter? @selection";
             await shell.AiChat.SendAsync().ConfigureAwait(true);
             var turns = shell.AiChat.Chat.Turns;
             var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
@@ -4180,7 +4181,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 var agentTurn = shell.AiChat.Chat.Turns[^1];
                 await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
                 Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
-                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                // Compact (the default, ADR 0092): the agent's steps fold into one line.
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatTurnView>().Any(v => v.Turn == agentTurn && v.StepsSummary == "Read 1 file" && !v.StepsShown), "AI Chat folds the agent's step into one line").ConfigureAwait(true);
                 await RenderedAsync().ConfigureAwait(true);
                 Screenshot("ai-chat-agent.png");
             }
