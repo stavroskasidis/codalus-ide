@@ -161,5 +161,6 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   package, 241.7 MB in the 0.12.0 nightly's): the benchmarks job publishes without the packages'
   `-p:DebugType=none`, so `shell_mb` counts Native AOT's debug symbols too: a linux-x64 publish of the release commit
   as that job makes it measures 421.4 MB, CI's number, of which `codalus.dbg` is 188.7 MB (macOS keeps a `.dSYM`).
-  Accepting a size is the maintainer's decision (`benchmarks/accepted.json`).
+  Fixed, by the maintainer's decision: `binary-size` leaves Native AOT's symbols out as it leaves out `*.pdb`, so it
+  measures what ships (232.7 MB for that local publish; ADR 0002's 2026-11-05 amendment, `HarnessTests`).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
