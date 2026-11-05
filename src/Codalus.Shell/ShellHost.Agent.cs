@@ -65,41 +65,19 @@ public sealed partial class ShellHost
     // ------------------------------------------------------------------ agent mode
 
     /// <summary>
-    /// Asks in agent mode: checks that the workspace is trusted and the model takes tools, then runs the loop with the
-    /// built-in tools and the MCP servers' tools.
+    /// Asks the built-in assistant, which is always an agent (ADR 0092): the loop with agent mode's tools, the IDE's and the
+    /// MCP servers'. Where the tools can't run (no folder, an untrusted one, a model that doesn't take them) it answers
+    /// without tools, and the turn says why.
     /// </summary>
     public async Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken)
     {
-        if (Solutions.Solution is not { } solution)
+        if (await WhyNoToolsAsync(cancellationToken).ConfigureAwait(true) is { } reason)
         {
-            ShowMessage(Localizer.Get("msg.ai.agentNeedsASolution", "Agent mode works in a solution or folder: open one first."));
+            await AiChat.Chat.SendAsync(question, items, cancellationToken, anchor, withoutTools: reason).ConfigureAwait(true);
             return;
         }
 
-        if (!solution.Trusted)
-        {
-            Workbench.Notifications.Warning(Localizer.Get("msg.ai.agentNeedsTrust", "Agent mode works only in trusted folders: it reads files and runs commands you allow."));
-            return;
-        }
-
-        if (Ai.ProviderId is { } providerId)
-        {
-            try
-            {
-                var models = await LanguageModels.GetModelsAsync(providerId, cancellationToken).ConfigureAwait(true);
-                var model = Ai.ModelId ?? (models.Count > 0 ? models[0].Id : null);
-                if (models.FirstOrDefault(m => m.Id == model) is { SupportsTools: false })
-                {
-                    Workbench.Notifications.Warning(Localizer.Format("msg.ai.modelTakesNoTools", "The model {0} doesn't take tools, so agent mode can't use it. Choose another model, or ask without Agent.", model!));
-                    return;
-                }
-            }
-            catch (LanguageModelRequestException)
-            {
-                // The request itself will say what's wrong.
-            }
-        }
-
+        var solution = Solutions.Solution!;
         // The IDE's tools (ADR 0092: code intelligence, tests, run, debug, the browser; plugins' tools), then the MCP servers'.
         var external = new List<ExternalAgentTool>();
         foreach (var definition in IdeToolDefinitions.Where(t => !AgentTools.OwnToolNames.Contains(t.Name)))
@@ -130,6 +108,39 @@ public sealed partial class ShellHost
         };
         var maxSteps = Math.Clamp(Workbench.Settings.GetInt32("ai.agent.maxSteps", 25), 1, 200);
         await AiChat.Chat.SendAgentAsync(question, items, tools, maxSteps, cancellationToken, anchor).ConfigureAwait(true);
+    }
+
+    /// <summary>Why the built-in assistant can't use tools here, or null when it can.</summary>
+    private async Task<string?> WhyNoToolsAsync(CancellationToken cancellationToken)
+    {
+        if (Solutions.Solution is not { } solution)
+        {
+            return Localizer.Get("msg.ai.noToolsNoFolder", "Answered without tools: no folder is open, so the assistant can't read, change or run anything.");
+        }
+
+        if (!solution.Trusted)
+        {
+            return Localizer.Get("msg.ai.noToolsUntrusted", "Answered without tools: this folder isn't trusted, so the assistant can't read, change or run anything.");
+        }
+
+        if (Ai.ProviderId is { } providerId)
+        {
+            try
+            {
+                var models = await LanguageModels.GetModelsAsync(providerId, cancellationToken).ConfigureAwait(true);
+                var model = Ai.ModelId ?? (models.Count > 0 ? models[0].Id : null);
+                if (models.FirstOrDefault(m => m.Id == model) is { SupportsTools: false })
+                {
+                    return Localizer.Format("msg.ai.noToolsModel", "Answered without tools: the model {0} doesn't take tools. Choose another model to let the assistant read, change and run.", model!);
+                }
+            }
+            catch (LanguageModelRequestException)
+            {
+                // The request itself will say what's wrong.
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The agent's view of the IDE.</summary>

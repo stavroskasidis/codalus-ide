@@ -4152,31 +4152,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
             Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
             Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
-            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            // The code block (ADR 0092): the code alone, wrapped, with its language in the corner and no actions.
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiCodeBlockView>().Any(b => b.HeaderText == "C#" && b.WrapsLines), "the answer's code shows as a wrapped C# block").ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("ai-chat.png");
-
-            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
-            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
-            shell.Dialogs.Accept();
-            await applying.ConfigureAwait(true);
-            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
 
-            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            // In the trusted solution (projects.open) the assistant uses its tools (it is always an agent, ADR 0092): a step that read a file.
             if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
             {
-                shell.AiChat.IsAgent = true;
                 shell.AiChat.Input = AgentQuestion;
-                try
-                {
-                    await shell.AiChat.SendAsync().ConfigureAwait(true);
-                }
-                finally
-                {
-                    shell.AiChat.IsAgent = false;
-                }
+                await shell.AiChat.SendAsync().ConfigureAwait(true);
 
                 var agentTurn = shell.AiChat.Chat.Turns[^1];
                 await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);

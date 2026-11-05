@@ -38,19 +38,33 @@
       <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
       <Setter Property="VerticalAlignment" Value="Top" />
     </Style>
-    <!-- A code block: a card with its header row (the language, Copy, Insert at Cursor, Apply…) over the code. -->
+    <!--
+      A code block (ADR 0092): the code on its own surface (Shell.CodeBlock.Background, a step off the panel in every theme:
+      the editor's background was one step from Classic Dark's panel) with rounded corners and no header bar; its language
+      and the Wrap toggle in the top-right corner, the toggle shown on hover and focus, quiet when checked. Outlined in High
+      contrast.
+    -->
     <Style Selector="Border.codeBlock">
+      <Setter Property="Background" Value="{DynamicResource Shell.CodeBlock.Background}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
-      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="BorderThickness" Value="{DynamicResource Shell.Chip.BorderThickness}" />
       <Setter Property="CornerRadius" Value="{DynamicResource Shell.CornerRadius.Overlay}" />
       <Setter Property="ClipToBounds" Value="True" />
     </Style>
-    <Style Selector="Border.codeBlockHeader">
-      <Setter Property="Background" Value="{DynamicResource Shell.CodeBlock.Header}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
-      <Setter Property="BorderThickness" Value="0,0,0,1" />
-      <Setter Property="MinHeight" Value="30" />
-      <Setter Property="Padding" Value="10,0,4,0" />
+    <Style Selector="Border.codeBlock ToggleButton.wrapToggle">
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="MinHeight" Value="18" />
+      <Setter Property="MinWidth" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="Border.codeBlock:pointerover ToggleButton.wrapToggle, Border.codeBlock ToggleButton.wrapToggle:focus-visible">
+      <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.codeBlock ToggleButton.wrapToggle:checked /template/ ContentPresenter#PART_ContentPresenter, Border.codeBlock ToggleButton.wrapToggle:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+      <Setter Property="BorderBrush" Value="Transparent" />
     </Style>
     <!-- The steps of an agent's turn: a rail at their left, their text small and muted. -->
     <Style Selector="Border.steps">
@@ -106,8 +120,6 @@
       </DropDownButton>
       <!-- The agent's choices (M51: its model, mode, effort…), one picker each, inserted here by the code-behind. -->
       <Border Classes="toolbarSpacer" />
-      <ToggleSwitch x:Name="AgentSwitch" IsChecked="{Binding IsAgent}" IsVisible="{Binding ShowBuiltInControls}" Content="{l:T aiChat.agent}" Margin="4,0"
-                    ToolTip.Tip="{l:T aiChat.agentModeTheAiMayRead}" AutomationProperties.Name="{l:T aiChat.agentMode}" />
       <Border Classes="toolbarSeparator" Height="16" />
       <!-- Compact (the default) folds each answer's steps into a line; detailed shows every step (ADR 0092). -->
       <ToggleButton x:Name="DensityToggle" Classes="toolbar icon" controls:ButtonIcon.Kind="list" IsChecked="{Binding !IsCompact, Mode=OneWay}"
@@ -177,7 +189,7 @@
       <StackPanel Classes="emptyState" IsVisible="{Binding ShowReadyState}">
         <controls:Icon Kind="comment" />
         <TextBlock Text="{l:T aiChat.askAQuestionAboutYourSolution}" />
-        <TextBlock Classes="small" Text="{l:T aiChat.turnOnAgentToLetIt}" />
+        <TextBlock Classes="small" Text="{l:T aiChat.itReadsBuildsAndTests}" />
       </StackPanel>
     </Panel>
 

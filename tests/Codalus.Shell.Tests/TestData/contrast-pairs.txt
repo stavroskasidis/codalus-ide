@@ -207,6 +207,8 @@ Shell.Icon.Yellow Shell.Status.Warning 3
 Shell.Icon.Green Shell.Status.Success 3
 Shell.Icon.Red Shell.Status.Error 3
 Shell.Chat.User.Foreground Shell.Chat.User 4.5
-Shell.Foreground Shell.CodeBlock.Header 4.5
+Shell.Foreground Shell.CodeBlock.Background 4.5
+Shell.Editor.Foreground Shell.CodeBlock.Background 4.5
+Shell.MutedForeground Shell.CodeBlock.Background 4.5
 # A disabled control's text is exempt from AA (WCAG 1.4.3) and drawn at about 3:1; it is held to 2.5 so it stays visible.
 Shell.Disabled.Foreground Shell.Disabled 2.5

@@ -122,6 +122,22 @@ The browser stops at New Chat, when the workspace changes, and at exit. A Blazor
 - An external agent's tool titles and raw input are redacted before they reach the chat, the approval and the log: the agent's title is often the command it runs.
 - A command approval still shows the exact command line (ADR 0079's "what runs is what the user sees").
 
+### Amendment, 2026-11-05: always an agent, and code blocks without actions
+
+The maintainer, reviewing the chat's code blocks (a header of C#, Copy, Insert and Apply… over code cut off by a scroll bar in a narrow pane), decided:
+
+| Question | Options | Verdict |
+|---|---|---|
+| Long lines | Wrap with a toggle; always wrap; scroll with a fade | **Wrap, with a per-block toggle** (unwrapped, the block scrolls sideways). |
+| The block's actions | A slim header with "Apply to *file*"; actions on hover; a footer bar | **None, and agent mode the only mode**: no Copy, Insert at Cursor or Apply…; the Agent switch goes. The text stays selectable. |
+| Where tools can't run (no folder, untrusted, a model without tools) | Answer without tools and say so; refuse | **Answer without tools**, with a notice under the answer saying why. |
+| The block's look | Borderless with a corner label; a slim header; plain Markdown | **Borderless with a corner label**: the editor's background with rounded corners (outlined in High contrast), the language and file small in the top-right corner, the Wrap toggle beside them on hover and focus, and a fold past 20 lines with "Show all N lines". |
+
+So:
+- `ShellHost.RunAgentAsync` serves every built-in question, the AI actions' too (Generate Tests now creates its file through the preview). Without tools it calls `AiChat.SendAsync(…, withoutTools: reason)`, whose turn carries an info notice; that prompt says it has no tools.
+- `AiChatViewModel.IsAgent`, `IAiChatHost.ApplyAiCodeAsync` and `CopyTextAsync`, and `ShellHost.ApplyAiCodeAsync` are removed. The **Agent** chip on turns is gone: every built-in turn is an agent's. Fix with AI keeps its own preview.
+- `AiCodeBlockView` has no header. A wrapped line's continuation starts at the block's edge: Avalonia's text layout ignores AvaloniaEdit's wrap indentation (`TODO(issue)`: a hanging indent). The fold limits the viewer's height to 20 screen lines, while its count is the block's source lines.
+
 ## Consequences
 
 - An agent in Codalus can find, trace, build, test, run and debug through the IDE: compiler-accurate answers with the user's unsaved edits, in the IDE's own windows. Outside the IDE, the same tools are one setting away (`ai.mcpServer.enabled`).

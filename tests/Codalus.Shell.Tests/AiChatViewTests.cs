@@ -206,9 +206,9 @@ public sealed class AiChatViewTests
         Assert.Contains(texts, t => t.Text == "◦");
         Assert.Contains(first.GetVisualDescendants().OfType<Button>(), b => b.Classes.Contains("link") && AutomationProperties.GetName(b) == "faults in contracts");
 
-        // The agent's turn: the Agent chip and its step, read_file with the file as a link and its outcome.
+        // The agent's turn: its step, read_file with the file as a link and its outcome (no Agent chip: every turn is one).
         var second = TurnView(window, 1);
-        Assert.Contains(second.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && ((TextBlock)b.Child!).Text == "Agent");
+        Assert.DoesNotContain(second.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && b.Child is TextBlock { Text: "Agent" });
         var step = Assert.Single(second.GetVisualDescendants().OfType<AiStepView>());
         var item = Assert.IsType<AiStepItem>(step.DataContext);
         Assert.Equal(("read", "read_file", AiStepStatus.Completed), (item.Kind, item.Title, item.Status));
@@ -221,17 +221,20 @@ public sealed class AiChatViewTests
     }
 
     [AvaloniaFact]
-    public async Task A_code_block_has_a_header_with_its_language_and_its_buttons_in_the_editor_colors_and_they_still_work()
+    public async Task A_code_block_is_the_code_alone_wrapped_with_its_language_in_the_corner_and_no_actions()
     {
         await using var server = DesignServer();
-        var (f, _, document) = await ConversationAsync(server);
+        var (f, _, _) = await ConversationAsync(server);
         await using var fixture = f;
         var chat = f.Shell.AiChat;
         var window = Show(chat, 556, 1600);
         var block = Assert.Single(TurnView(window, 0).CodeBlocks);
+
+        // ADR 0092: no header bar and no Copy, Insert or Apply (the agent changes files itself); the language in the corner.
         Assert.Equal("C#", block.HeaderText);
-        var header = block.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("codeBlockHeader"));
-        Assert.Equal(Brush(window, "Shell.CodeBlock.Header"), ((ISolidColorBrush)header.Background!).Color);
+        Assert.DoesNotContain(block.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("codeBlockHeader"));
+        Assert.DoesNotContain(block.GetVisualDescendants().OfType<Button>(), b => b is not ToggleButton && b.IsEffectivelyVisible);
+        Assert.Equal(Brush(window, "Shell.CodeBlock.Background"), ((ISolidColorBrush)block.Background!).Color);
 
         // The editor's colors (C# through its grammar in the editor theme), no line numbers, as high as the code.
         Assert.True(block.Viewer.EditorColors && block.Viewer.FitsContent);
@@ -239,34 +242,37 @@ public sealed class AiChatViewTests
         Assert.False(block.Viewer.Editor.ShowLineNumbers);
         var lines = block.Viewer.Editor.Document.LineCount;
         var lineHeight = block.Viewer.Editor.TextArea.TextView.DefaultLineHeight;
-        Assert.InRange(block.Viewer.Bounds.Height, lines * lineHeight, (lines * lineHeight) + 40);
+        var visualLines = block.Viewer.Editor.TextArea.TextView.VisualLines.Sum(v => v.TextLines.Count);
+        Assert.InRange(block.Viewer.Bounds.Height, visualLines * lineHeight, (visualLines * lineHeight) + 40);
+        Assert.True(visualLines >= lines);
 
-        // Copy, Insert at Cursor and Apply… as icon buttons in the header, each named.
-        Button Named(string name) => block.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name);
-        var copy = Named("Copy the code");
-        var insert = Named("Insert the code at the cursor");
-        var apply = Named("Apply the code after a preview");
-        Assert.Equal(("copy", "insert", "document-check"), (ButtonIcon.GetKind(copy), ButtonIcon.GetKind(insert), ButtonIcon.GetKind(apply)));
-        Assert.Contains("icon", copy.Classes);
-        Assert.Contains("iconText", apply.Classes);
-        Assert.Equal("Apply…", apply.Content);
-        Assert.All(new[] { copy, insert, apply }, b => Assert.True(header.IsVisualAncestorOf(b)));
+        // Lines wrap by default; the Wrap toggle (named, shown on hover) turns it off for this block.
+        Assert.True(block.WrapsLines);
+        Assert.Equal("Wrap long lines", AutomationProperties.GetName(block.WrapToggle));
+        Assert.Equal(0, block.WrapToggle.Opacity);
+        block.WrapToggle.IsChecked = false;
+        Assert.False(block.WrapsLines);
+        block.WrapToggle.IsChecked = true;
+        Assert.True(block.WrapsLines);
+        Assert.Null(block.FoldText);
+        window.Close();
+    }
 
-        copy.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        await ShellFixture.PumpUntil(() => Avalonia.Input.Platform.ClipboardExtensions.TryGetTextAsync(f.Window.Clipboard!).Result?.Contains("IsNullOrWhiteSpace", StringComparison.Ordinal) == true);
+    [AvaloniaFact]
+    public async Task A_long_line_wraps_inside_a_narrow_pane_instead_of_running_off_it()
+    {
+        await using var f = ShellFixture.Create();
+        var block = new AiCodeBlockView(f.Shell, f.Shell.EditorFont);
+        var window = new Window { Width = 280, Height = 400, Content = new ScrollViewer { Content = block, HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled } };
+        window.Show();
+        block.Show("csharp", "src/App/Calculator.cs", "static int Add(int a, int b) => checked(a + b) + Offset(a, b) * Factor;", streaming: false, closed: true);
+        Pump(6);
 
-        var editor = document.Controller!;
-        editor.Editor.SelectionLength = 0;
-        editor.Editor.CaretOffset = editor.Model.Text.Text.Length;
-        insert.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        await ShellFixture.PumpUntil(() => editor.Model.Text.Text.EndsWith("    return $\"Hello {name}!\";\n}\n", StringComparison.Ordinal));
-        editor.Editor.Undo();
-        await ShellFixture.PumpUntil(() => editor.Model.Text.Text == Service);
-
-        apply.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails);
-        f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => editor.Model.Text.Text.Contains("throw new ArgumentException", StringComparison.Ordinal) && !editor.Model.Text.Text.Contains("=>\n        $\"Hello", StringComparison.Ordinal));
+        // One line of code, several lines on screen, nothing past the pane's edge.
+        var lineHeight = block.Viewer.Editor.TextArea.TextView.DefaultLineHeight;
+        Assert.True(block.Viewer.Bounds.Height > 2 * lineHeight + 20, $"the line wrapped ({block.Viewer.Bounds.Height:0} px high)");
+        Assert.True(block.Bounds.Width <= 280);
+        Assert.Equal("C# · Calculator.cs", block.HeaderText);
         window.Close();
     }
 
@@ -290,14 +296,8 @@ public sealed class AiChatViewTests
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Enter sends · Shift+Enter new line · @ adds context · paste an image");
         Assert.Equal("Show every step (detailed)", AutomationProperties.GetName(view.GetVisualDescendants().OfType<ToggleButton>().Single(b => b.Name == "DensityToggle")));
 
-        // Agent mode is a switch with its own place in the toolbar.
-        var agent = Assert.Single(view.GetVisualDescendants().OfType<ToggleSwitch>());
-        Assert.Equal("Agent mode", AutomationProperties.GetName(agent));
-        Assert.True(agent.IsEffectivelyVisible);
-        agent.IsChecked = true;
-        Assert.True(chat.IsAgent);
-        agent.IsChecked = false;
-        Assert.False(chat.IsAgent);
+        // No Agent switch: the built-in assistant is always an agent (ADR 0092).
+        Assert.Empty(view.GetVisualDescendants().OfType<ToggleSwitch>());
 
         // Send: the primary icon button, disabled until there is a question; Enter sends it, Shift+Enter is a new line.
         var input = view.GetVisualDescendants().OfType<TextBox>().Single(t => AutomationProperties.GetName(t) == "Question");
@@ -343,7 +343,7 @@ public sealed class AiChatViewTests
         Directory.CreateDirectory(folder);
         var tools = new BlockingBuildHost();
         var host = new AgentChatHost(f.Shell, folder, tools);
-        using var chat = new AiChatViewModel(host) { IsAgent = true };
+        using var chat = new AiChatViewModel(host);
         host.Chat = chat;
         var window = Show(chat, 556, 700);
         var view = (AiChatView)window.Content!;
@@ -618,8 +618,7 @@ public sealed class AiChatViewTests
         }
 
         int At(string name) => names.IndexOf(name) is >= 0 and var at ? at : throw new Xunit.Sdk.XunitException($"Tab never reached '{name}': {string.Join(", ", names)}");
-        Assert.True(At("Start a new chat") < At("Agent mode") && At("Agent mode") < At("Copy the code") && At("Copy the code") < At("faults in contracts")
-            && At("faults in contracts") < At("Question") && At("Question") < At("Send the question"), string.Join(", ", names));
+        Assert.True(At("Start a new chat") < At("faults in contracts") && At("faults in contracts") < At("Question") && At("Question") < At("Send the question"), string.Join(", ", names));
         window.Close();
     }
 
@@ -792,7 +791,7 @@ public sealed class AiChatViewTests
     public async Task A_code_block_being_written_stays_plain_text_that_grows_and_is_colored_once_complete()
     {
         await using var f = ShellFixture.Create();
-        var block = new AiCodeBlockView(f.Shell, f.Shell.EditorFont, () => { }, () => { }, () => { });
+        var block = new AiCodeBlockView(f.Shell, f.Shell.EditorFont);
         var window = new Window { Width = 556, Height = 600, Content = new ScrollViewer { Content = block } };
         window.Show();
         Pump(2);
@@ -811,7 +810,7 @@ public sealed class AiChatViewTests
             Assert.Same(document, block.Viewer.Editor.Document);
         }
 
-        // Its closing fence came while the answer is still written: colored once, after the layout; the buttons wait.
+        // Its closing fence came while the answer is still written: colored once, after the layout.
         var full = Code(400) + "\n}";
         block.Show("csharp", null, full, streaming: true, closed: true);
         Assert.False(block.IsColored);
@@ -819,13 +818,20 @@ public sealed class AiChatViewTests
         Assert.True(block.IsColored);
         var colors = Assert.IsType<GrammarColorizer>(block.Viewer.GrammarColors);
         Assert.Same(document, block.Viewer.Editor.Document);
-        Assert.All(block.GetVisualDescendants().OfType<Button>(), b => Assert.False(b.IsEnabled));
 
-        // The answer ends: the buttons work, and the block isn't colored again.
+        // The answer ends: the block isn't colored again; at 403 lines it shows its first 20 until "Show all" opens it.
         block.Show("csharp", null, full, streaming: false, closed: true);
         Pump(4);
         Assert.Same(colors, block.Viewer.GrammarColors);
-        Assert.All(block.GetVisualDescendants().OfType<Button>(), b => Assert.True(b.IsEnabled));
+        Assert.True(block.IsFolded);
+        Assert.Equal("Show all 403 lines", block.FoldText);
+        var lineHeight = block.Viewer.Editor.TextArea.TextView.DefaultLineHeight;
+        Assert.True(block.Viewer.Bounds.Height < 25 * lineHeight, $"folded to about 20 lines ({block.Viewer.Bounds.Height:0} px)");
+        block.FoldButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Pump(4);
+        Assert.False(block.IsFolded);
+        Assert.Equal("Show fewer lines", block.FoldText);
+        Assert.True(block.Viewer.Bounds.Height > 400 * lineHeight);
         block.Release();
         window.Close();
     }

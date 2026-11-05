@@ -52,17 +52,15 @@ public interface IAiChatHost
     /// <summary>The context items of <paramref name="choice"/> (before the boundary), and where the selection is.</summary>
     (IReadOnlyList<AiContextItem> Items, AiSelectionAnchor? Anchor) GatherAiContext(AiContextChoice choice);
 
-    /// <summary>Applies a code block of <paramref name="turn"/>: over its selection, the named or active file, or at the caret, after a preview.</summary>
-    Task ApplyAiCodeAsync(AiChatTurn turn, AiCodeBlock block, bool insertOnly);
-
-    Task CopyTextAsync(string text);
-
     Task ChooseAiProviderAsync();
 
     /// <summary>Turns AI on in the user's settings (and back on for this workspace).</summary>
     Task TurnOnAiAsync();
 
-    /// <summary>Asks in agent mode (M28c): checks trust and the model, then runs the agent's loop.</summary>
+    /// <summary>
+    /// Asks the built-in assistant, always as an agent (ADR 0092): with the IDE's tools where they can run (a trusted
+    /// folder, a model that takes tools), otherwise without them, the turn saying why.
+    /// </summary>
     Task RunAgentAsync(string question, IReadOnlyList<AiContextItem> items, AiSelectionAnchor? anchor, CancellationToken cancellationToken);
 
     Task ConfigureAiProviderAsync();
@@ -161,7 +159,6 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _cts;
     private bool _sending;
     private string _input = string.Empty;
-    private bool _agent;
     private bool _stopped;
     private IReadOnlyList<string>? _mentionableFiles;
     private readonly HashSet<AiChatTurn> _known = [];
@@ -295,12 +292,6 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>Send queues the question: a turn is being answered.</summary>
     public bool WillQueue => IsAnswering;
 
-    /// <summary>Agent mode (M28c): the model may read, search, build, propose edits and ask to run commands.</summary>
-    public bool IsAgent
-    {
-        get => _agent;
-        set => SetField(ref _agent, value);
-    }
 
     // ------------------------------------------------------------------ density (ADR 0092)
 
@@ -819,14 +810,11 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
 
         var (items, anchor) = _host.GatherAiContext(AiMentions.Parse(question));
-        var agent = IsAgent;
         var external = SelectedAgent;
         _stopped = false;
         await AnswerAsync(token => external is { } selected
             ? Chat.SendExternalAsync(question, items, _host.ExternalAgents, selected, _host.AcpHost, token, anchor, images)
-            : agent
-                ? _host.RunAgentAsync(question, items, anchor, token)
-                : Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
+            : _host.RunAgentAsync(question, items, anchor, token)).ConfigureAwait(true);
 
         // The next queued question goes once this turn has ended, unless Stop paused the queue or AI went off.
         if (!_stopped && !IsOff && !IsAnswering && Queued.Count > 0 && !(IsExternal && IsAgentBlocked))
@@ -847,7 +835,8 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await AnswerAsync(token => Chat.SendAsync(question, items, token, anchor)).ConfigureAwait(true);
+        // An action's question goes to the agent too (ADR 0092): Generate Tests creates the file through the preview.
+        await AnswerAsync(token => _host.RunAgentAsync(question, items, anchor, token)).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -914,12 +903,6 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     public Task ConfigureAsync() => _host.ConfigureAiProviderAsync();
 
     public void ShowLog() => _host.ShowAiLog();
-
-    public Task CopyAsync(string text) => _host.CopyTextAsync(text);
-
-    public Task ApplyAsync(AiChatTurn turn, AiCodeBlock block) => _host.ApplyAiCodeAsync(turn, block, insertOnly: false);
-
-    public Task InsertAsync(AiChatTurn turn, AiCodeBlock block) => _host.ApplyAiCodeAsync(turn, block, insertOnly: true);
 
     public void OpenLink(string target) => _host.OpenLink(target);
 

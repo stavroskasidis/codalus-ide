@@ -25,7 +25,7 @@ Type a question in the box at the bottom and press `Enter` or click **Send** (`S
 
 **The conversation.** Your questions are on the right, each with what went with it under it: a chip for each part that was sent, **Not sent:** for a part that was left out (its tooltip says why), and how many secrets were redacted. The answers are on the left, beside the assistant's icon, with the model and the time: formatted text (headings, lists, `code` and links) and code blocks. You can select and copy any of it. A long conversation stays fast: only the part on screen is drawn. Before the first question, the window says what to do next: turn AI on, choose a provider, or ask.
 
-**The toolbar.** **New Chat**, the provider and model (click to change them), the **Agent** switch ([agent mode](#agent-mode)), **Compact or detailed**, the request log, and **Configure**.
+**The toolbar.** **New Chat**, the provider and model (click to change them), **Compact or detailed**, the request log, and **Configure**.
 
 **Compact or detailed.** By default (`ai.chat.density`: `compact`) an answer's steps fold into one line, such as "Read 3 files · searched twice · edited Program.cs · ran 2 commands", which shows the step running now while the answer streams. Click the line to see the steps. An agent's thinking is a short **Thought** line that opens on a click. The toolbar's list button switches to **detailed**, which opens every answer's steps under that line, and back; the choice is kept in your settings. In both, a step whose title is a long or multi-line command shows its first line, and the whole command is under the step's chevron.
 
@@ -44,12 +44,9 @@ An agent with the [IDE's tools](#the-ides-tools) reads what else it needs by its
 
 **The changes of an answer.** Under an answer that changed files, **Changed N files** lists them, each with **Diff** (the file now beside what it was before the answer) and **Revert** (which asks first, then puts the file back as it was: into the open editor, unsaved and one step in undo, or on the disk; a file the answer created is deleted). A change an external agent wrote by itself, without the preview, says so.
 
-**Code in answers.** A code block is drawn in your editor's colors and font, and its header names its language (and the file, when the block names one) and has three buttons, ready once the answer is complete:
-- **Copy** copies it.
-- **Insert at Cursor** inserts it at the caret of the active editor.
-- **Apply…** shows the change in a preview first, then replaces the selection you asked about (indented like it), or the whole file when the block names that file (```` ```csharp path=src/App/Program.cs ````) or starts like it. Otherwise it inserts at the caret. Applying is one step in the editor's undo.
+**Code in answers.** A code block shows the code alone, in your editor's colors and font, on the editor's background: no buttons, since the assistant changes files itself, through the preview ([agent mode](#agent-mode)). Its language, and the file it names, are small in its top-right corner. Long lines wrap to the pane; the wrap button beside the language (shown when you point at the block or Tab to it) turns wrapping off for that block, which then scrolls sideways. A block of more than 20 lines shows its first ones, with **Show all N lines**. You can select and copy the code like any text.
 
-**New Chat** starts over. Conversations aren't saved: when you close the IDE, they're gone, and nothing a model wrote is on disk unless you applied or copied it.
+**New Chat** starts over. Conversations aren't saved: when you close the IDE, they're gone. What the assistant changed is in your files, each change applied through the preview.
 
 In the editor's context menu, **AI > Explain the Selection** asks right away, and **AI > Ask AI About the Selection** opens the chat with the selection attached (actions choose their own context, without mentions).
 
@@ -82,13 +79,15 @@ Where AI can help with something the IDE already shows, there's an action for it
 
 ## Agent mode
 
-Turn on the **Agent** switch in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. It also has [the IDE's tools](#the-ides-tools): it finds symbols and references through the compiler, runs tests, debugs and starts the program. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended. Answers given in agent mode carry an **Agent** chip.
+The built-in assistant always works as an agent, in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. It also has [the IDE's tools](#the-ides-tools): it finds symbols and references through the compiler, runs tests, debugs and starts the program. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended.
+
+**Where it can't use tools** (no folder open, a folder that isn't trusted, or a model that doesn't take tools, which is common among small local ones), it still answers, from your question and what it mentions, without reading, changing or running anything; a line under the answer says why. AI actions that ask in AI Chat (Explain, Ask AI on an exception, a value or a failing test, Generate Tests and the others) run the same way: Generate Tests creates the test file through the preview.
 
 What it can't do without you:
 - **Every change shows in the preview first.** **Apply** changes the file in the editor (unsaved, in undo), **Cancel** rejects it, and the model is told it was rejected.
 - **Every command asks first**, with the exact command line and its folder, and **Reject** is the default: pressing Enter refuses. An allowed command runs for at most 2 minutes (`ai.agent.commandTimeoutSeconds`), and its output (redacted) goes back to the model.
 - **Only inside the workspace.** Paths that leave it, links included, are refused, and so are files that are never sent (below).
-- **Only in trusted folders**, and only with a model that takes tools. A model that doesn't, which is common among small local ones, is named, so you can choose another.
+- **Only in trusted folders**, and only with a model that takes tools; elsewhere it answers without tools (above).
 - **At most 25 steps** per question (`ai.agent.maxSteps`), and **Stop** ends it at once.
 
 The model is told that what it reads (files, command output, tool results) is data, not instructions. The approvals above hold whatever a file tells it. Each tool call is a line of the request log: the tool and its target, never the content.

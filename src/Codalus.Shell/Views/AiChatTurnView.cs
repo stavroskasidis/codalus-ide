@@ -96,14 +96,6 @@ internal sealed class AiChatTurnView : StackPanel
             ToolTip.SetTip(external, Localizer.Get("aiChat.externalAgentUsesItsOwn", "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for."));
             who.Children.Add(external);
         }
-        else if (turn.IsAgent)
-        {
-            var mode = new Border { Child = new TextBlock { Text = Localizer.Get("msg.ai.agentChip", "Agent") } };
-            mode.Classes.Add("chip");
-            mode.Classes.Add("info");
-            ToolTip.SetTip(mode, Localizer.Get("msg.ai.askedInAgentMode", "Asked in agent mode"));
-            who.Children.Add(mode);
-        }
 
         var steps = new ItemsControl { ItemsSource = _steps, ItemTemplate = s_stepTemplate };
         AutomationProperties.SetName(steps, Localizer.Get("msg.ai.whatTheAssistantDid", "What the assistant did"));
@@ -433,13 +425,7 @@ internal sealed class AiChatTurnView : StackPanel
         }
         else
         {
-            var at = index;
-            view = new AiCodeBlockView(
-                _owner.ViewModel!.EditorServices,
-                _owner.ViewModel.EditorFont,
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.CopyAsync(current.Code); } },
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.InsertAsync(_item.Turn, current); } },
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.ApplyAsync(_item.Turn, current); } });
+            view = new AiCodeBlockView(_owner.ViewModel!.EditorServices, _owner.ViewModel.EditorFont);
             _codeBlocks.Add(view);
         }
 
@@ -449,7 +435,6 @@ internal sealed class AiChatTurnView : StackPanel
     }
 
     /// <summary>A code block of the answer as it is now, by its index (the buttons act on the latest text).</summary>
-    private AiCodeBlock? Block(int index) => AiCodeBlocks.Parse(_item.Turn.Answer) is var blocks && index < blocks.Count ? blocks[index] : null;
 
     private void RenderStatus(AiChatTurn turn, string answer)
     {
