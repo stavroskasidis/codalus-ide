@@ -140,6 +140,48 @@ So:
 - A wrapped line's continuation starts at the block's edge: Avalonia's text layout ignores AvaloniaEdit's wrap indentation (`TODO(issue)`: a hanging indent). A thin mark in a margin beside each continuation groups a source line instead. The same line breaking splits a long identifier at the narrowest pane, and leaves an empty first screen line when a line's indentation and first identifier are wider than the pane.
 - The fold limits the viewer's height to 20 screen lines and fades its last ones out; its count is the block's source lines.
 
+### Amendment, 2026-11-05: an agent debugging a web app, and actions allowed by default
+
+The maintainer asked an external agent to change their Blazor Web App's counter (a WebAssembly component) and then, since it hadn't checked its change, to run and debug it. The agent's steps went wrong:
+- **`debug_start` said the session didn't start.** It gave up once the session had been idle for 30 s with no build running. On a large solution the build alone takes longer than that, and after the build the launch still evaluates the launch profile and prepares the page's debugger. So the tool failed while the app was still starting.
+- **`browser_navigate` failed.** A relative address had nothing to be relative to until the server said "Now listening on".
+- **The agent waited on `debug_wait_for_stop` for the app to start.** Nothing stops a web app before something requests its code, so the call waited out its timeout.
+- **The click never stopped at the breakpoint.** The agent drove a browser of its own, so its click never reached the breakpoint in the WebAssembly component. Only the page the IDE debugs, through the WebAssembly debugging proxy, stops there.
+- **Approvals.** The maintainer found asking at every new chat a nuisance.
+
+| Question | Options | Verdict |
+|---|---|---|
+| Approvals | Allow by default, with "Always Allow in This Workspace" for those who ask; keep asking once and add the per-workspace button; allow by default only | **Allow by default.** `ask` and `askOncePerSession` gain **Always Allow in This Workspace**, kept in the user's state. |
+| The browser under the debugger | The debugged page; a separate browser that says why its clicks don't stop | **The debugged page.** |
+| Steering agents to check their changes | Build and test always, and run when the change shows in the app; build and test only; leave it to the user | **Build and test always, run when it shows.** |
+
+So:
+- **Approvals.** `ai.agent.ideActions` defaults to `allow`, which still applies only in trusted folders (ADR 0004) and is still read from the user's settings only. Under `ask` and `askOncePerSession`, an action's dialog adds **Always Allow in This Workspace**. The grant is a list of folders in `<state>/ai-ide-actions-allowed.json` (a `TrustStore`: real paths, the platform's case rules). It is never kept in the solution's `.codalus/state`, which a cloned repository could ship. A value the setting doesn't know asks every time. Plugins' tools still ask every time.
+- **Waiting.** Each tool waits for what it needs:
+  - `debug_start` awaits the launch itself: the build, the profile, the debugger and a web app's page, for up to 10 minutes. A test's launch is awaited until its session runs. A web app is then awaited until it listens, for up to 90 s: an address in "Now listening on", or, when its logging filters that line, the launch profile's `applicationUrl` once it accepts a connection.
+  - `run_project` waits the same way.
+  - The browser tools wait up to 90 s for a web app that is starting. `AgentBrowser.NavigateAsync` reads `Page.navigate`'s `errorText` and retries a refused connection for up to 30 s, then names the error.
+  - The listening address loses the quotes a Serilog template without `:lj` puts around it.
+- **Saying the state.**
+  - `debug_start` answers with the state it left the program in, the web app's address, and each breakpoint with whether it is bound (and the debugger's reason when it isn't).
+  - `debug_wait_for_stop` waits for a launch that is still building. It returns when a web app it waited for starts to listen ("nothing has stopped it yet; request the code"), and on a timeout it lists the breakpoints again.
+- **The debugged page.**
+  - Every page the IDE debugs through vscode-js-debug opens in a profile of its own, `<state>/debug-browser`, with `--remote-debugging-port=0` in the launch's `runtimeArgs`. js-debug keeps a port the arguments give, connects through it, and with an `inspectUri` it used a port already. Chromium writes the port to the profile's `DevToolsActivePort`, which `AgentBrowser.AttachAsync` reads, and it connects to the page whose address is the app's.
+  - While the session has a page, the browser tools drive that page and never kill its browser. Without one (`run_project`, or a server debugged alone), they start a browser of their own as before.
+  - The profile also keeps the page's sign-ins between sessions, where js-debug's profile lived in its own storage.
+  - Its debugging port listens on the loopback address only, as the agent's own browser's does.
+- **A click that stops the program.**
+  - Under the debugger, a browser call races the debugger's `Stopped`. A WebAssembly breakpoint pauses the page's only thread, so `Runtime.evaluate` wouldn't answer until the program goes on. The call returns at once with where it stopped, and the script finishes after `debug_continue`.
+  - A call made while the program is already stopped gets 5 s, then says the page is paused instead of waiting out the protocol's minute.
+- **Steering.** `IdeTools.Instructions` (MCP's `instructions`, still nothing in the agent's own prompt) and the tool descriptions say:
+  - check a change before calling it done (`get_diagnostics` and `build`, the tests that cover it, and a run or debug session checked with `browser_*` when the change shows in the app);
+  - each tool waits and says the state it left, so read it instead of retrying;
+  - nothing stops a web app before something requests its code.
+- **Tests.**
+  - `IdeToolsShellTests` debugs `samples/BlazorHosted` through the tools: `debug_start` returns with the address and the bound breakpoint, `browser_navigate` opens `/counter` relative to it in the debugged page, the click stops in the WebAssembly component, a call on the paused page says so, and after Continue the count shows.
+  - The same class covers the default, the workspace grant and the two dialogs.
+  - `IdeToolsTests` attaches to a browser the test started, waits for a server that starts late, and names a refused connection.
+
 ## Consequences
 
 - An agent in Codalus can find, trace, build, test, run and debug through the IDE: compiler-accurate answers with the user's unsaved edits, in the IDE's own windows. Outside the IDE, the same tools are one setting away (`ai.mcpServer.enabled`).

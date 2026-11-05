@@ -58,13 +58,31 @@ public sealed class IdeToolsTests : IDisposable
     }
 
     [Theory]
-    [InlineData(null, IdeActionApproval.AskOncePerSession)]
+    [InlineData(null, IdeActionApproval.Allow)]
+    [InlineData("allow", IdeActionApproval.Allow)]
     [InlineData("askOncePerSession", IdeActionApproval.AskOncePerSession)]
     [InlineData("ask", IdeActionApproval.Ask)]
-    [InlineData("allow", IdeActionApproval.Allow)]
-    [InlineData("always", IdeActionApproval.AskOncePerSession)]
-    public void The_approval_setting_defaults_to_asking_once(string? value, IdeActionApproval expected) =>
+    [InlineData("always", IdeActionApproval.Ask)]
+    public void The_approval_setting_allows_by_default_and_an_unknown_value_asks(string? value, IdeActionApproval expected) =>
         Assert.Equal(expected, IdeTools.ParseApproval(value));
+
+    [Fact]
+    public void The_instructions_steer_agents_to_check_their_changes_and_read_the_state_tools_return()
+    {
+        Assert.Contains("Check your own changes before you say they are done", IdeTools.Instructions, StringComparison.Ordinal);
+        Assert.Contains("debug_start returns once the program runs and a web app listens", IdeTools.Instructions, StringComparison.Ordinal);
+        Assert.Contains("the very page being debugged", IdeTools.Instructions, StringComparison.Ordinal);
+        Assert.Contains("use browser_* first", IdeTools.Find("debug_wait_for_stop")!.Description, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("net::ERR_CONNECTION_REFUSED", true)]
+    [InlineData("net::ERR_CONNECTION_RESET", true)]
+    [InlineData("net::ERR_EMPTY_RESPONSE", true)]
+    [InlineData("net::ERR_NAME_NOT_RESOLVED", false)]
+    [InlineData("net::ERR_CERT_AUTHORITY_INVALID", false)]
+    public void A_navigation_that_finds_nothing_listening_is_tried_again(string error, bool again) =>
+        Assert.Equal(again, AgentBrowser.IsNotListeningYet(error));
 
     [Fact]
     public async Task Codalus_mcp_lists_the_ides_tools_says_how_to_use_them_and_relays_images()
@@ -138,6 +156,84 @@ public sealed class IdeToolsTests : IDisposable
         var png = Convert.FromBase64String(await agent.ScreenshotAsync(ct));
         Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], png[..4]);
         Assert.True(agent.IsRunning);
+    }
+
+    [Fact]
+    public async Task The_agent_attaches_to_a_browser_it_did_not_start_and_waits_for_a_server_that_starts_late()
+    {
+        var browser = Browsers.Find();
+        Assert.SkipWhen(browser is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Assert.NotNull(browser);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var ct = timeout.Token;
+
+        // Someone else's browser (the page the IDE debugs): a profile, a DevTools port, and a page.
+        var start = new System.Diagnostics.ProcessStartInfo(browser.Path) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+        foreach (var argument in new[] { "--user-data-dir=" + _profile, "--remote-debugging-port=0", "--headless=new", "--no-first-run", "--no-default-browser-check", "data:text/html,<title>Debugged</title>" })
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        if (OperatingSystem.IsLinux() && Environment.UserName == "root")
+        {
+            start.ArgumentList.Add("--no-sandbox");
+        }
+
+        using var process = System.Diagnostics.Process.Start(start)!;
+        process.OutputDataReceived += (_, _) => { };
+        process.ErrorDataReceived += (_, _) => { };
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        try
+        {
+            await using (var attached = await AgentBrowser.AttachAsync(_profile, null, TimeSpan.FromSeconds(30), ct))
+            {
+                Assert.True(attached.IsAttached);
+                await AssertEventuallyAsync(() => attached.GetPageAsync(null, ct).Result.Contains("Debugged", StringComparison.Ordinal), ct);
+
+                // A server that isn't listening yet (a web app starting): the navigation is tried again until it answers.
+                using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                probe.Start();
+                var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+                probe.Stop();
+                var url = $"http://127.0.0.1:{port}/";
+                using var server = new System.Net.HttpListener();
+                server.Prefixes.Add(url);
+                var serving = Task.Run(async () =>
+                {
+                    await Task.Delay(1500, ct);
+                    server.Start();
+                    var context = await server.GetContextAsync();
+                    var body = "<title>Late</title><p>Started late</p>"u8.ToArray();
+                    context.Response.ContentType = "text/html";
+                    await context.Response.OutputStream.WriteAsync(body, ct);
+                    context.Response.Close();
+                }, ct);
+                await attached.NavigateAsync(url, ct, retryFor: TimeSpan.FromSeconds(30));
+                Assert.Contains("Started late", await attached.GetPageAsync(null, ct), StringComparison.Ordinal);
+                await serving;
+
+                // Nothing ever listens: the error says what the browser said, after the wait. A port nothing has listened
+                // on, not the stopped server's: the browser's kept-alive connection to it can still get an empty answer
+                // after HttpListener.Stop, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally).
+                server.Stop();
+                using var never = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                never.Start();
+                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndpoint).Port}/";
+                never.Stop();
+                var refused = await Assert.ThrowsAsync<IdeToolException>(() => attached.NavigateAsync(nothing, ct, retryFor: TimeSpan.FromSeconds(1)));
+                Assert.Contains("ERR_CONNECTION_REFUSED", refused.Message, StringComparison.Ordinal);
+            }
+
+            // Letting go leaves the browser running: it's the debugger's.
+            await Task.Delay(500, ct);
+            Assert.False(process.HasExited);
+        }
+        finally
+        {
+            Codalus.Platform.ProcessTree.Kill(process);
+        }
     }
 
     private static async Task AssertEventuallyAsync(Func<bool> condition, CancellationToken cancellationToken)

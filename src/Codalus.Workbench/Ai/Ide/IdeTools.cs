@@ -5,7 +5,7 @@ namespace Codalus.Workbench.Ai.Ide;
 /// <summary>
 /// What an IDE tool does, which decides how it is approved (ADR 0092): reading the IDE's state never asks; an action
 /// (building, running tests, running or debugging the program, driving its browser) follows
-/// <c>ai.agent.ideActions</c>; a plugin's tool asks every time, as an MCP server's does.
+/// <c>ai.agent.ideActions</c> (allowed by default); a plugin's tool asks every time, as an MCP server's does.
 /// </summary>
 public enum IdeToolKind
 {
@@ -52,7 +52,7 @@ public static class IdeTools
 {
     public const string CodalusSource = "codalus";
 
-    /// <summary>The setting that decides how actions are approved: ask, askOncePerSession (the default), allow.</summary>
+    /// <summary>The setting that decides how actions are approved: allow (the default), askOncePerSession, ask.</summary>
     public const string ActionsSetting = "ai.agent.ideActions";
 
     /// <summary>
@@ -66,8 +66,14 @@ public static class IdeTools
         "find_references, find_implementations, call_hierarchy and type_hierarchy instead of reading files to trace code; " +
         "get_diagnostics after an edit; build, run_tests and get_test_results instead of dotnet build or dotnet test; " +
         "debug_* to reproduce a bug under the debugger (breakpoints, stack, variables, evaluate) instead of adding prints. " +
-        "When a web app runs under the debugger, browser_* reads its page, console and screenshots. Positions are 1-based " +
-        "lines; give a symbol by name (Namespace.Type.Member or Type.Member), or a path, line and the name on that line.";
+        "When a web app runs, browser_* drives and reads its page (under the debugger, the very page being debugged, so " +
+        "its breakpoints stop). Check your own changes before you say they are done: get_diagnostics and build after an " +
+        "edit, run_tests for the tests that cover it, and when the change shows in a running app (a page, a window, its " +
+        "output), start it with debug_start or run_project and check it, with browser_* for a web app; skip this only " +
+        "when the user says so. The tools wait for what they need: debug_start returns once the program runs and a web " +
+        "app listens, the browser tools wait for a web app that is starting, and every result says the state it left the " +
+        "program in; read it before the next step instead of retrying. Positions are 1-based lines; give a symbol by name " +
+        "(Namespace.Type.Member or Type.Member), or a path, line and the name on that line.";
 
     private const string Position =
         """
@@ -103,16 +109,16 @@ public static class IdeTools
         Read("get_test_results", "The tests Codalus IDE knows and their last results: counts, and each failure with its message and stack trace.", """{"failedOnly":{"type":"boolean","description":"Only failures (the default)."}}"""),
 
         // ---------------------------------------------------------- running
-        Action("run_project", "Start a project without debugging in Codalus IDE (the startup project by default). Its output goes to the IDE; read it with get_run_output.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."}}"""),
+        Action("run_project", "Start a project without debugging in Codalus IDE (the startup project by default), and wait until it runs (a web app: until it listens, and its address). Its output goes to the IDE; read it with get_run_output.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."}}"""),
         Read("get_run_output", "The end of the output of the program started last (run or debug), and whether it is still running.", """{"lines":{"type":"integer","description":"At most this many lines from the end (default 200)."}}"""),
         Action("stop_run", "Stop the program started with run_project, or the debug session.", "{}"),
 
         // ---------------------------------------------------------- debugging
-        Action("debug_start", "Start debugging a project (the startup project by default) or one test in Codalus IDE. Set breakpoints first; then debug_wait_for_stop.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."},"test":{"type":"string","description":"A test's full name, to debug that test instead."}}"""),
+        Action("debug_start", "Start debugging a project (the startup project by default) or one test in Codalus IDE. It builds, then waits until the program runs (a web app: until it listens, with its address) or stops, and says so, with each breakpoint's state (bound or not, and why). Set breakpoints first. Then make the program reach them (a web app: browser_*) and debug_wait_for_stop.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."},"test":{"type":"string","description":"A test's full name, to debug that test instead."}}"""),
         Read("debug_set_breakpoint", "Set a breakpoint in Codalus IDE, optionally with a condition (a C# expression) or a hit count.", """{"path":{"type":"string","description":"A file, relative to the workspace root."},"line":{"type":"integer","description":"A 1-based line."},"condition":{"type":"string"},"hitCount":{"type":"integer"}}""", "path", "line"),
         Read("debug_remove_breakpoint", "Remove a breakpoint, or every breakpoint when no path is given.", """{"path":{"type":"string"},"line":{"type":"integer"}}"""),
         Read("debug_list_breakpoints", "The breakpoints set in Codalus IDE.", "{}"),
-        Read("debug_wait_for_stop", "Wait until the debugged program stops (a breakpoint, a step, an exception) or ends. Returns why, where (with the source line), and the exception when there is one.", """{"timeoutSeconds":{"type":"integer","description":"How long to wait (default 30, at most 600)."}}"""),
+        Read("debug_wait_for_stop", "Wait until the debugged program stops (a breakpoint, a step, an exception) or ends, or, while it is starting, until a web app listens. Returns why, where (with the source line), and the exception when there is one; on a timeout, the breakpoints that aren't bound. Nothing stops a web app until something requests its code: use browser_* first.", """{"timeoutSeconds":{"type":"integer","description":"How long to wait (default 30, at most 600)."}}"""),
         Read("debug_get_state", "The debug session's state: running or stopped, why, the threads, and the stopped thread's call stack with files and lines.", "{}"),
         Read("debug_get_variables", "The locals and arguments of a stack frame of the stopped program (the top one by default), with an expanded object's members.", """{"frame":{"type":"integer","description":"The frame's index in debug_get_state's stack, 0 for the top."},"expand":{"type":"string","description":"A variable's path to expand, e.g. order.Lines."}}"""),
         Action("debug_evaluate", "Evaluate a C# expression in a frame of the stopped program, as the Watch window does. It can call methods, which may change the program's state.", """{"expression":{"type":"string"},"frame":{"type":"integer","description":"The frame's index, 0 for the top."}}""", "expression"),
@@ -120,22 +126,25 @@ public static class IdeTools
         Action("debug_continue", "Continue the stopped program. Use debug_wait_for_stop to wait for the next stop.", "{}"),
 
         // ---------------------------------------------------------- the browser of a web app under the debugger
-        Read("browser_get_page", "The page of the browser Codalus IDE opened for the web app it runs or debugs: its address, title and visible text, or the HTML of the elements a CSS selector matches.", """{"selector":{"type":"string","description":"A CSS selector; the visible text of the whole page without one."}}"""),
+        Read("browser_get_page", "The page of the web app Codalus IDE runs or debugs (under the debugger, the page being debugged): its address, title and visible text, or the HTML of the elements a CSS selector matches. Waits for a web app that is starting.", """{"selector":{"type":"string","description":"A CSS selector; the visible text of the whole page without one."}}"""),
         Read("browser_screenshot", "A PNG screenshot of the browser page Codalus IDE opened for the web app.", "{}"),
         Read("browser_console", "The browser page's console messages and uncaught errors since it opened (the last ones).", """{"lines":{"type":"integer","description":"At most this many (default 100)."}}"""),
-        Action("browser_evaluate", "Run JavaScript in the browser page Codalus IDE opened for the web app (to click, fill a form or read state) and return its result as JSON.", """{"script":{"type":"string","description":"An expression or the body of an async function; its value is returned."}}""", "script"),
-        Action("browser_navigate", "Open an address in the browser page Codalus IDE opened for the web app (relative to the app's address).", """{"url":{"type":"string"}}""", "url"),
+        Action("browser_evaluate", "Run JavaScript in the web app's page (to click, fill a form or read state) and return its result as JSON. When the script makes the debugged program stop at a breakpoint, it returns at once with where it stopped.", """{"script":{"type":"string","description":"An expression or the body of an async function; its value is returned."}}""", "script"),
+        Action("browser_navigate", "Open an address in the web app's page: a path relative to the app's address (e.g. /counter) or a full localhost address. Waits for a web app that is starting, and says when the page couldn't load.", """{"url":{"type":"string"}}""", "url"),
     ];
 
     /// <summary>The built-in tool named <paramref name="name"/>, or null.</summary>
     public static IdeToolDefinition? Find(string name) => BuiltIn.FirstOrDefault(t => t.Name == name);
 
-    /// <summary>How actions are approved: <c>ask</c>, <c>askOncePerSession</c> (an unknown value too) or <c>allow</c>.</summary>
+    /// <summary>
+    /// How actions are approved: <c>allow</c> (also when unset), <c>askOncePerSession</c> or <c>ask</c>. A value it
+    /// doesn't know asks every time: whoever wrote it wanted something other than the default.
+    /// </summary>
     public static IdeActionApproval ParseApproval(string? value) => value switch
     {
-        "ask" => IdeActionApproval.Ask,
-        "allow" => IdeActionApproval.Allow,
-        _ => IdeActionApproval.AskOncePerSession,
+        null or "" or "allow" => IdeActionApproval.Allow,
+        "askOncePerSession" => IdeActionApproval.AskOncePerSession,
+        _ => IdeActionApproval.Ask,
     };
 
     /// <summary>The definitions as MCP's <c>tools/list</c> wants them, as one JSON array.</summary>
@@ -207,12 +216,15 @@ public static class IdeTools
 /// <summary>How an IDE action is approved (<c>ai.agent.ideActions</c>).</summary>
 public enum IdeActionApproval
 {
-    /// <summary>Every build, test run, run and debug action asks.</summary>
+    /// <summary>Every build, test run, run and debug action asks, with "Always Allow in This Workspace".</summary>
     Ask,
 
-    /// <summary>The first action of a chat session asks, with "Allow for this chat"; the rest of that session runs.</summary>
+    /// <summary>
+    /// The first action of a chat session asks, with "Allow for This Chat" and "Always Allow in This Workspace"; the rest
+    /// of that session runs.
+    /// </summary>
     AskOncePerSession,
 
-    /// <summary>Actions run without asking (still only in trusted workspaces).</summary>
+    /// <summary>Actions run without asking (the default; still only in trusted workspaces).</summary>
     Allow,
 }

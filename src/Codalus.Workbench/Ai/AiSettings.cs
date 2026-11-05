@@ -99,17 +99,17 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 21,
         },
-        SettingDescriptor.Create(Ide.IdeTools.ActionsSetting, "\"askOncePerSession\"", SettingType.String, source) with
+        SettingDescriptor.Create(Ide.IdeTools.ActionsSetting, "\"allow\"", SettingType.String, source) with
         {
             Title = "Agent IDE Actions",
             Category = "AI",
             Description = "How an agent's IDE actions are approved: building, running tests, running or debugging the program, and driving the web app's browser (AI Chat's agents and codalus mcp). Reading code and the IDE's state never asks; edits always go through the preview and shell commands always ask. Read from your user settings only.",
-            Enum = ["askOncePerSession", "ask", "allow"],
+            Enum = ["allow", "askOncePerSession", "ask"],
             EnumDescriptions =
             [
-                "Ask at the first action of a chat, with Allow for This Chat; then run the rest of that chat's actions.",
-                "Ask before every action.",
                 "Run actions without asking (trusted folders only).",
+                "Ask at the first action of a chat, with Allow for This Chat and Always Allow in This Workspace; then run the rest of that chat's actions.",
+                "Ask before every action, with Always Allow in This Workspace.",
             ],
             Scope = SettingScope.User,
             Order = 22,

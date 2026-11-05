@@ -108,6 +108,13 @@ Servers start the first time agent mode needs their tools and stop when the IDE 
 
 Every agent in Codalus (agent mode, every external agent through its own `codalus mcp` pipe, and agents outside the IDE with **MCP Server** on) gets the same tools. They answer from the IDE's live state: the compiler's view of your code (Roslyn for C#), with your unsaved edits, Code Search's index, the Error List, Test Explorer and the debugger. Agents are told to prefer them to `grep` and the CLI, and they show what they do in the IDE's own windows.
 
+Agents are also told to check their own changes before they say they're done:
+- after an edit, the Error List and a build;
+- the tests that cover the change;
+- for a change you'd see in the running app (a page, a window, its output), a run or a debug session, checked with the browser tools for a web app.
+
+Tell the agent to skip any of this when you don't want it.
+
 | What | Tools |
 |---|---|
 | The solution and the editor | `get_solution`, `get_open_files`, `get_diagnostics`, `get_build_output` |
@@ -120,14 +127,26 @@ Every agent in Codalus (agent mode, every external agent through its own `codalu
 
 A tool that follows code takes a symbol by name (`OrderService.Submit`), or a file, a line and the name on it.
 
+**Each step waits until it can, and says where things stand.** On a large solution the build and the launch can take minutes, and a web app takes a while to listen:
+- `debug_start` returns once the program runs (a web app: once it listens, with its address) or has stopped. Its answer lists each breakpoint and whether the debugger bound it, and why not.
+- `run_project` waits the same way for a web app.
+- The browser tools wait for a web app that is starting (up to 90 seconds). A page that doesn't load says why, and an address where nothing listens yet is tried again.
+- `debug_wait_for_stop` also returns when a web app it was waiting for starts to listen: nothing stops a web app before something requests its code. When it times out, it lists the breakpoints that aren't bound.
+
 **What asks first.** Reading never asks. Building, running tests, starting, debugging, stepping, evaluating and driving the browser follow **Agent IDE Actions** (`ai.agent.ideActions`, in your user settings only):
-- `askOncePerSession` (the default): the first one in a chat asks, with **Allow**, **Allow for This Chat** and **Reject** (the default). **New Chat** forgets it.
-- `ask`: every one asks.
-- `allow`: they run without asking. This applies only in trusted folders, like everything an agent does.
+- `allow` (the default): they run without asking. This applies only in trusted folders, like everything an agent does.
+- `askOncePerSession`: the first one in a chat asks, with **Allow**, **Allow for This Chat**, **Always Allow in This Workspace** and **Reject** (the default). **New Chat** forgets **Allow for This Chat**.
+- `ask`: every one asks, with **Allow**, **Always Allow in This Workspace** and **Reject**.
+
+**Always Allow in This Workspace** is kept in your own state folder, never in the repository, and lasts until you remove the folder from `ai-ide-actions-allowed.json` in the state folder.
 
 Edits still go through the preview, and shell commands still ask every time. The tools stay inside the workspace and leave out files that are never sent (below). What they return is redacted, and each call is a line of the *AI* Output channel.
 
-**The browser.** The browser tools open a browser of the agent's own at the address of the web app the IDE runs or debugs: the Chromium browser `debug.browser` finds, with its own profile, reachable only from this machine. The agent can read the page, take screenshots, read the console and run JavaScript (to click or fill a form, for example). It opens only addresses on this machine. It closes with **New Chat**, when the folder changes, and when the IDE exits. Start the app first (`run_project` or `debug_start`); a breakpoint in the server's code then stops it in the IDE's debugger.
+**The browser.** While the IDE debugs a web app together with its page ([a Blazor Web App](debugging.md), or a web app whose launch profile opens a browser), the browser tools drive that page, in the IDE's debugging browser. Breakpoints in the page's own code (WebAssembly components and scripts) stop when the agent clicks, and you watch what it does. When a click reaches a breakpoint, `browser_evaluate` returns at once with where the program stopped. While the program is stopped, the page doesn't answer, and the tools say so.
+
+Otherwise (`run_project`, or a server debugged without its page) the browser tools open a browser of the agent's own at the web app's address: the Chromium browser `debug.browser` finds, with its own profile, reachable only from this machine. It closes with **New Chat**, when the folder changes, and when the IDE exits.
+
+Either way the agent can read the page, take screenshots, read the console and run JavaScript (to click or fill a form, for example). It opens only addresses on this machine; a path such as `/counter` is relative to the web app's address. The debugging browser keeps its own profile (`debug-browser` in the state folder), so a page you signed in to stays signed in between sessions.
 
 **Plugins' tools.** Plugins can add tools of their own ([AI tools](plugin-api.md)). Each call asks first and names the plugin.
 
@@ -280,7 +299,7 @@ AI assistance has one gate that every request goes through:
 | `ai.nextEdit.enabled` | `false` | Next edit suggestions |
 | `ai.agent.maxSteps` | `25` | The most tool calls agent mode makes for one question |
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
-| `ai.agent.ideActions` | `askOncePerSession` | How the agents' IDE actions are approved: `askOncePerSession`, `ask` or `allow` (user settings only) |
+| `ai.agent.ideActions` | `allow` | How the agents' IDE actions are approved: `allow`, `askOncePerSession` or `ask` (user settings only) |
 | `ai.chat.density` | `compact` | `compact` folds each answer's steps into a line; `detailed` shows every step |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
 | `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE's tools (external agents' own pipes don't need it) |
