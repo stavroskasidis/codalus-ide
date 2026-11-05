@@ -149,7 +149,8 @@ public sealed class DotNetTestFixture : IAsyncLifetime
         return node!;
     });
 
-    public async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken)
+    /// <param name="describe">What the timeout's message says first, read when it times out.</param>
+    public async Task WaitUntilAsync(Func<bool> condition, CancellationToken cancellationToken, Func<string>? describe = null)
     {
         while (!condition())
         {
@@ -159,7 +160,7 @@ public sealed class DotNetTestFixture : IAsyncLifetime
             }
             catch (OperationCanceledException)
             {
-                throw new TimeoutException("Timed out. Log:\n" + Log);
+                throw new TimeoutException($"Timed out{(describe is null ? string.Empty : " waiting for " + describe())}. Log:\n" + Log);
             }
         }
     }
