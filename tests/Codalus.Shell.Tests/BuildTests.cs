@@ -43,8 +43,17 @@ public sealed class BuildTests
         await f.Shell.ErrorList.OpenAsync(f.Shell.ErrorList.Rows.First(r => r.Code == "CS0103"));
         await ShellFixture.PumpUntil(() => f.Shell.Layout.ActiveDocument is Editor.CodeEditorDocument { Title: "Greeter.cs" });
 
-        // Fixed, then Ctrl+F5: builds the startup project and runs it with its first launch profile.
+        // Fixed, then Ctrl+F5: builds the startup project and runs it with its first launch profile. Meanwhile the toolbar
+        // says so, with Stop.
         File.WriteAllText(greeter, original);
+        List<string?> statuses = [];
+        f.Shell.Toolbar.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ToolbarViewModel.LaunchStatus))
+            {
+                statuses.Add(f.Shell.Toolbar.LaunchStatus);
+            }
+        };
         await f.RunAsync("run.startWithoutDebugging");
         await ShellFixture.PumpUntil(
             () => f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name == "Run: Hello")?.GetText().Contains("has exited with code 0", StringComparison.Ordinal) == true,
@@ -53,6 +62,48 @@ public sealed class BuildTests
         Assert.Contains("args: one two words", output, StringComparison.Ordinal);
         Assert.Contains("GREETING: from the launch profile", output, StringComparison.Ordinal);
         Assert.True(f.Shell.Builds.LastBuild!.Result.Succeeded);
+        await ShellFixture.PumpUntil(() => !f.Shell.Toolbar.IsLaunching);
+        Assert.Equal("Starting Hello…", statuses[0]);
+        Assert.Contains("Building Hello…", statuses);
+        Assert.Null(statuses[^1]);
         await ShellFixture.PumpUntil(() => !f.Shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.BuildSource));
+    }
+
+    /// <summary>
+    /// Ctrl+F5 shows Stop and what it's doing in the toolbar from the click, in the Start buttons' place, not only once the
+    /// program runs: the build before it can take a while. Stop then cancels it, before its build starts or during it,
+    /// and the program doesn't start. (The first test sees the status follow the build.)
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Start_shows_stop_and_its_progress_at_once_and_stop_cancels_it()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("BuildAndRun");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 90);
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbar.CanStart);
+        var toolbar = f.Shell.Toolbar;
+        Assert.Equal((true, false, false), (toolbar.CanStart, toolbar.CanStop, toolbar.IsLaunching));
+
+        var start = f.Shell.StartWithoutDebuggingAsync();
+        Assert.Equal((false, true, true), (toolbar.CanStart, toolbar.CanStop, toolbar.IsLaunching));
+        Assert.True(toolbar.LaunchStatus is "Starting Hello…" or "Building Hello…", toolbar.LaunchStatus); // the build can start within the click
+        Assert.True(f.Shell.Workbench.Commands.IsEnabled("run.stop"));
+        Assert.False(toolbar.CanHotReload);
+
+        // A second Start meanwhile is refused.
+        await f.Shell.StartWithoutDebuggingAsync();
+        Assert.True(toolbar.IsLaunching);
+
+        f.Shell.Run("run.stop");
+        await start;
+        Assert.Equal((true, false, false), (toolbar.CanStart, toolbar.CanStop, toolbar.IsLaunching));
+        Assert.Null(toolbar.LaunchStatus);
+        Assert.Empty(f.Shell.Runs.Running);
+        Assert.DoesNotContain(f.Shell.Workbench.Output.Channels, c => c.Name == "Run: Hello");
+        Assert.NotEqual(true, f.Shell.Workbench.Context.GetValue("programStarting"));
+        Assert.False(f.Shell.Workbench.Commands.IsEnabled("run.stop"));
+        await ShellFixture.PumpUntil(() => !f.Shell.Builds.IsBuilding, seconds: 60);
     }
 }
