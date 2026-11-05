@@ -124,6 +124,35 @@ public class EverydayScenarioTests
     }
 
     [Fact]
+    public void Binary_size_counts_what_ships_without_any_debug_symbols()
+    {
+        // Linux's shell_mb counted Native AOT's codalus.dbg, 188.7 of its 421.4 MB (0.12.0's release run, 41937217669).
+        var dir = Directory.CreateTempSubdirectory("codalus-bench-").FullName;
+        try
+        {
+            foreach (var file in new[]
+                     {
+                         "codalus", "codalus.dbg", "codalus.pdb", "libSkiaSharp.so",
+                         Path.Combine("codalus.dSYM", "Contents", "Resources", "DWARF", "codalus"),
+                         Path.Combine("lshost", "codalus-lshost.dll"), Path.Combine("datahost", "codalus-datahost.dbg"),
+                     })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(dir, file))!);
+                File.WriteAllText(Path.Combine(dir, file), "x");
+            }
+
+            var shipped = ScenarioRunner.Files(dir, exclude: [Path.Combine(dir, "lshost")])
+                .Select(f => Path.GetRelativePath(dir, f))
+                .Order(StringComparer.Ordinal);
+            Assert.Equal(["codalus", "libSkiaSharp.so"], shipped);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Each_flow_gives_its_longest_wait_and_its_stalls_and_a_note_says_what_they_were()
     {
         var path = Path.GetTempFileName();

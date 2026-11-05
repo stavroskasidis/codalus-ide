@@ -233,17 +233,24 @@ internal static class Gates
                         var previous = history.Take(policy.BaselineRuns).Select(h => h.Value).ToList();
                         if (previous.Count > 0)
                         {
-                            (reference, gating) = (Median(previous), true);
+                            (reference, gating) = (Median(previous), !isReference);
                             rule = Describe(threshold, $"the median of {previous.Count} run(s) ({reference:F1})");
                         }
                         else if (acceptedReference is not null)
                         {
-                            (reference, gating) = (acceptedReference.Value, true);
+                            (reference, gating) = (acceptedReference.Value, !isReference);
                             rule = Describe(threshold, $"the value accepted on {acceptedReference.Date:yyyy-MM-dd} ({reference:F1})");
                         }
                         else
                         {
                             continue;
+                        }
+
+                        // The reference application's install is its latest release's (VS Code's grew 16.6 MB on Linux
+                        // between the 0.11.0 and 0.12.0 release runs, 41352153213 and 41937217669): reported, never failed.
+                        if (isReference)
+                        {
+                            rule += "; the reference application: never fails";
                         }
                     }
                     else
