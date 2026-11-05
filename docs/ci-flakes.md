@@ -152,4 +152,13 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
 - **The benchmark regression gate** (39953872764, 39979261891, 40423773696, 40461519855): one metric just past +10% on
   a hosted runner, once with VS Code, the reference app, moving as much in the same run. That is the gate's policy on
   noisy machines (ADR 0002), a decision for the maintainer, not a test to fix here.
+- **The binary-size gate, 0.12.0's release run** (41937217669): two Linux sizes over +5 % of the median of 10 runs.
+  VS Code's `install_mb` (1044.6 MB over 1032.5; 1028.0 in 0.11.0's run 41352153213) failed although the reference
+  application's numbers never fail: the size branch of `Gates.Compare` gated every target. Fixed: the reference
+  application's sizes are reported, never failed (`GatesTests`). The shell's `shell_mb` (421.4 MB over 421.1) grew
+  2.2 MB since 0.11.0's 419.2, which was already 4.5 % over the same median: the median of 10 releases trails a size
+  that grows a little every release. The shipped Linux shell outside the helpers grew 1 MB (240.7 MB in 0.11.0's
+  package, 241.7 MB in the 0.12.0 nightly's): the benchmarks job publishes without the packages'
+  `-p:DebugType=none`, so on Linux and macOS `shell_mb` likely counts Native AOT's debug symbols too (being checked).
+  Accepting a size is the maintainer's decision (`benchmarks/accepted.json`).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
