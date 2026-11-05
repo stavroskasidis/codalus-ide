@@ -5,6 +5,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 ## 0.13.0
 
 - **About Codalus IDE is a window, at the bottom of the Help menu** ([user guide](docs/user-guide/troubleshooting.md#which-version-you-have)): it showed the version as a notification, from the middle of the menu. It now opens a window over the IDE with the version, the .NET runtime, the operating system and its architecture, **Copy Info** to put them on the clipboard, and links to the website, the source code, the license and the third-party notices; it is the Help menu's last entry, as in most apps.
+- **Debugging a Blazor Web App's server follows it after a restart even when leaving the old one is slow**: an edit that made `dotnet watch` restart the server, while the debugger took a while to leave the old one (17 s on a Windows runner), left the debugger idle: the new server had already said it was listening before the debugger began to wait for it, and the debugger waited for it to say so again. It now counts from the restart, and attaches to the new server.
 
 ## 0.12.0
 
