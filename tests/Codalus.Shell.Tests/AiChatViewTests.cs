@@ -243,7 +243,8 @@ public sealed class AiChatViewTests
         var lines = block.Viewer.Editor.Document.LineCount;
         var lineHeight = block.Viewer.Editor.TextArea.TextView.DefaultLineHeight;
         var visualLines = block.Viewer.Editor.TextArea.TextView.VisualLines.Sum(v => v.TextLines.Count);
-        Assert.InRange(block.Viewer.Bounds.Height, visualLines * lineHeight, (visualLines * lineHeight) + 40);
+        var padding = block.Viewer.Editor.Padding.Top + block.Viewer.Editor.Padding.Bottom;
+        Assert.InRange(block.Viewer.Bounds.Height, visualLines * lineHeight, (visualLines * lineHeight) + padding + 4);
         Assert.True(visualLines >= lines);
 
         // Lines wrap by default; the Wrap toggle (named, shown on hover) turns it off for this block.

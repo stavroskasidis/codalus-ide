@@ -700,7 +700,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
-        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code shown as a wrapped block without actions, and a step of the agent it always is", AiChatStepAsync).ConfigureAwait(true);
 
         // #79, D43: Connect to Claude… from AI Chat's off state, with stand-in node and npx: the requirements, the exact
         // commands and the consent shown; Cancel writes nothing. No network, no agent.

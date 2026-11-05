@@ -136,7 +136,9 @@ The maintainer, reviewing the chat's code blocks (a header of C#, Copy, Insert a
 So:
 - `ShellHost.RunAgentAsync` serves every built-in question, the AI actions' too (Generate Tests now creates its file through the preview). Without tools it calls `AiChat.SendAsync(…, withoutTools: reason)`, whose turn carries an info notice; that prompt says it has no tools.
 - `AiChatViewModel.IsAgent`, `IAiChatHost.ApplyAiCodeAsync` and `CopyTextAsync`, and `ShellHost.ApplyAiCodeAsync` are removed. The **Agent** chip on turns is gone: every built-in turn is an agent's. Fix with AI keeps its own preview.
-- `AiCodeBlockView` has no header. A wrapped line's continuation starts at the block's edge: Avalonia's text layout ignores AvaloniaEdit's wrap indentation (`TODO(issue)`: a hanging indent). The fold limits the viewer's height to 20 screen lines, while its count is the block's source lines.
+- `AiCodeBlockView` has no header. Its surface is a new token, `Shell.CodeBlock.Background` (the old header's colors, a step off the panel in every theme): an independent review of the screenshots found the block invisible in Classic Dark on the editor's background (#1E1E1E on #1F1F1F), and `contrast-pairs.txt` now checks code and its label on it.
+- A wrapped line's continuation starts at the block's edge: Avalonia's text layout ignores AvaloniaEdit's wrap indentation (`TODO(issue)`: a hanging indent). A thin mark in a margin beside each continuation groups a source line instead. The same line breaking splits a long identifier at the narrowest pane, and leaves an empty first screen line when a line's indentation and first identifier are wider than the pane.
+- The fold limits the viewer's height to 20 screen lines and fades its last ones out; its count is the block's source lines.
 
 ## Consequences
 
