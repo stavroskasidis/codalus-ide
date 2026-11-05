@@ -2,6 +2,12 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.13.0
+
+- **Start shows Stop from the click** ([user guide](docs/user-guide/build-and-run.md#running)): after F5 or Ctrl+F5, Stop appeared only once the program ran, so a long build couldn't be cancelled from the toolbar, and only the status bar said it had begun. Now the toolbar shows what the Start is doing ("Building Hello…", "Starting Hello…") over a running bar in the Start buttons' place, with Stop beside it; Stop (`Shift+F5`) cancels the build, and the program doesn't start.
+- **Git Changes opens a file at its first change** ([user guide](docs/user-guide/git.md#the-git-changes-window)): with Open File as Default Action, a double-click opened the file at its top, where the change could be off screen. It now opens at the first line that differs from the staged version (from the last commit for a staged file), in view. Every jump to a line far down a file (Go to Definition, a search result) lands on screen too: the editor's first scroll used estimated line heights, and lines with CodeLens rows above them are taller, so it fell a few lines short.
+- **Notifications stay up longer** ([user guide](docs/user-guide/settings.md#the-window)): an informational toast hides after 15 seconds instead of 8, not while the pointer is over it, and not at all once you click in it. A toast with buttons waits for your choice.
+
 ## 0.12.0
 
 - **Every open document is a click away, and the tabs have the classic IDE's options** ([user guide](docs/user-guide/solutions.md#solution-explorer)): tabs that don't fit in a group left out the last ones, which only the Window menu and `Ctrl+Tab` reached. A **…** beside the tabs now lists every document of the group by name, the active one in bold, to open or close; and a gear beside it places the tabs on the top, left or right, colors them by project or by file extension, and shows them in multiple rows, which scrolling down over the tabs turns on (and up, off). Coloring by project is now **Color Document Tabs By** (`workbench.editor.colorTabsBy`); the old `workbench.editor.colorTabsByProject` still works while that isn't set.

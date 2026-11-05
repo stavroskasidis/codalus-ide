@@ -201,11 +201,11 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 5,
             },
-            SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "8", SettingType.Integer, shell) with
+            SettingDescriptor.Create("workbench.notifications.autoHideSeconds", "15", SettingType.Integer, shell) with
             {
                 Title = "Auto-Hide Informational Toasts",
                 Category = "Notifications",
-                Description = "Seconds after which informational toasts hide (they stay in the Notifications window). 0 keeps them until dismissed.",
+                Description = "Seconds after which informational toasts hide (they stay in the Notifications window); not while the pointer is over one, nor once you click in it. 0 keeps them until dismissed.",
                 Minimum = 0,
                 Maximum = 120,
                 Scope = SettingScope.User,

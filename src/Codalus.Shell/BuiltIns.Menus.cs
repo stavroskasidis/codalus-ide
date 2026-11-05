@@ -328,7 +328,7 @@ internal static partial class BuiltIns
             Item(Debug, "debug.stop", "2-session", when: "debugActive"),
             Item(Debug, "debug.detachAll", "2-session", when: "debugActive"),
             Item(Debug, "debug.restart", "2-session", when: "debugActive"),
-            Item(Debug, "run.stop", "2-session", when: "programRunning"),
+            Item(Debug, "run.stop", "2-session", when: "programRunning || programStarting"),
             Item(Debug, "debug.attach", "3-attach"),
             Item(Debug, "debug.reattach", "3-attach"),
             Sub(Debug, DebugTargetsMenu, "Other Debug Targets", "3-attach"),
