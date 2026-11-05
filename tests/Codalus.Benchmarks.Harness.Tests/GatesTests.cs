@@ -147,6 +147,28 @@ public class GatesTests
     }
 
     [Fact]
+    public void The_reference_applications_install_size_is_reported_but_never_fails()
+    {
+        // The 0.12.0 release run (41937217669) failed on VS Code's install_mb: 1044.6 MB over its 1032.5 MB limit.
+        var baseline = Result("vscode", "binary-size", 1, "CPU", "1", ("install_mb", [983.3]));
+        var finding = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("vscode", "binary-size", 2, "CPU", null, ("install_mb", [1044.6]))], [baseline]));
+        Assert.False(finding.Failed);
+        Assert.True(finding.Warning);
+        Assert.EndsWith("; the reference application: never fails", finding.Rule, StringComparison.Ordinal);
+
+        var accepted = Assert.Single(Gates.Compare(
+            new RegressionPolicy(),
+            [Result("vscode", "binary-size", 2, "CPU", null, ("install_mb", [1044.6]))],
+            [],
+            [new AcceptedValue("linux", "vscode", "binary-size", "install_mb", 983.3, s_epoch, "test")]));
+        Assert.False(accepted.Failed);
+        Assert.True(accepted.Warning);
+
+        // The shell's own size still fails.
+        Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", 2, ("shell_mb", [421.4]))], [Result("binary-size", 1, ("shell_mb", [401.0]))])).Failed);
+    }
+
+    [Fact]
     public void P99_is_only_compared_with_enough_samples()
     {
         var few = Enumerable.Repeat(10.0, 5).Append(100).ToArray();
