@@ -214,9 +214,15 @@ public sealed class IdeToolsTests : IDisposable
                 Assert.Contains("Started late", await attached.GetPageAsync(null, ct), StringComparison.Ordinal);
                 await serving;
 
-                // Nothing ever listens: the error says what the browser said, after the wait.
+                // Nothing ever listens: the error says what the browser said, after the wait. A port nothing has listened
+                // on, not the stopped server's: the browser's kept-alive connection to it can still get an empty answer
+                // after HttpListener.Stop, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally).
                 server.Stop();
-                var refused = await Assert.ThrowsAsync<IdeToolException>(() => attached.NavigateAsync(url, ct, retryFor: TimeSpan.FromSeconds(1)));
+                using var never = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                never.Start();
+                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndpoint).Port}/";
+                never.Stop();
+                var refused = await Assert.ThrowsAsync<IdeToolException>(() => attached.NavigateAsync(nothing, ct, retryFor: TimeSpan.FromSeconds(1)));
                 Assert.Contains("ERR_CONNECTION_REFUSED", refused.Message, StringComparison.Ordinal);
             }
 
