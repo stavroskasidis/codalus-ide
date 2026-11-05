@@ -2,7 +2,7 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
-## 0.12.0
+## 0.13.0
 
 - **Agents use the IDE, not grep** ([ADR 0092](docs/adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md), [user guide](docs/user-guide/ai.md#the-ides-tools)): every agent (agent mode, an external agent over ACP, and agents outside the IDE through `codalus mcp`) had five tools: the solution, the open files, the Error List, the build output and a build. They now get the IDE's own:
   - finding symbols through Code Search's index, and following code through the compiler: definitions, references, implementations, callers and type hierarchies;
@@ -15,6 +15,9 @@ Hand-written notes for each release. The release pages add the list of changes, 
 - **@-mentions replace the context chips**: only your question goes, plus what it mentions (`@selection`, `@file`, `@errors`, `@build`, `@solution`, or any file of the workspace).
 - **Queued questions, pasted images and the changes of an answer**: a question sent while an answer runs waits in a queue. A pasted or dropped screenshot goes to an agent that takes images. Under an answer that changed files, each one has **Diff** and **Revert**.
 - **Fixed: a token an agent's command contained showed in AI Chat.** An external agent's tool titles and input are now redacted before they show. The redaction also knows Azure DevOps personal access tokens, `$pat = "…"` and `Authorization` values.
+
+## 0.12.0
+
 - **Every open document is a click away, and the tabs have the classic IDE's options** ([user guide](docs/user-guide/solutions.md#solution-explorer)): tabs that don't fit in a group left out the last ones, which only the Window menu and `Ctrl+Tab` reached. A **…** beside the tabs now lists every document of the group by name, the active one in bold, to open or close; and a gear beside it places the tabs on the top, left or right, colors them by project or by file extension, and shows them in multiple rows, which scrolling down over the tabs turns on (and up, off). Coloring by project is now **Color Document Tabs By** (`workbench.editor.colorTabsBy`); the old `workbench.editor.colorTabsByProject` still works while that isn't set.
 - **Pages open among the documents, and narrow lists on the right** ([ADR 0091](docs/adr/0091-default-tool-window-locations.md)): the Plugins page, Components, Aspire Resources and Benchmarks open as tabs among the documents, and the HTTP Response in a group beside its `.http` file ([user guide](docs/user-guide/web.md#http-files)); Notifications, Worktrees, the Task Runner Explorer and .NET Counters open on the right. All of them used to open in the bottom group. The Plugins window and the Plugin Gallery are now one **Plugins** page, with an **Installed** tab and a **Browse** tab ([user guide](docs/user-guide/settings.md#plugins)). A saved layout keeps everything but the moved windows, which open in their new places when next shown. In a narrow group the HTTP Response puts its history under the response and its time and size under the status, instead of drawing its toolbar over them.
 - **Markdown views render GitHub's tables, task lists and more** ([user guide](docs/user-guide/editing.md#other-languages)): a table showed as one paragraph of pipes. Tables now render with their columns sized to their content and aligned as written, and so do task lists, strikethrough, setext headings, quotes of several lines, hard line breaks, bare addresses and link titles; images show as links, HTML comments are hidden, and headings are bold. Every view that renders Markdown gets them.

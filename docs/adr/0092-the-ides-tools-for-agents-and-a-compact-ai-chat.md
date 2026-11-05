@@ -1,6 +1,6 @@
 # 0092. The IDE's tools for agents, and a compact AI Chat
 
-- **Status:** accepted (0.12, 2026-11-04)
+- **Status:** accepted (0.13, 2026-11-04)
 - **Date:** 2026-11-04
 - **Deciders:** maintainer (the grilling of 2026-11-04, below)
 - **Amends:** [ADR 0063](0063-agent-mode-safety-model.md) (more tools, `ai.agent.ideActions`, `codalus mcp` lists the running IDE's tools), [ADR 0079](0079-external-agents-over-the-agent-client-protocol.md) (images in prompts, tool titles redacted, `codalus mcp`'s tools), [ADR 0062](0062-ai-provider-api-and-data-boundaries.md) (AI Chat sends only what a question @-mentions)

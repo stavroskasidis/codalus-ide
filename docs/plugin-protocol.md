@@ -139,7 +139,7 @@ A message is `{role: system\|user\|assistant\|tool, content, toolCalls?: [{id, n
 
 ### AI tools
 
-Proposed (Codalus IDE 0.12), [ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md); messages in `AiToolMessages.cs`. A tool is declared in the manifest (`contributes.aiTools: [{name, description, inputSchema?}]`) and registered when its plugin activates (`onAiTool:<name>`, implicit), which the shell does at the tool's first call, after the user allowed it. `$/cancelRequest` cancels a call (the agent's turn stopped).
+Proposed (Codalus IDE 0.13), [ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md); messages in `AiToolMessages.cs`. A tool is declared in the manifest (`contributes.aiTools: [{name, description, inputSchema?}]`) and registered when its plugin activates (`onAiTool:<name>`, implicit), which the shell does at the tool's first call, after the user allowed it. `$/cancelRequest` cancels a call (the agent's turn stopped).
 
 | Method | Direction | Kind | Params → Result |
 |---|---|---|---|
