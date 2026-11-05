@@ -159,6 +159,7 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   2.2 MB since 0.11.0's 419.2, which was already 4.5 % over the same median: the median of 10 releases trails a size
   that grows a little every release. The shipped Linux shell outside the helpers grew 1 MB (240.7 MB in 0.11.0's
   package, 241.7 MB in the 0.12.0 nightly's): the benchmarks job publishes without the packages'
-  `-p:DebugType=none`, so on Linux and macOS `shell_mb` likely counts Native AOT's debug symbols too (being checked).
+  `-p:DebugType=none`, so `shell_mb` counts Native AOT's debug symbols too: a linux-x64 publish of the release commit
+  as that job makes it measures 421.4 MB, CI's number, of which `codalus.dbg` is 188.7 MB (macOS keeps a `.dSYM`).
   Accepting a size is the maintainer's decision (`benchmarks/accepted.json`).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
