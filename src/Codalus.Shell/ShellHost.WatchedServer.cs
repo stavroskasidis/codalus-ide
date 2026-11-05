@@ -28,6 +28,10 @@ public sealed partial class ShellHost
     internal const string StaleServerBreakpoint = "The server runs the code it started with until a restart (Ctrl+Shift+F5); the page still stops here.";
 
     private WatchedServerSession? _watchedServer;
+    private string? _watchedServerWait;
+
+    /// <summary>What the wait for the server under <c>dotnet watch</c> saw last (<see cref="WatchedApp.Observed"/>), for a failure's report; null before one.</summary>
+    internal string? WatchedServerWait => Volatile.Read(ref _watchedServerWait);
     private RunningProgram? _watchedProgram;
 
     /// <summary>The Blazor Web App server debugged under <c>dotnet watch</c>, while one is (tests).</summary>
@@ -284,10 +288,13 @@ public sealed partial class ShellHost
             watch.Exited,
             watch.ProcessId,
             WatchedServer.AppNameOf(plan),
-            Uri.TryCreate(page.Url, UriKind.Absolute, out var address) ? address : null);
+            Uri.TryCreate(page.Url, UriKind.Absolute, out var address) ? address : null)
+        {
+            Observed = seen => Volatile.Write(ref shell._watchedServerWait, seen),
+        };
 
-        public Task<int?> WaitForAppAsync(int? previousPid, CancellationToken cancellationToken) =>
-            WatchedServer.WaitForAppAsync(App, previousPid, s_watchedStartTimeout, cancellationToken);
+        public Task<int?> WaitForAppAsync(int? previousPid, int listeningBefore, CancellationToken cancellationToken) =>
+            WatchedServer.WaitForAppAsync(App, previousPid, listeningBefore, s_watchedStartTimeout, cancellationToken);
 
         public async Task<bool> AttachAsync(int processId, CancellationToken cancellationToken)
         {

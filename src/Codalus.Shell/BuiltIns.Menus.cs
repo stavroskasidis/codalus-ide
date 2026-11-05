@@ -453,11 +453,11 @@ internal static partial class BuiltIns
             Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),
             Item(Help, "help.openCrashReports", "help"),
-            Item(Help, "help.about", "help"),
             Item(Help, "help.reportProblem", "help-feedback"), // M51: after the help group, before the updates
             Item(Help, "help.suggestFeature", "help-feedback"),
             Item(Help, "update.check", "updates"),
             Item(Help, "update.whatsNew", "updates"),
+            Item(Help, "help.about", "z-about"), // last, in a group of its own, as in most apps
         ]);
     }
 

@@ -71,6 +71,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
 
     private static string Diagnostics(ShellFixture f) =>
         $"Debugger: {f.Shell.Debugger.State}; dotnet watch's session: {f.Shell.WatchedServerDebugSession?.State.ToString() ?? "none"}"
+        // Why a follow never found the next server (Windows CI, run 41939076255: it served, and no attach was tried).
+        + $"; the wait for the server saw: {f.Shell.WatchedServerWait ?? "nothing"}"
         + (f.Shell.DebugEdits.Browser?.Server is { } pages ? $"; pages open: {pages.Pages}, connections: {pages.Connections}" : string.Empty)
         // What the status bar says of the last edit: the page's edit was never applied on macOS CI (run 41621106416; TODO(issue):
         // what the browser refresh server sent and got back for each edit).

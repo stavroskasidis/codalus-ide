@@ -1,5 +1,9 @@
 # Troubleshooting, logs and crash reports
 
+## Which version you have
+
+**Help → About Codalus IDE**, the Help menu's last entry (on macOS also the first entry of the **Codalus IDE** menu), opens a window with the version and what Codalus IDE runs on: the .NET runtime, the operating system and its architecture. **Copy Info** puts them on the clipboard, for a bug report or a question; the links open the website, the source code, the license and the third-party notices. **OK**, `Enter` or `Esc` closes it. From a terminal, `codalus --version` prints the same.
+
 ## Output channels
 
 View → Output (`Ctrl+Shift+U`) has a channel per component:
