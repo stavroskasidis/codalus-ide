@@ -17,6 +17,7 @@
     <ProjectReference Include="..\Codalus.AcpAgent.Fake\Codalus.AcpAgent.Fake.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\TodoBoard\TodoBoard.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\samples\plugins\HelloWorld\HelloWorld.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\samples\plugins\WordCount\WordCount.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\src\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" ReferenceOutputAssembly="false" />

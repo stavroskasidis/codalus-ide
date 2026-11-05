@@ -265,7 +265,7 @@ Colors (every theme; the values are in [`design/controls.md`](design/controls.md
 | `Shell.Badge`, `.Foreground` | Count badges, neutral chips |
 | `Shell.Status.Success`, `.Error`, `.Warning`, `.Info` (each with `.Foreground`) | Chips |
 | `Shell.Dialog.Footer`, `Shell.Dialog.Scrim` | A dialog's button row; the window behind it |
-| `Shell.Chat.User`, `.Foreground`; `Shell.CodeBlock.Header` | AI Chat's own messages; a code block's header row |
+| `Shell.Chat.User`, `.Foreground`; `Shell.CodeBlock.Background` | AI Chat's own messages; a code block's surface, a step off the panel in every theme (ADR 0092) |
 
 Sizes and shapes:
 

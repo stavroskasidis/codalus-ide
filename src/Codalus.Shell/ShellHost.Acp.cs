@@ -318,7 +318,16 @@ public sealed partial class ShellHost
             var pipe = McpBridge.SessionPipeName(SingleInstance.PipeName(shell.Paths.State), token);
 
             // Open for this session only, whatever ai.mcpServer.enabled says (ADR 0079), for the current user only.
-            var bridge = McpBridge.Listen(pipe, (tool, args, ct) => Ui.RunAsync(() => shell.McpToolAsync(tool, args, ct, agent)).Unwrap());
+            var bridge = McpBridge.Listen(pipe, (tool, args, ct) => Ui.RunAsync(() =>
+            {
+                // An external agent's session pipe (M48, ADR 0079): only while it may run.
+                if (shell.ExternalAgents.WhyNot() is { } reason)
+                {
+                    throw new McpException(reason);
+                }
+
+                return shell.IdeToolAsync(tool, args, agent, ct);
+            }).Unwrap());
             Interlocked.Increment(ref shell._agentPipes);
             var (path, assembly) = shell.McpExecutable;
             var server = AcpAgents.CodalusMcpServer(path, assembly, shell.Options.UserDataDir, token);

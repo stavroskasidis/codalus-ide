@@ -21,6 +21,7 @@ internal sealed class ProposedHost : IDisposable
         Tests = new HostTestRegistry(server);
         Hosting = new HostHostingRegistry(server);
         LanguageModels = new HostLanguageModelRegistry(server);
+        AiTools = new HostAiToolRegistry(server);
     }
 
     public HostTestRegistry Tests { get; }
@@ -28,6 +29,8 @@ internal sealed class ProposedHost : IDisposable
     public HostHostingRegistry Hosting { get; }
 
     public HostLanguageModelRegistry LanguageModels { get; }
+
+    public HostAiToolRegistry AiTools { get; }
 
     internal PluginHostServer Server => _server;
 
@@ -43,6 +46,7 @@ internal sealed class ProposedHost : IDisposable
         var connection = _server.Connection;
         Hosting.RegisterHandlers(connection);
         LanguageModels.RegisterHandlers(connection);
+        AiTools.RegisterHandlers(connection);
         connection.OnRequest(ProposedMethods.TestsRun, json.TestRunParams, json.TestRunResultDto, async (p, ct) =>
             new TestRunResultDto([.. await Tests.RunAsync(p, ct).ConfigureAwait(false)]));
         connection.OnRequest(ProposedMethods.TestsRefresh, json.TestControllerIdParams, json.EmptyResult, async (p, ct) =>
@@ -291,6 +295,10 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
 
     private PluginLanguageModels? _languageModels;
 
+    public IAiTools AiTools => _aiTools ??= new PluginAiTools(_host.AiTools, _pluginId);
+
+    private PluginAiTools? _aiTools;
+
     private HostSecrets? _secrets;
     private readonly List<IDisposable> _providers = [];
 
@@ -442,6 +450,7 @@ internal sealed class PluginProposedApi : IProposedApi, ITests, IWorkspace, IBui
         _host.DocumentsChanged -= OnDocumentsChanged;
         _host.BuildFinished -= OnBuildFinished;
         _languageModels?.Dispose();
+        _aiTools?.Dispose();
         List<HostTestController> controllers;
         lock (_controllers)
         {
