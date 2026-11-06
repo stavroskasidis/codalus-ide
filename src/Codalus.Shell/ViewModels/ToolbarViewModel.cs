@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Codalus.Shell.Infrastructure;
-using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -39,7 +38,6 @@ public sealed class ToolbarViewModel : ObservableObject
     private string? _deviceLabel;
     private bool _hasSolution;
     private string? _solutionName;
-    private string? _documentName;
     private bool _isDebugging;
     private bool _isStopped;
     private bool _isRunning;
@@ -124,45 +122,8 @@ public sealed class ToolbarViewModel : ObservableObject
     public string? SolutionName
     {
         get => _solutionName;
-        private set
-        {
-            if (SetField(ref _solutionName, value))
-            {
-                OnPropertyChanged(nameof(WindowTitle));
-            }
-        }
+        private set => SetField(ref _solutionName, value);
     }
-
-    /// <summary>
-    /// The active document's name ("Program.cs"), shown in the window's title after the solution's; null: none is open.
-    /// </summary>
-    public string? DocumentName
-    {
-        get => _documentName;
-        private set
-        {
-            if (SetField(ref _documentName, value))
-            {
-                OnPropertyChanged(nameof(WindowTitle));
-            }
-        }
-    }
-
-    /// <summary>
-    /// The main window's title, which the taskbar, Alt+Tab and the window list show: the open solution's name first,
-    /// so windows with different solutions tell apart, then the active document's ("Shop - Program.cs - Codalus IDE");
-    /// the product name alone when neither is open.
-    /// </summary>
-    public string WindowTitle => (_solutionName, _documentName) switch
-    {
-        ({ Length: > 0 } solution, { Length: > 0 } document) => Localizer.Format("main.windowTitleWithSolutionAndDocument", "{0} - {1} - Codalus IDE", solution, document),
-        ({ Length: > 0 } solution, _) => Localizer.Format("main.windowTitleWithName", "{0} - Codalus IDE", solution),
-        (_, { Length: > 0 } document) => Localizer.Format("main.windowTitleWithName", "{0} - Codalus IDE", document),
-        _ => Localizer.Get("main.codalusStudio", "Codalus IDE"),
-    };
-
-    /// <summary>The active document's name for the window's title, or null when no document is open.</summary>
-    public void SetDocument(string? name) => DocumentName = name;
 
     public string? Configuration
     {

@@ -14,6 +14,9 @@ public sealed partial class ShellHost
 
     public ToolbarViewModel Toolbar { get; private set; } = null!;
 
+    /// <summary>The main window's title: the solution's and the active document's names.</summary>
+    public WindowTitleViewModel WindowTitle { get; } = new();
+
     private void InitializeToolbar()
     {
         Toolbar = new ToolbarViewModel(
@@ -66,14 +69,14 @@ public sealed partial class ShellHost
             _titleDocument.PropertyChanged += OnTitleDocumentChanged;
         }
 
-        Toolbar?.SetDocument(TitleName(_titleDocument));
+        WindowTitle.SetDocument(TitleName(_titleDocument));
     }
 
     private void OnTitleDocumentChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ShellDocument.Title) && sender == _titleDocument)
         {
-            Toolbar?.SetDocument(TitleName(_titleDocument));
+            WindowTitle.SetDocument(TitleName(_titleDocument));
         }
     }
 
@@ -92,6 +95,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        WindowTitle.SetSolution(Solutions?.Solution?.Name);
         if (Solutions?.Solution is not { } solution)
         {
             Toolbar.SetSolution(null, null);
