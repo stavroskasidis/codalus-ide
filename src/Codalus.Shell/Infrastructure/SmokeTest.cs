@@ -700,7 +700,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
-        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code shown as a wrapped block without actions, and a step of the agent it always is", AiChatStepAsync).ConfigureAwait(true);
 
         // #79, D43: Connect to Claude… from AI Chat's off state, with stand-in node and npx: the requirements, the exact
         // commands and the consent shown; Cancel writes nothing. No network, no agent.
@@ -4144,43 +4144,32 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             shell.ShowAiChat();
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
-            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            // Only what the question @-mentions goes with it (ADR 0092).
+            shell.AiChat.Input = "What does this do? Can it be shorter? @selection";
             await shell.AiChat.SendAsync().ConfigureAwait(true);
             var turns = shell.AiChat.Chat.Turns;
             var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
             await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
             Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
             Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
-            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            // The code block (ADR 0092): the code alone, wrapped, with its language in the corner and no actions.
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiCodeBlockView>().Any(b => b.HeaderText == "C#" && b.WrapsLines), "the answer's code shows as a wrapped C# block").ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("ai-chat.png");
-
-            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
-            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
-            shell.Dialogs.Accept();
-            await applying.ConfigureAwait(true);
-            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
 
-            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            // In the trusted solution (projects.open) the assistant uses its tools (it is always an agent, ADR 0092): a step that read a file.
             if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
             {
-                shell.AiChat.IsAgent = true;
                 shell.AiChat.Input = AgentQuestion;
-                try
-                {
-                    await shell.AiChat.SendAsync().ConfigureAwait(true);
-                }
-                finally
-                {
-                    shell.AiChat.IsAgent = false;
-                }
+                await shell.AiChat.SendAsync().ConfigureAwait(true);
 
                 var agentTurn = shell.AiChat.Chat.Turns[^1];
                 await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
                 Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
-                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                // Compact (the default, ADR 0092): the agent's steps fold into one line.
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatTurnView>().Any(v => v.Turn == agentTurn && v.StepsSummary == "Read 1 file" && !v.StepsShown), "AI Chat folds the agent's step into one line").ConfigureAwait(true);
                 await RenderedAsync().ConfigureAwait(true);
                 Screenshot("ai-chat-agent.png");
             }

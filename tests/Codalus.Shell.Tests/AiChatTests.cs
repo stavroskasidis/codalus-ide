@@ -67,10 +67,8 @@ public sealed class AiChatTests
 
         var view = await ShowChatAsync(f);
         var chat = f.Shell.AiChat;
-        chat.IncludeCurrentFile = false;
-        chat.IncludeSolution = false;
-        Assert.True(chat.ContextPreview.Contains("Calc.cs", StringComparison.Ordinal), $"preview: '{chat.ContextPreview}', active: {f.Shell.ActiveEditor?.Model.Path}, selection: {editor.Editor.SelectionLength}, state: {f.Shell.Ai.State}");
-        chat.Input = "Make it shorter";
+        // Only what the question @-mentions goes with it (ADR 0092).
+        chat.Input = "Make it shorter @selection";
         await chat.SendAsync();
         var turn = Assert.Single(chat.Chat.Turns);
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
@@ -82,35 +80,24 @@ public sealed class AiChatTests
         {
             var question = body.RootElement.GetProperty("messages").EnumerateArray().Last().GetProperty("content").GetString()!;
             Assert.Contains("return a + b;", question, StringComparison.Ordinal);
-            Assert.EndsWith("Make it shorter", question, StringComparison.Ordinal);
+            Assert.EndsWith("Make it shorter @selection", question, StringComparison.Ordinal);
         }
 
-        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Apply the code after a preview"));
+        // No folder is open, so the assistant (always an agent, ADR 0092) answered without tools, and the turn says why.
+        Assert.Contains(turn.Notices, n => n.Text.StartsWith("Answered without tools: no folder is open", StringComparison.Ordinal));
+        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<AiCodeBlockView>().Any(b => b.HeaderText == "C#"));
         await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai" && i.Item.Text.Contains("OpenAI-compatible", StringComparison.Ordinal)));
 
-        // M34h: at a tool window's narrowest (280 px) the code block's Copy, Insert at Cursor and Apply… wrap onto
-        // another line instead of running off the pane (the gallery showed Apply… cut off).
+        // At a tool window's narrowest (280 px) the code wraps inside the pane instead of running off it.
         var narrow = new Window { Width = 280, Height = 640, Content = new AiChatView { DataContext = chat } };
         narrow.Show();
-        await ShellFixture.PumpUntil(() => narrow.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetName(b) == "Apply the code after a preview" && b.Bounds.Width > 0));
+        await ShellFixture.PumpUntil(() => narrow.GetVisualDescendants().OfType<AiCodeBlockView>().Any(b => b.Bounds.Width > 0));
         ShellFixture.Pump();
-        foreach (var name in new[] { "Copy the code", "Insert the code at the cursor", "Apply the code after a preview" })
-        {
-            var button = narrow.GetVisualDescendants().OfType<Button>().Single(b => AutomationProperties.GetName(b) == name);
-            var right = button.TranslatePoint(new Point(button.Bounds.Width, 0), narrow)!.Value.X;
-            Assert.True(right <= narrow.Bounds.Width - 8, $"'{name}' ends at {right:0} px, past the 280 px pane");
-        }
-
+        var block = narrow.GetVisualDescendants().OfType<AiCodeBlockView>().Single();
+        var right = block.TranslatePoint(new Point(block.Bounds.Width, 0), narrow)!.Value.X;
+        Assert.True(right <= narrow.Bounds.Width, $"the block ends at {right:0} px, past the 280 px pane");
+        Assert.True(block.WrapsLines);
         narrow.Close();
-
-        // Apply replaces the selection after the preview, as one undoable change.
-        var block = Assert.Single(AiCodeBlocks.Parse(turn.Answer));
-        var applying = chat.ApplyAsync(turn, block);
-        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.HasDetails);
-        Assert.Contains(f.Shell.Dialogs.Details, l => l.Text.Contains("static int Add(int a, int b) => a + b;", StringComparison.Ordinal));
-        f.Shell.Dialogs.Accept();
-        await applying;
-        Assert.Equal("class Calc\n{\n    static int Add(int a, int b) => a + b;\n}\n", editor.Model.Text.Text);
 
         // The request log names what was sent, not what it said.
         var log = f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText();

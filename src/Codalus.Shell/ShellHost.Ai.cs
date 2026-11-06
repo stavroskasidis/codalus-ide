@@ -45,9 +45,11 @@ public sealed partial class ShellHost : IAiChatHost
     {
         Workbench.Settings.Register(AiSettings.Descriptors(ContributionSource.Shell));
         LanguageModels = new LanguageModelService(Plugins);
+        PluginAiTools = new Codalus.Workbench.Ai.Ide.PluginAiTools(Plugins);
         Ai = new AiService(Workbench.Settings, LanguageModels, Workbench.Output, () => Solutions.Solution?.Directory, () => Solutions.Solution?.Trusted ?? true);
         InitializeExternalAgents();
         AiChat = new AiChatViewModel(this);
+        InitializeAiChatChanges();
         AiCompletions = new AiCompletions(Ai, Workbench.Settings);
         AiNextEdit = new AiNextEdit(Ai, Workbench.Settings);
         Ai.Changed += (_, _) => Ui.Post(UpdateAiStatus);
@@ -386,129 +388,47 @@ public sealed partial class ShellHost : IAiChatHost
             items.Add(new AiContextItem(AiContextKind.Solution, Path.GetFileName(solution.Path), sb.ToString()));
         }
 
-        return (items, anchor);
-    }
-
-    // ------------------------------------------------------------------ applying code
-
-    public async Task ApplyAiCodeAsync(AiChatTurn turn, AiCodeBlock block, bool insertOnly)
-    {
-        var anchor = turn.Tag as AiSelectionAnchor;
-
-        // The file: the one the block names (open, or in the solution's folder), else the selection's, else the active one.
-        CodeDocument? model = null;
-        string? path = null;
-        if (!insertOnly && block.Path is { Length: > 0 } named)
+        // Files the question @-mentions (ADR 0092): as the editor has them, else from the disk; only inside the workspace.
+        foreach (var mentioned in choice.Files)
         {
-            model = _models.Values.FirstOrDefault(m => AiCodeBlocks.NamesFile(named, m.Path));
-            path = model?.Path ?? ResolveNamedFile(named);
-        }
-
-        if (path is null && anchor is not null && _models.TryGetValue(anchor.Path, out var anchored) && !insertOnly)
-        {
-            model = anchored;
-            path = anchored.Path;
-        }
-
-        if (path is null && ActiveEditor?.Model is { } activeModel)
-        {
-            model = activeModel;
-            path = activeModel.Path;
-        }
-
-        if (path is null)
-        {
-            ShowMessage(Localizer.Get("msg.ai.openAFileFirst", "Open the file the code goes into first."));
-            return;
-        }
-
-        var text = model?.Text.Text ?? (File.Exists(path) ? (await TextFiles.ReadAsync(path, CancellationToken.None).ConfigureAwait(true)).Text : string.Empty);
-        var code = block.Code;
-        int start, length;
-        var kind = insertOnly ? AiApplyKind.Insert : AiCodeBlocks.Plan(block, text, path, anchor is not null && SolutionPaths.Comparer.Equals(anchor.Path, path));
-        switch (kind)
-        {
-            case AiApplyKind.ReplaceFile:
-                (start, length) = (0, text.Length);
-                break;
-            case AiApplyKind.ReplaceSelection when FindAnchor(text, anchor!) is { } found:
-                (start, length) = (found, anchor!.Text.Length);
-
-                // The selection's own line ending stays as it was, and its indentation is the code's.
-                if (!anchor.Text.EndsWith('\n'))
-                {
-                    code = code.TrimEnd('\n', '\r');
-                }
-
-                code = AiCodeBlocks.IndentLike(code, anchor.Text);
-
-                break;
-            default:
-                start = model is not null && ReferenceEquals(ActiveEditor?.Model, model) && ActiveEditor?.Controller?.Editor is { } caretEditor ? caretEditor.CaretOffset : text.Length;
-                length = 0;
-                kind = AiApplyKind.Insert;
-                break;
-        }
-
-        if (text.Contains("\r\n", StringComparison.Ordinal))
-        {
-            code = code.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal);
-        }
-
-        var range = new Codalus.LanguageServices.Protocol.Range(PositionIn(text, start), PositionIn(text, start + length));
-        var edit = new WorkspaceEdit([new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(path), model?.Version), [new TextEdit(range, code)])]);
-        if (kind == AiApplyKind.Insert && insertOnly)
-        {
-            await ApplyWorkspaceEditAsync(edit).ConfigureAwait(true);
-            return;
-        }
-
-        var title = kind switch
-        {
-            AiApplyKind.ReplaceFile => Localizer.Format("msg.ai.replaceFile", "Replace {0} with the code?", Path.GetFileName(path)),
-            AiApplyKind.ReplaceSelection => Localizer.Get("msg.ai.replaceSelection", "Replace the selection with the code?"),
-            _ => Localizer.Format("msg.ai.insertCode", "Insert the code into {0}?", Path.GetFileName(path)),
-        };
-        await PreviewAndApplyAsync(title, edit).ConfigureAwait(true);
-    }
-
-    /// <summary>A block's <c>path=</c> under the solution's folder, when that file exists or the folder does.</summary>
-    private string? ResolveNamedFile(string named)
-    {
-        if (Solutions.Solution?.Directory is not { } root || Path.IsPathRooted(named))
-        {
-            return null;
-        }
-
-        var full = Path.GetFullPath(Path.Combine(root, named.Replace('/', Path.DirectorySeparatorChar)));
-        return Codalus.Workbench.FileSystem.FileSystems.IsUnder(full, root) && (File.Exists(full) || Directory.Exists(Path.GetDirectoryName(full))) ? full : null;
-    }
-
-    /// <summary>Where the selection's text is now: at its old offset, else the nearest occurrence; null when it's gone.</summary>
-    private static int? FindAnchor(string text, AiSelectionAnchor anchor)
-    {
-        if (anchor.Text.Length == 0)
-        {
-            return null;
-        }
-
-        if (anchor.Offset + anchor.Text.Length <= text.Length && string.CompareOrdinal(text, anchor.Offset, anchor.Text, 0, anchor.Text.Length) == 0)
-        {
-            return anchor.Offset;
-        }
-
-        int? best = null;
-        for (var i = text.IndexOf(anchor.Text, StringComparison.Ordinal); i >= 0; i = text.IndexOf(anchor.Text, i + 1, StringComparison.Ordinal))
-        {
-            if (best is null || Math.Abs(i - anchor.Offset) < Math.Abs(best.Value - anchor.Offset))
+            if (Solutions.Solution?.Directory is not { } root)
             {
-                best = i;
+                break;
+            }
+
+            string path;
+            try
+            {
+                path = WorkspacePath(mentioned, root);
+            }
+            catch (Codalus.Workbench.Ai.Ide.IdeToolException)
+            {
+                continue;
+            }
+
+            var open = openModels.FirstOrDefault(m => SolutionPaths.Comparer.Equals(m.Path, path));
+            string? text = open?.Text.Text;
+            if (text is null && File.Exists(path) && new FileInfo(path).Length <= 1_000_000)
+            {
+                try
+                {
+                    text = File.ReadAllText(path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+
+            if (text is not null && !text.Contains('\0', StringComparison.Ordinal))
+            {
+                items.Add(new AiContextItem(AiContextKind.OpenFile, Path.GetFileName(path), text) { Path = path, Language = open?.LanguageId });
             }
         }
 
-        return best;
+        return (items, anchor);
     }
 
+    /// <summary>The line and column of <paramref name="offset"/> in <paramref name="text"/> (the agent's edits' previews).</summary>
     private static Position PositionIn(string text, int offset)
     {
         var line = 0;

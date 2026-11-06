@@ -30,6 +30,7 @@ internal sealed class UiStallMonitor : IDisposable
     private int _probes;
     private int _stalls;
     private double _stalled;
+    private long _firstSent;
 
     public UiStallMonitor()
     {
@@ -66,8 +67,16 @@ internal sealed class UiStallMonitor : IDisposable
         }
     }
 
+    /// <summary>
+    /// When the first probe since the last <see cref="Reset"/> was posted (a <see cref="Stopwatch"/> timestamp; 0 before
+    /// one). A wait the UI thread spent blocked that no probe measured says whether the monitor's own thread ran during
+    /// it (macOS CI, run 41968010181: a 600 ms block and one probe of 0 ms).
+    /// </summary>
+    internal long FirstSent => Interlocked.Read(ref _firstSent);
+
     public void Reset()
     {
+        Interlocked.Exchange(ref _firstSent, 0);
         lock (_gate)
         {
             _longest = 0;
@@ -96,6 +105,7 @@ internal sealed class UiStallMonitor : IDisposable
                 ran = Stopwatch.GetTimestamp();
                 answered.Set();
             }, DispatcherPriority.Input);
+            Interlocked.CompareExchange(ref _firstSent, sent, 0);
 
             jobs.Clear();
             steps.Clear();

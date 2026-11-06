@@ -28,6 +28,10 @@ public sealed partial class ShellHost
     internal const string StaleServerBreakpoint = "The server runs the code it started with until a restart (Ctrl+Shift+F5); the page still stops here.";
 
     private WatchedServerSession? _watchedServer;
+    private string? _watchedServerWait;
+
+    /// <summary>What the wait for the server under <c>dotnet watch</c> saw last (<see cref="WatchedApp.Observed"/>), for a failure's report; null before one.</summary>
+    internal string? WatchedServerWait => Volatile.Read(ref _watchedServerWait);
     private RunningProgram? _watchedProgram;
 
     /// <summary>The Blazor Web App server debugged under <c>dotnet watch</c>, while one is (tests).</summary>
@@ -172,6 +176,7 @@ public sealed partial class ShellHost
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException)
         {
+            _debugBrowserProfile = null; // the agent's browser tools open a browser of their own
             DebugLog.AppendLine("The page couldn't be debugged: " + ex.Message);
             Workbench.Notifications.Warning(Localizer.Format("msg.browserDebug.thePageCouldntBeDebuggedIn", "The page couldn't be debugged in {0}: {1} It opened without the debugger; the server is still debugged.", browser.Display, ex.Message));
             if (Uri.TryCreate(page.Url, UriKind.Absolute, out var uri))
@@ -284,10 +289,13 @@ public sealed partial class ShellHost
             watch.Exited,
             watch.ProcessId,
             WatchedServer.AppNameOf(plan),
-            Uri.TryCreate(page.Url, UriKind.Absolute, out var address) ? address : null);
+            Uri.TryCreate(page.Url, UriKind.Absolute, out var address) ? address : null)
+        {
+            Observed = seen => Volatile.Write(ref shell._watchedServerWait, seen),
+        };
 
-        public Task<int?> WaitForAppAsync(int? previousPid, CancellationToken cancellationToken) =>
-            WatchedServer.WaitForAppAsync(App, previousPid, s_watchedStartTimeout, cancellationToken);
+        public Task<int?> WaitForAppAsync(int? previousPid, int listeningBefore, CancellationToken cancellationToken) =>
+            WatchedServer.WaitForAppAsync(App, previousPid, listeningBefore, s_watchedStartTimeout, cancellationToken);
 
         public async Task<bool> AttachAsync(int processId, CancellationToken cancellationToken)
         {

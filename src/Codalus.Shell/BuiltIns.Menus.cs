@@ -328,7 +328,7 @@ internal static partial class BuiltIns
             Item(Debug, "debug.stop", "2-session", when: "debugActive"),
             Item(Debug, "debug.detachAll", "2-session", when: "debugActive"),
             Item(Debug, "debug.restart", "2-session", when: "debugActive"),
-            Item(Debug, "run.stop", "2-session", when: "programRunning"),
+            Item(Debug, "run.stop", "2-session", when: "programRunning || programStarting"),
             Item(Debug, "debug.attach", "3-attach"),
             Item(Debug, "debug.reattach", "3-attach"),
             Sub(Debug, DebugTargetsMenu, "Other Debug Targets", "3-attach"),
@@ -453,11 +453,11 @@ internal static partial class BuiltIns
             Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),
             Item(Help, "help.openCrashReports", "help"),
-            Item(Help, "help.about", "help"),
             Item(Help, "help.reportProblem", "help-feedback"), // M51: after the help group, before the updates
             Item(Help, "help.suggestFeature", "help-feedback"),
             Item(Help, "update.check", "updates"),
             Item(Help, "update.whatsNew", "updates"),
+            Item(Help, "help.about", "z-about"), // last, in a group of its own, as in most apps
         ]);
     }
 

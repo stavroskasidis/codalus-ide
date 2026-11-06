@@ -505,6 +505,22 @@ class Codalus.Plugins.ProjectOutput
   TargetFramework { get; init; } : System.String?
   TargetPath { get; init; } : System.String?
   ToString() -> System.String
+class Codalus.Plugins.Proposed.AiTool
+  InvokeAsync(System.Text.Json.JsonElement arguments, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<Codalus.Plugins.Proposed.AiToolResult>
+  Name { get; } : System.String
+class Codalus.Plugins.Proposed.AiToolException
+  .ctor()
+  .ctor(System.String message)
+  .ctor(System.String message, System.Exception innerException)
+class Codalus.Plugins.Proposed.AiToolResult
+  .ctor(System.String Text, System.Boolean IsError = False)
+  Deconstruct(out System.String Text, out System.Boolean IsError) -> System.Void
+  Equals(Codalus.Plugins.Proposed.AiToolResult? other) -> System.Boolean
+  Equals(System.Object? obj) -> System.Boolean
+  GetHashCode() -> System.Int32
+  IsError { get; init; } : System.Boolean
+  Text { get; init; } : System.String
+  ToString() -> System.String
 enum Codalus.Plugins.Proposed.ChatFinishReason
   Length = 1
   Refused = 3
@@ -579,9 +595,12 @@ class Codalus.Plugins.Proposed.ChatToolCall
   Id { get; init; } : System.String
   Name { get; init; } : System.String
   ToString() -> System.String
+interface Codalus.Plugins.Proposed.IAiTools
+  RegisterTool(Codalus.Plugins.Proposed.AiTool tool) -> System.IDisposable
 interface Codalus.Plugins.Proposed.ILanguageModels
   RegisterProvider(Codalus.Plugins.Proposed.LanguageModelProvider provider) -> System.IDisposable
 interface Codalus.Plugins.Proposed.IProposedApi
+  AiTools { get; } : Codalus.Plugins.Proposed.IAiTools
   LanguageModels { get; } : Codalus.Plugins.Proposed.ILanguageModels
 interface Codalus.Plugins.Proposed.IProposedApiProvider
   Proposed { get; } : Codalus.Plugins.Proposed.IProposedApi?

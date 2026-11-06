@@ -205,14 +205,48 @@ public sealed class AiStepItem : ObservableObject
             details.Add(Localizer.Get("msg.acp.output", "Output") + "\n" + output);
         }
 
+        // A long title (a script the agent runs) shows its first line; the whole of it opens with the details (ADR 0092).
+        var shown = McpTitle(step.Target);
+        var firstLine = shown.Split('\n', 2)[0].TrimEnd('\r');
+        if (firstLine.Length > 120 || firstLine.Length < shown.Length)
+        {
+            details.Insert(0, shown);
+            shown = (firstLine.Length > 120 ? firstLine[..120] : firstLine) + " …";
+        }
+
         var running = step.TerminalId is not null && status is AiStepStatus.Running or AiStepStatus.Pending && step.Output is { Length: > 0 };
-        return new AiStepItem(step.Kind ?? "other", step.Target, status)
+        return new AiStepItem(step.Kind ?? "other", shown, status)
         {
             Locations = [.. step.Locations.Select(l => new AiStepLocation(l.Path, l.Line))],
             Details = details.Count == 0 ? null : string.Join("\n\n", details),
             Open = open,
             IsExpanded = running,
         };
+    }
+
+    /// <summary>
+    /// An external agent's MCP call as a step shows it (ADR 0092): Claude's adapter titles one
+    /// <c>mcp__codalus__find_references Greeter.Greet</c>; the IDE's own tool shows as <c>find_references Greeter.Greet</c>,
+    /// another server's as <c>github: create_issue</c>. Other titles are as the agent wrote them.
+    /// </summary>
+    internal static string McpTitle(string title)
+    {
+        if (!title.StartsWith("mcp__", StringComparison.Ordinal))
+        {
+            return title;
+        }
+
+        var space = title.IndexOf(' ', StringComparison.Ordinal);
+        var name = space < 0 ? title : title[..space];
+        var at = name.IndexOf("__", 5, StringComparison.Ordinal);
+        if (at < 0 || at + 2 >= name.Length)
+        {
+            return title;
+        }
+
+        var server = name[5..at];
+        var tool = name[(at + 2)..];
+        return (server == "codalus" ? tool : server + ": " + tool) + (space < 0 ? "" : title[space..]);
     }
 
     /// <summary>The kind of a built-in tool; an MCP server's tool (<c>server__tool</c>) is <c>mcp</c>.</summary>

@@ -27,6 +27,12 @@ public sealed record WatchedApp(HotReloadSession HotReload, Task WatchExited, in
 
     /// <summary>Whether the address accepts a connection now (tests replace it).</summary>
     public Func<Uri, CancellationToken, Task<bool>> Accepts { get; init; } = WatchedServer.AcceptsAsync;
+
+    /// <summary>
+    /// What the wait saw last, each time it changes (the candidate, the listening lines, the previous app, the probe):
+    /// a follow that never ends says why in the failure's report.
+    /// </summary>
+    public Action<string>? Observed { get; init; }
 }
 
 /// <summary>
@@ -40,10 +46,13 @@ public static class WatchedServer
     /// "Now listening on", or (its logging filters the host's messages) its address accepts connections while the
     /// previous one has exited. Its id comes from the agent's line (SDK 11 on), else from <c>dotnet watch</c>'s process
     /// tree. Null when <c>dotnet watch</c> exits, says the app exited, or <paramref name="timeout"/> passes first.
+    /// <paramref name="listeningBefore"/>: how many "Now listening on" lines are older than the app waited for (0 for the
+    /// first; after a restart, the count when it was announced, as the next server can log its line before the wait begins).
     /// </summary>
-    public static async Task<int?> WaitForAppAsync(WatchedApp app, int? previousPid, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task<int?> WaitForAppAsync(WatchedApp app, int? previousPid, int listeningBefore, TimeSpan timeout, CancellationToken cancellationToken)
     {
-        var listening = previousPid is null ? 0 : app.HotReload.ListeningCount;
+        var listening = listeningBefore;
+        string? seen = null;
         var ended = 0;
         void OnEnded() => Volatile.Write(ref ended, 1);
         app.HotReload.AppEnded += OnEnded;
@@ -65,17 +74,34 @@ public static class WatchedServer
                 }
 
                 pid ??= Candidate(app, previousPid);
+                var count = app.HotReload.ListeningCount;
+                var previousAlive = previousPid is { } previous && app.IsAlive(previous);
+                var accepts = false;
                 if (pid is { } found)
                 {
-                    if (app.HotReload.ListeningCount > listening)
+                    if (count > listening)
                     {
                         return found;
                     }
 
-                    if (app.Address is { } address && (previousPid is not { } previous || !app.IsAlive(previous))
-                        && await app.Accepts(address, cancellationToken).ConfigureAwait(false))
+                    if (app.Address is { } address && !previousAlive)
                     {
-                        return found;
+                        accepts = await app.Accepts(address, cancellationToken).ConfigureAwait(false);
+                        if (accepts)
+                        {
+                            return found;
+                        }
+                    }
+                }
+
+                if (app.Observed is { } observed)
+                {
+                    var now = FormattableString.Invariant(
+                        $"candidate {(pid is { } p ? p.ToString(System.Globalization.CultureInfo.InvariantCulture) : "none")} (the agent's {app.HotReload.AppProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}); \"Now listening on\" {count}, waiting for more than {listening}; previous {previousPid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} {(previousAlive ? "alive" : "gone")}; {(app.Address is { } probed ? $"{probed.Authority} {(accepts ? "accepts" : pid is null || previousAlive ? "not probed" : "refuses")}" : "no address to probe")}");
+                    if (now != seen)
+                    {
+                        seen = now;
+                        observed(now);
                     }
                 }
 

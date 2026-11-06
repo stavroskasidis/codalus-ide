@@ -19,28 +19,36 @@ While AI assistance is on, the status bar shows **AI:** and the provider, or **A
 
 ## AI Chat
 
-Type a question in the box at the bottom and press `Enter` or click **Send** (`Shift+Enter` starts a new line). The answer streams in as the model writes it; while it does, **Send** becomes **Stop**, which ends it. You can type your next question meanwhile, but it isn't sent until the answer ends (in agent mode, until the whole turn ends, tool steps included).
+Type a question in the box at the bottom and press `Enter` or click **Send** (`Shift+Enter` starts a new line). The answer streams in as the model writes it; while it does, **Stop** ends it.
+
+**Queued questions.** You can keep typing while an answer runs: `Enter` (or the clock button beside **Stop**) queues the question, which shows above the box and goes as soon as the answer ends (in agent mode, when the whole turn ends, tool steps included). Click a queued question to take it back into the box and change it, or × to remove it. **Stop** pauses the queue: the next question you send starts it again.
 
 **The conversation.** Your questions are on the right, each with what went with it under it: a chip for each part that was sent, **Not sent:** for a part that was left out (its tooltip says why), and how many secrets were redacted. The answers are on the left, beside the assistant's icon, with the model and the time: formatted text (headings, lists, `code` and links) and code blocks. You can select and copy any of it. A long conversation stays fast: only the part on screen is drawn. Before the first question, the window says what to do next: turn AI on, choose a provider, or ask.
 
-**The toolbar.** **New Chat**, the provider and model (click to change them), the **Agent** switch ([agent mode](#agent-mode)), the request log, and **Configure**.
+**The toolbar.** **New Chat**, the provider and model (click to change them), **Compact or detailed**, the request log, and **Configure**.
 
-**What goes with your question.** The chips above the box say what the IDE attaches (click one to turn it on or off), and the line under them lists it before you send:
-- **Selection**: the text selected in the editor.
-- **Current file**: the active editor's whole file.
-- **Open files**: the other open editors.
-- **Errors**: the Error List's errors and warnings in the open files (up to 50).
-- **Build output**: the end of the last build's output.
-- **Solution**: the solution's projects, their target frameworks and output types.
+**Compact or detailed.** By default (`ai.chat.density`: `compact`) an answer's steps fold into one line, such as "Read 3 files · searched twice · edited Program.cs · ran 2 commands", which shows the step running now while the answer streams. Click the line to see the steps. An agent's thinking is a short **Thought** line that opens on a click. The toolbar's list button switches to **detailed**, which opens every answer's steps under that line, and back; the choice is kept in your settings. In both, a step whose title is a long or multi-line command shows its first line, and the whole command is under the step's chevron.
 
-**Code in answers.** A code block is drawn in your editor's colors and font, and its header names its language (and the file, when the block names one) and has three buttons, ready once the answer is complete:
-- **Copy** copies it.
-- **Insert at Cursor** inserts it at the caret of the active editor.
-- **Apply…** shows the change in a preview first, then replaces the selection you asked about (indented like it), or the whole file when the block names that file (```` ```csharp path=src/App/Program.cs ````) or starts like it. Otherwise it inserts at the caret. Applying is one step in the editor's undo.
+**What goes with your question.** Only your question, and what it mentions with `@` (typing `@` lists them):
+- `@selection`: the text selected in the editor.
+- `@file`: the active editor's whole file.
+- `@open`: the other open editors.
+- `@errors`: the Error List's errors and warnings in the open files (up to 50).
+- `@build`: the end of the last build's output.
+- `@solution`: the solution's projects, their target frameworks and output types.
+- `@src/App/Program.cs`, or any other file of the workspace (the list offers them as you type).
 
-**New Chat** starts over. Conversations aren't saved: when you close the IDE, they're gone, and nothing a model wrote is on disk unless you applied or copied it.
+An agent with the [IDE's tools](#the-ides-tools) reads what else it needs by itself, so a question usually needs no mentions.
 
-In the editor's context menu, **AI > Explain the Selection** asks right away, and **AI > Ask AI About the Selection** opens the chat with the selection attached.
+**Images.** Paste a screenshot (`Ctrl+V`, `Cmd+V` on macOS) or drop an image file (PNG, JPEG, GIF or WebP, up to 5 MB) into the box: it goes with the question to an [external agent](#external-agents-acp) that takes images, such as Claude. The built-in assistant and agents that don't take images get none, and the chat says so before you send.
+
+**The changes of an answer.** Under an answer that changed files, **Changed N files** lists them, each with **Diff** (the file now beside what it was before the answer) and **Revert** (which asks first, then puts the file back as it was: into the open editor, unsaved and one step in undo, or on the disk; a file the answer created is deleted). A change an external agent wrote by itself, without the preview, says so.
+
+**Code in answers.** A code block shows the code alone, in your editor's colors and font, on the editor's background: no buttons, since the assistant changes files itself, through the preview ([agent mode](#agent-mode)). Its language, and the file it names, are small in its top-right corner. Long lines wrap to the pane; the wrap button beside the language (shown when you point at the block or Tab to it) turns wrapping off for that block, which then scrolls sideways. A block of more than 20 lines shows its first ones, with **Show all N lines**. You can select and copy the code like any text.
+
+**New Chat** starts over. Conversations aren't saved: when you close the IDE, they're gone. What the assistant changed is in your files, each change applied through the preview.
+
+In the editor's context menu, **AI > Explain the Selection** asks right away, and **AI > Ask AI About the Selection** opens the chat with the selection attached (actions choose their own context, without mentions).
 
 ## Inline suggestions
 
@@ -71,13 +79,15 @@ Where AI can help with something the IDE already shows, there's an action for it
 
 ## Agent mode
 
-Turn on the **Agent** switch in AI Chat's toolbar to let the model work in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended. Answers given in agent mode carry an **Agent** chip.
+The built-in assistant always works as an agent, in steps: it reads and searches the workspace, looks at the Error List and the build output, builds, proposes edits and asks to run commands. It also has [the IDE's tools](#the-ides-tools): it finds symbols and references through the compiler, runs tests, debugs and starts the program. Each step shows in the answer as it happens, on a line of its own: an icon for how it stands (a check when it's done, a clock while it runs, an error when it failed or you refused it, a square when you stopped it) and one for what it does, the tool (`read_file`), the file it read or changed (click it to open the file), what it searched for or ran, and how it ended.
+
+**Where it can't use tools** (no folder open, a folder that isn't trusted, or a model that doesn't take tools, which is common among small local ones), it still answers, from your question and what it mentions, without reading, changing or running anything; a line under the answer says why. AI actions that ask in AI Chat (Explain, Ask AI on an exception, a value or a failing test, Generate Tests and the others) run the same way: Generate Tests creates the test file through the preview.
 
 What it can't do without you:
 - **Every change shows in the preview first.** **Apply** changes the file in the editor (unsaved, in undo), **Cancel** rejects it, and the model is told it was rejected.
 - **Every command asks first**, with the exact command line and its folder, and **Reject** is the default: pressing Enter refuses. An allowed command runs for at most 2 minutes (`ai.agent.commandTimeoutSeconds`), and its output (redacted) goes back to the model.
 - **Only inside the workspace.** Paths that leave it, links included, are refused, and so are files that are never sent (below).
-- **Only in trusted folders**, and only with a model that takes tools. A model that doesn't, which is common among small local ones, is named, so you can choose another.
+- **Only in trusted folders**, and only with a model that takes tools; elsewhere it answers without tools (above).
 - **At most 25 steps** per question (`ai.agent.maxSteps`), and **Stop** ends it at once.
 
 The model is told that what it reads (files, command output, tool results) is data, not instructions. The approvals above hold whatever a file tells it. Each tool call is a line of the request log: the tool and its target, never the content.
@@ -94,22 +104,61 @@ Agent mode can use the tools of MCP (Model Context Protocol) servers you configu
 
 Servers start the first time agent mode needs their tools and stop when the IDE closes. Their tools are offered to the model as `<server>__<tool>`. Each call asks first, showing the server, the tool and the arguments, and the results are redacted. Servers are started over stdio. Servers over HTTP, and MCP's resources and prompts, aren't supported yet.
 
+## The IDE's tools
+
+Every agent in Codalus (agent mode, every external agent through its own `codalus mcp` pipe, and agents outside the IDE with **MCP Server** on) gets the same tools. They answer from the IDE's live state: the compiler's view of your code (Roslyn for C#), with your unsaved edits, Code Search's index, the Error List, Test Explorer and the debugger. Agents are told to prefer them to `grep` and the CLI, and they show what they do in the IDE's own windows.
+
+Agents are also told to check their own changes before they say they're done:
+- after an edit, the Error List and a build;
+- the tests that cover the change;
+- for a change you'd see in the running app (a page, a window, its output), a run or a debug session, checked with the browser tools for a web app.
+
+Tell the agent to skip any of this when you don't want it.
+
+| What | Tools |
+|---|---|
+| The solution and the editor | `get_solution`, `get_open_files`, `get_diagnostics`, `get_build_output` |
+| Finding code | `find_symbols` (types, members and files by name, fuzzy: `OrdSvc` finds `OrderService`), `search_code` (Find in Files), `get_document_outline` |
+| Following code | `get_symbol_info` (signature and docs), `go_to_definition` (also into referenced assemblies), `find_references` (with read, write and declaration), `find_implementations`, `call_hierarchy` (callers or callees), `type_hierarchy` (base types or subtypes) |
+| Building and testing | `build` (the solution or a project), `run_tests` (all, a project's, by name, or the ones that failed) and `get_test_results` (failures with their messages and stacks) |
+| Running | `run_project`, `get_run_output`, `stop_run` |
+| Debugging | `debug_start` (a project or one test), breakpoints (`debug_set_breakpoint` with a condition or hit count, `debug_remove_breakpoint`, `debug_list_breakpoints`), `debug_wait_for_stop`, `debug_get_state` (the stack and the exception), `debug_get_variables`, `debug_evaluate`, `debug_step`, `debug_continue` |
+| A web app's browser | `browser_get_page`, `browser_screenshot`, `browser_console`, `browser_evaluate`, `browser_navigate` |
+
+A tool that follows code takes a symbol by name (`OrderService.Submit`), or a file, a line and the name on it.
+
+**Each step waits until it can, and says where things stand.** On a large solution the build and the launch can take minutes, and a web app takes a while to listen:
+- `debug_start` returns once the program runs (a web app: once it listens, with its address) or has stopped. Its answer lists each breakpoint and whether the debugger bound it, and why not.
+- `run_project` waits the same way for a web app.
+- The browser tools wait for a web app that is starting (up to 90 seconds). A page that doesn't load says why, and an address where nothing listens yet is tried again.
+- `debug_wait_for_stop` also returns when a web app it was waiting for starts to listen: nothing stops a web app before something requests its code. When it times out, it lists the breakpoints that aren't bound.
+
+**What asks first.** Reading never asks. Building, running tests, starting, debugging, stepping, evaluating and driving the browser follow **Agent IDE Actions** (`ai.agent.ideActions`, in your user settings only):
+- `allow` (the default): they run without asking. This applies only in trusted folders, like everything an agent does.
+- `askOncePerSession`: the first one in a chat asks, with **Allow**, **Allow for This Chat**, **Always Allow in This Workspace** and **Reject** (the default). **New Chat** forgets **Allow for This Chat**.
+- `ask`: every one asks, with **Allow**, **Always Allow in This Workspace** and **Reject**.
+
+**Always Allow in This Workspace** is kept in your own state folder, never in the repository, and lasts until you remove the folder from `ai-ide-actions-allowed.json` in the state folder.
+
+Edits still go through the preview, and shell commands still ask every time. The tools stay inside the workspace and leave out files that are never sent (below). What they return is redacted, and each call is a line of the *AI* Output channel.
+
+**The browser.** While the IDE debugs a web app together with its page ([a Blazor Web App](debugging.md), or a web app whose launch profile opens a browser), the browser tools drive that page, in the IDE's debugging browser. Breakpoints in the page's own code (WebAssembly components and scripts) stop when the agent clicks, and you watch what it does. When a click reaches a breakpoint, `browser_evaluate` returns at once with where the program stopped. While the program is stopped, the page doesn't answer, and the tools say so.
+
+Otherwise (`run_project`, or a server debugged without its page) the browser tools open a browser of the agent's own at the web app's address: the Chromium browser `debug.browser` finds, with its own profile, reachable only from this machine. It closes with **New Chat**, when the folder changes, and when the IDE exits.
+
+Either way the agent can read the page, take screenshots, read the console and run JavaScript (to click or fill a form, for example). It opens only addresses on this machine; a path such as `/counter` is relative to the web app's address. The debugging browser keeps its own profile (`debug-browser` in the state folder), so a page you signed in to stays signed in between sessions.
+
+**Plugins' tools.** Plugins can add tools of their own ([AI tools](plugin-api.md)). Each call asks first and names the plugin.
+
 ## Codalus as an MCP server
 
-AI agents that run outside the IDE (in a terminal, or another editor) can use what the IDE knows. Turn on **MCP Server** (`ai.mcpServer.enabled`) in **Tools > Options > AI**, then configure the agent with this stdio server:
+AI agents that run outside the IDE (in a terminal, or another editor) can use [the IDE's tools](#the-ides-tools). Turn on **MCP Server** (`ai.mcpServer.enabled`) in **Tools > Options > AI**, then configure the agent with this stdio server:
 
 ```json
 { "command": "codalus", "args": ["mcp"] }
 ```
 
-(add `"--user-data-dir", "<dir>"` when you run the IDE with one). The tools reach the running IDE of the same user:
-- `get_solution`: the solution and its projects, frameworks and output types;
-- `get_open_files`: the open files, the active one and its selection;
-- `get_diagnostics`: the Error List;
-- `get_build_output`;
-- `build`, which asks you in the IDE first.
-
-Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
+(add `"--user-data-dir", "<dir>"` when you run the IDE with one). The tools reach the running IDE of the same user, and plugins' tools are listed too. The server also tells the agent, in its instructions, to prefer these tools to `grep` and the CLI. Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
 
 ## External agents (ACP)
 
@@ -188,8 +237,8 @@ While an external agent is chosen, the label shows above the question box, and t
 
 ### What you see
 
-- **The answer** is under the agent's name, with an **External agent** chip, and streams in as Markdown; the agent's **thinking** is folded under **Thinking**; its **plan** is a checklist above the steps.
-- **Steps** are the agent's tool calls, shown like the built-in agent's: an icon for how it stands and one for its kind, its title, and the files it works on as links that open the file at the line (only files in the workspace open). A step's details (the changes it reports, read-only, and a command's output, open while it runs) are under its chevron.
+- **The answer** is under the agent's name, with an **External agent** chip, and streams in as Markdown. The agent's **thinking** is a short **Thought** line that opens on a click, and its **plan** is a checklist above the steps.
+- **Steps** are the agent's tool calls, folded into one line in compact mode (above) and shown like the built-in agent's when opened: an icon for how it stands and one for its kind, its title, and the files it works on as links that open the file at the line (only files in the workspace open). A step's details (the changes it reports, read-only, and a command's output, open while it runs) are under its chevron.
 - **Model, mode and effort**: when the agent offers choices for its session over ACP (its model, its modes such as Ask and Code, its effort or thinking level, or others of its own), each one has a picker in the toolbar after the agent picker, showing its current value. They show as soon as AI Chat shows the agent in a trusted folder: Codalus starts the agent then, so you can pick before you ask anything (it doesn't sign in on its own: an agent that needs you to sign in first shows them after your first question, which asks). A pick goes to the agent at once and is kept in its entry (`ai.agents.<agent>.choices`), so its next sessions start with it; a value the agent refuses, or no longer offers, is left as the agent has it. Agents that offer none show no pickers.
 - **Across a restart**: AI Chat opens with the agent you chose last (`ai.chat.agent`), not the built-in assistant.
 - **Commands**: typing `/` offers the agent's slash commands; `Tab` or a click puts one in the box.
@@ -204,7 +253,8 @@ What the agent asks of the IDE goes through the IDE's checks:
 - **Writing** (`fs/write_text_file`): every change shows in the preview first. **Apply** puts it in the editor (unsaved, one step in undo; the file opens if it isn't open), and **Reject** tells the agent you rejected it. The same paths are refused.
 - **Permissions**: when the agent asks before acting, the approval dialog shows the action, its kind, its input and its changes, with **Allow Once**, **Reject** and **Always Reject**. **Reject** is the default (Enter and Esc reject). There's no "always allow".
 - **Commands**: each one asks first with the exact command line, its folder and every environment variable the agent sets for it (secrets redacted), as agent mode's do, and runs for at most `ai.agent.commandTimeoutSeconds`. Variables that change what a command runs (`PATH`, `LD_*` and `DYLD_*`, `NODE_OPTIONS`, `GIT_*`, `NPM_CONFIG_*`, `DOTNET_*` and similar) are refused before you're asked. Its output is redacted before the agent reads it, and Stop kills it.
-- **The IDE's tools**: every agent gets `codalus mcp` (the solution, the open files, the Error List, the build output, and a build that asks first) through a pipe of its own that lives as long as the chat, for your user only, even when **MCP Server** is off.
+- **The IDE's tools**: every agent gets `codalus mcp` ([the IDE's tools](#the-ides-tools): code intelligence, builds, tests, running, debugging and the web app's browser, with actions approved as `ai.agent.ideActions` says) through a pipe of its own that lives as long as the chat, for your user only, even when **MCP Server** is off.
+- **Secrets in what it shows**: a tool call's title (often the command it runs) and its input are redacted before they show in the chat, an approval or the log.
 - **Only while it may run**: if AI assistance is turned off (by you, or for the workspace) or the folder stops being trusted, a running agent stops, and any request it sends meanwhile is refused. The same holds for its `codalus mcp` pipe, which also only shows files under the workspace.
 - **The log**: each prompt, request and tool call is a line of the *AI* Output channel (the agent, the method, the path or command, never the content).
 
@@ -249,8 +299,10 @@ AI assistance has one gate that every request goes through:
 | `ai.nextEdit.enabled` | `false` | Next edit suggestions |
 | `ai.agent.maxSteps` | `25` | The most tool calls agent mode makes for one question |
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
+| `ai.agent.ideActions` | `allow` | How the agents' IDE actions are approved: `allow`, `askOncePerSession` or `ask` (user settings only) |
+| `ai.chat.density` | `compact` | `compact` folds each answer's steps into a line; `detailed` shows every step |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
-| `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE (external agents' own pipes don't need it) |
+| `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE's tools (external agents' own pipes don't need it) |
 | `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices`) |
 | `ai.chat.agent` | `""` | Who answers in AI Chat: empty for the built-in assistant, or an agent of `ai.agents` (the picker writes it) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |

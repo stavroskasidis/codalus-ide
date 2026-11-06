@@ -137,6 +137,18 @@ Proposed (M28a), [ADR 0062](adr/0062-ai-provider-api-and-data-boundaries.md); me
 
 A message is `{role: system\|user\|assistant\|tool, content, toolCalls?: [{id, name, arguments}], toolCallId?, isError}`; a tool is `{name, description, parameters}` with a JSON schema; `arguments` is a JSON object as text. The host posts every `chatPart` before it answers `chat`, but the shell may handle the answer first, so it waits until it has `partCount` parts. Errors: `-33020` no such provider, `-33021` the service failed (the message says why), `-33022` the provider needs configuring (a missing or refused key).
 
+### AI tools
+
+Proposed (Codalus IDE 0.13), [ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md); messages in `AiToolMessages.cs`. A tool is declared in the manifest (`contributes.aiTools: [{name, description, inputSchema?}]`) and registered when its plugin activates (`onAiTool:<name>`, implicit), which the shell does at the tool's first call, after the user allowed it. `$/cancelRequest` cancels a call (the agent's turn stopped).
+
+| Method | Direction | Kind | Params → Result |
+|---|---|---|---|
+| `aiTools/registerTool` | host → shell | notification | `{pluginId, name}` |
+| `aiTools/unregisterTool` | host → shell | notification | `{pluginId, name}` |
+| `aiTools/invoke` | shell → host | request | `{name, arguments}` → `{text, isError}` |
+
+`arguments` is the agent's JSON object. An `AiToolException` answers `{text: its message, isError: true}`. Errors: `-33030` no such tool, `-33031` the tool failed unexpectedly (the message says why). The shell redacts `text` before an agent sees it.
+
 ## API 1.0 (M22a)
 
 Progress, declarative views and custom editors ([plugins.md](plugins.md#progress)):

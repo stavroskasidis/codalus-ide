@@ -15,6 +15,7 @@ public sealed class UiStallMonitorTests
         await ShellFixture.PumpUntil(() => monitor.Report().Probes > 0);
         monitor.Reset();
         monitor.Step = "blocking";
+        var blocked = System.Diagnostics.Stopwatch.GetTimestamp();
         // Late in the stall, so a probe sent during it (one every 10 ms, a loaded runner allowing) waits through the collection.
         Block(500);
         GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
@@ -24,7 +25,12 @@ public sealed class UiStallMonitorTests
         await ShellFixture.PumpUntil(() => monitor.Report().LongestMilliseconds > 0);
 
         var report = monitor.Report();
-        Assert.True(report.LongestMilliseconds >= 400, report.Describe());
+        // Whether the monitor's thread posted a probe during the block, or only after it (macOS CI, run 41968010181: one
+        // probe of 0 ms). TODO(issue)
+        var first = monitor.FirstSent;
+        var sent = first == 0 ? "no probe posted since the reset"
+            : $"the first probe since the reset posted {System.Diagnostics.Stopwatch.GetElapsedTime(blocked, first).TotalMilliseconds:0} ms after the 600 ms block began, {System.Diagnostics.Stopwatch.GetElapsedTime(blocked).TotalMilliseconds:0} ms ago";
+        Assert.True(report.LongestMilliseconds >= 400, $"{report.Describe()}; {sent}");
         Assert.Equal("blocking", report.LongestStep);
         Assert.Matches(@"; during it, \d+ collection\(s\) \(gen0 \d+, gen1 \d+, gen2 [1-9]\d*\); the longest known, a ", report.Describe());
     }

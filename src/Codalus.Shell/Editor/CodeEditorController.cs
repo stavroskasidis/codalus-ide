@@ -2699,9 +2699,39 @@ public sealed partial class CodeEditorController : IDisposable
 
         var location = Model.Text.GetLocation(offset);
         Editor.ScrollTo(location.Line, location.Column);
-        Dispatcher.UIThread.Post(() => Editor.TextArea.TextView.MakeVisible(Editor.TextArea.Caret.CalculateCaretRectangle()), DispatcherPriority.Background);
+        BringCaretIntoView(location.Line, attempts: 4);
         Editor.TextArea.Focus();
     }
+
+    /// <summary>
+    /// After a scroll to <paramref name="line"/>, once laid out: the scroll used estimated heights for the lines it hadn't
+    /// built, and lines with a CodeLens or inlay rows above them are taller, so far down a file it fell short and the line
+    /// stayed off screen (Git Changes opening a file at a change on line 150). While the line isn't among the built ones,
+    /// it scrolls again with the heights now known; then makes the caret visible.
+    /// </summary>
+    private void BringCaretIntoView(int line, int attempts) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || Editor.TextArea.Caret.Line != line)
+            {
+                return; // moved on meanwhile
+            }
+
+            var view = Editor.TextArea.TextView;
+            view.EnsureVisualLines();
+            var shown = view.VisualLinesValid ? view.GetVisualLine(line) : null;
+            var inView = shown is not null
+                && shown.VisualTop >= view.VerticalOffset
+                && shown.VisualTop + shown.Height <= view.VerticalOffset + view.Bounds.Height;
+            if (!inView && attempts > 0)
+            {
+                Editor.ScrollTo(line, Editor.TextArea.Caret.Column);
+                BringCaretIntoView(line, attempts - 1);
+                return;
+            }
+
+            view.MakeVisible(Editor.TextArea.Caret.CalculateCaretRectangle());
+        }, DispatcherPriority.Background);
 
     // ------------------------------------------------------------------ teardown
 

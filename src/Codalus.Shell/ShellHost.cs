@@ -138,7 +138,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Plugins.HostRuntimeMissing = ReportHostRuntimeMissing; // one notification, not one per plugin (M49); any thread
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
-        Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
+        Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 15));
         PluginList = new PluginsViewModel(
             Plugins,
             (id, off) => _ = SetPluginTurnedOffAsync(id, off),
@@ -1014,8 +1014,6 @@ public sealed partial class ShellHost : IAsyncDisposable
         JsonElement? value = args.Count > 1 && args[1].ValueKind != JsonValueKind.Null ? args[1] : null;
         return Workbench.Settings.SetAsync(args[0].GetString()!, value, SettingScope.User, cancellationToken);
     }
-
-    public void ShowAbout() => Workbench.Notifications.Info(ShellInfo.VersionText.Replace("\n", " · ", StringComparison.Ordinal));
 
     // ------------------------------------------------------------------ status bar and settings
 

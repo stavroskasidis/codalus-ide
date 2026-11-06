@@ -406,7 +406,9 @@ public class UxPassTests
         // Ctrl+Shift+Space is Parameter Info.
         editor.Editor.CaretOffset = text.IndexOf("Describe(", StringComparison.Ordinal) + "Describe(".Length;
         f.Press(Key.Space, RawInputModifiers.Control | RawInputModifiers.Shift);
-        await ShellFixture.PumpUntil(() => executed.Contains("editor.action.triggerParameterHints"));
+        await ShellFixture.PumpUntil(
+            () => executed.Contains("editor.action.triggerParameterHints"),
+            describe: () => $"commands run: [{string.Join(", ", executed)}]; focus: {f.Window.FocusManager?.GetFocusedElement()}, focusedView {f.Shell.Workbench.Context.GetValue("focusedView")}, editorTextFocus {f.Shell.Workbench.Context.GetValue("editorTextFocus")}; completion window open: {editor.CompletionWindow is not null}; toasts: {f.Shell.Notifications.Toasts.Count}");
     }
 
     // ------------------------------------------------------------------ file icons, the navigation bar, outlining

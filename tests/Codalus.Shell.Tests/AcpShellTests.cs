@@ -4,6 +4,7 @@ using Avalonia;
 using System.Text.Json;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -42,6 +43,9 @@ public sealed class AcpShellTests
         var log = Path.Combine(f.UserData, "agent-log.jsonl");
         var settings = f.Shell.Workbench.Settings;
         await settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None);
+
+        // These tests read the steps one by one: the detailed density shows them unfolded (ADR 0092).
+        await settings.SetAsync(AiChat.DensitySetting, "detailed", SettingScope.User, CancellationToken.None);
         var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = log };
         if (choices is not null)
         {
@@ -146,9 +150,10 @@ public sealed class AcpShellTests
         var turn = await AskAsync(f, "hello");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
         Assert.Equal(("Hello from the stand-in.", "stand-in"), (turn.Answer, turn.ExternalAgent));
-        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string) == "Thinking"), describe: () => Describe(f, turn));
+        // The thought is one short line ("Thought"), closed (ADR 0092).
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<ToggleButton>().Any(e => AutomationProperties.GetName(e) == "Thinking" && e.IsEffectivelyVisible), describe: () => Describe(f, turn));
         view = ChatView(f);
-        Assert.False(view.GetVisualDescendants().OfType<Expander>().Single(e => (e.Header as string) == "Thinking").IsExpanded);
+        Assert.False(view.GetVisualDescendants().OfType<ToggleButton>().Single(e => AutomationProperties.GetName(e) == "Thinking").IsChecked);
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "☑ Say hello");
         // The agent answers under its own name, with a chip that says it is an external agent.
         Assert.Equal("stand-in", f.Shell.AiChat.Turns[^1].Author);
@@ -174,7 +179,7 @@ public sealed class AcpShellTests
             Assert.Contains("BuildAndRun.slnx", solution, StringComparison.Ordinal);
         }
 
-        Assert.Contains("MCP server (external agent stand-in): get_solution", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+        Assert.Contains("IDE tool (stand-in): get_solution", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
 
         // Through its session pipe, an agent sees only what's under the workspace: not a file open from elsewhere, nor its selection.
         var outside = Path.Combine(f.UserData, "outside-notes.txt");
@@ -189,7 +194,8 @@ public sealed class AcpShellTests
             Assert.DoesNotContain("outside-notes", open, StringComparison.Ordinal);
             Assert.DoesNotContain("private notes", open, StringComparison.Ordinal);
             using var elsewhere = JsonDocument.Parse(JsonSerializer.Serialize(new { path = outside }));
-            Assert.Contains("isn't in the workspace", await client.CallAsync("get_diagnostics", elsewhere.RootElement, CancellationToken.None), StringComparison.Ordinal);
+            var refused = await Assert.ThrowsAsync<McpException>(() => client.CallAsync("get_diagnostics", elsewhere.RootElement, CancellationToken.None));
+            Assert.Contains("outside the workspace", refused.Message, StringComparison.Ordinal);
         }
 
         // A read step with its location: clicking it opens the file at the line.

@@ -63,14 +63,14 @@ public sealed class FeedbackDialogTests
         url.Query.TrimStart('?').Split('&').Select(p => p.Split('=', 2)).ToDictionary(p => p[0], p => Uri.UnescapeDataString(p[1]));
 
     [AvaloniaFact]
-    public async Task The_commands_are_on_the_Help_menu_after_About_and_in_the_palette()
+    public async Task The_commands_are_on_the_Help_menu_after_Open_Crash_Reports_and_in_the_palette()
     {
         await using var f = ShellFixture.Create();
 
         var help = f.Shell.Workbench.Menus.GetItems("menuBar/help").Select(i => i.Command).ToList();
-        var about = help.IndexOf("help.about");
-        Assert.True(about >= 0);
-        Assert.Equal(s_commands, help.Skip(about + 1).Take(2));
+        var crashReports = help.IndexOf("help.openCrashReports");
+        Assert.True(crashReports >= 0);
+        Assert.Equal(s_commands, help.Skip(crashReports + 1).Take(2));
         Assert.True(help.IndexOf("update.check") > help.IndexOf("help.suggestFeature"));
         foreach (var id in s_commands)
         {

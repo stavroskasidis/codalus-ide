@@ -124,6 +124,9 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
     public string? CurrentModeId => Volatile.Read(ref _modeId);
 
+    /// <summary>Whether the agent takes images in a prompt (<c>promptCapabilities.image</c>, ADR 0092).</summary>
+    public bool TakesImages => _client?.Info?.AgentCapabilities?.PromptCapabilities?.Image == true;
+
     /// <summary>
     /// The choices the agent offers for the session (M51): its model, mode, effort and other selects, from its config
     /// options or, without them, its modes and models; empty when it offers none.
@@ -348,7 +351,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     /// reason. Cancelling sends <c>session/cancel</c>, answers pending permissions with <c>cancelled</c>, kills the turn's
     /// commands, and waits a little for the agent to confirm. A crash throws <see cref="AcpException"/>.
     /// </summary>
-    public async Task<string> PromptAsync(string text, AiChatTurn turn, Action changed, CancellationToken cancellationToken)
+    public async Task<string> PromptAsync(string text, AiChatTurn turn, Action changed, CancellationToken cancellationToken, IReadOnlyList<AiImageAttachment>? images = null)
     {
         if (!IsAlive || _client is not { } client)
         {
@@ -378,7 +381,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             AcpPromptResponse response;
             try
             {
-                response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+                response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, PromptBlocks(text, images)), giveUp.Token).ConfigureAwait(false);
             }
             catch (AcpAuthRequiredException ex) when (!cancellationToken.IsCancellationRequested)
             {
@@ -398,7 +401,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
                 _ai.LogAgent(Name, "session/prompt (sent again after the sign-in)");
                 try
                 {
-                    response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, [AcpContentBlock.FromText(text)]), giveUp.Token).ConfigureAwait(false);
+                    response = await client.PromptAsync(new AcpPromptRequest(_sessionId!, PromptBlocks(text, images)), giveUp.Token).ConfigureAwait(false);
                 }
                 catch (AcpAuthRequiredException)
                 {
@@ -696,6 +699,16 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         _ => $"[{block.Type}]",
     };
 
+    /// <summary>The prompt: the text, then the images when the agent takes them (the chat refuses them otherwise).</summary>
+    private List<AcpContentBlock> PromptBlocks(string text, IReadOnlyList<AiImageAttachment>? images) =>
+        [AcpContentBlock.FromText(text), .. TakesImages ? (images ?? []).Select(AcpContentBlock.FromImage) : []];
+
+    /// <summary>
+    /// A tool call's title or raw input with its secrets replaced: an agent's title is often the command it runs, which
+    /// can carry a token the user typed or the agent read (a <c>$pat = "…"</c> line), and it shows in the chat and the log.
+    /// </summary>
+    private string? Redacted(string? text) => text is null ? null : SecretRedactor.Redact(text, Config.SecretValues.Values).Text;
+
     private void OnToolCall(AiChatTurn turn, AcpToolCall call)
     {
         var locations = call.Locations?.Select(l => new AiAgentLocation(l.Path, l.Line is { } line ? Math.Max(1, line) : null)).ToList();
@@ -705,7 +718,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
         var existing = turn.FindStep(call.ToolCallId);
         if (existing is null)
         {
-            var title = call.Title ?? call.Kind ?? "tool call";
+            var title = Redacted(call.Title) ?? call.Kind ?? "tool call";
             var step = new AiAgentStep(call.Kind ?? "other", title, null)
             {
                 Id = call.ToolCallId,
@@ -726,7 +739,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             {
                 Tool = call.Kind ?? step.Tool,
                 Kind = call.Kind ?? step.Kind,
-                Target = call.Title ?? step.Target,
+                Target = Redacted(call.Title) ?? step.Target,
                 Status = call.Status ?? step.Status,
                 Locations = locations ?? step.Locations,
                 Diffs = diffs ?? step.Diffs,
@@ -942,9 +955,9 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
 
         // Allow always isn't offered (ADR 0063: no always-allow yet).
         var offered = options.Where(o => o.Kind is "allow_once" or "reject_once" or "reject_always").ToList();
-        var title = call.Title ?? CurrentTurn()?.FindStep(call.ToolCallId)?.Target ?? call.Kind ?? "a tool call";
+        var title = Redacted(call.Title) ?? CurrentTurn()?.FindStep(call.ToolCallId)?.Target ?? call.Kind ?? "a tool call";
         var diffs = call.Content?.Where(c => c.Type == "diff" && c.Path is { Length: > 0 }).Select(c => new AiStepDiff(c.Path!, c.OldText, c.NewText ?? "", Reviewed: false)).ToList() ?? [];
-        var raw = call.RawInput is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } input ? Pretty(input) : null;
+        var raw = call.RawInput is { ValueKind: not (JsonValueKind.Undefined or JsonValueKind.Null) } input ? Redacted(Pretty(input)) : null;
         _ai.LogAgent(Name, $"{AcpMethods.SessionRequestPermission} {call.Kind ?? "other"} \"{Short(title)}\"");
 
         var turnToken = TurnToken;
