@@ -65,6 +65,7 @@ public class SolutionTests
             f.Shell.Explorer.Rows.Select(r => r.Name));
         Assert.Equal(("Debug", "Any CPU"), (f.Shell.Toolbar.Configuration, f.Shell.Toolbar.Platform));
         Assert.Equal("ProjectSystem", f.Shell.Toolbar.SolutionName);
+        Assert.Equal("ProjectSystem - Codalus IDE", f.Window.Title); // the taskbar and Alt+Tab tell windows apart by it
         Assert.Equal(f.Shell.Solutions.Solution!.Path, f.Shell.Recent.Items[0]);
         Assert.EndsWith(Path.Combine(".codalus", "settings.json"), f.Shell.Workbench.Settings.WorkspaceFile, StringComparison.Ordinal);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("solutionOpen"));
@@ -73,6 +74,7 @@ public class SolutionTests
         await f.Shell.CloseSolutionAsync();
         await ShellFixture.PumpUntil(() => !f.Shell.Explorer.HasSolution);
         Assert.Null(f.Shell.Workbench.Settings.WorkspaceFile);
+        await ShellFixture.PumpUntil(() => f.Window.Title == "Codalus IDE");
     }
 
     [AvaloniaFact]

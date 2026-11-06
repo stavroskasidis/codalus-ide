@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -122,8 +123,22 @@ public sealed class ToolbarViewModel : ObservableObject
     public string? SolutionName
     {
         get => _solutionName;
-        private set => SetField(ref _solutionName, value);
+        private set
+        {
+            if (SetField(ref _solutionName, value))
+            {
+                OnPropertyChanged(nameof(WindowTitle));
+            }
+        }
     }
+
+    /// <summary>
+    /// The main window's title, which the taskbar, Alt+Tab and the window list show: the open solution's name first,
+    /// so windows with different solutions tell apart ("Shop - Codalus IDE"), or the product name when none is open.
+    /// </summary>
+    public string WindowTitle => _solutionName is { Length: > 0 } name
+        ? Localizer.Format("main.windowTitleWithSolution", "{0} - Codalus IDE", name)
+        : Localizer.Get("main.codalusStudio", "Codalus IDE");
 
     public string? Configuration
     {

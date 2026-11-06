@@ -423,6 +423,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Toolbar is { HasSolution: true, Configuration: not null, Platform: not null }, "the toolbar shows the solution configuration", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.Toolbar.StartupProject is { Name: "Hello" }, "the toolbar shows the startup project", 60).ConfigureAwait(true);
             Check(shell.Toolbar.SolutionName == "BuildAndRun", "the title bar shows the solution's name");
+            Check(window.Title == "BuildAndRun - Codalus IDE", "the window's title, which the taskbar shows, names the solution");
             Check(shell.StatusBar is { HasSolution: true, IsEmptyState: false }, "the status bar is in its solution color");
             Check(shell.Workbench.Commands.Find("workbench.action.featureSearch") is not null, "the search box's command is registered");
             var before = shell.Theme.Setting;

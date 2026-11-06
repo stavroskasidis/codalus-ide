@@ -1733,6 +1733,7 @@
   "main.solutionName": "Solution name",
   "main.statusBar": "Status bar",
   "main.taskProgress": "Task progress",
+  "main.windowTitleWithSolution": "{0} - Codalus IDE",
   "markdown.collapsePreview": "Collapse the preview",
   "markdown.preview": "Markdown preview",
   "markdown.showPreview": "Show the preview",
