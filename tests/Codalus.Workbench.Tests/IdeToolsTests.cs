@@ -232,13 +232,16 @@ public sealed class IdeToolsTests : IDisposable
                 server.Dispose();
                 await serving;
 
-                // Nothing ever listens: the error says what the browser said, after the wait. A port bound but never
-                // listened on, not the served one: the browser's kept-alive connection to a stopped server can still get
-                // an empty answer, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally).
-                using var never = Bound();
-                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndPoint!).Port}/";
+                // Nothing ever listens: the error says what the browser said, after the wait. A port nothing has listened
+                // on, not the served one: the browser's kept-alive connection to a stopped server can still get an empty
+                // answer, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally). Probed and freed,
+                // not held by a socket that never listens: macOS doesn't refuse a connection to one (macOS CI, run 42300832132).
+                using var never = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                never.Start();
+                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndpoint).Port}/";
+                never.Stop();
                 var refused = await Assert.ThrowsAsync<IdeToolException>(() => attached.NavigateAsync(nothing, ct, retryFor: TimeSpan.FromSeconds(1)));
-                Assert.Contains("ERR_CONNECTION_REFUSED", refused.Message, StringComparison.Ordinal);
+                Assert.True(refused.Message.Contains("ERR_CONNECTION_REFUSED", StringComparison.Ordinal), refused.Message);
             }
 
             // Letting go leaves the browser running: it's the debugger's.
