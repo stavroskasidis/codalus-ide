@@ -251,6 +251,65 @@ public sealed class IdeToolsTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// The page navigating on its own while the agent reads it (a debugger opening the app's page in the same tab, a
+    /// redirect, a reload): the read waits for the new page instead of failing with "Inspected target navigated or closed"
+    /// (Ubuntu CI, run 42288986008: browser_navigate while vscode-js-debug still opened the debugged page).
+    /// </summary>
+    [Fact]
+    public async Task Reading_a_page_that_navigates_on_its_own_waits_for_the_new_page()
+    {
+        var browser = Browsers.Find();
+        Assert.SkipWhen(browser is null && Environment.GetEnvironmentVariable("CI") != "true", "No Chrome, Edge or Chromium is installed.");
+        Assert.NotNull(browser);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(2));
+        var ct = timeout.Token;
+
+        // A page that keeps moving between two sites (127.0.0.1 and localhost), so the tab changes renderer process
+        // on each hop, as a debugger's first navigation to the app does, and most reads overlap a navigation.
+        using var server = Bound();
+        server.Listen();
+        var port = ((System.Net.IPEndPoint)server.LocalEndPoint!).Port;
+        var stopped = false;
+        var serving = Task.Run(async () =>
+        {
+            try
+            {
+                while (true)
+                {
+                    var connection = await server.AcceptAsync(ct);
+                    _ = Task.Run(() => ServeAsync(connection, "<title>Hopping</title><p>Still here</p><script>setTimeout(() => location.href = location.hostname === 'localhost' ? 'http://127.0.0.1:" + port + "/' : 'http://localhost:" + port + "/', 5)</script>", ct), ct);
+                }
+            }
+            catch (Exception) when (Volatile.Read(ref stopped))
+            {
+                // The server closed below.
+            }
+        }, ct);
+
+        await using var agent = await AgentBrowser.StartAsync(browser.Path, _profile, "data:text/html,<title>First</title>", headless: true, ct);
+        await agent.NavigateAsync($"http://127.0.0.1:{port}/", ct);
+        var failures = new List<string>();
+        for (var i = 0; i < 200; i++)
+        {
+            try
+            {
+                await agent.GetPageAsync(null, ct);
+            }
+            catch (IdeToolException e)
+            {
+                failures.Add(e.Message);
+            }
+        }
+
+        Assert.True(failures.Count == 0, $"{failures.Count} of 200 reads failed: " + string.Join(" | ", failures.Distinct()));
+
+        Volatile.Write(ref stopped, true);
+        server.Dispose();
+        await serving;
+    }
+
     /// <summary>A loopback TCP socket bound to a free port and not listening: connections to it are refused.</summary>
     private static System.Net.Sockets.Socket Bound()
     {
