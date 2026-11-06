@@ -193,35 +193,50 @@ public sealed class IdeToolsTests : IDisposable
                 await AssertEventuallyAsync(() => attached.GetPageAsync(null, ct).Result.Contains("Debugged", StringComparison.Ordinal), ct);
 
                 // A server that isn't listening yet (a web app starting): the navigation is tried again until it answers.
-                using var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-                probe.Start();
-                var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
-                probe.Stop();
-                var url = $"http://127.0.0.1:{port}/";
-                using var server = new System.Net.HttpListener();
-                server.Prefixes.Add(url);
+                // Its socket is bound from the start and only listens later, so connections are refused until then and
+                // the port stays ours: a probed port freed for an HttpListener could be taken in between, and on Windows
+                // the listener then never answered (Windows CI, run 42276868528).
+                using var server = Bound();
+                var url = $"http://127.0.0.1:{((System.Net.IPEndPoint)server.LocalEndPoint!).Port}/";
+                var stopped = false;
                 var serving = Task.Run(async () =>
                 {
                     await Task.Delay(1500, ct);
-                    server.Start();
-                    var context = await server.GetContextAsync();
-                    var body = "<title>Late</title><p>Started late</p>"u8.ToArray();
-                    context.Response.ContentType = "text/html";
-                    await context.Response.OutputStream.WriteAsync(body, ct);
-                    context.Response.Close();
+                    server.Listen();
+                    try
+                    {
+                        while (true)
+                        {
+                            // Every connection gets the page: the browser may open more than one (a preconnect, the favicon).
+                            var connection = await server.AcceptAsync(ct);
+                            _ = Task.Run(() => ServeAsync(connection, "<title>Late</title><p>Started late</p>", ct), ct);
+                        }
+                    }
+                    catch (Exception) when (Volatile.Read(ref stopped))
+                    {
+                        // The server closed below.
+                    }
                 }, ct);
-                await attached.NavigateAsync(url, ct, retryFor: TimeSpan.FromSeconds(30));
+                try
+                {
+                    await attached.NavigateAsync(url, ct, retryFor: TimeSpan.FromSeconds(30));
+                }
+                catch (IdeToolException) when (serving.IsFaulted)
+                {
+                    await serving; // why the server never answered
+                    throw;
+                }
+
                 Assert.Contains("Started late", await attached.GetPageAsync(null, ct), StringComparison.Ordinal);
+                Volatile.Write(ref stopped, true);
+                server.Dispose();
                 await serving;
 
-                // Nothing ever listens: the error says what the browser said, after the wait. A port nothing has listened
-                // on, not the stopped server's: the browser's kept-alive connection to it can still get an empty answer
-                // after HttpListener.Stop, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally).
-                server.Stop();
-                using var never = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-                never.Start();
-                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndpoint).Port}/";
-                never.Stop();
+                // Nothing ever listens: the error says what the browser said, after the wait. A port bound but never
+                // listened on, not the served one: the browser's kept-alive connection to a stopped server can still get
+                // an empty answer, which loads as an empty page (Ubuntu CI, run 42038288930; 2 in 30 locally).
+                using var never = Bound();
+                var nothing = $"http://127.0.0.1:{((System.Net.IPEndPoint)never.LocalEndPoint!).Port}/";
                 var refused = await Assert.ThrowsAsync<IdeToolException>(() => attached.NavigateAsync(nothing, ct, retryFor: TimeSpan.FromSeconds(1)));
                 Assert.Contains("ERR_CONNECTION_REFUSED", refused.Message, StringComparison.Ordinal);
             }
@@ -233,6 +248,40 @@ public sealed class IdeToolsTests : IDisposable
         finally
         {
             Codalus.Platform.ProcessTree.Kill(process);
+        }
+    }
+
+    /// <summary>A loopback TCP socket bound to a free port and not listening: connections to it are refused.</summary>
+    private static System.Net.Sockets.Socket Bound()
+    {
+        var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+        socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+        return socket;
+    }
+
+    /// <summary>Answers one HTTP request on <paramref name="connection"/> with <paramref name="html"/>, then closes it.</summary>
+    private static async Task ServeAsync(System.Net.Sockets.Socket connection, string html, CancellationToken cancellationToken)
+    {
+        using (connection)
+        {
+            var request = new System.Text.StringBuilder();
+            var buffer = new byte[4096];
+            while (!request.ToString().Contains("\r\n\r\n", StringComparison.Ordinal))
+            {
+                var read = await connection.ReceiveAsync(buffer, cancellationToken);
+                if (read == 0)
+                {
+                    return; // a preconnect closed unused
+                }
+
+                request.Append(System.Text.Encoding.ASCII.GetString(buffer, 0, read));
+            }
+
+            var body = System.Text.Encoding.UTF8.GetBytes(html);
+            var head = System.Text.Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n");
+            await connection.SendAsync(head, cancellationToken);
+            await connection.SendAsync(body, cancellationToken);
+            connection.Shutdown(System.Net.Sockets.SocketShutdown.Both);
         }
     }
 
