@@ -66,6 +66,15 @@ public class SolutionTests
         Assert.Equal(("Debug", "Any CPU"), (f.Shell.Toolbar.Configuration, f.Shell.Toolbar.Platform));
         Assert.Equal("ProjectSystem", f.Shell.Toolbar.SolutionName);
         Assert.Equal("ProjectSystem - Codalus IDE", f.Window.Title); // the taskbar and Alt+Tab tell windows apart by it
+        var greeter = await f.Shell.OpenFileAsync(Path.Combine(f.Shell.Solutions.Solution!.Directory, "src", "Core", "Greeter.cs"));
+        await ShellFixture.PumpUntil(() => f.Window.Title == "ProjectSystem - Greeter.cs - Codalus IDE"); // then the active document
+        greeter!.Controller!.Editor.Document.Insert(0, "// edited\n");
+        await ShellFixture.PumpUntil(() => greeter.Title.EndsWith('●'));
+        Assert.Equal("ProjectSystem - Greeter.cs - Codalus IDE", f.Window.Title); // without the tab's modified dot
+        await f.RunAsync("file.save");
+        await ShellFixture.PumpUntil(() => !greeter.IsModified);
+        f.Shell.CloseActiveDocument();
+        await ShellFixture.PumpUntil(() => f.Window.Title == "ProjectSystem - Codalus IDE");
         Assert.Equal(f.Shell.Solutions.Solution!.Path, f.Shell.Recent.Items[0]);
         Assert.EndsWith(Path.Combine(".codalus", "settings.json"), f.Shell.Workbench.Settings.WorkspaceFile, StringComparison.Ordinal);
         Assert.Equal(true, f.Shell.Workbench.Context.GetValue("solutionOpen"));

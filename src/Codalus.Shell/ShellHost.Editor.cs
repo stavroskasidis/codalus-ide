@@ -254,6 +254,7 @@ public sealed partial class ShellHost : IEditorServices
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
+        Layout.ActiveDocumentChanged += (_, _) => TrackTitleDocument();
         Switcher.Chosen += (_, document) => Layout.OpenDocument(document, focus: true);
         _ = ConfigureLanguagesAsync();
     }
