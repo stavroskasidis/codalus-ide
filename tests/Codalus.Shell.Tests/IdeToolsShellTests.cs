@@ -222,7 +222,11 @@ public sealed class IdeToolsShellTests
             var folder = f.CopySample("BlazorHosted");
             var port = FreePort();
             var settings = Path.Combine(folder, "BlazorHosted", "Properties", "launchSettings.json");
-            File.WriteAllText(settings, File.ReadAllText(settings).Replace("5274", port.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal));
+            // Its logging filters the host's "Now listening on", as the maintainer's app's did (2026-11-06): the tools find
+            // the app at its launch profile's address instead.
+            File.WriteAllText(settings, File.ReadAllText(settings)
+                .Replace("5274", port.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                .Replace("\"ASPNETCORE_ENVIRONMENT\": \"Development\"", "\"ASPNETCORE_ENVIRONMENT\": \"Development\", \"Logging__LogLevel__Microsoft.Hosting.Lifetime\": \"Warning\"", StringComparison.Ordinal));
             f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
             await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BlazorHosted.slnx"));
             await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
@@ -267,6 +271,14 @@ public sealed class IdeToolsShellTests
             // The paused page doesn't answer: the tool says so instead of waiting a minute.
             var paused = await CallAsync(f, "browser_get_page");
             Assert.Contains("the debugged program is stopped", paused.Text, StringComparison.Ordinal);
+
+            // A step returns at its stop. It said "nothing has stopped it yet" while the app answered at its address and
+            // its log had never said so (the maintainer's report, 2026-11-06).
+            var stepped = await CallAsync(f, "debug_step");
+            Assert.False(stepped.IsError, stepped.Text + Diagnostics());
+            Assert.DoesNotContain("nothing has stopped", stepped.Text, StringComparison.Ordinal);
+            Assert.Contains("State: stopped", stepped.Text, StringComparison.Ordinal);
+            Assert.Contains("Counter.razor:", stepped.Text, StringComparison.Ordinal);
 
             Assert.StartsWith("Continued.", (await CallAsync(f, "debug_continue")).Text, StringComparison.Ordinal);
             for (var i = 0; i < 60 && !(await CallAsync(f, "browser_get_page")).Text.Contains("Current count: 2", StringComparison.Ordinal); i++)

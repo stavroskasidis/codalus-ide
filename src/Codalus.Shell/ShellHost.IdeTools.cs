@@ -392,7 +392,8 @@ public sealed partial class ShellHost
                     "out" => Debugger.StepOutAsync(),
                     _ => Debugger.StepOverAsync(),
                 }).ConfigureAwait(true);
-                return new(await WaitForStopTextAsync(TimeSpan.FromSeconds(30), root, cancellationToken).ConfigureAwait(true));
+                // Only the step's stop ends this wait: the web app is up already (a step is from a stop).
+                return new(await WaitForStopTextAsync(TimeSpan.FromSeconds(30), root, cancellationToken, untilWebApp: false).ConfigureAwait(true));
             }
 
             case "debug_continue":
@@ -1308,7 +1309,11 @@ public sealed partial class ShellHost
         return sb.ToString().TrimEnd();
     }
 
-    private async Task<string> WaitForStopTextAsync(TimeSpan timeout, string? root, CancellationToken cancellationToken)
+    /// <summary>
+    /// Until the debugged program stops or ends, or (<paramref name="untilWebApp"/>) a web app that doesn't answer yet
+    /// starts to listen: nothing stops a web app before a request. A step waits for its stop only.
+    /// </summary>
+    private async Task<string> WaitForStopTextAsync(TimeSpan timeout, string? root, CancellationToken cancellationToken, bool untilWebApp = true)
     {
         var deadline = DateTime.UtcNow + timeout;
         if (!Debugger.IsActive && _agentLaunch is { IsCompleted: false } launch)
@@ -1332,9 +1337,12 @@ public sealed partial class ShellHost
             Debugger.Stopped += OnStopped;
             Debugger.Ended += OnEnded;
 
-            // A web app that doesn't listen yet: its start ends the wait too, since nothing stops it before a request.
+            // A web app that doesn't answer yet: its start ends the wait too, since nothing stops it before a request. Not
+            // one that answers already, though its log never said where it listens (its logging filters the host's
+            // "Now listening on"): every wait ended at once there, a step's too, saying nothing had stopped the program
+            // (the maintainer's report, 2026-11-06).
             using var readyStop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var ready = _debugLaunchUrl is not null && ListeningAddress() is null
+            var ready = untilWebApp && _debugLaunchUrl is not null && await WebAppAsync(TimeSpan.Zero, cancellationToken).ConfigureAwait(true) is null
                 ? WaitForWebAppAsync(readyStop.Token)
                 : new TaskCompletionSource<string?>().Task;
             try
@@ -1520,7 +1528,13 @@ public sealed partial class ShellHost
             var expected = await ExpectedAddressAsync().ConfigureAwait(true);
             if (expected is not null && await AcceptsAsync(expected, cancellationToken).ConfigureAwait(true))
             {
-                return expected; // its logging may filter the host's "Now listening on"
+                // Its logging may filter the host's "Now listening on": the session's address from now on.
+                if (Debugger.IsActive && expected == _debugLaunchUrl)
+                {
+                    _debugAppUrl ??= expected;
+                }
+
+                return expected;
             }
 
             var starting = _agentLaunch is { IsCompleted: false }
