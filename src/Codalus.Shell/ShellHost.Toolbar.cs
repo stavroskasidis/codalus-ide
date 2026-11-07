@@ -1,5 +1,6 @@
 using Codalus.LanguageServices.Protocol;
 using Codalus.Projects.Protocol;
+using Codalus.Shell.Docking;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Search;
 
@@ -12,6 +13,9 @@ public sealed partial class ShellHost
     private const string LaunchChoicePrefix = "launch:";
 
     public ToolbarViewModel Toolbar { get; private set; } = null!;
+
+    /// <summary>The main window's title: the solution's and the active document's names.</summary>
+    public WindowTitleViewModel WindowTitle { get; } = new();
 
     private void InitializeToolbar()
     {
@@ -49,6 +53,41 @@ public sealed partial class ShellHost
         };
     }
 
+    private ShellDocument? _titleDocument;
+
+    /// <summary>Keeps the window's title on the active document's name, through its renames.</summary>
+    private void TrackTitleDocument()
+    {
+        if (_titleDocument is not null)
+        {
+            _titleDocument.PropertyChanged -= OnTitleDocumentChanged;
+        }
+
+        _titleDocument = Layout.ActiveDocument;
+        if (_titleDocument is not null)
+        {
+            _titleDocument.PropertyChanged += OnTitleDocumentChanged;
+        }
+
+        WindowTitle.SetDocument(TitleName(_titleDocument));
+    }
+
+    private void OnTitleDocumentChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ShellDocument.Title) && sender == _titleDocument)
+        {
+            WindowTitle.SetDocument(TitleName(_titleDocument));
+        }
+    }
+
+    /// <summary>A file's name, or a page's title ("Options"), without the tab's modified dot.</summary>
+    internal static string? TitleName(ShellDocument? document) => document switch
+    {
+        null => null,
+        { FilePath: { Length: > 0 } path } when Path.GetFileName(path) is { Length: > 0 } name => name,
+        _ => document.Title?.TrimEnd(' ', '●'),
+    };
+
     private void UpdateToolbarSolution()
     {
         if (Toolbar is null)
@@ -56,6 +95,7 @@ public sealed partial class ShellHost
             return;
         }
 
+        WindowTitle.SetSolution(Solutions?.Solution?.Name);
         if (Solutions?.Solution is not { } solution)
         {
             Toolbar.SetSolution(null, null);

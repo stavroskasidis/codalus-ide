@@ -155,7 +155,9 @@ public sealed class XamlShellTests
         await ShellFixture.PumpUntil(() => document?.Controller is not null);
         f.Shell.ShowXamlPreview();
         var preview = f.Shell.XamlPreview;
-        await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300);
+        // The first frame never came on Windows CI, the runner idle for four minutes (run 42294063461): what the preview
+        // waited on (the project's properties, the build, the previewer) is said if it happens again.
+        await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300, describe: () => PreviewState(f));
         preview.ZoomResetCommand.Execute(null);
         Assert.Equal((240d, 32d), (preview.ImageWidth, preview.ImageHeight));
         var firstFrame = preview.Frame!;
@@ -168,7 +170,7 @@ public sealed class XamlShellTests
         code.Text.Replace(setter, "set => Set(ref _title, value);".Length, "set => Set(ref _title, value.ToUpperInvariant());");
         await code.SaveAsync(CancellationToken.None);
         var frames = preview.FrameCount;
-        await ShellFixture.PumpUntil(() => preview.FrameCount > frames && preview.Frame is { } frame && !frame.Data.AsSpan().SequenceEqual(firstFrame.Data), seconds: 300);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > frames && preview.Frame is { } frame && !frame.Data.AsSpan().SequenceEqual(firstFrame.Data), seconds: 300, describe: () => PreviewState(f));
         Assert.Contains("rebuilding", f.Shell.PreviewerLog.GetText(), StringComparison.Ordinal);
 
         // A XAML compiler error from a build lands in its .axaml file as a diagnostic.
@@ -180,5 +182,14 @@ public sealed class XamlShellTests
         var error = f.Shell.Languages.Diagnostics.Get(styles, XamlBuildDiagnostics.Source)!.Items[0];
         Assert.StartsWith("AVLN", error.Code, StringComparison.Ordinal);
         Assert.Equal(File.ReadAllLines(styles).ToList().FindIndex(l => l.Contains("NoSuchProperty", StringComparison.Ordinal)), error.Range.Start.Line);
+    }
+
+    /// <summary>The preview's stage and status, its log, and the end of the build output, for a wait that timed out.</summary>
+    private static string PreviewState(ShellFixture f)
+    {
+        var build = f.Shell.Builds.Channel.GetText();
+        return $"stage {f.Shell.Previewer.Stage}, status \"{f.Shell.XamlPreview.Status}\", frames {f.Shell.XamlPreview.FrameCount}\n"
+            + "XAML Previewer log:\n" + f.Shell.PreviewerLog.GetText()
+            + "\nBuild output (its end):\n" + build[Math.Max(0, build.Length - 4000)..];
     }
 }
