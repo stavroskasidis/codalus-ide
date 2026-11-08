@@ -217,7 +217,7 @@ public sealed class AgentBrowser : IAsyncDisposable
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (DateTime.UtcNow < deadline)
         {
-            if (await EvaluateAsync("document.readyState", cancellationToken).ConfigureAwait(false) is "\"complete\"")
+            if (await ReadAsync("document.readyState", cancellationToken).ConfigureAwait(false) is "\"complete\"")
             {
                 return;
             }
@@ -239,7 +239,7 @@ public sealed class AgentBrowser : IAsyncDisposable
         var script = selector is { Length: > 0 }
             ? "(() => { const all = [...document.querySelectorAll(" + JsonSerializer.Serialize(selector, IdeJsonContext.Default.String) + ")]; return all.length === 0 ? 'Nothing matches the selector.' : all.slice(0, 50).map(e => e.outerHTML).join('\\n'); })()"
             : "location.href + '\\n' + document.title + '\\n\\n' + (document.body ? document.body.innerText : '')";
-        var value = await EvaluateAsync(script, cancellationToken).ConfigureAwait(false);
+        var value = await ReadAsync(script, cancellationToken).ConfigureAwait(false);
         return value.Length > 1 && value[0] == '"' ? JsonSerializer.Deserialize(value, IdeJsonContext.Default.String) ?? "" : value;
     }
 
@@ -273,6 +273,35 @@ public sealed class AgentBrowser : IAsyncDisposable
             : value.TryGetProperty("description", out var description) ? description.GetString() ?? ""
             : value.TryGetProperty("type", out var type) ? type.GetString() ?? "" : "";
     }
+
+    /// <summary>
+    /// Runs a script that only reads the page, again while the page navigates under it (a debugger opening the app's
+    /// page in the same tab, a redirect): a read in flight then fails with "Inspected target navigated or closed" as
+    /// the tab changes renderer process (Ubuntu CI, run 42288986008). An agent's own script isn't run twice: it may
+    /// change something.
+    /// </summary>
+    private async Task<string> ReadAsync(string script, CancellationToken cancellationToken)
+    {
+        var until = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            try
+            {
+                return await EvaluateAsync(script, cancellationToken).ConfigureAwait(false);
+            }
+            catch (IdeToolException e) when (IsNavigating(e.Message) && DateTime.UtcNow < until)
+            {
+                await Task.Delay(50, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>Chromium's errors for a command that the page's navigation interrupted.</summary>
+    internal static bool IsNavigating(string message) =>
+        message.Contains("Inspected target navigated or closed", StringComparison.Ordinal)
+        || message.Contains("Execution context was destroyed", StringComparison.Ordinal)
+        || message.Contains("Cannot find default execution context", StringComparison.Ordinal)
+        || message.Contains("Cannot find context with specified id", StringComparison.Ordinal);
 
     /// <summary>The last <paramref name="count"/> console messages and uncaught errors.</summary>
     public IReadOnlyList<string> Console(int count)
