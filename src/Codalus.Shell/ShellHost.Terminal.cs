@@ -4,6 +4,7 @@ using Codalus.Shell.Infrastructure;
 using Codalus.Shell.Terminal;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
+using Codalus.Workbench.Build;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Settings;
 using Codalus.Workbench.Terminal;
@@ -194,6 +195,49 @@ public sealed partial class ShellHost
             Workbench.Notifications.Error(Localizer.Format("msg.terminal.couldNotRunInTheTerminal", "Could not run {0} in the terminal: {1}", Path.GetFileName(project), ex.Message));
             return false;
         }
+    }
+
+    /// <summary>
+    /// Start with Hot Reload in the integrated terminal (<c>run.console</c>): <c>dotnet watch</c> runs in a new terminal,
+    /// so the app reads input there, and the startup hook relays its messages to the Hot Reload session (the status bar).
+    /// False when the startup hook isn't there.
+    /// </summary>
+    public async Task<bool> RunHotReloadInTerminalAsync(string project)
+    {
+        TerminalSession? session = null;
+        RunningProgram? program;
+        try
+        {
+            program = await Runs.StartHotReloadInTerminalAsync(project, (title, plan) =>
+            {
+                session = Terminals.Run(title, plan.FileName, plan.SplitArguments(), plan.WorkingDirectory, plan.Environment);
+                var exited = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                session.Exited += (_, code) => exited.TrySetResult(code);
+                if (session.ExitCode is { } code)
+                {
+                    exited.TrySetResult(code);
+                }
+
+                return (session.ProcessId, exited.Task);
+            }, CancellationToken.None).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (session is not null)
+            {
+                // Also when dotnet watch ended at once: the terminal says why.
+                Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
+                TerminalWindow.Show(session);
+            }
+        }
+
+        if (program is null)
+        {
+            return false;
+        }
+
+        OnHotReloadStarted(program);
+        return true;
     }
 
     public static IReadOnlyList<SettingDescriptor> TerminalSettings(IReadOnlyList<TerminalProfile> profiles)

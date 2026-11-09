@@ -324,10 +324,18 @@ public sealed partial class ShellHost
             }
 
             var console = Workbench.Settings.GetString(RunConsoleSetting, DefaultRunConsole);
-            if (console == "integratedTerminal" && Runs.IsExecutable(project) && !hotReload)
+            if (console == "integratedTerminal" && Runs.IsExecutable(project))
             {
-                await RunInTerminalAsync(project).ConfigureAwait(true);
-                return;
+                if (!hotReload)
+                {
+                    await RunInTerminalAsync(project).ConfigureAwait(true);
+                    return;
+                }
+
+                if (!launch.IsCanceled && await RunHotReloadInTerminalAsync(project).ConfigureAwait(true))
+                {
+                    return; // dotnet watch in the terminal, its messages relayed (without the startup hook: the Output window)
+                }
             }
 
             if (launch.IsCanceled)
