@@ -61,6 +61,8 @@ public sealed class DiffViewModel : ObservableObject
     private string _summary = string.Empty;
     private double _zoom = 1;
     private int _colorsVersion;
+    private CodeDocument? _held;
+    private bool _closed;
     private int _reloadVersion;
     private bool _showStagingControls;
     private bool _isBusy;
@@ -122,6 +124,15 @@ public sealed class DiffViewModel : ObservableObject
 
     /// <summary>The shell's services: colors, languages and open documents (null in a test: plain text).</summary>
     public DiffServices? Services { get; set; }
+
+    /// <summary>
+    /// The language service's view of the working-tree side (Quick Info, CodeLens, the navigation bar's symbols), while
+    /// that side is the open document's text; null otherwise (a staged or revision diff, a file without a service).
+    /// </summary>
+    public DiffInsights? Insights { get; private set; }
+
+    /// <summary>Raised when <see cref="Insights"/> was made or let go of.</summary>
+    public event EventHandler? InsightsChanged;
 
     /// <summary>A command's key as menus show it (<c>F8</c>), for tooltips; null when unbound.</summary>
     public Func<string, string?>? ShortcutFor { get; set; }
@@ -418,15 +429,16 @@ public sealed class DiffViewModel : ObservableObject
         var old = oldBytes is null ? Text(string.Empty) : TextFiles.Decode(oldBytes);
         (string Text, TextFileFormat Format) now;
         byte[] nowBytes;
-        var buffer = Staged ? null : Services?.OpenDocument(Path);
+        var buffer = Staged ? null : Services?.OpenDocument(Path) ?? await HoldAsync().ConfigureAwait(true);
         if (Staged)
         {
             nowBytes = await _git.ShowBytesAsync(Path, ":").ConfigureAwait(true) ?? [];
             now = nowBytes.Length == 0 ? Text(string.Empty) : TextFiles.Decode(nowBytes);
         }
-        else if (buffer is not null)
+        else if (buffer is not null && (buffer != _held || buffer.IsModified))
         {
-            // The working tree's side is the open buffer, unsaved edits included (D45 question 11).
+            // The working tree's side is the open buffer, unsaved edits included (D45 question 11). A document only the
+            // diff holds, without edits, is the file: read from disk, where a change may not have reached it yet.
             now = (buffer.Text.Text, buffer.Format);
             nowBytes = TextFiles.Encode(now.Text, now.Format);
         }
@@ -449,7 +461,7 @@ public sealed class DiffViewModel : ObservableObject
                 ? Localizer.Format("diff.renamedFrom", "renamed from {0}", System.IO.Path.GetFileName(OldPath))
                 : status is { WorkTree: not '.' } ? Localizer.Get("diff.workingTreeHasMoreEdits", "the working tree has more edits") : null;
         }
-        else if (!File.Exists(Path) && buffer is null)
+        else if (!File.Exists(Path) && (buffer is null || (buffer == _held && !buffer.IsModified)))
         {
             newNote = Localizer.Get("diff.deleted", "deleted");
         }
@@ -595,6 +607,69 @@ public sealed class DiffViewModel : ObservableObject
         _ = ColorAsync();
     }
 
+    /// <summary>
+    /// A working-tree diff of a file no editor has open holds its document (the maintainer's report: no Quick Info and
+    /// no CodeLens in a diff), so its language service knows the file as the classic IDE's right side is the file itself.
+    /// Only files with a language (a grammar); a binary file stays out. Null when the file can't be held.
+    /// </summary>
+    private async Task<CodeDocument?> HoldAsync()
+    {
+        if (_held is not null || _closed || Services is not { } services || !File.Exists(Path) || services.LanguageOf(Path) is null)
+        {
+            return _held;
+        }
+
+        var model = await services.AcquireDocumentAsync(Path).ConfigureAwait(true);
+        if (model is null)
+        {
+            return null;
+        }
+
+        if (_closed || _held is not null || model.LanguageId is null || model.IsLarge)
+        {
+            services.ReleaseDocument(model); // closed meanwhile, held by another load, or nothing to ask a service about
+            return _held ?? Services.OpenDocument(Path);
+        }
+
+        _held = model;
+        return model;
+    }
+
+    /// <summary>The working-tree side's insights follow the open document's text: made when it is, let go of when it isn't.</summary>
+    private void UpdateInsights()
+    {
+        var model = !_closed && IsGitDiff && !Staged && State == DiffState.Lines && OpenSideIsOld == false ? Services?.OpenDocument(Path) : null;
+        if (model == Insights?.Model)
+        {
+            return;
+        }
+
+        Insights?.Dispose();
+        Insights = model is null ? null : new DiffInsights(model, Services!.Editor);
+        InsightsChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>The language service started again or knows more (its projects loaded): the insights ask again.</summary>
+    public void RefreshInsights() => Insights?.Refresh();
+
+    /// <summary>The document closed: the insights stop and the held document is let go of.</summary>
+    public void Close()
+    {
+        _closed = true;
+        if (Insights is { } insights)
+        {
+            Insights = null;
+            insights.Dispose();
+            InsightsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        if (_held is { } held)
+        {
+            _held = null;
+            Services?.ReleaseDocument(held);
+        }
+    }
+
     private static (string Text, TextFileFormat Format) Text(string text) =>
         (text, new TextFileFormat(new System.Text.UTF8Encoding(false), false, TextFiles.DetectLineEnding(text)));
 
@@ -704,6 +779,7 @@ public sealed class DiffViewModel : ObservableObject
             }
 
             (OldColors, NewColors, OpenSideIsOld) = (oldColors, newColors, OpenSide(services, oldText, newText));
+            UpdateInsights();
             ColorsChanged?.Invoke(this, EventArgs.Empty);
 
             // The open document's side: its language service's tokens, as the editor colors it.

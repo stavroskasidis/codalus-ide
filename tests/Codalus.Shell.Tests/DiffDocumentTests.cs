@@ -367,27 +367,72 @@ public sealed class DiffDocumentTests
     [AvaloniaFact]
     public async Task The_navigation_bar_row_is_on_the_open_documents_side_with_an_empty_row_opposite()
     {
-        var (f, _, file) = await RepositoryAsync();
+        var (f, folder, file) = await RepositoryAsync();
         await using var fixture = f;
         await File.WriteAllTextAsync(file, Original.Replace("Hello from", "Hi from", StringComparison.Ordinal));
         await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
 
-        // The file isn't open: neither side is the open document, and neither has the row.
+        // No editor has the file open: the diff holds its document (its language service knows the file, as the classic
+        // IDE's right side is the file itself), so the working tree is the open document's side.
+        Assert.Null(f.Shell.DiffServices.OpenDocument(file));
         var document = await f.Shell.OpenDiffAsync(file, staged: false);
-        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any() && document!.ViewModel.NewColors is not null);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DiffView>().Any() && document!.ViewModel.OpenSideIsOld == false);
         var view = f.Window.GetVisualDescendants().OfType<DiffView>().Single();
-        Assert.Null(document!.ViewModel.OpenSideIsOld);
-        Assert.False(view.NavigationOf(DiffPaneSide.Old).Row);
-        Assert.False(view.NavigationOf(DiffPaneSide.New).Row);
-
-        // Open in the editor: the working tree is its text, so both sides get the row and only that side the bar's place.
-        await f.Shell.OpenFileAsync(file);
-        f.Shell.Layout.OpenDocument(document, focus: true);
-        await document.ViewModel.ColorAsync();
-        await ShellFixture.PumpUntil(() => document.ViewModel.OpenSideIsOld == false);
-        view = f.Window.GetVisualDescendants().OfType<DiffView>().Single(v => v.ViewModel == document.ViewModel);
+        Assert.NotNull(f.Shell.DiffServices.OpenDocument(file));
+        Assert.NotNull(document!.ViewModel.Insights);
         await ShellFixture.PumpUntil(() => view.NavigationOf(DiffPaneSide.New).Row && view.NavigationOf(DiffPaneSide.Old).Row);
         Assert.False(view.NavigationOf(DiffPaneSide.Old).Bar); // the empty, disabled row
+
+        // Open in the editor too: the same document, so closing the diff keeps it, and closing the editor then lets it go.
+        var editor = await f.Shell.OpenFileAsync(file);
+        Assert.Same(f.Shell.DiffServices.OpenDocument(file), editor!.Model);
+        f.Shell.Layout.CloseDocument(document);
+        Assert.Null(document.ViewModel.Insights);
+        Assert.NotNull(f.Shell.DiffServices.OpenDocument(file));
+        f.Shell.Layout.CloseDocument(editor);
+        await ShellFixture.PumpUntil(() => f.Shell.DiffServices.OpenDocument(file) is null);
+
+        // Closed without an editor: the diff lets go of the document it held.
+        var again = await f.Shell.OpenDiffAsync(file, staged: false);
+        await ShellFixture.PumpUntil(() => again!.ViewModel.OpenSideIsOld == false);
+        f.Shell.Layout.CloseDocument(again!);
+        Assert.Null(f.Shell.DiffServices.OpenDocument(file));
+
+        // A staged diff holds nothing: neither side is the working tree.
+        Git(folder, "add", ".");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        var staged = await f.Shell.OpenDiffAsync(file, staged: true);
+        await ShellFixture.PumpUntil(() => staged!.ViewModel.NewColors is not null);
+        Assert.Null(f.Shell.DiffServices.OpenDocument(file));
+        Assert.Null(staged!.ViewModel.Insights);
+    }
+
+    [AvaloniaFact]
+    public async Task Opening_a_diff_scrolls_its_first_change_into_view()
+    {
+        // The maintainer's report: a diff opened from Git Changes stayed at the top of the file, its first change below.
+        var lines = Enumerable.Range(1, 300).Select(i => $"    // line {i}").ToList();
+        var text = "namespace Greetings;\n\npublic static class Long\n{\n" + string.Join('\n', lines) + "\n}\n";
+        var (f, _, file) = await RepositoryAsync(text);
+        await using var fixture = f;
+        await File.WriteAllTextAsync(file, text.Replace("// line 240\n", "// line 240, changed\n", StringComparison.Ordinal));
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+
+        foreach (var layout in new[] { DiffViewModel.LayoutSideBySide, DiffViewModel.LayoutInline })
+        {
+            await f.Shell.Workbench.Settings.SetAsync(BuiltIns.DiffLayoutSetting, layout, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+            var view = await OpenDiffViewAsync(f, file, staged: false);
+            var sides = layout == DiffViewModel.LayoutInline ? new[] { DiffPaneSide.Inline } : [DiffPaneSide.Old, DiffPaneSide.New];
+            foreach (var side in sides)
+            {
+                var changed = LineOf(view.EditorOf(side).Text, "// line 240");
+                await ShellFixture.PumpUntil(
+                    () => view.VisibleLines(side) is var (first, last) && first <= changed && changed <= last,
+                    describe: () => $"{layout} {side}: lines {view.VisibleLines(side)} shown, the change on {changed}");
+            }
+
+            f.Shell.Layout.CloseDocument(f.Shell.Layout.Documents.OfType<DiffDocument>().Single());
+        }
     }
 
     private const string TwoChanges = """

@@ -252,6 +252,7 @@ public sealed partial class ShellHost : IEditorServices
         Editor.CodeColors.Configure(Languages.LanguageIdOf, TextMate.GrammarFor, id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
         ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
+        Layout.DocumentClosed += (_, document) => OnDiffClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
         Layout.ActiveDocumentChanged += (_, _) => TrackTitleDocument();
@@ -766,6 +767,7 @@ public sealed partial class ShellHost : IEditorServices
                 editor.Controller?.RefreshAll();
             }
 
+            RefreshDiffInsights(model);
             if (languageId == RazorLanguageId)
             {
                 // HTML and CSS in Razor files come from the HTML server (ADR 0027).
@@ -820,6 +822,8 @@ public sealed partial class ShellHost : IEditorServices
         {
             editor.Controller?.RefreshAll();
         }
+
+        RefreshDiffInsights();
     }
 
     private WorkspaceStatusParams? _languageStatus;
