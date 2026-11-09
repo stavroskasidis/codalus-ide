@@ -51,7 +51,7 @@
 - The terminal exposes its visible text to screen readers (UI Automation on Windows, the accessibility API on macOS and AT-SPI on Linux).
 
 **Running programs in the terminal**
-- Set `run.console` to `integratedTerminal` to run console apps there with **Start Without Debugging** (`Ctrl+F5`), so they can read input.
+- Set `run.console` to `integratedTerminal` to run console apps there with **Start Without Debugging** (`Ctrl+F5`), so they can read input. With Hot Reload (Start with Hot Reload, or **Hot Reload on Start Without Debugging**), `dotnet watch` runs in the terminal and the app reads input there too; the status bar follows Hot Reload as usual ([Hot Reload](web.md#hot-reload)).
 - The default, `outputWindow`, shows their output in the Output window. `externalConsole` opens a separate console window.
 
 ## C# Interactive

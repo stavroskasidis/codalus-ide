@@ -80,6 +80,13 @@ public sealed class RunningProgram : IDisposable
         _listening.TrySetCanceled();
     }
 
+    /// <summary>The program ended with <paramref name="code"/>, reported by what started it (the integrated terminal).</summary>
+    internal void OnExited(int code)
+    {
+        _exited.TrySetResult(code);
+        _listening.TrySetCanceled();
+    }
+
     /// <summary>Ends the program and every process it started, without waiting for that (<see cref="StopAsync"/>).</summary>
     public void Stop() => _ = StopAsync();
 
@@ -531,11 +538,132 @@ public sealed class RunService : IDisposable
         if (hotReload)
         {
             plan = HotReloadPlan(projectPath, plan, profile?.CommandLineArgs, targetFramework, announceProcess);
-            externalConsole = false;
         }
 
         var console = externalConsole && OperatingSystem.IsWindows() && string.Equals(info.OutputType, "Exe", StringComparison.OrdinalIgnoreCase);
-        return Launch(projectPath, name, plan, channel, console, hotReload, profile is null ? string.Empty : $"   (profile '{profile.Name}')");
+        HotReloadRelay? relay = null;
+        if (hotReload && console)
+        {
+            // dotnet watch runs in the console window, and the app in its console; its messages come through the relay.
+            relay = HotReloadRelay.Create();
+            if (relay is null)
+            {
+                console = false; // no startup hook: the Output window, whose output the session follows
+            }
+            else
+            {
+                plan = plan with { Environment = relay.Environment(plan.Environment) };
+            }
+        }
+
+        return Launch(projectPath, name, plan, channel, console, hotReload, ProfileNote(profile), relay);
+    }
+
+    private static string ProfileNote(LaunchProfile? profile) => profile is null ? string.Empty : $"   (profile '{profile.Name}')";
+
+    /// <summary>
+    /// Starts a (built) project with Hot Reload in the integrated terminal (<c>run.console</c>): <c>dotnet watch</c> runs
+    /// there, so the app it starts reads input from it, and its messages reach the run's <see cref="HotReloadSession"/>
+    /// through a <see cref="HotReloadRelay"/>. <paramref name="startInTerminal"/> starts a plan in a terminal titled with
+    /// its first argument, and gives the process id and the exit code. Null when the startup hook isn't there.
+    /// </summary>
+    public async Task<RunningProgram?> StartHotReloadInTerminalAsync(string projectPath, Func<string, LaunchPlan, (int ProcessId, Task<int> Exited)> startInTerminal, CancellationToken cancellationToken)
+    {
+        if (HotReloadRelay.Create() is not { } relay)
+        {
+            return null;
+        }
+
+        try
+        {
+            // On the caller's thread (the UI's): the terminal starts there.
+            var (info, profiles, error) = await GetProfilesAsync(projectPath, cancellationToken).ConfigureAwait(true);
+            var name = Path.GetFileNameWithoutExtension(projectPath);
+            var channel = _output.GetOrCreate("codalus.run." + name, "Run: " + name);
+            var profile = ResolveProfile(projectPath, profiles);
+            var plan = HotReloadPlan(projectPath, await LaunchPlanAsync(info, profile, cancellationToken).ConfigureAwait(true), profile?.CommandLineArgs);
+            plan = plan with { Environment = relay.Environment(plan.Environment) };
+            channel.Clear();
+            if (error is not null)
+            {
+                channel.AppendLine($"Ignoring the launch settings: {error}");
+            }
+
+            channel.AppendLine($"> {plan.FileName} {plan.Arguments}".TrimEnd() + ProfileNote(profile));
+            var (processId, exited) = startInTerminal(name + (profile is null ? string.Empty : $" ({profile.Name})"), plan);
+            Process process;
+            try
+            {
+                process = Process.GetProcessById(processId);
+            }
+            catch (ArgumentException)
+            {
+                throw new InvalidOperationException("dotnet watch ended as it started (see the terminal).");
+            }
+
+            var session = new HotReloadSession(plan.WorkingDirectory);
+            var program = new RunningProgram(projectPath, name, process, channel: null) { HotReload = session, KillTree = KillTree };
+            relay.Start(line =>
+            {
+                channel.AppendLine(line);
+                session.OnLine(line);
+            });
+            lock (_gate)
+            {
+                _running.Add(program);
+            }
+
+            RunningChanged?.Invoke(this, EventArgs.Empty);
+            _ = exited.ContinueWith(t =>
+            {
+                var code = t.IsCompletedSuccessfully ? t.Result : -1;
+                program.OnExited(code);
+                channel.AppendLine($"The program '[{processId.ToString(CultureInfo.InvariantCulture)}] {Path.GetFileName(plan.FileName)}' has exited with code {code.ToString(CultureInfo.InvariantCulture)} (0x{code:x}).");
+                lock (_gate)
+                {
+                    _running.Remove(program);
+                }
+
+                RunningChanged?.Invoke(this, EventArgs.Empty);
+                relay.Dispose();
+                program.Dispose();
+            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+            if (Uri.TryCreate(plan.BrowserUrl, UriKind.Absolute, out var address))
+            {
+                // The app's output is in the terminal: the browser opens once the launch profile's address answers.
+                _ = Task.Run(async () =>
+                {
+                    if (await ServerProbe.WaitUntilListeningAsync(address, TimeSpan.FromMinutes(2), () => !program.HasExited, CancellationToken.None).ConfigureAwait(false))
+                    {
+                        OpenBrowser(address, channel);
+                    }
+                }, CancellationToken.None);
+            }
+
+            return program;
+        }
+        catch
+        {
+            relay.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Opens the launch profile's address in the browser. A failure is written to the run's channel: on the output
+    /// reader's thread, its exception ended the IDE.
+    /// </summary>
+    private void OpenBrowser(Uri url, OutputChannel channel)
+    {
+        // A failure here (no xdg-open, task #90) ended the IDE.
+        try
+        {
+            _openBrowser(url);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or ArgumentException or PlatformNotSupportedException or UnauthorizedAccessException)
+        {
+            channel.AppendErrorLine($"The browser couldn't be opened at {url}: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -544,7 +672,7 @@ public sealed class RunService : IDisposable
     /// </summary>
     /// <param name="hotReload">The plan runs <c>dotnet watch</c> (<see cref="HotReloadPlan"/>): its output feeds a Hot Reload session.</param>
     public RunningProgram StartPlan(string key, string name, LaunchPlan plan, bool hotReload = false) =>
-        Launch(key, name, plan, _output.GetOrCreate("codalus.run." + name, "Run: " + name), console: false, hotReload, string.Empty);
+        Launch(key, name, plan, _output.GetOrCreate("codalus.run." + name, "Run: " + name), console: false, hotReload, string.Empty, relay: null);
 
     /// <summary>
     /// Follows a program the system started for us (a packaged app activated through Windows, M44): it is listed as
@@ -591,7 +719,8 @@ public sealed class RunService : IDisposable
         return program;
     }
 
-    private RunningProgram Launch(string projectPath, string name, LaunchPlan plan, OutputChannel channel, bool console, bool hotReload, string note)
+    /// <param name="relay">A Hot Reload run in a console window: <c>dotnet watch</c>'s messages, for its session.</param>
+    private RunningProgram Launch(string projectPath, string name, LaunchPlan plan, OutputChannel channel, bool console, bool hotReload, string note, HotReloadRelay? relay)
     {
         var start = CreateStartInfo(plan, console);
 
@@ -604,11 +733,23 @@ public sealed class RunService : IDisposable
 
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
         var ready = new TaskCompletionSource<RunningProgram>(TaskCreationOptions.RunContinuationsAsynchronously);
-        process.Exited += (_, _) => _ = ready.Task.ContinueWith(t => OnExited(t.Result, plan, channel, console), CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
-        if (!process.Start())
+        process.Exited += (_, _) => _ = ready.Task.ContinueWith(t =>
+        {
+            OnExited(t.Result, plan, channel, console);
+            relay?.Dispose();
+        }, CancellationToken.None, TaskContinuationOptions.OnlyOnRanToCompletion, TaskScheduler.Default);
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"{plan.FileName} did not start.");
+            }
+        }
+        catch
         {
             process.Dispose();
-            throw new InvalidOperationException($"{plan.FileName} did not start.");
+            relay?.Dispose();
+            throw;
         }
 
         var program = new RunningProgram(projectPath, name, process, console ? null : channel) { HotReload = hotReload ? new HotReloadSession(plan.WorkingDirectory) : null, KillTree = KillTree };
@@ -627,16 +768,18 @@ public sealed class RunService : IDisposable
 
             if (Uri.TryCreate(plan.BrowserUrl, UriKind.Absolute, out var url))
             {
-                // On the output reader's thread: a failure here (no xdg-open, task #90) ended the IDE.
-                try
-                {
-                    _openBrowser(url);
-                }
-                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException or ArgumentException or PlatformNotSupportedException or UnauthorizedAccessException)
-                {
-                    channel.AppendErrorLine($"The browser couldn't be opened at {url}: {ex.Message}");
-                }
+                OpenBrowser(url, channel);
             }
+        }
+
+        if (relay is not null && program.HotReload is { } relayed)
+        {
+            // dotnet watch in the console window: its messages, copied by the startup hook, feed the session.
+            relay.Start(line =>
+            {
+                channel.AppendLine(line);
+                relayed.OnLine(line);
+            });
         }
 
         if (!console)
