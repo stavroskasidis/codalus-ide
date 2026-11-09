@@ -62,8 +62,9 @@ internal sealed class DiffPaneView : DockPanel
         types.Classes.Add("navigationBar");
         members.Classes.Add("navigationBar");
         Grid.SetColumn(members, 1);
-        // As tall as the bar opposite (a NavigationBar takes no Border.navigationBar style), so the sides' code lines up.
+        // Styled as the bar opposite (Border.navigationBar), so it's as tall and the sides' code lines up.
         _navigationPlaceholder = new Border { Child = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { types, members } } };
+        _navigationPlaceholder.Classes.Add("navigationBar");
         AutomationProperties.SetName(_navigationPlaceholder, Localizer.Get("diff.noNavigation", "Navigation bar (the other side is the open document)"));
         NavigationRow = new Panel { Children = { _navigationPlaceholder, _navigationBar } };
         _navigationBar.PropertyChanged += (_, e) =>
