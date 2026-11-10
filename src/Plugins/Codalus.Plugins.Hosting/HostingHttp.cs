@@ -15,8 +15,8 @@ public sealed class HostingHttpException(int status, string message) : Exception
 
 /// <summary>
 /// JSON over HTTPS to a host's API. <see cref="Authorize"/> adds the session's credentials to API calls; token endpoints
-/// are called without them. A 401 is <see cref="HostingAuthenticationException"/> (sign in again); other errors are
-/// <see cref="HostingHttpException"/> with the host's message.
+/// are called without them. A 401 is <see cref="HostingAuthenticationException"/> (sign in again), unless
+/// <see cref="Refused"/> decides otherwise; other errors are <see cref="HostingHttpException"/> with the host's message.
 /// </summary>
 public sealed class HostingHttp : IDisposable
 {
@@ -47,6 +47,12 @@ public sealed class HostingHttp : IDisposable
 
     /// <summary>Adds the session's Authorization header to a request (throws <see cref="HostingAuthenticationException"/> without one).</summary>
     public Func<HttpRequestMessage, CancellationToken, Task>? Authorize { get; set; }
+
+    /// <summary>
+    /// Decides what a 401 means: the request, the host's message and the cancellation; the exception to throw, or null
+    /// for <see cref="HostingAuthenticationException"/>. A provider checks there whether the session itself was refused.
+    /// </summary>
+    public Func<HttpRequestMessage, string, CancellationToken, Task<Exception?>>? Refused { get; set; }
 
     /// <summary>Headers every API call sends (an Accept media type, an API version).</summary>
     public IDictionary<string, string> Headers { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -97,7 +103,9 @@ public sealed class HostingHttp : IDisposable
         var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            throw new HostingAuthenticationException($"The host refused the session ({MessageOf(text) ?? "401 Unauthorized"}). Sign in again.");
+            var reason = MessageOf(text) ?? "401 Unauthorized";
+            throw (Refused is { } refused ? await refused(request, reason, cancellationToken).ConfigureAwait(false) : null)
+                ?? new HostingAuthenticationException($"The host refused the session ({reason}). Sign in again.");
         }
 
         if (!response.IsSuccessStatusCode)

@@ -139,15 +139,37 @@ public sealed class HostingPluginHostTests : IAsyncLifetime
         await _store.SetAsync(SecretStorage.Service, "codalus.github/session", session.Replace(MockGitHub.Token, "revoked", StringComparison.Ordinal), TestContext.Current.CancellationToken);
         await _workbench.Settings.SetAsync("github.oauthClientId", "reload", SettingScope.User, TestContext.Current.CancellationToken);
 
-        var asked = new List<string>();
-        _hosting.SignInRequired += (_, provider) => asked.Add(provider);
+        var asked = new List<HostingSignInRequired>();
+        _hosting.SignInRequired += (_, ended) => asked.Add(ended);
         await WaitForSettingsAsync();
         await Assert.ThrowsAsync<HostingSignInRequiredException>(() => _hosting.PullRequestsAsync(match!, "all", Timeout()));
-        Assert.Equal(["github"], asked);
+        var ended = Assert.Single(asked);
+        Assert.Equal("github", ended.ProviderId);
+        Assert.Contains("refused the token of ada, signed in just now (Bad credentials)", ended.Reason, StringComparison.Ordinal);
         Assert.Null(_hosting.AccountFor("github"));
 
         var error = await Assert.ThrowsAsync<HostingRequestException>(() => _hosting.PublishAsync("nope", "x", "y", null, true, Timeout()));
         Assert.Contains("nope", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_refusal_the_token_survives_keeps_the_account()
+    {
+        await _hosting.SignInAsync("github", MockGitHub.Token, Timeout());
+        var match = await _hosting.MatchAsync(Remotes, Timeout());
+        Assert.NotNull(match);
+        var asked = 0;
+        _hosting.SignInRequired += (_, _) => Interlocked.Increment(ref asked);
+
+        // One endpoint answers 401 while /user still accepts the token: an error, not a sign-out.
+        _github.RefusedPaths.Add($"/api/v3/repos/{_github.Owner}/{_github.Name}/pulls");
+        var error = await Assert.ThrowsAsync<HostingRequestException>(() => _hosting.PullRequestsAsync(match!, "all", Timeout()));
+        Assert.Contains("the session is still valid", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, asked);
+        Assert.NotNull(_hosting.AccountFor("github"));
+
+        _github.RefusedPaths.Clear();
+        Assert.Single(await _hosting.PullRequestsAsync(match!, "all", Timeout()));
     }
 
     /// <summary>Settings reach the plugin host as a notification: give it a moment.</summary>

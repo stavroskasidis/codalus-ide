@@ -86,8 +86,8 @@ public sealed class HostingService : IHostingSink
     /// <summary>A sign-in shows a device code.</summary>
     public event EventHandler<HostingDeviceCodeParams>? DeviceCodeReceived;
 
-    /// <summary>A provider's session expired or was revoked (the provider's id): its account was removed.</summary>
-    public event EventHandler<string>? SignInRequired;
+    /// <summary>A provider's session expired or was revoked (the provider's id and the reason): its account was removed.</summary>
+    public event EventHandler<HostingSignInRequired>? SignInRequired;
 
     public bool IsEnabled => _enabled();
 
@@ -492,7 +492,7 @@ public sealed class HostingService : IHostingSink
         catch (JsonRpcRemoteException ex) when (ex.Code == HostingErrorCodes.NotSignedIn)
         {
             UpdateAccounts(list => list.RemoveAll(a => a.ProviderId == providerId));
-            SignInRequired?.Invoke(this, providerId);
+            SignInRequired?.Invoke(this, new HostingSignInRequired(providerId, ex.Message));
             throw new HostingSignInRequiredException(providerId, ex.Message);
         }
         catch (JsonRpcRemoteException ex)
@@ -542,6 +542,9 @@ public sealed class HostingService : IHostingSink
         }
     }
 }
+
+/// <summary>A provider's session ended: <see cref="Reason"/> is the provider's (the host's message, when the user signed in).</summary>
+public sealed record HostingSignInRequired(string ProviderId, string Reason);
 
 internal sealed record HostingAccountsState
 {
