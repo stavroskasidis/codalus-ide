@@ -6,7 +6,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
-    <AvaloniaVersion>12.1.5</AvaloniaVersion>
+    <AvaloniaVersion>12.1.6</AvaloniaVersion>
     <RoslynVersion>5.12.0-1.26522.148</RoslynVersion>
     <!-- Coverlet is bundled with the .NET test plugin (ADR 0011), not referenced: see its project file. -->
     <CoverletVersion>10.1.0</CoverletVersion>
