@@ -79,9 +79,10 @@ internal sealed class UiStallMonitor : IDisposable
     internal Action? BeforeRecord { get; set; }
 
     /// <summary>
-    /// Forgets what was measured. A probe sent before it isn't counted, though it may be answered or recorded after it: it
-    /// measured time before the reset, and a probe answered just before a reset and recorded just after it read as a 0 ms
-    /// measurement of what followed, before the probe that waited through it was recorded (macOS CI, run 42894614787).
+    /// Forgets what was measured. A probe answered before it isn't counted, though it may be recorded after it: it read as a
+    /// 0 ms measurement of what followed, before the probe that waited through that was recorded (macOS CI, run
+    /// 42894614787). The probe on its way at the reset is counted: it is the one that measures a stall right after it, as
+    /// no other is posted while it waits (dropping it failed two stall tests on Linux CI, run 42903894635).
     /// </summary>
     public void Reset()
     {
@@ -138,19 +139,19 @@ internal sealed class UiStallMonitor : IDisposable
             BeforeRecord?.Invoke();
             lock (_gate)
             {
-                Record(sent, waited, gc, gcMark, jobs, steps, stepSent);
+                Record(Volatile.Read(ref ran), waited, gc, gcMark, jobs, steps, stepSent);
             }
 
             Thread.Sleep(10);
         }
     }
 
-    /// <summary>Counts an answered probe (under the gate), unless it was sent before the last <see cref="Reset"/>.</summary>
-    private void Record(long sent, double waited, double gc, GcMark gcMark, Dictionary<string, int> jobs, Dictionary<string, int> steps, string? stepSent)
+    /// <summary>Counts an answered probe (under the gate), unless it was answered before the last <see cref="Reset"/>.</summary>
+    private void Record(long answeredAt, double waited, double gc, GcMark gcMark, Dictionary<string, int> jobs, Dictionary<string, int> steps, string? stepSent)
     {
-        if (sent < _resetAt)
+        if (answeredAt < _resetAt)
         {
-            return; // it measured time before the reset (see Reset)
+            return; // it measured only time before the reset (see Reset)
         }
 
         _probes++;

@@ -69,6 +69,34 @@ public sealed class UiStallMonitorTests
     }
 
     [AvaloniaFact]
+    public async Task The_probe_on_its_way_at_a_reset_measures_the_stall_after_it()
+    {
+        // No other probe is posted while it waits, so it is the only measure of a stall right after the reset (Linux CI,
+        // run 42903894635: a monitor that dropped it failed EverydayBenchTests and A_stall_at_the_end_of_a_flow_counts).
+        using var monitor = new UiStallMonitor();
+        var waiting = System.Diagnostics.Stopwatch.StartNew();
+        do
+        {
+            // A probe posted after this reset, which waits: the UI thread isn't pumped. (One posted just before the reset
+            // isn't seen as FirstSent, and no other comes until it is answered: pump again.)
+            ShellFixture.Pump();
+            monitor.Reset();
+            var round = System.Diagnostics.Stopwatch.StartNew();
+            while (monitor.FirstSent == 0 && round.ElapsedMilliseconds < 200)
+            {
+                Thread.Sleep(1);
+            }
+        }
+        while (monitor.FirstSent == 0 && waiting.Elapsed < TimeSpan.FromSeconds(30));
+
+        Assert.NotEqual(0, monitor.FirstSent);
+        monitor.Reset(); // the probe is on its way
+        Thread.Sleep(300); // a job that holds the UI thread
+        await ShellFixture.PumpUntil(() => monitor.Report().Probes > 0);
+        Assert.True(monitor.Report().LongestMilliseconds >= 250, monitor.Report().Describe());
+    }
+
+    [AvaloniaFact]
     public void A_flow_over_before_any_probe_was_answered_is_measured_all_the_same()
     {
         // Nothing runs the dispatcher between the reset and the check, as after a flow that ended within one of the
