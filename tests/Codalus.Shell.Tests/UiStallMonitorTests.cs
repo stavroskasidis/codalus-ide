@@ -26,13 +26,46 @@ public sealed class UiStallMonitorTests
 
         var report = monitor.Report();
         // Whether the monitor's thread posted a probe during the block, or only after it (macOS CI, run 41968010181: one
-        // probe of 0 ms). TODO(issue)
+        // probe of 0 ms; run 42894614787 showed it had posted one 49 ms in, and the 0 ms probe was one sent before the reset).
         var first = monitor.FirstSent;
         var sent = first == 0 ? "no probe posted since the reset"
             : $"the first probe since the reset posted {System.Diagnostics.Stopwatch.GetElapsedTime(blocked, first).TotalMilliseconds:0} ms after the 600 ms block began, {System.Diagnostics.Stopwatch.GetElapsedTime(blocked).TotalMilliseconds:0} ms ago";
         Assert.True(report.LongestMilliseconds >= 400, $"{report.Describe()}; {sent}");
         Assert.Equal("blocking", report.LongestStep);
         Assert.Matches(@"; during it, \d+ collection\(s\) \(gen0 \d+, gen1 \d+, gen2 [1-9]\d*\); the longest known, a ", report.Describe());
+    }
+
+    [AvaloniaFact]
+    public async Task A_probe_answered_before_a_reset_isnt_counted_after_it()
+    {
+        // The probe answered just before the reset and recorded just after it: it read as a 0 ms measurement of what
+        // followed, and the probe that waited through it wasn't recorded yet (macOS CI, run 42894614787).
+        using var monitor = new UiStallMonitor();
+        using var answered = new ManualResetEventSlim();
+        using var reset = new ManualResetEventSlim();
+        using var next = new ManualResetEventSlim();
+        var calls = 0;
+        var probesAtNext = -1;
+        monitor.BeforeRecord = () =>
+        {
+            switch (Interlocked.Increment(ref calls))
+            {
+                case 1:
+                    answered.Set();
+                    reset.Wait(TimeSpan.FromSeconds(30));
+                    break;
+                case 2:
+                    probesAtNext = monitor.Report().Probes;
+                    next.Set();
+                    break;
+            }
+        };
+
+        await ShellFixture.PumpUntil(() => answered.IsSet);
+        monitor.Reset();
+        reset.Set();
+        await ShellFixture.PumpUntil(() => next.IsSet);
+        Assert.Equal(0, probesAtNext);
     }
 
     [AvaloniaFact]
