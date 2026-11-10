@@ -31,6 +31,9 @@ public sealed record HostingSession
 
     /// <summary>The host's id of the user (Azure DevOps and GitLab filter by it).</summary>
     public string? UserId { get; init; }
+
+    /// <summary>When the user signed in (kept through refreshes; null for a session stored before it was recorded).</summary>
+    public DateTimeOffset? SignedInAt { get; init; }
 }
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
@@ -47,6 +50,9 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
     public const string IntegratedScheme = "negotiate";
 
     private const string SessionKey = "session";
+
+    /// <summary>A request's option: the stored session authorized it (a 401 then may mean the session is gone).</summary>
+    private static readonly HttpRequestOptionsKey<HostingSession> s_sessionRequest = new("codalus.session");
     private readonly SemaphoreSlim _gate = new(1, 1);
     private HostingSession? _session;
     private bool _loaded;
@@ -58,6 +64,7 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
         Secrets = context.Secrets;
         Http = new HostingHttp($"Codalus/{context.Plugin.Version}");
         Http.Authorize = AuthorizeAsync;
+        Http.Refused = RefusedAsync;
         context.Settings.Changed += (_, e) =>
         {
             if (e.Affects(SettingsSection))
@@ -80,6 +87,13 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
 
     /// <summary>The host of the configured server (sessions belong to one).</summary>
     protected abstract string ServerHost { get; }
+
+    /// <summary>
+    /// The API address that says who a token belongs to (GitHub's <c>/user</c>), or null. With one, a 401 on another
+    /// request signs the user out only when this refuses the token too, and <see cref="ReusableAccountAsync"/> can keep a
+    /// stored session the host still accepts instead of making a new token.
+    /// </summary>
+    protected virtual string? WhoAmIUrl => null;
 
     /// <summary>Renews an expiring OAuth session; by default the user must sign in again.</summary>
     protected virtual Task<HostingSession> RefreshAsync(HostingSession session, CancellationToken cancellationToken) =>
@@ -122,6 +136,7 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
 
     protected async Task SaveSessionAsync(HostingSession session, CancellationToken cancellationToken)
     {
+        session = session with { SignedInAt = session.SignedInAt ?? DateTimeOffset.UtcNow };
         await Secrets.StoreAsync(SessionKey, JsonSerializer.Serialize(session, HostingSessionJsonContext.Default.HostingSession), cancellationToken).ConfigureAwait(false);
         _session = session;
         _loaded = true;
@@ -157,6 +172,7 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
                 if (_session is { } current && current.ExpiresAt == session.ExpiresAt)
                 {
                     var renewed = await RefreshAsync(session, cancellationToken).ConfigureAwait(false);
+                    renewed = renewed with { SignedInAt = renewed.SignedInAt ?? session.SignedInAt };
                     await Secrets.StoreAsync(SessionKey, JsonSerializer.Serialize(renewed, HostingSessionJsonContext.Default.HostingSession), cancellationToken).ConfigureAwait(false);
                     _session = renewed;
                 }
@@ -187,6 +203,82 @@ public abstract class HostingProviderBase : HostingProvider, IDisposable
         }
 
         request.Headers.Authorization = Authorization(session.Scheme, session.AccessToken);
+        request.Options.Set(s_sessionRequest, session);
+    }
+
+    /// <summary>
+    /// A 401 on a request the stored session authorized: with <see cref="WhoAmIUrl"/>, the token is asked about once more,
+    /// and only a second refusal signs the user out (<see cref="HostingAuthenticationException"/>, saying the host's reason
+    /// and how long ago the user signed in). A token the host still accepts, or one that couldn't be checked, keeps the
+    /// session: the request fails as an ordinary error.
+    /// </summary>
+    private async Task<Exception?> RefusedAsync(HttpRequestMessage request, string reason, CancellationToken cancellationToken)
+    {
+        if (!request.Options.TryGetValue(s_sessionRequest, out var session))
+        {
+            return null; // a token being checked, or a request without the session
+        }
+
+        var refused = $"{session.Host} refused the token of {session.Account}{SignedInAgo(session)} ({reason}).";
+        if (WhoAmIUrl is not { } url)
+        {
+            return new HostingAuthenticationException(refused);
+        }
+
+        var what = $"{request.Method} {request.RequestUri?.AbsolutePath}: 401 {reason}";
+        try
+        {
+            await GetWithTokenAsync(url, session.Scheme, session.AccessToken, cancellationToken).ConfigureAwait(false);
+            return new HostingHttpException(401, $"{what} (the session is still valid: {session.Host} accepts the token of {session.Account}).");
+        }
+        catch (HostingAuthenticationException)
+        {
+            return new HostingAuthenticationException(refused);
+        }
+        catch (Exception ex) when (ex is HostingHttpException or HttpRequestException or JsonException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return new HostingHttpException(401, $"{what} (the session couldn't be checked, so it is kept: {ex.Message})");
+        }
+    }
+
+    /// <summary>
+    /// The stored session's account when the host still accepts its token (refreshed if it was expiring), so signing in
+    /// again keeps it instead of making a new token: a host limits how many it keeps for a user and an app (GitHub
+    /// revokes the oldest beyond ten). Null without <see cref="WhoAmIUrl"/>, a session, or a token the host accepts.
+    /// </summary>
+    protected async Task<HostingAccount?> ReusableAccountAsync(CancellationToken cancellationToken)
+    {
+        if (WhoAmIUrl is not { } url || await SessionAsync(cancellationToken).ConfigureAwait(false) is not { Scheme: not IntegratedScheme })
+        {
+            return null;
+        }
+
+        try
+        {
+            var session = await RequireSessionAsync(cancellationToken).ConfigureAwait(false);
+            await GetWithTokenAsync(url, session.Scheme, session.AccessToken, cancellationToken).ConfigureAwait(false);
+            return AccountOf(session);
+        }
+        catch (Exception ex) when (ex is HostingAuthenticationException or HostingHttpException or HttpRequestException or JsonException || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>", signed in 3 days ago", or nothing when the session doesn't say when.</summary>
+    internal static string SignedInAgo(HostingSession session)
+    {
+        if (session.SignedInAt is not { } at)
+        {
+            return string.Empty;
+        }
+
+        var age = DateTimeOffset.UtcNow - at;
+        static string Count(double value, string unit) => ((int)value).ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + unit + ((int)value == 1 ? string.Empty : "s");
+        return ", signed in " + (age.TotalMinutes < 1 ? "just now"
+            : age.TotalHours < 1 ? Count(age.TotalMinutes, "minute") + " ago"
+            : age.TotalDays < 1 ? Count(age.TotalHours, "hour") + " ago"
+            : Count(age.TotalDays, "day") + " ago");
     }
 
     /// <summary>The Authorization header for a token.</summary>

@@ -31,6 +31,7 @@ internal sealed class UiStallMonitor : IDisposable
     private int _stalls;
     private double _stalled;
     private long _firstSent;
+    private long _resetAt;
 
     public UiStallMonitor()
     {
@@ -74,11 +75,21 @@ internal sealed class UiStallMonitor : IDisposable
     /// </summary>
     internal long FirstSent => Interlocked.Read(ref _firstSent);
 
+    /// <summary>Runs on the monitor's thread after a probe is answered, before it is recorded (tests force interleavings with it).</summary>
+    internal Action? BeforeRecord { get; set; }
+
+    /// <summary>
+    /// Forgets what was measured. A probe answered before it isn't counted, though it may be recorded after it: it read as a
+    /// 0 ms measurement of what followed, before the probe that waited through that was recorded (macOS CI, run
+    /// 42894614787). The probe on its way at the reset is counted: it is the one that measures a stall right after it, as
+    /// no other is posted while it waits (dropping it failed two stall tests on Linux CI, run 42903894635).
+    /// </summary>
     public void Reset()
     {
         Interlocked.Exchange(ref _firstSent, 0);
         lock (_gate)
         {
+            _resetAt = Stopwatch.GetTimestamp();
             _longest = 0;
             _longestGc = 0;
             _longestJob = null;
@@ -125,26 +136,38 @@ internal sealed class UiStallMonitor : IDisposable
 
             var gc = (GC.GetTotalPauseDuration() - gcMark.Paused).TotalMilliseconds;
             var waited = Stopwatch.GetElapsedTime(sent, Volatile.Read(ref ran)).TotalMilliseconds - gc;
+            BeforeRecord?.Invoke();
             lock (_gate)
             {
-                _probes++;
-                if (waited > StallMilliseconds)
-                {
-                    _stalls++;
-                    _stalled += waited;
-                }
-
-                if (waited > _longest)
-                {
-                    _longest = waited;
-                    _longestGc = gc;
-                    _longestJob = jobs.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault();
-                    _longestStep = steps.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault() ?? stepSent;
-                    _longestCollections = GcReport.Since(gcMark);
-                }
+                Record(Volatile.Read(ref ran), waited, gc, gcMark, jobs, steps, stepSent);
             }
 
             Thread.Sleep(10);
+        }
+    }
+
+    /// <summary>Counts an answered probe (under the gate), unless it was answered before the last <see cref="Reset"/>.</summary>
+    private void Record(long answeredAt, double waited, double gc, GcMark gcMark, Dictionary<string, int> jobs, Dictionary<string, int> steps, string? stepSent)
+    {
+        if (answeredAt < _resetAt)
+        {
+            return; // it measured only time before the reset (see Reset)
+        }
+
+        _probes++;
+        if (waited > StallMilliseconds)
+        {
+            _stalls++;
+            _stalled += waited;
+        }
+
+        if (waited > _longest)
+        {
+            _longest = waited;
+            _longestGc = gc;
+            _longestJob = jobs.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault();
+            _longestStep = steps.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault() ?? stepSent;
+            _longestCollections = GcReport.Since(gcMark);
         }
     }
 

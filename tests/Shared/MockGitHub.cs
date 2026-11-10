@@ -74,6 +74,9 @@ internal sealed class MockGitHub : IAsyncDisposable
 
     public List<MockPullRequest> PullRequests { get; } = [];
 
+    /// <summary>API paths answered with 401 "Bad credentials" whatever the token (a refusal that isn't the session's).</summary>
+    public HashSet<string> RefusedPaths { get; } = [];
+
     public Dictionary<int, List<MockReviewThread>> Threads { get; } = [];
 
     public List<MockIssue> Issues { get; } = [];
@@ -119,7 +122,7 @@ internal sealed class MockGitHub : IAsyncDisposable
             return MockHttpResponse.NotFound();
         }
 
-        if (request.BearerToken != Token)
+        if (request.BearerToken != Token || RefusedPaths.Contains(path))
         {
             return MockHttpResponse.Json("""{ "message": "Bad credentials" }""", 401);
         }

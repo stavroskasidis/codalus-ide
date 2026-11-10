@@ -2875,7 +2875,7 @@
   "msg.hosting.theSolutionIsInASingle": "The solution is in a single repository.",
   "msg.hosting.theSolutionIsntInAGit": "The solution isn't in a git repository. Create one with a first commit of its files, then publish it?",
   "msg.hosting.thisRepositoryIsntOnAHost": "This repository isn't on a host you're signed in to.",
-  "msg.hosting.yourSessionExpiredOrWasRevoked": "Your {0} session expired or was revoked. Sign in again to see pull requests and checks.",
+  "msg.hosting.yourSessionEnded": "Your {0} session expired or was revoked: {1} Sign in again to see pull requests and checks.",
   "msg.hotReload.anEditCouldntBeAppliedTo": "An edit couldn't be applied to the running {0}, so it is restarting (a rude edit).",
   "msg.hotReload.applyingTheCodeChanges": "Applying the code changes…",
   "msg.hotReload.theCodeChangesAreSavedOnceItWatches": "Hot Reload is starting: the code changes are saved and applied once it watches for them…",
