@@ -99,7 +99,7 @@ The UI shell (`codalus`, Native AOT) is kept light and responsive. Heavy service
 
 ## Building
 
-You need the .NET SDK pinned in `global.json` (11.0, its second release candidate until GA), the .NET 10 runtime for the fixtures that target `net10.0`, and git. For the debugger, run `eng/get-netcoredbg.sh` once.
+You need the .NET SDK pinned in `global.json` (11.0), the .NET 10 runtime for the fixtures that target `net10.0`, and git. For the debugger, run `eng/get-netcoredbg.sh` once.
 
 ```bash
 dotnet build Codalus.slnx

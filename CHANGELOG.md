@@ -4,6 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 0.13.0
 
+- **Codalus IDE runs on .NET 11** ([user guide](docs/user-guide/getting-started.md#prerequisites)): it moves from the .NET 11 release candidate to the released .NET 11 (SDK 11.0.100), and the editor's C# and Visual Basic service to that SDK's compiler. Its helper processes now ask for the .NET 11.0.0 runtime: on a machine with only the release candidate, Codalus IDE offers to install .NET 11, as for any missing runtime. The Windows package depends on winget's .NET 11 SDK instead of its preview SDK.
 - **Agents use the IDE, not grep** ([ADR 0092](docs/adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md), [user guide](docs/user-guide/ai.md#the-ides-tools)): every agent (agent mode, an external agent over ACP, and agents outside the IDE through `codalus mcp`) had five tools: the solution, the open files, the Error List, the build output and a build. They now get the IDE's own:
   - finding symbols through Code Search's index, and following code through the compiler: definitions, references, implementations, callers and type hierarchies;
   - building, running and reading tests, and starting the program;
