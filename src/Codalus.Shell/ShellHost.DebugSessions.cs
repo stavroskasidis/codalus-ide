@@ -259,6 +259,7 @@ public sealed partial class ShellHost
 
         var arguments = new LaunchArguments(dotnet, [.. wsl.Arguments], wsl.WorkingDirectory, new Dictionary<string, string>(plan.Environment));
         var map = new SourceMap(SourceFileMap(), SolutionFiles());
+        UseRemoteCompanion(RemoteShell.Companion(target, debugger));
         return new DebugLaunch(name, plan) { Remote = new RemoteLaunch(RemoteShell.Adapter(target, debugger), arguments, map, target.Display) };
     }
 
@@ -455,11 +456,12 @@ public sealed partial class ShellHost
         try
         {
             DebugLog.Clear();
-            DebugLog.AppendLine($"Attaching to {process.Name} ({process.Id.ToString(CultureInfo.InvariantCulture)}) on {target.Display} through {debugger}…");
+            DebugLog.AppendLine($"Attaching to {process.Name} ({process.Id.ToString(CultureInfo.InvariantCulture)}) on {target.Display} through {debugger.Path}…");
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             var map = new SourceMap(SourceFileMap(), SolutionFiles());
+            UseRemoteCompanion(RemoteShell.Companion(target, debugger));
             await Debugger.AttachAsync(process.Id, CancellationToken.None, new RemoteAttach(RemoteShell.Adapter(target, debugger), map, target.Display), process.Name).ConfigureAwait(true);
             _lastRemote = (target, process);
             _lastAttached = null;
@@ -485,14 +487,49 @@ public sealed partial class ShellHost
         return true;
     }
 
-    /// <summary>netcoredbg's path on <paramref name="target"/>, copied there after the user agrees; null otherwise (reported).</summary>
-    private async Task<string?> EnsureRemoteDebuggerAsync(RemoteTarget target)
+    /// <summary>
+    /// The debug companion on the machine of the remote session being started (M58b, ADR 0094): the Codalus debugger's
+    /// bundle there in its companion mode, which reads the program's modules for <c>[DebuggerDisplay]</c>, hidden
+    /// members and the members' kinds. Null for a local session, and under netcoredbg (the values are the debugger's).
+    /// </summary>
+    private DebugCompanion? _remoteCompanion;
+
+    /// <summary>Starts using <paramref name="launch"/>'s companion for the session's display attributes, or stops (null); the one before is ended.</summary>
+    private void UseRemoteCompanion(Codalus.Rpc.ProcessLaunchInfo? launch)
+    {
+        var previous = Interlocked.Exchange(ref _remoteCompanion, launch is null ? null : new DebugCompanion(() => launch));
+        if (previous is not null)
+        {
+            _ = previous.DisposeAsync().AsTask();
+        }
+    }
+
+    /// <summary>A type's display attributes from the companion on the target; null when it can't say (it isn't reachable, or the type isn't in those modules).</summary>
+    private static async Task<Codalus.Debugging.Companion.TypeDisplayResult?> RemoteTypeDisplayAsync(DebugCompanion remote, string type, IReadOnlyList<string> modules, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await remote.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The debugger on <paramref name="target"/>, copied there after the user agrees: the Codalus debugger's bundle when
+    /// <c>debug.adapter</c> chooses it and there is one for the target's platform, else netcoredbg (M58b, ADR 0094).
+    /// Null when it couldn't be had (reported).
+    /// </summary>
+    private async Task<RemoteDebugger?> EnsureRemoteDebuggerAsync(RemoteTarget target)
     {
         UseAskpassForSsh();
         try
         {
             return await RemoteDebuggers.EnsureAsync(
                 target,
+                Debugger.UsesCodalusAdapter,
                 question => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy")),
                 new Progress<string>(line => DebugLog.AppendLine(line)),
                 CancellationToken.None).ConfigureAwait(true);

@@ -96,6 +96,10 @@ public sealed partial class ShellHost
         Add("buildhost", BuildHostLocator.Resolve());
         Add("lshost", PathOf(HostLaunchInfo.Resolve()));
         Add("markuphost", PathOf(MarkupHostLaunch.Resolve()));
+
+        // The debug companion host, whose --clr-dap mode is the Codalus debugger (M58b, ADR 0094): it debugs on the
+        // server with the server's .NET.
+        Add(RemoteSession.DebugHostPart, PathOf(DebugCompanion.Resolve()));
         return parts;
     }
 
@@ -519,18 +523,18 @@ public sealed partial class ShellHost
         }
         else
         {
-            var adapter = await RemoteDebuggerAsync(remote).ConfigureAwait(true);
-            if (adapter is null)
+            var start = await RemoteDebuggerAsync(remote).ConfigureAwait(true);
+            if (start is null)
             {
                 return;
             }
 
             DebugLog.AppendLine($"> {plan.FileName} {plan.Arguments}   (on {remote.Display})".TrimEnd());
             var arguments = new LaunchArguments(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment));
-            var start = new DebugAdapterStartInfo(adapter, ["--interpreter=vscode"], null, null, remote.Display) { Launcher = remote.DebugLauncher };
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+            UseRemoteCompanion(start.IsCodalus ? remote.CodalusCompanion : null);
             await Debugger.LaunchAsync([new DebugLaunch(name, plan) { Remote = new RemoteLaunch(start, arguments, new SourceMap(), remote.Display) }], CancellationToken.None).ConfigureAwait(true);
         }
 
@@ -540,17 +544,45 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>netcoredbg on the remote machine: copied there on first use; this machine's for the local stand-in.</summary>
-    private async Task<string?> RemoteDebuggerAsync(RemoteSession remote)
+    /// <summary>
+    /// The debugger of a remote window, started through its server: the Codalus debugger the server's bundle carries
+    /// (M58b, ADR 0094), unless <c>debug.adapter</c> chooses netcoredbg, which is copied to the machine on first use;
+    /// this machine's netcoredbg for the local stand-in.
+    /// </summary>
+    private async Task<DebugAdapterStartInfo?> RemoteDebuggerAsync(RemoteSession remote)
     {
+        if (Debugger.UsesCodalusAdapter && remote.CodalusDebugger is { } codalus)
+        {
+            return codalus;
+        }
+
+        DebugAdapterStartInfo Netcoredbg(string path) => new(path, ["--interpreter=vscode"], null, null, remote.Display) { Launcher = remote.DebugLauncher };
         if (remote.Spec.Target is { } target)
         {
-            return await EnsureRemoteDebuggerAsync(target).ConfigureAwait(true);
+            // Asked for netcoredbg: the target's own bundle isn't looked for.
+            UseAskpassForSsh();
+            try
+            {
+                return Netcoredbg(await RemoteDebuggers.EnsureAsync(
+                    target,
+                    question => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy")),
+                    new Progress<string>(line => DebugLog.AppendLine(line)),
+                    CancellationToken.None).ConfigureAwait(true));
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or HttpRequestException or InvalidDataException or System.ComponentModel.Win32Exception)
+            {
+                Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.theDebuggerCouldntBeSetUp", "The debugger couldn't be set up on {0}: {1}", target.Display, ex.Message));
+                return null;
+            }
         }
 
         if (DebugAdapterLocator.Resolve() is { } local)
         {
-            return local;
+            return Netcoredbg(local);
         }
 
         Workbench.Notifications.Error(Localizer.Get("msg.remote.theDebuggerNetcoredbgWasNotFound", "The debugger (netcoredbg) was not found."));

@@ -189,6 +189,32 @@ public sealed class DebugService : IAsyncDisposable
             ExpressionCompiler);
 
     /// <summary>
+    /// The debugger on another machine, through its pipe transport, its paths mapped to this machine's. The Codalus
+    /// debugger there (M58b) gets the expression compiler too, asked with this machine's path of the frame's source;
+    /// the program's console is the Debug Console (no terminal on that side).
+    /// </summary>
+    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken)
+    {
+        if (!info.IsCodalus)
+        {
+            return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken).ConfigureAwait(false), map);
+        }
+
+        AnnounceAdapter(null);
+        var compiler = ExpressionCompiler is { } compile
+            ? (Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>)((request, ct) => compile(request with { SourcePath = map.ToLocal(request.SourcePath), ModulePath = null }, ct))
+            : null;
+        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map);
+    }
+
+    /// <summary>
+    /// The Codalus debugger's launch on another machine: the program, its arguments and environment as they are there.
+    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally.
+    /// </summary>
+    private NetFxDebugArguments RemoteCoreClrArguments(LaunchArguments arguments) =>
+        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes);
+
+    /// <summary>
     /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
     /// where the frame is stopped; the shell sets it to the language host's compiler. Null: those expressions say what
     /// the evaluator didn't read.
@@ -655,8 +681,10 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
+                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct).ConfigureAwait(false),
+                adapter => remote.Adapter.IsCodalus
+                    ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
         if (UseCodalusAdapter(launch.Plan))
@@ -955,8 +983,10 @@ public sealed class DebugService : IAsyncDisposable
         else
         {
             await StartAsync(
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+                ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
+                adapter => remote.Adapter.IsCodalus
+                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);

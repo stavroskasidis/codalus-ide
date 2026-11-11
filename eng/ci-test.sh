@@ -262,6 +262,11 @@ case "$shard" in
     exit "$status"
     ;;
   others)
+    # The Codalus debugger's bundle for this machine's remote stand-ins (M58b, ADR 0094; the fake ssh on Linux and
+    # macOS): RemoteCodalusTests copy it to them, and fail without it in CI. It builds in .work, apart from the solution.
+    case "$(uname -s)" in
+      Linux | Darwin) bash eng/get-codalus-debugger.sh ;;
+    esac
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random, and three at a time still
     # starved a test now and then (a plugin host's start, a trace's start, Aspire's orchestrator check): two there.

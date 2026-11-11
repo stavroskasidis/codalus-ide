@@ -220,7 +220,10 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
     public Task ConfigurationDoneAsync(CancellationToken cancellationToken) => Inner.ConfigurationDoneAsync(cancellationToken);
 
     public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
-        [.. (await Inner.SetBreakpointsAsync(Map.ToRemote(path), breakpoints, cancellationToken).ConfigureAwait(false)).Select(Local)];
+        [.. (await Inner.SetBreakpointsAsync(
+            Map.ToRemote(path),
+            [.. breakpoints.Select(b => b.DependsOn is { } other ? b with { DependsOn = other with { Path = Map.ToRemote(other.Path) } } : b)], // the breakpoint it waits for is in a file there too
+            cancellationToken).ConfigureAwait(false)).Select(Local)];
 
     public Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken) => Inner.SetFunctionBreakpointsAsync(breakpoints, cancellationToken);
 
@@ -233,6 +236,43 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
     public Task StepInAsync(int threadId, CancellationToken cancellationToken) => Inner.StepInAsync(threadId, cancellationToken);
 
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) => Inner.StepOutAsync(threadId, cancellationToken);
+
+    // What the Codalus debugger adds (M58, ADR 0094), on a remote target too (M58b): passed through, with the paths of a
+    // Set Next Statement and of the Disassembly window's source lines mapped.
+
+    public bool AppliesBreakpointBehaviors(int threadId) => ((IDebugAdapter)Inner).AppliesBreakpointBehaviors(threadId);
+
+    public Capabilities CapabilitiesOf(int threadId) => ((IDebugAdapter)Inner).CapabilitiesOf(threadId);
+
+    public Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken) => Inner.StepInTargetsAsync(frameId, cancellationToken);
+
+    public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) => Inner.StepInAsync(threadId, targetId, cancellationToken);
+
+    public Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken) => Inner.GotoTargetsAsync(threadId, Map.ToRemote(path), line, cancellationToken);
+
+    public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) => Inner.GotoAsync(threadId, targetId, cancellationToken);
+
+    public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken) =>
+        Inner.ReadMemoryAsync(threadId, memoryReference, offset, count, cancellationToken);
+
+    public Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken) =>
+        Inner.WriteMemoryAsync(threadId, memoryReference, offset, data, cancellationToken);
+
+    public async Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken) =>
+        [.. (await Inner.DisassembleAsync(threadId, memoryReference, instructionOffset, count, cancellationToken).ConfigureAwait(false))
+            .Select(i => i.Location is { Path: { } path } location ? i with { Location = location with { Path = Map.ToLocal(path) } } : i)];
+
+    public Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken) => Inner.LoadSymbolsAsync(moduleId, cancellationToken);
+
+    public Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) => Inner.RegistersAsync(frameId, cancellationToken);
+
+    public Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) => Inner.StepInstructionAsync(threadId, into, cancellationToken);
+
+    public Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) => Inner.MakeObjectIdAsync(expression, frameId, cancellationToken);
+
+    public Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken) => Inner.DeleteObjectIdAsync(name, frameId, cancellationToken);
+
+    public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) => Inner.FreezeThreadAsync(threadId, frozen, cancellationToken);
 
     public Task PauseAsync(int threadId, CancellationToken cancellationToken) => Inner.PauseAsync(threadId, cancellationToken);
 

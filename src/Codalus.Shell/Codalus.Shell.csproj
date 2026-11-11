@@ -122,6 +122,8 @@
       terminal/                   shell integration scripts for the integrated terminal
       remote/server/              codalus-server, the remote development server, framework-dependent for any OS (M21)
       remote/<rid>/               codalus-server self-contained for a remote platform ($(CodalusServerRids), publish only)
+      remote/<rid>/debugger/      the Codalus debugger's bundle for that platform (M58b, ADR 0094): codalus-debughost
+                                  self-contained and trimmed, copied to SSH, container and WSL targets to debug there
   -->
   <PropertyGroup>
     <!-- The remote platforms that get a self-contained server in a published install (empty: none; remote machines then need .NET). -->
@@ -156,6 +158,20 @@
     <Exec Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) --no-self-contained -p:UseAppHost=false -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)server&quot; -nologo" />
     <Exec Condition="'@(_CodalusServerRid)' != ''"
           Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusServerProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) --self-contained -p:PublishSingleFile=true -p:Version=$(Version) -p:PublishTrimmed=true -p:DebugType=none -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)&quot; -nologo" />
+    <!--
+      The Codalus debugger's bundle for the same platforms (M58b, ADR 0094): the debug companion host with its own
+      runtime, so a target needs only the program's (the host's project has the bundle's settings). bundle.id names
+      the build: a target keeps one copy per id (RemoteDebuggers).
+    -->
+    <PropertyGroup>
+      <_CodalusDebugHostProject>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '..', 'Codalus.Debugging.Host', 'Codalus.Debugging.Host.csproj'))</_CodalusDebugHostProject>
+    </PropertyGroup>
+    <Exec Condition="'@(_CodalusServerRid)' != ''"
+          Command="&quot;$(_CodalusDotnet)&quot; publish &quot;$(_CodalusDebugHostProject)&quot; -c $(Configuration) -r %(_CodalusServerRid.Identity) -p:CodalusDebuggerBundle=true -p:Version=$(Version) -o &quot;$(_CodalusRemoteDir)%(_CodalusServerRid.Identity)/debugger&quot; -nologo" />
+    <GetFileHash Condition="'@(_CodalusServerRid)' != ''" Files="@(_CodalusServerRid->'$(_CodalusRemoteDir)%(Identity)/debugger/codalus-debughost.dll')" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_CodalusDebuggerHash" />
+    </GetFileHash>
+    <WriteLinesToFile Condition="'@(_CodalusDebuggerHash)' != ''" File="%(_CodalusDebuggerHash.RootDir)%(_CodalusDebuggerHash.Directory)bundle.id" Lines="$(Version)-$([System.String]::Copy('%(_CodalusDebuggerHash.FileHash)').Substring(0, 12).ToLowerInvariant())" Overwrite="true" />
   </Target>
   <!--
     The WPF previewer and the Live Visual Tree's agent for WPF apps (M40b, ADR 0072): WPF code (net8.0-windows), built on

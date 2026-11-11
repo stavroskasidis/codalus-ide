@@ -19,15 +19,31 @@
     <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>
 
+  <!--
+    The Codalus debugger's bundle for a platform (M58b, ADR 0094; -p:CodalusDebuggerBundle=true with a runtime
+    identifier): this host with its own .NET runtime, so a remote target needs only the program's. Partial trimming:
+    the runtime is trimmed to what the host's assemblies use, which stay whole (ClrMD, the DAP types' JSON). The
+    settings are here, not on the command line, where they would reach the netstandard projects below too.
+  -->
+  <PropertyGroup Condition="'$(CodalusDebuggerBundle)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <DebugType>none</DebugType>
+    <UseAppHost>true</UseAppHost>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
     <!-- The Mono debugger adapter's protocol client (M20b, ADR 0065; MIT, vendored). -->
     <ProjectReference Include="..\ThirdParty\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
-    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). -->
-    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" />
+    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). Not in the debugger's bundle. -->
+    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
     <!-- Likewise: the XAML previewer's agent, loaded into Avalonia's designer host (M19a, ADR 0048). -->
-    <ProjectReference Include="..\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />
+    <ProjectReference Include="..\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
   </ItemGroup>
 
   <ItemGroup>

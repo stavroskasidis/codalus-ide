@@ -277,6 +277,25 @@ public sealed class RemoteSession : IAsyncDisposable
         return new ProcessLaunchInfo("dotnet", [$"{_installed.Folder}/{folder}/{name}.dll", .. rest.Select(Map.ToRemote)]) { Launcher = Launcher };
     }
 
+    /// <summary>The bundle part that carries the debug companion host, whose <c>--clr-dap</c> mode is the Codalus debugger (M58b, ADR 0094).</summary>
+    public const string DebugHostPart = "debughost";
+
+    /// <summary>
+    /// The Codalus debugger on the server: the debug companion host the bundle carries, run by the server's .NET (a
+    /// remote window builds there, so .NET is there) through <see cref="DebugLauncher"/>. Null for the local stand-in,
+    /// or when the bundle doesn't carry it.
+    /// </summary>
+    public Codalus.Debugging.DebugAdapterStartInfo? CodalusDebugger =>
+        _installed is null || !_parts.Any(p => p.Name == DebugHostPart)
+            ? null
+            : new Codalus.Debugging.DebugAdapterStartInfo("dotnet", [$"{_installed.Folder}/{DebugHostPart}/codalus-debughost.dll", Codalus.Debugging.CoreClrAdapter.AdapterArgument], null, null, Display) { Launcher = DebugLauncher, IsCodalus = true };
+
+    /// <summary>The same host in its companion mode on the server: it reads the program's modules there, for the debugger's display attributes.</summary>
+    public ProcessLaunchInfo? CodalusCompanion =>
+        _installed is null || !_parts.Any(p => p.Name == DebugHostPart)
+            ? null
+            : new ProcessLaunchInfo("dotnet", [$"{_installed.Folder}/{DebugHostPart}/codalus-debughost.dll"]) { Launcher = Launcher };
+
     /// <summary>
     /// A folder or file of this machine that the bundle carries (a plugin's folder, ADR 0057) as the server has it; the
     /// path itself for the local stand-in, or when the bundle doesn't carry it.

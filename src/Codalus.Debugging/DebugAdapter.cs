@@ -201,7 +201,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
         {
             Transport = info.Transport,
             _local = info.Transport is null && info.Launcher is null or LocalProcessLauncher,
-            IsCodalus = info.Arguments.Contains(CoreClrAdapter.AdapterArgument),
+            IsCodalus = info.IsCodalus || info.Arguments.Contains(CoreClrAdapter.AdapterArgument),
         };
         if (terminal is not null)
         {

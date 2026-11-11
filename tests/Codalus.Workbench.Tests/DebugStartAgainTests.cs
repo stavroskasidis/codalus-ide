@@ -97,7 +97,7 @@ public sealed class DebugStartAgainTests : IDisposable
     /// <summary>A session whose program starts in <paramref name="terminal"/>, debugged by the netcoredbg stand-in; its Debug Console goes to <paramref name="output"/>.</summary>
     private static async Task<(DebugService Debug, Task<int?> Ended)> LaunchInTerminalAsync(HeldTerminal terminal, System.Text.StringBuilder output)
     {
-        var debug = new DebugService(() => NetcoredbgStandIn) { Terminal = terminal, StartupHook = "Codalus.Debugging.StartupHook.dll" };
+        var debug = new DebugService(() => NetcoredbgStandIn) { AdapterSetting = () => DebugService.NetcoredbgAdapter, Terminal = terminal, StartupHook = "Codalus.Debugging.StartupHook.dll" };
         var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
         debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
         debug.Ended += (_, code) => ended.TrySetResult(code);
@@ -674,7 +674,7 @@ public sealed class DebugStartAgainTests : IDisposable
         File.WriteAllText(script, "slow 1000");
         try
         {
-            await using var debug = new DebugService(() => NetcoredbgStandIn);
+            await using var debug = new DebugService(() => NetcoredbgStandIn) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
             var output = new System.Text.StringBuilder();
             var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
             Task? pausing = null;
