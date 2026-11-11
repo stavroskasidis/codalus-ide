@@ -57,7 +57,7 @@ What doesn't hold, and the label says:
 - **the CLI changes files and runs commands by itself.** No edit passes the refactoring preview and no command the IDE's approval. What asks the user is the CLI's own permission prompts;
 - what it reads goes to its provider under that provider's terms.
 
-Every console shows, above its terminal: "External agent's own CLI: it uses its own provider and data policy, and changes files and runs commands itself, asking you with its own prompts. Codalus doesn't preview its edits." One line, its whole text in its tooltip, as AI Chat's label. Beside it, whether the IDE's tools are connected.
+Every console shows, above its terminal: "External agent's own CLI: it uses its own provider and data policy, and changes files and runs commands itself, asking you with its own prompts. Codalus doesn't preview its edits." On a row of its own that wraps (up to three lines), with its whole text in its tooltip: the first smoke pictures, on both Linux and Windows, showed a one-line label beside the toolbar cut to "it uses its own provider and d…" at the bottom group's usual width, which left out the part that matters. Above it, whether the IDE's tools are connected.
 
 The same program typed into the Terminal runs today with no gate at all. The gate is here because Codalus starts the program, gives it the user's keys and the IDE's tools, and presents it as a feature of the IDE.
 

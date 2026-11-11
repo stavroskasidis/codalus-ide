@@ -7,19 +7,17 @@
              x:Class="Codalus.Shell.Views.AiConsoleView"
              x:DataType="vm:AiConsoleViewModel">
   <!--
-    AI Console (ADR 0094): a connected agent's own CLI in the IDE's terminal. The top row is the label every console
-    shows (one line, its whole text in its tooltip, as AI Chat's) with whether the IDE's tools are connected, then the
-    agent a new console starts, New, Restart, Close and AI Chat. Under it, why nothing runs, with Connect or Install.
+    AI Console (ADR 0094): a connected agent's own CLI in the IDE's terminal. The top row says whether the IDE's tools
+    are connected, then the agent a new console starts, New, Restart, Close and AI Chat. Under it, the label every
+    console shows, on a row of its own that wraps: cut to one line beside the toolbar, a console as wide as the bottom
+    group usually is showed only its first words, not that the CLI changes files itself. Then why nothing runs, with
+    Connect or Install.
     The consoles are tabs in a list on the right once there are two.
   -->
   <DockPanel>
     <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="4,2">
-      <DockPanel x:Name="LabelRow" ToolTip.Tip="{x:Static vm:AiConsoleViewModel.Label}" VerticalAlignment="Center" Margin="2,0,8,0">
-        <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,0,6,0" VerticalAlignment="Center" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
-        <TextBlock x:Name="ToolsNote" DockPanel.Dock="Right" Classes="small" Text="{Binding ToolsNote}" Margin="8,0,0,0" VerticalAlignment="Center"
-                   TextTrimming="CharacterEllipsis" MaxWidth="360" ToolTip.Tip="{Binding ToolsNote}" />
-        <TextBlock x:Name="ConsoleLabel" Classes="small" Text="{x:Static vm:AiConsoleViewModel.Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-      </DockPanel>
+      <TextBlock x:Name="ToolsNote" Classes="small" Text="{Binding ToolsNote}" Margin="2,0,8,0" VerticalAlignment="Center"
+                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ToolsNote}" />
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
         <ComboBox x:Name="AgentPicker" MinWidth="130" ItemsSource="{Binding Agents}" PlaceholderText="{l:T aiConsole.newConsoleFor}" AutomationProperties.Name="{l:T aiConsole.agent}" ToolTip.Tip="{l:T aiConsole.newConsoleWithThisAgent}">
           <ComboBox.ItemTemplate>
@@ -42,6 +40,10 @@
         </Button>
       </StackPanel>
     </Grid>
+    <DockPanel x:Name="LabelRow" DockPanel.Dock="Top" Margin="6,0,6,3" ToolTip.Tip="{x:Static vm:AiConsoleViewModel.Label}">
+      <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,1,6,0" VerticalAlignment="Top" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+      <TextBlock x:Name="ConsoleLabel" Classes="small" Text="{x:Static vm:AiConsoleViewModel.Label}" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" />
+    </DockPanel>
     <Border x:Name="NoticeBanner" DockPanel.Dock="Top" Margin="4,0,4,2" Padding="8,4" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding HasNotice}"
             Background="{DynamicResource Shell.Status.Warning}" BorderBrush="{DynamicResource Shell.Status.Warning.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
       <DockPanel>

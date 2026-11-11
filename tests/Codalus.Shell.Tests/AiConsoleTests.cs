@@ -176,7 +176,8 @@ public sealed class AiConsoleTests
 
         var output = f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText();
         Assert.Contains("IDE tool (Claude (AI Console)): get_solution", output, StringComparison.Ordinal);
-        Assert.Contains("agent claude: AI Console: claude --session-id", output, StringComparison.Ordinal);
+        // The log names the program by its file: npm's script on Windows (claude.cmd), which cmd.exe runs.
+        Assert.Contains($"agent claude: AI Console: {(OperatingSystem.IsWindows() ? "claude.cmd" : "claude")} --session-id", output, StringComparison.Ordinal);
 
         // Typing goes to the CLI.
         view.Terminal.Focus();
