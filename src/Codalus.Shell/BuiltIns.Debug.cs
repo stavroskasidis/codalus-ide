@@ -27,6 +27,8 @@ internal static partial class BuiltIns
           { "key": "shift+alt+p", "command": "debug.reattach", "when": "!debugActive" },
           { "key": "shift+f9", "command": "debug.quickWatch", "when": "debugStopped" },
           { "key": "primary+f10", "command": "debug.runToCursor", "when": "editorTextFocus && !debugRunning" },
+          { "key": "primary+shift+f10", "command": "debug.setNextStatement", "when": "editorTextFocus && debugCanSetNextStatement" },
+          { "key": "shift+alt+f11", "command": "debug.stepIntoSpecific", "when": "debugCanStepIntoSpecific" },
           { "key": "ctrl+alt+e", "command": "debug.exceptionSettings" },
           { "key": "shift+alt+f9 t", "command": "debug.insertTemporaryBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+alt+b", "command": "workbench.view.debug.breakpoints", "when": "keyboardScheme != vscode" },
@@ -191,6 +193,8 @@ internal static partial class BuiltIns
         Add("debug.quickWatch", "QuickWatch…", shell.ShowQuickWatchAsync, "debugStopped");
         Add("debug.runToCursor", "Run to Cursor", _ => shell.RunToCursorAsync(), "activeDocumentKind == textFile && !debugRunning");
         Add("debug.forceRunToCursor", "Force Run to Cursor", _ => shell.RunToCursorAsync(force: true), "activeDocumentKind == textFile && debugStopped");
+        Add("debug.setNextStatement", "Set Next Statement", _ => shell.SetNextStatementAsync(), "activeDocumentKind == textFile && debugCanSetNextStatement");
+        Add("debug.stepIntoSpecific", "Step Into Specific…", _ => shell.StepIntoSpecificAsync(), "debugCanStepIntoSpecific");
         Add("debug.reattach", "Reattach to Process", _ => shell.ReattachAsync(), "!debugActive");
         Add("debug.newFunctionBreakpoint", "New Function Breakpoint…", _ => shell.NewFunctionBreakpointAsync());
         Add("debug.insertTemporaryBreakpoint", "Insert Temporary Breakpoint", Sync(shell.InsertTemporaryBreakpoint), "activeDocumentKind == textFile");

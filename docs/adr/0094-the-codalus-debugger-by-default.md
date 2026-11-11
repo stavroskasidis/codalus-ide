@@ -21,7 +21,7 @@ The maintainer's request of 2026-11-11: make the Codalus debugger the default an
 | | Decision |
 |---|---|
 | **netcoredbg** | `debug.adapter` defaults to `codalus`. `netcoredbg` stays one release as an opt-in fallback, then a later release removes it with `eng/get-netcoredbg.sh`, its copy in `RemoteDebuggers` and its workarounds in `DebugAdapter` |
-| **Native-level gaps** | Managed side only: Memory (`ICorDebugProcess::ReadMemory`, `WriteMemory`), Registers (`ICorDebugRegisterSet`) and Disassembly of JIT-compiled managed code, with decoders of our own for x64 and arm64. **Data breakpoints and mixed-mode debugging stay documented gaps** |
+| **Native-level gaps** | Managed side only: Memory (`ICorDebugProcess::ReadMemory`, `WriteMemory`), Registers (`ICorDebugRegisterSet`) and Disassembly of JIT-compiled managed code, decoded by Iced (MIT) on x64 and by a decoder of our own on arm64. **Data breakpoints and mixed-mode debugging stay documented gaps** |
 | **Remote targets** | A self-contained, trimmed adapter bundle per platform (`codalus-debughost` with the CoreCLR adapter only), copied with consent as netcoredbg is, and carried by `codalus-server`. Runs on targets that have only the program's runtime |
 | **x64 programs on Apple silicon** | The same bundle for `osx-x64`, an on-demand component (the Components window), downloaded with consent the first time such a program is debugged |
 | **Expressions** | Our interpreter first, extended with `new`, generic methods, object IDs, type proxies and Results View. What it can't read (lambdas, LINQ, the rest of C#) the C# language host compiles against the stopped frame into a small assembly, which the adapter loads into the program (`Assembly.Load` through func-eval) and calls |

@@ -587,6 +587,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+        UpdateDebuggerAbilities();
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);
