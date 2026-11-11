@@ -270,6 +270,49 @@ public sealed class GitRepositoryShellTests
     }
 
     [AvaloniaFact]
+    public async Task Outgoing_commits_are_marked_also_below_the_upstreams_merged_ones()
+    {
+        var (f, folder) = await OpenRepositoryAsync();
+        await using var fixture = f;
+
+        // main gets a commit of its own, then merges origin/main: its outgoing commits are the merge and "Local work",
+        // with the upstream's "Add notes upstream" between them or beside them, which origin has.
+        File.WriteAllText(Path.Combine(folder, "LOCAL.md"), "local\n");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "Local work");
+        Git(folder, "merge", "-q", "--no-edit", "-m", "Merge upstream", "origin/main");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+
+        var vm = await OpenDocumentAsync(f);
+        await ShellFixture.PumpUntil(
+            () => vm.History is { IsLoading: false, Rows.Count: 4 } h && h.Rows.Any(r => r.IsOutgoing),
+            describe: () => $"header {vm.Header}; sections {string.Join(" | ", vm.History?.SectionHeaders.Select(h => h.Title) ?? [])}; rows {string.Join(" | ", vm.History?.Rows.Select(r => r.Subject) ?? [])}");
+        var history = vm.History!;
+        Assert.Equal(["Incoming (0)", "Local History (2 Outgoing)"], history.SectionHeaders.Select(h => h.Title));
+        Assert.Equal(["Local work", "Merge upstream"], history.Rows.Where(r => r.IsOutgoing).Select(r => r.Subject).Order());
+        Assert.Equal(["Add notes upstream", "initial"], history.Rows.Where(r => !r.IsOutgoing).Select(r => r.Subject).Order());
+        Assert.EndsWith(", outgoing", history.Rows.Single(r => r.Subject == "Local work").AccessibleName, StringComparison.Ordinal);
+        Assert.DoesNotContain("outgoing", history.Rows.Single(r => r.Subject == "initial").AccessibleName, StringComparison.Ordinal);
+
+        // The view shows the marker on those rows only (CODALUS_UI_SNAPSHOTS keeps a picture of it).
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitHistoryView>().Any(v => v.IsEffectivelyVisible));
+        var view = f.Window.GetVisualDescendants().OfType<GitHistoryView>().First(v => v.IsEffectivelyVisible);
+        await ShellFixture.PumpUntil(() => view.GetVisualDescendants().OfType<Codalus.Shell.Controls.Icon>().Count(i => i.Kind == "arrow-up" && i.IsEffectivelyVisible) == 2);
+        Snapshots(f.Window, "git-repository-outgoing");
+
+        // A filter's matches keep the marker; every branch's graph has none (other branches' commits are there too).
+        history.Filter = "work";
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 1 } && history.Rows[0].IsOutgoing);
+        history.Filter = string.Empty;
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 4 });
+        history.AllBranches = true;
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: > 4 });
+        Assert.DoesNotContain(history.Rows, r => r.IsOutgoing);
+        history.AllBranches = false;
+        await ShellFixture.PumpUntil(() => history is { IsLoading: false, Rows.Count: 4 } && history.Rows.Count(r => r.IsOutgoing) == 2);
+    }
+
+    [AvaloniaFact]
     public async Task A_branch_has_the_branch_drop_downs_menu_and_a_double_click_checks_it_out()
     {
         var (f, folder) = await OpenRepositoryAsync();

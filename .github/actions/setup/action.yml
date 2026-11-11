@@ -130,7 +130,15 @@ runs:
       shell: bash
       run: |
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-        npx -y playwright@1.56.1 install --with-deps chromium
+        npx -y playwright@1.56.1 install chromium
+        # The libraries Chromium loads are on the runner's image; what its packages add here is fonts, from
+        # ports.ubuntu.com. That name didn't resolve for 13 minutes in two runs in a row (43034040499, 43040050023) and
+        # the step failed before any test. So the packages get 5 minutes and their failure is a warning; a missing
+        # library still fails the step, at chromium --version below.
+        timeout -k 10 300 npx -y playwright@1.56.1 install-deps chromium || {
+          echo "::warning::Chromium's packages (fonts) weren't installed: apt-get failed or took over 5 minutes"
+          sudo pkill -x apt-get || true
+        }
         chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
         [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
         sudo ln -sf "$chrome" /usr/local/bin/chromium

@@ -74,6 +74,7 @@ public sealed class GitCommitRow : ObservableObject
     internal const int MaxShownRefs = 8;
 
     private IReadOnlyList<GitRefChip> _shownRefs;
+    private bool _isOutgoing;
 
     public GitCommitRow(GitCommit commit, bool isIncoming = false)
     {
@@ -87,6 +88,22 @@ public sealed class GitCommitRow : ObservableObject
 
     /// <summary>A commit of the Incoming section (the upstream's, not yet on the branch).</summary>
     public bool IsIncoming { get; }
+
+    /// <summary>
+    /// A commit the branch has and its upstream doesn't (one of the header's <b>n Outgoing</b>): the row carries the
+    /// outgoing marker. After a merge of the upstream these aren't the top rows, so the upstream's chip alone doesn't say.
+    /// </summary>
+    public bool IsOutgoing
+    {
+        get => _isOutgoing;
+        internal set
+        {
+            if (SetField(ref _isOutgoing, value))
+            {
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
 
     public string ShortHash => Commit.ShortHash;
 
@@ -123,7 +140,7 @@ public sealed class GitCommitRow : ObservableObject
 
     public GraphRow? Graph => Commit.Graph;
 
-    public string AccessibleName => $"{Subject}, {Author}, {Date}, {ShortHash}{(RefChips.Count > 0 ? ", " + RefsTip : string.Empty)}";
+    public string AccessibleName => $"{Subject}, {Author}, {Date}, {ShortHash}{(RefChips.Count > 0 ? ", " + RefsTip : string.Empty)}{(_isOutgoing ? ", " + Localizer.Get("msg.gitHistory.outgoing", "outgoing") : string.Empty)}";
 
     internal void ShowRefs(bool remote, bool tags) =>
         ShownRefs = remote && tags && RefChips.Count <= MaxShownRefs ? RefChips
@@ -195,15 +212,16 @@ public sealed class GitHistorySection : ObservableObject
 
 /// <summary>
 /// What the Git Repository document gives a local branch's history (with an upstream): the range of incoming commits
-/// (<c>main..origin/main</c>), the counts, and the links of each section.
+/// (<c>main..origin/main</c>) and of outgoing ones (<c>origin/main..main</c>), the counts, and the links of each section.
 /// </summary>
-public sealed record GitHistorySections(string IncomingRevision, int Incoming, int Outgoing, IReadOnlyList<GitHistoryLink> IncomingLinks, IReadOnlyList<GitHistoryLink> LocalLinks);
+public sealed record GitHistorySections(string IncomingRevision, string OutgoingRevision, int Incoming, int Outgoing, IReadOnlyList<GitHistoryLink> IncomingLinks, IReadOnlyList<GitHistoryLink> LocalLinks);
 
 /// <summary>
 /// A history (M13; the Git Repository document's right side, and the File History tab): the commit graph of a branch,
 /// every branch, a file, a folder or a range of lines, loaded in pages as it scrolls, in the classic IDE's columns
 /// (Branch / Tag, Graph, Message, Author, Date, ID), with one Filter History box (a message, an author or a commit id). A
-/// local branch with an upstream has an Incoming section above its Local History. Double-click or Enter opens a commit's
+/// local branch with an upstream has an Incoming section above its Local History, and a marker on each outgoing commit
+/// (also among a filter's matches; not with Show All Branches, where other branches' commits are listed too). Double-click or Enter opens a commit's
 /// details (a tab); commands on a commit go to the shell. Ctrl+click and Shift+click select several commits: Compare
 /// Commits compares two of them, the older on the left; Compare with Previous compares one with its first parent.
 /// </summary>
@@ -234,6 +252,7 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
     private GitHistorySections? _sections;
     private GitHistorySection? _incomingSection;
     private GitHistorySection? _localSection;
+    private IReadOnlySet<string>? _outgoing;
     private int _lanes = 1;
 
     public GitHistoryViewModel(GitService git, GitLogQuery query, string title, Func<string, GitCommit, Task> commitAction, (string Path, int Start, int End)? lines = null)
@@ -523,12 +542,19 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
             ? new GitHistorySection("local", Localizer.Format("msg.gitHistory.localHistory", "Local History ({0} Outgoing)", _sections!.Outgoing), _sections.LocalLinks, _localSection?.IsExpanded ?? true)
             : null;
         RebuildItems();
+
+        // The outgoing commits' ids, read beside the first page: rows made before they arrive are marked when they do.
+        _outgoing = null;
+        var outgoing = _sections is { Outgoing: > 0 } && !_allBranches && Lines is null
+            ? LoadOutgoingAsync(_sections.OutgoingRevision, cts.Token)
+            : Task.CompletedTask;
         if (sectioned && _sections!.Incoming > 0)
         {
             await LoadIncomingAsync(_sections.IncomingRevision, cts.Token).ConfigureAwait(true);
         }
 
         await LoadMoreAsync().ConfigureAwait(true);
+        await outgoing.ConfigureAwait(true);
         if (selectedHash is not null && cts == _cts && Rows.Concat(IncomingRows).FirstOrDefault(r => r.Commit.Hash == selectedHash) is { } again)
         {
             Selected = again;
@@ -555,6 +581,27 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
             }
 
             RebuildItems();
+        }
+        catch (Exception ex) when (ex is GitException or OperationCanceledException or InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task LoadOutgoingAsync(string revision, CancellationToken token)
+    {
+        try
+        {
+            var ids = await _git.CommitIdsAsync(revision, token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _outgoing = ids;
+            foreach (var row in Rows)
+            {
+                row.IsOutgoing = ids.Contains(row.Commit.Hash);
+            }
         }
         catch (Exception ex) when (ex is GitException or OperationCanceledException or InvalidOperationException)
         {
@@ -622,7 +669,7 @@ public sealed class GitHistoryViewModel : ObservableObject, IDisposable
             var shown = _localSection is not { IsExpanded: false };
             foreach (var commit in page)
             {
-                var row = new GitCommitRow(commit);
+                var row = new GitCommitRow(commit) { IsOutgoing = _outgoing?.Contains(commit.Hash) == true };
                 row.ShowRefs(_showRemoteRefs, _showTags);
                 Rows.Add(row);
                 if (shown)
