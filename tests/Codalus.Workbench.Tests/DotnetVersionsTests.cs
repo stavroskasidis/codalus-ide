@@ -51,7 +51,7 @@ public sealed class DotnetVersionsTests
         Assert.Equal(("Out of support since 2024-11-12 (.NET 6.0)", true), DotnetSupport.Status("6.0.428", today));
         Assert.Equal(("Out of support since 2021-08-21 (.NET 2.1)", true), DotnetSupport.Status("2.1.818", today));
         Assert.Equal(("Preview of .NET 11.0 (STS)", false), DotnetSupport.Status("11.0.100-rc.1.26425.128", today));
-        Assert.Equal((".NET 11.0 (STS)", false), DotnetSupport.Status("11.0.100", today));
+        Assert.Equal(("Supported until 2028-11-14 (.NET 11.0 STS)", false), DotnetSupport.Status("11.0.100", today));
         Assert.Equal(("Preview of .NET 12.0", false), DotnetSupport.Status("12.0.100-preview.1", today));
     }
     [Fact]

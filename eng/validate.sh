@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds and tests this checkout the way CI does, on Linux or macOS (eng/wsl-test.sh runs it under WSL; on the Mac it
 # runs in a clone, see CLAUDE.md). Installs the SDK pinned by global.json into ~/.dotnet when no matching one is on
-# the PATH (the .NET 11 release candidate since M30b), and the .NET 10 SDK next to it for the fixtures that still
+# the PATH (the .NET 11 SDK since M30b), and the .NET 10 SDK next to it for the fixtures that still
 # target net10.0, and fetches netcoredbg so the debugger tests run instead of skipping.
 #
 # Usage: eng/validate.sh [--smoke] [dotnet test arguments...]

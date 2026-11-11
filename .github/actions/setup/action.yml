@@ -67,19 +67,17 @@ runs:
         echo "${free} GB free on a small runner: removing toolchains the repository doesn't use."
         sudo rm -rf /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/julia* /opt/az /usr/share/miniconda || true
         df -h /
-    # The SDK of global.json, spelled out: setup-dotnet reads global.json's "latestFeature" as the channel's newest
-    # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
-    # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.
+    # The SDK of global.json (its "latestFeature": the channel's newest release); the extra SDK is the previous
+    # version's, for the fixtures still on it (docs/release/dotnet-upgrade.md).
     - if: inputs.extra-sdks != 'true'
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 11.0.100-rc.3.26522.148
+        global-json-file: global.json
     - if: inputs.extra-sdks == 'true'
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: |
-          10.0.x
-          11.0.100-rc.3.26522.148
+        global-json-file: global.json
+        dotnet-version: 10.0.x
     - if: inputs.nuget-cache == 'true'
       id: restore-nuget
       uses: actions/cache/restore@v6

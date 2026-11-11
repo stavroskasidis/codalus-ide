@@ -17,10 +17,10 @@ public sealed class JsDebug(NodeRuntime node, string cacheFolder, HttpClient? ht
     /// proxy's handshake. Without the hook js-debug opens the page at once again, and the race that avoids is back
     /// (<c>BrowserDebugTests</c>' stand-in proxy fails then).
     /// </summary>
-    public const string Version = "1.140.0";
+    public const string Version = "1.140.1";
 
-    /// <summary>The SHA-256 of <c>js-debug-dap-v1.140.0.tar.gz</c>, pinned when the version was chosen.</summary>
-    internal const string Sha256 = "27dab92937ec1ab35821ae955aac867544fe06a1b6307229049f2d789af10968";
+    /// <summary>The SHA-256 of <c>js-debug-dap-v1.140.1.tar.gz</c>, pinned when the version was chosen.</summary>
+    internal const string Sha256 = "c72fab31bcbfdce6ad1f42adfd28eff8d4681dd3b03b5e2e6f9e72e6f9927faf";
 
     private readonly SemaphoreSlim _install = new(1, 1);
 

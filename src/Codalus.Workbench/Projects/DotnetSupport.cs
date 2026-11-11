@@ -13,7 +13,7 @@ public static class DotnetSupport
     /// <summary>Channel (<c>major.minor</c>) → whether it's LTS, and the last day of support (null: not announced yet).</summary>
     private static readonly Dictionary<string, (bool Lts, DateOnly? EndOfSupport)> s_channels = new(StringComparer.Ordinal)
     {
-        ["11.0"] = (false, null),
+        ["11.0"] = (false, new DateOnly(2028, 11, 14)),
         ["10.0"] = (true, new DateOnly(2028, 11, 14)),
         ["9.0"] = (false, new DateOnly(2026, 11, 10)),
         ["8.0"] = (true, new DateOnly(2026, 11, 10)),
