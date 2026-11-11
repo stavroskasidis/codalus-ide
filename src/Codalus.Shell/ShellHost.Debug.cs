@@ -59,7 +59,7 @@ public sealed partial class ShellHost
         Debugger = new DebugService(DebugAdapterLocator.Resolve)
         {
             JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true),
-            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter),
+            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.CodalusAdapter),
         };
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>

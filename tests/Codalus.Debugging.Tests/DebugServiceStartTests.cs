@@ -6,9 +6,20 @@ namespace Codalus.Debugging.Tests;
 public sealed class DebugServiceStartTests
 {
     [Fact]
+    public async Task A_missing_codalus_debugger_fails_the_start_and_says_where_it_goes()
+    {
+        // The default (M58): the Codalus debugger, whose host isn't installed here.
+        var debug = new DebugService(() => null) { CoreClrAdapter = () => null };
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync("app", [], ".", new Dictionary<string, string>(), TestContext.Current.CancellationToken));
+        Assert.Contains("The Codalus debugger (codalus-debughost) wasn't found", error.Message, StringComparison.Ordinal);
+        Assert.Equal(DebugState.Idle, debug.State);
+        Assert.False(debug.IsActive);
+    }
+
+    [Fact]
     public async Task A_missing_debugger_fails_the_start_and_the_next_start_fails_the_same_way()
     {
-        var debug = new DebugService(() => null);
+        var debug = new DebugService(() => null) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var environment = new Dictionary<string, string>();
         var first = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync("app", [], ".", environment, TestContext.Current.CancellationToken));
         Assert.Contains("netcoredbg", first.Message, StringComparison.Ordinal);

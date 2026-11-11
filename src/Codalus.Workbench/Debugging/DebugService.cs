@@ -129,20 +129,20 @@ public sealed class DebugService : IAsyncDisposable
             DesktopClrAdapter() ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
             cancellationToken);
 
-    /// <summary>The <c>debug.adapter</c> setting's value for CoreCLR's adapter (M54, ADR 0086).</summary>
+    /// <summary>The <c>debug.adapter</c> setting's value for netcoredbg, the fallback since M58 (ADR 0094).</summary>
     public const string NetcoredbgAdapter = "netcoredbg";
 
-    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter (a preview in M54).</summary>
+    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter: the default since M58 (ADR 0094).</summary>
     public const string CodalusAdapter = "codalus";
 
     /// <summary>Overrides <c>debug.adapter</c>: <c>netcoredbg</c> or <c>codalus</c> (the tests' <c>debug-codalus</c> shard).</summary>
     public const string AdapterVariable = "CODALUS_DEBUG_ADAPTER";
 
     /// <summary>
-    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>netcoredbg</c> (the
-    /// default, ADR 0007) or <c>codalus</c>, Codalus IDE's own (<c>codalus-debughost --clr-dap</c>, M54, ADR 0086).
-    /// <see cref="AdapterVariable"/> overrides it. Remote targets, .NET Framework programs and x64 programs on Apple
-    /// silicon don't follow it.
+    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>codalus</c>, Codalus
+    /// IDE's own (<c>codalus-debughost --clr-dap</c>, ADR 0086), the default since M58 (ADR 0094), also when nothing is
+    /// set; or <c>netcoredbg</c>, the fallback for one release. <see cref="AdapterVariable"/> overrides it. Remote
+    /// targets, .NET Framework programs and x64 programs on Apple silicon don't follow it.
     /// </summary>
     public Func<string?> AdapterSetting { get; set; } = () => null;
 
@@ -152,9 +152,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Whether a process runs as x64 on an Arm64 Mac (under Rosetta 2), which keeps netcoredbg 3.1.3 (ADR 0030).</summary>
     public Func<int, bool> IsX64ProcessOnArm64Mac { get; set; } = DefaultIsX64ProcessOnArm64Mac;
 
-    /// <summary>Whether sessions use Codalus IDE's adapter: the setting, or the variable over it.</summary>
+    /// <summary>Whether sessions use Codalus IDE's adapter: unless the setting, or the variable over it, asks for netcoredbg.</summary>
     public bool UsesCodalusAdapter =>
-        string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), CodalusAdapter, StringComparison.OrdinalIgnoreCase);
+        !string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), NetcoredbgAdapter, StringComparison.OrdinalIgnoreCase);
 
     private static DebugAdapterStartInfo? DefaultCoreClrAdapter() =>
         DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, Codalus.Debugging.CoreClrAdapter.AdapterArgument], host.WorkingDirectory) : null;
@@ -258,10 +258,10 @@ public sealed class DebugService : IAsyncDisposable
     private NetFxDebugArguments CoreClrAttach(int processId) =>
         new(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET Attach", Type: "coreclr", Request: "attach");
 
-    /// <summary>The Debug Console's first line under <c>debug.adapter</c> <c>codalus</c>: the adapter, or why it isn't (M54).</summary>
+    /// <summary>The Debug Console's first line under the Codalus debugger: the adapter, or why it isn't (M54).</summary>
     private void AnnounceAdapter(string? fallback) =>
         Output?.Invoke(this, new DebugOutput("console", fallback is null
-            ? "Debugging with the Codalus debugger (preview).\n"
+            ? "Debugging with the Codalus debugger.\n"
             : $"Debugging with netcoredbg: {fallback}, which the Codalus debugger doesn't debug yet.\n"));
 
     /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>

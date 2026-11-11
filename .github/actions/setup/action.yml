@@ -124,7 +124,7 @@ runs:
     - name: A Chromium browser (Linux arm64)
       # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package brings
       # one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it: allow them on
-      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests
+      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests (Linux arm64's)
       # waited out their limits without one (run 40804553432).
       if: inputs.browser == 'true' && runner.os == 'Linux' && runner.arch == 'ARM64'
       shell: bash

@@ -1,0 +1,31 @@
+# The debugger tests CI runs under both debuggers: under the default, Codalus IDE's own CoreCLR adapter
+# (`codalus-debughost --clr-dap`, ADR 0086; the default since M58, ADR 0094), in the shards of their projects, and again
+# under netcoredbg, the fallback, in the debug-netcoredbg shard (eng/ci-test.sh, CODALUS_DEBUG_ADAPTER=netcoredbg). Linux
+# arm64 runs them alone, under the Codalus debugger (debug-codalus). They are the parity set: every test here passes
+# under both adapters, with no skip for either (the M54 plan). Each line is a test class, or one test method (ending in
+# "()"), by its full name; its namespace names its test project (tests/<namespace>). Tests of one debugger aren't here:
+# NetcoredbgTests, DebugServiceStartTests (a missing netcoredbg, the x64 one), LateRuntimeTests (its 5-second wait),
+# RemoteTests and the Shell's RemoteShellTests (remote targets keep netcoredbg), nor DebugAdapterChoiceTests (the
+# variable overrides its setting). The classes that start the Codalus debugger themselves (ClrDebuggerTests,
+# ClrDebuggerFeatureTests, HotReloadDebuggingTests) run the same in every shard.
+Codalus.Debugging.Tests.ClrDebuggerTests
+Codalus.Debugging.Tests.ClrDebuggerFeatureTests
+Codalus.Debugging.Tests.HotReloadDebuggingTests
+Codalus.Debugging.Tests.DebugServiceTests
+Codalus.Debugging.Tests.DataTipDebuggerTests
+Codalus.Debugging.Tests.DebuggerDepthTests
+Codalus.Debugging.Tests.DebuggerDisplayTests
+Codalus.Debugging.Tests.BreakpointFilterSessionTests
+Codalus.Debugging.Tests.CollectionVisualizerTests
+Codalus.Debugging.Tests.ConsoleWindowLaunchTests
+Codalus.Debugging.Tests.FSharpDebuggingTests
+Codalus.Debugging.Tests.PinnedDataTipSessionTests
+Codalus.Debugging.Tests.PluginVisualizerTests
+Codalus.Debugging.Tests.SessionsTests
+Codalus.Debugging.Tests.TerminalLaunchTests
+Codalus.Debugging.Tests.VisualBasicDebuggingTests
+Codalus.Shell.Tests.DebugTests
+Codalus.Shell.Tests.DebugSessionsTests
+Codalus.Shell.Tests.CompoundDebugTests
+Codalus.Shell.Tests.BlazorWebAppHotReloadDebugTests
+Codalus.Plugins.Tests.DotNetTestRunControlTests.Debugging_a_test_stops_at_its_breakpoint()

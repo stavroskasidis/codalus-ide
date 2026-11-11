@@ -62,7 +62,16 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             registration = shim.RegisterForRuntimeStartup(pid, startup, IntPtr.Zero);
             launched.Resume();
-            if (!attached.Task.Wait(RuntimeStartTimeout))
+
+            // A program that ends without starting a .NET runtime (a script that failed, a native program) says so at
+            // once, instead of after the whole wait. One that ends right after its runtime started was attached to first.
+            if (Task.WaitAny([attached.Task, launched.Exited], RuntimeStartTimeout) == 1 && !attached.Task.Wait(TimeSpan.FromMilliseconds(500)))
+            {
+                var code = launched.Exited.Result is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
+                throw new ClrException($"{Path.GetFileName(program)} ended{code} before a .NET runtime started in it: is it a .NET program?");
+            }
+
+            if (!attached.Task.Wait(attached.Task.IsCompleted ? TimeSpan.Zero : RuntimeStartTimeout))
             {
                 throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => LoadedRuntime(shim, id))}");
             }
