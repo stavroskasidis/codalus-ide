@@ -89,6 +89,9 @@ public sealed record Capabilities
     /// <summary>The Codalus debugger's own (M58): <c>codalus/registers</c>, a frame's registers.</summary>
     public bool SupportsRegisters { get; init; }
 
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/loadSymbols</c>, a module's symbols looked up on demand.</summary>
+    public bool SupportsSymbolLoading { get; init; }
+
     /// <summary>The Codalus debugger's own (M58): <c>codalus/makeObjectId</c> and <c>codalus/deleteObjectId</c>.</summary>
     public bool SupportsObjectIds { get; init; }
 
@@ -146,8 +149,15 @@ public sealed record NetFxDebugArguments(
     string Type = "clr",
     string Request = "launch",
     string? Console = null,
-    string[]? ClientViews = null)
+    string[]? ClientViews = null,
+    Codalus.Debugging.Symbols.SymbolOptions? Symbols = null)
 {
+    /// <summary>
+    /// Where the Codalus debugger looks for the PDB of a module that has none next to it (M58): symbol paths, symbol
+    /// servers and their cache. Null: nowhere.
+    /// </summary>
+    public Codalus.Debugging.Symbols.SymbolOptions? Symbols { get; init; } = Symbols;
+
     /// <summary>
     /// The types the client shows in a view of its own (<c>System.Collections.Generic.List`1</c>, by their metadata
     /// names): the Codalus debugger lists their own members, without their <c>[DebuggerTypeProxy]</c>'s view (M58).
@@ -343,6 +353,13 @@ public sealed record DisassembledInstruction(string Address, string Instruction,
 
 public sealed record DisassembleResponse(DisassembledInstruction[] Instructions);
 
+/// <summary>
+/// <c>codalus/loadSymbols</c> (M58): looks for the symbols of a loaded module (<see cref="ModuleId"/>, a <c>module</c>
+/// event's id) in the symbol paths and on the symbol servers, whatever the module lists say. The answer comes at once;
+/// a <c>module</c> event with the reason <c>changed</c> says what was found.
+/// </summary>
+public sealed record LoadSymbolsArguments(string ModuleId);
+
 /// <summary><c>codalus/registers</c> (M58): the registers of a frame.</summary>
 public sealed record RegistersArguments(int FrameId);
 
@@ -527,6 +544,7 @@ public static class DapEvents
 [JsonSerializable(typeof(DisassembleArguments))]
 [JsonSerializable(typeof(DisassembleResponse))]
 [JsonSerializable(typeof(RegistersArguments))]
+[JsonSerializable(typeof(LoadSymbolsArguments))]
 [JsonSerializable(typeof(RegistersResponse))]
 [JsonSerializable(typeof(MakeObjectIdArguments))]
 [JsonSerializable(typeof(CompileExpressionArguments))]

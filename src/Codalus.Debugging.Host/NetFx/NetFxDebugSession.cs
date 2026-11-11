@@ -28,8 +28,24 @@ internal interface IClrDebugger
 /// </summary>
 internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
 {
-    /// <summary>Closes the assemblies read for the debugger attributes.</summary>
-    public void Dispose() => _attributes.Dispose();
+    /// <summary>Closes the assemblies read for the debugger attributes, and ends the symbol lookups.</summary>
+    public void Dispose()
+    {
+        _attributes.Dispose();
+        _symbolsCancel.Cancel();
+        _symbols?.Dispose();
+        _localSymbols?.Dispose();
+        _http?.Dispose();
+        _symbolsCancel.Dispose();
+    }
+
+    /// <summary>Where PDBs that aren't next to their modules are looked for (M58: symbol paths and servers); null: nowhere.</summary>
+    private Codalus.Debugging.Symbols.SymbolLocator? _symbols;
+
+    /// <summary>The same without the servers: the symbol paths and the cache are read as a module loads, before its breakpoints bind.</summary>
+    private Codalus.Debugging.Symbols.SymbolLocator? _localSymbols;
+    private HttpClient? _http;
+    private readonly CancellationTokenSource _symbolsCancel = new();
 
     private const int MaxChildren = 100;
     private static readonly JsonElement s_empty = JsonElement.Parse("{}");
@@ -192,6 +208,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     SupportsStepInTargetsRequest = true,
                     SupportsFreezingThreads = true,
                     SupportsObjectIds = true,
+                    SupportsSymbolLoading = true,
                     SupportsReadMemoryRequest = true,
                     SupportsWriteMemoryRequest = true,
                     SupportsDisassembleRequest = Disassembler.IsSupported(Disassembler.Architecture),
@@ -262,6 +279,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 return JsonSerializer.SerializeToElement(WriteMemory(Read(arguments, json.WriteMemoryArguments)!), json.WriteMemoryResponse);
             case "disassemble":
                 return JsonSerializer.SerializeToElement(new DisassembleResponse(Disassemble(Read(arguments, json.DisassembleArguments)!)), json.DisassembleResponse);
+            case LoadSymbolsCommand:
+                LoadSymbols(Read(arguments, json.LoadSymbolsArguments)!.ModuleId);
+                return null;
             case RegistersCommand:
                 return JsonSerializer.SerializeToElement(new RegistersResponse(Registers(Read(arguments, json.RegistersArguments)!.FrameId)), json.RegistersResponse);
             case "stepInTargets":
@@ -311,6 +331,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>Keeps a thread from running when the program runs on, or lets it run again (M58).</summary>
     public const string FreezeThreadCommand = "codalus/freezeThread";
+
+    /// <summary>Looks for a loaded module's symbols in the symbol paths and on the symbol servers (M58).</summary>
+    public const string LoadSymbolsCommand = "codalus/loadSymbols";
 
     /// <summary>A frame's registers (M58).</summary>
     public const string RegistersCommand = "codalus/registers";
@@ -438,6 +461,13 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         _justMyCode = arguments.JustMyCode;
         _stepFiltering = arguments.EnableStepFiltering;
         _clientViews = new HashSet<string>(arguments.ClientViews ?? [], StringComparer.Ordinal);
+        if (arguments.Symbols is { } symbols && (symbols.SearchPaths.Count > 0 || symbols.Servers.Count > 0))
+        {
+            _http = new HttpClient();
+            _symbols = new Codalus.Debugging.Symbols.SymbolLocator(symbols, _http, log.WriteLine);
+            _localSymbols = new Codalus.Debugging.Symbols.SymbolLocator(symbols with { Servers = [] }, _http, log.WriteLine);
+        }
+
         _attached = attach;
         if (attach)
         {
@@ -636,6 +666,32 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
         }
 
+        // No PDB next to it: one in a symbol path, or downloaded before (the cache), is read now, so the module's
+        // breakpoints bind as it loads (M58). The servers are asked after it loaded (below).
+        if (info is { HasSymbols: false } && _localSymbols is { } local && local.Options.Includes(module.Path))
+        {
+            try
+            {
+                var found = local.FindAsync(module.Path, ignoreFilter: false, _symbolsCancel.Token).GetAwaiter().GetResult();
+                if (found.PdbPath is { } pdb && ClrModuleInfo.Open(module.Path, pdb, found.Status) is var withSymbols)
+                {
+                    if (withSymbols.HasSymbols)
+                    {
+                        info.Dispose();
+                        info = withSymbols;
+                    }
+                    else
+                    {
+                        withSymbols.Dispose();
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException or OperationCanceledException)
+            {
+                log.WriteLine($"Symbols for {Path.GetFileName(module.Path)}: {ex.Message}");
+            }
+        }
+
         // Just My Code: the user's code is what has symbols and isn't optimized.
         var userCode = info is { HasSymbols: true, IsOptimized: false };
         if (userCode && debugger is CoreClr.DbgShimDebugger && !_process!.EnableEditAndContinue(module))
@@ -685,6 +741,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
         }
 
+        // A module without symbols next to it: looked up in the symbol paths and on the servers, after it loaded (the
+        // program doesn't wait for a download). With Just My Code its code isn't stepped into, so only the modules the
+        // settings name are looked up by themselves; Load Symbols asks for any.
+        if (info is { HasSymbols: false } && _symbols is { Options.Servers.Count: > 0 } locator && locator.Options.Includes(module.Path)
+            && (!_justMyCode || locator.Options.ModuleFilter == Codalus.Debugging.Symbols.SymbolModuleFilter.OnlySpecified))
+        {
+            FindSymbols(module, ignoreFilter: false);
+        }
+
         var name = module.IsDynamic || module.Path.Length == 0 ? "(dynamic module)" : Path.GetFileName(module.Path);
         _ = dap.SendEventAsync(DapEvents.Module, new ModuleEvent("new", new DapModule(
             JsonSerializer.SerializeToElement(ModuleId(module), DapJsonContext.Default.JsonElement),
@@ -694,6 +759,115 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             info?.PdbPath,
             IsOptimized: info?.IsOptimized,
             IsUserCode: userCode)), DapJsonContext.Default.ModuleEvent);
+    }
+
+    /// <summary>Load Symbols: a module's symbols, whatever the module lists say; a <c>module</c> event says what was found.</summary>
+    private void LoadSymbols(string moduleId)
+    {
+        lock (_gate)
+        {
+            if (_modules.FirstOrDefault(m => RuntimeHelpersId(m.Module).ToString(CultureInfo.InvariantCulture) == moduleId) is not ({ } module, { } info))
+            {
+                throw new DapRequestException("That module isn't loaded any more.");
+            }
+
+            if (info.HasSymbols)
+            {
+                return;
+            }
+
+            if (_symbols is null)
+            {
+                throw new DapRequestException("No symbol paths or symbol servers are set (Options › Debugging › Symbols).");
+            }
+
+            _symbols.ForgetFailures();
+            FindSymbols(module, ignoreFilter: true);
+        }
+    }
+
+    /// <summary>Looks a module's PDB up in the background, and loads it when it's found.</summary>
+    private void FindSymbols(IClrModule module, bool ignoreFilter)
+    {
+        var locator = _symbols!;
+        var cancellation = _symbolsCancel.Token;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var result = await locator.FindAsync(module.Path, ignoreFilter, cancellation).ConfigureAwait(false);
+                ApplySymbols(module, result);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException or BadImageFormatException)
+            {
+                log.WriteLine($"Symbols for {Path.GetFileName(module.Path)}: {ex.Message}");
+            }
+        }, CancellationToken.None);
+    }
+
+    /// <summary>A lookup's end: the PDB found replaces the module's symbols (breakpoints in its files bind), and the Modules window hears what happened.</summary>
+    private void ApplySymbols(IClrModule module, Codalus.Debugging.Symbols.SymbolResult result)
+    {
+        ClrModuleInfo? loaded = null;
+        var status = result.Status;
+        lock (_gate)
+        {
+            var index = _modules.FindIndex(m => ReferenceEquals(m.Module, module));
+            if (index < 0 || _ended.Task.IsCompleted)
+            {
+                return;
+            }
+
+            var current = _modules[index].Info;
+            if (result.PdbPath is { } pdb && !current.HasSymbols)
+            {
+                try
+                {
+                    loaded = ClrModuleInfo.Open(module.Path, pdb, result.Status);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)
+                {
+                    status = $"{Path.GetFileName(pdb)} couldn't be read: {ex.Message}";
+                }
+
+                if (loaded is { HasSymbols: true })
+                {
+                    WhileStopped(() =>
+                    {
+                        _modules[index] = (module, loaded);
+                        foreach (var (path, states) in _breakpoints)
+                        {
+                            Bind(path, states, module, loaded);
+                        }
+
+                        foreach (var state in _functionBreakpoints)
+                        {
+                            BindFunction(state, module, loaded);
+                        }
+                    });
+                    current.Dispose();
+                    current = loaded;
+                    status = loaded.SymbolStatus;
+                }
+                else if (loaded is not null)
+                {
+                    status = loaded.SymbolStatus;
+                    loaded.Dispose();
+                }
+            }
+
+            _ = dap.SendEventAsync(DapEvents.Module, new ModuleEvent("changed", new DapModule(
+                ModuleId(module),
+                Path.GetFileName(module.Path),
+                module.Path,
+                status,
+                current.PdbPath,
+                IsOptimized: current.IsOptimized,
+                IsUserCode: current is { HasSymbols: true, IsOptimized: false })), DapJsonContext.Default.ModuleEvent);
+        }
     }
 
     private static JsonElement ModuleId(IClrModule module) =>

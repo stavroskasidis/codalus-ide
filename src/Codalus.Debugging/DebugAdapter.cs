@@ -791,6 +791,17 @@ public sealed partial class DebugAdapter : IDebugAdapter
             ? (await _connection.RequestAsync("disassemble", new DisassembleArguments(memoryReference, count, InstructionOffset: instructionOffset), Json.DisassembleArguments, Json.DisassembleResponse, cancellationToken).ConfigureAwait(false)).Instructions
             : throw new DapException("disassemble", "This debugger doesn't show machine code.");
 
+    public async Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.SupportsSymbolLoading)
+        {
+            return false;
+        }
+
+        await _connection.RequestAsync("codalus/loadSymbols", new LoadSymbolsArguments(moduleId), Json.LoadSymbolsArguments, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     public async Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) =>
         Capabilities.SupportsRegisters
             ? (await _connection.RequestAsync("codalus/registers", new RegistersArguments(frameId), Json.RegistersArguments, Json.RegistersResponse, cancellationToken).ConfigureAwait(false)).Registers

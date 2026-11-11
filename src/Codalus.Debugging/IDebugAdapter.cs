@@ -81,6 +81,13 @@ public interface IDebugAdapter : IAsyncDisposable
     Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken) =>
         throw new DapException("disassemble", "This debugger doesn't show machine code.");
 
+    /// <summary>
+    /// Load Symbols (<see cref="Capabilities.SupportsSymbolLoading"/>): looks for a loaded module's symbols in the symbol
+    /// paths and on the symbol servers; a <c>module</c> event says what was found. False when no adapter of the session
+    /// has the module.
+    /// </summary>
+    Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken) => Task.FromResult(false);
+
     /// <summary>A frame's registers (<see cref="Capabilities.SupportsRegisters"/>).</summary>
     Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) => Task.FromResult<RegisterValue[]>([]);
 

@@ -427,6 +427,9 @@ public sealed record ModuleRow(DebugModule Module)
     public string Order => (Module.Order + 1).ToString(CultureInfo.InvariantCulture);
 
     public string AccessibleName => $"{Name}, {SymbolStatus}";
+
+    /// <summary>Load Symbols applies: the module is a file whose symbols aren't loaded.</summary>
+    public bool CanLoadSymbols => Module.Path is { Length: > 0 } && Module.SymbolStatus?.StartsWith("Symbols loaded", StringComparison.Ordinal) != true;
 }
 
 /// <summary>
@@ -441,6 +444,7 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
     private readonly ShownRefresh _refresh;
     private string _filter = string.Empty;
     private bool _queued;
+    private string? _symbolsProblem;
 
     public ModulesViewModel(DebugService debugger)
     {
@@ -454,6 +458,19 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
     void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
+
+    /// <summary>Whether the session's debugger looks symbols up on demand (the Codalus debugger, M58).</summary>
+    public bool CanLoadSymbols => _debugger.CanLoadSymbols;
+
+    /// <summary>Why the last Load Symbols couldn't be asked; null when it could (the module's status then says what was found).</summary>
+    public string? SymbolsProblem
+    {
+        get => _symbolsProblem;
+        private set => SetField(ref _symbolsProblem, value);
+    }
+
+    /// <summary>Load Symbols: looks for the module's PDB in the symbol paths and on the symbol servers.</summary>
+    public async Task LoadSymbolsAsync(ModuleRow row) => SymbolsProblem = await _debugger.LoadSymbolsAsync(row.Module.Id).ConfigureAwait(true);
 
     public string Filter
     {

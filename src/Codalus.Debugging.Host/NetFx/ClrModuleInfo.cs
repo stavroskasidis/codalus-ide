@@ -95,8 +95,12 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>Whether the assembly was compiled with optimizations (its <c>DebuggableAttribute</c> doesn't turn the JIT optimizer off).</summary>
     public bool IsOptimized { get; }
 
-    /// <summary>Reads <paramref name="path"/>'s metadata and its portable PDB (next to it, where its debug directory says, or embedded).</summary>
-    public static ClrModuleInfo Open(string path)
+    /// <summary>
+    /// Reads <paramref name="path"/>'s metadata and its portable PDB: next to it, where its debug directory says, or
+    /// embedded; or the one at <paramref name="symbolPath"/> (M58: found in a symbol path or on a symbol server, with
+    /// <paramref name="symbolStatus"/> saying where).
+    /// </summary>
+    public static ClrModuleInfo Open(string path, string? symbolPath = null, string? symbolStatus = null)
     {
         var stream = File.OpenRead(path);
         PEReader pe;
@@ -120,8 +124,22 @@ internal sealed class ClrModuleInfo : IDisposable
         string status;
         try
         {
-            if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            if (symbolPath is not null)
             {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(symbolPath));
+                _ = provider.GetMetadataReader(); // a file that isn't a portable PDB says so here
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            {
+                status = "Symbols loaded.";
+            }
+            else if (BuiltPortablePdb(pe) is var (built, builtPath))
+            {
+                // Not next to the module, but still where the build wrote it (a program copied without its PDB).
+                provider = built;
+                pdbPath = builtPath;
                 status = "Symbols loaded.";
             }
             else
@@ -142,10 +160,45 @@ internal sealed class ClrModuleInfo : IDisposable
         return new ClrModuleInfo(path, pe, provider, pdbPath, status);
     }
 
+    /// <summary>
+    /// The portable PDB at the path the debug directory names (where the build wrote it), when it's there and is this
+    /// build's: the runtime's own lookup reads only the one next to the module. It was taken for a Windows PDB before,
+    /// which left a program copied without its PDB without symbols on the machine that built it.
+    /// </summary>
+    private static (MetadataReaderProvider Provider, string Path)? BuiltPortablePdb(PEReader pe)
+    {
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && e.IsPortableCodeView))
+        {
+            var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
+            if (!System.IO.Path.IsPathRooted(codeView.Path) || !File.Exists(codeView.Path))
+            {
+                continue;
+            }
+
+            MetadataReaderProvider? provider = null;
+            try
+            {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(codeView.Path));
+                var id = new BlobContentId(provider.GetMetadataReader().DebugMetadataHeader!.Id);
+                if (id.Guid == codeView.Guid)
+                {
+                    return (provider, codeView.Path);
+                }
+            }
+            catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException or NullReferenceException)
+            {
+            }
+
+            provider?.Dispose();
+        }
+
+        return null;
+    }
+
     /// <summary>A Windows PDB the debug directory names (next to the module or where it was built), if it's there.</summary>
     private static string? WindowsPdb(PEReader pe, string path)
     {
-        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView))
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && !e.IsPortableCodeView))
         {
             var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
             var nextTo = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path) ?? string.Empty, System.IO.Path.GetFileName(codeView.Path.Replace('\\', System.IO.Path.DirectorySeparatorChar)));

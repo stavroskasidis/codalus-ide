@@ -151,6 +151,62 @@ internal static partial class BuiltIns
             Description = "Source folders of programs debugged on another machine, as \"/folder/there=C:\\folder\\here\". Without one, a file is found in the solution by its folder and name.",
             Order = 7,
         },
+        SettingDescriptor.Create(ShellHost.SymbolsMicrosoftServerSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: Microsoft Symbol Server",
+            Category = "Debugging",
+            Description = "Look for the PDBs of .NET's own modules on Microsoft's symbol server (msdl.microsoft.com), under the Codalus debugger. The names and build IDs of the modules looked up are sent to it. Off by default.",
+            Order = 20,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsNuGetServerSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: NuGet.org Symbol Server",
+            Category = "Debugging",
+            Description = "Look for the PDBs of NuGet packages on NuGet.org's symbol server (symbols.nuget.org), under the Codalus debugger. The names and build IDs of the modules looked up are sent to it. Off by default.",
+            Order = 21,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsServersSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: other symbol servers",
+            Category = "Debugging",
+            Description = "The URLs of other symbol servers (https://), asked in order after the two above.",
+            Order = 22,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsPathsSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: symbol paths",
+            Category = "Debugging",
+            Description = "Folders searched for a module's PDB when there's none next to it: the PDB itself, or a symbol store's layout.",
+            Order = 23,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsCacheSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Symbols: cache folder",
+            Category = "Debugging",
+            Description = "Where PDBs downloaded from symbol servers are kept. Empty: Codalus IDE's cache folder.",
+            Order = 24,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsOnlySpecifiedSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: load only specified modules",
+            Category = "Debugging",
+            Description = "Look up only the modules listed in \"Symbols: modules to load\". Off, every module is looked up but those in \"Symbols: modules to leave out\". With Just My Code on, modules are looked up by themselves only when this is on; Load Symbols in the Modules window asks for any module.",
+            Order = 25,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsIncludeSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: modules to load",
+            Category = "Debugging",
+            Description = "Module file names to look up when only specified modules are loaded; * and ? match any characters (Newtonsoft.*.dll).",
+            Order = 26,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsExcludeSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: modules to leave out",
+            Category = "Debugging",
+            Description = "Module file names that are never looked up by themselves; * and ? match any characters.",
+            Order = 27,
+        },
     ];
 
     public static void RegisterDebugCommands(ShellHost shell)

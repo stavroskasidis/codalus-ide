@@ -367,6 +367,39 @@ public sealed class DebugCodalusTests
     }
 
     [AvaloniaFact]
+    public async Task The_symbol_settings_list_no_server_until_one_is_turned_on()
+    {
+        await using var f = ShellFixture.Create();
+        var settings = f.Shell.Workbench.Settings;
+
+        // Out of the box: nowhere to look, so nothing about a program's modules leaves the machine.
+        Assert.Null(f.Shell.SymbolOptions());
+        Assert.False(settings.GetBoolean(ShellHost.SymbolsMicrosoftServerSetting, true));
+        Assert.False(settings.GetBoolean(ShellHost.SymbolsNuGetServerSetting, true));
+
+        // A symbol path alone asks no server; the cache is Codalus IDE's own unless one is named.
+        await settings.SetAsync(ShellHost.SymbolsPathsSetting, System.Text.Json.JsonElement.Parse("[\" /symbols/here \"]"), SettingScope.User, CancellationToken.None);
+        var paths = f.Shell.SymbolOptions()!;
+        Assert.Equal(["/symbols/here"], paths.SearchPaths);
+        Assert.Empty(paths.Servers);
+        Assert.EndsWith("symbols", paths.CacheFolder, StringComparison.Ordinal);
+
+        // The servers that are checked, in order, then the user's own; the module lists as they're set.
+        await settings.SetAsync(ShellHost.SymbolsNuGetServerSetting, true, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(ShellHost.SymbolsMicrosoftServerSetting, true, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(ShellHost.SymbolsServersSetting, System.Text.Json.JsonElement.Parse("[\"https://symbols.example.test/store\"]"), SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(ShellHost.SymbolsCacheSetting, "/cache/there", SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(ShellHost.SymbolsOnlySpecifiedSetting, true, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(ShellHost.SymbolsIncludeSetting, System.Text.Json.JsonElement.Parse("[\"Contoso.*.dll\"]"), SettingScope.User, CancellationToken.None);
+        var all = f.Shell.SymbolOptions()!;
+        Assert.Equal([Codalus.Debugging.Symbols.SymbolOptions.MicrosoftServer, Codalus.Debugging.Symbols.SymbolOptions.NuGetServer, "https://symbols.example.test/store"], all.Servers);
+        Assert.Equal("/cache/there", all.CacheFolder);
+        Assert.Equal(Codalus.Debugging.Symbols.SymbolModuleFilter.OnlySpecified, all.ModuleFilter);
+        Assert.True(all.Includes("Contoso.Web.dll"));
+        Assert.False(all.Includes("System.Console.dll"));
+    }
+
+    [AvaloniaFact]
     public async Task Under_netcoredbg_the_commands_are_off_and_breakpoints_behave_as_before()
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariable("CODALUS_DEBUG_ADAPTER") == DebugService.CodalusAdapter, "The debug-codalus shard runs every session under the Codalus debugger.");

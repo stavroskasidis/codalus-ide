@@ -267,7 +267,8 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>
     public NetFxDebugArguments DesktopClrArguments(LaunchPlan plan, bool newConsole) =>
         new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole,
-            ClientViews: CollectionViews.ViewedTypes);
+            ClientViews: CollectionViews.ViewedTypes,
+            Symbols: Symbols?.Invoke());
 
     /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
     public bool StepFiltering { get; set; } = true;
@@ -926,7 +927,7 @@ public sealed class DebugService : IAsyncDisposable
             // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
             await StartAsync(
                 StartDesktopClrAdapterAsync,
-                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);
@@ -1892,6 +1893,42 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
+    }
+
+    // ------------------------------------------------------------------ symbols (M58)
+
+    /// <summary>
+    /// Where the Codalus debugger looks for PDBs that aren't next to their modules (the shell reads it from the
+    /// settings at each start): symbol paths, symbol servers and their cache. Null, or nothing listed: nowhere.
+    /// </summary>
+    public Func<Codalus.Debugging.Symbols.SymbolOptions?>? Symbols { get; set; }
+
+    /// <summary>Whether the session's debugger looks symbols up on demand (the Codalus debugger).</summary>
+    public bool CanLoadSymbols => _adapter is { } adapter && State != DebugState.Idle && adapter.Adapters.Any(a => a.Capabilities.SupportsSymbolLoading);
+
+    /// <summary>
+    /// Load Symbols: looks for a module's symbols in the symbol paths and on the symbol servers, whatever the module
+    /// lists say; the module's status says what was found. Why it couldn't be asked, or null.
+    /// </summary>
+    public async Task<string?> LoadSymbolsAsync(string moduleId)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return "There's no debug session.";
+        }
+
+        try
+        {
+            return await adapter.LoadSymbolsAsync(moduleId, _session.Token).ConfigureAwait(false) ? null : "This debugger doesn't look symbols up (the Codalus debugger does).";
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
     }
 
     // ------------------------------------------------------------------ memory, machine code and registers (M58)

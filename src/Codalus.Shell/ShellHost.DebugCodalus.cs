@@ -8,6 +8,53 @@ namespace Codalus.Shell;
 // netcoredbg, or in the browser, they're off.
 public sealed partial class ShellHost
 {
+    public const string SymbolsMicrosoftServerSetting = "debug.symbols.microsoftServer";
+    public const string SymbolsNuGetServerSetting = "debug.symbols.nugetServer";
+    public const string SymbolsServersSetting = "debug.symbols.servers";
+    public const string SymbolsPathsSetting = "debug.symbols.paths";
+    public const string SymbolsCacheSetting = "debug.symbols.cacheFolder";
+    public const string SymbolsOnlySpecifiedSetting = "debug.symbols.loadOnlySpecified";
+    public const string SymbolsIncludeSetting = "debug.symbols.include";
+    public const string SymbolsExcludeSetting = "debug.symbols.exclude";
+
+    /// <summary>
+    /// The symbol settings (Options › Debugging › Symbols) as the Codalus debugger takes them at a session's start:
+    /// the servers that are turned on (none by default: nothing leaves the machine until one is), the symbol paths and
+    /// the cache; null when nothing is listed.
+    /// </summary>
+    internal Codalus.Debugging.Symbols.SymbolOptions? SymbolOptions()
+    {
+        var settings = Workbench.Settings;
+        var servers = new List<string>();
+        if (settings.GetBoolean(SymbolsMicrosoftServerSetting, false))
+        {
+            servers.Add(Codalus.Debugging.Symbols.SymbolOptions.MicrosoftServer);
+        }
+
+        if (settings.GetBoolean(SymbolsNuGetServerSetting, false))
+        {
+            servers.Add(Codalus.Debugging.Symbols.SymbolOptions.NuGetServer);
+        }
+
+        servers.AddRange(settings.GetStrings(SymbolsServersSetting).Select(s => s.Trim()).Where(s => s.Length > 0));
+        var paths = settings.GetStrings(SymbolsPathsSetting).Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+        if (servers.Count == 0 && paths.Count == 0)
+        {
+            return null;
+        }
+
+        var cache = settings.GetString(SymbolsCacheSetting, string.Empty).Trim();
+        return new Codalus.Debugging.Symbols.SymbolOptions
+        {
+            Servers = servers,
+            SearchPaths = paths,
+            CacheFolder = cache.Length > 0 ? cache : Path.Combine(Paths.Cache, "symbols"),
+            ModuleFilter = settings.GetBoolean(SymbolsOnlySpecifiedSetting, false) ? Codalus.Debugging.Symbols.SymbolModuleFilter.OnlySpecified : Codalus.Debugging.Symbols.SymbolModuleFilter.AllModules,
+            IncludedModules = [.. settings.GetStrings(SymbolsIncludeSetting)],
+            ExcludedModules = [.. settings.GetStrings(SymbolsExcludeSetting)],
+        };
+    }
+
     /// <summary>The context keys of what the current debugger can do: set at every change of the debug state.</summary>
     private void UpdateDebuggerAbilities()
     {

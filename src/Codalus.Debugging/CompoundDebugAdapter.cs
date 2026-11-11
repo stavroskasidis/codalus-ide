@@ -844,6 +844,28 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return part.Adapter.DisassembleAsync(thread, memoryReference, instructionOffset, count, cancellationToken);
     }
 
+    public async Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        // A module's id names it in its own adapter: the one that has it takes the request.
+        DapException? refused = null;
+        foreach (var part in Parts())
+        {
+            try
+            {
+                if (await part.Adapter.LoadSymbolsAsync(moduleId, cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+            catch (DapException ex)
+            {
+                refused ??= ex;
+            }
+        }
+
+        return refused is null ? false : throw refused;
+    }
+
     public Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken)
     {
         var (part, frame) = Owner(frameId, "codalus/registers");

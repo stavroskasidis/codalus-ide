@@ -7,6 +7,7 @@
   <DockPanel>
     <TextBox x:Name="Search" DockPanel.Dock="Top" Margin="6,4" Text="{Binding Filter}" PlaceholderText="{l:T modules.searchModules}" AutomationProperties.Name="{l:T modules.searchModules}" />
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T modules.modulesAppearHereWhileDebugging}" IsVisible="{Binding IsEmpty}" />
+    <TextBlock DockPanel.Dock="Bottom" Classes="muted" Margin="8,2" Text="{Binding SymbolsProblem}" TextWrapping="Wrap" IsVisible="{Binding SymbolsProblem, Converter={x:Static ObjectConverters.IsNotNull}}" />
     <!--
       The table fills the pane; below its minimum width the columns keep their widths and scroll sideways together
       (M34g on M43: at 280 px the symbol status, a desktop-CLR module's reason among them, was past the pane's edge).
@@ -38,6 +39,11 @@
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>
+          <ListBox.ContextMenu>
+            <ContextMenu x:Name="ModuleMenu">
+              <MenuItem x:Name="LoadSymbolsItem" Header="{l:T modules.loadSymbols}" Click="OnLoadSymbols" />
+            </ContextMenu>
+          </ListBox.ContextMenu>
         </ListBox>
       </DockPanel>
     </ScrollViewer>
