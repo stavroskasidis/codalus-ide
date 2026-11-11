@@ -21,7 +21,7 @@ public sealed class BreakAllSessionTests(SessionsFixture fixture) : IClassFixtur
     public ValueTask InitializeAsync()
     {
         // The Codalus debugger by the setting, with no netcoredbg to fall back on. Not in the parity list
-        // (eng/ci-debug-codalus.txt): a shard's CODALUS_DEBUG_ADAPTER would override the setting.
+        // (eng/ci-debug-parity.txt): a shard's CODALUS_DEBUG_ADAPTER would override the setting.
         _debug = new DebugService(() => null) { CoreClrAdapter = DebuggeeFixture.CodalusAdapter, AdapterSetting = () => DebugService.CodalusAdapter };
         _debug.Stopped += (_, stop) => _stops.Writer.TryWrite(stop);
         _debug.Ended += (_, code) => _ended.TrySetResult(code);
