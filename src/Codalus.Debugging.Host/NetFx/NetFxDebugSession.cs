@@ -25,8 +25,11 @@ internal interface IClrDebugger
 /// evaluation of C# expressions (<see cref="ClrEvaluator"/>), exceptions (all with a type filter, or unhandled), and
 /// changing primitive values. Handles (frames, variable references) live until the program runs again.
 /// </summary>
-internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger)
+internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
 {
+    /// <summary>Closes the assemblies read for the debugger attributes.</summary>
+    public void Dispose() => _attributes.Dispose();
+
     private const int MaxChildren = 100;
     private static readonly JsonElement s_empty = JsonElement.Parse("{}");
     private static readonly StringComparer s_paths = OperatingSystem.IsLinux() ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase;
@@ -52,6 +55,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// <summary>The frames handed out since the stop that are their thread's innermost managed one (frames are read anew each time, so not by reference to another read).</summary>
     private readonly HashSet<IClrFrame> _innermost = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, (int FrameId, string Name, int Ordinal)> _stepInTargets = [];
+
+    /// <summary>The objects with an ID (M58: <c>$1</c>, <c>$2</c>…), each held until its ID is deleted or the session ends.</summary>
+    private readonly Dictionary<string, (IClrValue Value, Action Release)> _objectIds = new(StringComparer.Ordinal);
+    private readonly TypeAttributes _attributes = new();
+    private HashSet<string> _clientViews = new(StringComparer.Ordinal);
+    private int _nextObjectId;
 
     /// <summary>What the method a step just returned from returned (M58): shown first in Locals, and <c>$ReturnValue</c>.</summary>
     private (int ThreadId, string Method, IClrValue Value)? _returnValue;
@@ -169,6 +178,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     SupportsGotoTargetsRequest = true,
                     SupportsStepInTargetsRequest = true,
                     SupportsFreezingThreads = true,
+                    SupportsObjectIds = true,
+                    SupportsTypeProxies = true,
                     SupportsExceptionInfoRequest = true,
                     SupportsExceptionFilterOptions = true,
                     SupportsSetVariable = true,
@@ -234,6 +245,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 var jump = Read(arguments, json.GotoArguments)!;
                 await GotoAsync(jump.ThreadId, jump.TargetId).ConfigureAwait(false);
                 return null;
+            case MakeObjectIdCommand:
+                var make = Read(arguments, json.MakeObjectIdArguments)!;
+                return JsonSerializer.SerializeToElement(new ObjectIdResponse(MakeObjectId(make.Expression, make.FrameId)), json.ObjectIdResponse);
+            case DeleteObjectIdCommand:
+                DeleteObjectId(Read(arguments, json.DeleteObjectIdArguments)!.Name);
+                return null;
             case FreezeThreadCommand:
                 var freeze = Read(arguments, json.FreezeThreadArguments)!;
                 lock (_gate)
@@ -267,6 +284,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>Keeps a thread from running when the program runs on, or lets it run again (M58).</summary>
     public const string FreezeThreadCommand = "codalus/freezeThread";
+
+    /// <summary>Gives an object an ID (<c>$1</c>) that expressions reach it by for the rest of the session (M58).</summary>
+    public const string MakeObjectIdCommand = "codalus/makeObjectId";
+
+    public const string DeleteObjectIdCommand = "codalus/deleteObjectId";
 
     // ------------------------------------------------------------------ code changes (M55)
 
@@ -385,6 +407,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         _justMyCode = arguments.JustMyCode;
         _stepFiltering = arguments.EnableStepFiltering;
+        _clientViews = new HashSet<string>(arguments.ClientViews ?? [], StringComparer.Ordinal);
         _attached = attach;
         if (attach)
         {
@@ -536,6 +559,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 }
 
                 _modules.Clear();
+                _objectIds.Clear();
             }
         }
     }
@@ -1567,6 +1591,14 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             variables.Add((ReturnValueName, () => returned.Value));
         }
 
+        // The exception the thread stopped on (or is throwing), and the objects with an ID.
+        var thread = frame.Thread;
+        variables.Add((ExceptionName, () => _exceptions.GetValueOrDefault(thread.Id) ?? SafeValue(Live(thread.CurrentException))));
+        foreach (var (name, id) in _objectIds)
+        {
+            variables.Add((name, () => id.Value));
+        }
+
         return new ClrFrameContext(frame, variables, self, declaring, ns);
     }
 
@@ -1612,6 +1644,78 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>The pseudo-variable for the value the last step's method returned.</summary>
     public const string ReturnValueName = "$ReturnValue";
+
+    /// <summary>The pseudo-variable for the exception the thread stopped on.</summary>
+    public const string ExceptionName = "$exception";
+
+    // ------------------------------------------------------------------ object IDs (M58)
+
+    /// <summary>Gives the object an expression evaluates to an ID: held by a strong handle, so it's reachable (and alive) when no variable in scope holds it.</summary>
+    private string MakeObjectId(string expression, int? frameId)
+    {
+        lock (_gate)
+        {
+            RequireStopped();
+            var frame = frameId is { } id ? Frame(id) : _frames.Values.FirstOrDefault(f => f.Module is not null) ?? throw new DapRequestException("An object ID needs a stopped frame.");
+            if (Evaluator(frame).Evaluate(expression) is not RemoteValue { Value: { Kind: ClrValueKind.Object or ClrValueKind.Array or ClrValueKind.String } value })
+            {
+                throw new DapRequestException($"'{expression.Trim()}' isn't an object: only objects can have an ID.");
+            }
+
+            if (ObjectIdOf(value) is { } existing)
+            {
+                return existing;
+            }
+
+            var kept = Process.Keep(value, out var release)
+                ?? throw new DapRequestException($"'{expression.Trim()}' is a value type's value, which isn't an object of its own: only objects can have an ID.");
+            var name = "$" + (++_nextObjectId).ToString(CultureInfo.InvariantCulture);
+            _objectIds[name] = (kept, release);
+            return name;
+        }
+    }
+
+    private void DeleteObjectId(string name)
+    {
+        lock (_gate)
+        {
+            if (_objectIds.Remove(name.Trim(), out var id))
+            {
+                id.Release();
+            }
+        }
+    }
+
+    /// <summary>The ID of the object a value is (the same object, by where it is now), if it has one.</summary>
+    private string? ObjectIdOf(IClrValue value)
+    {
+        if (_objectIds.Count == 0 || value.Kind is ClrValueKind.Null or ClrValueKind.Primitive)
+        {
+            return null;
+        }
+
+        try
+        {
+            var address = value.Address;
+            if (address == 0)
+            {
+                return null;
+            }
+
+            foreach (var (name, id) in _objectIds)
+            {
+                if (id.Value.Address == address)
+                {
+                    return name;
+                }
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        return null;
+    }
 
     private Dictionary<string, IClrValue> Values(ClrFrameContext context)
     {
@@ -1661,7 +1765,13 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         try
         {
-            return new(name, Types.Format(value), value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName, IndexedVariables: Indexed(value));
+            var text = Types.Format(value);
+            if (value is not null && ObjectIdOf(value) is { } id && name != id)
+            {
+                text += " {" + id + "}"; // as the classic IDE marks an object that has an ID
+            }
+
+            return new(name, text, value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName, IndexedVariables: Indexed(value));
         }
         catch (InvalidOperationException ex)
         {
@@ -1699,7 +1809,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     return 0;
                 }
 
-                return Handle(() => Members(value, evaluateName), () => MemberValues(value));
+                return Handle(() => Members(value, evaluateName), () => ProxyOf(value) is null ? MemberValues(value) : []);
             default:
                 return 0;
         }
@@ -1746,8 +1856,344 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return indices;
     }
 
-    /// <summary>An object's instance fields (auto-properties' backing fields under the property's name) and its other properties, read through their getters.</summary>
+    private const string TypeProxyAttribute = "System.Diagnostics.DebuggerTypeProxyAttribute";
+    private static readonly VariablePresentationHint s_virtual = new(VariablePresentationHint.Virtual);
+    private static readonly VariablePresentationHint s_virtualLazy = new(VariablePresentationHint.Virtual, Lazy: true);
+
+    /// <summary>
+    /// An object's children (M58): through its type's <c>[DebuggerTypeProxy]</c> when it has one (the proxy's public
+    /// members, then the object's own under Raw View), else its own members, with a Results View when it can be
+    /// enumerated. A type the client shows in a view of its own gets its own members only.
+    /// </summary>
     private List<Variable> Members(IClrValue target, string? evaluateName)
+    {
+        if (ProxyOf(target) is { } proxy && CreateProxy(target, proxy) is { } view)
+        {
+            var members = ProxyMembers(view);
+            members.Add(new Variable(Variable.RawView, string.Empty, TypeName(target), Handle(() => RawMembers(target, evaluateName), () => MemberValues(target)), evaluateName, PresentationHint: s_virtual));
+            return members;
+        }
+
+        var raw = RawMembers(target, evaluateName);
+        if (!ShownByClient(target) && IsEnumerable(target))
+        {
+            raw.Add(new Variable(Variable.ResultsView, "Expanding the Results View will enumerate the IEnumerable", string.Empty, Handle(() => Enumerate(target)), PresentationHint: s_virtualLazy));
+        }
+
+        return raw;
+    }
+
+    private bool ShownByClient(IClrValue value) => _clientViews.Count > 0 && _clientViews.Contains(Types.FullName(value.Type));
+
+    /// <summary>The proxy type of a value's type or of one of its bases (with that type's arguments, for a generic proxy); null without one.</summary>
+    private (IClrModule Module, int Token, ClrModuleInfo Info, IReadOnlyList<ClrType> TypeArguments)? ProxyOf(IClrValue value)
+    {
+        if (value.Kind != ClrValueKind.Object || ShownByClient(value))
+        {
+            return null;
+        }
+
+        foreach (var (module, token, info, typeArguments) in Types.ChainWithArguments(value.Type))
+        {
+            if (!info.TypeHasAttribute(token, TypeProxyAttribute))
+            {
+                continue;
+            }
+
+            // The attribute's type as it's written there: "Ns.Proxy`1, Assembly, Version=…", or without an assembly in its own.
+            if (_attributes.Find(info.TypeFullName(token), [info.Path]).TypeProxy is not { Length: > 0 } name)
+            {
+                return null;
+            }
+
+            var comma = name.IndexOf(',', StringComparison.Ordinal);
+            var typeName = (comma < 0 ? name : name[..comma]).Trim();
+            var assembly = comma < 0 ? null : name[(comma + 1)..].Split(',')[0].Trim();
+            foreach (var (candidate, candidateInfo) in Types.Modules.Where(m => assembly is not null && string.Equals(m.Info.AssemblyName, assembly, StringComparison.OrdinalIgnoreCase)).Append((module, info)))
+            {
+                if (candidateInfo.FindType(typeName) is var found and not 0)
+                {
+                    return (candidate, found, candidateInfo, typeArguments);
+                }
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>The proxy object for a value: its type's one-parameter constructor run on the value (func-eval); null when it can't be made (the log says why).</summary>
+    private IClrValue? CreateProxy(IClrValue target, (IClrModule Module, int Token, ClrModuleInfo Info, IReadOnlyList<ClrType> TypeArguments) proxy)
+    {
+        var name = proxy.Info.TypeDisplayName(proxy.Token);
+        var arity = proxy.Info.GenericParameterCount(proxy.Token);
+        if (CurrentThread() is not { } thread || (arity != 0 && arity != proxy.TypeArguments.Count)
+            || proxy.Info.Methods(proxy.Token).FirstOrDefault(m => m.Name == ".ctor" && !m.IsStatic && m.ParameterTypes.Count == 1) is not { } constructor)
+        {
+            return null;
+        }
+
+        try
+        {
+            var created = Process.NewObject(thread, proxy.Module, constructor.Token, arity == 0 ? [] : proxy.TypeArguments, [target], EvalTimeout);
+            return ClrLiveValue.Of(Process, created, () => created);
+        }
+        catch (ClrEvalException ex)
+        {
+            log.WriteLine($"The type proxy {name} threw {Types.FullName(ex.Exception.Type)}: the object's own members are shown.");
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+        {
+            log.WriteLine($"The type proxy {name} couldn't be created ({ex.Message}): the object's own members are shown.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A proxy's view: its public instance properties and fields, without those <c>[DebuggerBrowsable]</c> hides, and
+    /// with a root-hidden one replaced by its elements or members (a collection's <c>Items</c>).
+    /// </summary>
+    private List<Variable> ProxyMembers(IClrValue proxy)
+    {
+        var result = new List<Variable>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var thread = CurrentThread();
+        foreach (var (module, token, info, typeArguments) in Types.ChainWithArguments(proxy.Type).Where(c => c.Info.TypeFullName(c.Token) is not ("System.Object" or "System.ValueType")))
+        {
+            var browsable = _attributes.Find(info.TypeFullName(token), [info.Path]);
+            void Add(string name, Func<IClrValue?> read)
+            {
+                if (browsable.Hidden.Contains(name) || !seen.Add(name) || result.Count >= MaxChildren)
+                {
+                    return;
+                }
+
+                IClrValue? value;
+                try
+                {
+                    value = read();
+                }
+                catch (ClrEvalException ex)
+                {
+                    value = ex.Exception;
+                }
+                catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+                {
+                    result.Add(new Variable(name, "(" + ex.Message + ")"));
+                    return;
+                }
+
+                if (browsable.RootHidden.Contains(name))
+                {
+                    result.AddRange(Flattened(value));
+                }
+                else
+                {
+                    result.Add(Displayed(VariableOf(name, value, null), value));
+                }
+            }
+
+            foreach (var property in info.Properties(token).Where(p => p is { IsStatic: false, IndexParameters: 0, IsPublic: true } && p.GetterToken != 0))
+            {
+                var getter = property.GetterToken;
+                Add(property.Name, () =>
+                {
+                    if (thread is null)
+                    {
+                        return null;
+                    }
+
+                    var value = Process.Call(thread, module, getter, typeArguments, [proxy], EvalTimeout);
+                    return ClrLiveValue.Of(Process, value, () => value);
+                });
+            }
+
+            foreach (var field in info.Fields(token).Where(f => f is { IsStatic: false, IsPublic: true }))
+            {
+                var fieldToken = field.Token;
+                Add(field.Name, () => proxy.Field(module, token, fieldToken));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>A root-hidden member's value in its place: an array's elements, an object's members; nothing for null.</summary>
+    private List<Variable> Flattened(IClrValue? value)
+    {
+        switch (value?.Kind)
+        {
+            case ClrValueKind.Array:
+                var count = Math.Min(value.Length, MaxChildren);
+                var elements = new List<Variable>(count + 1);
+                for (var i = 0; i < count; i++)
+                {
+                    var at = i;
+                    var element = SafeValue(() => value.Element(at));
+                    elements.Add(Displayed(VariableOf("[" + at.ToString(CultureInfo.InvariantCulture) + "]", element, null), element));
+                }
+
+                if (value.Length > count)
+                {
+                    elements.Add(new Variable("…", $"{(value.Length - count).ToString(CultureInfo.InvariantCulture)} more"));
+                }
+
+                return elements;
+            case ClrValueKind.Object:
+                return Members(value, null);
+            default:
+                return [];
+        }
+    }
+
+    /// <summary>
+    /// A variable with its type's <c>[DebuggerDisplay]</c> applied (its value, and its name when the attribute names
+    /// it): for the rows of a proxy's view and of a Results View, which no expression of the client's reaches (a
+    /// dictionary's entries show as <c>[key]</c> and their value).
+    /// </summary>
+    private Variable Displayed(Variable variable, IClrValue? value)
+    {
+        if (value is not { Kind: ClrValueKind.Object } || _frames.Values.FirstOrDefault(f => f.Module is not null) is not { } frame)
+        {
+            return variable;
+        }
+
+        try
+        {
+            var chain = Types.Chain(value.Type).ToList();
+            if (chain.Count == 0)
+            {
+                return variable;
+            }
+
+            var attributes = _attributes.Find(chain[0].Info.TypeFullName(chain[0].Token), [.. chain.Select(c => c.Info.Path).Distinct()]);
+            if (attributes.Display is null && attributes.Name is null)
+            {
+                return variable;
+            }
+
+            var typeName = chain[0].Info.TypeFullName(chain[0].Token);
+            var evaluator = new ClrEvaluator(Types, Process, new ClrFrameContext(frame, [], () => value, (chain[0].Module, chain[0].Token), typeName.LastIndexOf('.') is var dot and > 0 ? typeName[..dot] : null), EvalTimeout);
+            return variable with
+            {
+                Value = attributes.Display is { } display ? Fill(display, evaluator) : variable.Value,
+                Name = attributes.Name is { } name ? Fill(name, evaluator) : variable.Name,
+            };
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("A [DebuggerDisplay] couldn't be read: " + ex.Message);
+            return variable;
+        }
+    }
+
+    /// <summary>A <c>[DebuggerDisplay]</c> string with each <c>{expression}</c> evaluated on the object (<c>,nq</c>: a string without its quotes).</summary>
+    private string Fill(string format, ClrEvaluator evaluator)
+    {
+        var result = new System.Text.StringBuilder();
+        for (var i = 0; i < format.Length; i++)
+        {
+            if (format[i] != '{' || format.IndexOf('}', i) is not (var end and > 0))
+            {
+                result.Append(format[i]);
+                continue;
+            }
+
+            var expression = format[(i + 1)..end];
+            var noQuotes = false;
+            if (expression.LastIndexOf(',') is var comma and > 0 && expression[(comma + 1)..].Trim() is "nq" or "d" or "h" or "x" or "raw" or "nse" or "ac")
+            {
+                noQuotes = expression[(comma + 1)..].Trim() == "nq";
+                expression = expression[..comma];
+            }
+
+            try
+            {
+                result.Append(evaluator.Evaluate(expression) switch
+                {
+                    LocalValue { Value: string text } when noQuotes => text,
+                    LocalValue local => ClrTypeSystem.FormatPrimitive(local.Value),
+                    RemoteValue { Value: { Kind: ClrValueKind.String, Text: { } text } } when noQuotes => text,
+                    RemoteValue remote => Types.Format(remote.Value),
+                    _ => "{" + expression + "}",
+                });
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+            {
+                result.Append('{').Append(expression).Append('}');
+            }
+
+            i = end;
+        }
+
+        return result.ToString();
+    }
+
+    private const string EnumerableInterface = "System.Collections.IEnumerable";
+
+    /// <summary>Whether an object can be enumerated: its type or a base implements <c>IEnumerable</c> (a string and an array show their own elements).</summary>
+    private bool IsEnumerable(IClrValue value) =>
+        value.Kind == ClrValueKind.Object
+        && Types.Chain(value.Type).Any(c => c.Info.Interfaces(c.Token).Any(i => i == EnumerableInterface || i.StartsWith("System.Collections.Generic.IEnumerable`1", StringComparison.Ordinal)));
+
+    /// <summary>
+    /// A Results View's rows: the first elements <c>IEnumerable.GetEnumerator()</c> gives, read through func-evals when
+    /// the node is expanded (enumerating runs the program's code, a query's included).
+    /// </summary>
+    private List<Variable> Enumerate(IClrValue target)
+    {
+        var result = new List<Variable>();
+        if (CurrentThread() is not { } thread || Types.CoreLibrary is not var (module, info)
+            || info.FindType(EnumerableInterface) is not (var enumerable and not 0) || info.FindType("System.Collections.IEnumerator") is not (var enumeratorType and not 0)
+            || info.Methods(enumerable).FirstOrDefault(m => m.Name == "GetEnumerator") is not { } getEnumerator
+            || info.Methods(enumeratorType).FirstOrDefault(m => m.Name == "MoveNext") is not { } moveNext
+            || info.Methods(enumeratorType).FirstOrDefault(m => m.Name == "get_Current") is not { } current)
+        {
+            return [new Variable("(not evaluated)", "The Results View needs a stopped thread.")];
+        }
+
+        try
+        {
+            var enumerator = Process.Call(thread, module, getEnumerator.Token, [], [target], EvalTimeout);
+            for (var i = 0; ; i++)
+            {
+                if (Process.Call(thread, module, moveNext.Token, [], [enumerator], EvalTimeout) is not { Kind: ClrValueKind.Primitive, Primitive: true })
+                {
+                    break;
+                }
+
+                if (i == MaxChildren)
+                {
+                    result.Add(new Variable("…", $"More: the first {MaxChildren.ToString(CultureInfo.InvariantCulture)} are listed."));
+                    break;
+                }
+
+                var element = Process.Call(thread, module, current.Token, [], [enumerator], EvalTimeout);
+                var live = ClrLiveValue.Of(Process, element, () => element);
+                result.Add(Displayed(VariableOf("[" + i.ToString(CultureInfo.InvariantCulture) + "]", live, null), live));
+            }
+
+            if (result.Count == 0)
+            {
+                result.Add(new Variable("Empty", "\"Enumeration yielded no results\"", "string"));
+            }
+        }
+        catch (ClrEvalException ex)
+        {
+            result.Add(VariableOf("Error", ex.Exception, null));
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException)
+        {
+            result.Add(new Variable("Error", "(" + ex.Message + ")"));
+        }
+
+        return result;
+    }
+
+    /// <summary>An object's instance fields (auto-properties' backing fields under the property's name) and its other properties, read through their getters.</summary>
+    private List<Variable> RawMembers(IClrValue target, string? evaluateName)
     {
         var result = new List<Variable>();
         var seen = new HashSet<string>(StringComparer.Ordinal);

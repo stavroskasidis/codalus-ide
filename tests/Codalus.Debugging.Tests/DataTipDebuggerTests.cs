@@ -62,7 +62,20 @@ public sealed class DataTipDebuggerTests(DebuggeeFixture debuggee) : IClassFixtu
         var inventory = Assert.Single(locals, v => v.Name == "inventory");
         var members = await _debug.MembersAsync(inventory.Type!, TestContext.Current.CancellationToken);
         Assert.NotNull(members);
-        var rows = VariableGrouping.Group(await _debug.VariablesAsync(inventory.VariablesReference), members, _debug.IsUserCode);
+        var own = await _debug.VariablesAsync(inventory.VariablesReference);
+        if (own.FirstOrDefault(v => v.IsVirtual && v.Name == Variable.RawView) is { } rawView)
+        {
+            // The Codalus debugger applies type proxies (M58), as the classic IDE does: Inventory is a Collection<string>,
+            // whose proxy lists its elements, with the object's own members under Raw View. netcoredbg lists those at once.
+            var view = VariableGrouping.Group(own, members, _debug.IsUserCode);
+            Assert.All(view.Take(view.Count - 1), r => Assert.Equal(MemberKind.Element, r.Kind));
+            Assert.Equal("[0]", view[0].Variable.Name);
+            Assert.Equal(MemberKind.AdapterView, view[^1].Kind);
+            Assert.Equal(inventory.Type, rawView.Type);
+            own = await _debug.VariablesAsync(rawView.VariablesReference);
+        }
+
+        var rows = VariableGrouping.Group(own, members, _debug.IsUserCode);
 
         // Inline, in name order: the public members and your own private field, with the lock; then the groups.
         var logger = Assert.Single(rows, r => r.Variable.Name == "logger");

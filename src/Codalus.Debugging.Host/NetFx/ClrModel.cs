@@ -62,6 +62,25 @@ internal interface IClrProcess : IDisposable
     /// <summary>A primitive value created in the debuggee, to pass to a call.</summary>
     IClrValue NewPrimitive(IClrThread thread, object value);
 
+    /// <summary>
+    /// A primitive boxed in the debuggee (M58), to pass where an object is expected: func-eval doesn't box what it's
+    /// given (a bare int there ended the program). <paramref name="module"/> and <paramref name="typeToken"/> are the
+    /// primitive's type in the core library (<c>System.Int32</c>).
+    /// </summary>
+    IClrValue Box(IClrThread thread, IClrModule module, int typeToken, object value, TimeSpan timeout) =>
+        throw new ClrException("A number can't be passed where an object is expected here (it would need boxing).");
+
+    /// <summary>A null reference, to pass to a call (M58).</summary>
+    IClrValue NewNull(IClrThread thread) => throw new ClrException("null can't be passed as an argument here.");
+
+    /// <summary>
+    /// Creates an object in the debuggee by running one of its type's constructors (func-eval, M58: <c>new</c> in
+    /// expressions and <c>[DebuggerTypeProxy]</c> types). <paramref name="typeArguments"/> are a generic type's. Throws as
+    /// <see cref="Call"/> does; the object stays valid as a call's result does.
+    /// </summary>
+    IClrValue NewObject(IClrThread thread, IClrModule module, int constructorToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
+        throw new ClrException("This debugger can't create objects.");
+
     /// <summary>Ends the process.</summary>
     void Terminate();
 

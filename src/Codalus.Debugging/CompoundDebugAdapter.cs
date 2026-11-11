@@ -826,6 +826,18 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return part.Adapter.GotoAsync(thread, targetId / MaxParts, cancellationToken);
     }
 
+    public Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId ?? 0, "codalus/makeObjectId");
+        return part.Adapter.MakeObjectIdAsync(expression, frameId is null ? null : frame, cancellationToken);
+    }
+
+    public Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId ?? 0, "codalus/deleteObjectId");
+        return part.Adapter.DeleteObjectIdAsync(name, frameId is null ? null : frame, cancellationToken);
+    }
+
     public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken)
     {
         var (part, thread) = Owner(threadId, "codalus/freezeThread");

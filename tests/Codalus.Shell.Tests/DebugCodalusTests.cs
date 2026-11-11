@@ -120,6 +120,68 @@ public sealed class DebugCodalusTests
         Assert.Contains("exited with code 3", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
     }
 
+    private static async Task<IReadOnlyList<VariableNode>> ExpandAsync(VariableNode node)
+    {
+        node.IsExpanded = true;
+        await node.LoadChildrenOnceAsync();
+        await ShellFixture.PumpUntil(() => node.Children.Count > 0 && node.Children.All(c => !c.IsPlaceholder));
+        return node.Children;
+    }
+
+    [AvaloniaFact]
+    public async Task Type_proxies_results_views_and_object_ids_show_in_the_variable_windows()
+    {
+        await using var f = ShellFixture.Create();
+        var features = await OpenAsync(f);
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, Line(features, "features-views")));
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, Line(features, "features-ids")));
+        await f.RunAsync("debug.start");
+        await StoppedAtAsync(f, features, "features-views", seconds: 180);
+        await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "basket"));
+        VariableNode Local(string name) => f.Shell.Locals.Roots.Single(r => r.Name == name);
+
+        // A type's own proxy: its view, then Raw View with the object's own members, grouped as any object's.
+        var basket = await ExpandAsync(Local("basket"));
+        Assert.Equal(["Summary", "#0", "#1", "Raw View"], basket.Select(n => n.Name));
+        Assert.Equal("apple (5)", basket[1].Value);
+        Assert.Equal(MemberKind.AdapterView, basket[3].Kind);
+        var raw = await ExpandAsync(basket[3]);
+        Assert.Equal(["Items", "Name", "_secret"], raw.Select(n => n.Name).Order(StringComparer.Ordinal));
+
+        // A list stays the shell's own view (its elements, then its Raw View), as under netcoredbg.
+        var items = await ExpandAsync(raw.Single(n => n.Name == "Items"));
+        Assert.Equal(["[0]", "[1]", "Raw View"], items.Select(n => n.Name));
+        Assert.Equal(MemberKind.RawView, items[2].Kind);
+
+        // The framework's proxy for a type the shell has no view for; an iterator's Results View.
+        Assert.Equal(["[0]", "[1]", "[2]", "Raw View"], (await ExpandAsync(Local("linked"))).Select(n => n.Name));
+        var evens = await ExpandAsync(Local("evens"));
+        Assert.Equal("Results View", evens[^1].Name);
+        Assert.Equal(MemberKind.AdapterView, evens[^1].Kind);
+        Assert.Equal(["0", "2", "4", "6"], (await ExpandAsync(evens[^1])).Select(n => n.Value));
+
+        // Expressions the debugger reads now: new, and null where an object is expected.
+        Assert.Equal("2", (await f.Shell.Debugger.EvaluateAsync("new Crate(\"x\", 2).Size", "watch", TestContext.Current.CancellationToken)).Result);
+        Assert.Equal("\"nothing!\"", (await f.Shell.Debugger.EvaluateAsync("Features.Label(null, null)", "watch", TestContext.Current.CancellationToken)).Result);
+
+        // Make Object ID: offered, named, watched; the object is still reached when its variable holds another.
+        Assert.True(f.Shell.Debugger.CanMakeObjectIds);
+        Assert.Equal("$1", await f.Shell.MakeObjectIdAsync("basket"));
+        Assert.Contains("$1", f.Shell.Watch.Expressions);
+        Assert.Null(await f.Shell.MakeObjectIdAsync("basket.Items.Count"));
+        Assert.Contains("only objects can have an ID", f.Shell.StatusBar.Message, StringComparison.Ordinal);
+        await f.RunAsync("debug.continue");
+        await StoppedAtAsync(f, features, "features-ids");
+        await ShellFixture.PumpUntil(() => f.Shell.Watch.Roots.Any(r => r is { Name: "$1", Value: "{Debuggee.Basket}" }));
+        Assert.Equal("\"fruit\"", (await f.Shell.Debugger.EvaluateAsync("$1.Name", "watch", TestContext.Current.CancellationToken)).Result);
+        Assert.Equal("\"empty\"", (await f.Shell.Debugger.EvaluateAsync("basket.Name", "watch", TestContext.Current.CancellationToken)).Result);
+        await f.Shell.DeleteObjectIdAsync("$1");
+        Assert.DoesNotContain("$1", f.Shell.Watch.Expressions);
+
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+    }
+
     [AvaloniaFact]
     public async Task Under_netcoredbg_the_commands_are_off_and_breakpoints_behave_as_before()
     {

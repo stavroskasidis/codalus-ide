@@ -29,6 +29,17 @@ public static class Features
             tagger.Join();
         }
 
+        // Type proxies, Results View, [DebuggerDisplay] names, new, null and boxed arguments, object IDs.
+        var basket = new Basket("fruit", ["apple", "pear"]);
+        var linked = new LinkedList<int>([3, 1, 2]);
+        var sorted = new SortedDictionary<string, int> { ["b"] = 2, ["a"] = 1 };
+        var evens = Evens(7);
+        var none = Evens(0);
+        var empty = string.Empty;
+        Console.WriteLine($"{basket.Items.Count} {linked.Count} {sorted.Count} {evens.Count()} {none.Count()} {empty.Length}"); // [features-views]
+        basket = new Basket("empty", []);
+        GC.KeepAlive(basket); // [features-ids]
+
         var ticker = new Thread(Tick) { Name = "Ticker" };
         ticker.Start();
         while (Volatile.Read(ref s_ticks) == 0)
@@ -53,6 +64,16 @@ public static class Features
 
     public static string Mark(string name) => "<" + name + ">"; // [features-mark]
 
+    public static IEnumerable<int> Evens(int below)
+    {
+        for (var n = 0; n < below; n += 2)
+        {
+            yield return n;
+        }
+    }
+
+    public static string Label(object? value, string? suffix) => (value?.ToString() ?? "nothing") + (suffix ?? "!");
+
     public static int Measure(string value)
     {
         var length = value.Length; // [features-measure-body]
@@ -67,4 +88,42 @@ public static class Features
             Thread.Sleep(10);
         }
     }
+}
+
+/// <summary>A type with a proxy of its own: the proxy's public members are its view, its own are under Raw View.</summary>
+[System.Diagnostics.DebuggerTypeProxy(typeof(BasketView))]
+public sealed class Basket(string name, List<string> items)
+{
+    private readonly string _secret = "kept";
+
+    public string Name { get; } = name;
+
+    public List<string> Items { get; } = items;
+
+    public override string ToString() => Name + _secret.Length;
+
+    private sealed class BasketView(Basket basket)
+    {
+        private readonly Basket _basket = basket;
+
+        public string Summary => $"{_basket.Name}: {_basket.Items.Count}";
+
+        [System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.RootHidden)]
+        public Fruit[] Fruits => [.. _basket.Items.Select((item, index) => new Fruit(index, item))];
+
+        [System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.Never)]
+        public string Hidden => "not shown";
+    }
+}
+
+/// <summary>A row of a proxy's view, named and shown by its <c>[DebuggerDisplay]</c>.</summary>
+[System.Diagnostics.DebuggerDisplay("{Name,nq} ({Name.Length})", Name = "#{Index}")]
+public sealed record Fruit(int Index, string Name);
+
+/// <summary>A type to create from an expression: <c>new Crate("x", 2)</c>.</summary>
+public sealed class Crate(string label, int size)
+{
+    public string Label { get; } = label;
+
+    public int Size { get; } = size;
 }

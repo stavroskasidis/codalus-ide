@@ -66,6 +66,15 @@ public interface IDebugAdapter : IAsyncDisposable
     /// <summary>Moves <paramref name="threadId"/>'s next statement to one of <see cref="GotoTargetsAsync"/>'s targets; a <c>stopped</c> event with the reason <c>goto</c> follows.</summary>
     Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) => throw new DapException("goto", "This debugger can't set the next statement.");
 
+    /// <summary>
+    /// Make Object ID (<see cref="Capabilities.SupportsObjectIds"/>): the object <paramref name="expression"/> evaluates to
+    /// in the frame gets a name (<c>$1</c>) expressions reach it by for the rest of the session.
+    /// </summary>
+    Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) => throw new DapException("codalus/makeObjectId", "This debugger doesn't make object IDs.");
+
+    /// <summary>Lets go of an object ID.</summary>
+    Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>Keeps a thread from running when the program runs on, or lets it run again (<see cref="Capabilities.SupportsFreezingThreads"/>).</summary>
     Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) => throw new DapException("codalus/freezeThread", "This debugger can't freeze threads.");
 

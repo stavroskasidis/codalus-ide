@@ -201,6 +201,7 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
             await _stop.CancelAsync();
             await Client.DisposeAsync();
             _server.Dispose();
+            Session.Dispose();
             _stop.Dispose();
         }
     }

@@ -766,6 +766,16 @@ public sealed partial class DebugAdapter : IDebugAdapter
     public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
         _connection.RequestAsync("goto", new GotoArguments(threadId, targetId), Json.GotoArguments, cancellationToken);
 
+    public async Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsObjectIds
+            ? (await _connection.RequestAsync("codalus/makeObjectId", new MakeObjectIdArguments(expression, frameId), Json.MakeObjectIdArguments, Json.ObjectIdResponse, cancellationToken).ConfigureAwait(false)).Name
+            : throw new DapException("codalus/makeObjectId", "This debugger doesn't make object IDs.");
+
+    public Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsObjectIds
+            ? _connection.RequestAsync("codalus/deleteObjectId", new DeleteObjectIdArguments(name), Json.DeleteObjectIdArguments, cancellationToken)
+            : Task.CompletedTask;
+
     /// <summary>The Codalus debugger's <c>codalus/freezeThread</c> (M58).</summary>
     public const string FreezeThreadCommand = "codalus/freezeThread";
 

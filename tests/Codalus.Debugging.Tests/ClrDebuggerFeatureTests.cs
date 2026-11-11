@@ -16,13 +16,15 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
 
     private int Line(string marker) => DebuggeeFixture.Line(Features, marker);
 
-    private async Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(params SourceBreakpoint[] breakpoints)
+    private Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(params SourceBreakpoint[] breakpoints) => StartAsync(null, breakpoints);
+
+    private async Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(string[]? clientViews, params SourceBreakpoint[] breakpoints)
     {
         var adapter = await DebugAdapter.StartAsync(DebuggeeFixture.CodalusAdapter(), Ct);
         try
         {
             var events = new EventLog(adapter);
-            await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll, "--features"], fixture.Folder, Type: "coreclr"), s_json.NetFxDebugArguments, Ct);
+            await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll, "--features"], fixture.Folder, Type: "coreclr", ClientViews: clientViews), s_json.NetFxDebugArguments, Ct);
             await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
             await adapter.SetBreakpointsAsync(Features, breakpoints, Ct);
             await adapter.ConfigurationDoneAsync(Ct);
@@ -202,6 +204,137 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
         locals = await adapter.VariablesAsync(Assert.Single(await adapter.ScopesAsync(top.Id, Ct)).VariablesReference, Ct);
         Assert.Equal("Debuggee.Features.Measure returned", locals[0].Name);
         Assert.Equal("5", locals[0].Value);
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    private static async Task<Variable[]> LocalsAsync(DebugAdapter adapter, StackFrame frame) =>
+        await adapter.VariablesAsync(Assert.Single(await adapter.ScopesAsync(frame.Id, Ct)).VariablesReference, Ct);
+
+    private static async Task<Variable[]> ChildrenAsync(DebugAdapter adapter, Variable[] variables, string name) =>
+        await adapter.VariablesAsync(variables.Single(v => v.Name == name).VariablesReference, Ct);
+
+    [Fact]
+    public async Task Type_proxies_show_their_view_with_the_objects_own_members_under_raw_view()
+    {
+        var (adapter, events) = await StartAsync(new SourceBreakpoint(Line("features-views")));
+        await using var _ = adapter;
+        var top = await TopAsync(adapter, await events.StoppedAsync());
+        var locals = await LocalsAsync(adapter, top);
+        Assert.Equal("\"\"", locals.Single(v => v.Name == "empty").Value);
+
+        // A type's own proxy: its public members, the root-hidden one's elements in its place under their
+        // [DebuggerDisplay] names and values, the hidden one left out, then Raw View with the object's own members.
+        var basket = await ChildrenAsync(adapter, locals, "basket");
+        Assert.Equal(["Summary", "#0", "#1", Variable.RawView], basket.Select(v => v.Name));
+        Assert.Equal("\"fruit: 2\"", basket[0].Value);
+        Assert.Equal("apple (5)", basket[1].Value);
+        Assert.Equal("pear (4)", basket[2].Value);
+        Assert.True(basket[3].IsVirtual);
+        Assert.Equal("Debuggee.Basket", basket[3].Type);
+        var raw = await adapter.VariablesAsync(basket[3].VariablesReference, Ct);
+        Assert.Equal(["Items", "Name", "_secret"], raw.Select(v => v.Name));
+        Assert.Equal("\"apple\"", (await ChildrenAsync(adapter, basket, "#0")).Single(v => v.Name == "Name").Value);
+
+        // The framework's proxies: a linked list's elements, a sorted dictionary's entries by their keys.
+        var linked = await ChildrenAsync(adapter, locals, "linked");
+        Assert.Equal(["[0]", "[1]", "[2]", Variable.RawView], linked.Select(v => v.Name));
+        Assert.Equal(["3", "1", "2"], linked.Take(3).Select(v => v.Value));
+        var sorted = await ChildrenAsync(adapter, locals, "sorted");
+        Assert.Equal(["[\"a\"]", "[\"b\"]", Variable.RawView], sorted.Select(v => v.Name));
+        Assert.Equal(["1", "2"], sorted.Take(2).Select(v => v.Value));
+        Assert.Equal(["Key", "Value"], (await adapter.VariablesAsync(sorted[0].VariablesReference, Ct)).Select(v => v.Name).Where(n => n is "Key" or "Value").Order());
+
+        // A list too, when the client doesn't show it in a view of its own.
+        var items = await ChildrenAsync(adapter, raw, "Items");
+        Assert.Equal(["[0]", "[1]", Variable.RawView], items.Select(v => v.Name));
+        Assert.Equal(["\"apple\"", "\"pear\""], items.Take(2).Select(v => v.Value));
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
+    public async Task A_type_the_client_shows_itself_lists_its_own_members()
+    {
+        var (adapter, events) = await StartAsync(["System.Collections.Generic.List`1"], new SourceBreakpoint(Line("features-views")));
+        await using var _ = adapter;
+        var top = await TopAsync(adapter, await events.StoppedAsync());
+        var raw = await adapter.VariablesAsync((await adapter.EvaluateAsync("basket.Items", top.Id, "watch", Ct)).VariablesReference, Ct);
+        Assert.DoesNotContain(raw, v => v.IsVirtual);
+        Assert.Contains(raw, v => v.Name == "_items");
+        Assert.Contains(raw, v => v is { Name: "_size", Value: "2" });
+
+        // The others keep their proxies.
+        Assert.Contains(await ChildrenAsync(adapter, await LocalsAsync(adapter, top), "linked"), v => v.Name == Variable.RawView);
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
+    public async Task An_enumerable_gets_a_results_view_that_enumerates_it_when_expanded()
+    {
+        var (adapter, events) = await StartAsync(new SourceBreakpoint(Line("features-views")));
+        await using var _ = adapter;
+        var top = await TopAsync(adapter, await events.StoppedAsync());
+        var locals = await LocalsAsync(adapter, top);
+
+        // An iterator: its own members, then the Results View, which is lazy.
+        var evens = await ChildrenAsync(adapter, locals, "evens");
+        var view = evens[^1];
+        Assert.Equal(Variable.ResultsView, view.Name);
+        Assert.True(view.IsVirtual);
+        Assert.True(view.PresentationHint!.Lazy);
+        var results = await adapter.VariablesAsync(view.VariablesReference, Ct);
+        Assert.Equal(["[0]", "[1]", "[2]", "[3]"], results.Select(v => v.Name));
+        Assert.Equal(["0", "2", "4", "6"], results.Select(v => v.Value));
+        Assert.All(results, v => Assert.Equal("int", v.Type));
+
+        // Nothing to enumerate says so; a string and an array have no Results View.
+        var none = await ChildrenAsync(adapter, locals, "none");
+        Assert.Equal("Empty", Assert.Single(await adapter.VariablesAsync(none[^1].VariablesReference, Ct)).Name);
+        Assert.Equal(0, locals.Single(v => v.Name == "empty").VariablesReference);
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
+    public async Task Expressions_create_objects_pass_null_and_boxed_values_and_reach_objects_by_their_ids()
+    {
+        var (adapter, events) = await StartAsync(new SourceBreakpoint(Line("features-views")), new SourceBreakpoint(Line("features-ids")));
+        await using var _ = adapter;
+        var stop = await events.StoppedAsync();
+        var top = await TopAsync(adapter, stop);
+        async Task<string> EvalAsync(string expression) => (await adapter.EvaluateAsync(expression, top.Id, "watch", Ct)).Result;
+
+        // new, with the constructor that fits; an empty string, null and a number where an object is expected.
+        Assert.Equal("2", await EvalAsync("new Crate(\"x\", 2).Size"));
+        Assert.Equal("\"\"", await EvalAsync("new Debuggee.Crate(empty, 3).Label"));
+        Assert.Equal("{Debuggee.Crate}", await EvalAsync("new Crate(\"x\", 2)"));
+        Assert.Equal("\"nothing!\"", await EvalAsync("Features.Label(null, null)"));
+        Assert.Equal("\"5?\"", await EvalAsync("Features.Label(5, \"?\")"));
+        Assert.Equal("\"True\"", await EvalAsync("Features.Label(true, \"\")"));
+        Assert.Equal("\"fruit4!\"", await EvalAsync("Features.Label(basket, null)"));
+
+        // $exception has no value while no exception is being thrown.
+        Assert.Contains("'$exception' has no value here", (await Assert.ThrowsAsync<DapException>(() => EvalAsync("$exception"))).Message, StringComparison.Ordinal);
+
+        // An object ID: the object's values say so, and the same object gets the same ID.
+        Assert.Equal("$1", await adapter.MakeObjectIdAsync("basket", top.Id, Ct));
+        Assert.Equal("$1", await adapter.MakeObjectIdAsync("basket", top.Id, Ct));
+        Assert.Equal("$2", await adapter.MakeObjectIdAsync("basket.Items", top.Id, Ct));
+        Assert.Equal("{Debuggee.Basket} {$1}", (await LocalsAsync(adapter, top)).Single(v => v.Name == "basket").Value);
+        Assert.Equal("\"fruit\"", await EvalAsync("$1.Name"));
+        Assert.Contains("only objects can have an ID", (await Assert.ThrowsAsync<DapException>(() => adapter.MakeObjectIdAsync("basket.Items.Count", top.Id, Ct))).Message, StringComparison.Ordinal);
+
+        // The program runs on and the variable holds another object: the ID still reaches the first one.
+        await adapter.ContinueAsync(stop.ThreadId!.Value, Ct);
+        top = await TopAsync(adapter, await events.StoppedAsync());
+        Assert.Equal(Line("features-ids"), top.Line);
+        Assert.Equal("\"empty\"", await EvalAsync("basket.Name"));
+        Assert.Equal("\"fruit\"", await EvalAsync("$1.Name"));
+        Assert.Equal("2", await EvalAsync("$2.Count"));
+        Assert.Equal("{Debuggee.Basket}", (await LocalsAsync(adapter, top)).Single(v => v.Name == "basket").Value);
+
+        // Deleted, it's a name nothing has.
+        await adapter.DeleteObjectIdAsync("$1", top.Id, Ct);
+        Assert.Contains("'$1' doesn't exist", (await Assert.ThrowsAsync<DapException>(() => EvalAsync("$1"))).Message, StringComparison.Ordinal);
+        Assert.Equal("2", await EvalAsync("$2.Count"));
         await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
     }
 

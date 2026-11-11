@@ -258,7 +258,8 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>
     public NetFxDebugArguments DesktopClrArguments(LaunchPlan plan, bool newConsole) =>
-        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole);
+        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole,
+            ClientViews: CollectionViews.ViewedTypes);
 
     /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
     public bool StepFiltering { get; set; } = true;
@@ -917,7 +918,7 @@ public sealed class DebugService : IAsyncDisposable
             // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
             await StartAsync(
                 StartDesktopClrAdapterAsync,
-                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach"), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);
@@ -1883,6 +1884,52 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>Whether the stopped thread's debugger gives objects IDs (the Codalus debugger, M58).</summary>
+    public bool CanMakeObjectIds => StoppedCapabilities?.SupportsObjectIds == true;
+
+    /// <summary>
+    /// Make Object ID: the object <paramref name="expression"/> evaluates to in the selected frame gets a name
+    /// (<c>$1</c>) that Watch, conditions and other expressions reach it by for the rest of the session. Returns the
+    /// name, or why it couldn't be made.
+    /// </summary>
+    public async Task<(string? Name, string? Problem)> MakeObjectIdAsync(string expression)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return (null, "Object IDs can be made only while the program is stopped.");
+        }
+
+        try
+        {
+            return (await adapter.MakeObjectIdAsync(expression, SelectedFrame?.Id, _session.Token).ConfigureAwait(false), null);
+        }
+        catch (DapException ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return (null, "The debug session ended.");
+        }
+    }
+
+    /// <summary>Lets go of an object ID (<c>$1</c>).</summary>
+    public async Task DeleteObjectIdAsync(string name)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return;
+        }
+
+        try
+        {
+            await adapter.DeleteObjectIdAsync(name, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+        }
     }
 
     /// <summary>

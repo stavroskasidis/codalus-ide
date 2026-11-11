@@ -15,9 +15,10 @@ internal readonly record struct ClrSequencePoint(int Offset, int StartLine, int 
 /// <summary>A type named by a module's metadata: its assembly (null: the same module) and its full name (<c>Ns.Outer+Inner</c>).</summary>
 internal readonly record struct ClrTypeName(string? Assembly, string FullName, int Token);
 
-internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName);
+internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName, bool IsPublic = false);
 
-internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName);
+/// <summary><see cref="IsPublic"/>: its getter is public (a type proxy's view lists its public members, M58).</summary>
+internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName, bool IsPublic = false);
 
 internal sealed record ClrMethodInfo(int Token, string Name, bool IsStatic, bool IsVirtual, IReadOnlyList<string> ParameterTypes, IReadOnlyList<string> ParameterNames, int GenericParameters, string ReturnType, bool IsSpecialName);
 
@@ -436,6 +437,21 @@ internal sealed class ClrModuleInfo : IDisposable
         }
     }
 
+    /// <summary>The interfaces a type definition says it implements (the compiler lists the inherited ones too), by their full names.</summary>
+    public IReadOnlyList<string> Interfaces(int typeToken)
+    {
+        var result = new List<string>();
+        foreach (var handle in Metadata.GetTypeDefinition(TypeHandle(typeToken)).GetInterfaceImplementations())
+        {
+            if (NameOf(Metadata.GetInterfaceImplementation(handle).Interface) is { } name)
+            {
+                result.Add(name.FullName);
+            }
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<ClrFieldInfo> Fields(int typeToken)
     {
         var result = new List<ClrFieldInfo>();
@@ -459,7 +475,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type));
+            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type,
+                (attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public));
         }
 
         return result;
@@ -490,7 +507,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type));
+            var isPublic = !accessors.Getter.IsNil && (Metadata.GetMethodDefinition(accessors.Getter).Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public;
+            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type, isPublic));
         }
 
         return result;

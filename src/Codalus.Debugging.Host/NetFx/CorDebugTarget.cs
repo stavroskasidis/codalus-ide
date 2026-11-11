@@ -916,6 +916,43 @@ internal sealed class CorDebugTarget : IClrProcess
     public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout) =>
         Evaluate(thread, timeout, eval => eval.NewString(text)) ?? throw new ClrException("The string wasn't created.");
 
+    public IClrValue Box(IClrThread thread, IClrModule module, int typeToken, object value, TimeSpan timeout)
+    {
+        // An object of the primitive's type without running a constructor (a box of zero), then the value written into it.
+        var boxed = Evaluate(thread, timeout, eval => eval.NewObjectNoConstructor(((CorModule)module).Raw.GetClassFromToken(new mdTypeDef(typeToken)).Raw))
+            ?? throw new ClrException("The value couldn't be boxed.");
+        Translate(() =>
+        {
+            if (boxed.Original.Raw is not ICorDebugReferenceValue reference || new CorDebugReferenceValue(reference).Dereference().Raw is not ICorDebugBoxValue box
+                || new CorDebugBoxValue(box).Object.Raw is not ICorDebugGenericValue inner)
+            {
+                throw new ClrException("The value couldn't be boxed.");
+            }
+
+            CorValue.Write(new CorDebugGenericValue(inner), value);
+        });
+        return boxed;
+    }
+
+    public IClrValue NewNull(IClrThread thread) =>
+        Translate(() => (IClrValue)CorValue.Wrap(this, ((CorThread)thread).Raw.CreateEval().CreateValue(CorElementType.Class, null)));
+
+    public IClrValue NewObject(IClrThread thread, IClrModule module, int constructorToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
+        Evaluate(thread, timeout, eval =>
+        {
+            var constructor = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(constructorToken));
+            var types = typeArguments.Select(t => t.Native as CorDebugType).ToList();
+            var values = arguments.Select(a => ((CorValue)ClrLiveValue.Unwrap(a)).Original.Raw).ToArray();
+            if (types.Count > 0 && types.All(t => t is not null))
+            {
+                eval.NewParameterizedObject(constructor.Raw, types.Count, [.. types.Select(t => t!.Raw)], values.Length, values);
+            }
+            else
+            {
+                eval.NewObject(constructor.Raw, values.Length, values);
+            }
+        }) ?? throw new ClrException("The object wasn't created.");
+
     public IClrValue NewPrimitive(IClrThread thread, object value) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, CreatePrimitive(((CorThread)thread).Raw, value)));
 

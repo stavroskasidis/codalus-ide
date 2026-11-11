@@ -60,7 +60,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         BinaryExpr binary => Binary(binary),
         ConditionalExpr conditional => Truth(Evaluate(conditional.Condition)) ? Evaluate(conditional.WhenTrue) : Evaluate(conditional.WhenFalse),
         CastExpr cast => Cast(cast.TypeName, Evaluate(cast.Operand)),
-        _ => throw new ExpressionException("The expression isn't supported."),
+        NewExpr create => New(create),
+        _ => throw new UnsupportedExpressionException("The expression isn't supported."),
     };
 
     /// <summary>A condition's value (breakpoint conditions).</summary>
@@ -79,7 +80,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         {
             if (variable == name)
             {
-                return read() is { } value ? new RemoteValue(value) : throw new ExpressionException($"'{name}' isn't available here (optimized code).");
+                return read() is { } value ? new RemoteValue(value)
+                    : throw new ExpressionException(name.StartsWith('$') ? $"'{name}' has no value here." : $"'{name}' isn't available here (optimized code).");
             }
         }
 
@@ -403,10 +405,61 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         }
     }
 
+    /// <summary><c>new Type(arguments)</c>: the type by its name as written, and its constructor that fits the arguments.</summary>
+    private RemoteValue New(NewExpr create)
+    {
+        var found = types.FindTypeByName(create.TypeName, context.Namespace) ?? types.FindType(create.TypeName)
+            ?? throw new UnsupportedExpressionException($"The type '{create.TypeName}' isn't in a loaded module.");
+        var info = types.Info(found.Module)!;
+        if (info.GenericParameterCount(found.Token) > 0)
+        {
+            throw new UnsupportedExpressionException($"{create.TypeName} needs type arguments.");
+        }
+
+        var arguments = create.Arguments.Select(Evaluate).ToList();
+        ClrMethodInfo? best = null;
+        var bestScore = -1;
+        foreach (var constructor in info.Methods(found.Token).Where(m => m.Name == ".ctor" && !m.IsStatic && m.ParameterTypes.Count == arguments.Count))
+        {
+            var score = 0;
+            for (var i = 0; i < arguments.Count && score >= 0; i++)
+            {
+                var fit = Fit(arguments[i], constructor.ParameterTypes[i]);
+                score = fit < 0 ? -1 : score + fit;
+            }
+
+            if (score > bestScore)
+            {
+                (best, bestScore) = (constructor, score);
+            }
+        }
+
+        if (best is null)
+        {
+            throw new UnsupportedExpressionException($"{create.TypeName} has no constructor that takes {Describe(arguments)}.");
+        }
+
+        try
+        {
+            var created = process.NewObject(Thread, found.Module, best.Token, [], Arguments(best, arguments), timeout);
+            return new RemoteValue(ClrLiveValue.Of(process, created, () => created));
+        }
+        catch (ClrEvalException ex)
+        {
+            throw new ExpressionException($"new {create.TypeName} threw {types.FullName(ex.Exception.Type)}" + (types.Field(ex.Exception, "_message") is { Kind: ClrValueKind.String } message ? ": " + message.Text : "."));
+        }
+        catch (TimeoutException)
+        {
+            throw new ExpressionException($"Evaluating new {create.TypeName} timed out after {timeout.TotalSeconds:0} seconds.");
+        }
+    }
+
     private IClrValue CallMethod(IClrValue receiver, ClrType type, string name, IReadOnlyList<EvalValue> arguments, string display)
     {
+        // No method that fits: maybe one this evaluator doesn't find (an extension method, a generic one, optional or
+        // params parameters), which the compiler does.
         var (module, method, typeArguments) = TryFindMethod(type, name, arguments, instance: true)
-            ?? throw new ExpressionException($"{types.Name(type)} has no method '{display}' that takes {Describe(arguments)}.");
+            ?? throw new UnsupportedExpressionException($"{types.Name(type)} has no method '{display}' that takes {Describe(arguments)}.");
         return Invoke(module, method.Token, typeArguments, [receiver, .. Arguments(method, arguments)], display);
     }
 
@@ -414,7 +467,7 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
     {
         var type = ClrTypeSystem.TypeOf(module, token);
         var (found, method, _) = TryFindMethod(type, name, arguments, instance: false)
-            ?? throw new ExpressionException($"{types.Name(type)} has no static method '{name}' that takes {Describe(arguments)}.");
+            ?? throw new UnsupportedExpressionException($"{types.Name(type)} has no static method '{name}' that takes {Describe(arguments)}.");
         return Invoke(found, method.Token, [], Arguments(method, arguments), name);
     }
 
@@ -481,7 +534,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
 
         if (parameter == "object")
         {
-            return argument is RemoteValue { Value.IsValueType: false } or LocalValue { Value: string } || (argument is RemoteValue r && r.Value.Kind is ClrValueKind.String or ClrValueKind.Array) ? 1 : -1;
+            // A number, a bool or a character is boxed for it (ToRemote); a struct's value isn't here.
+            return argument is RemoteValue { Value: { Kind: ClrValueKind.Object, IsValueType: true } } ? -1 : 1;
         }
 
         if (argument is RemoteValue { Value: { Kind: ClrValueKind.Object or ClrValueKind.Array } remote } && !IsPrimitiveKeyword(parameter))
@@ -556,10 +610,26 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         return Live(() => process.GetStaticField(Thread, ClrTypeSystem.TypeOf(module, token), field.Token));
     }
 
+    /// <summary>A number, a bool or a character as an object in the debuggee: func-eval passes what it's given, and doesn't box.</summary>
+    private IClrValue Boxed(object primitive)
+    {
+        if (!ExpressionParser.Keywords.TryGetValue(Keyword(primitive), out var runtimeType) || types.FindType(runtimeType) is not var (module, token))
+        {
+            throw new UnsupportedExpressionException($"A {Keyword(primitive)} can't be passed where an object is expected here.");
+        }
+
+        var boxed = process.Box(Thread, module, token, primitive, timeout);
+        return ClrLiveValue.Of(process, boxed, () => boxed);
+    }
+
     private IClrValue ToRemote(EvalValue value, string? parameter)
     {
         switch (value)
         {
+            case RemoteValue { Value: { Kind: ClrValueKind.Primitive, Primitive: { } unboxed } } when parameter == "object":
+                return Boxed(unboxed);
+            case LocalValue { Value: not (null or string or decimal) and var literal } when parameter == "object":
+                return Boxed(literal);
             case RemoteValue { Value: { Kind: ClrValueKind.Primitive } primitive } when parameter is not null && s_numeric.Contains(parameter) && primitive.Primitive is { } raw && Keyword(raw) != parameter:
                 var converted = ConvertTo(raw, parameter);
                 return Live(() => process.NewPrimitive(Thread, converted));
@@ -571,15 +641,11 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                 var text = process.NewString(Thread, s, timeout);
                 return ClrLiveValue.Of(process, text, () => text);
             case LocalValue { Value: null }:
-                throw new ExpressionException("null can't be passed as an argument here.");
+                return Live(() => process.NewNull(Thread));
             case LocalValue { Value: decimal }:
-                throw new ExpressionException("Decimal values can't be passed as arguments here.");
+                throw new UnsupportedExpressionException("Decimal values can't be passed as arguments here.");
             case LocalValue local:
-                if (parameter == "object")
-                {
-                    throw new ExpressionException("A number can't be passed where an object is expected here (it would need boxing).");
-                }
-
+                // Where an object is expected the runtime boxes the number it's given.
                 var number = parameter is not null && s_numeric.Contains(parameter) ? ConvertTo(local.Value!, parameter) : local.Value!;
                 return Live(() => process.NewPrimitive(Thread, number));
             default:

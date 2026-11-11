@@ -68,6 +68,15 @@ public sealed record Capabilities
     /// <summary>The Codalus debugger's own (M58): <c>codalus/freezeThread</c>, and <see cref="DapThread.Frozen"/>.</summary>
     public bool SupportsFreezingThreads { get; init; }
 
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/makeObjectId</c> and <c>codalus/deleteObjectId</c>.</summary>
+    public bool SupportsObjectIds { get; init; }
+
+    /// <summary>
+    /// The Codalus debugger's own (M58): an object whose type has a <c>[DebuggerTypeProxy]</c> lists the proxy's members,
+    /// then its own under <see cref="Variable.RawView"/>; an enumerable gets <see cref="Variable.ResultsView"/>.
+    /// </summary>
+    public bool SupportsTypeProxies { get; init; }
+
     public ExceptionBreakpointsFilter[]? ExceptionBreakpointFilters { get; init; }
 
     /// <summary>The adapter applies hit conditions, log messages, filters and dependencies itself (<see cref="IDebugAdapter.AppliesBreakpointBehaviors"/>).</summary>
@@ -115,7 +124,15 @@ public sealed record NetFxDebugArguments(
     string Name = ".NET Framework",
     string Type = "clr",
     string Request = "launch",
-    string? Console = null);
+    string? Console = null,
+    string[]? ClientViews = null)
+{
+    /// <summary>
+    /// The types the client shows in a view of its own (<c>System.Collections.Generic.List`1</c>, by their metadata
+    /// names): the Codalus debugger lists their own members, without their <c>[DebuggerTypeProxy]</c>'s view (M58).
+    /// </summary>
+    public string[]? ClientViews { get; init; } = ClientViews;
+}
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
@@ -296,7 +313,36 @@ public sealed record VariablesPage(int Start, int Count, string? Filter = null);
 /// <see cref="NamedVariables"/> and <see cref="IndexedVariables"/> count the children (M56): netcoredbg counts an
 /// array's elements as named ones, and reports no indexed ones.
 /// </summary>
-public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null, int? NamedVariables = null, int? IndexedVariables = null);
+public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null, int? NamedVariables = null, int? IndexedVariables = null, VariablePresentationHint? PresentationHint = null)
+{
+    /// <summary>A type proxy's view of an object lists the object's own members under this node (the Codalus debugger, M58).</summary>
+    public const string RawView = "Raw View";
+
+    /// <summary>An enumerable's elements, read when the node is expanded (the Codalus debugger, M58).</summary>
+    public const string ResultsView = "Results View";
+
+    /// <summary>A node the debugger made up (<see cref="RawView"/>, <see cref="ResultsView"/>): not a member of the object.</summary>
+    [JsonIgnore]
+    public bool IsVirtual => PresentationHint?.Kind == VariablePresentationHint.Virtual;
+}
+
+/// <summary>DAP's hint about a variable: <see cref="Kind"/> <c>virtual</c> marks a node that isn't a member (<see cref="Variable.RawView"/>).</summary>
+public sealed record VariablePresentationHint(string? Kind = null, string[]? Attributes = null, string? Visibility = null, bool? Lazy = null)
+{
+    public const string Virtual = "virtual";
+}
+
+/// <summary>
+/// <c>codalus/makeObjectId</c> (M58): keeps the object <see cref="Expression"/> evaluates to in <see cref="FrameId"/>'s
+/// frame reachable as <c>$1</c>, <c>$2</c>… for the rest of the session, also where no variable holds it any more.
+/// </summary>
+public sealed record MakeObjectIdArguments(string Expression, int? FrameId = null);
+
+/// <summary>The object's name (<c>$1</c>).</summary>
+public sealed record ObjectIdResponse(string Name);
+
+/// <summary><c>codalus/deleteObjectId</c>: lets go of an object ID.</summary>
+public sealed record DeleteObjectIdArguments(string Name);
 
 public sealed record VariablesResponse(Variable[] Variables);
 
@@ -389,6 +435,9 @@ public static class DapEvents
 [JsonSerializable(typeof(EmptyArguments))]
 [JsonSerializable(typeof(ThreadArguments))]
 [JsonSerializable(typeof(FreezeThreadArguments))]
+[JsonSerializable(typeof(MakeObjectIdArguments))]
+[JsonSerializable(typeof(ObjectIdResponse))]
+[JsonSerializable(typeof(DeleteObjectIdArguments))]
 [JsonSerializable(typeof(GotoTargetsArguments))]
 [JsonSerializable(typeof(GotoTargetsResponse))]
 [JsonSerializable(typeof(GotoArguments))]

@@ -81,6 +81,9 @@ public sealed partial class ShellHost
         VariableActions.VisualizeWithPlugin = VisualizeWithPluginAsync;
         VariableActions.AskAi = AskAiAboutValueAsync;
         VariableActions.CanAskAi = () => Ai.IsEnabled;
+        VariableActions.MakeObjectId = expression => MakeObjectIdAsync(expression);
+        VariableActions.CanMakeObjectId = () => Debugger.CanMakeObjectIds;
+        VariableActions.DeleteObjectId = DeleteObjectIdAsync;
         VariableActions.CopyText = async text =>
         {
             if (Window?.Clipboard is { } clipboard)

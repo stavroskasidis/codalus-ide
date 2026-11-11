@@ -39,6 +39,38 @@ public sealed partial class ShellHost
         return true;
     }
 
+    /// <summary>
+    /// Make Object ID: the object gets a name (<c>$1</c>) and a watch on it, so it stays in reach when no variable holds
+    /// it any more. Returns the name, or null with the reason in the status bar.
+    /// </summary>
+    public async Task<string?> MakeObjectIdAsync(string expression)
+    {
+        var (name, problem) = await Debugger.MakeObjectIdAsync(expression).ConfigureAwait(true);
+        if (name is null)
+        {
+            StatusBar.ShowMessage(problem ?? string.Empty, TimeSpan.FromSeconds(6));
+            return null;
+        }
+
+        if (!Watch.Expressions.Contains(name))
+        {
+            await AddWatchAsync(name).ConfigureAwait(true);
+        }
+
+        StatusBar.ShowMessage(Localizer.Format("msg.debug.objectIdMade", "{0} names this object for the rest of the session: use it in Watch, conditions and the Debug Console.", name), TimeSpan.FromSeconds(8));
+        return name;
+    }
+
+    /// <summary>Delete Object ID: the name is let go, and its watch removed.</summary>
+    public async Task DeleteObjectIdAsync(string name)
+    {
+        await Debugger.DeleteObjectIdAsync(name).ConfigureAwait(true);
+        if (Watch.Roots.FirstOrDefault(r => r.Name == name) is { } watch)
+        {
+            Watch.Remove(watch);
+        }
+    }
+
     /// <summary>Shift+Alt+F11: the calls of the rest of the current line, to step into one; the others run without a stop.</summary>
     public async Task StepIntoSpecificAsync()
     {
