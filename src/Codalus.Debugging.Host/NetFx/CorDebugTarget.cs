@@ -712,9 +712,9 @@ internal sealed class CorDebugTarget : IClrProcess
             }
             else if (step.Ranges.Count > 0)
             {
-                var size = frame?.Function.ILCode.Size ?? int.MaxValue;
+                var size = step.Native ? int.MaxValue : frame?.Function.ILCode.Size ?? int.MaxValue;
                 var ranges = step.Ranges.Select(r => new COR_DEBUG_STEP_RANGE { startOffset = r.Start, endOffset = Math.Min(r.End, size) }).ToArray();
-                stepper.SetRangeIL(true);
+                stepper.SetRangeIL(!step.Native);
                 stepper.StepRange(step.Kind == ClrStepKind.Into, ranges, ranges.Length);
             }
             else
@@ -954,6 +954,52 @@ internal sealed class CorDebugTarget : IClrProcess
 
             return null;
         });
+
+    public unsafe byte[] ReadMemory(ulong address, int count)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        var buffer = new byte[count];
+        int read;
+        fixed (byte* pointer = buffer)
+        {
+            // Less than asked at the end of a mapped region: a page at a time finds how much is there.
+            if (Process.TryReadMemory(address, count, (IntPtr)pointer, out read) != HRESULT.S_OK || read <= 0)
+            {
+                read = 0;
+                const int Page = 0x1000;
+                while (read < count)
+                {
+                    var chunk = Math.Min(count - read, Page - (int)((address + (ulong)read) % Page));
+                    if (Process.TryReadMemory(address + (ulong)read, chunk, (IntPtr)(pointer + read), out var got) != HRESULT.S_OK || got <= 0)
+                    {
+                        break;
+                    }
+
+                    read += got;
+                }
+            }
+        }
+
+        return read == count ? buffer : buffer[..read];
+    }
+
+    public unsafe int WriteMemory(ulong address, byte[] data)
+    {
+        if (data.Length == 0)
+        {
+            return 0;
+        }
+
+        fixed (byte* pointer = data)
+        {
+            var result = Process.TryWriteMemory(address, data.Length, (IntPtr)pointer, out var written);
+            return result == HRESULT.S_OK ? written : throw new ClrException($"The memory at 0x{address:x} can't be written ({(Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture))}).");
+        }
+    }
 
     public IClrValue NewNull(IClrThread thread) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, ((CorThread)thread).Raw.CreateEval().CreateValue(CorElementType.Class, null)));
@@ -1467,6 +1513,75 @@ internal sealed class CorFrame : IClrFrame
         catch (Exception ex) when (ex is COMException or ClrException)
         {
             return null;
+        }
+    }
+
+    public ClrNativeCode? NativeCode()
+    {
+        try
+        {
+            if (Current.Raw is not ICorDebugNativeFrame raw)
+            {
+                return null;
+            }
+
+            var native = new CorDebugNativeFrame(raw);
+            var code = native.Code;
+            var start = code.Address.Value;
+            if (start == 0)
+            {
+                return null;
+            }
+
+            var map = new List<(int, int, int)>();
+            try
+            {
+                map.AddRange(code.ILToNativeMapping.Select(m => (m.ilOffset, m.nativeStartOffset, m.nativeEndOffset)));
+            }
+            catch (COMException)
+            {
+            }
+
+            return new ClrNativeCode(start, code.Size, start + (ulong)native.IP, map);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    public IReadOnlyList<(int Register, ulong Value)> Registers()
+    {
+        try
+        {
+            if (Current.Raw is not ICorDebugNativeFrame raw)
+            {
+                return [];
+            }
+
+            var set = new CorDebugNativeFrame(raw).RegisterSet;
+            var available = (ulong)set.RegistersAvailable;
+            var wanted = new List<int>();
+            for (var i = 0; i < 40; i++)
+            {
+                if ((available & (1UL << i)) != 0)
+                {
+                    wanted.Add(i);
+                }
+            }
+
+            ulong mask = 0;
+            foreach (var i in wanted)
+            {
+                mask |= 1UL << i;
+            }
+
+            var values = set.GetRegisters((CorDebugRegister)mask, wanted.Count);
+            return [.. wanted.Zip(values, (register, value) => (register, value.Value))];
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return [];
         }
     }
 

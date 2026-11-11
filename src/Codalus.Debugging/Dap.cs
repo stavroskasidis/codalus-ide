@@ -75,6 +75,20 @@ public sealed record Capabilities
     /// <summary>The Codalus debugger's own (M58): <c>codalus/freezeThread</c>, and <see cref="DapThread.Frozen"/>.</summary>
     public bool SupportsFreezingThreads { get; init; }
 
+    /// <summary>The program's memory by address: <c>readMemory</c>, and <see cref="Variable.MemoryReference"/>.</summary>
+    public bool SupportsReadMemoryRequest { get; init; }
+
+    public bool SupportsWriteMemoryRequest { get; init; }
+
+    /// <summary>Machine code as text: <c>disassemble</c>, and <see cref="StackFrame.InstructionPointerReference"/>.</summary>
+    public bool SupportsDisassembleRequest { get; init; }
+
+    /// <summary>A step can be one machine instruction (<see cref="StepInArguments.Granularity"/> <c>instruction</c>).</summary>
+    public bool SupportsSteppingGranularity { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/registers</c>, a frame's registers.</summary>
+    public bool SupportsRegisters { get; init; }
+
     /// <summary>The Codalus debugger's own (M58): <c>codalus/makeObjectId</c> and <c>codalus/deleteObjectId</c>.</summary>
     public bool SupportsObjectIds { get; init; }
 
@@ -286,14 +300,55 @@ public sealed record StepInTarget(int Id, string Label);
 
 public sealed record StepInTargetsResponse(StepInTarget[] Targets);
 
-/// <summary><c>stepIn</c>'s arguments: with <see cref="TargetId"/>, into that call of the line (Step Into Specific).</summary>
-public sealed record StepInArguments(int ThreadId, int? TargetId = null);
+/// <summary>
+/// A step's arguments: with <see cref="TargetId"/> (<c>stepIn</c>), into that call of the line (Step Into Specific);
+/// with <see cref="Granularity"/> <c>instruction</c>, one machine instruction instead of a source line.
+/// </summary>
+public sealed record StepInArguments(int ThreadId, int? TargetId = null, string? Granularity = null)
+{
+    public const string Instruction = "instruction";
+}
 
 public sealed record ThreadsResponse(DapThread[] Threads);
 
 public sealed record StackTraceArguments(int ThreadId, int? StartFrame = null, int? Levels = null);
 
-public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null, System.Text.Json.JsonElement? ModuleId = null);
+public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null, System.Text.Json.JsonElement? ModuleId = null)
+{
+    /// <summary>Where the frame is in its machine code (an address, <c>0x…</c>): what <c>disassemble</c> starts from.</summary>
+    public string? InstructionPointerReference { get; init; }
+}
+
+/// <summary><c>readMemory</c>: <see cref="Count"/> bytes at <see cref="MemoryReference"/> (an address, <c>0x…</c>) plus <see cref="Offset"/>.</summary>
+public sealed record ReadMemoryArguments(string MemoryReference, int Count, long? Offset = null);
+
+/// <summary>The bytes read, base64 (<see cref="Data"/>), from <see cref="Address"/>; <see cref="UnreadableBytes"/> of those asked for weren't readable.</summary>
+public sealed record ReadMemoryResponse(string Address, int? UnreadableBytes = null, string? Data = null);
+
+public sealed record WriteMemoryArguments(string MemoryReference, string Data, long? Offset = null, bool? AllowPartial = null);
+
+public sealed record WriteMemoryResponse(int? Offset = null, int? BytesWritten = null);
+
+/// <summary>
+/// <c>disassemble</c>: <see cref="InstructionCount"/> instructions from the one at <see cref="MemoryReference"/> plus
+/// <see cref="Offset"/> bytes, moved by <see cref="InstructionOffset"/> instructions (negative: the ones before it).
+/// </summary>
+public sealed record DisassembleArguments(string MemoryReference, int InstructionCount, long? Offset = null, int? InstructionOffset = null, bool? ResolveSymbols = null);
+
+/// <summary>
+/// One instruction: its address, bytes (hex) and text. <see cref="Symbol"/> names the method on its first instruction;
+/// <see cref="Location"/> and <see cref="Line"/> are on the first instruction of each source line.
+/// </summary>
+public sealed record DisassembledInstruction(string Address, string Instruction, string? InstructionBytes = null, string? Symbol = null, Source? Location = null, int? Line = null);
+
+public sealed record DisassembleResponse(DisassembledInstruction[] Instructions);
+
+/// <summary><c>codalus/registers</c> (M58): the registers of a frame.</summary>
+public sealed record RegistersArguments(int FrameId);
+
+public sealed record RegisterValue(string Name, string Value);
+
+public sealed record RegistersResponse(RegisterValue[] Registers);
 
 public sealed record StackTraceResponse(StackFrame[] StackFrames, int? TotalFrames = null);
 
@@ -327,6 +382,9 @@ public sealed record Variable(string Name, string Value, string? Type = null, in
 
     /// <summary>An enumerable's elements, read when the node is expanded (the Codalus debugger, M58).</summary>
     public const string ResultsView = "Results View";
+
+    /// <summary>Where an object, an array or a string is in the program's memory (an address, <c>0x…</c>), for <c>readMemory</c>.</summary>
+    public string? MemoryReference { get; init; }
 
     /// <summary>A node the debugger made up (<see cref="RawView"/>, <see cref="ResultsView"/>): not a member of the object.</summary>
     [JsonIgnore]
@@ -372,7 +430,11 @@ public sealed record VariablesResponse(Variable[] Variables);
 /// <summary><see cref="Context"/> is <c>watch</c>, <c>repl</c>, <c>hover</c> or <c>clipboard</c>.</summary>
 public sealed record EvaluateArguments(string Expression, int? FrameId = null, string? Context = null);
 
-public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0, int? NamedVariables = null, int? IndexedVariables = null);
+public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0, int? NamedVariables = null, int? IndexedVariables = null)
+{
+    /// <summary>Where the value is in the program's memory, when it's an object (<see cref="Variable.MemoryReference"/>).</summary>
+    public string? MemoryReference { get; init; }
+}
 
 public sealed record SetVariableArguments(int VariablesReference, string Name, string Value);
 
@@ -458,6 +520,14 @@ public static class DapEvents
 [JsonSerializable(typeof(EmptyArguments))]
 [JsonSerializable(typeof(ThreadArguments))]
 [JsonSerializable(typeof(FreezeThreadArguments))]
+[JsonSerializable(typeof(ReadMemoryArguments))]
+[JsonSerializable(typeof(ReadMemoryResponse))]
+[JsonSerializable(typeof(WriteMemoryArguments))]
+[JsonSerializable(typeof(WriteMemoryResponse))]
+[JsonSerializable(typeof(DisassembleArguments))]
+[JsonSerializable(typeof(DisassembleResponse))]
+[JsonSerializable(typeof(RegistersArguments))]
+[JsonSerializable(typeof(RegistersResponse))]
 [JsonSerializable(typeof(MakeObjectIdArguments))]
 [JsonSerializable(typeof(CompileExpressionArguments))]
 [JsonSerializable(typeof(CompileExpressionResponse))]

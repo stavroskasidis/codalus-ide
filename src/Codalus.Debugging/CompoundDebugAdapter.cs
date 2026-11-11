@@ -826,6 +826,33 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return part.Adapter.GotoAsync(thread, targetId / MaxParts, cancellationToken);
     }
 
+    public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "readMemory");
+        return part.Adapter.ReadMemoryAsync(thread, memoryReference, offset, count, cancellationToken);
+    }
+
+    public Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "writeMemory");
+        return part.Adapter.WriteMemoryAsync(thread, memoryReference, offset, data, cancellationToken);
+    }
+
+    public Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "disassemble");
+        return part.Adapter.DisassembleAsync(thread, memoryReference, instructionOffset, count, cancellationToken);
+    }
+
+    public Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId, "codalus/registers");
+        return part.Adapter.RegistersAsync(frame, cancellationToken);
+    }
+
+    public Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) =>
+        ResumeAsync(threadId, into ? "stepIn" : "next", (adapter, thread) => adapter.StepInstructionAsync(thread, into, cancellationToken), cancellationToken);
+
     public Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken)
     {
         var (part, frame) = Owner(frameId ?? 0, "codalus/makeObjectId");

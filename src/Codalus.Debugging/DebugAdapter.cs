@@ -776,6 +776,31 @@ public sealed partial class DebugAdapter : IDebugAdapter
     public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
         _connection.RequestAsync("goto", new GotoArguments(threadId, targetId), Json.GotoArguments, cancellationToken);
 
+    public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken) =>
+        Capabilities.SupportsReadMemoryRequest
+            ? _connection.RequestAsync("readMemory", new ReadMemoryArguments(memoryReference, count, offset), Json.ReadMemoryArguments, Json.ReadMemoryResponse, cancellationToken)
+            : throw new DapException("readMemory", "This debugger doesn't read the program's memory.");
+
+    public async Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken) =>
+        Capabilities.SupportsWriteMemoryRequest
+            ? (await _connection.RequestAsync("writeMemory", new WriteMemoryArguments(memoryReference, Convert.ToBase64String(data), offset), Json.WriteMemoryArguments, Json.WriteMemoryResponse, cancellationToken).ConfigureAwait(false)).BytesWritten ?? data.Length
+            : throw new DapException("writeMemory", "This debugger doesn't write the program's memory.");
+
+    public async Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken) =>
+        Capabilities.SupportsDisassembleRequest
+            ? (await _connection.RequestAsync("disassemble", new DisassembleArguments(memoryReference, count, InstructionOffset: instructionOffset), Json.DisassembleArguments, Json.DisassembleResponse, cancellationToken).ConfigureAwait(false)).Instructions
+            : throw new DapException("disassemble", "This debugger doesn't show machine code.");
+
+    public async Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsRegisters
+            ? (await _connection.RequestAsync("codalus/registers", new RegistersArguments(frameId), Json.RegistersArguments, Json.RegistersResponse, cancellationToken).ConfigureAwait(false)).Registers
+            : [];
+
+    public Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) =>
+        Capabilities.SupportsSteppingGranularity
+            ? _connection.RequestAsync(into ? "stepIn" : "next", new StepInArguments(threadId, Granularity: StepInArguments.Instruction), Json.StepInArguments, cancellationToken)
+            : into ? StepInAsync(threadId, cancellationToken) : NextAsync(threadId, cancellationToken);
+
     public async Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) =>
         Capabilities.SupportsObjectIds
             ? (await _connection.RequestAsync("codalus/makeObjectId", new MakeObjectIdArguments(expression, frameId), Json.MakeObjectIdArguments, Json.ObjectIdResponse, cancellationToken).ConfigureAwait(false)).Name

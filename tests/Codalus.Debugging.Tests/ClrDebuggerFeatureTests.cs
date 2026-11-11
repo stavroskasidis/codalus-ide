@@ -339,6 +339,79 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
     }
 
     [Fact]
+    public async Task Memory_machine_code_and_registers_are_read_and_a_step_can_be_one_instruction()
+    {
+        var (adapter, events) = await StartAsync(new SourceBreakpoint(Line("features-measure")));
+        await using var _ = adapter;
+        var stop = await events.StoppedAsync();
+        var thread = stop.ThreadId!.Value;
+        var top = await TopAsync(adapter, stop);
+        var supported = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture is System.Runtime.InteropServices.Architecture.X64 or System.Runtime.InteropServices.Architecture.Arm64;
+        Assert.Equal(supported, adapter.Capabilities.SupportsDisassembleRequest);
+        Assert.True(adapter.Capabilities.SupportsReadMemoryRequest);
+
+        // An object's memory: a string's characters are in it, as UTF-16; writing them changes the string.
+        var text = await adapter.EvaluateAsync("text", top.Id, "watch", Ct);
+        Assert.Equal("\"A-BB!\"", text.Result);
+        Assert.StartsWith("0x", text.MemoryReference, StringComparison.Ordinal);
+        var read = await adapter.ReadMemoryAsync(thread, text.MemoryReference!, 0, 64, Ct);
+        Assert.Null(read.UnreadableBytes);
+        var bytes = Convert.FromBase64String(read.Data!);
+        var characters = System.Text.Encoding.Unicode.GetBytes("A-BB!");
+        var at = bytes.AsSpan().IndexOf(characters);
+        Assert.True(at > 0, Convert.ToHexString(bytes));
+        Assert.Equal(2, await adapter.WriteMemoryAsync(thread, text.MemoryReference!, at, System.Text.Encoding.Unicode.GetBytes("Z"), Ct));
+        Assert.Equal("\"Z-BB!\"", (await adapter.EvaluateAsync("text", top.Id, "watch", Ct)).Result);
+
+        // An address nothing is mapped at: nothing read, and it says how much wasn't.
+        var unmapped = await adapter.ReadMemoryAsync(thread, "0x10", 0, 16, Ct);
+        Assert.Equal(16, unmapped.UnreadableBytes);
+        Assert.Null(unmapped.Data);
+        Assert.Contains("isn't an address", (await Assert.ThrowsAsync<DapException>(() => adapter.ReadMemoryAsync(thread, "there", 0, 4, Ct))).Message, StringComparison.Ordinal);
+
+        if (!supported)
+        {
+            await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            return;
+        }
+
+        // The frame's machine code: the instruction it's at, with its bytes and text, and the source lines its parts come from.
+        Assert.StartsWith("0x", top.InstructionPointerReference, StringComparison.Ordinal);
+        var code = await adapter.DisassembleAsync(thread, top.InstructionPointerReference!, 0, 12, Ct);
+        Assert.Equal(12, code.Length);
+        Assert.Equal(top.InstructionPointerReference, code[0].Address);
+        Assert.Equal(Line("features-measure"), code[0].Line);
+        Assert.EndsWith("Features.cs", code[0].Location?.Path, StringComparison.Ordinal);
+        Assert.All(code, i => Assert.False(string.IsNullOrWhiteSpace(i.Instruction) || string.IsNullOrEmpty(i.InstructionBytes)));
+        Assert.Contains(code, i => i.Line == Line("features-print"));
+
+        // From the method's start: its name on the first instruction, and the current one further down.
+        var whole = await adapter.DisassembleAsync(thread, top.InstructionPointerReference!, -100000, 4000, Ct);
+        Assert.Equal("Debuggee.Features.Run", whole[0].Symbol);
+        Assert.Contains(whole, i => i.Address == top.InstructionPointerReference);
+        Assert.Contains(whole, i => i.Line == Line("features-start"));
+
+        // The registers: the instruction pointer is where the frame is, and the stack pointer isn't null.
+        var registers = await adapter.RegistersAsync(top.Id, Ct);
+        var ip = registers.Single(r => r.Name is "rip" or "pc");
+        Assert.Equal(Convert.ToUInt64(top.InstructionPointerReference![2..], 16), Convert.ToUInt64(ip.Value[2..], 16));
+        Assert.NotEqual(0UL, Convert.ToUInt64(registers.Single(r => r.Name is "rsp" or "sp").Value[2..], 16));
+
+        // One instruction at a time: the next stop is the next instruction, on the same line.
+        await adapter.StepInstructionAsync(thread, into: false, Ct);
+        var stepped = await events.StoppedAsync();
+        Assert.Equal("step", stepped.Reason);
+        var after = await TopAsync(adapter, stepped);
+        Assert.Equal(code[1].Address, after.InstructionPointerReference);
+        Assert.Equal(Line("features-measure"), after.Line);
+
+        // And a line at a time again: the next line.
+        await adapter.NextAsync(thread, Ct);
+        Assert.Equal(Line("features-print"), (await TopAsync(adapter, await events.StoppedAsync())).Line);
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
     public async Task A_frozen_thread_does_not_run_until_it_is_thawed()
     {
         var (adapter, events) = await StartAsync(new SourceBreakpoint(Line("features-freeze")));

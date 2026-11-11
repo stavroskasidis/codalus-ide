@@ -50,6 +50,9 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "timer" };
         yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "package" };
+        yield return new ToolWindowDescriptor(DisassemblyViewModel.ToolWindowId, "Disassembly", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "code" };
+        yield return new ToolWindowDescriptor(RegistersViewModel.ToolWindowId, "Registers", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "braces" };
+        yield return new ToolWindowDescriptor(MemoryViewModel.ToolWindowId, "Memory", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "table" };
         yield return new ToolWindowDescriptor(LiveTreeViewModel.ToolWindowId, "Live Visual Tree", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "type-hierarchy" };
         yield return new ToolWindowDescriptor(LivePropertiesViewModel.ToolWindowId, "Live Property Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "properties" };
         yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layers" };

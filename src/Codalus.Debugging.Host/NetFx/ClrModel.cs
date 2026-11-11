@@ -76,6 +76,12 @@ internal interface IClrProcess : IDisposable
     /// </summary>
     IClrModule? FindModule(Guid mvid) => null;
 
+    /// <summary>The program's memory at an address (M58): as many of <paramref name="count"/> bytes as can be read, none when the address isn't readable.</summary>
+    byte[] ReadMemory(ulong address, int count) => [];
+
+    /// <summary>Writes the program's memory; the number of bytes written. Throws <see cref="ClrException"/> when it can't be.</summary>
+    int WriteMemory(ulong address, byte[] data) => throw new ClrException("This debugger can't write the program's memory.");
+
     /// <summary>A null reference, to pass to a call (M58).</summary>
     IClrValue NewNull(IClrThread thread) => throw new ClrException("null can't be passed as an argument here.");
 
@@ -205,6 +211,12 @@ internal interface IClrFrame
     /// <summary>The IL of the method's version the frame runs; null when it can't be read.</summary>
     byte[]? Il() => null;
 
+    /// <summary>The machine code the frame runs (M58: the Disassembly window); null for a frame without any here.</summary>
+    ClrNativeCode? NativeCode() => null;
+
+    /// <summary>The frame's registers, by the runtime's numbering (index, value), for those it has (M58: the Registers window).</summary>
+    IReadOnlyList<(int Register, ulong Value)> Registers() => [];
+
     /// <summary>
     /// Moves the thread's next instruction to <paramref name="ilOffset"/> of the frame's method (M58: Set Next
     /// Statement); the innermost frame only. Throws <see cref="ClrException"/> with the runtime's reason when it can't.
@@ -212,6 +224,13 @@ internal interface IClrFrame
     /// </summary>
     void SetIp(int ilOffset) => throw new ClrException("This debugger can't set the next statement.");
 }
+
+/// <summary>
+/// A frame's machine code: where it starts and how long it is, where the frame is in it (<see cref="Ip"/>, an address),
+/// and which IL offsets its parts were compiled from (<see cref="Map"/>: offsets from <see cref="Start"/>; an IL
+/// offset below 0 is the prolog, the epilog or code without one).
+/// </summary>
+internal sealed record ClrNativeCode(ulong Start, int Size, ulong Ip, IReadOnlyList<(int IlOffset, int NativeStart, int NativeEnd)> Map);
 
 internal enum ClrValueKind
 {
@@ -405,7 +424,14 @@ internal interface IClrBreakpoint
 }
 
 /// <summary>A step: into, over or out; <see cref="Ranges"/> are the IL ranges of the current line (over and into).</summary>
-internal sealed record ClrStep(ClrStepKind Kind, IReadOnlyList<(int Start, int End)> Ranges, bool JustMyCode);
+internal sealed record ClrStep(ClrStepKind Kind, IReadOnlyList<(int Start, int End)> Ranges, bool JustMyCode)
+{
+    /// <summary>
+    /// The ranges are of the method's machine code (offsets from its start), not of its IL: a step of one instruction
+    /// (M58, the Disassembly window).
+    /// </summary>
+    public bool Native { get; init; }
+}
 
 internal enum ClrStepKind
 {

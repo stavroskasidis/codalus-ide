@@ -1,3 +1,4 @@
+using Codalus.Debugging.Host.Disassembly;
 using Codalus.Debugging.Host.Mono;
 using System.Globalization;
 using System.Text.Json;
@@ -144,6 +145,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         /// <summary>The calls of <see cref="Target"/>'s name the step went into so far.</summary>
         public int TargetCalls { get; set; }
 
+        /// <summary>A step of one machine instruction (M58): it stops where it ends, mid-line or not.</summary>
+        public bool Instruction { get; init; }
+
         /// <summary>The frames the thread had when the step started: fewer at its end means the method returned.</summary>
         public int Depth { get; set; }
 
@@ -188,6 +192,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     SupportsStepInTargetsRequest = true,
                     SupportsFreezingThreads = true,
                     SupportsObjectIds = true,
+                    SupportsReadMemoryRequest = true,
+                    SupportsWriteMemoryRequest = true,
+                    SupportsDisassembleRequest = Disassembler.IsSupported(Disassembler.Architecture),
+                    SupportsSteppingGranularity = Disassembler.IsSupported(Disassembler.Architecture),
+                    SupportsRegisters = Disassembler.IsSupported(Disassembler.Architecture),
                     SupportsTypeProxies = true,
                     SupportsExceptionInfoRequest = true,
                     SupportsExceptionFilterOptions = true,
@@ -240,12 +249,21 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 Resume();
                 return JsonSerializer.SerializeToElement(new ContinueResponse(AllThreadsContinued: true), json.ContinueResponse);
             case "next":
-                Step(Read(arguments, json.ThreadArguments)!.ThreadId, ClrStepKind.Over);
+                var next = Read(arguments, json.StepInArguments)!;
+                Step(next.ThreadId, ClrStepKind.Over, instruction: next.Granularity == StepInArguments.Instruction);
                 return null;
             case "stepIn":
                 var stepIn = Read(arguments, json.StepInArguments)!;
-                Step(stepIn.ThreadId, ClrStepKind.Into, stepIn.TargetId);
+                Step(stepIn.ThreadId, ClrStepKind.Into, stepIn.TargetId, stepIn.Granularity == StepInArguments.Instruction);
                 return null;
+            case "readMemory":
+                return JsonSerializer.SerializeToElement(ReadMemory(Read(arguments, json.ReadMemoryArguments)!), json.ReadMemoryResponse);
+            case "writeMemory":
+                return JsonSerializer.SerializeToElement(WriteMemory(Read(arguments, json.WriteMemoryArguments)!), json.WriteMemoryResponse);
+            case "disassemble":
+                return JsonSerializer.SerializeToElement(new DisassembleResponse(Disassemble(Read(arguments, json.DisassembleArguments)!)), json.DisassembleResponse);
+            case RegistersCommand:
+                return JsonSerializer.SerializeToElement(new RegistersResponse(Registers(Read(arguments, json.RegistersArguments)!.FrameId)), json.RegistersResponse);
             case "stepInTargets":
                 return JsonSerializer.SerializeToElement(new StepInTargetsResponse(StepInTargets(Read(arguments, json.StepInTargetsArguments)!.FrameId)), json.StepInTargetsResponse);
             case "gotoTargets":
@@ -293,6 +311,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>Keeps a thread from running when the program runs on, or lets it run again (M58).</summary>
     public const string FreezeThreadCommand = "codalus/freezeThread";
+
+    /// <summary>A frame's registers (M58).</summary>
+    public const string RegistersCommand = "codalus/registers";
 
     /// <summary>Gives an object an ID (<c>$1</c>) that expressions reach it by for the rest of the session (M58).</summary>
     public const string MakeObjectIdCommand = "codalus/makeObjectId";
@@ -1121,7 +1142,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         Process.ReleaseKept();
     }
 
-    private void Step(int threadId, ClrStepKind kind, int? targetId = null)
+    private void Step(int threadId, ClrStepKind kind, int? targetId = null, bool instruction = false)
     {
         lock (_gate)
         {
@@ -1138,6 +1159,16 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _exceptions.Clear();
             RunsOn();
             var top = TopFrame(thread);
+            // One machine instruction (the Disassembly window): the range is the instruction the frame is at.
+            if (instruction && top?.NativeCode() is { } code && Process.ReadMemory(code.Ip, Disassembler.MaxInstructionLength(Disassembler.Architecture)) is { Length: > 0 } bytes
+                && Disassembler.Decode(Disassembler.Architecture, bytes, code.Ip) is [var current, ..])
+            {
+                var offset = (int)(code.Ip - code.Start);
+                _step = new StepState(kind, threadId, top.Module, top.MethodToken) { Instruction = true };
+                Process.Step(thread, new ClrStep(kind, [(offset, offset + current.Bytes.Length)], _justMyCode) { Native = true });
+                return;
+            }
+
             _step = new StepState(kind, threadId, top?.Module, top?.MethodToken ?? 0) { Target = target, Depth = SafeFrames(thread).Count };
             StartStep(thread, kind, top);
         }
@@ -1291,7 +1322,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         var frame = TopFrame(thread);
         var info = frame?.Module is { } module ? Types.Info(module) : null;
-        if (frame is null || step.Repeats++ > 50)
+        if (frame is null || step.Instruction || step.Repeats++ > 50)
         {
             _step = null;
             Stop("step", thread);
@@ -1518,7 +1549,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     hasSource ? point!.Value.EndLine : null,
                     hasSource ? point!.Value.EndColumn : null,
                     PresentationHint: hasSource && (userCode || !_justMyCode) ? null : "subtle",
-                    ModuleId: ModuleId(module)));
+                    ModuleId: ModuleId(module))
+                {
+                    InstructionPointerReference = frame.NativeCode() is { } code ? Hex(code.Ip) : null,
+                });
             }
 
             return new StackTraceResponse([.. result], frames.Count);
@@ -1663,6 +1697,143 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// <summary>The pseudo-variable for the exception the thread stopped on.</summary>
     public const string ExceptionName = "$exception";
 
+    // ------------------------------------------------------------------ memory, machine code and registers (M58)
+
+    private static string Hex(ulong address) => "0x" + address.ToString("x", CultureInfo.InvariantCulture);
+
+    /// <summary>An address as a client sends it back: <c>0x…</c>, or decimal.</summary>
+    private static ulong Address(string reference, long? offset)
+    {
+        var text = reference.Trim();
+        var parsed = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            ? ulong.TryParse(text.AsSpan(2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var hex) ? hex : (ulong?)null
+            : ulong.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+        return parsed is { } address ? unchecked(address + (ulong)(offset ?? 0)) : throw new DapRequestException($"'{reference}' isn't an address.");
+    }
+
+    /// <summary>Where an object, an array or a string is in memory; null for null, a primitive and a value without an address.</summary>
+    private static string? MemoryReference(IClrValue? value)
+    {
+        try
+        {
+            return value is { Kind: ClrValueKind.Object or ClrValueKind.Array or ClrValueKind.String, Address: not 0 and var address } ? Hex(address) : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private ReadMemoryResponse ReadMemory(ReadMemoryArguments arguments)
+    {
+        var address = Address(arguments.MemoryReference, arguments.Offset);
+        var count = Math.Clamp(arguments.Count, 0, 1 << 20);
+        lock (_gate)
+        {
+            RequireStopped();
+            var bytes = Process.ReadMemory(address, count);
+            return new ReadMemoryResponse(Hex(address), count - bytes.Length is > 0 and var unreadable ? unreadable : null, bytes.Length == 0 ? null : Convert.ToBase64String(bytes));
+        }
+    }
+
+    private WriteMemoryResponse WriteMemory(WriteMemoryArguments arguments)
+    {
+        var address = Address(arguments.MemoryReference, arguments.Offset);
+        byte[] data;
+        try
+        {
+            data = Convert.FromBase64String(arguments.Data);
+        }
+        catch (FormatException)
+        {
+            throw new DapRequestException("The bytes to write aren't base64.");
+        }
+
+        lock (_gate)
+        {
+            RequireStopped();
+            try
+            {
+                return new WriteMemoryResponse(BytesWritten: Process.WriteMemory(address, data));
+            }
+            catch (ClrException ex)
+            {
+                throw new DapRequestException(ex.Message);
+            }
+        }
+    }
+
+    private RegisterValue[] Registers(int frameId)
+    {
+        lock (_gate)
+        {
+            RequireStopped();
+            var names = Disassembler.RegisterNames(Disassembler.Architecture);
+            return [.. Frame(frameId).Registers().Where(r => r.Register < names.Count).Select(r => new RegisterValue(names[r.Register], "0x" + r.Value.ToString("x16", CultureInfo.InvariantCulture)))];
+        }
+    }
+
+    /// <summary>
+    /// The instructions around an address. In a method a stopped frame runs, the method's code is decoded from its
+    /// start (so instructions before the address are whole ones too) and each source line's first instruction says
+    /// its line; elsewhere, from the address on.
+    /// </summary>
+    private DisassembledInstruction[] Disassemble(DisassembleArguments arguments)
+    {
+        var address = Address(arguments.MemoryReference, arguments.Offset);
+        var count = Math.Clamp(arguments.InstructionCount, 0, 5000);
+        var first = arguments.InstructionOffset ?? 0;
+        var architecture = Disassembler.Architecture;
+        if (!Disassembler.IsSupported(architecture))
+        {
+            throw new DapRequestException($"Machine code for {architecture} isn't decoded here.");
+        }
+
+        lock (_gate)
+        {
+            RequireStopped();
+            foreach (var frame in _frames.Values)
+            {
+                if (frame.Module is not { } module || frame.NativeCode() is not { } code || address < code.Start || address >= code.Start + (ulong)code.Size)
+                {
+                    continue;
+                }
+
+                var info = Types.Info(module);
+                var instructions = Disassembler.Decode(architecture, Process.ReadMemory(code.Start, code.Size), code.Start);
+                var at = instructions.FindIndex(i => address >= i.Address && address < i.Address + (ulong)i.Bytes.Length);
+                var result = new List<DisassembledInstruction>();
+                int? lastLine = null;
+                for (var i = Math.Max(0, at + first); i < instructions.Count && result.Count < count; i++)
+                {
+                    var instruction = instructions[i];
+                    var offset = (int)(instruction.Address - code.Start);
+                    ClrSequencePoint? point = null;
+                    if (info is not null && code.Map.Where(m => m.IlOffset >= 0 && offset >= m.NativeStart && offset < m.NativeEnd).Select(m => (int?)m.IlOffset).FirstOrDefault() is { } il)
+                    {
+                        point = info.LineAt(frame.MethodToken, il, frame.CodeVersion);
+                    }
+
+                    var newLine = point is { Document.Length: > 0 } && point.Value.StartLine != lastLine;
+                    lastLine = point?.StartLine ?? lastLine;
+                    result.Add(new DisassembledInstruction(
+                        Hex(instruction.Address),
+                        instruction.Text,
+                        Convert.ToHexString(instruction.Bytes).ToLowerInvariant(),
+                        i == 0 ? info?.MethodDisplayName(frame.MethodToken) : null,
+                        newLine ? new Source(Path.GetFileName(point!.Value.Document), point.Value.Document) : null,
+                        newLine ? point!.Value.StartLine : null));
+                }
+
+                return [.. result];
+            }
+
+            // Not a frame's method: what's at the address, from it on.
+            var raw = Disassembler.Decode(architecture, Process.ReadMemory(address, Math.Max(1, count) * Disassembler.MaxInstructionLength(architecture)), address);
+            return [.. raw.Skip(Math.Max(0, first)).Take(count).Select(i => new DisassembledInstruction(Hex(i.Address), i.Text, Convert.ToHexString(i.Bytes).ToLowerInvariant()))];
+        }
+    }
+
     // ------------------------------------------------------------------ object IDs (M58)
 
     /// <summary>Gives the object an expression evaluates to an ID: held by a strong handle, so it's reachable (and alive) when no variable in scope holds it.</summary>
@@ -1786,7 +1957,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 text += " {" + id + "}"; // as the classic IDE marks an object that has an ID
             }
 
-            return new(name, text, value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName, IndexedVariables: Indexed(value));
+            return new(name, text, value is null ? null : TypeName(value), ChildrenOf(value, evaluateName), evaluateName, IndexedVariables: Indexed(value)) { MemoryReference = MemoryReference(value) };
         }
         catch (InvalidOperationException ex)
         {
@@ -2553,7 +2724,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return result switch
             {
                 LocalValue local => new EvaluateResponse(ClrTypeSystem.FormatPrimitive(local.Value), local.Value is null ? null : LocalTypeName(local.Value)),
-                RemoteValue remote => new EvaluateResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim()), IndexedVariables: Indexed(remote.Value)),
+                RemoteValue remote => new EvaluateResponse(Types.Format(remote.Value), TypeName(remote.Value), ChildrenOf(remote.Value, expression.Trim()), IndexedVariables: Indexed(remote.Value)) { MemoryReference = MemoryReference(remote.Value) },
                 TypeValue type => throw new DapRequestException($"'{expression.Trim()}' is a type ({Types.Name(ClrTypeSystem.TypeOf(type.Module, type.Token))}), not a value."),
                 _ => throw new DapRequestException($"'{expression.Trim()}' is a namespace, not a value."),
             };

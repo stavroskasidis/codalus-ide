@@ -1894,6 +1894,97 @@ public sealed class DebugService : IAsyncDisposable
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
     }
 
+    // ------------------------------------------------------------------ memory, machine code and registers (M58)
+
+    /// <summary>Whether the stopped thread's debugger reads the program's memory (the Codalus debugger).</summary>
+    public bool CanReadMemory => StoppedCapabilities?.SupportsReadMemoryRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger shows machine code and steps by instruction (the Codalus debugger, on x64 and arm64).</summary>
+    public bool CanDisassemble => StoppedCapabilities?.SupportsDisassembleRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger shows a frame's registers.</summary>
+    public bool CanShowRegisters => StoppedCapabilities?.SupportsRegisters == true;
+
+    /// <summary>The program's memory: <paramref name="count"/> bytes from an address (<c>0x…</c>) plus <paramref name="offset"/>; null when it can't be asked.</summary>
+    public async Task<ReadMemoryResponse?> ReadMemoryAsync(string reference, long offset, int count)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await adapter.ReadMemoryAsync(CurrentThread, reference, offset, count, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Writes bytes into the program's memory; why it couldn't, or null.</summary>
+    public async Task<string?> WriteMemoryAsync(string reference, long offset, byte[] data)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return "Memory can be written only while the program is stopped.";
+        }
+
+        try
+        {
+            await adapter.WriteMemoryAsync(CurrentThread, reference, offset, data, _session.Token).ConfigureAwait(false);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
+    /// <summary>The machine instructions around an address: <paramref name="count"/> from the one there, moved by <paramref name="instructionOffset"/>.</summary>
+    public async Task<IReadOnlyList<DisassembledInstruction>> DisassembleAsync(string reference, int instructionOffset, int count)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.DisassembleAsync(CurrentThread, reference, instructionOffset, count, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The selected frame's registers.</summary>
+    public async Task<IReadOnlyList<RegisterValue>> RegistersAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || SelectedFrame is not { } frame)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.RegistersAsync(frame.Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Steps one machine instruction: over a call, or into it.</summary>
+    public Task StepInstructionAsync(bool into) => ResumeAsync(a => a.StepInstructionAsync(CurrentThread, into, _session.Token));
+
     /// <summary>Whether the stopped thread's debugger gives objects IDs (the Codalus debugger, M58).</summary>
     public bool CanMakeObjectIds => StoppedCapabilities?.SupportsObjectIds == true;
 

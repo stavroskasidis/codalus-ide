@@ -287,6 +287,86 @@ public sealed class DebugCodalusTests
     }
 
     [AvaloniaFact]
+    public async Task The_disassembly_registers_and_memory_windows_show_the_machine_and_step_an_instruction()
+    {
+        await using var f = ShellFixture.Create();
+        var features = await OpenAsync(f);
+        var ct = TestContext.Current.CancellationToken;
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, Line(features, "features-measure")));
+        await f.RunAsync("debug.start");
+        await StoppedAtAsync(f, features, "features-measure", seconds: 180);
+        Assert.True(f.Shell.Debugger.CanReadMemory);
+
+        // Memory: an expression's object, where its characters are; bytes written there change the string.
+        f.Shell.Layout.ShowToolWindow(MemoryViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MemoryView>().Any());
+        var memory = f.Shell.MemoryWindow;
+        memory.AddressText = "text";
+        await memory.GoAsync();
+        Assert.Null(memory.Message);
+        Assert.Equal(MemoryViewModel.RowsPerPage, memory.Rows.Count);
+        Assert.Contains("A.-.B.B.!.", string.Concat(memory.Rows.Take(3).Select(r => r.Text)), StringComparison.Ordinal);
+        var characters = string.Concat(memory.Rows.Take(3).Select(r => r.Text)).IndexOf("A.-.B.B.!.", StringComparison.Ordinal);
+        var start = Convert.ToUInt64(memory.Rows[0].Address[2..], 16) + (ulong)characters;
+        memory.AddressText = "0x" + start.ToString("x", System.Globalization.CultureInfo.InvariantCulture);
+        await memory.GoAsync();
+        Assert.StartsWith("41 00 2d 00", memory.Rows[0].Hex, StringComparison.Ordinal);
+        memory.WriteText = "5a 00";
+        await memory.WriteAsync();
+        Assert.Null(memory.Message);
+        Assert.StartsWith("5a 00 2d 00", memory.Rows[0].Hex, StringComparison.Ordinal);
+        Assert.Equal("\"Z-BB!\"", (await f.Shell.Debugger.EvaluateAsync("text", "watch", ct)).Result);
+
+        // What isn't an address says so; so do bytes that aren't hex.
+        memory.WriteText = "zz";
+        await memory.WriteAsync();
+        Assert.Contains("hex digits", memory.Message, StringComparison.Ordinal);
+        memory.AddressText = "nothere";
+        await memory.GoAsync();
+        Assert.Contains("isn't an address", memory.Message, StringComparison.Ordinal);
+        Assert.Empty(memory.Rows);
+
+        if (!f.Shell.Debugger.CanDisassemble)
+        {
+            return; // an architecture whose machine code isn't decoded
+        }
+
+        // Disassembly: the method's code under its source lines, the frame's instruction marked and scrolled to.
+        f.Shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+        var disassembly = f.Shell.DisassemblyWindow;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<DisassemblyView>().Any() && disassembly.CurrentIndex >= 0);
+        Assert.Equal("Debuggee.Features.Run", disassembly.Rows[0].Heading);
+        Assert.Contains(disassembly.Rows, r => r.Heading == $"Features.cs:{Line(features, "features-measure")}");
+        var current = Assert.Single(disassembly.Rows, r => r.IsCurrent);
+        Assert.Same(current, disassembly.Rows[disassembly.CurrentIndex]);
+        Assert.NotEmpty(current.Text);
+        Assert.Matches("^[0-9a-f]{2}( [0-9a-f]{2})*$", current.Bytes);
+        Assert.True(disassembly.CanStep);
+
+        // Registers: the instruction pointer is the current instruction's address.
+        f.Shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+        var registers = f.Shell.RegistersWindow;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<RegistersView>().Any() && registers.Rows.Count > 0);
+        var ip = registers.Rows.Single(r => r.Name is "rip" or "pc");
+        Assert.Equal(Convert.ToUInt64(current.Address[2..], 16), Convert.ToUInt64(ip.Value[2..], 16));
+        Assert.False(ip.IsChanged);
+
+        // One instruction: the marker moves to the next one, on the same source line, and the instruction pointer changed.
+        var next = disassembly.Rows.Skip(disassembly.CurrentIndex + 1).First(r => r.IsInstruction);
+        f.Shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+        await disassembly.StepOverAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && disassembly.CurrentIndex >= 0 && disassembly.Rows[disassembly.CurrentIndex].Address == next.Address, seconds: 60);
+        Assert.Equal(Line(features, "features-measure"), f.Shell.ActiveEditor!.Controller!.CurrentDebugLine());
+        f.Shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => registers.Rows.Any(r => r.Name is "rip" or "pc" && r.IsChanged));
+
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+        Assert.Empty(disassembly.Rows);
+        Assert.Empty(registers.Rows);
+    }
+
+    [AvaloniaFact]
     public async Task Under_netcoredbg_the_commands_are_off_and_breakpoints_behave_as_before()
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariable("CODALUS_DEBUG_ADAPTER") == DebugService.CodalusAdapter, "The debug-codalus shard runs every session under the Codalus debugger.");
@@ -308,6 +388,18 @@ public sealed class DebugCodalusTests
         Assert.Equal(false, f.Shell.Workbench.Context.GetValue("debugCanStepIntoSpecific"));
         Assert.Equal(false, f.Shell.Workbench.Context.GetValue("debugCanFreezeThreads"));
         Assert.Empty(await f.Shell.Debugger.StepInTargetsAsync());
+
+        // The machine's windows say which debugger shows them.
+        Assert.False(f.Shell.Debugger.CanDisassemble);
+        f.Shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Shell.RegistersWindow.Message is not null);
+        Assert.Contains("Codalus debugger", f.Shell.RegistersWindow.Message, StringComparison.Ordinal);
+        f.Shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Shell.DisassemblyWindow.Message is not null);
+        Assert.Contains("Codalus debugger", f.Shell.DisassemblyWindow.Message, StringComparison.Ordinal);
+        f.Shell.MemoryWindow.AddressText = "0x1000";
+        await f.Shell.MemoryWindow.GoAsync();
+        Assert.Contains("Codalus debugger", f.Shell.MemoryWindow.Message, StringComparison.Ordinal);
         Assert.False(await f.Shell.SetNextStatementAsync(features, Line(features, "features-nested")));
         Assert.Contains("can't set the next statement", f.Shell.StatusBar.Message, StringComparison.Ordinal);
         await f.RunAsync("debug.stop");
