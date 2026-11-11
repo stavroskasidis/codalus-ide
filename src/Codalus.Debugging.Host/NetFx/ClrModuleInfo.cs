@@ -61,11 +61,12 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>A method's version for the symbol lookups: its newest (new calls run it, breakpoints bind in it).</summary>
     public const int LatestVersion = int.MaxValue;
 
-    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus)
+    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus, WindowsPdbSymbols? windowsPdb = null)
     {
         Path = path;
         _pe = pe;
         _pdbProvider = pdbProvider;
+        _windowsPdb = windowsPdb;
         Metadata = pe.GetMetadataReader();
         Pdb = pdbProvider?.GetMetadataReader();
         PdbPath = pdbPath;
@@ -87,7 +88,10 @@ internal sealed class ClrModuleInfo : IDisposable
 
     public string? PdbPath { get; }
 
-    public bool HasSymbols => Pdb is not null;
+    /// <summary>The module's Windows PDB (M58), when that is the format its symbols are in; edits aren't applied to such a module's symbols.</summary>
+    private readonly WindowsPdbSymbols? _windowsPdb;
+
+    public bool HasSymbols => Pdb is not null || _windowsPdb is not null;
 
     /// <summary>DAP's <c>symbolStatus</c>: "Symbols loaded.", or why not.</summary>
     public string SymbolStatus { get; }
@@ -98,7 +102,8 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>
     /// Reads <paramref name="path"/>'s metadata and its portable PDB: next to it, where its debug directory says, or
     /// embedded; or the one at <paramref name="symbolPath"/> (M58: found in a symbol path or on a symbol server, with
-    /// <paramref name="symbolStatus"/> saying where).
+    /// <paramref name="symbolStatus"/> saying where). A Windows PDB (next to the module, where it was built, or at
+    /// <paramref name="symbolPath"/>) is read through <see cref="WindowsPdbSymbols"/>.
     /// </summary>
     public static ClrModuleInfo Open(string path, string? symbolPath = null, string? symbolStatus = null)
     {
@@ -120,11 +125,18 @@ internal sealed class ClrModuleInfo : IDisposable
         }
 
         MetadataReaderProvider? provider = null;
+        WindowsPdbSymbols? windowsPdb = null;
         string? pdbPath = null;
         string status;
         try
         {
-            if (symbolPath is not null)
+            if (symbolPath is not null && WindowsPdbSymbols.IsWindowsPdb(symbolPath))
+            {
+                windowsPdb = WindowsPdbSymbols.Open(path, symbolPath);
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (symbolPath is not null)
             {
                 provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(symbolPath));
                 _ = provider.GetMetadataReader(); // a file that isn't a portable PDB says so here
@@ -142,11 +154,15 @@ internal sealed class ClrModuleInfo : IDisposable
                 pdbPath = builtPath;
                 status = "Symbols loaded.";
             }
+            else if (WindowsPdb(pe, path) is { } windows)
+            {
+                windowsPdb = WindowsPdbSymbols.Open(path, windows);
+                pdbPath = windows;
+                status = "Symbols loaded.";
+            }
             else
             {
-                status = WindowsPdb(pe, path) is { } windows
-                    ? $"{System.IO.Path.GetFileName(windows)} is a Windows PDB, which this debugger doesn't read: build with portable PDBs (DebugType portable)."
-                    : "No symbols: there's no PDB.";
+                status = "No symbols: there's no PDB.";
             }
         }
         catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -157,7 +173,7 @@ internal sealed class ClrModuleInfo : IDisposable
             pdbPath = null;
         }
 
-        return new ClrModuleInfo(path, pe, provider, pdbPath, status);
+        return new ClrModuleInfo(path, pe, provider, pdbPath, status, windowsPdb);
     }
 
     /// <summary>
@@ -217,6 +233,7 @@ internal sealed class ClrModuleInfo : IDisposable
     public void Dispose()
     {
         _pdbProvider?.Dispose();
+        _windowsPdb?.Dispose();
         foreach (var provider in _deltaProviders)
         {
             provider.Dispose();
@@ -802,6 +819,10 @@ internal sealed class ClrModuleInfo : IDisposable
             {
             }
         }
+        else if (_windowsPdb is { } windows)
+        {
+            result.AddRange(windows.SequencePoints(methodToken));
+        }
 
         lock (_sequencePoints)
         {
@@ -920,6 +941,19 @@ internal sealed class ClrModuleInfo : IDisposable
             tokens.AddRange(_editedSymbols.Keys.Except(tokens).ToList());
         }
 
+        foreach (var token in _windowsPdb?.Methods() ?? [])
+        {
+            foreach (var document in SequencePoints(token).Select(p => p.Document).Where(d => d.Length > 0).Distinct(s_paths))
+            {
+                if (!result.TryGetValue(document, out var list))
+                {
+                    result[document] = list = [];
+                }
+
+                list.Add(token);
+            }
+        }
+
         foreach (var token in tokens)
         {
             if (Symbols(token, LatestVersion) is not var (pdb, row))
@@ -968,7 +1002,7 @@ internal sealed class ClrModuleInfo : IDisposable
     {
         if (Symbols(methodToken, version) is not var (pdb, row))
         {
-            return [];
+            return _windowsPdb?.Locals(methodToken, ilOffset) ?? [];
         }
 
         var result = new List<(int, string)>();

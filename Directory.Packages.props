@@ -68,6 +68,7 @@
     <PackageVersion Include="ClrDebug" Version="0.4.2" />
     <!-- The x64 instruction decoder of the Codalus debugger's Disassembly window (M58, ADR 0094; MIT, managed). -->
     <PackageVersion Include="Iced" Version="1.21.0" />
+    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <!-- CoreCLR's debugger shim, one package per platform (M54, ADR 0086): CoreCLR's debugger adapter starts and attaches through it. -->
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.win-x64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.linux-x64" Version="10.0.750501" />

@@ -16,4 +16,13 @@
     <!-- A Blazor app's answer for its WebAssembly debugging proxy. -->
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
+  <!-- A real Windows PDB for WindowsPdbTests (M58): the one Microsoft.ApplicationInsights, which the test platform
+       brings, ships next to its assembly. Copied with the assembly to windows-pdb/ in the output. -->
+  <Target Name="CopyWindowsPdbFixture" AfterTargets="Build">
+    <ItemGroup>
+      <_WindowsPdbAssembly Include="@(ReferencePath)" Condition="'%(Filename)' == 'Microsoft.ApplicationInsights'" />
+      <_WindowsPdbFixture Include="@(_WindowsPdbAssembly);@(_WindowsPdbAssembly->'%(RootDir)%(Directory)%(Filename).pdb')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WindowsPdbFixture)" DestinationFolder="$(OutDir)windows-pdb" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
