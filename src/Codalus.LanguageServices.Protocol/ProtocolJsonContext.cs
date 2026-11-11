@@ -93,6 +93,8 @@ namespace Codalus.LanguageServices.Protocol;
 [JsonSerializable(typeof(SyntaxTreeResult))]
 [JsonSerializable(typeof(CodeMetricsParams))]
 [JsonSerializable(typeof(HotReloadStartParams))]
+[JsonSerializable(typeof(CompileExpressionParams))]
+[JsonSerializable(typeof(CompileExpressionResult))]
 [JsonSerializable(typeof(HotReloadSessionParams))]
 [JsonSerializable(typeof(HotReloadUpdateResult))]
 [JsonSerializable(typeof(bool))]

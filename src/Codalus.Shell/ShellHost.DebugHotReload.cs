@@ -37,6 +37,7 @@ public sealed partial class ShellHost
     private void InitializeDebugHotReload()
     {
         DebugEdits = new DebugHotReload(Debugger, () => Languages.RunningClient(CSharpLanguageId));
+        Debugger.ExpressionCompiler = CompileDebuggerExpressionAsync;
         DebugEdits.ActiveChanged += (_, _) => Ui.Post(() =>
         {
             if (!DebugEdits.IsActive)

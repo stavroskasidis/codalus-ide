@@ -185,7 +185,15 @@ public sealed class DebugService : IAsyncDisposable
         DebugAdapter.StartAsync(
             CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
             cancellationToken,
-            terminal);
+            terminal,
+            ExpressionCompiler);
+
+    /// <summary>
+    /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
+    /// where the frame is stopped; the shell sets it to the language host's compiler. Null: those expressions say what
+    /// the evaluator didn't read.
+    /// </summary>
+    public Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>? ExpressionCompiler { get; set; }
 
     /// <summary>Codalus IDE's CoreCLR adapter's launch arguments for a plan (M54): the desktop-CLR adapter's, as a launch of .NET.</summary>
     public NetFxDebugArguments CoreClrArguments(LaunchPlan plan) =>

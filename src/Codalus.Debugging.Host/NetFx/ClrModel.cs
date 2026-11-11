@@ -70,6 +70,12 @@ internal interface IClrProcess : IDisposable
     IClrValue Box(IClrThread thread, IClrModule module, int typeToken, object value, TimeSpan timeout) =>
         throw new ClrException("A number can't be passed where an object is expected here (it would need boxing).");
 
+    /// <summary>
+    /// A module the program loaded from bytes (no file), by its MVID: the assembly of a compiled expression (M58), right
+    /// after <c>Assembly.Load</c> returned, before its load event is handled. Null when there's none.
+    /// </summary>
+    IClrModule? FindModule(Guid mvid) => null;
+
     /// <summary>A null reference, to pass to a call (M58).</summary>
     IClrValue NewNull(IClrThread thread) => throw new ClrException("null can't be passed as an argument here.");
 

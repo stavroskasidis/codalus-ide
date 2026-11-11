@@ -17,8 +17,15 @@ public sealed record InitializeArguments(
     bool SupportsVariablePaging = false,
     bool SupportsRunInTerminalRequest = false,
     string Locale = "en-US",
-    bool SupportsStartDebuggingRequest = false)
+    bool SupportsStartDebuggingRequest = false,
+    bool SupportsExpressionCompiler = false)
 {
+    /// <summary>
+    /// The client answers <c>codalus/compileExpression</c> (M58): the Codalus debugger asks it to compile the
+    /// expressions its own evaluator doesn't read.
+    /// </summary>
+    public bool SupportsExpressionCompiler { get; init; } = SupportsExpressionCompiler;
+
     [JsonPropertyName("clientID")]
     public string ClientId { get; init; } = ClientId;
 
@@ -333,6 +340,22 @@ public sealed record VariablePresentationHint(string? Kind = null, string[]? Att
 }
 
 /// <summary>
+/// The Codalus debugger's reverse request <c>codalus/compileExpression</c> (M58, ADR 0094): an expression its own
+/// evaluator doesn't read (a lambda, a query, Visual Basic), to compile where the frame is stopped
+/// (<see cref="Line"/> and <see cref="Column"/> of <see cref="SourcePath"/>, 1-based) in the project that built
+/// <see cref="ModulePath"/>.
+/// </summary>
+public sealed record CompileExpressionArguments(string Expression, string SourcePath, int Line, int Column, string? ModulePath = null);
+
+/// <summary>
+/// The answer: <see cref="Assembly"/> with a static method <see cref="MethodName"/> of <see cref="TypeName"/> that
+/// returns the expression's value as an object, to call with <see cref="Parameters"/> (each an expression the
+/// debugger's evaluator reads: <c>this</c>, a variable's name, <c>this.Name</c>) and the frame's type arguments when it
+/// has <see cref="TypeParameters"/>. <see cref="Errors"/> when it didn't compile (the compiler's words).
+/// </summary>
+public sealed record CompileExpressionResponse(byte[]? Assembly = null, string? TypeName = null, string? MethodName = null, string[]? Parameters = null, int TypeParameters = 0, string[]? Errors = null);
+
+/// <summary>
 /// <c>codalus/makeObjectId</c> (M58): keeps the object <see cref="Expression"/> evaluates to in <see cref="FrameId"/>'s
 /// frame reachable as <c>$1</c>, <c>$2</c>… for the rest of the session, also where no variable holds it any more.
 /// </summary>
@@ -436,6 +459,8 @@ public static class DapEvents
 [JsonSerializable(typeof(ThreadArguments))]
 [JsonSerializable(typeof(FreezeThreadArguments))]
 [JsonSerializable(typeof(MakeObjectIdArguments))]
+[JsonSerializable(typeof(CompileExpressionArguments))]
+[JsonSerializable(typeof(CompileExpressionResponse))]
 [JsonSerializable(typeof(ObjectIdResponse))]
 [JsonSerializable(typeof(DeleteObjectIdArguments))]
 [JsonSerializable(typeof(GotoTargetsArguments))]

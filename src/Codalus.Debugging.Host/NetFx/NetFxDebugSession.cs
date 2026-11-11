@@ -56,6 +56,14 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly HashSet<IClrFrame> _innermost = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<int, (int FrameId, string Name, int Ordinal)> _stepInTargets = [];
 
+    /// <summary>The client compiles the expressions the evaluator doesn't read (M58, <c>codalus/compileExpression</c>).</summary>
+    private bool _compilesExpressions;
+    private readonly Dictionary<string, CompiledExpression> _compiledExpressions = new(StringComparer.Ordinal);
+    private readonly HashSet<IClrModule> _expressionModules = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>A compiled expression in the program: its method, what to pass it, or why it didn't compile.</summary>
+    private sealed record CompiledExpression(IClrModule? Module, int MethodToken, string[] Parameters, int TypeParameters, string? Error);
+
     /// <summary>The objects with an ID (M58: <c>$1</c>, <c>$2</c>…), each held until its ID is deleted or the session ends.</summary>
     private readonly Dictionary<string, (IClrValue Value, Action Release)> _objectIds = new(StringComparer.Ordinal);
     private readonly TypeAttributes _attributes = new();
@@ -159,6 +167,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         switch (command)
         {
             case "initialize":
+                _compilesExpressions = Read(arguments, json.InitializeArguments)?.SupportsExpressionCompiler == true;
                 if (debugger is CoreClr.DbgShimDebugger shim && Read(arguments, json.InitializeArguments)?.SupportsRunInTerminalRequest == true)
                 {
                     // The client starts programs in its terminal for us (M54): the launcher runs there.
@@ -587,6 +596,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return; // registered at a stop that came first (EnsureModule)
         }
 
+        if (_expressionModules.Contains(module))
+        {
+            return; // a compiled expression's assembly (M58): not one of the program's modules
+        }
+
         ClrModuleInfo? info = null;
         string? problem = null;
         if (!module.IsDynamic && module.Path.Length > 0)
@@ -888,7 +902,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             try
             {
-                if (TopFrame(hit.Thread) is not { } frame || !Evaluator(frame).IsTrue(condition))
+                if (TopFrame(hit.Thread) is not { } frame || !Evaluator(frame).IsTrue(EvaluateIn(frame, condition)))
                 {
                     return false;
                 }
@@ -986,7 +1000,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                         throw new ClrException("no frame to evaluate it in");
                     }
 
-                    result.Append((evaluator ??= Evaluator(frame)).Evaluate(expression) switch
+                    evaluator ??= Evaluator(frame);
+                    result.Append(EvaluateIn(frame, expression) switch
                     {
                         LocalValue local => ClrTypeSystem.FormatPrimitive(local.Value),
                         RemoteValue remote => Types.Format(remote.Value),
@@ -1657,7 +1672,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             RequireStopped();
             var frame = frameId is { } id ? Frame(id) : _frames.Values.FirstOrDefault(f => f.Module is not null) ?? throw new DapRequestException("An object ID needs a stopped frame.");
-            if (Evaluator(frame).Evaluate(expression) is not RemoteValue { Value: { Kind: ClrValueKind.Object or ClrValueKind.Array or ClrValueKind.String } value })
+            if (EvaluateIn(frame, expression) is not RemoteValue { Value: { Kind: ClrValueKind.Object or ClrValueKind.Array or ClrValueKind.String } value })
             {
                 throw new DapRequestException($"'{expression.Trim()}' isn't an object: only objects can have an ID.");
             }
@@ -2331,6 +2346,193 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private ClrEvaluator Evaluator(IClrFrame frame) => new(Types, Process, Context(frame), EvalTimeout);
 
+    /// <summary>
+    /// An expression's value in a frame: by the evaluator here, and what it doesn't read (a lambda, a query, a generic or
+    /// an extension method, Visual Basic) compiled by the client and run in the program (M58, ADR 0094).
+    /// </summary>
+    private EvalValue EvaluateIn(IClrFrame frame, string expression)
+    {
+        // The evaluator reads C#. In a Visual Basic frame it reads what means the same in both (a name, its members),
+        // and everything else is the compiler's: Me, =, <>, And, Not, items(0), a / b.
+        var visualBasic = _compilesExpressions && IsVisualBasic(frame);
+        if (visualBasic && !IsMemberChain(expression))
+        {
+            return Compiled(frame, expression, new UnsupportedExpressionException("Visual Basic expressions need the compiler."));
+        }
+
+        try
+        {
+            return Evaluator(frame).Evaluate(expression);
+        }
+        catch (UnsupportedExpressionException ex) when (_compilesExpressions)
+        {
+            return Compiled(frame, expression, ex);
+        }
+        catch (ExpressionException ex) when (visualBasic)
+        {
+            return Compiled(frame, expression, new UnsupportedExpressionException(ex.Message));
+        }
+    }
+
+    private bool IsVisualBasic(IClrFrame frame) =>
+        frame.Module is { } module && Types.Info(module)?.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { Document: { } document }
+        && document.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A name and its members (<c>order.Customer.Name</c>): the same in C# and Visual Basic.</summary>
+    internal static bool IsMemberChain(string expression)
+    {
+        var text = expression.AsSpan().Trim();
+        if (text.IsEmpty || text[^1] == '.' || !(char.IsLetter(text[0]) || text[0] is '_' or '$'))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < text.Length; i++)
+        {
+            if (!(char.IsLetterOrDigit(text[i]) || text[i] == '_' || (text[i] == '.' && text[i - 1] != '.')))
+            {
+                return false;
+            }
+        }
+
+        return !text.Equals("Me", StringComparison.OrdinalIgnoreCase) && !text.StartsWith("Me.", StringComparison.OrdinalIgnoreCase)
+            && !text.Equals("Nothing", StringComparison.OrdinalIgnoreCase) && !text.Equals("True", StringComparison.OrdinalIgnoreCase) && !text.Equals("False", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>The reverse request for an expression the evaluator doesn't read.</summary>
+    public const string CompileExpressionCommand = "codalus/compileExpression";
+
+    private const string Base64 = "System.Convert";
+
+    private RemoteValue Compiled(IClrFrame frame, string expression, UnsupportedExpressionException reason)
+    {
+        if (frame.Module is not { } module || Types.Info(module) is not { } info || info.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is not { Document.Length: > 0 } point)
+        {
+            throw reason; // no source line to compile it at
+        }
+
+        // The same expression at the same place is the same method: a watch compiles once.
+        var key = string.Join('\n', expression.Trim(), info.Mvid.ToString("N"), frame.MethodToken.ToString(CultureInfo.InvariantCulture), frame.CodeVersion.ToString(CultureInfo.InvariantCulture),
+            point.StartLine.ToString(CultureInfo.InvariantCulture), point.StartColumn.ToString(CultureInfo.InvariantCulture));
+        if (!_compiledExpressions.TryGetValue(key, out var compiled))
+        {
+            _compiledExpressions[key] = compiled = Compile(frame, expression, module, point, reason);
+        }
+
+        if (compiled.Error is { } error || compiled.Module is not { } assembly)
+        {
+            throw new ExpressionException(compiled.Error ?? reason.Message);
+        }
+
+        var evaluator = Evaluator(frame);
+        var arguments = new List<IClrValue>(compiled.Parameters.Length);
+        foreach (var parameter in compiled.Parameters)
+        {
+            arguments.Add(evaluator.Evaluate(parameter) is RemoteValue { Value: var value } ? value : throw new ExpressionException($"'{parameter}' has no value to pass to the expression."));
+        }
+
+        var typeArguments = compiled.TypeParameters == 0 ? [] : frame.TypeArguments;
+        if (typeArguments.Count != compiled.TypeParameters)
+        {
+            throw new ExpressionException("The frame's type arguments aren't available, so the expression can't be run here.");
+        }
+
+        try
+        {
+            var result = Process.Call(frame.Thread, assembly, compiled.MethodToken, typeArguments, arguments, EvalTimeout);
+            return new RemoteValue(ClrLiveValue.Of(Process, result, () => result));
+        }
+        catch (ClrEvalException ex)
+        {
+            throw new ExpressionException($"The expression threw {Types.FullName(ex.Exception.Type)}" + (Types.Field(ex.Exception, "_message") is { Kind: ClrValueKind.String } message ? ": " + message.Text : "."));
+        }
+        catch (TimeoutException)
+        {
+            throw new ExpressionException($"Evaluating the expression timed out after {EvalTimeout.TotalSeconds:0} seconds.");
+        }
+    }
+
+    /// <summary>
+    /// Asks the client to compile an expression where the frame is, and loads the assembly it sends into the program:
+    /// its bytes as a base64 string (func-eval's <c>NewString</c>), <c>Convert.FromBase64String</c>, then
+    /// <c>Assembly.Load</c>. A failure is the compiler's words.
+    /// </summary>
+    private CompiledExpression Compile(IClrFrame frame, string expression, IClrModule module, ClrSequencePoint point, UnsupportedExpressionException reason)
+    {
+        static CompiledExpression Failed(string error) => new(null, 0, [], 0, error);
+        CompileExpressionResponse? response;
+        try
+        {
+            response = dap.RequestAsync(CompileExpressionCommand, new CompileExpressionArguments(expression, point.Document, point.StartLine, point.StartColumn, module.Path), DapJsonContext.Default.CompileExpressionArguments, CancellationToken.None)
+                .GetAwaiter().GetResult()?.Deserialize(DapJsonContext.Default.CompileExpressionResponse);
+        }
+        catch (Exception ex) when (ex is DapRequestException or IOException)
+        {
+            log.WriteLine("The expression couldn't be compiled: " + ex.Message);
+            return Failed(reason.Message);
+        }
+
+        if (response?.Errors is { Length: > 0 } errors)
+        {
+            return Failed(string.Join(" ", errors));
+        }
+
+        if (response is not { Assembly: { Length: > 0 } bytes, TypeName: { } typeName, MethodName: { } methodName })
+        {
+            return Failed(reason.Message);
+        }
+
+        try
+        {
+            // The method's token and the module's MVID, from the bytes.
+            Guid mvid;
+            int token;
+            using (var pe = new System.Reflection.PortableExecutable.PEReader(System.Collections.Immutable.ImmutableArray.Create(bytes)))
+            {
+                var metadata = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(pe);
+                mvid = metadata.GetGuid(metadata.GetModuleDefinition().Mvid);
+                token = 0;
+                foreach (var handle in metadata.MethodDefinitions)
+                {
+                    var method = metadata.GetMethodDefinition(handle);
+                    var type = metadata.GetTypeDefinition(method.GetDeclaringType());
+                    var ns = metadata.GetString(type.Namespace);
+                    if (metadata.GetString(method.Name) == methodName && (ns.Length == 0 ? string.Empty : ns + ".") + metadata.GetString(type.Name) == typeName)
+                    {
+                        token = System.Reflection.Metadata.Ecma335.MetadataTokens.GetToken(handle);
+                        break;
+                    }
+                }
+            }
+
+            if (token == 0 || Types.CoreLibrary is not var (core, coreInfo)
+                || coreInfo.FindType(Base64) is not (var convert and not 0) || coreInfo.Methods(convert).FirstOrDefault(m => m is { Name: "FromBase64String", IsStatic: true, ParameterTypes: ["string"] }) is not { } fromBase64
+                || coreInfo.FindType("System.Reflection.Assembly") is not (var assemblyType and not 0) || coreInfo.Methods(assemblyType).FirstOrDefault(m => m is { Name: "Load", IsStatic: true, ParameterTypes: ["byte[]"] }) is not { } load)
+            {
+                return Failed("The compiled expression couldn't be loaded into the program: its core library has no Assembly.Load.");
+            }
+
+            var text = Process.NewString(frame.Thread, Convert.ToBase64String(bytes), EvalTimeout);
+            var array = Process.Call(frame.Thread, core, fromBase64.Token, [], [text], EvalTimeout);
+            Process.Call(frame.Thread, core, load.Token, [], [array], EvalTimeout);
+            if (Process.FindModule(mvid) is not { } loaded)
+            {
+                return Failed("The compiled expression's assembly wasn't found in the program after it was loaded.");
+            }
+
+            _expressionModules.Add(loaded);
+            return new CompiledExpression(loaded, token, response.Parameters ?? [], response.TypeParameters, null);
+        }
+        catch (ClrEvalException ex)
+        {
+            return Failed($"The compiled expression couldn't be loaded into the program: {Types.FullName(ex.Exception.Type)}" + (Types.Field(ex.Exception, "_message") is { Kind: ClrValueKind.String } message ? ": " + message.Text : "."));
+        }
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or BadImageFormatException)
+        {
+            return Failed("The compiled expression couldn't be loaded into the program: " + ex.Message);
+        }
+    }
+
     private EvaluateResponse Evaluate(string expression, int? frameId)
     {
         lock (_gate)
@@ -2347,7 +2549,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 throw new DapRequestException("Expressions can't be evaluated in this frame (it isn't managed code).");
             }
 
-            var result = Evaluator(frame).Evaluate(expression);
+            var result = EvaluateIn(frame, expression);
             return result switch
             {
                 LocalValue local => new EvaluateResponse(ClrTypeSystem.FormatPrimitive(local.Value), local.Value is null ? null : LocalTypeName(local.Value)),

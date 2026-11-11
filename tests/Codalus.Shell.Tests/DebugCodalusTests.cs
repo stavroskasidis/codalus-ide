@@ -183,6 +183,110 @@ public sealed class DebugCodalusTests
     }
 
     [AvaloniaFact]
+    public async Task Lambdas_queries_and_extension_methods_are_compiled_and_run_in_the_program()
+    {
+        await using var f = ShellFixture.Create();
+        var features = await OpenAsync(f);
+        var ct = TestContext.Current.CancellationToken;
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, Line(features, "features-views")));
+
+        // A condition the debugger's own evaluator doesn't read (an array creation, a lambda): compiled, and it breaks.
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, Line(features, "features-ids"), Condition: "new[] { 1, 2 }.Sum(n => n) == 3 && basket.Items.Count == 0"));
+        await f.RunAsync("debug.start");
+        await StoppedAtAsync(f, features, "features-views", seconds: 180);
+        async Task<string> EvalAsync(string expression) => (await f.Shell.Debugger.EvaluateAsync(expression, "watch", ct)).Result;
+
+        // The language host has the project once the solution has loaded there: the first one waits for it.
+        string? first = null;
+        for (var attempt = 0; first is null; attempt++)
+        {
+            try
+            {
+                first = await EvalAsync("evens.Count()");
+            }
+            catch (Codalus.Debugging.DapException ex) when (attempt < 240 && (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal)))
+            {
+                await Task.Delay(500, ct);
+            }
+        }
+
+        Assert.Equal("4", first);
+
+        // An extension method, lambdas over locals and their members, a query, a generic method, typeof and a pattern.
+        Assert.Equal("1", await EvalAsync("basket.Items.Where(i => i.StartsWith(\"a\")).ToList().Count"));
+        Assert.Equal("\"a1\"", await EvalAsync("sorted.Select(p => p.Key + p.Value).First()"));
+        Assert.Equal("21", await EvalAsync("linked.Sum() + count"));
+        Assert.Equal("\"Basket\"", await EvalAsync("typeof(Basket).Name"));
+        Assert.Equal("true", await EvalAsync("basket is { Name: \"fruit\" }"));
+        Assert.Equal("2", await EvalAsync("(from n in linked where n > 1 select n).Count()"));
+        Assert.Equal("\"<x>\"", await EvalAsync("Mark(\"x\")")); // a static method of the frame's type, by its simple name
+
+        // The result is a value of the program like any other: it expands.
+        var list = await f.Shell.Debugger.EvaluateAsync("linked.OrderBy(n => n).ToArray()", "watch", ct);
+        Assert.Equal("{int[3]}", list.Result);
+        Assert.Equal(["1", "2", "3"], (await f.Shell.Debugger.VariablesAsync(list.VariablesReference)).Select(v => v.Value));
+
+        // What doesn't compile says so in the compiler's words; what throws says what it threw.
+        Assert.Contains("CS1061", (await Assert.ThrowsAsync<Codalus.Debugging.DapException>(() => EvalAsync("evens.Nope()"))).Message, StringComparison.Ordinal);
+        Assert.Contains("System.InvalidOperationException", (await Assert.ThrowsAsync<Codalus.Debugging.DapException>(() => EvalAsync("evens.First(n => n > 100)"))).Message, StringComparison.Ordinal);
+
+        // The compiled expressions' assemblies aren't the program's modules.
+        Assert.DoesNotContain(f.Shell.Debugger.Modules, m => m.Name.Contains("CodalusExpression", StringComparison.Ordinal) || m.Name.Contains("dynamic", StringComparison.Ordinal));
+
+        // And the compiled condition breaks.
+        await f.RunAsync("debug.continue");
+        await StoppedAtAsync(f, features, "features-ids");
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+    }
+
+    [AvaloniaFact]
+    public async Task Visual_basic_expressions_are_read_as_visual_basic()
+    {
+        await using var f = ShellFixture.Create();
+        var ct = TestContext.Current.CancellationToken;
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("VisualBasic");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "VisualBasic.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 4 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        f.Shell.Runs.SetStartupProject(Path.Combine(folder, "VbConsole", "VbConsole.vbproj"));
+        var program = Path.Combine(folder, "VbConsole", "Program.vb");
+        var loop = Array.FindIndex(File.ReadAllLines(program), l => l.Contains("' [vb-loop]", StringComparison.Ordinal)) + 1;
+        f.Shell.Debugger.Breakpoints.Set(new BreakpointSpec(program, loop));
+        await f.RunAsync("debug.start");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && f.Shell.ActiveEditor?.Controller?.CurrentDebugLine() == loop, seconds: 240);
+        async Task<string> EvalAsync(string expression) => (await f.Shell.Debugger.EvaluateAsync(expression, "watch", ct)).Result;
+
+        // A name and its members mean the same in both languages: read at once.
+        Assert.Equal("\"Tea\"", await EvalAsync("product.Name"));
+
+        // The rest is Visual Basic's: = compares, <>, Not, AndAlso, &, a lambda, a decimal literal.
+        string? first = null;
+        for (var attempt = 0; first is null; attempt++)
+        {
+            try
+            {
+                first = await EvalAsync("product.Price = 3D");
+            }
+            catch (Codalus.Debugging.DapException ex) when (attempt < 240 && (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal)))
+            {
+                await Task.Delay(500, ct);
+            }
+        }
+
+        Assert.Equal("true", first);
+        Assert.Equal("true", await EvalAsync("Not String.IsNullOrEmpty(product.Name) AndAlso product.Name <> \"Bread\""));
+        Assert.Equal("\"Tea!\"", await EvalAsync("product.Name & \"!\""));
+        Assert.Equal("1", await EvalAsync("inventory.Products.Where(Function(p) p.Price > 2.6D).Count()"));
+        Assert.Equal("\"EUR\"", await EvalAsync("If(formatter Is Nothing, \"none\", \"EUR\")"));
+        Assert.Contains("BC30451", (await Assert.ThrowsAsync<Codalus.Debugging.DapException>(() => EvalAsync("nothere + 1"))).Message, StringComparison.Ordinal);
+
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+    }
+
+    [AvaloniaFact]
     public async Task Under_netcoredbg_the_commands_are_off_and_breakpoints_behave_as_before()
     {
         Assert.SkipWhen(Environment.GetEnvironmentVariable("CODALUS_DEBUG_ADAPTER") == DebugService.CodalusAdapter, "The debug-codalus shard runs every session under the Codalus debugger.");

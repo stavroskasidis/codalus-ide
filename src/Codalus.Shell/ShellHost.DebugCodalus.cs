@@ -71,6 +71,30 @@ public sealed partial class ShellHost
         }
     }
 
+    /// <summary>
+    /// The expressions the Codalus debugger's own evaluator doesn't read (lambdas, LINQ, Visual Basic), compiled by the
+    /// C# language host where the frame is stopped; the debugger runs the result in the program. Without the language
+    /// host (no solution loaded, a file of no project) the answer says so, and the debugger shows it.
+    /// </summary>
+    private async Task<Codalus.Debugging.CompileExpressionResponse> CompileDebuggerExpressionAsync(Codalus.Debugging.CompileExpressionArguments request, CancellationToken cancellationToken)
+    {
+        if (Languages.RunningClient(CSharpLanguageId) is not { } client)
+        {
+            return new Codalus.Debugging.CompileExpressionResponse(Errors: [Localizer.Get("msg.debug.expressionNeedsTheProject", "This expression needs the compiler: open the program's solution to evaluate it.")]);
+        }
+
+        try
+        {
+            var result = await client.CompileExpressionAsync(
+                new Codalus.LanguageServices.Protocol.CompileExpressionParams(request.Expression, request.SourcePath, request.Line, request.Column, request.ModulePath), cancellationToken).ConfigureAwait(false);
+            return new Codalus.Debugging.CompileExpressionResponse(result.Assembly, result.TypeName, result.MethodName, result.Parameters, result.TypeParameters, result.Errors.Length == 0 ? null : result.Errors);
+        }
+        catch (Exception ex) when (ex is Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException or InvalidOperationException or TimeoutException)
+        {
+            return new Codalus.Debugging.CompileExpressionResponse(Errors: [ex.Message]);
+        }
+    }
+
     /// <summary>Shift+Alt+F11: the calls of the rest of the current line, to step into one; the others run without a stop.</summary>
     public async Task StepIntoSpecificAsync()
     {

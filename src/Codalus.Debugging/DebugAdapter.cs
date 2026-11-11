@@ -187,7 +187,8 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// machine, M14c) and sends <c>initialize</c>. With <paramref name="terminal"/>, the client offers DAP's
     /// <c>runInTerminal</c> and answers it through the terminal.
     /// </summary>
-    public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null)
+    /// <param name="compiler">Answers the Codalus debugger's <c>codalus/compileExpression</c> (M58): the expressions its evaluator doesn't read.</param>
+    public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null, Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>? compiler = null)
     {
         var launch = new ProcessLaunchInfo(info.Program, info.Arguments)
         {
@@ -207,13 +208,22 @@ public sealed partial class DebugAdapter : IDebugAdapter
             adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));
         }
 
+        if (compiler is not null)
+        {
+            adapter._connection.Handle(CompileExpressionCommand, async (arguments, ct) =>
+            {
+                var request = Read(arguments, DapJsonContext.Default.CompileExpressionArguments) ?? throw new InvalidOperationException("codalus/compileExpression: no arguments.");
+                return JsonSerializer.SerializeToElement(await compiler(request, ct).ConfigureAwait(false), DapJsonContext.Default.CompileExpressionResponse);
+            });
+        }
+
         process.BeginErrorRead();
         adapter._connection.Start();
         try
         {
             adapter.Capabilities = await adapter._connection.RequestAsync(
                 "initialize",
-                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsVariablePaging: true, SupportsRunInTerminalRequest: terminal is not null),
+                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsVariablePaging: true, SupportsRunInTerminalRequest: terminal is not null, SupportsExpressionCompiler: compiler is not null),
                 DapJsonContext.Default.InitializeArguments,
                 DapJsonContext.Default.Capabilities,
                 cancellationToken).ConfigureAwait(false);
@@ -775,6 +785,9 @@ public sealed partial class DebugAdapter : IDebugAdapter
         Capabilities.SupportsObjectIds
             ? _connection.RequestAsync("codalus/deleteObjectId", new DeleteObjectIdArguments(name), Json.DeleteObjectIdArguments, cancellationToken)
             : Task.CompletedTask;
+
+    /// <summary>The Codalus debugger's reverse request for an expression its evaluator doesn't read (M58).</summary>
+    public const string CompileExpressionCommand = "codalus/compileExpression";
 
     /// <summary>The Codalus debugger's <c>codalus/freezeThread</c> (M58).</summary>
     public const string FreezeThreadCommand = "codalus/freezeThread";

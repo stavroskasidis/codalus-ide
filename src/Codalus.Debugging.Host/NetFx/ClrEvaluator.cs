@@ -67,6 +67,9 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
     /// <summary>A condition's value (breakpoint conditions).</summary>
     public bool IsTrue(string text) => Truth(Evaluate(text));
 
+    /// <summary>Whether a value is true, as a condition reads it.</summary>
+    public bool IsTrue(EvalValue value) => Truth(value);
+
     // ------------------------------------------------------------------ names
 
     private EvalValue Name(string name)

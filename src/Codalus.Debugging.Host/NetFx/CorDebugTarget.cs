@@ -934,6 +934,27 @@ internal sealed class CorDebugTarget : IClrProcess
         return boxed;
     }
 
+    public IClrModule? FindModule(Guid mvid) =>
+        Translate(() =>
+        {
+            foreach (var module in Process.AppDomains.SelectMany(d => d.Assemblies).SelectMany(a => a.Modules).Where(m => m.IsDynamic || m.IsInMemory))
+            {
+                try
+                {
+                    if (module.GetMetaDataInterface<MetaDataImport>().ScopeProps.pmvid == mvid)
+                    {
+                        return (IClrModule?)Module(module);
+                    }
+                }
+                catch (Exception ex) when (ex is COMException or InvalidCastException)
+                {
+                    // A module whose metadata isn't readable yet: not ours.
+                }
+            }
+
+            return null;
+        });
+
     public IClrValue NewNull(IClrThread thread) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, ((CorThread)thread).Raw.CreateEval().CreateValue(CorElementType.Class, null)));
 

@@ -671,6 +671,25 @@ public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);
 /// </summary>
 public sealed record HotReloadStartParams(string Session, string[] Projects, string[] Capabilities);
 
+/// <summary>
+/// <c>codalus/debug/compileExpression</c> (M58): <see cref="Expression"/> as the user wrote it, to compile where a
+/// frame is stopped: <see cref="Line"/> and <see cref="Column"/> (1-based; column 0: the line's start) of
+/// <see cref="SourcePath"/>, in the project that built <see cref="ModulePath"/>.
+/// </summary>
+public sealed record CompileExpressionParams(string Expression, string SourcePath, int Line, int Column = 0, string? ModulePath = null);
+
+/// <summary>
+/// The compiled expression: an assembly whose static method <see cref="MethodName"/> of <see cref="TypeName"/> returns
+/// the expression's value as an object (null for one without a value). <see cref="Parameters"/> are what the debugger
+/// passes it, in order, each an expression its own evaluator reads: <see cref="This"/>, a local's or a parameter's
+/// name, or <c>this.Name</c>. The method is generic over the frame's <see cref="TypeParameters"/> type parameters (the
+/// types' first, as the runtime orders a frame's type arguments). <see cref="Errors"/> instead when it doesn't compile.
+/// </summary>
+public sealed record CompileExpressionResult(byte[]? Assembly, string? TypeName, string? MethodName, string[] Parameters, int TypeParameters, string[] Errors)
+{
+    public const string This = "this";
+}
+
 /// <summary>Names a Hot Reload session (update, commit, discard, end).</summary>
 public sealed record HotReloadSessionParams(string Session);
 

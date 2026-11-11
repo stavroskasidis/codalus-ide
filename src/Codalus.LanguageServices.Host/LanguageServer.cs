@@ -21,6 +21,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly CodeActionsFeature _codeActions;
     private readonly CodeCleanupFeature _cleanup;
     private readonly HotReloadFeature _hotReload;
+    private readonly ExpressionCompilerFeature _expressions;
     private readonly DiagnosticsService _diagnostics;
     private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
@@ -36,6 +37,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
         _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
+        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution);
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
@@ -304,6 +306,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.HotReloadCommit, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Commit(p)));
         _connection.OnRequest(Methods.HotReloadDiscard, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Discard(p)));
         _connection.OnRequest(Methods.HotReloadEnd, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.End(p.Session)));
+        _connection.OnRequest(Methods.CompileExpression, json.CompileExpressionParams, json.CompileExpressionResult, _expressions.CompileAsync);
         _connection.OnRequest(Methods.AspNetEndpoints, json.AspNetEndpointsParams, json.AspNetEndpointsResult,
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
         _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,
