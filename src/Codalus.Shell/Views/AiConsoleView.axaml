@@ -21,7 +21,7 @@
         <TextBlock x:Name="ConsoleLabel" Classes="small" Text="{x:Static vm:AiConsoleViewModel.Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
       </DockPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
-        <ComboBox x:Name="AgentPicker" MinWidth="130" ItemsSource="{Binding Agents}" AutomationProperties.Name="{l:T aiConsole.agent}" ToolTip.Tip="{l:T aiConsole.newConsoleWithThisAgent}">
+        <ComboBox x:Name="AgentPicker" MinWidth="130" ItemsSource="{Binding Agents}" PlaceholderText="{l:T aiConsole.newConsoleFor}" AutomationProperties.Name="{l:T aiConsole.agent}" ToolTip.Tip="{l:T aiConsole.newConsoleWithThisAgent}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AiConsoleAgentChoice">
               <TextBlock Text="{Binding DisplayName}" />

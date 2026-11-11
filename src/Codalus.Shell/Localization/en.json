@@ -84,6 +84,7 @@
   "aiConsole.consoles": "Consoles",
   "aiConsole.installItsCli": "Install Its CLI…",
   "aiConsole.newConsole": "New AI Console",
+  "aiConsole.newConsoleFor": "New console for…",
   "aiConsole.newConsoleWithThisAgent": "New console with this agent",
   "aiConsole.noConsoleIsOpen": "No console is open. Click + to start the agent's CLI.",
   "aiConsole.openAiChat": "Open AI Chat",

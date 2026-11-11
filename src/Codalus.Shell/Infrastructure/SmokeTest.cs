@@ -4149,6 +4149,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             await WaitAsync(() => shell.AiConsoleAgents.Count == 1, "Claude is an agent AI Console can start").ConfigureAwait(true);
             Check(shell.Workbench.ToolWindows.All.Single(w => w.Id == AiConsoleViewModel.ToolWindowId).Location == Workbench.ToolWindows.ToolWindowLocation.Bottom, "AI Console's place is the bottom group");
+            // AI Chat (the ai.connect step's) closed first, so the console has the window's width for its picture.
+            shell.Layout.CloseToolWindow(AiChatViewModel.ToolWindowId);
             await shell.Workbench.Commands.ExecuteAsync("ai.console.show", [], CancellationToken.None).ConfigureAwait(true);
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiConsoleView>().Any(v => v.IsEffectivelyVisible), "AI Console opens").ConfigureAwait(true);
             await WaitAsync(() => Screen().Contains("Claude stand-in ready (--session-id)", StringComparison.Ordinal), $"the agent's CLI starts with a conversation id ({console.Notice})", 60).ConfigureAwait(true);
