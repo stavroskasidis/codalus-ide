@@ -467,6 +467,94 @@ public sealed class DebugStartAgainTests : IDisposable
         };
     }
 
+    /// <summary>Whether process <paramref name="id"/> ended: gone, or (Linux) a zombie its parent hasn't reaped.</summary>
+    private static bool HasEnded(int id)
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                var stat = File.ReadAllText($"/proc/{id.ToString(System.Globalization.CultureInfo.InvariantCulture)}/stat");
+                return stat[(stat.LastIndexOf(')') + 1)..].TrimStart() is ['Z' or 'X', ..];
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            return process.HasExited;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// A program whose runtime the debugger saw late, and which ended while the debugger's events about that still
+    /// waited to be handled (here behind an output handler that takes its time; on a loaded machine, behind anything):
+    /// the wait for its runtime saw the process gone first, took it for a program that never started, and started it
+    /// again. The local validation of M58b saw that as a second program with no process id (docs/ci-flakes.md).
+    /// On macOS the wait can't see an unreaped program as ended, so the handler just waits its limit there.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_ends_while_the_debuggers_events_wait_isnt_taken_for_one_that_never_started()
+    {
+        await using var debug = new DebugService(() => null);
+        var output = new System.Text.StringBuilder();
+        var ended = new List<int?>();
+        var done = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Output += (_, o) =>
+        {
+            lock (output)
+            {
+                output.Append(o.Text);
+            }
+
+            if (o.Text.Contains("the runtime starts", StringComparison.Ordinal))
+            {
+                // The events behind this one (the runtime's thread and module) wait until the program has ended, and a
+                // little longer than the wait for its runtime takes to look at the process again.
+                var held = System.Diagnostics.Stopwatch.StartNew();
+                while (held.Elapsed < TimeSpan.FromSeconds(OperatingSystem.IsMacOS() ? 3 : 20) && !(ProgramIds() is [var program] && HasEnded(program)))
+                {
+                    Thread.Sleep(20);
+                }
+
+                Thread.Sleep(400);
+            }
+        };
+        debug.Ended += (_, code) => { lock (ended) { ended.Add(code); } done.TrySetResult(code); };
+
+        await debug.LaunchAsync(
+            [StartupProject("First", failStarts: 0), StartupProject("Second", failStarts: 1, runtimeAfter: "300", options: new() { ["announceRuntime"] = "true" })],
+            Timeout());
+
+        Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
+        await Task.Delay(500, TestContext.Current.CancellationToken);
+        string text;
+        lock (output)
+        {
+            text = output.ToString();
+        }
+
+        Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("before its runtime started", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Could not start", text, StringComparison.Ordinal);
+        Assert.Contains("[Second] The debugger saw the program's runtime start ", text, StringComparison.Ordinal);
+        Assert.Contains("[Second] The program has exited with code 7", text, StringComparison.Ordinal);
+        Assert.Equal("1", File.ReadAllText(_starts));
+        Assert.Equal(Assert.Single(ProgramIds()), debug.Processes[1].Id);
+        Assert.Equal([7], ended);
+        Assert.All(debug.Processes, p => Assert.Equal(7, p.ExitCode));
+        Assert.Equal(DebugState.Idle, debug.State);
+        Assert.True(LeftPrograms().Running.Count == 0);
+    }
+
     [Fact]
     public async Task A_later_startup_project_whose_program_runs_on_joins_once_its_runtime_reports()
     {
@@ -480,7 +568,15 @@ public sealed class DebugStartAgainTests : IDisposable
         await debug.LaunchAsync([StartupProject("First", failStarts: 0), StartupProject("Second", failStarts: 1, runtimeAfter: "1500")], Timeout());
 
         // The second program joined on its first start, under its process id, and the session ended once, after both.
-        Assert.Equal(Assert.Single(ProgramIds()), debug.Processes[1].Id);
+        // The Debug Console goes with a failure: it says whether the start was made again (M58b's local validation saw
+        // no process id here once, with nothing kept that said why).
+        string joined;
+        lock (output)
+        {
+            joined = output.ToString();
+        }
+
+        Assert.True(Assert.Single(ProgramIds()) == debug.Processes[1].Id, $"The second program's id is {debug.Processes[1].Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "not set"}, not {ProgramIds()[0].ToString(System.Globalization.CultureInfo.InvariantCulture)}. The Debug Console:\n{joined}");
         Assert.Equal(7, await done.Task.WaitAsync(Timeout()));
         await Task.Delay(500, TestContext.Current.CancellationToken);
         Assert.Equal([7], ended);

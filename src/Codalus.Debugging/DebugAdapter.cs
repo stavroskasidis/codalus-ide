@@ -550,6 +550,16 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
                 if (HasExited(program))
                 {
+                    // Its runtime may have started first: the debugger says so in events, which are handled one by one
+                    // and can wait behind others while this loop already sees the process gone. A short-lived program
+                    // was then taken for one that never started, and started again (it ran twice). So the debugger is
+                    // asked something first: by its answer everything it wrote before is read, and then handled.
+                    await SettleEventsAsync(cancellationToken).ConfigureAwait(false);
+                    if (_runtime.Task.IsCompleted)
+                    {
+                        break;
+                    }
+
                     Log?.Invoke(this, $"The program ended {Seconds(waited)} seconds later, before its runtime started.");
                     System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(timeout);
                 }
@@ -612,6 +622,34 @@ public sealed partial class DebugAdapter : IDebugAdapter
             _connection.Post(processEvent);
             await Task.WhenAny(_lateProcessPosted.Task, _connection.Closed, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>How long <see cref="SettleEventsAsync"/> waits for the debugger's answer and for its events to be handled.</summary>
+    private static readonly TimeSpan SettleLimit = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Waits until the events the debugger wrote so far are handled: a request it answers at once
+    /// (<see cref="WakeCommand"/>), then the events read before that answer. Bounded, and ended by the connection's end:
+    /// a debugger that doesn't answer leaves things as they were.
+    /// </summary>
+    private async Task SettleEventsAsync(CancellationToken cancellationToken)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(SettleLimit);
+        try
+        {
+            await _connection.RequestAsync(WakeCommand, new EmptyArguments(), Json.EmptyArguments, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
+        {
+            // netcoredbg doesn't know the request: its answer, an error, is what was waited for.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await Task.WhenAny(_connection.EventsHandledAsync(), _connection.Closed, Task.Delay(SettleLimit, cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task OnEventAsync(DapEvent e)
