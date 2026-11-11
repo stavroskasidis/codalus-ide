@@ -11,7 +11,8 @@ using System.Threading;
 /// <c>$CODALUS_DEBUG_WAIT/pid</c> and waits for <c>$CODALUS_DEBUG_WAIT/go</c>, which the IDE writes once the debugger
 /// has attached and set the breakpoints. After <c>CODALUS_DEBUG_WAIT_SECONDS</c> (120) it goes on without it.
 /// The variables are cleared, so the program's own child processes don't wait.
-/// Programs the Codalus debugger launches get it too, for <see cref="HotReloadAgent"/> (ADR 0090).
+/// Programs the Codalus debugger launches get it too, for <see cref="HotReloadAgent"/> (ADR 0090), and <c>dotnet watch</c>
+/// run in a console of its own, for <see cref="WatchRelay"/>.
 /// </summary>
 internal static class StartupHook
 {
@@ -25,7 +26,14 @@ internal static class StartupHook
     {
         // The Codalus debugger's launcher runs with the program's environment, and its runtime runs DOTNET_STARTUP_HOOKS
         // although its runtimeconfig turns them off: the variables are the program's, left for it.
-        if (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == DebugHost)
+        var entry = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name ?? string.Empty;
+        if (entry == DebugHost)
+        {
+            return;
+        }
+
+        // dotnet watch in a console window or the terminal, under Hot Reload: its messages go to the IDE too.
+        if (WatchRelay.Start(entry))
         {
             return;
         }

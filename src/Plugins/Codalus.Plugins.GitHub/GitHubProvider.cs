@@ -39,6 +39,9 @@ internal sealed class GitHubProvider : HostingProviderBase
     /// <summary>The REST API: api.github.com, or <c>/api/v3</c> on a GitHub Enterprise Server.</summary>
     private string Api => IsDotCom ? "https://api.github.com" : ServerUrl + "/api/v3";
 
+    /// <summary>Who the token belongs to: asked again before a 401 signs the user out, and before a new sign-in makes a new token.</summary>
+    protected override string WhoAmIUrl => Api + "/user";
+
     private string GraphQl => IsDotCom ? "https://api.github.com/graphql" : ServerUrl + "/api/graphql";
 
     public override HostingRepository? ResolveRepository(string remoteUrl)
@@ -55,8 +58,17 @@ internal sealed class GitHubProvider : HostingProviderBase
 
     // ------------------------------------------------------------------ account
 
+    /// <summary>
+    /// The device flow, unless the stored token still works: GitHub keeps ten tokens for a user and an OAuth app and
+    /// revokes the oldest when it makes an eleventh, so each needless sign-in can end another profile's session.
+    /// </summary>
     public override async Task<HostingAccount> SignInAsync(IDeviceCodePrompt prompt, CancellationToken cancellationToken)
     {
+        if (await ReusableAccountAsync(cancellationToken).ConfigureAwait(false) is { } account)
+        {
+            return account;
+        }
+
         var token = await DeviceFlow.SignInAsync(
             Http,
             new DeviceFlowEndpoints(ServerUrl + "/login/device/code", ServerUrl + "/login/oauth/access_token", ClientId, Scopes),

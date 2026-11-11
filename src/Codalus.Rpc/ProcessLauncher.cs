@@ -102,6 +102,9 @@ public sealed class LocalHostProcess : IHostProcess
     private readonly Process _process;
     private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _errorCompleted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly object _pipes = new(); // PipeStartGuard: the streams' first operation and their disposal
+    private Stream? _output;
+    private Stream? _input;
     private int _errorReading;
 
     public LocalHostProcess(Process process)
@@ -128,9 +131,9 @@ public sealed class LocalHostProcess : IHostProcess
 
     public Process Process => _process;
 
-    public Stream Output => _process.StandardOutput.BaseStream;
+    public Stream Output => _output ??= Guarded(_process.StandardOutput.BaseStream);
 
-    public Stream Input => _process.StandardInput.BaseStream;
+    public Stream Input => _input ??= Guarded(_process.StandardInput.BaseStream);
 
     public int? Id
     {
@@ -186,7 +189,14 @@ public sealed class LocalHostProcess : IHostProcess
 
     public ValueTask DisposeAsync()
     {
-        _process.Dispose();
+        lock (_pipes)
+        {
+            _process.Dispose(); // it closes the redirected streams, so not while one makes its pipe's socket
+        }
+
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>On Unix, a redirected stream (a pipe stream) through <see cref="PipeStartGuard"/>.</summary>
+    private Stream Guarded(Stream stream) => OperatingSystem.IsWindows() ? stream : new PipeStartGuard(stream, _pipes);
 }
