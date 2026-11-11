@@ -31,8 +31,17 @@ internal sealed record ConditionalExpr(Expr Condition, Expr WhenTrue, Expr WhenF
 /// <summary><c>(int)x</c>: <see cref="TypeName"/> as written.</summary>
 internal sealed record CastExpr(string TypeName, Expr Operand) : Expr;
 
+/// <summary><c>new Ns.Type(arguments)</c> (M58): <see cref="TypeName"/> as written, a type without type arguments.</summary>
+internal sealed record NewExpr(string TypeName, IReadOnlyList<Expr> Arguments) : Expr;
+
 /// <summary>An expression that isn't valid, or isn't supported, with the message to show.</summary>
-internal sealed class ExpressionException(string message) : InvalidOperationException(message);
+internal class ExpressionException(string message) : InvalidOperationException(message);
+
+/// <summary>
+/// An expression this evaluator doesn't read (a lambda, <c>typeof</c>, a generic method…) though it may be valid C#:
+/// the session then asks the client to compile it (M58, <c>codalus/compileExpression</c>).
+/// </summary>
+internal sealed class UnsupportedExpressionException(string message) : ExpressionException(message);
 
 internal static class ExpressionParser
 {
@@ -62,7 +71,7 @@ internal static class ExpressionParser
         var expression = parser.ParseExpression();
         if (!parser.AtEnd)
         {
-            throw new ExpressionException($"Unexpected '{parser.Current.Text}' in the expression.");
+            throw new UnsupportedExpressionException($"Unexpected '{parser.Current.Text}' in the expression.");
         }
 
         return expression;
@@ -96,6 +105,19 @@ internal static class ExpressionParser
             if (char.IsWhiteSpace(c))
             {
                 i++;
+                continue;
+            }
+
+            if (c == '$' && i + 1 < text.Length && (char.IsLetterOrDigit(text[i + 1]) || text[i + 1] == '_'))
+            {
+                // A pseudo-variable (M58): $exception, $ReturnValue, an object ID ($1).
+                var start = i++;
+                while (i < text.Length && (char.IsLetterOrDigit(text[i]) || text[i] == '_'))
+                {
+                    i++;
+                }
+
+                tokens.Add(new Token(Kind.Identifier, text[start..i]));
                 continue;
             }
 
@@ -142,7 +164,7 @@ internal static class ExpressionParser
             }
 
             var op = s_operators.FirstOrDefault(o => string.CompareOrdinal(text, i, o, 0, o.Length) == 0)
-                ?? throw new ExpressionException($"Unexpected '{c}' in the expression.");
+                ?? throw new UnsupportedExpressionException($"Unexpected '{c}' in the expression.");
             tokens.Add(new Token(Kind.Operator, op));
             i += op.Length;
         }
@@ -332,7 +354,7 @@ internal static class ExpressionParser
         {
             if (!Accept(op))
             {
-                throw new ExpressionException(AtEnd ? $"'{op}' is missing at the end of the expression." : $"'{op}' was expected, not '{Current.Text}'.");
+                throw new UnsupportedExpressionException(AtEnd ? $"'{op}' is missing at the end of the expression." : $"'{op}' was expected, not '{Current.Text}'.");
             }
         }
 
@@ -456,7 +478,9 @@ internal static class ExpressionParser
                         "true" => new LiteralExpr(true),
                         "false" => new LiteralExpr(false),
                         "null" => new LiteralExpr(null),
-                        "new" or "typeof" or "sizeof" or "default" or "await" or "is" or "as" => throw new ExpressionException($"'{token.Text}' isn't supported in expressions here."),
+                        "new" => ParseNew(),
+                        "typeof" or "sizeof" or "default" or "await" or "is" or "as" or "nameof" or "checked" or "unchecked" or "stackalloc" or "throw" or "switch" or "with" or "ref" or "out" or "in"
+                            => throw new UnsupportedExpressionException($"'{token.Text}' isn't supported in expressions here."),
                         _ => new NameExpr(token.Text),
                     };
                 case Kind.Operator when token.Text == "(":
@@ -467,8 +491,32 @@ internal static class ExpressionParser
                 case Kind.End:
                     throw new ExpressionException("The expression ends too early.");
                 default:
-                    throw new ExpressionException($"Unexpected '{token.Text}' in the expression.");
+                    throw new UnsupportedExpressionException($"Unexpected '{token.Text}' in the expression.");
             }
+        }
+
+        /// <summary><c>new Ns.Type(arguments)</c>; arrays, initializers, type arguments and anonymous types are left to the compiler.</summary>
+        private NewExpr ParseNew()
+        {
+            if (Current.Kind != Kind.Identifier)
+            {
+                throw new UnsupportedExpressionException("A type name was expected after 'new'.");
+            }
+
+            var name = new StringBuilder(Current.Text);
+            _position++;
+            while (Is(".") && tokens[_position + 1].Kind == Kind.Identifier)
+            {
+                name.Append('.').Append(tokens[_position + 1].Text);
+                _position += 2;
+            }
+
+            if (!Accept("("))
+            {
+                throw new UnsupportedExpressionException("'new' is read here for a type without type arguments and its constructor's arguments: new Type(…).");
+            }
+
+            return new NewExpr(name.ToString(), Arguments(")"));
         }
 
         private Expr ParsePostfix(Expr target)
@@ -481,7 +529,7 @@ internal static class ExpressionParser
                     _position++;
                     if (Current.Kind != Kind.Identifier)
                     {
-                        throw new ExpressionException("A member name was expected after '.'.");
+                        throw new UnsupportedExpressionException("A member name was expected after '.'.");
                     }
 
                     target = new MemberExpr(target, Current.Text, conditional);
@@ -491,7 +539,7 @@ internal static class ExpressionParser
                 {
                     if (target is not (NameExpr or MemberExpr))
                     {
-                        throw new ExpressionException("Only methods can be called.");
+                        throw new UnsupportedExpressionException("Only methods can be called.");
                     }
 
                     target = new CallExpr(target, Arguments(")"));

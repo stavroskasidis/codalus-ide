@@ -520,6 +520,8 @@ internal static partial class BuiltIns
             Item(EditorBreakpointMenu, "debug.insertTemporaryBreakpoint", "1-breakpoint"),
             Item(EditorBreakpointMenu, "debug.toggleBreakpointEnabled", "1-breakpoint"),
             Item(Context, "debug.runToCursor", "4-debug", when: "debugActive"),
+            Item(Context, "debug.setNextStatement", "4-debug", when: "debugCanSetNextStatement"),
+            Item(Context, "debug.stepIntoSpecific", "4-debug", when: "debugCanStepIntoSpecific"),
             Item(Context, "interactive.sendSelection", "5-send", when: "editorLanguageId != fsharp"),
             Item(Context, "fsi.sendSelection", "5-send", when: "editorLanguageId == fsharp"),
             Item(Context, "fsi.sendLine", "5-send", when: "editorLanguageId == fsharp"),

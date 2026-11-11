@@ -26,6 +26,14 @@ public static class VariableActions
     public static Func<VariableNode, Task>? AskAi { get; set; }
 
     public static Func<bool>? CanAskAi { get; set; }
+
+    /// <summary>Make Object ID (M58), offered while the debugger gives objects IDs (<see cref="CanMakeObjectId"/>): the expression's object.</summary>
+    public static Func<string, Task>? MakeObjectId { get; set; }
+
+    public static Func<bool>? CanMakeObjectId { get; set; }
+
+    /// <summary>Delete Object ID: the ID's name (<c>$1</c>).</summary>
+    public static Func<string, Task>? DeleteObjectId { get; set; }
 }
 
 /// <summary>The menu and visualizers of a value in the data tip and the variable windows.</summary>
@@ -83,6 +91,14 @@ internal static class VariableTreeSupport
             {
                 items.Add(Item("Pin to Source", "pin", pin));
             }
+
+            if (!node.IsError && !node.IsPlaceholder && VariableActions.CanMakeObjectId?.Invoke() == true)
+            {
+                // An object that has an ID says so after its value: {$1}.
+                items.Add(ObjectIdOf(node.Value) is { } id
+                    ? Item("Delete Object ID", "cancel", () => _ = VariableActions.DeleteObjectId?.Invoke(id))
+                    : Item("Make Object ID", "tag", () => _ = VariableActions.MakeObjectId?.Invoke(expression)));
+            }
         }
 
         var visualizers = VisualizerChoices(node);
@@ -99,6 +115,18 @@ internal static class VariableTreeSupport
         }
 
         return items;
+    }
+
+    /// <summary>The ID the debugger wrote after an object's value (<c>{Type} {$1}</c>), or null.</summary>
+    internal static string? ObjectIdOf(string? value)
+    {
+        if (value is null || !value.EndsWith('}') || value.LastIndexOf(" {$", StringComparison.Ordinal) is not (var open and >= 0))
+        {
+            return null;
+        }
+
+        var id = value[(open + 2)..^1];
+        return id.Length > 1 && id.AsSpan(1).IndexOfAnyExceptInRange('0', '9') < 0 ? id : null;
     }
 
     private static MenuItem Item(string header, string? icon, Action action, string? keys = null) => Controls.MenuEntry.Create(header, icon, keys: keys, click: action);

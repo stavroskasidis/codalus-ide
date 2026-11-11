@@ -677,6 +677,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,
+            RegistersViewModel.ToolWindowId => RegistersWindow,
+            DisassemblyViewModel.ToolWindowId => DisassemblyWindow,
+            MemoryViewModel.ToolWindowId => MemoryWindow,
             LiveTreeViewModel.ToolWindowId => LiveTree,
             LivePropertiesViewModel.ToolWindowId => LiveProperties,
             ParallelStacksViewModel.ToolWindowId => ParallelStacksWindow,
@@ -1331,6 +1334,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         Views.VariableActions.CopyText = Unless(Views.VariableActions.CopyText);
         Views.VariableActions.AskAi = Unless(Views.VariableActions.AskAi);
         Views.VariableActions.CanAskAi = Unless(Views.VariableActions.CanAskAi);
+        Views.VariableActions.MakeObjectId = Unless(Views.VariableActions.MakeObjectId);
+        Views.VariableActions.CanMakeObjectId = Unless(Views.VariableActions.CanMakeObjectId);
+        Views.VariableActions.DeleteObjectId = Unless(Views.VariableActions.DeleteObjectId);
     }
 
     /// <summary>The callback, or null when it calls this shell.</summary>

@@ -138,7 +138,10 @@
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
-                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included), exit codes on macOS, casts and C#'s operators in expressions</li>
+                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
+                    <li>Under it: Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs; hit counts and logpoints without a stop per hit; lambdas, LINQ and the rest of C# in Watch and conditions, and Visual Basic in Visual Basic code; [DebuggerTypeProxy] and Results View</li>
+                    <li>Disassembly, Registers and Memory windows for managed code on x64 and arm64; symbol paths and symbol servers (off until you turn one on); Windows PDBs</li>
+                    <li>Several startup projects in one debug session, where under the Codalus debugger a stop in one program pauses the others</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="git-and-hosting">
@@ -260,7 +263,7 @@
                     <li>Old-style (non-SDK-style) projects too: packages.config restored, a Dependencies node of their references, hint paths and packages, built with the .NET SDK's MSBuild</li>
                     <li>C# 7.3 in the editor, as the compiler uses it, and binding redirects generated for executables</li>
                     <li>Convert to SDK-Style: an old-style project rewritten as an SDK-style one, packages.config as package references and AssemblyInfo.cs as properties, after a preview of every change</li>
-                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, and Attach to Process; elsewhere the IDE says it's Windows only</li>
+                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, Attach to Process, and portable and Windows PDBs; elsewhere the IDE says it's Windows only</li>
                     <li>xUnit, NUnit and MSTest tests on .NET Framework in the Test Explorer on Windows, old-style test projects included: discover, run and debug</li>
                     <li>Projects that need the classic IDE's own targets (ASP.NET web applications) open with IntelliSense and say why they don't build</li>
                     <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
