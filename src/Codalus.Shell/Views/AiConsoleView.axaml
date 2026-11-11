@@ -7,7 +7,7 @@
              x:Class="Codalus.Shell.Views.AiConsoleView"
              x:DataType="vm:AiConsoleViewModel">
   <!--
-    AI Console (ADR 0094): a connected agent's own CLI in the IDE's terminal. The top row says whether the IDE's tools
+    AI Console (ADR 0095): a connected agent's own CLI in the IDE's terminal. The top row says whether the IDE's tools
     are connected, then the agent a new console starts, New, Restart, Close and AI Chat. Under it, the label every
     console shows, on a row of its own that wraps: cut to one line beside the toolbar, a console as wide as the bottom
     group usually is showed only its first words, not that the CLI changes files itself. Then why nothing runs, with

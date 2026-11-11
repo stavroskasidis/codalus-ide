@@ -11,7 +11,7 @@ namespace Codalus.Shell.ViewModels;
 /// <summary>An agent AI Console can start: its entry's name in <c>ai.agents</c> and the name shown.</summary>
 public sealed record AiConsoleAgentChoice(string Name, string DisplayName);
 
-/// <summary>What AI Console needs from the shell (ADR 0094): the gate, the agents, and its consoles' processes.</summary>
+/// <summary>What AI Console needs from the shell (ADR 0095): the gate, the agents, and its consoles' processes.</summary>
 public interface IAiConsoleHost
 {
     /// <summary>Why no agent's CLI may run now (the external agents' gate, ADR 0079), or null.</summary>
@@ -128,10 +128,10 @@ public sealed class AiConsoleTabViewModel(string agent, string displayName, Agen
 }
 
 /// <summary>
-/// The AI Console tool window (ADR 0094): a connected agent's own CLI in the IDE's terminal, a tab per console, in the
+/// The AI Console tool window (ADR 0095): a connected agent's own CLI in the IDE's terminal, a tab per console, in the
 /// bottom group beside the Output and the Terminal. It runs under the external agents' gate, says so in its label, and
 /// gives each CLI the IDE's tools on a pipe of its own where the CLI can take them.
-/// TODO(issue): find in a console, and AI Console in remote windows (ADR 0094).
+/// TODO(issue): find in a console, and AI Console in remote windows (ADR 0095).
 /// </summary>
 public sealed class AiConsoleViewModel : ObservableObject
 {
@@ -179,7 +179,7 @@ public sealed class AiConsoleViewModel : ObservableObject
 
     public ICommand ShowChatCommand { get; }
 
-    /// <summary>The label every console shows (ADR 0094, amending ADR 0079's).</summary>
+    /// <summary>The label every console shows (ADR 0095, amending ADR 0079's).</summary>
     public static string Label => Localizer.Get("msg.aiConsole.label", "External agent's own CLI: it uses its own provider and data policy, and changes files and runs commands itself, asking you with its own prompts. Codalus doesn't preview its edits.");
 
     public AiConsoleTabViewModel? Selected

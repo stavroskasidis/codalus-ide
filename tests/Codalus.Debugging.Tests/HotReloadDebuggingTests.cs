@@ -9,8 +9,10 @@ namespace Codalus.Debugging.Tests;
 /// M55 (ADR 0086's phase 2), on every OS: Hot Reload while debugging under the Codalus debugger. The language host's
 /// Hot Reload session (Roslyn's Edit and Continue service) turns an edit of the running program's source into deltas;
 /// the adapter applies them (<c>codalus/applyChanges</c>) and binds breakpoints in the new version. Later calls run the
-/// new code; a frame already in a changed method finishes in its old version (Hot Reload's semantics, not a remap). A
-/// program that hasn't stopped yet takes edits too. A program attached to takes them when it runs with
+/// new code. An edit made while stopped comes with the frames' active statements (M58, Edit and Continue): the frame
+/// stopped in a changed method goes on in its new version, and so does a calling frame once its call returned; an edit
+/// of the statement a calling frame waits in is a rude edit. Without them (as while the program runs) a frame already
+/// in a changed method finishes in its old version. A program that hasn't stopped yet takes edits too. A program attached to takes them when it runs with
 /// <c>DOTNET_MODIFIABLE_ASSEMBLIES=debug</c>, and is refused with the runtime's reason without it. A rude edit comes
 /// back as Roslyn's diagnostic with the project to restart. Visual Basic as C#.
 /// </summary>
@@ -183,6 +185,99 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
         }
     }
 
+    [Fact]
+    public async Task A_frame_stopped_in_the_changed_method_goes_on_in_its_new_version()
+    {
+        // M58, Edit and Continue: the edit is made with the stopped threads' active statements, so the frame at the
+        // breakpoint moves into the method's new version when the program goes on, with its locals.
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        var events = new EventLog(adapter);
+        var session = "remap-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await LaunchAsync(adapter, CSharp, [new SourceBreakpoint(CSharp.Line("message"))]);
+            var stopped = await events.StoppedAsync();
+            var thread = stopped.ThreadId!.Value;
+            await StartAsync(adapter, session, CSharp);
+
+            var before = CSharp.Line("message");
+            await CSharp.EditAsync(Body, "        // A line the edit adds above the statement the frame is at.\n        var text = \"hello \" + i; // [message]\n        var extra = \" remapped\"; // [extra]\n        return text + extra;");
+            await ApplyStoppedAsync(adapter, session);
+
+            // Still stopped, in the old version: shown where its statement is in the source as edited.
+            Assert.Equal(before + 1, CSharp.Line("message"));
+            Assert.Equal(CSharp.Line("message"), (await adapter.StackTraceAsync(thread, 1, Ct)).StackFrames[0].Line);
+
+            await adapter.SetBreakpointsAsync(CSharp.Path, [], Ct);
+            await adapter.NextAsync(thread, Ct);
+            await events.StoppedAsync();
+            var top = (await adapter.StackTraceAsync(thread, 1, Ct)).StackFrames[0];
+            Assert.Equal(CSharp.Line("extra"), top.Line);
+            Assert.Equal("\"hello 0\"", (await adapter.EvaluateAsync("text", top.Id, "watch", Ct)).Result);
+            await adapter.ContinueAsync(thread, Ct);
+            await WaitUntilAsync(() => events.Output.Contains("hello 0 remapped", StringComparison.Ordinal), "the remapped frame's output", events);
+        }
+        finally
+        {
+            await EndAsync(adapter, session);
+        }
+    }
+
+    [Fact]
+    public async Task A_calling_frame_goes_on_in_its_new_version_after_its_call_returns()
+    {
+        // The program's Main is waiting for Message when it is edited: its call's statement finishes in the old
+        // version, and the statement after it is the new version's.
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        var events = new EventLog(adapter);
+        var session = "caller-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await LaunchAsync(adapter, CSharp, [new SourceBreakpoint(CSharp.Line("message"))]);
+            var stopped = await events.StoppedAsync();
+            var thread = stopped.ThreadId!.Value;
+            await StartAsync(adapter, session, CSharp);
+
+            await CSharp.EditAsync("    Console.WriteLine(Greeter.StatusAsync(i).Result);", "    Console.WriteLine(\"main edited \" + i); // [after]");
+            await ApplyStoppedAsync(adapter, session);
+
+            await adapter.SetBreakpointsAsync(CSharp.Path, [], Ct);
+            await adapter.ContinueAsync(thread, Ct);
+            await WaitUntilAsync(() => events.Output.Contains("main edited 0", StringComparison.Ordinal), "the calling frame's new output", events);
+            Assert.DoesNotContain("status 0", events.Output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await EndAsync(adapter, session);
+        }
+    }
+
+    [Fact]
+    public async Task An_edit_to_the_statement_a_calling_frame_waits_in_is_a_rude_edit()
+    {
+        // What a frame can't follow needs a restart: Roslyn refuses the edit instead of letting the old call finish
+        // into changed code.
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        var events = new EventLog(adapter);
+        var session = "active-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            await LaunchAsync(adapter, CSharp, [new SourceBreakpoint(CSharp.Line("message"))]);
+            await events.StoppedAsync();
+            await StartAsync(adapter, session, CSharp);
+
+            await CSharp.EditAsync("    Console.WriteLine(Greeter.Message(i)); // [call]", "    Console.WriteLine(Greeter.Message(i + 1)); // [call]");
+            var update = await fixture.Client.HotReloadUpdateAsync(session, Ct, await ActiveStatementsAsync(adapter));
+            Assert.Empty(update.Updates);
+            Assert.Contains(update.RudeEdits, d => d.Id.StartsWith("ENC", StringComparison.Ordinal));
+            await fixture.Client.HotReloadDiscardAsync(session, Ct);
+        }
+        finally
+        {
+            await EndAsync(adapter, session);
+        }
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -336,9 +431,31 @@ public sealed class HotReloadDebuggingTests(HotReloadFixture fixture)
         await fixture.Client.HotReloadCommitAsync(session, Ct);
     }
 
+    /// <summary>As <see cref="ApplyAsync"/> for a stopped program, the way the IDE does it (M58): with where its frames are, which then move.</summary>
+    private async Task ApplyStoppedAsync(DebugAdapter adapter, string session)
+    {
+        var statements = await ActiveStatementsAsync(adapter);
+        Assert.Contains(statements, a => a.Leaf);
+        var update = await fixture.Client.HotReloadUpdateAsync(session, Ct, statements);
+        Assert.True(update.Status == HotReloadUpdateResult.Ready && update.Updates.Length == 1,
+            $"{update.Status}, {update.Updates.Length} update(s); rude edits: {string.Join("; ", update.RudeEdits.Select(d => d.Id + " " + d.Message))}; errors: {string.Join("; ", update.Errors.Select(d => d.Id + " " + d.Message))}");
+        var result = Assert.Single((await ApplyChangesAsync(adapter, update)).Results);
+        Assert.True(result.Status == ModuleDeltaResult.Applied, $"{result.Status}: {result.Message}");
+        await fixture.Client.HotReloadCommitAsync(session, Ct);
+    }
+
+    private static async Task<HotReloadActiveStatement[]> ActiveStatementsAsync(DebugAdapter adapter)
+    {
+        var response = await adapter.Connection.RequestAsync(Host.NetFx.NetFxDebugSession.ActiveStatementsCommand, JsonElement.Parse("{}"), s_json.JsonElement, s_json.ActiveStatementsResponse, Ct);
+        return [.. response.Statements.Select(a => new HotReloadActiveStatement(a.ModuleId, a.MethodToken, a.MethodVersion, a.IlOffset, a.Document, a.StartLine, a.StartColumn, a.EndLine, a.EndColumn, a.Leaf, a.UpToDate) { PartiallyExecuted = a.PartiallyExecuted })];
+    }
+
     private static Task<ApplyChangesResponse> ApplyChangesAsync(DebugAdapter adapter, HotReloadUpdateResult update) =>
         adapter.Connection.RequestAsync(Host.NetFx.NetFxDebugSession.ApplyChangesCommand,
-            new ApplyChangesArguments([.. update.Updates.Select(u => new ModuleDelta(u.ModuleId, u.MetadataDelta, u.IlDelta, u.PdbDelta))]),
+            new ApplyChangesArguments([.. update.Updates.Select(u => new ModuleDelta(u.ModuleId, u.MetadataDelta, u.IlDelta, u.PdbDelta)
+            {
+                ActiveStatements = [.. u.ActiveStatements.Select(a => new ActiveStatementUpdate(a.MethodToken, a.MethodVersion, a.IlOffset, a.StartLine, a.StartColumn))],
+            })]),
             s_json.ApplyChangesArguments, s_json.ApplyChangesResponse, Ct);
 
     private async Task EndAsync(DebugAdapter adapter, string session)

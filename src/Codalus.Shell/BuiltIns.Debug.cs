@@ -27,6 +27,8 @@ internal static partial class BuiltIns
           { "key": "shift+alt+p", "command": "debug.reattach", "when": "!debugActive" },
           { "key": "shift+f9", "command": "debug.quickWatch", "when": "debugStopped" },
           { "key": "primary+f10", "command": "debug.runToCursor", "when": "editorTextFocus && !debugRunning" },
+          { "key": "primary+shift+f10", "command": "debug.setNextStatement", "when": "editorTextFocus && debugCanSetNextStatement" },
+          { "key": "shift+alt+f11", "command": "debug.stepIntoSpecific", "when": "debugCanStepIntoSpecific" },
           { "key": "ctrl+alt+e", "command": "debug.exceptionSettings" },
           { "key": "shift+alt+f9 t", "command": "debug.insertTemporaryBreakpoint", "when": "editorTextFocus" },
           { "key": "ctrl+alt+b", "command": "workbench.view.debug.breakpoints", "when": "keyboardScheme != vscode" },
@@ -48,6 +50,9 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(QuickWatchViewModel.ToolWindowId, "QuickWatch", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "search" };
         yield return new ToolWindowDescriptor(ThreadsViewModel.ToolWindowId, "Threads", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "timer" };
         yield return new ToolWindowDescriptor(ModulesViewModel.ToolWindowId, "Modules", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "package" };
+        yield return new ToolWindowDescriptor(DisassemblyViewModel.ToolWindowId, "Disassembly", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "code" };
+        yield return new ToolWindowDescriptor(RegistersViewModel.ToolWindowId, "Registers", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "braces" };
+        yield return new ToolWindowDescriptor(MemoryViewModel.ToolWindowId, "Memory", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "table" };
         yield return new ToolWindowDescriptor(LiveTreeViewModel.ToolWindowId, "Live Visual Tree", ToolWindowLocation.Left, ToolWindowKind.BuiltIn, shell) { Icon = "type-hierarchy" };
         yield return new ToolWindowDescriptor(LivePropertiesViewModel.ToolWindowId, "Live Property Explorer", ToolWindowLocation.Right, ToolWindowKind.BuiltIn, shell) { Icon = "properties" };
         yield return new ToolWindowDescriptor(ParallelStacksViewModel.ToolWindowId, "Parallel Stacks", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "layers" };
@@ -77,6 +82,13 @@ internal static partial class BuiltIns
             Title = "Step over properties and operators",
             Category = "Debugging",
             Description = "Step Into steps over property getters and setters and operators (applies from the next session).",
+            Order = 1,
+        },
+        SettingDescriptor.Create(ShellHost.BreakAllProcessesSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Break all processes when one process breaks",
+            Category = "Debugging",
+            Description = "With several startup projects under the Codalus debugger, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
             Order = 1,
         },
         SettingDescriptor.Create(Workbench.Debugging.Browsers.SettingKey, "\"auto\"", SettingType.String, ContributionSource.Shell) with
@@ -146,6 +158,62 @@ internal static partial class BuiltIns
             Description = "Source folders of programs debugged on another machine, as \"/folder/there=C:\\folder\\here\". Without one, a file is found in the solution by its folder and name.",
             Order = 7,
         },
+        SettingDescriptor.Create(ShellHost.SymbolsMicrosoftServerSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: Microsoft Symbol Server",
+            Category = "Debugging",
+            Description = "Look for the PDBs of .NET's own modules on Microsoft's symbol server (msdl.microsoft.com), under the Codalus debugger. The names and build IDs of the modules looked up are sent to it. Off by default.",
+            Order = 20,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsNuGetServerSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: NuGet.org Symbol Server",
+            Category = "Debugging",
+            Description = "Look for the PDBs of NuGet packages on NuGet.org's symbol server (symbols.nuget.org), under the Codalus debugger. The names and build IDs of the modules looked up are sent to it. Off by default.",
+            Order = 21,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsServersSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: other symbol servers",
+            Category = "Debugging",
+            Description = "The URLs of other symbol servers (https://), asked in order after the two above.",
+            Order = 22,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsPathsSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: symbol paths",
+            Category = "Debugging",
+            Description = "Folders searched for a module's PDB when there's none next to it: the PDB itself, or a symbol store's layout.",
+            Order = 23,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsCacheSetting, "\"\"", SettingType.String, ContributionSource.Shell) with
+        {
+            Title = "Symbols: cache folder",
+            Category = "Debugging",
+            Description = "Where PDBs downloaded from symbol servers are kept. Empty: Codalus IDE's cache folder.",
+            Order = 24,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsOnlySpecifiedSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Symbols: load only specified modules",
+            Category = "Debugging",
+            Description = "Look up only the modules listed in \"Symbols: modules to load\". Off, every module is looked up but those in \"Symbols: modules to leave out\". With Just My Code on, modules are looked up by themselves only when this is on; Load Symbols in the Modules window asks for any module.",
+            Order = 25,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsIncludeSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: modules to load",
+            Category = "Debugging",
+            Description = "Module file names to look up when only specified modules are loaded; * and ? match any characters (Newtonsoft.*.dll).",
+            Order = 26,
+        },
+        SettingDescriptor.Create(ShellHost.SymbolsExcludeSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Symbols: modules to leave out",
+            Category = "Debugging",
+            Description = "Module file names that are never looked up by themselves; * and ? match any characters.",
+            Order = 27,
+        },
     ];
 
     public static void RegisterDebugCommands(ShellHost shell)
@@ -191,6 +259,8 @@ internal static partial class BuiltIns
         Add("debug.quickWatch", "QuickWatch…", shell.ShowQuickWatchAsync, "debugStopped");
         Add("debug.runToCursor", "Run to Cursor", _ => shell.RunToCursorAsync(), "activeDocumentKind == textFile && !debugRunning");
         Add("debug.forceRunToCursor", "Force Run to Cursor", _ => shell.RunToCursorAsync(force: true), "activeDocumentKind == textFile && debugStopped");
+        Add("debug.setNextStatement", "Set Next Statement", _ => shell.SetNextStatementAsync(), "activeDocumentKind == textFile && debugCanSetNextStatement");
+        Add("debug.stepIntoSpecific", "Step Into Specific…", _ => shell.StepIntoSpecificAsync(), "debugCanStepIntoSpecific");
         Add("debug.reattach", "Reattach to Process", _ => shell.ReattachAsync(), "!debugActive");
         Add("debug.newFunctionBreakpoint", "New Function Breakpoint…", _ => shell.NewFunctionBreakpointAsync());
         Add("debug.insertTemporaryBreakpoint", "Insert Temporary Breakpoint", Sync(shell.InsertTemporaryBreakpoint), "activeDocumentKind == textFile");

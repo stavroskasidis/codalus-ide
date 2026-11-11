@@ -7,7 +7,7 @@ using Codalus.Workbench.ToolWindows;
 namespace Codalus.Shell;
 
 /// <summary>
-/// AI assistance (M28a, ADR 0062): the AI Chat window, AI Console (an agent's own CLI in a terminal, ADR 0094), their
+/// AI assistance (M28a, ADR 0062): the AI Chat window, AI Console (an agent's own CLI in a terminal, ADR 0095), their
 /// commands, menus and key binding. The key opens AI Console when an agent with a CLI is connected, else AI Chat.
 /// </summary>
 internal static partial class BuiltIns
@@ -47,7 +47,7 @@ internal static partial class BuiltIns
 
         Add("ai.chat.show", "AI Chat", () => Sync(shell.ShowAiChat));
 
-        // AI Console (ADR 0094). Its Show is the AI key's command: AI Chat instead while no agent with a CLI is connected.
+        // AI Console (ADR 0095). Its Show is the AI key's command: AI Chat instead while no agent with a CLI is connected.
         Add("ai.console.show", "AI Console", () => Sync(shell.ShowAiConsoleOrChat));
         Add("ai.console.new", "New AI Console", () => shell.NewAiConsoleAsync(null), "aiConsoleAvailable");
         Add("ai.console.restart", "Restart the AI Console", () => shell.AiConsole.Selected is { } tab ? shell.RestartAiConsoleAsync(tab) : Task.CompletedTask, "aiConsoleAvailable");

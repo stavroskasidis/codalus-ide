@@ -12,7 +12,7 @@ using Codalus.Workbench.Terminal;
 namespace Codalus.Shell;
 
 /// <summary>
-/// AI Console (ADR 0094): a connected agent's own CLI in the IDE's terminal, in a tool window of the bottom group. It
+/// AI Console (ADR 0095): a connected agent's own CLI in the IDE's terminal, in a tool window of the bottom group. It
 /// starts only where an external agent may (ADR 0079's gate: AI on, the agent in the user's settings, a trusted folder,
 /// not a remote window) and ends when that changes. The CLI works by itself, with its own approvals; what it gets from
 /// the IDE is <c>codalus mcp</c> on a pipe of its own, with the checks every agent's tools have. Its consoles are kept per
@@ -70,7 +70,7 @@ public sealed partial class ShellHost : IAiConsoleHost
     }
 
     /// <summary>
-    /// The AI key and the entry points (ADR 0094): AI Console when an agent with a CLI is connected, else AI Chat, which
+    /// The AI key and the entry points (ADR 0095): AI Console when an agent with a CLI is connected, else AI Chat, which
     /// the built-in assistant and agents without a CLI use.
     /// </summary>
     public void ShowAiConsoleOrChat()

@@ -157,6 +157,65 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
     }
 
     [Fact]
+    public async Task A_program_built_with_a_Windows_PDB_stops_at_its_breakpoint_with_its_locals()
+    {
+        // M58 (ADR 0094): DebugType full, as old-style projects built outside Codalus and older libraries have it. The
+        // Windows PDB is read by the adapter's managed reader; the compiler writes one only on Windows.
+        RequireWindows();
+
+        // A copy of the project, built on its own: in the fixture's folder the compiler isn't run again for a property
+        // that changed (DebugType isn't among its inputs), and the first build's portable PDB was copied to the output
+        // (Windows CI, PR #323's run 43035898820: "the build wrote a Windows PDB" failed).
+        var folder = Path.Combine(Path.GetDirectoryName(fixture.Folder)!, "NetFxDebuggeeFull");
+        Directory.CreateDirectory(folder);
+        foreach (var file in Directory.EnumerateFiles(fixture.Folder))
+        {
+            File.Copy(file, Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
+        }
+
+        var program = Path.Combine(folder, Path.GetFileName(fixture.Program));
+        var start = new ProcessStartInfo("dotnet", ["build", folder, "-nologo", "-v", "quiet", "-p:DebugType=full"]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        using (var build = Process.Start(start)!)
+        {
+            var printed = build.StandardOutput.ReadToEndAsync(Ct);
+            var failed = build.StandardError.ReadToEndAsync(Ct);
+            await build.WaitForExitAsync(Ct);
+            Assert.True(build.ExitCode == 0, await printed + await failed);
+        }
+
+        var exe = Path.Combine(folder, "bin", "Debug", "net48", "NetFxDebuggee.exe");
+        var pdb = Path.ChangeExtension(exe, ".pdb");
+        Assert.True(File.Exists(pdb), $"{pdb} was built; the folder has: {string.Join(", ", Directory.Exists(Path.GetDirectoryName(exe)) ? Directory.EnumerateFiles(Path.GetDirectoryName(exe)!).Select(Path.GetFileName) : [])}");
+        Assert.True(Host.NetFx.WindowsPdbSymbols.IsWindowsPdb(pdb), $"the build wrote a Windows PDB; {pdb} starts with {Convert.ToHexString(File.ReadAllBytes(pdb).AsSpan(0, 8))}");
+
+        var events = Channel.CreateUnbounded<DapEvent>();
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+        adapter.EventReceived += e => events.Writer.WriteAsync(e).AsTask();
+        adapter.Log += (_, line) => log.Enqueue(line);
+        await adapter.LaunchAsync(new NetFxDebugArguments(exe, [], folder), s_json.NetFxDebugArguments, Ct);
+        await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        await adapter.SetBreakpointsAsync(program, [new SourceBreakpoint(Line("netfx-sum"))], Ct);
+        await adapter.ConfigurationDoneAsync(Ct);
+
+        var stopped = await NextAsync(events, DapEvents.Stopped, log);
+        Assert.Equal("breakpoint", stopped.GetProperty("reason").GetString());
+        var thread = stopped.GetProperty("threadId").GetInt32();
+        var top = (await adapter.StackTraceAsync(thread, 20, Ct)).StackFrames[0];
+        Assert.Equal("NetFxDebuggee.Cart.Total", top.Name);
+        Assert.Equal(Line("netfx-sum"), top.Line);
+        var locals = await adapter.VariablesAsync(Assert.Single(await adapter.ScopesAsync(top.Id, Ct)).VariablesReference, Ct);
+        Assert.Equal("0", locals.Single(v => v.Name == "sum").Value);
+        Assert.Contains(locals, v => v.Name == "item");
+
+        // A step lands on the next line: the PDB's sequence points drive it.
+        await adapter.NextAsync(thread, Ct);
+        Assert.Equal("step", (await NextAsync(events, DapEvents.Stopped, log)).GetProperty("reason").GetString());
+        Assert.Equal("NetFxDebuggee.Cart.Total", (await adapter.StackTraceAsync(thread, 1, Ct)).StackFrames[0].Name);
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
     public async Task The_debug_service_debugs_a_net48_program_from_its_launch_plan()
     {
         // F5's path: a launch plan whose program is a managed .exe goes to the desktop-CLR adapter.

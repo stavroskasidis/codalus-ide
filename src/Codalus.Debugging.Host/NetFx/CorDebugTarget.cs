@@ -466,6 +466,12 @@ internal sealed class CorDebugTarget : IClrProcess
                 _stepper = null;
                 Queue(new ClrStepCompleted(Thread(step.Thread)), e, false);
                 return;
+            case FunctionRemapOpportunityCorDebugManagedCallbackEventArgs remap:
+                Queue(new ClrRemapOpportunity(Thread(remap.Thread), Module(remap.OldFunction.Module), (int)remap.OldFunction.Token.Value, remap.OldILOffset), e, false);
+                return;
+            case FunctionRemapCompleteCorDebugManagedCallbackEventArgs remapped:
+                Queue(new ClrRemapCompleted(Thread(remapped.Thread)), e, false);
+                return;
             case BreakCorDebugManagedCallbackEventArgs userBreak:
                 Queue(new ClrUserBreak(Thread(userBreak.Thread)), e, false);
                 return;
@@ -659,6 +665,32 @@ internal sealed class CorDebugTarget : IClrProcess
         }
     }
 
+    public void Remap(IClrThread thread, int ilOffset) =>
+        Translate(() =>
+        {
+            if (((CorThread)thread).Raw.ActiveFrame?.Raw is not ICorDebugILFrame frame)
+            {
+                throw new ClrException("The thread's innermost frame isn't managed code.");
+            }
+
+            new CorDebugILFrame(frame).RemapFunction(ilOffset);
+            Generation++;
+        });
+
+    public byte[]? Il(IClrModule module, int methodToken)
+    {
+        try
+        {
+            var code = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).ILCode;
+            var size = code.Size;
+            return size <= 0 ? [] : code.GetCode(0, size, size);
+        }
+        catch (COMException)
+        {
+            return null;
+        }
+    }
+
     public int CodeVersion(IClrModule module, int methodToken) =>
         Translate(() => ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).VersionNumber);
 
@@ -712,9 +744,9 @@ internal sealed class CorDebugTarget : IClrProcess
             }
             else if (step.Ranges.Count > 0)
             {
-                var size = frame?.Function.ILCode.Size ?? int.MaxValue;
+                var size = step.Native ? int.MaxValue : frame?.Function.ILCode.Size ?? int.MaxValue;
                 var ranges = step.Ranges.Select(r => new COR_DEBUG_STEP_RANGE { startOffset = r.Start, endOffset = Math.Min(r.End, size) }).ToArray();
-                stepper.SetRangeIL(true);
+                stepper.SetRangeIL(!step.Native);
                 stepper.StepRange(step.Kind == ClrStepKind.Into, ranges, ranges.Length);
             }
             else
@@ -756,6 +788,145 @@ internal sealed class CorDebugTarget : IClrProcess
             return CorValue.Wrap(this, raw);
         });
 
+    // ------------------------------------------------------------------ frozen threads, return values, kept objects (M58)
+
+    private readonly HashSet<int> _frozen = [];
+    private readonly List<CorDebugHandleValue> _kept = [];
+
+    internal bool IsFrozen(int threadId)
+    {
+        lock (_gate)
+        {
+            return _frozen.Contains(threadId);
+        }
+    }
+
+    internal void Freeze(CorThread thread, bool frozen) =>
+        Translate(() =>
+        {
+            thread.Raw.DebugState = frozen ? CorDebugThreadState.THREAD_SUSPEND : CorDebugThreadState.THREAD_RUN;
+            lock (_gate)
+            {
+                _ = frozen ? _frozen.Add(thread.Id) : _frozen.Remove(thread.Id);
+            }
+        });
+
+    /// <summary>A func-eval lets every thread run again when it's done: the frozen ones are suspended again.</summary>
+    private void FreezeAgain()
+    {
+        List<CorThread> frozen;
+        lock (_gate)
+        {
+            frozen = [.. _threads.Values.Where(t => _frozen.Contains(t.Id))];
+        }
+
+        foreach (var thread in frozen)
+        {
+            try
+            {
+                thread.Raw.DebugState = CorDebugThreadState.THREAD_SUSPEND;
+            }
+            catch (COMException)
+            {
+            }
+        }
+    }
+
+    /// <summary>The frames ICorDebug handed out are stale (Set Next Statement): they're read again.</summary>
+    internal void FramesChanged() => Generation++;
+
+    internal static string SetIpProblem(HRESULT result) => result switch
+    {
+        HRESULT.CORDBG_E_CANT_SET_IP_INTO_FINALLY => "The next statement can't be set into a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_FINALLY => "The next statement can't be set out of a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_INTO_CATCH => "The next statement can't be set into a catch block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_FINALLY_ON_WIN64 => "The next statement can't be set out of a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_CATCH_ON_WIN64 => "The next statement can't be set out of a catch block.",
+        HRESULT.CORDBG_E_SET_IP_NOT_ALLOWED_ON_NONLEAF_FRAME => "The next statement can be set only in the innermost frame.",
+        HRESULT.CORDBG_E_SET_IP_IMPOSSIBLE => "The next statement can't be set there.",
+        HRESULT.CORDBG_E_SET_IP_NOT_ALLOWED_ON_EXCEPTION => "The next statement can't be set while an exception is being thrown.",
+        HRESULT.CORDBG_E_CANT_SETIP_INTO_OR_OUT_OF_FILTER => "The next statement can't be set into or out of an exception filter.",
+        _ => "The next statement can't be set there (" + (Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture)) + ").",
+    };
+
+    public IClrValue? ReturnValue(IClrThread thread, int callIlOffset)
+    {
+        try
+        {
+            var corThread = ((CorThread)thread).Raw;
+            if (corThread.ActiveFrame?.Raw is not ICorDebugILFrame il || new CorDebugILFrame(il).TryGetReturnValueForILOffset(callIlOffset, out var value) != HRESULT.S_OK || value is null)
+            {
+                return null;
+            }
+
+            if (StrongHandle(value) is { } handle)
+            {
+                lock (_gate)
+                {
+                    _kept.Add(handle);
+                }
+
+                return CorValue.OfHandle(this, handle);
+            }
+
+            return CorValue.Result(this, corThread, value);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A strong handle to the object a reference points at; null for null and for a value that isn't on the heap.</summary>
+    private static CorDebugHandleValue? StrongHandle(CorDebugValue value) =>
+        value.Raw is ICorDebugReferenceValue referenceRaw && new CorDebugReferenceValue(referenceRaw) is { IsNull: false } reference
+            && reference.Dereference().Raw is ICorDebugHeapValue2 heap
+            && heap.CreateHandle(CorDebugHandleType.HANDLE_STRONG, out var raw) == HRESULT.S_OK && raw is not null
+            ? new CorDebugHandleValue(raw)
+            : null;
+
+    public IClrValue? Keep(IClrValue value, out Action release)
+    {
+        release = static () => { };
+        if (ClrLiveValue.Unwrap(value) is not CorValue cor || Translate(() => StrongHandle(cor.Original)) is not { } handle)
+        {
+            return null;
+        }
+
+        release = () =>
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (COMException)
+            {
+            }
+        };
+        return CorValue.OfHandle(this, handle);
+    }
+
+    public void ReleaseKept()
+    {
+        List<CorDebugHandleValue> kept;
+        lock (_gate)
+        {
+            kept = [.. _kept];
+            _kept.Clear();
+        }
+
+        foreach (var handle in kept)
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (COMException)
+            {
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ func-eval
 
     public IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
@@ -776,6 +947,110 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public IClrValue NewString(IClrThread thread, string text, TimeSpan timeout) =>
         Evaluate(thread, timeout, eval => eval.NewString(text)) ?? throw new ClrException("The string wasn't created.");
+
+    public IClrValue Box(IClrThread thread, IClrModule module, int typeToken, object value, TimeSpan timeout)
+    {
+        // An object of the primitive's type without running a constructor (a box of zero), then the value written into it.
+        var boxed = Evaluate(thread, timeout, eval => eval.NewObjectNoConstructor(((CorModule)module).Raw.GetClassFromToken(new mdTypeDef(typeToken)).Raw))
+            ?? throw new ClrException("The value couldn't be boxed.");
+        Translate(() =>
+        {
+            if (boxed.Original.Raw is not ICorDebugReferenceValue reference || new CorDebugReferenceValue(reference).Dereference().Raw is not ICorDebugBoxValue box
+                || new CorDebugBoxValue(box).Object.Raw is not ICorDebugGenericValue inner)
+            {
+                throw new ClrException("The value couldn't be boxed.");
+            }
+
+            CorValue.Write(new CorDebugGenericValue(inner), value);
+        });
+        return boxed;
+    }
+
+    public IClrModule? FindModule(Guid mvid) =>
+        Translate(() =>
+        {
+            foreach (var module in Process.AppDomains.SelectMany(d => d.Assemblies).SelectMany(a => a.Modules).Where(m => m.IsDynamic || m.IsInMemory))
+            {
+                try
+                {
+                    if (module.GetMetaDataInterface<MetaDataImport>().ScopeProps.pmvid == mvid)
+                    {
+                        return (IClrModule?)Module(module);
+                    }
+                }
+                catch (Exception ex) when (ex is COMException or InvalidCastException)
+                {
+                    // A module whose metadata isn't readable yet: not ours.
+                }
+            }
+
+            return null;
+        });
+
+    public unsafe byte[] ReadMemory(ulong address, int count)
+    {
+        if (count <= 0)
+        {
+            return [];
+        }
+
+        var buffer = new byte[count];
+        int read;
+        fixed (byte* pointer = buffer)
+        {
+            // Less than asked at the end of a mapped region: a page at a time finds how much is there.
+            if (Process.TryReadMemory(address, count, (IntPtr)pointer, out read) != HRESULT.S_OK || read <= 0)
+            {
+                read = 0;
+                const int Page = 0x1000;
+                while (read < count)
+                {
+                    var chunk = Math.Min(count - read, Page - (int)((address + (ulong)read) % Page));
+                    if (Process.TryReadMemory(address + (ulong)read, chunk, (IntPtr)(pointer + read), out var got) != HRESULT.S_OK || got <= 0)
+                    {
+                        break;
+                    }
+
+                    read += got;
+                }
+            }
+        }
+
+        return read == count ? buffer : buffer[..read];
+    }
+
+    public unsafe int WriteMemory(ulong address, byte[] data)
+    {
+        if (data.Length == 0)
+        {
+            return 0;
+        }
+
+        fixed (byte* pointer = data)
+        {
+            var result = Process.TryWriteMemory(address, data.Length, (IntPtr)pointer, out var written);
+            return result == HRESULT.S_OK ? written : throw new ClrException($"The memory at 0x{address:x} can't be written ({(Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture))}).");
+        }
+    }
+
+    public IClrValue NewNull(IClrThread thread) =>
+        Translate(() => (IClrValue)CorValue.Wrap(this, ((CorThread)thread).Raw.CreateEval().CreateValue(CorElementType.Class, null)));
+
+    public IClrValue NewObject(IClrThread thread, IClrModule module, int constructorToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
+        Evaluate(thread, timeout, eval =>
+        {
+            var constructor = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(constructorToken));
+            var types = typeArguments.Select(t => t.Native as CorDebugType).ToList();
+            var values = arguments.Select(a => ((CorValue)ClrLiveValue.Unwrap(a)).Original.Raw).ToArray();
+            if (types.Count > 0 && types.All(t => t is not null))
+            {
+                eval.NewParameterizedObject(constructor.Raw, types.Count, [.. types.Select(t => t!.Raw)], values.Length, values);
+            }
+            else
+            {
+                eval.NewObject(constructor.Raw, values.Length, values);
+            }
+        }) ?? throw new ClrException("The object wasn't created.");
 
     public IClrValue NewPrimitive(IClrThread thread, object value) =>
         Translate(() => (IClrValue)CorValue.Wrap(this, CreatePrimitive(((CorThread)thread).Raw, value)));
@@ -891,6 +1166,8 @@ internal sealed class CorDebugTarget : IClrProcess
                 catch (COMException)
                 {
                 }
+
+                FreezeAgain();
             }
         }
     }
@@ -1156,6 +1433,10 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
     public IClrValue? CurrentException() => CorDebugTarget.Translate(() => Raw.CurrentException is { } value ? CorValue.Wrap(target, value) : null);
 
     public IClrValue? ThreadObject() => CorDebugTarget.Translate(() => Raw.Object is { } value ? CorValue.Wrap(target, value) : null);
+
+    public bool Frozen => target.IsFrozen(Id);
+
+    public void Freeze(bool frozen) => target.Freeze(this, frozen);
 }
 
 internal sealed class CorFrame : IClrFrame
@@ -1177,7 +1458,9 @@ internal sealed class CorFrame : IClrFrame
             var function = frame.Function;
             Module = thread.Target.Module(function.Module);
             MethodToken = (int)function.Token.Value;
-            IlOffset = frame.IP.pnOffset;
+            var ip = frame.IP;
+            IlOffset = ip.pnOffset;
+            IsIlOffsetExact = ip.pMappingResult == CorDebugMappingResult.MAPPING_EXACT;
             try
             {
                 CodeVersion = function.VersionNumber;
@@ -1210,12 +1493,14 @@ internal sealed class CorFrame : IClrFrame
 
     public int IlOffset { get; }
 
+    public bool IsIlOffsetExact { get; } = true;
+
     public string? Description { get; }
 
     public int CodeVersion { get; } = 1;
 
     /// <summary>The frame as ICorDebug has it now: the cached one until the process ran (a func-eval), then read again.</summary>
-    private CorDebugILFrame Il
+    private CorDebugILFrame Current
     {
         get
         {
@@ -1236,7 +1521,7 @@ internal sealed class CorFrame : IClrFrame
         {
             try
             {
-                return [.. Il.TypeParameters.Select(t => CorValue.TypeOf(_thread.Target, t))];
+                return [.. Current.TypeParameters.Select(t => CorValue.TypeOf(_thread.Target, t))];
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
@@ -1245,9 +1530,105 @@ internal sealed class CorFrame : IClrFrame
         }
     }
 
-    public IClrValue? Argument(int index) => Read(() => Il.GetArgument(index));
+    public IClrValue? Argument(int index) => Read(() => Current.GetArgument(index));
 
-    public IClrValue? Local(int slot) => Read(() => Il.GetLocalVariable(slot));
+    public IClrValue? Local(int slot) => Read(() => Current.GetLocalVariable(slot));
+
+    public byte[]? Il()
+    {
+        try
+        {
+            var code = Current.Function.ILCode; // the frame's own version of the method (M55)
+            var size = code.Size;
+            return size <= 0 ? [] : code.GetCode(0, size, size);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException)
+        {
+            return null;
+        }
+    }
+
+    public ClrNativeCode? NativeCode()
+    {
+        try
+        {
+            if (Current.Raw is not ICorDebugNativeFrame raw)
+            {
+                return null;
+            }
+
+            var native = new CorDebugNativeFrame(raw);
+            var code = native.Code;
+            var start = code.Address.Value;
+            if (start == 0)
+            {
+                return null;
+            }
+
+            var map = new List<(int, int, int)>();
+            try
+            {
+                map.AddRange(code.ILToNativeMapping.Select(m => (m.ilOffset, m.nativeStartOffset, m.nativeEndOffset)));
+            }
+            catch (COMException)
+            {
+            }
+
+            return new ClrNativeCode(start, code.Size, start + (ulong)native.IP, map);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    public IReadOnlyList<(int Register, ulong Value)> Registers()
+    {
+        try
+        {
+            if (Current.Raw is not ICorDebugNativeFrame raw)
+            {
+                return [];
+            }
+
+            var set = new CorDebugNativeFrame(raw).RegisterSet;
+            var available = (ulong)set.RegistersAvailable;
+            var wanted = new List<int>();
+            for (var i = 0; i < 40; i++)
+            {
+                if ((available & (1UL << i)) != 0)
+                {
+                    wanted.Add(i);
+                }
+            }
+
+            ulong mask = 0;
+            foreach (var i in wanted)
+            {
+                mask |= 1UL << i;
+            }
+
+            var values = set.GetRegisters((CorDebugRegister)mask, wanted.Count);
+            return [.. wanted.Zip(values, (register, value) => (register, value.Value))];
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return [];
+        }
+    }
+
+    public void SetIp(int ilOffset) => CorDebugTarget.Translate(() =>
+    {
+        var frame = Current;
+        var allowed = frame.TryCanSetIP(ilOffset);
+        if ((int)allowed < 0)
+        {
+            throw new ClrException(CorDebugTarget.SetIpProblem(allowed));
+        }
+
+        frame.SetIP(ilOffset);
+        _thread.Target.FramesChanged();
+    });
 
     private CorValue? Read(Func<CorDebugValue> read)
     {
@@ -1344,8 +1725,11 @@ internal sealed class CorValue : IClrValue
 
     public string? Text => Kind == ClrValueKind.String ? CorDebugTarget.Translate(() =>
     {
+        // An empty string has nothing to read: ICorDebug answers a read of no characters with E_INVALIDARG, which showed
+        // every empty string of a program as an error.
         var text = new CorDebugStringValue((ICorDebugStringValue)Value.Raw);
-        return text.GetString(text.Length);
+        var length = text.Length;
+        return length == 0 ? string.Empty : text.GetString(length);
     }) : null;
 
     private CorDebugArrayValue Array => new((ICorDebugArrayValue)Value.Raw);
@@ -1421,6 +1805,9 @@ internal sealed class CorValue : IClrValue
 
         return result;
     }
+
+    /// <summary>A value behind a strong handle the target keeps: dereferenced again after the process ran.</summary>
+    public static CorValue OfHandle(CorDebugTarget target, CorDebugHandleValue handle) => new(target, handle, () => handle);
 
     private static bool IsCreatable(object value) => value is bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or float or double;
 

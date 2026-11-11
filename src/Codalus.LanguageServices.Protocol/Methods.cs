@@ -112,4 +112,10 @@ public static class Methods
     public const string HotReloadDiscard = "codalus/hotReload/discard";
 
     public const string HotReloadEnd = "codalus/hotReload/end";
+
+    /// <summary>
+    /// Compiles a debugger expression against the place a frame is stopped at (M58, ADR 0094): what the Codalus
+    /// debugger's own evaluator doesn't read (lambdas, LINQ, Visual Basic).
+    /// </summary>
+    public const string CompileExpression = "codalus/debug/compileExpression";
 }

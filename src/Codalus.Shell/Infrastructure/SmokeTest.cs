@@ -709,8 +709,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // commands and the consent shown; Cancel writes nothing. No network, no agent.
         await StepAsync("ai.connect", "D43", "AI Chat's off state offers the one-click agents; Connect to Claude shows its requirements, sign-in and exact commands, and Cancel writes nothing", AiConnectStepAsync).ConfigureAwait(true);
 
-        // ADR 0094: AI Console, with a stand-in for the agent's CLI on the shell's agent search path. No network, no agent.
-        await StepAsync("ai.console", "ADR 0094", "AI Console runs a connected agent's own CLI in the bottom group: its label, the IDE's tools on a pipe of its own, a reference typed into its prompt, and Close ending it", AiConsoleStepAsync, "projects.open").ConfigureAwait(true);
+        // ADR 0095: AI Console, with a stand-in for the agent's CLI on the shell's agent search path. No network, no agent.
+        await StepAsync("ai.console", "ADR 0095", "AI Console runs a connected agent's own CLI in the bottom group: its label, the IDE's tools on a pipe of its own, a reference typed into its prompt, and Close ending it", AiConsoleStepAsync, "projects.open").ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
@@ -1071,6 +1071,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("debug.terminal.codalus", "M54", "Under the Codalus debugger: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderCodalusDebuggerAsync(DebugTerminalStepAsync), "debug.compound.codalus").ConfigureAwait(true);
         await StepAsync("debug.roslyn.codalus", "M54", "Under the Codalus debugger: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderCodalusDebuggerAsync(DebugRoslynStepAsync), "debug.compound.codalus").ConfigureAwait(true);
         await StepAsync("debug.applyChanges.codalus", "M55", "Under the Codalus debugger: an edit made while stopped applies on Continue, and one made while running with Apply Code Changes", () => UnderCodalusDebuggerAsync(DebugApplyChangesStepAsync), "debug.compound.codalus").ConfigureAwait(true);
+        // M58 (ADR 0094): the Codalus debugger's own features, in the shipped app.
+        await StepAsync("debug.codalus", "M58", "Under the Codalus debugger: a hit count, Set Next Statement, a lambda in an expression, the Disassembly, Registers and Memory windows, and an edit that moves the stopped frame into its new code", () => UnderCodalusDebuggerAsync(DebugCodalusStepAsync), "debug.session.codalus").ConfigureAwait(true);
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
         {
@@ -1745,6 +1747,101 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Any(i => i.Id == "codalus.hotReload" && i.Text.Contains("applied at", StringComparison.Ordinal)), "the status bar says the edits applied").ConfigureAwait(true);
         Screenshot("smoke-test-debug-apply-changes.png");
 
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
+    }
+
+    /// <summary>
+    /// M58 (ADR 0094), on samples/Debugging: the debugger applies a hit count itself, Set Next Statement moves the
+    /// thread, an expression with a lambda is compiled and run in the program, the Disassembly, Registers and Memory
+    /// windows show the stopped frame's machine state; then, on HotReload.slnx, an edit applied while stopped in the
+    /// method it changes moves the frame into the new code (Edit and Continue).
+    /// </summary>
+    private async Task DebugCodalusStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        if (!Directory.Exists(Sessions))
+        {
+            Copy(Path.Combine(samples, "Debugging"), Sessions);
+        }
+
+        // Debuggee's --features mode, as a launch profile for this step only.
+        var launchSettings = SessionSource("Debuggee", Path.Combine("Properties", "launchSettings.json"));
+        Directory.CreateDirectory(Path.GetDirectoryName(launchSettings)!);
+        File.WriteAllText(launchSettings, """{ "profiles": { "Features": { "commandName": "Project", "commandLineArgs": "--features" } } }""");
+        try
+        {
+            await shell.OpenSolutionAsync(Path.Combine(Sessions, "Debugging.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Debugging solution is open", 300).ConfigureAwait(true);
+            var features = SessionSource("Debuggee", "Features.cs");
+            var loop = MarkerLine(features, "features-loop");
+            var measure = MarkerLine(features, "features-measure");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, loop, HitCondition: "== 4"));
+            shell.Run("debug.start");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == loop, "the debugger stops at the loop's breakpoint", 300).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "i", Value: "3" }), "the hit count stopped the fourth pass (i is 3): the debugger counted, with no stop before").ConfigureAwait(true);
+
+            // Set Next Statement: on to the line after the loop, the rest of the loop not run; then a step over it.
+            shell.Debugger.Breakpoints.Clear();
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugCanSetNextStatement"), true), "Set Next Statement is offered").ConfigureAwait(true);
+            Check(await shell.SetNextStatementAsync(features, measure - 1).ConfigureAwait(true), "Set Next Statement moves the thread: " + shell.StatusBar.Message);
+            await WaitAsync(() => shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure - 1, "the current line is the one chosen").ConfigureAwait(true);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "count", Value: "3" }), "the loop's later passes didn't run (count is 3)").ConfigureAwait(true);
+            shell.Run("debug.stepOver");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
+
+            // A lambda: the C# language host compiles it, and the program runs it.
+            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
+
+            // The machine's side of the stopped frame.
+            Check(shell.Debugger.CanReadMemory && shell.Debugger.CanDisassemble && shell.Debugger.CanShowRegisters, "the debugger reads memory, registers and machine code");
+            shell.Layout.ShowToolWindow(MemoryViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<MemoryView>().Any(), "the Memory window renders").ConfigureAwait(true);
+            shell.MemoryWindow.AddressText = "text";
+            await shell.MemoryWindow.GoAsync().ConfigureAwait(true);
+            Check(shell.MemoryWindow.Message is null && shell.MemoryWindow.Rows.Count > 0, "the Memory window shows the bytes of an object: " + shell.MemoryWindow.Message);
+            shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<RegistersView>().Any() && shell.RegistersWindow.Rows.Any(r => r.Name is "rip" or "pc"), "the Registers window lists the instruction pointer").ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<DisassemblyView>().Any() && shell.DisassemblyWindow.CurrentIndex >= 0, "the Disassembly window marks the frame's instruction").ConfigureAwait(true);
+            Check(shell.DisassemblyWindow.Rows.Any(r => r.Heading == $"Features.cs:{measure}"), "the instructions are under their source lines");
+            Screenshot("smoke-test-debug-disassembly.png");
+
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            File.Delete(launchSettings);
+        }
+
+        // Edit and Continue: stopped in Greeter.Message, an edit to it is applied, and a step goes on in the new code.
+        await shell.OpenSolutionAsync(Path.Combine(Sessions, "HotReload.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the HotReload solution is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(SessionSource("HotReload", "HotReload.csproj"));
+        var program = SessionSource("HotReload", "Program.cs");
+        var message = MarkerLine(program, "message");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(program, message);
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message, "the debugger stops in Greeter.Message", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.DebugEdits.IsActive, "the session takes edits", 60).ConfigureAwait(true);
+        var editor = await shell.OpenFileAsync(program, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Program.cs did not open.");
+        await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
+        const string Old = "        return text;";
+        const string New = "        var more = \" moved\";\n        return text + more;";
+        var offset = editor.Model.Text.Text.IndexOf(Old, StringComparison.Ordinal);
+        Check(offset >= 0, "Program.cs has Greeter.Message's return");
+        editor.Model.Text.Replace(offset, Old.Length, New);
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.stepOver");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message + 1, "the step applied the edit and stopped on the line it added, in the new code", 120).ConfigureAwait(true);
+        shell.Run("debug.continue");
+        await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 moved", StringComparison.Ordinal), "the frame that was stopped ran the new code: its call prints it", 60).ConfigureAwait(true);
         shell.Run("debug.stop");
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
         editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
@@ -4117,7 +4214,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     }
 
     /// <summary>
-    /// The ai.console step (ADR 0094): AI on and Claude connected in the user's settings, with a stand-in <c>claude</c> on
+    /// The ai.console step (ADR 0095): AI on and Claude connected in the user's settings, with a stand-in <c>claude</c> on
     /// the shell's agent search path (it says it is ready and echoes each line; nothing reaches an agent or the network).
     /// The console opens in the bottom group and starts it with a conversation id and the IDE's tools; Add File types a
     /// reference into its prompt; Close ends it and its pipe. The settings are put back.

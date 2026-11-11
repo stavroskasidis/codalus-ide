@@ -44,6 +44,9 @@
       (M54, ADR 0086): COM interop only, the runtime's own mscordbi does the work.
     -->
     <PackageReference Include="ClrDebug" />
+    <!-- x64 instructions as text, for the Disassembly window (M58, ADR 0094; MIT); arm64's decoder is ours (Disassembly/). -->
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Mono.Cecil" />
     <!--
       dbgshim (MIT), which starts CoreCLR programs for the debugger and finds their runtime's mscordbi (ADR 0086): a
       publish for a runtime identifier takes its platform's library, a build without one (the tests) every platform's

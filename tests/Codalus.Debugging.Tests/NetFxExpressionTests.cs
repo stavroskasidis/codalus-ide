@@ -68,12 +68,44 @@ public sealed class NetFxExpressionTests
     [InlineData("a b", "Unexpected 'b'")]
     [InlineData("\"open", "isn't closed")]
     [InlineData("'ab'", "one character")]
-    [InlineData("new Cart()", "isn't supported")]
     [InlineData("a.", "member name")]
     [InlineData("1(2)", "Only methods can be called")]
     [InlineData("a # b", "Unexpected '#'")]
     public void Rejects_invalid_expressions(string text, string message) =>
-        Assert.Contains(message, Assert.Throws<ExpressionException>(() => ExpressionParser.Parse(text)).Message, StringComparison.Ordinal);
+        Assert.Contains(message, Assert.ThrowsAny<ExpressionException>(() => ExpressionParser.Parse(text)).Message, StringComparison.Ordinal);
+
+    /// <summary>
+    /// What this parser doesn't read may still be C# (M58): it says so with its own exception, and the session asks the
+    /// client to compile the expression; what is wrong in any reading (an unclosed string) isn't sent on.
+    /// </summary>
+    [Theory]
+    [InlineData("items.Where(x => x > 1)", true)]
+    [InlineData("typeof(Cart)", true)]
+    [InlineData("a is Cart", true)]
+    [InlineData("new Cart { Size = 1 }", true)]
+    [InlineData("new List<int>()", true)]
+    [InlineData("new[] { 1 }", true)]
+    [InlineData("a b", true)]
+    [InlineData("\"open", false)]
+    [InlineData("'ab'", false)]
+    [InlineData("", false)]
+    public void Says_which_expressions_a_compiler_might_read(string text, bool unsupported)
+    {
+        var error = Assert.ThrowsAny<ExpressionException>(() => ExpressionParser.Parse(text));
+        Assert.Equal(unsupported, error is UnsupportedExpressionException);
+    }
+
+    [Fact]
+    public void Reads_new_with_a_dotted_type_name_and_pseudo_variables()
+    {
+        var create = Assert.IsType<NewExpr>(ExpressionParser.Parse("new Shop.Cart(\"a\", 2)"));
+        Assert.Equal("Shop.Cart", create.TypeName);
+        Assert.Equal(2, create.Arguments.Count);
+        Assert.Equal("Size", Assert.IsType<MemberExpr>(ExpressionParser.Parse("new Cart().Size")).Name);
+        Assert.Equal("$exception", Assert.IsType<NameExpr>(Assert.IsType<MemberExpr>(ExpressionParser.Parse("$exception.Message")).Target).Name);
+        Assert.Equal("$1", Assert.IsType<NameExpr>(ExpressionParser.Parse("$1")).Name);
+        Assert.Equal("$ReturnValue", Assert.IsType<NameExpr>(ExpressionParser.Parse(" $ReturnValue ")).Name);
+    }
 
     [Theory]
     [InlineData("+", 1, 2, 3)]

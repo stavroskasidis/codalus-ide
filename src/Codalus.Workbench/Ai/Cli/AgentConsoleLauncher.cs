@@ -17,7 +17,7 @@ public sealed record AgentConsoleLaunch(string Program, IReadOnlyList<string> Ar
 }
 
 /// <summary>
-/// Builds the command line of an agent's CLI for AI Console (ADR 0094): its conversation (new with an id of Codalus's,
+/// Builds the command line of an agent's CLI for AI Console (ADR 0095): its conversation (new with an id of Codalus's,
 /// resumed by that id, or the CLI's last one), <c>codalus mcp</c> for this console's pipe in the form the CLI takes for one
 /// run, and the entry's environment (<c>env</c>, <c>secretEnv</c>, <c>unsetEnv</c>, Codalus's Node.js). Only text and
 /// paths: it starts nothing, so it is tested on every OS.

@@ -29,6 +29,17 @@ public interface IDebugAdapter : IAsyncDisposable
 
     Task ConfigurationDoneAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Whether the adapter that stopped <paramref name="threadId"/> applies a breakpoint's hit condition, log message,
+    /// filter and dependency itself (the Codalus debugger, M58): then a stop at a breakpoint is one to show. Otherwise
+    /// the adapter is sent the breakpoint without them, stops at every hit, and the session decides (netcoredbg, the
+    /// browser's adapter).
+    /// </summary>
+    bool AppliesBreakpointBehaviors(int threadId) => Capabilities.AppliesBreakpointBehaviors;
+
+    /// <summary>The capabilities of the adapter <paramref name="threadId"/> belongs to (a compound session's parts differ).</summary>
+    Capabilities CapabilitiesOf(int threadId) => Capabilities;
+
     Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken);
 
     Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken);
@@ -42,6 +53,58 @@ public interface IDebugAdapter : IAsyncDisposable
     Task StepInAsync(int threadId, CancellationToken cancellationToken);
 
     Task StepOutAsync(int threadId, CancellationToken cancellationToken);
+
+    /// <summary>The calls of the rest of a frame's line that a step could go into (Step Into Specific); none when the adapter can't say.</summary>
+    Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken) => Task.FromResult<StepInTarget[]>([]);
+
+    /// <summary>Steps into one of <see cref="StepInTargetsAsync"/>'s calls.</summary>
+    Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) => StepInAsync(threadId, cancellationToken);
+
+    /// <summary>Where <paramref name="threadId"/>'s next statement could be set on a line (Set Next Statement); none when it can't be.</summary>
+    Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken) => Task.FromResult<GotoTarget[]>([]);
+
+    /// <summary>Moves <paramref name="threadId"/>'s next statement to one of <see cref="GotoTargetsAsync"/>'s targets; a <c>stopped</c> event with the reason <c>goto</c> follows.</summary>
+    Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) => throw new DapException("goto", "This debugger can't set the next statement.");
+
+    /// <summary>The program's memory (<see cref="Capabilities.SupportsReadMemoryRequest"/>); <paramref name="threadId"/> names the program in a session of several.</summary>
+    Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken) =>
+        throw new DapException("readMemory", "This debugger doesn't read the program's memory.");
+
+    /// <summary>Writes the program's memory; the number of bytes written.</summary>
+    Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken) =>
+        throw new DapException("writeMemory", "This debugger doesn't write the program's memory.");
+
+    /// <summary>
+    /// The machine instructions around an address (<see cref="Capabilities.SupportsDisassembleRequest"/>):
+    /// <paramref name="count"/> of them from the one at <paramref name="memoryReference"/>, moved by <paramref name="instructionOffset"/>.
+    /// </summary>
+    Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken) =>
+        throw new DapException("disassemble", "This debugger doesn't show machine code.");
+
+    /// <summary>
+    /// Load Symbols (<see cref="Capabilities.SupportsSymbolLoading"/>): looks for a loaded module's symbols in the symbol
+    /// paths and on the symbol servers; a <c>module</c> event says what was found. False when no adapter of the session
+    /// has the module.
+    /// </summary>
+    Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    /// <summary>A frame's registers (<see cref="Capabilities.SupportsRegisters"/>).</summary>
+    Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) => Task.FromResult<RegisterValue[]>([]);
+
+    /// <summary>Steps one machine instruction (<see cref="Capabilities.SupportsSteppingGranularity"/>): over a call, or into it.</summary>
+    Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) => into ? StepInAsync(threadId, cancellationToken) : NextAsync(threadId, cancellationToken);
+
+    /// <summary>
+    /// Make Object ID (<see cref="Capabilities.SupportsObjectIds"/>): the object <paramref name="expression"/> evaluates to
+    /// in the frame gets a name (<c>$1</c>) expressions reach it by for the rest of the session.
+    /// </summary>
+    Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) => throw new DapException("codalus/makeObjectId", "This debugger doesn't make object IDs.");
+
+    /// <summary>Lets go of an object ID.</summary>
+    Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Keeps a thread from running when the program runs on, or lets it run again (<see cref="Capabilities.SupportsFreezingThreads"/>).</summary>
+    Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) => throw new DapException("codalus/freezeThread", "This debugger can't freeze threads.");
 
     Task PauseAsync(int threadId, CancellationToken cancellationToken);
 

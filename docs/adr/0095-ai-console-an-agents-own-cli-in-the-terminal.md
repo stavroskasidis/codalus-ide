@@ -1,4 +1,4 @@
-# 0094. AI Console: an agent's own CLI in the terminal, and how far the external agents' exception goes
+# 0095. AI Console: an agent's own CLI in the terminal, and how far the external agents' exception goes
 
 - **Status:** accepted (0.13, 2026-11-11)
 - **Date:** 2026-11-11

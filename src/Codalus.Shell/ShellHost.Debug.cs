@@ -26,6 +26,9 @@ public sealed partial class ShellHost
     /// <summary>Step over properties and operators (M14b).</summary>
     public const string StepFilteringSetting = "debug.stepOverPropertiesAndOperators";
 
+    /// <summary>With several startup projects, a stop in one program pauses the others (M58); on by default.</summary>
+    public const string BreakAllProcessesSetting = "debug.breakAllProcesses";
+
     /// <summary>The adapter that debugs .NET programs: netcoredbg, or Codalus IDE's own, a preview (M54, ADR 0086).</summary>
     public const string DebugAdapterSetting = "debug.adapter";
 
@@ -81,6 +84,9 @@ public sealed partial class ShellHost
         VariableActions.VisualizeWithPlugin = VisualizeWithPluginAsync;
         VariableActions.AskAi = AskAiAboutValueAsync;
         VariableActions.CanAskAi = () => Ai.IsEnabled;
+        VariableActions.MakeObjectId = expression => MakeObjectIdAsync(expression);
+        VariableActions.CanMakeObjectId = () => Debugger.CanMakeObjectIds;
+        VariableActions.DeleteObjectId = DeleteObjectIdAsync;
         VariableActions.CopyText = async text =>
         {
             if (Window?.Clipboard is { } clipboard)
@@ -587,6 +593,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+        UpdateDebuggerAbilities();
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);

@@ -17,7 +17,7 @@ internal static class NetFxAdapter
         }
 
         using var server = new DapServer(input, output) { Trace = trace };
-        var session = new NetFxDebugSession(server, trace is null ? log : new CoreClr.TeeWriter(log, trace), debugger ?? CreateDebugger());
+        using var session = new NetFxDebugSession(server, trace is null ? log : new CoreClr.TeeWriter(log, trace), debugger ?? CreateDebugger());
         server.Handler = session.HandleAsync;
         using var stop = new CancellationTokenSource();
         var reading = server.RunAsync(stop.Token);

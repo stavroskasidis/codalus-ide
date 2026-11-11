@@ -3,7 +3,7 @@ using Codalus.Workbench.Setup;
 
 namespace Codalus.Workbench.Ai.Cli;
 
-/// <summary>How an agent's CLI takes an MCP server for one run, without anything written to its own config (ADR 0094).</summary>
+/// <summary>How an agent's CLI takes an MCP server for one run, without anything written to its own config (ADR 0095).</summary>
 public enum AgentCliMcp
 {
     /// <summary>It takes none on its command line: the console says the IDE's tools aren't connected.</summary>
@@ -49,7 +49,7 @@ public enum AgentConsoleStart
 }
 
 /// <summary>
-/// An agent's own CLI as AI Console runs it (ADR 0094): the program found on the PATH, how it takes the IDE's tools for
+/// An agent's own CLI as AI Console runs it (ADR 0095): the program found on the PATH, how it takes the IDE's tools for
 /// one run, how a conversation is resumed, and how its prompt names a file. Written from each CLI's documentation.
 /// </summary>
 /// <param name="Id">The agent's id (a template's, or the entry's name for a <c>console</c> command).</param>
@@ -79,7 +79,7 @@ public sealed record AgentCli(string Id, string Program)
     public bool CanResume => ResumeSessionFlag is not null || ContinueArgs.Count > 0;
 }
 
-/// <summary>The CLIs AI Console knows (ADR 0094), by the agent template's id, and the CLI of an <c>ai.agents</c> entry.</summary>
+/// <summary>The CLIs AI Console knows (ADR 0095), by the agent template's id, and the CLI of an <c>ai.agents</c> entry.</summary>
 public static class AgentClis
 {
     /// <summary>The agent the last console was started with (the user's settings), for the next one.</summary>
@@ -118,7 +118,7 @@ public static class AgentClis
             Reference = AgentCliReference.AtPath,
         },
         // TODO(issue): the IDE's tools and resuming for pi and OpenCode, once their flags are confirmed from their
-        // documentation (ADR 0094): they start a new conversation without the tools.
+        // documentation (ADR 0095): they start a new conversation without the tools.
         new("pi", "pi"),
         new("opencode", "opencode"),
         new("goose", "goose")
@@ -155,7 +155,7 @@ public static class AgentClis
             return own;
         }
 
-        // TODO(issue): pinned installs for Claude's and Codex's CLIs (other packages than their ACP adapters, ADR 0094).
+        // TODO(issue): pinned installs for Claude's and Codex's CLIs (other packages than their ACP adapters, ADR 0095).
         if (cli.InstallPage is { } page)
         {
             return [new AcpInstallOption("page", template.Name, $"{template.Name}'s install page.", InstallKind.OpenPage, page)];

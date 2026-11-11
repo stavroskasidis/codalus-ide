@@ -7,7 +7,7 @@ namespace Codalus.Workbench.Ai.Cli;
 public sealed record AgentConsoleTab(string Agent, string? Session);
 
 /// <summary>
-/// The consoles each workspace had open (ADR 0094), in the user's state folder: never in the solution's own
+/// The consoles each workspace had open (ADR 0095), in the user's state folder: never in the solution's own
 /// <c>.codalus</c> folder, which a cloned repository could ship. Only names and ids: the agent must still be in the
 /// user's <c>ai.agents</c>, and an id that isn't a UUID is dropped when read (it becomes an argument of the CLI).
 /// </summary>

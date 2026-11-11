@@ -78,6 +78,37 @@ public sealed class DebugHotReloadTests
     }
 
     [AvaloniaFact]
+    public async Task A_frame_stopped_in_an_edited_method_goes_on_in_the_new_code()
+    {
+        // M58, Edit and Continue: the edit is applied while the program is stopped in the method it changes. The frame
+        // is shown where its statement is now, and a step goes on in the new version, with the frame's locals.
+        await using var f = ShellFixture.Create();
+        var program = await OpenAsync(f, DebugService.CodalusAdapter);
+        var line = Line(program, "message");
+        f.Shell.Debugger.Breakpoints.Toggle(program, line);
+        await f.RunAsync("debug.start");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 180, describe: () => Diagnostics(f));
+        await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive && Equals(f.Shell.Workbench.Context.GetValue("hotReloadRunning"), true), seconds: 60, describe: () => Diagnostics(f));
+        Assert.Equal(line, f.Shell.Debugger.SelectedFrame?.Line);
+
+        await EditAsync(f, program, "        var text = \"hello \" + i; // [message]\n        return text;",
+            "        // A line the edit adds.\n        var text = \"hello \" + i; // [message]\n        var more = \" in new code\";\n        return text + more;");
+        f.Shell.Debugger.Breakpoints.Clear();
+        await f.RunAsync("run.applyCodeChanges");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.SelectedFrame?.Line == line + 1, seconds: 60, describe: () => $"frame line {f.Shell.Debugger.SelectedFrame?.Line}" + Diagnostics(f));
+        Assert.Equal(DebugState.Stopped, f.Shell.Debugger.State);
+
+        await f.RunAsync("debug.stepOver");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped && f.Shell.Debugger.SelectedFrame?.Line == line + 2, seconds: 60, describe: () => $"frame line {f.Shell.Debugger.SelectedFrame?.Line}" + Diagnostics(f));
+        Assert.Equal("\"hello 0\"", (await f.Shell.Debugger.EvaluateAsync("text", "watch", CancellationToken.None)).Result);
+
+        await f.RunAsync("debug.continue");
+        await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("hello 0 in new code", StringComparison.Ordinal), seconds: 60, describe: () => Diagnostics(f));
+        await f.RunAsync("debug.stop");
+        await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle && !f.Shell.DebugEdits.IsActive, seconds: 60);
+    }
+
+    [AvaloniaFact]
     public async Task A_save_applies_while_running_and_a_rude_edit_asks_and_shows_in_the_Error_List()
     {
         await using var f = ShellFixture.Create();

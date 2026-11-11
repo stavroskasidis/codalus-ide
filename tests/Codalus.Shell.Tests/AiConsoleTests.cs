@@ -15,7 +15,7 @@ using Codalus.Workbench.ToolWindows;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// AI Console (ADR 0094) in the headless shell, with a stand-in for an agent's CLI on a test PATH (a script that logs its
+/// AI Console (ADR 0095) in the headless shell, with a stand-in for an agent's CLI on a test PATH (a script that logs its
 /// arguments, says it is ready and echoes each line it reads; nothing reaches a real agent): the console in the bottom
 /// group with its label, the CLI's conversation id and the IDE's tools on a pipe of its own, the external agents' gate,
 /// consoles that come back with their conversation, a CLI that isn't installed or sits inside the workspace, references

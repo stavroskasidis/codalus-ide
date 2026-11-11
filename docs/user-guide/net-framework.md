@@ -71,7 +71,9 @@ On Linux and macOS, Start, Start Without Debugging and the Performance Profiler 
 - **Attach to Process** lists .NET Framework processes with the .NET ones ("· .NET Framework"); attaching works the same, and Stop detaches.
 - **Multiple startup projects** debug .NET Framework apps with the others, in one session.
 
-The debugger reads **portable PDBs**. SDK-style projects build them; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, the classic IDE's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere) shows that in the Modules window, and its code is debugged without source.
+The debugger reads **portable PDBs and Windows PDBs**. SDK-style projects build portable ones; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, the classic IDE's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere, or an older library's) is debugged with its lines and locals as well.
+
+The .NET Framework debugger is the same code as [the Codalus debugger](debugging.md#the-codalus-debugger-preview), on the desktop CLR. So it also offers Set Next Statement, Step Into Specific, hit counts and logpoints without a stop per hit, `new` and lambdas in expressions, type proxies, object IDs, symbol paths and servers, and the Disassembly, Registers and Memory windows. Codalus's CI tests breakpoints, stacks, variables, expressions, stepping, exceptions and Windows PDBs on .NET Framework; the newer features are tested on .NET and are best effort here.
 
 The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>` (the classic IDE's old templates set it), says so instead of starting; set `Prefer32Bit` to `false` to debug it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
 
@@ -85,7 +87,7 @@ File → New Project lists **.NET Framework Console App** and **.NET Framework C
 
 ## Not supported
 
-- Running and debugging on Mono; 32-bit processes under the debugger; mixed-mode (native) debugging, Edit and Continue and Set Next Statement for .NET Framework apps; code coverage of .NET Framework tests; Windows PDBs.
+- Running and debugging on Mono; 32-bit processes under the debugger; mixed-mode (native) debugging and Edit and Continue for .NET Framework apps; code coverage of .NET Framework tests.
 - Building with the classic IDE's MSBuild or Build Tools; COM references (`ResolveComReference`), ClickOnce publishing, the Entity Framework 6 designer, Web Forms, C++/CLI and VSTO.
 
 - The Windows Forms designer and WPF's previewer with .NET Framework apps haven't been validated yet: their forms and XAML edit as code.

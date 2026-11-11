@@ -5,7 +5,7 @@ using Codalus.Workbench.Ai.Cli;
 namespace Codalus.Workbench.Tests;
 
 /// <summary>
-/// AI Console's side of the workbench (ADR 0094): which CLI an <c>ai.agents</c> entry has, the command line each CLI
+/// AI Console's side of the workbench (ADR 0095): which CLI an <c>ai.agents</c> entry has, the command line each CLI
 /// starts with (its conversation, <c>codalus mcp</c> in the form it takes for one run, the entry's environment), the
 /// program found on the PATH but never inside the workspace, references as each CLI's prompt reads them, and the consoles
 /// kept per workspace. Only text and files: nothing starts.

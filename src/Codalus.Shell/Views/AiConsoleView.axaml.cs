@@ -11,7 +11,7 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The AI Console tool window (ADR 0094): the selected console's terminal, the agent picker that starts a new one, and
+/// The AI Console tool window (ADR 0095): the selected console's terminal, the agent picker that starts a new one, and
 /// files dropped on it (from Solution Explorer or the OS), which become references in the prompt.
 /// </summary>
 public sealed partial class AiConsoleView : UserControl, IPaneView

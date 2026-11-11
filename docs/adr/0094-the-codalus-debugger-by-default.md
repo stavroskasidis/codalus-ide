@@ -1,0 +1,62 @@
+# 0094. The Codalus debugger by default, and its gaps closed
+
+- **Status:** accepted (2026-11-11, D49 in the [roadmap](../roadmap.md#decision-register)); built as [M58](../roadmap.md#m58--the-codalus-debugger-by-default) in two pull requests (M58a: the adapter's features, still opt-in; M58b: remote targets and the default)
+- **Date:** 2026-11-11
+- **Deciders:** maintainer (the grilling of 2026-11-11: every answer below is theirs)
+- **Amends:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (its phase 3: the default changes now, not after weeks of nightlies), [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0021](0021-debugger-depth.md) and [ADR 0032](0032-debug-companion-host.md) (their gaps lists), [ADR 0039](0039-debugger-sessions.md) (remote targets' debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (active frames), [ADR 0076](0076-debugging-the-desktop-clr.md) (x86 and Windows PDBs)
+
+## Context
+
+ADR 0086 replaced netcoredbg with a debug adapter of our own in three phases. Phases 1 and 2 are built (M54, M55): `codalus-debughost --clr-dap` on dbgshim passes the debugger suites on Windows, Linux x64, Linux arm64 and macOS, and applies edits to the program being debugged. It is still a preview behind `debug.adapter`, and on 2026-11-11 this was left:
+
+- **Programs it hands to netcoredbg:** x64 programs on Apple silicon, and every remote target (SSH, containers, WSL, remote windows).
+- **netcoredbg's gaps, unchanged under it:** hit counts and logpoints done by the IDE with a stop per hit, no Set Next Statement, no Step Into Specific, no `[DebuggerTypeProxy]` or Results View, no `new`, lambdas or generic methods in expressions, no Make Object ID, no return values, no freezing of threads, no data breakpoints, no Memory, Disassembly or Registers windows, no mixed-mode debugging, no symbol servers.
+- **Hot Reload's semantics while debugging:** a method already running finishes in its old version.
+- **Around it:** with several startup projects a stop in one program doesn't pause the others; the .NET Framework adapter debugs only 64-bit processes with portable PDBs; remote sessions show no `[DebuggerDisplay]`, icons or grouping; Watch reads only C#.
+
+The maintainer's request of 2026-11-11: make the Codalus debugger the default and close the gaps.
+
+## Decision
+
+| | Decision |
+|---|---|
+| **netcoredbg** | `debug.adapter` defaults to `codalus`. `netcoredbg` stays one release as an opt-in fallback, then a later release removes it with `eng/get-netcoredbg.sh`, its copy in `RemoteDebuggers` and its workarounds in `DebugAdapter` |
+| **Native-level gaps** | Managed side only: Memory (`ICorDebugProcess::ReadMemory`, `WriteMemory`), Registers (`ICorDebugRegisterSet`) and Disassembly of JIT-compiled managed code, decoded by Iced (MIT) on x64 and by a decoder of our own on arm64. **Data breakpoints and mixed-mode debugging stay documented gaps** |
+| **Remote targets** | A self-contained, trimmed adapter bundle per platform (`codalus-debughost` with the CoreCLR adapter only), copied with consent as netcoredbg is, and carried by `codalus-server`. Runs on targets that have only the program's runtime |
+| **x64 programs on Apple silicon** | The same bundle for `osx-x64`, an on-demand component (the Components window), downloaded with consent the first time such a program is debugged |
+| **Expressions** | Our interpreter first, extended with `new`, generic methods, object IDs, type proxies and Results View. What it can't read (lambdas, LINQ, the rest of C#) the C# language host compiles against the stopped frame into a small assembly, which the adapter loads into the program (`Assembly.Load` through func-eval) and calls |
+| **Visual Basic** | VB expressions through the compiled path (VB is in the C# host's workspace). F# expressions stay a gap |
+| **Several startup projects** | A stop in one program pauses the others, as the classic IDE does; a setting turns it off |
+| **.NET Framework** | 32-bit processes through an x86 adapter process (the `win-x86` adapter bundle, an on-demand component as the `osx-x64` one, so M58b), and Windows PDBs through a managed, MIT-licensed reader (Mono.Cecil's, M58a) |
+| **Remote sessions' metadata** | The adapter on the target reads the modules itself: `[DebuggerDisplay]`, icons and grouping there too |
+| **Edit and Continue** | Active frames are remapped into the new version (`ICorDebugILFrame2::RemapFunction` at the runtime's remap opportunity, from Roslyn's active statements); what Roslyn can't remap is a rude edit |
+| **Symbols** | Options › Debugging › Symbols, as the classic IDE: the Microsoft and NuGet.org symbol servers listed and **off**, the user's own URLs and folders, a cache, include and exclude lists, Load Symbols in the Modules window. Nothing leaves the machine until a server is turned on |
+| **Left as documented limits** | Dumps from another operating system, Windows remote targets, start-up breakpoints in packaged WinUI apps, and the Mono adapter's gaps (iPhone, CoreCLR on mobile, Hot Reload on devices) |
+| **Landing** | Two pull requests into `develop`, each opened once when complete: M58a, the adapter's features, with the adapter still opt-in; M58b, remote targets, the component, the default, the user guide's limits rewritten |
+
+ADR 0086 made the default wait for a failure rate over some weeks of nightlies no worse than netcoredbg's. The maintainer changes it now instead: the fallback setting is the safety net, and every failure of the `debug-codalus` shard recorded in `docs/ci-flakes.md` is worked as a bug of the default debugger.
+
+## Consequences
+
+- The gaps list of the user guide becomes the Codalus debugger's own, much shorter; netcoredbg's is kept only under the fallback setting until it is removed.
+- The packages carry the adapter bundle for their own platform's remote targets (Linux x64 and arm64 in every package, as `codalus-server` is), which the size gate counts.
+- Compiled expressions load assemblies into the debugged program that stay until it ends (collectible contexts can't be used through func-eval before .NET Core 3.0, and not on .NET Framework); the Modules window hides them.
+- The interpreter stays the first reader, so data tips, conditions and attach without a loaded solution don't wait for a compile, and the remote bundle needs no Roslyn.
+- Symbol servers are a new way workspace-derived data (module names, their IDs) leaves the machine: off by default, HTTPS only, listed in the user guide's privacy notes.
+
+## What M58a built (2026-11-11)
+
+The adapter's features, with `debug.adapter` still `netcoredbg` by default ([m58a](../checkpoints/m58a.md)). The design choices made while building:
+
+- **Capabilities decide, not the adapter's name.** The adapter answers `initialize` with what it does (`appliesBreakpointBehaviors`, `supportsGotoTargetsRequest`, `supportsStepInTargetsRequest`, `supportsFreezingThreads`, `supportsObjectIds`, `supportsTypeProxies`, `supportsReadMemoryRequest`, `supportsDisassembleRequest`, `supportsRegisters`, `supportsSymbolLoading`); the debug service asks the stopped thread's adapter, so a compound session with netcoredbg or the JavaScript debugger in it keeps the IDE's own handling for those parts. Under netcoredbg nothing changes.
+- **Breakpoint behaviors in the adapter.** A hit that doesn't count (a hit count, a filter, a dependency not yet met) or a logpoint continues inside the adapter, without a `stopped` event and the IDE's round trip. The filter's parser moved to `Codalus.Debugging`, shared with the IDE's handling for the other adapters.
+- **Expressions: the interpreter first, then Roslyn.** The evaluator throws `UnsupportedExpressionException` for what it doesn't read; the adapter then sends the reverse request `codalus/compileExpression` with the expression and the frame's source position, the C# language host compiles a static generic method against the workspace's compilation (accessibility ignored; Visual Basic through a clone of the compilation that sees `Friend` members), and the adapter loads the assembly into the program (`Assembly.Load(byte[])` by func-eval) and calls it. Compiled expressions are kept per frame location and text. The interpreter stays first: data tips and conditions don't wait for a compile, and attach without a loaded solution still evaluates.
+- **Func-eval facts found on the way.** A primitive passed where `object` is expected must be boxed by the debugger (the runtime ended the program otherwise); an empty string can't be read or made through `GetString` and `NewString`; a frame a call returned to reports the JIT's boundary before the call, so the returned value belongs to the first call at or after it.
+- **Type proxies and Results View in the adapter**, except for the five collections the shell shows through its own views, which it names in the launch (`clientViews`).
+- **Disassembly** decodes the method's JIT-compiled code read from the program's memory: Iced (MIT) on x64, and on arm64 a decoder of our own, checked against a table llvm-mc produced (the tests don't run LLVM). Registers are the general ones of the frame.
+- **Symbols.** `Codalus.Debugging.Symbols` finds a module's PDB by its SSQP key in the symbol paths (a folder, or a symbol store's layout), the cache and the listed servers. Local places are read as the module loads; servers are asked in the background, and with Just My Code on only for the modules the include list names, or on Load Symbols. A server is asked only for the key (the PDB's name and ID).
+- **Edit and Continue.** While stopped, the IDE sends Roslyn the statement of every frame (`codalus/activeStatements`: leaf, non-leaf, partially executed), so Roslyn refuses what a frame can't follow and says where each statement is in the new code. The runtime offers a frame its move when it reaches a place with an empty evaluation stack (`FunctionRemapOpportunity`). The adapter moves it (`ICorDebugILFrame2::RemapFunction`) in two cases, both sound: the frame is at a statement Roslyn mapped; or it is at the statement right after one, having run straight there with no branch in between, in the old code and in the new (a frame back from the call it waited in, whose statement Roslyn doesn't let the edit change). Otherwise it runs on in its old version and is asked again at its next statement; once it ran past a place unmoved, only Roslyn's own statements move it. A step from a moved frame starts again in the new version, and until the program goes on the stopped frame is shown at its statement's new place.
+- **A stop pauses the other programs** whose debugger says it can (`supportsBreakWithOtherPrograms`: the Codalus debugger; under netcoredbg on Windows a program paused that way, between a thread's end and an exception, never went on after `continue`, PR #323's first run), in the compound session, not in the adapters: the others are paused when one program's stop shows, go on with it (during a step too, pausing again at its end), and a program that paused after the first one went on goes on at once.
+- **Windows PDBs** through Mono.Cecil's reader (a port of Microsoft's CCI reader, MIT): the module's sequence points and locals, checked against the module's GUID and age. Old-style projects still build portable PDBs in Codalus (ADR 0076): the reader is for what was built elsewhere.
+
+Left for M58b beside its own scope: `[DebuggerDisplay]` read by the adapter, which the remote metadata needs anyway.

@@ -385,7 +385,7 @@ public sealed partial class ShellHost
         });
 
         /// <summary>
-        /// Start a Chat after Connect: the agent's own CLI in AI Console when it has one (ADR 0094), else AI Chat. AI
+        /// Start a Chat after Connect: the agent's own CLI in AI Console when it has one (ADR 0095), else AI Chat. AI
         /// Chat answers with it too, either way.
         /// </summary>
         public void StartChat(string agent)

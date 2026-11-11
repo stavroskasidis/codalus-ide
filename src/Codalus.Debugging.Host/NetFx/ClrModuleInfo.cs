@@ -15,11 +15,26 @@ internal readonly record struct ClrSequencePoint(int Offset, int StartLine, int 
 /// <summary>A type named by a module's metadata: its assembly (null: the same module) and its full name (<c>Ns.Outer+Inner</c>).</summary>
 internal readonly record struct ClrTypeName(string? Assembly, string FullName, int Token);
 
-internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName);
+internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName, bool IsPublic = false);
 
-internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName);
+/// <summary><see cref="IsPublic"/>: its getter is public (a type proxy's view lists its public members, M58).</summary>
+internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName, bool IsPublic = false);
 
 internal sealed record ClrMethodInfo(int Token, string Name, bool IsStatic, bool IsVirtual, IReadOnlyList<string> ParameterTypes, IReadOnlyList<string> ParameterNames, int GenericParameters, string ReturnType, bool IsSpecialName);
+
+/// <summary>A called method, as a call instruction names it: its type as C# shows it, and its name as metadata spells it.</summary>
+internal sealed record ClrCallTarget(string TypeName, string Name, bool ReturnsVoid)
+{
+    /// <summary>As a list of calls shows it: <c>Ns.Type.Method</c>, a constructor as <c>new Ns.Type</c>, an accessor as <c>Ns.Type.Name.get</c>.</summary>
+    public string Display => Name switch
+    {
+        ".ctor" => "new " + TypeName,
+        ".cctor" => TypeName + " (static constructor)",
+        _ when Name.StartsWith("get_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".get",
+        _ when Name.StartsWith("set_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".set",
+        _ => TypeName + "." + Name,
+    };
+}
 
 /// <summary>
 /// A module's metadata and portable PDB, read from its file with System.Reflection.Metadata (M43b): type, method,
@@ -46,11 +61,12 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>A method's version for the symbol lookups: its newest (new calls run it, breakpoints bind in it).</summary>
     public const int LatestVersion = int.MaxValue;
 
-    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus)
+    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus, WindowsPdbSymbols? windowsPdb = null)
     {
         Path = path;
         _pe = pe;
         _pdbProvider = pdbProvider;
+        _windowsPdb = windowsPdb;
         Metadata = pe.GetMetadataReader();
         Pdb = pdbProvider?.GetMetadataReader();
         PdbPath = pdbPath;
@@ -72,7 +88,10 @@ internal sealed class ClrModuleInfo : IDisposable
 
     public string? PdbPath { get; }
 
-    public bool HasSymbols => Pdb is not null;
+    /// <summary>The module's Windows PDB (M58), when that is the format its symbols are in; edits aren't applied to such a module's symbols.</summary>
+    private readonly WindowsPdbSymbols? _windowsPdb;
+
+    public bool HasSymbols => Pdb is not null || _windowsPdb is not null;
 
     /// <summary>DAP's <c>symbolStatus</c>: "Symbols loaded.", or why not.</summary>
     public string SymbolStatus { get; }
@@ -80,8 +99,13 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>Whether the assembly was compiled with optimizations (its <c>DebuggableAttribute</c> doesn't turn the JIT optimizer off).</summary>
     public bool IsOptimized { get; }
 
-    /// <summary>Reads <paramref name="path"/>'s metadata and its portable PDB (next to it, where its debug directory says, or embedded).</summary>
-    public static ClrModuleInfo Open(string path)
+    /// <summary>
+    /// Reads <paramref name="path"/>'s metadata and its portable PDB: next to it, where its debug directory says, or
+    /// embedded; or the one at <paramref name="symbolPath"/> (M58: found in a symbol path or on a symbol server, with
+    /// <paramref name="symbolStatus"/> saying where). A Windows PDB (next to the module, where it was built, or at
+    /// <paramref name="symbolPath"/>) is read through <see cref="WindowsPdbSymbols"/>.
+    /// </summary>
+    public static ClrModuleInfo Open(string path, string? symbolPath = null, string? symbolStatus = null)
     {
         var stream = File.OpenRead(path);
         PEReader pe;
@@ -101,19 +125,44 @@ internal sealed class ClrModuleInfo : IDisposable
         }
 
         MetadataReaderProvider? provider = null;
+        WindowsPdbSymbols? windowsPdb = null;
         string? pdbPath = null;
         string status;
         try
         {
-            if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            if (symbolPath is not null && WindowsPdbSymbols.IsWindowsPdb(symbolPath))
             {
+                windowsPdb = WindowsPdbSymbols.Open(path, symbolPath);
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (symbolPath is not null)
+            {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(symbolPath));
+                _ = provider.GetMetadataReader(); // a file that isn't a portable PDB says so here
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            {
+                status = "Symbols loaded.";
+            }
+            else if (BuiltPortablePdb(pe) is var (built, builtPath))
+            {
+                // Not next to the module, but still where the build wrote it (a program copied without its PDB).
+                provider = built;
+                pdbPath = builtPath;
+                status = "Symbols loaded.";
+            }
+            else if (WindowsPdb(pe, path) is { } windows)
+            {
+                windowsPdb = WindowsPdbSymbols.Open(path, windows);
+                pdbPath = windows;
                 status = "Symbols loaded.";
             }
             else
             {
-                status = WindowsPdb(pe, path) is { } windows
-                    ? $"{System.IO.Path.GetFileName(windows)} is a Windows PDB, which this debugger doesn't read: build with portable PDBs (DebugType portable)."
-                    : "No symbols: there's no PDB.";
+                status = "No symbols: there's no PDB.";
             }
         }
         catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -124,13 +173,48 @@ internal sealed class ClrModuleInfo : IDisposable
             pdbPath = null;
         }
 
-        return new ClrModuleInfo(path, pe, provider, pdbPath, status);
+        return new ClrModuleInfo(path, pe, provider, pdbPath, status, windowsPdb);
+    }
+
+    /// <summary>
+    /// The portable PDB at the path the debug directory names (where the build wrote it), when it's there and is this
+    /// build's: the runtime's own lookup reads only the one next to the module. It was taken for a Windows PDB before,
+    /// which left a program copied without its PDB without symbols on the machine that built it.
+    /// </summary>
+    private static (MetadataReaderProvider Provider, string Path)? BuiltPortablePdb(PEReader pe)
+    {
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && e.IsPortableCodeView))
+        {
+            var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
+            if (!System.IO.Path.IsPathRooted(codeView.Path) || !File.Exists(codeView.Path))
+            {
+                continue;
+            }
+
+            MetadataReaderProvider? provider = null;
+            try
+            {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(codeView.Path));
+                var id = new BlobContentId(provider.GetMetadataReader().DebugMetadataHeader!.Id);
+                if (id.Guid == codeView.Guid)
+                {
+                    return (provider, codeView.Path);
+                }
+            }
+            catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException or NullReferenceException)
+            {
+            }
+
+            provider?.Dispose();
+        }
+
+        return null;
     }
 
     /// <summary>A Windows PDB the debug directory names (next to the module or where it was built), if it's there.</summary>
     private static string? WindowsPdb(PEReader pe, string path)
     {
-        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView))
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && !e.IsPortableCodeView))
         {
             var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
             var nextTo = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path) ?? string.Empty, System.IO.Path.GetFileName(codeView.Path.Replace('\\', System.IO.Path.DirectorySeparatorChar)));
@@ -149,6 +233,7 @@ internal sealed class ClrModuleInfo : IDisposable
     public void Dispose()
     {
         _pdbProvider?.Dispose();
+        _windowsPdb?.Dispose();
         foreach (var provider in _deltaProviders)
         {
             provider.Dispose();
@@ -422,6 +507,21 @@ internal sealed class ClrModuleInfo : IDisposable
         }
     }
 
+    /// <summary>The interfaces a type definition says it implements (the compiler lists the inherited ones too), by their full names.</summary>
+    public IReadOnlyList<string> Interfaces(int typeToken)
+    {
+        var result = new List<string>();
+        foreach (var handle in Metadata.GetTypeDefinition(TypeHandle(typeToken)).GetInterfaceImplementations())
+        {
+            if (NameOf(Metadata.GetInterfaceImplementation(handle).Interface) is { } name)
+            {
+                result.Add(name.FullName);
+            }
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<ClrFieldInfo> Fields(int typeToken)
     {
         var result = new List<ClrFieldInfo>();
@@ -445,7 +545,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type));
+            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type,
+                (attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public));
         }
 
         return result;
@@ -476,7 +577,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type));
+            var isPublic = !accessors.Getter.IsNil && (Metadata.GetMethodDefinition(accessors.Getter).Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public;
+            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type, isPublic));
         }
 
         return result;
@@ -544,6 +646,71 @@ internal sealed class ClrModuleInfo : IDisposable
 
         var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
         return TypeDisplayName(MetadataTokens.GetToken(method.GetDeclaringType())) + "." + Metadata.GetString(method.Name);
+    }
+
+    /// <summary>
+    /// The method a call instruction's token names (M58): a definition here, a reference to another module's, or a
+    /// generic method's instantiation. Its type's display name (<c>Ns.Type</c>) and its own, as metadata spells them
+    /// (<c>get_Count</c>, <c>.ctor</c>); null for a token that isn't a method's (a <c>calli</c> signature) or is an
+    /// edit's.
+    /// </summary>
+    public ClrCallTarget? CallTarget(int token)
+    {
+        try
+        {
+            var handle = MetadataTokens.EntityHandle(token);
+            switch (handle.Kind)
+            {
+                case HandleKind.MethodDefinition:
+                    if (Added(token) is { } added)
+                    {
+                        return new ClrCallTarget(TypeDisplayName(added.TypeToken), String(added.Method.Name), false);
+                    }
+
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.MethodDefinitions.Count)
+                    {
+                        return null;
+                    }
+
+                    var definition = Metadata.GetMethodDefinition((MethodDefinitionHandle)handle);
+                    return new ClrCallTarget(TypeDisplayName(MetadataTokens.GetToken(definition.GetDeclaringType())), Metadata.GetString(definition.Name), ReturnsVoid(definition.Signature));
+                case HandleKind.MemberReference:
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MemberRef))
+                    {
+                        return null;
+                    }
+
+                    var reference = Metadata.GetMemberReference((MemberReferenceHandle)handle);
+                    var parent = reference.Parent.Kind == HandleKind.MethodDefinition
+                        ? TypeDisplayName(MetadataTokens.GetToken(Metadata.GetMethodDefinition((MethodDefinitionHandle)reference.Parent).GetDeclaringType()))
+                        : NameOf(reference.Parent) is { } type ? DisplayName(type.FullName) : "?";
+                    return new ClrCallTarget(parent, Metadata.GetString(reference.Name), ReturnsVoid(reference.Signature));
+                case HandleKind.MethodSpecification:
+                    return MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MethodSpec)
+                        ? null
+                        : CallTarget(MetadataTokens.GetToken(Metadata.GetMethodSpecification((MethodSpecificationHandle)handle).Method));
+                default:
+                    return null;
+            }
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or ArgumentException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a method signature's return type is <c>void</c>.</summary>
+    private bool ReturnsVoid(BlobHandle signature)
+    {
+        var blob = Metadata.GetBlobReader(signature);
+        var header = blob.ReadSignatureHeader();
+        if (header.IsGeneric)
+        {
+            blob.ReadCompressedInteger();
+        }
+
+        blob.ReadCompressedInteger(); // the parameter count
+        return blob.RemainingBytes > 0 && blob.ReadSignatureTypeCode() == SignatureTypeCode.Void;
     }
 
     /// <summary>A method an edit added (M55), with its type: the module's own tables don't have it.</summary>
@@ -651,6 +818,10 @@ internal sealed class ClrModuleInfo : IDisposable
             catch (BadImageFormatException)
             {
             }
+        }
+        else if (_windowsPdb is { } windows)
+        {
+            result.AddRange(windows.SequencePoints(methodToken));
         }
 
         lock (_sequencePoints)
@@ -770,6 +941,19 @@ internal sealed class ClrModuleInfo : IDisposable
             tokens.AddRange(_editedSymbols.Keys.Except(tokens).ToList());
         }
 
+        foreach (var token in _windowsPdb?.Methods() ?? [])
+        {
+            foreach (var document in SequencePoints(token).Select(p => p.Document).Where(d => d.Length > 0).Distinct(s_paths))
+            {
+                if (!result.TryGetValue(document, out var list))
+                {
+                    result[document] = list = [];
+                }
+
+                list.Add(token);
+            }
+        }
+
         foreach (var token in tokens)
         {
             if (Symbols(token, LatestVersion) is not var (pdb, row))
@@ -818,7 +1002,7 @@ internal sealed class ClrModuleInfo : IDisposable
     {
         if (Symbols(methodToken, version) is not var (pdb, row))
         {
-            return [];
+            return _windowsPdb?.Locals(methodToken, ilOffset) ?? [];
         }
 
         var result = new List<(int, string)>();
