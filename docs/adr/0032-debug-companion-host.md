@@ -3,6 +3,7 @@
 - **Status:** accepted (M14b, 2026-10-11; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-11
 - **Deciders:** maintainer
+- **Amended by:** [ADR 0094](0094-the-codalus-debugger-by-default.md) (M58a, 2026-11-11: the Codalus debugger reads `[DebuggerTypeProxy]` and Results View itself and freezes threads; the companion's workarounds stay for netcoredbg)
 
 ## Context
 

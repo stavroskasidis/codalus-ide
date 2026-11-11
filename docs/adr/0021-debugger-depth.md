@@ -3,6 +3,7 @@
 - **Status:** accepted (M14 plan, 2026-10-10; the maintainer's standing go-ahead for M9–M16)
 - **Date:** 2026-10-10
 - **Deciders:** maintainer
+- **Amended by:** [ADR 0094](0094-the-codalus-debugger-by-default.md) (M58a, 2026-11-11: under the Codalus debugger hit counts, logpoints, filters and dependent breakpoints are applied by the debugger, and Set Next Statement, Step Into Specific, type proxies, Results View, object IDs and the Disassembly, Registers and Memory windows are built; this ADR's gaps stay netcoredbg's)
 
 ## Context
 

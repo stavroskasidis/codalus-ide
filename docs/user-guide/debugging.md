@@ -34,7 +34,7 @@ Debug → **Configure Startup Projects** (or right-click the solution) opens the
 F5 then builds the solution once and starts the projects in that order. Those set to Start are debugged in **one session**:
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;
-- each program stops at its own breakpoints, and the others keep running;
+- each program stops at its own breakpoints. Under [the Codalus debugger](#the-codalus-debugger-preview), a stop in one program (a breakpoint, a step's end, an exception) pauses the others too, as the classic IDE's "Break all processes when one process breaks": their threads and values can be read while you're stopped, and they go on when you continue or step (during a step they run, and pause again at its end). Turn it off with `debug.breakAllProcesses`. Under netcoredbg the others keep running;
 - Break All stops every program except a later one that is still starting, which keeps running (Break All waits for the first program to be attached to, as above);
 - the session ends when the last program ends.
 
@@ -107,6 +107,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
 - **Function breakpoints**: Debug → New Function Breakpoint breaks when a method is entered: `Method`, `Type.Method` or `Namespace.Type.Method`, with an optional condition.
 - **The Breakpoints window** (`Ctrl+Alt+B`) lists source and function breakpoints with their labels and settings. Search by location, condition or label; enable or disable the ones shown; double-click to open; `Delete` to remove; right-click to edit labels. **Export** and **Import** save breakpoints to a JSON file and read them back.
 - **Edits**: breakpoints follow your edits to the file, and are saved with the solution.
+- **Who counts the hits**: under [the Codalus debugger](#the-codalus-debugger-preview) the debugger itself applies hit counts, filters, dependencies and logpoints, so the program doesn't stop for a hit that doesn't count and a logpoint in a loop costs little. Under netcoredbg, Codalus IDE stops the program at each hit and continues it.
 
 ## Running to a line
 
@@ -119,6 +120,10 @@ Programs started after you turn it on are covered. Turning it off removes the va
 Codalus IDE comes to the front when the program stops, even when the program's window or the browser had the focus, so `F10` and `F11` go to the debugger (in the browser, `F11` is its full screen).
 
 - **Stepping**: Step Over (`F10`), Step Into (`F11`), Step Out (`Shift+F11`), Continue (`F5`).
+- Under [the Codalus debugger](#the-codalus-debugger-preview) also:
+  - **Set Next Statement** (`Ctrl+Shift+F10`, or the editor's context menu): moves the current statement to the caret's line without running the code between. The line has to be in the method the thread is in, and the status bar says why when a line can't be chosen.
+  - **Step Into Specific** (`Shift+Alt+F11`): lists the calls of the current line and steps into the one you pick, past the others (`Shout(Join("a", Twice("b")))` offers `Twice`, `Join` and `Shout`).
+  - **Returned values**: after Step Out, or a step that leaves a method at its end, Locals shows what the method returned as its first row (`Shout returned`), and `$ReturnValue` reads it in Watch.
 - **The current statement** is highlighted, with a yellow arrow in the margin.
 - **PerfTips**: the time since the program was resumed appears in gray at the end of the current line, e.g. `≤ 12 ms elapsed`. It includes the debugger's own overhead, so use it to compare steps, not as a profiler. Turn it off with the `debug.perfTips` setting.
 - **Locals** and **Autos**: Autos shows the variables used on the current and previous lines. Expand objects to see their members: they show as rows under the Name | Value | Type header, each level indented inside the Name column so values and types stay in their columns (drag the header's edges to resize them). What you expanded stays expanded when you step. `Right` and `Left` expand and collapse the selected row; `Ctrl+C` copies its value. At a session's first stop, Locals comes to the front of the tabs it shares with the Call Stack.
@@ -132,8 +137,10 @@ Codalus IDE comes to the front when the program stops, even when the program's w
   - plugins can add their own visualizers for other types (see [Plugins](../plugins.md#workbench-apis)).
 - **Display attributes**: objects whose type has `[DebuggerDisplay]` show its text (`Order 7: Ada (1 lines)` instead of `{MyApp.Order}`), and members marked `[DebuggerBrowsable(Never)]` are hidden, in Locals, Autos, Watch, QuickWatch and data tips.
 - **Call Stack** (`Ctrl+Alt+C`): the frames of the selected thread. Pick another thread at the top. Double-click a frame to see its source and its variables.
-- **Threads** (`Ctrl+Alt+H`): every thread with its id, name and location. Double-click to switch to a thread; flag threads and show only the flagged ones.
-- **Modules** (`Ctrl+Alt+U`): the loaded modules with their symbol status and path.
+- **Threads** (`Ctrl+Alt+H`): every thread with its id, name and location. Double-click to switch to a thread; flag threads and show only the flagged ones. Under the Codalus debugger, the context menu's **Freeze** keeps a thread from running when the program goes on, and **Thaw** lets it run again.
+- **Modules** (`Ctrl+Alt+U`): the loaded modules with their symbol status and path. Under the Codalus debugger, **Load Symbols** in a module's context menu looks its PDB up now (see [Symbols](#symbols)).
+- **Object IDs**: under the Codalus debugger, a value's context menu has **Make Object ID**: the object gets a name (`$1`, shown as `{$1}` after its value) that Watch and conditions can use while it is out of scope, for as long as the program keeps it or you **Delete Object ID**. `$exception` is the thread's current exception.
+- **Disassembly, Registers and Memory** (Debug → Windows), under the Codalus debugger: see [The machine's side](#the-machines-side).
 - **Data tips**: hover over a variable or a member access to see its value; see [Data tips](#data-tips).
 - **Pinned data tips**: the pin in a data tip's header or rows keeps that expression next to its line, as the data tip's header with a strip to unpin it. It is evaluated again at every pause, in red when the value changed, and keeps its last value, muted, after the program resumes or the session ends. While the program is paused, its chevron expands it into the same tips as the hover's, and its value is edited in place. Several pins on one line stack. Right-click it to add a comment (shown under it), copy, add a watch or unpin it; double-click its name for QuickWatch. Pinned tips follow your edits and are saved with the solution; Debug → Windows → Clear All DataTips removes them.
 - **Parallel Stacks** (Debug → Windows): every thread's call stack in one tree. Threads that share callers are grouped until their stacks branch; the node with the active thread is marked.
@@ -161,6 +168,7 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
   - in a remote session (SSH, containers, WSL) the program's assemblies aren't on this machine: nothing is grouped, and icons are guessed from the names (`_name` and `name` are fields, `Name` a property).
 - **Collections**: a `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` or `Stack<T>` expands to its elements, then **Raw View**, which holds the collection's own members (its capacity, its count, its private fields). A dictionary's entries are named by their keys (`["server.Features"]`) and expand to Key and Value; a queue lists from its head, a stack from its top. netcoredbg can't build these types' debugger views (`[DebuggerTypeProxy]`), so the elements are read from the collections' fields, which differ between .NET versions, .NET Framework and Mono; a collection whose fields aren't known shows its own members. Other collections show their own members.
 - **Long arrays**: up to 1,000 elements show at once. A longer array, and a collection's backing array under Raw View, shows ranges, `[0..999]`, `[1000..1999]` and so on, each read from the program when you expand it, in data tips, Locals, Autos, Watch, QuickWatch and pinned tips. Past 1,000,000 elements, ranges hold ranges. A debugger that sends a list whole shows its first 1,000 elements and a row saying how many more there are.
+- **Type proxies and Results View**, under [the Codalus debugger](#the-codalus-debugger-preview): a type with `[DebuggerTypeProxy]` shows its proxy's members (as the framework's other collections do: `LinkedList<T>`, `SortedSet<T>`, the concurrent and immutable ones), with **Raw View** for its own. A value that is only a sequence (`IEnumerable`, a LINQ query not yet run) has **Results View**, which runs it when you expand it.
 - **Long lists**: the `[DebuggerDisplay]` text of the first 60 elements is shown at once; the others show their type, in gray, until they scroll into view. A tip builds only the rows on screen, and its Name column is as wide as the widest name of all its members, so it doesn't shift while you scroll.
 - **From the keyboard**: `Up` and `Down` move in a tip, `Right` opens the selected row's tip, `Left` closes it or goes back, `F2` or `Enter` edits the value, `Ctrl+C` copies it, `Shift+F10` opens its menu and `Escape` closes the tips.
 - **Editing**: click a value (in the header or a row), or press `F2` or `Enter`, to edit it in place; `Enter` sets it and `Escape` puts it back. When the debugger refuses what you typed (a name it doesn't know, a string without quotes), the box stays open with its message under it. A value that can't be changed opens no box: rest the pointer on it to see why (a property without a setter, a constant, a read-only field, or a Mono program, whose debugger can't change values).
@@ -191,20 +199,56 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 
 ## The Codalus debugger (preview)
 
-Codalus IDE has a .NET debugger of its own, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). netcoredbg stays the default while it matures: to try it, set **`debug.adapter`** to `codalus` (Options › Debugging › **Debugger for .NET programs**). It applies from the next session, to Start Debugging, Attach to Process, debugging tests and several startup projects, and the first line in the Debug Console says which debugger a session uses.
+Codalus IDE has a .NET debugger of its own, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). netcoredbg stays the default until the next release makes this one the default: to use it now, set **`debug.adapter`** to `codalus` (Options › Debugging › **Debugger for .NET programs**). It applies from the next session, to Start Debugging, Attach to Process, debugging tests and several startup projects, and the first line in the Debug Console says which debugger a session uses.
 
 What it does that netcoredbg doesn't:
-- **Hot Reload while debugging**: edits apply to the program you're debugging (below)
+- **Hot Reload and Edit and Continue**: edits apply to the program you're debugging, and the method you're stopped in goes on in its new code ([below](#hot-reload-while-debugging))
+- hit counts, filters, dependencies and logpoints applied by the debugger, with no stop for a hit that doesn't count ([Breakpoints](#breakpoints))
+- Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs ([While stopped](#while-stopped))
+- the whole of C# in Watch, QuickWatch, data tips and conditions, and Visual Basic in Visual Basic code ([Expressions](#expressions))
+- `[DebuggerTypeProxy]`, Results View and Raw View ([Data tips](#data-tips))
+- the Disassembly, Registers and Memory windows ([The machine's side](#the-machines-side))
+- symbol paths and symbol servers ([Symbols](#symbols)), and Windows PDBs
+- with several startup projects, a stop in one program pauses the others
 - the program's own exit code on macOS (netcoredbg reports 0 there)
 - programs in the integrated terminal or a console window start under the debugger, so a breakpoint on `Main`'s first line stops there; the integrated terminal works on macOS too, and no startup hook is needed
-- casts and C#'s operators in Watch, QuickWatch and conditions
 - exception module conditions on .NET 11 programs
 
 What it doesn't do yet, so netcoredbg debugs these and the Debug Console says why:
 - x64 programs on Apple silicon (.NET 5 and earlier under Rosetta 2)
 - remote targets: SSH, containers and WSL
 
-Its expressions are the .NET Framework debugger's C# subset: names, members, indexers, method calls, operators, `?:`, `??` and casts, but no `new`, lambdas or generic methods. If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its log there, to attach to a report.
+If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder: each session writes its log there, to attach to a report.
+
+### Expressions
+
+The debugger reads most expressions itself, at once: names, members, indexers, method calls (generic ones too), operators, `?:`, `??`, casts, `new`, and its own names (`$exception`, `$ReturnValue`, object IDs like `$1`). What it doesn't read, it has the C# language service compile against the place you're stopped at and runs the result in your program: **lambdas and LINQ** (`orders.Where(o => o.Total > 100).Count()`), extension methods, collection and object initializers, pattern matching, string interpolation, and the rest of C#. Private members can be used, as everywhere in the debugger.
+
+- In **Visual Basic** code, expressions are Visual Basic (`names.Where(Function(n) n.Length > 3).Count()`, `If(x Is Nothing, 0, x.Length)`).
+- Compiling needs the program's project loaded in the solution. Attached to a program whose project isn't open, the debugger's own reader still works.
+- A compiled expression is a small assembly loaded into your program; it stays until the program ends, and the Modules window leaves it out.
+- F# expressions aren't compiled: F# code reads C#'s subset.
+
+### The machine's side
+
+Debug → Windows has three windows for the code as the JIT compiled it. They show managed code, in the stopped frame:
+
+- **Disassembly**: the current method's instructions under their source lines, the frame's instruction marked. **Step Over Instruction** and **Step Into Instruction** step one instruction. x64 and arm64 are decoded.
+- **Registers**: the frame's general registers, in red when a step changed them.
+- **Memory**: the bytes at an address or at an expression's object (`text`, `0x7f3a10002000`), a page at a time, with their characters; **Write** puts the hex bytes you type at the address.
+
+There are no data breakpoints and no mixed-mode (native) debugging.
+
+### Symbols
+
+The debugger reads the PDB next to a module, the one the module embeds, or the one still where the build wrote it, in the portable format and in Windows' older one. For a module without one, **Options › Debugging** has the classic IDE's symbol settings:
+
+- **Symbol paths** (`debug.symbols.paths`): folders that hold PDBs, loose or in a symbol store's layout.
+- **Symbol servers**: Microsoft's (`debug.symbols.microsoftServer`), NuGet.org's (`debug.symbols.nugetServer`) and your own URLs (`debug.symbols.servers`). **All are off or empty until you turn them on**: a server is asked nothing before that. What a server is sent is a module's PDB name and build ID, nothing of your code.
+- **The cache** (`debug.symbols.cacheFolder`): where downloaded PDBs are kept, so each is fetched once.
+- **Which modules**: every module but those in `debug.symbols.exclude`, or with `debug.symbols.loadOnlySpecified` only those in `debug.symbols.include` (`Newtonsoft.*.dll`). With Just My Code on, servers are asked by themselves only for the modules you list; **Load Symbols** in the Modules window asks for any module, and its symbol status says where the PDB was found or why not.
+
+Symbol paths and the cache are read as a module loads; servers are asked in the background, and the module's status changes when its PDB arrives.
 
 ### Hot Reload while debugging
 
@@ -213,7 +257,14 @@ Under the Codalus debugger, C#, Visual Basic and Razor edits apply to the progra
 - **Continue**, a step or Run to Cursor applies the edits you made while stopped, before the program goes on.
 - **Saving a file** applies it while the program runs, with **Hot Reload while debugging** (`debug.hotReload`) on, as it is by default.
 
-The status bar's Hot Reload item says when the edits last applied, and the Debug Console says each time. As with `dotnet watch`, a changed method runs its new code from its next call: a method already running (the one you're stopped in, say) finishes in its old version. Breakpoints bind in the new code, so a breakpoint on a line you just added stops there.
+The status bar's Hot Reload item says when the edits last applied, and the Debug Console says each time. Breakpoints bind in the new code, so a breakpoint on a line you just added stops there.
+
+**Edit and Continue.** An edit you make **while the program is stopped** also reaches the methods that are running:
+- the method you're stopped in goes on in its new code, from the statement you were at, with its locals. The current statement moves with your edit as soon as it's applied, and a step from there steps through the new code;
+- a method further down the call stack, waiting for a call to return, finishes that call's statement as it was and goes on in the new code from the next statement. You can't change the statement it is waiting in: that needs a restart, and Codalus IDE asks.
+- When the code after such a call branches at once (the call is an `if`'s condition, say), the method goes on in its old version until it reaches the call again; its next call runs the new code either way.
+
+An edit applied **while the program runs** is Hot Reload's: a changed method runs its new code from its next call, and a method already running finishes in its old version.
 
 Some edits can't be applied to a running program (changing a class's base type, say). Codalus IDE then asks: **Restart** builds and debugs the program again, and **Continue with the Old Code** goes on with the code it started with. The edit's diagnostics are in the Error List, under the source *Hot Reload*. Code that doesn't compile isn't applied: its errors are there too.
 
@@ -230,6 +281,8 @@ Under netcoredbg, the first edit you save while debugging offers the Codalus deb
 - `debug.adapter`: the debugger for .NET programs, `netcoredbg` (the default) or `codalus` ([the Codalus debugger](#the-codalus-debugger-preview), a preview).
 - `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger). Off, a Blazor Web App's WebAssembly edits wait for a restart.
 - `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
+- `debug.breakAllProcesses`: with several startup projects, a stop in one program pauses the others (the Codalus debugger; on by default).
+- `debug.symbols.*`: symbol paths, symbol servers (off by default), the cache and the modules to look up, for [the Codalus debugger](#symbols).
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.
@@ -241,24 +294,31 @@ Under netcoredbg, the first edit you save while debugging offers the Codalus deb
 
 Blazor WebAssembly apps, and the pages of ASP.NET Core apps, are debugged in the browser (see [Web development](web.md#debugging-the-server-and-the-page-together)). There, function breakpoints, the Modules window and the .NET exception settings don't apply.
 
-These come from netcoredbg:
-- no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). [The Codalus debugger](#hot-reload-while-debugging) applies edits while debugging. Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.
-- no data breakpoints
+The Codalus debugger's own limits:
+- no data breakpoints and no mixed-mode (native) debugging; the Disassembly, Registers and Memory windows show managed code
+- remote targets and x64 programs on Apple silicon are debugged by netcoredbg
+- symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
+- F# expressions are read as C#'s subset
+- Edit and Continue doesn't cover modules built with Windows PDBs
+
+These come from netcoredbg, which is the default debugger for now; [the Codalus debugger](#the-codalus-debugger-preview) does the first eight:
+- no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows
-- no mixed-mode debugging
 - debugger type proxies (`[DebuggerTypeProxy]`) aren't applied: showing one means creating it, which netcoredbg can't evaluate. `List<T>`, `Dictionary<TKey, TValue>`, `HashSet<T>`, `Queue<T>` and `Stack<T>` show their elements anyway (see [Data tips](#data-tips)); other collections show their own members, and the Grid Visualizer shows the ones with a `ToArray()`. There's no Results View
 - no Make Object ID, no return values after Step Out, and no freezing of threads
 - no symbol servers or symbol paths: the debugger reads the PDBs next to the assemblies, and library sources come from embedded sources and Source Link
+- no `new`, lambdas or generic methods in expressions, and hit counts and logpoints stop the program at each hit
+- with several startup projects, a stop in one program doesn't pause the others
+- no data breakpoints and no mixed-mode debugging
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
 - no console input for a program debugged with the Debug Console (set `debug.console` to `integratedTerminal`)
-- with several startup projects, a stop in one program doesn't pause the others
 - remote debugging covers Linux and macOS targets with `sh`, `tar` and `gzip`; not Windows machines over SSH, nor Windows containers
 - on macOS, the program's exit code is reported as 0
 - no debugger for macOS on Intel
 - .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
-Hit counts, logpoints, filters, dependent and temporary breakpoints, exception module conditions and Run to Cursor are implemented by the IDE, so each hit pauses the program briefly.
+Under netcoredbg, hit counts, logpoints, filters and dependent breakpoints are implemented by the IDE, so each hit pauses the program briefly; temporary breakpoints, exception module conditions and Run to Cursor are the IDE's under both debuggers.
 
-The .NET Framework debugger (Windows) has these limits of its own: 64-bit processes only (not x86 or `Prefer32Bit` apps), portable PDBs only, no integrated terminal (the Debug Console or a console window), expressions limited to a C# subset (no `new`, lambdas, generic methods or assignments), and Edit and Continue, Set Next Statement, data breakpoints and mixed-mode debugging aren't available ([.NET Framework](net-framework.md#debugging-on-windows)).
+The .NET Framework debugger (Windows) has these limits of its own: 64-bit processes only (not x86 or `Prefer32Bit` apps), no integrated terminal (the Debug Console or a console window), and Edit and Continue, data breakpoints and mixed-mode debugging aren't available. It shares the Codalus debugger's code, so it offers the same breakpoints, stepping, expressions and windows; of those, Codalus's CI tests on .NET Framework what the guide's [.NET Framework](net-framework.md#debugging-on-windows) page lists ([.NET Framework](net-framework.md#debugging-on-windows)).

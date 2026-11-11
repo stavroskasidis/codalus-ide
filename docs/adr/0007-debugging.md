@@ -3,7 +3,7 @@
 - **Status:** accepted (M5, continuing autonomously toward the MVP)
 - **Date:** 2026-10-09
 - **Deciders:** maintainer (goal: "keep going until MVP is reached")
-- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28: a managed CoreCLR adapter of our own replaces netcoredbg in phases; phase 1 built in M54, 2026-10-29: the Codalus debugger behind `debug.adapter`, netcoredbg still the default)
+- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28: a managed CoreCLR adapter of our own replaces netcoredbg in phases; phase 1 built in M54, 2026-10-29: the Codalus debugger behind `debug.adapter`, netcoredbg still the default); [ADR 0094](0094-the-codalus-debugger-by-default.md) (D49, 2026-11-11: the Codalus debugger becomes the default in M58b and netcoredbg an opt-in fallback for one release; M58a closes the gaps listed here under the Codalus debugger)
 
 ## Context
 
