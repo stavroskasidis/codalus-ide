@@ -195,8 +195,37 @@ public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProc
 /// </summary>
 public sealed record ApplyChangesArguments(ModuleDelta[] Updates);
 
-/// <summary>Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON).</summary>
-public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta);
+/// <summary>
+/// Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON). <see cref="ActiveStatements"/> (M58): where
+/// the statements the stopped threads' frames are at are in the edited methods' new versions, so the frames move there.
+/// </summary>
+public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta)
+{
+    public ActiveStatementUpdate[]? ActiveStatements { get; init; }
+}
+
+/// <summary>
+/// The frame at <see cref="IlOffset"/> of a method's version goes on, in the method's new version, at the statement
+/// that starts at <see cref="StartLine"/> and <see cref="StartColumn"/> (1-based, as the symbols count).
+/// </summary>
+public sealed record ActiveStatementUpdate(int MethodToken, int MethodVersion, int IlOffset, int StartLine, int StartColumn);
+
+/// <summary>
+/// <c>codalus/activeStatements</c>'s answer (M58): the statement each frame of the stopped threads is at, in the
+/// modules that have symbols.
+/// </summary>
+public sealed record ActiveStatementsResponse(ActiveStatement[] Statements);
+
+/// <summary>
+/// A frame's statement: its method (the module's MVID, the token, the version the frame runs), the IL offset, and the
+/// statement's span in <see cref="Document"/> (1-based). <see cref="Leaf"/>: the thread's innermost frame;
+/// <see cref="UpToDate"/>: the method's newest version.
+/// </summary>
+public sealed record ActiveStatement(Guid ModuleId, int MethodToken, int MethodVersion, int IlOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn, bool Leaf, bool UpToDate)
+{
+    /// <summary>The frame is in the middle of the statement (after a step out): the statement can't be edited.</summary>
+    public bool PartiallyExecuted { get; init; }
+}
 
 /// <summary><c>codalus/applyChanges</c>'s answer: what happened to each module's delta.</summary>
 public sealed record ApplyChangesResponse(ModuleDeltaResult[] Results);
@@ -526,6 +555,7 @@ public static class DapEvents
 [JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(ApplyChangesArguments))]
 [JsonSerializable(typeof(ApplyChangesResponse))]
+[JsonSerializable(typeof(ActiveStatementsResponse))]
 [JsonSerializable(typeof(HotReloadCapabilitiesResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
 [JsonSerializable(typeof(StartDebuggingArguments))]

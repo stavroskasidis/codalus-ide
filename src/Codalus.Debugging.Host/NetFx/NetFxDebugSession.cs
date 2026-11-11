@@ -317,6 +317,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             case "disconnect" or "terminate":
                 Disconnect(Read(arguments, json.DisconnectArguments)?.TerminateDebuggee ?? !_attached);
                 return null;
+            case ActiveStatementsCommand:
+                return JsonSerializer.SerializeToElement(new ActiveStatementsResponse(ActiveStatements()), json.ActiveStatementsResponse);
             case HotReloadCapabilitiesCommand:
                 return JsonSerializer.SerializeToElement(new HotReloadCapabilitiesResponse(HotReloadCapabilities()), json.HotReloadCapabilitiesResponse);
             case ApplyChangesCommand:
@@ -347,6 +349,247 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     /// <summary>Applies an edit's deltas to the modules the program has loaded (Roslyn's, from the language host).</summary>
     public const string ApplyChangesCommand = "codalus/applyChanges";
+
+    /// <summary>Where the stopped threads' frames are, for Roslyn's analysis of an edit made while stopped (M58).</summary>
+    public const string ActiveStatementsCommand = "codalus/activeStatements";
+
+    /// <summary>
+    /// Where a frame goes on after an edit (M58): the one at <see cref="OldOffset"/> of the method's version
+    /// <see cref="Version"/> is at <see cref="NewOffset"/> of version <see cref="NewVersion"/>, at <see cref="Line"/>.
+    /// </summary>
+    private sealed record FrameRemap(int Version, int OldOffset, int NewVersion, int NewOffset, int Line);
+
+    /// <summary>The edited methods' <see cref="FrameRemap"/>s, as their last edit gave them.</summary>
+    private readonly Dictionary<(IClrModule Module, int Method), List<FrameRemap>> _remaps = [];
+
+    /// <summary>
+    /// Threads whose frame in an edited method ran past a place it could have moved at, without one to move to: from
+    /// then on it moves only at a statement Roslyn mapped, since how it got anywhere else is no longer known.
+    /// </summary>
+    private readonly HashSet<(int Thread, IClrModule Module, int Method)> _ranOn = [];
+
+    /// <summary>The thread whose step starts again when its frame is in the new version.</summary>
+    private int? _stepAfterRemap;
+
+    /// <summary>
+    /// The statement each frame of every thread is at, in modules with symbols: the innermost frame of a thread is a
+    /// leaf (it can go on in an edited method's new version at once), the others wait for their callees. A leaf in the
+    /// middle of its statement (after a step out) is partially executed: Roslyn then refuses an edit of that statement.
+    /// None while the program runs.
+    /// </summary>
+    private ActiveStatement[] ActiveStatements()
+    {
+        lock (_gate)
+        {
+            if (!_userStopped)
+            {
+                return [];
+            }
+
+            var result = new List<ActiveStatement>();
+            foreach (var thread in Process.Threads())
+            {
+                var leaf = true;
+                foreach (var frame in SafeFrames(thread))
+                {
+                    if (frame.Module is not { } module)
+                    {
+                        continue; // a native or internal frame: the managed one under it isn't the innermost any more
+                    }
+
+                    var isLeaf = leaf;
+                    leaf = false;
+                    if (Types.Info(module) is not { HasSymbols: true } info || info.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is not { Document.Length: > 0 } point)
+                    {
+                        continue;
+                    }
+
+                    int latest;
+                    try
+                    {
+                        latest = Process.CodeVersion(module, frame.MethodToken);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        latest = frame.CodeVersion;
+                    }
+
+                    result.Add(new ActiveStatement(info.Mvid, frame.MethodToken, frame.CodeVersion, frame.IlOffset, point.Document, point.StartLine, point.StartColumn, point.EndLine, point.EndColumn, isLeaf, frame.CodeVersion == latest)
+                    {
+                        PartiallyExecuted = isLeaf && (!frame.IsIlOffsetExact || point.Offset != frame.IlOffset),
+                    });
+                }
+            }
+
+            return [.. result];
+        }
+    }
+
+    /// <summary>
+    /// The statement to show for a frame: where it is, or, for one in an old version of an edited method that moves
+    /// when the program goes on, where its statement is in the source as edited (the file no longer has the old lines).
+    /// </summary>
+    private ClrSequencePoint? ShownAt(IClrModule module, ClrModuleInfo info, IClrFrame frame)
+    {
+        if (_remaps.TryGetValue((module, frame.MethodToken), out var remaps) && remaps.FirstOrDefault(r => r.Version == frame.CodeVersion && r.OldOffset == frame.IlOffset) is { } remap)
+        {
+            try
+            {
+                if (Process.CodeVersion(module, frame.MethodToken) == remap.NewVersion && frame.CodeVersion != remap.NewVersion)
+                {
+                    return info.LineAt(frame.MethodToken, remap.NewOffset);
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        return info.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion);
+    }
+
+    /// <summary>
+    /// Keeps where the frames in a module's edited methods go on: Roslyn's new place of each active statement, as an
+    /// offset in the method's new version (read now, while the symbols are this edit's).
+    /// </summary>
+    private void KeepRemaps(IClrModule module, ClrModuleInfo info, ActiveStatementUpdate[] updates)
+    {
+        foreach (var group in updates.GroupBy(a => a.MethodToken))
+        {
+            int latest;
+            try
+            {
+                latest = Process.CodeVersion(module, group.Key);
+            }
+            catch (InvalidOperationException)
+            {
+                continue;
+            }
+
+            var points = info.SequencePoints(group.Key);
+            var remaps = new List<FrameRemap>();
+            foreach (var update in group)
+            {
+                if (points.Where(p => !p.IsHidden && p.StartLine == update.StartLine && p.StartColumn == update.StartColumn).OrderBy(p => p.Offset).Cast<ClrSequencePoint?>().FirstOrDefault() is { } to)
+                {
+                    remaps.Add(new FrameRemap(update.MethodVersion, update.IlOffset, latest, to.Offset, to.StartLine));
+                }
+            }
+
+            _remaps[(module, group.Key)] = remaps;
+            _ranOn.RemoveWhere(r => ReferenceEquals(r.Module, module) && r.Method == group.Key);
+        }
+    }
+
+    /// <summary>
+    /// A thread in an old version of an edited method is at a place where it can go on in the new one (the start of a
+    /// statement, nothing on the evaluation stack). It does when the new place is known:
+    /// <list type="bullet">
+    /// <item>it is at a statement Roslyn mapped (the one it was stopped at when the edit was made): that statement in the new version;</item>
+    /// <item>it is at the statement right after one Roslyn mapped, having run straight there (a frame that waited for a
+    /// call, back from it: Roslyn refuses an edit of that statement, so the old one finished as written): the statement
+    /// after it in the new version, when that also follows straight.</item>
+    /// </list>
+    /// Otherwise it runs on in the old version, and is asked again at its next statement.
+    /// </summary>
+    /// <returns>Whether the frame moves when the program goes on.</returns>
+    private bool RemapFrame(ClrRemapOpportunity opportunity)
+    {
+        var key = (opportunity.Module, opportunity.MethodToken);
+        if (Types.Info(opportunity.Module) is not { } info || !_remaps.TryGetValue(key, out var all) || TopFrame(opportunity.Thread) is not { } frame
+            || frame.MethodToken != opportunity.MethodToken || !ReferenceEquals(frame.Module, opportunity.Module))
+        {
+            return false;
+        }
+
+        var at = opportunity.OldIlOffset;
+        var name = info.MethodDisplayName(opportunity.MethodToken);
+        try
+        {
+            var latest = Process.CodeVersion(opportunity.Module, opportunity.MethodToken);
+            var remaps = all.Where(r => r.Version == frame.CodeVersion && r.NewVersion == latest).ToList();
+            var starts = info.SequencePoints(opportunity.MethodToken, frame.CodeVersion).Select(p => p.Offset).Distinct().Order().ToList();
+
+            // The runtime asks where the evaluation stack is empty, which is also at the nop that ends a statement
+            // with a call (seen on .NET 11): nothing is left of that statement, so it is the next one's start.
+            if (!starts.Contains(at) && starts.Where(o => o > at).Cast<int?>().FirstOrDefault() is { } following && frame.Il() is { } il && following <= il.Length && il.AsSpan(at, following - at).IndexOfAnyExcept((byte)0) < 0)
+            {
+                at = following;
+            }
+            (int Offset, int Line)? to = null;
+            if (starts.Contains(at) && remaps.FirstOrDefault(r => r.OldOffset == at) is { } same)
+            {
+                to = (same.NewOffset, same.Line);
+            }
+            else if (starts.Contains(at) && !_ranOn.Contains((opportunity.Thread.Id, opportunity.Module, opportunity.MethodToken)))
+            {
+                to = After(info, opportunity, frame, remaps, starts, at);
+            }
+
+            if (to is not var (offset, line))
+            {
+                if (_ranOn.Add((opportunity.Thread.Id, opportunity.Module, opportunity.MethodToken)))
+                {
+                    log.WriteLine($"Edit and Continue: {name} runs on in its old version (no place in the new one for IL offset {at.ToString(CultureInfo.InvariantCulture)}; statements at {string.Join(' ', starts)}; mapped: {string.Join(' ', remaps.Select(r => r.OldOffset + ">" + r.NewOffset))}).");
+                }
+
+                return false;
+            }
+
+            Process.Remap(opportunity.Thread, offset);
+            log.WriteLine($"Edit and Continue: {name} goes on in its new version at line {line.ToString(CultureInfo.InvariantCulture)}.");
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine($"Edit and Continue: {name} couldn't go on in its new version ({ex.Message}); the frame runs on in the old one.");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The new place of the statement at <paramref name="at"/>, as the one that follows a mapped statement: in the old
+    /// version it is the next statement after the mapped one with only straight code between them, and so is its
+    /// counterpart in the new version.
+    /// </summary>
+    private (int Offset, int Line)? After(ClrModuleInfo info, ClrRemapOpportunity opportunity, IClrFrame frame, List<FrameRemap> remaps, List<int> starts, int at)
+    {
+        var index = starts.IndexOf(at);
+        if (index <= 0 || frame.Il() is not { Length: > 0 } oldIl || Process.Il(opportunity.Module, opportunity.MethodToken) is not { Length: > 0 } newIl)
+        {
+            return null;
+        }
+
+        // The statement before this one, and a frame that was in it (at its start, or mid-way at a call).
+        var before = starts[index - 1];
+        if (remaps.FirstOrDefault(r => r.OldOffset >= before && r.OldOffset < at) is not { } mapped || !IlCalls.IsStraight(oldIl, before, at))
+        {
+            return null;
+        }
+
+        var points = info.SequencePoints(opportunity.MethodToken).OrderBy(p => p.Offset).ToList();
+        if (points.Where(p => p.Offset > mapped.NewOffset).Cast<ClrSequencePoint?>().FirstOrDefault() is not { } next || !IlCalls.IsStraight(newIl, mapped.NewOffset, next.Offset))
+        {
+            return null;
+        }
+
+        return (next.Offset, next.IsHidden ? mapped.Line : next.StartLine);
+    }
+
+    /// <summary>The moved frame is in the new version: the step it was on starts again from its statement there.</summary>
+    private bool RemapCompleted(IClrThread thread)
+    {
+        if (_stepAfterRemap != thread.Id || _step is not { } step || step.ThreadId != thread.Id)
+        {
+            return false;
+        }
+
+        _stepAfterRemap = null;
+        var frame = TopFrame(thread);
+        _step = new StepState(step.Kind, thread.Id, frame?.Module, frame?.MethodToken ?? 0) { Depth = SafeFrames(thread).Count };
+        StartStep(thread, step.Kind, frame);
+        return true;
+    }
 
     /// <summary>What the debugged runtime can apply, for Roslyn's analysis of an edit.</summary>
     public const string HotReloadCapabilitiesCommand = "codalus/hotReloadCapabilities";
@@ -440,6 +683,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     {
                         Bind(path, states, module, info);
                     }
+
+                    KeepRemaps(module, info, update.ActiveStatements ?? []);
 
                     results.Add(new ModuleDeltaResult(update.ModuleId, ModuleDeltaResult.Applied));
                 }
@@ -576,6 +821,17 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 return BreakpointHit(hit);
             case ClrStepCompleted step:
                 return StepCompleted(step.Thread);
+            case ClrRemapOpportunity remap:
+                if (RemapFrame(remap) && _step?.ThreadId == remap.Thread.Id)
+                {
+                    // The step was from the old frame: it starts again when the new one is there.
+                    _process!.CancelStep();
+                    _stepAfterRemap = remap.Thread.Id;
+                }
+
+                return false;
+            case ClrRemapCompleted remapped:
+                return RemapCompleted(remapped.Thread);
             case ClrUserBreak userBreak:
                 _process!.CancelStep();
                 _step = null;
@@ -1710,7 +1966,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
                 var info = Types.Info(module);
                 var name = info?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}]";
-                var point = info?.LineAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion);
+                var point = info is null ? null : ShownAt(module, info, frame);
                 var file = point?.Document;
                 var hasSource = file is { Length: > 0 } && File.Exists(file);
                 var userCode = info is { HasSymbols: true, IsOptimized: false } && !info.IsNonUserCode(frame.MethodToken);

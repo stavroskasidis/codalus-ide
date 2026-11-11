@@ -121,6 +121,16 @@ internal interface IClrProcess : IDisposable
     int CodeVersion(IClrModule module, int methodToken) => 1;
 
     /// <summary>
+    /// Moves <paramref name="thread"/>'s innermost frame into its method's newest version, at <paramref name="ilOffset"/>
+    /// there (M58: <c>ICorDebugILFrame2::RemapFunction</c>), while a <see cref="ClrRemapOpportunity"/> is being handled.
+    /// Its locals keep their values. Throws <see cref="ClrException"/> when the runtime refuses.
+    /// </summary>
+    void Remap(IClrThread thread, int ilOffset) => throw new ClrException("This debugger can't move a frame into edited code.");
+
+    /// <summary>The IL of a method's newest version (the one new calls run); null when it can't be read.</summary>
+    byte[]? Il(IClrModule module, int methodToken) => null;
+
+    /// <summary>
     /// The value the call at <paramref name="callIlOffset"/> of <paramref name="thread"/>'s top frame returned, read
     /// right after it returned (a step out's stop, M58); null when the runtime has none there (a method that returns
     /// nothing, a platform without it). Valid as a func-eval's result is, until <see cref="ReleaseKept"/>.
@@ -468,6 +478,16 @@ internal sealed record ClrThreadExited(IClrThread Thread) : ClrEvent;
 internal sealed record ClrBreakpointHit(IClrThread Thread, IClrBreakpoint Breakpoint) : ClrEvent;
 
 internal sealed record ClrStepCompleted(IClrThread Thread) : ClrEvent;
+
+/// <summary>
+/// A thread running an old version of an edited method reached a place where it can go on in the new one (M58,
+/// ICorDebug's <c>FunctionRemapOpportunity</c>): the session says where (<see cref="IClrProcess.Remap"/>), or lets it
+/// run on in the old version.
+/// </summary>
+internal sealed record ClrRemapOpportunity(IClrThread Thread, IClrModule Module, int MethodToken, int OldIlOffset) : ClrEvent;
+
+/// <summary>The frame <see cref="IClrProcess.Remap"/> moved is in its method's new version now (ICorDebug's <c>FunctionRemapComplete</c>): a step from it starts again there.</summary>
+internal sealed record ClrRemapCompleted(IClrThread Thread) : ClrEvent;
 
 /// <summary><c>Debugger.Break()</c>.</summary>
 internal sealed record ClrUserBreak(IClrThread Thread) : ClrEvent;

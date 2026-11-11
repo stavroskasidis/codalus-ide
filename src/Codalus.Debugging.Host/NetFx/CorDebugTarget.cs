@@ -466,6 +466,12 @@ internal sealed class CorDebugTarget : IClrProcess
                 _stepper = null;
                 Queue(new ClrStepCompleted(Thread(step.Thread)), e, false);
                 return;
+            case FunctionRemapOpportunityCorDebugManagedCallbackEventArgs remap:
+                Queue(new ClrRemapOpportunity(Thread(remap.Thread), Module(remap.OldFunction.Module), (int)remap.OldFunction.Token.Value, remap.OldILOffset), e, false);
+                return;
+            case FunctionRemapCompleteCorDebugManagedCallbackEventArgs remapped:
+                Queue(new ClrRemapCompleted(Thread(remapped.Thread)), e, false);
+                return;
             case BreakCorDebugManagedCallbackEventArgs userBreak:
                 Queue(new ClrUserBreak(Thread(userBreak.Thread)), e, false);
                 return;
@@ -656,6 +662,32 @@ internal sealed class CorDebugTarget : IClrProcess
         if (result != HRESULT.S_OK)
         {
             throw new ClrException(Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture));
+        }
+    }
+
+    public void Remap(IClrThread thread, int ilOffset) =>
+        Translate(() =>
+        {
+            if (((CorThread)thread).Raw.ActiveFrame?.Raw is not ICorDebugILFrame frame)
+            {
+                throw new ClrException("The thread's innermost frame isn't managed code.");
+            }
+
+            new CorDebugILFrame(frame).RemapFunction(ilOffset);
+            Generation++;
+        });
+
+    public byte[]? Il(IClrModule module, int methodToken)
+    {
+        try
+        {
+            var code = ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).ILCode;
+            var size = code.Size;
+            return size <= 0 ? [] : code.GetCode(0, size, size);
+        }
+        catch (COMException)
+        {
+            return null;
         }
     }
 
@@ -1506,7 +1538,7 @@ internal sealed class CorFrame : IClrFrame
     {
         try
         {
-            var code = Current.Function.ILCode;
+            var code = Current.Function.ILCode; // the frame's own version of the method (M55)
             var size = code.Size;
             return size <= 0 ? [] : code.GetCode(0, size, size);
         }

@@ -23,47 +23,11 @@ internal static class IlCalls
     {
         var calls = new List<IlCall>();
         var at = 0;
-        while (at < il.Length)
+        while (Size(il, at) is > 0 and var size)
         {
-            var op = il[at];
-            int size;
-            if (op == Prefix)
+            if (il[at] is Call or CallVirt or NewObj)
             {
-                if (at + 1 >= il.Length)
-                {
-                    break;
-                }
-
-                size = 2 + TwoByteOperand(il[at + 1]);
-            }
-            else if (op == Switch)
-            {
-                if (at + 5 > il.Length)
-                {
-                    break;
-                }
-
-                var targets = BinaryPrimitives.ReadUInt32LittleEndian(il[(at + 1)..]);
-                if (targets > (uint)(il.Length - at) / 4)
-                {
-                    break;
-                }
-
-                size = 5 + (4 * (int)targets);
-            }
-            else
-            {
-                size = 1 + OneByteOperand(op);
-            }
-
-            if (at + size > il.Length)
-            {
-                break;
-            }
-
-            if (op is Call or CallVirt or NewObj)
-            {
-                calls.Add(new IlCall(at, at + size, BinaryPrimitives.ReadInt32LittleEndian(il[(at + 1)..]), op == NewObj));
+                calls.Add(new IlCall(at, at + size, BinaryPrimitives.ReadInt32LittleEndian(il[(at + 1)..]), il[at] == NewObj));
             }
 
             at += size;
@@ -71,6 +35,88 @@ internal static class IlCalls
 
         return calls;
     }
+
+    /// <summary>
+    /// Whether the instructions from <paramref name="from"/> up to <paramref name="to"/> run one after another, each
+    /// once: both are instruction starts and none between them branches, returns, throws or leaves (M58: a frame that
+    /// went from one to the other took no other way).
+    /// </summary>
+    public static bool IsStraight(ReadOnlySpan<byte> il, int from, int to)
+    {
+        if (from < 0 || from >= to || to > il.Length)
+        {
+            return false;
+        }
+
+        var at = 0;
+        while (at < to && Size(il, at) is > 0 and var size)
+        {
+            if (at >= from && TransfersControl(il, at))
+            {
+                return false;
+            }
+
+            if (at < from && at + size > from)
+            {
+                return false; // from is inside an instruction
+            }
+
+            at += size;
+        }
+
+        return at == to;
+    }
+
+    /// <summary>The size of the instruction at <paramref name="at"/>; 0 at the end or at a malformed one.</summary>
+    private static int Size(ReadOnlySpan<byte> il, int at)
+    {
+        if (at >= il.Length)
+        {
+            return 0;
+        }
+
+        var op = il[at];
+        int size;
+        if (op == Prefix)
+        {
+            if (at + 1 >= il.Length)
+            {
+                return 0;
+            }
+
+            size = 2 + TwoByteOperand(il[at + 1]);
+        }
+        else if (op == Switch)
+        {
+            if (at + 5 > il.Length)
+            {
+                return 0;
+            }
+
+            var targets = BinaryPrimitives.ReadUInt32LittleEndian(il[(at + 1)..]);
+            if (targets > (uint)(il.Length - at) / 4)
+            {
+                return 0;
+            }
+
+            size = 5 + (4 * (int)targets);
+        }
+        else
+        {
+            size = 1 + OneByteOperand(op);
+        }
+
+        return at + size > il.Length ? 0 : size;
+    }
+
+    /// <summary>jmp, ret, the branches, switch, throw, endfinally, leave, and the two-byte endfilter and rethrow.</summary>
+    private static bool TransfersControl(ReadOnlySpan<byte> il, int at) => il[at] switch
+    {
+        0x27 or 0x2A or Switch or 0x7A or 0xDC or 0xDD or 0xDE => true,
+        >= 0x2B and <= 0x44 => true,
+        Prefix => il[at + 1] is 0x11 or 0x1A,
+        _ => false,
+    };
 
     /// <summary>
     /// The call that just returned to a frame at <paramref name="ilOffset"/>. The runtime reports such a frame at the

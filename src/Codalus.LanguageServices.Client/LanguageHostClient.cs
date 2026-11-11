@@ -687,8 +687,8 @@ public sealed class LanguageHostClient : IAsyncDisposable
         Invoke(Methods.CompileExpression, parameters, ProtocolJsonContext.Default.CompileExpressionParams, ProtocolJsonContext.Default.CompileExpressionResult, cancellationToken);
 
     /// <summary><c>codalus/hotReload/update</c>: the edits since the session's start or last commit, as deltas or rude edits.</summary>
-    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken) =>
-        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
+    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken, HotReloadActiveStatement[]? activeStatements = null) =>
+        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session, activeStatements), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
 
     /// <summary><c>codalus/hotReload/commit</c>: the debugger applied the last update.</summary>
     public Task<bool> HotReloadCommitAsync(string session, CancellationToken cancellationToken) =>

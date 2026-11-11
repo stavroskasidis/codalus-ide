@@ -1740,6 +1740,37 @@ public sealed class DebugService : IAsyncDisposable
         RefreshPinnedTips();
     }
 
+    /// <summary>
+    /// Reads the selected thread's frames again while stopped, keeping the selected one by its place: after an edit was
+    /// applied (M58), the frames in edited methods are shown where their statements are now.
+    /// </summary>
+    public async Task RefreshFramesAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || SelectedThreadId is not { } threadId)
+        {
+            return;
+        }
+
+        var index = SelectedFrame is { } selected ? Frames.ToList().FindIndex(f => f.Id == selected.Id) : -1;
+        try
+        {
+            var frames = await adapter.StackTraceAsync(threadId, 200, _session.Token).ConfigureAwait(false);
+            if (State != DebugState.Stopped || SelectedThreadId != threadId)
+            {
+                return;
+            }
+
+            Frames = frames.StackFrames;
+            SelectedFrame = index >= 0 && index < Frames.Count ? Frames[index] : Frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (Frames.Count > 0 ? Frames[0] : null);
+            FrameChanged?.Invoke(this, EventArgs.Empty);
+            RefreshPinnedTips();
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or OperationCanceledException)
+        {
+            // The program went on or ended meanwhile.
+        }
+    }
+
     public void SelectFrame(StackFrame frame)
     {
         SelectedFrame = frame;

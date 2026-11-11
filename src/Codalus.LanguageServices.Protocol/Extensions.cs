@@ -690,8 +690,29 @@ public sealed record CompileExpressionResult(byte[]? Assembly, string? TypeName,
     public const string This = "this";
 }
 
-/// <summary>Names a Hot Reload session (update, commit, discard, end).</summary>
-public sealed record HotReloadSessionParams(string Session);
+/// <summary>
+/// Names a Hot Reload session (update, commit, discard, end). An update made while the program is stopped carries
+/// <see cref="ActiveStatements"/> (M58): where each thread's frames are, so the frames in an edited method can go on in
+/// its new version, and an edit they can't follow is a rude edit. Null while the program runs.
+/// </summary>
+public sealed record HotReloadSessionParams(string Session, HotReloadActiveStatement[]? ActiveStatements = null);
+
+/// <summary>
+/// A statement a stopped thread's frame is at: the method (its module's MVID, its token and the version the frame runs),
+/// the IL offset, and the statement's span in <see cref="Document"/> as the program's symbols have it (1-based).
+/// <see cref="Leaf"/>: the thread's innermost frame; <see cref="UpToDate"/>: the method's newest version.
+/// </summary>
+public sealed record HotReloadActiveStatement(Guid ModuleId, int MethodToken, int MethodVersion, int IlOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn, bool Leaf, bool UpToDate)
+{
+    /// <summary>The frame is in the middle of the statement: Roslyn refuses an edit of it.</summary>
+    public bool PartiallyExecuted { get; init; }
+}
+
+/// <summary>
+/// Where an active statement is after the edit (M58): the frame at <see cref="IlOffset"/> of the method's version goes
+/// on at the statement that starts at <see cref="StartLine"/> and <see cref="StartColumn"/> (1-based) in the new one.
+/// </summary>
+public sealed record HotReloadActiveStatementUpdate(int MethodToken, int MethodVersion, int IlOffset, int StartLine, int StartColumn);
 
 /// <summary>
 /// The edits since the session's start or its last commit. <see cref="Status"/>: <c>none</c> (nothing to apply),
@@ -706,7 +727,11 @@ public sealed record HotReloadUpdateResult(string Status, HotReloadModuleUpdate[
 }
 
 /// <summary>One module's deltas (its MVID; base64 in JSON), from <see cref="Project"/>.</summary>
-public sealed record HotReloadModuleUpdate(Guid ModuleId, string Project, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta, int[] UpdatedTypes);
+public sealed record HotReloadModuleUpdate(Guid ModuleId, string Project, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta, int[] UpdatedTypes)
+{
+    /// <summary>Where the active statements of the module's edited methods are in their new versions (M58); empty for an edit made while the program runs.</summary>
+    public HotReloadActiveStatementUpdate[] ActiveStatements { get; init; } = [];
+}
 
 /// <summary>A rude edit or an error: Roslyn's id (<c>ENC0004</c>, <c>CS1002</c>), its message, and where.</summary>
 public sealed record HotReloadDiagnostic(string Id, string Message, Location? Location);
