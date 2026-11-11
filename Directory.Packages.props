@@ -90,7 +90,7 @@
     <PackageVersion Include="Markdig" Version="1.6.0" />
   </ItemGroup>
   <ItemGroup Label="Testing (the .NET test plugin, ADR 0010 and 0011)">
-    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.11.1" />
   </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
