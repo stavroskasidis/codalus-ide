@@ -164,7 +164,7 @@ Translations come from the community; [Translating](../translating.md) explains 
 
 ## Components
 
-Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
+Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, the Codalus debugger's other builds (for x64 programs on Apple silicon, and for 32-bit .NET Framework programs on Windows), netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
 
 **Offline layout**: on a machine with internet access, **Export Offline Layout…** copies the downloaded components to a folder. On a machine without it, **Import Offline Layout…** copies them in, so no feature tries to download anything. The .NET SDK has its own offline installer, and the layout doesn't include it.
 

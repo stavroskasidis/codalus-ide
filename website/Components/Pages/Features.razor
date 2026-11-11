@@ -138,10 +138,11 @@
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
-                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
-                    <li>Under it: Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs; hit counts and logpoints without a stop per hit; lambdas, LINQ and the rest of C# in Watch and conditions, and Visual Basic in Visual Basic code; [DebuggerTypeProxy] and Results View</li>
+                    <li>A .NET debugger of Codalus IDE's own, the Codalus debugger, on .NET and .NET Framework (netcoredbg stays one release as a fallback, a setting away): Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
+                    <li>Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs; hit counts and logpoints without a stop per hit; lambdas, LINQ and the rest of C# in Watch and conditions, and Visual Basic in Visual Basic code; [DebuggerTypeProxy] and Results View</li>
                     <li>Disassembly, Registers and Memory windows for managed code on x64 and arm64; symbol paths and symbol servers (off until you turn one on); Windows PDBs</li>
-                    <li>Several startup projects in one debug session, where under the Codalus debugger a stop in one program pauses the others</li>
+                    <li>Several startup projects in one debug session, where a stop in one program pauses the others</li>
+                    <li>The same debugger on Linux machines over SSH, in containers and in WSL, copied there when you agree</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="git-and-hosting">
@@ -173,7 +174,7 @@
                     <li>.http files, the HTTP Response window beside them (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
-                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server under dotnet watch with netcoredbg attached, or launched under the Codalus debugger, which sends the page its edits)</li>
+                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server launched under the Codalus debugger, which sends the page its edits)</li>
                     <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
@@ -229,7 +230,7 @@
                     <li>Debug on Android devices and emulators, iOS simulators and Mac Catalyst with our own Mono debugger: breakpoints, stepping, locals, watch and exceptions</li>
                     <li>MAUI XAML: completion, compiled binding paths from x:DataType, live errors, hover and Go to Definition</li>
                     <li>The MAUI workloads, the Android SDK and a JDK installed when you agree, and listed in Check Environment</li>
-                    <li>The Windows target runs and debugs as a desktop app (netcoredbg, Hot Reload with dotnet watch), packaged or unpackaged</li>
+                    <li>The Windows target runs and debugs as a desktop app (Hot Reload with dotnet watch), packaged or unpackaged</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="wpf-windows-forms-and-winui-3">
@@ -325,7 +326,7 @@
             </div>
         </div>
         <div class="rule-note">
-            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging server-side code under netcoredbg (the Codalus debugger, a preview, has it), and translations of the interface.</p>
+            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, data breakpoints and mixed-mode (native) debugging, and translations of the interface.</p>
             <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap <Icon Name="arrow" Size="16" /></a>
         </div>
     </section>

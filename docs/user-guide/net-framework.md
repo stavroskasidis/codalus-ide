@@ -73,9 +73,9 @@ On Linux and macOS, Start, Start Without Debugging and the Performance Profiler 
 
 The debugger reads **portable PDBs and Windows PDBs**. SDK-style projects build portable ones; Codalus IDE builds old-style projects that ask for Windows PDBs (`<DebugType>full</DebugType>`, the classic IDE's old default) with portable ones too, unless the project sets `<CodalusKeepDebugType>true</CodalusKeepDebugType>`. An assembly with a Windows PDB (built elsewhere, or an older library's) is debugged with its lines and locals as well.
 
-The .NET Framework debugger is the same code as [the Codalus debugger](debugging.md#the-codalus-debugger-preview), on the desktop CLR. So it also offers Set Next Statement, Step Into Specific, hit counts and logpoints without a stop per hit, `new` and lambdas in expressions, type proxies, object IDs, symbol paths and servers, and the Disassembly, Registers and Memory windows. Codalus's CI tests breakpoints, stacks, variables, expressions, stepping, exceptions and Windows PDBs on .NET Framework; the newer features are tested on .NET and are best effort here.
+The .NET Framework debugger is the same code as [the Codalus debugger](debugging.md#the-codalus-debugger), on the desktop CLR. So it also offers Set Next Statement, Step Into Specific, hit counts and logpoints without a stop per hit, `new` and lambdas in expressions, type proxies, object IDs, symbol paths and servers, and the Disassembly, Registers and Memory windows. Codalus's CI tests breakpoints, stacks, variables, expressions, stepping, exceptions and Windows PDBs on .NET Framework; the newer features are tested on .NET and are best effort here.
 
-The debugger is 64-bit, and debugs 64-bit processes: an app built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>` (the classic IDE's old templates set it), says so instead of starting; set `Prefer32Bit` to `false` to debug it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
+A debugger debugs processes of its own size, and the one in the package is 64-bit. For a **32-bit app** (built for x86, or AnyCPU with `<Prefer32Bit>true</Prefer32Bit>`, which the classic IDE's old templates set) Codalus IDE downloads the debugger's 32-bit build the first time you debug one, after you agree (about 15 MB; Tools → Components lists it), and uses it from then on. If you decline, or the download isn't available (a source build), the session says so instead of starting; setting `Prefer32Bit` to `false` debugs the app as a 64-bit process. The 32-bit build is best effort: Codalus's CI doesn't test it. Apps for .NET Framework 2.0 to 3.5 debug on the CLR 2 when .NET Framework 3.5 is installed (best effort: not tested by Codalus's CI).
 
 ## Tests
 
@@ -87,7 +87,7 @@ File → New Project lists **.NET Framework Console App** and **.NET Framework C
 
 ## Not supported
 
-- Running and debugging on Mono; 32-bit processes under the debugger; mixed-mode (native) debugging and Edit and Continue for .NET Framework apps; code coverage of .NET Framework tests.
+- Running and debugging on Mono; mixed-mode (native) debugging and Edit and Continue for .NET Framework apps; code coverage of .NET Framework tests.
 - Building with the classic IDE's MSBuild or Build Tools; COM references (`ResolveComReference`), ClickOnce publishing, the Entity Framework 6 designer, Web Forms, C++/CLI and VSTO.
 
 - The Windows Forms designer and WPF's previewer with .NET Framework apps haven't been validated yet: their forms and XAML edit as code.

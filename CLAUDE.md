@@ -28,7 +28,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 - Command-line options: `codalus --help` (`src/Codalus.Shell/Program.cs`).
 - Every `CODALUS_*` environment variable is in `docs/environment-variables.md`; a new one gets a row there in the same change.
-- Debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
+- The netcoredbg debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); the Codalus debugger's remote-target tests need its bundle (`eng/get-codalus-debugger.sh`); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
 - NativeAOT publish on Windows needs `vswhere.exe` on `PATH`.
 
 ## Where things are
