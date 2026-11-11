@@ -123,26 +123,43 @@ public sealed class DebugService : IAsyncDisposable
     private static DebugAdapterStartInfo? DefaultDesktopClrAdapter() =>
         DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, DesktopClr.AdapterArgument], host.WorkingDirectory) : null;
 
-    /// <summary>Starts the desktop-CLR adapter, or says it isn't installed.</summary>
-    private Task<DebugAdapter> StartDesktopClrAdapterAsync(CancellationToken cancellationToken) =>
-        DebugAdapter.StartAsync(
-            DesktopClrAdapter() ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
-            cancellationToken);
+    /// <summary>
+    /// The .NET Framework debugger for 32-bit programs (M58b, ADR 0094): the debugger's <c>win-x86</c> bundle, a 32-bit
+    /// process as ICorDebug needs for a 32-bit program, which the shell downloads on first use after asking (a
+    /// component); it answers null when the user declined or it couldn't be had. Null here: this installation offers
+    /// none, and the 64-bit adapter says what to change in the project.
+    /// </summary>
+    public Func<CancellationToken, Task<DebugAdapterStartInfo?>>? X86DesktopClrAdapter { get; set; }
 
-    /// <summary>The <c>debug.adapter</c> setting's value for CoreCLR's adapter (M54, ADR 0086).</summary>
+    /// <summary>Whether a .NET Framework program runs as a 32-bit process (x86, or AnyCPU with Prefer32Bit).</summary>
+    public Func<string, bool> Is32BitDesktopClrProgram { get; set; } = DesktopClr.Runs32Bit;
+
+    /// <summary>Whether a .NET Framework process to attach to is a 32-bit one.</summary>
+    public Func<int, bool> Is32BitDesktopClrProcess { get; set; } = DesktopClr.Runs32Bit;
+
+    /// <summary>Starts the desktop-CLR adapter (the 32-bit one for a 32-bit program, when there is one), or says it isn't installed.</summary>
+    private async Task<DebugAdapter> StartDesktopClrAdapterAsync(CancellationToken cancellationToken, bool x86 = false)
+    {
+        var info = (x86 && X86DesktopClrAdapter is { } resolve ? await resolve(cancellationToken).ConfigureAwait(false) : null)
+            ?? DesktopClrAdapter()
+            ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST.");
+        return await DebugAdapter.StartAsync(info, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The <c>debug.adapter</c> setting's value for netcoredbg, the fallback since M58 (ADR 0094).</summary>
     public const string NetcoredbgAdapter = "netcoredbg";
 
-    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter (a preview in M54).</summary>
+    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter: the default since M58 (ADR 0094).</summary>
     public const string CodalusAdapter = "codalus";
 
     /// <summary>Overrides <c>debug.adapter</c>: <c>netcoredbg</c> or <c>codalus</c> (the tests' <c>debug-codalus</c> shard).</summary>
     public const string AdapterVariable = "CODALUS_DEBUG_ADAPTER";
 
     /// <summary>
-    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>netcoredbg</c> (the
-    /// default, ADR 0007) or <c>codalus</c>, Codalus IDE's own (<c>codalus-debughost --clr-dap</c>, M54, ADR 0086).
-    /// <see cref="AdapterVariable"/> overrides it. Remote targets, .NET Framework programs and x64 programs on Apple
-    /// silicon don't follow it.
+    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>codalus</c>, Codalus
+    /// IDE's own (<c>codalus-debughost --clr-dap</c>, ADR 0086), the default since M58 (ADR 0094), also when nothing is
+    /// set; or <c>netcoredbg</c>, the fallback for one release. <see cref="AdapterVariable"/> overrides it. Remote
+    /// targets, .NET Framework programs and x64 programs on Apple silicon don't follow it.
     /// </summary>
     public Func<string?> AdapterSetting { get; set; } = () => null;
 
@@ -152,9 +169,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Whether a process runs as x64 on an Arm64 Mac (under Rosetta 2), which keeps netcoredbg 3.1.3 (ADR 0030).</summary>
     public Func<int, bool> IsX64ProcessOnArm64Mac { get; set; } = DefaultIsX64ProcessOnArm64Mac;
 
-    /// <summary>Whether sessions use Codalus IDE's adapter: the setting, or the variable over it.</summary>
+    /// <summary>Whether sessions use Codalus IDE's adapter: unless the setting, or the variable over it, asks for netcoredbg.</summary>
     public bool UsesCodalusAdapter =>
-        string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), CodalusAdapter, StringComparison.OrdinalIgnoreCase);
+        !string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), NetcoredbgAdapter, StringComparison.OrdinalIgnoreCase);
 
     private static DebugAdapterStartInfo? DefaultCoreClrAdapter() =>
         DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, Codalus.Debugging.CoreClrAdapter.AdapterArgument], host.WorkingDirectory) : null;
@@ -181,12 +198,48 @@ public sealed class DebugService : IAsyncDisposable
     /// Starts Codalus IDE's CoreCLR adapter, or says it isn't installed; with <paramref name="terminal"/>, it can start
     /// programs there (its launcher, through <c>runInTerminal</c>, M54b).
     /// </summary>
-    private Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken, ITerminalLauncher? terminal = null) =>
-        DebugAdapter.StartAsync(
-            CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
-            cancellationToken,
-            terminal,
-            ExpressionCompiler);
+    private async Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken, ITerminalLauncher? terminal = null, bool x64 = false)
+    {
+        // An x64 program on Apple silicon is debugged by the x64 bundle of the same debugger (M58b), a component.
+        var info = x64
+            ? (X64CoreClrAdapter is { } resolve ? await resolve(cancellationToken).ConfigureAwait(false) : null)
+                ?? throw new InvalidOperationException("The Codalus debugger for x64 programs (a component, downloaded on first use) isn't installed. Install it from the Components page, or set debug.adapter to netcoredbg to debug this program with netcoredbg.")
+            : CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST.");
+        return await DebugAdapter.StartAsync(info, cancellationToken, terminal, ExpressionCompiler).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The Codalus debugger for x64 programs on Apple silicon (M58b, ADR 0094): its <c>osx-x64</c> bundle, which the shell
+    /// downloads on first use after asking (a component); it answers null when the user declined or it couldn't be had.
+    /// Null here: this installation offers none, and netcoredbg's x64 build debugs those programs.
+    /// </summary>
+    public Func<CancellationToken, Task<DebugAdapterStartInfo?>>? X64CoreClrAdapter { get; set; }
+
+    /// <summary>
+    /// The debugger on another machine, through its pipe transport, its paths mapped to this machine's. The Codalus
+    /// debugger there (M58b) gets the expression compiler too, asked with this machine's path of the frame's source;
+    /// the program's console is the Debug Console (no terminal on that side).
+    /// </summary>
+    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken)
+    {
+        if (!info.IsCodalus)
+        {
+            return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken).ConfigureAwait(false), map);
+        }
+
+        AnnounceAdapter(null);
+        var compiler = ExpressionCompiler is { } compile
+            ? (Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>)((request, ct) => compile(request with { SourcePath = map.ToLocal(request.SourcePath), ModulePath = null }, ct))
+            : null;
+        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map);
+    }
+
+    /// <summary>
+    /// The Codalus debugger's launch on another machine: the program, its arguments and environment as they are there.
+    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally.
+    /// </summary>
+    private NetFxDebugArguments RemoteCoreClrArguments(LaunchArguments arguments) =>
+        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes);
 
     /// <summary>
     /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
@@ -231,13 +284,13 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var reason = RunsAsX64OnAppleSilicon(plan) ? "it runs as x64 on Apple silicon" : null;
+        var reason = RunsAsX64OnAppleSilicon(plan) && X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
 
     /// <summary>Whether a local launch of <paramref name="plan"/> will use Codalus IDE's adapter (nothing said).</summary>
-    public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && !RunsAsX64OnAppleSilicon(plan);
+    public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && (X64CoreClrAdapter is not null || !RunsAsX64OnAppleSilicon(plan));
 
     private static bool RunsAsX64OnAppleSilicon(LaunchPlan plan) => plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName);
 
@@ -249,7 +302,7 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var reason = IsX64ProcessOnArm64Mac(processId) ? "it runs as x64 on Apple silicon" : null;
+        var reason = IsX64ProcessOnArm64Mac(processId) && X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
@@ -258,10 +311,10 @@ public sealed class DebugService : IAsyncDisposable
     private NetFxDebugArguments CoreClrAttach(int processId) =>
         new(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET Attach", Type: "coreclr", Request: "attach");
 
-    /// <summary>The Debug Console's first line under <c>debug.adapter</c> <c>codalus</c>: the adapter, or why it isn't (M54).</summary>
+    /// <summary>The Debug Console's first line under the Codalus debugger: the adapter, or why it isn't (M54).</summary>
     private void AnnounceAdapter(string? fallback) =>
         Output?.Invoke(this, new DebugOutput("console", fallback is null
-            ? "Debugging with the Codalus debugger (preview).\n"
+            ? "Debugging with the Codalus debugger.\n"
             : $"Debugging with netcoredbg: {fallback}, which the Codalus debugger doesn't debug yet.\n"));
 
     /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>
@@ -645,7 +698,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, window ? DebugProcess.ConsoleWindow : DebugProcess.Launched, null),
-                async ct => await StartDesktopClrAdapterAsync(ct).ConfigureAwait(false),
+                async ct => await StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProgram(launch.Plan.FileName)).ConfigureAwait(false),
                 adapter => ((DebugAdapter)adapter).LaunchAsync(DesktopClrArguments(launch.Plan, window), DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
         }
 
@@ -655,8 +708,10 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
+                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct).ConfigureAwait(false),
+                adapter => remote.Adapter.IsCodalus
+                    ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
         if (UseCodalusAdapter(launch.Plan))
@@ -680,7 +735,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, console is null ? DebugProcess.Launched : inWindow ? DebugProcess.ConsoleWindow : DebugProcess.Terminal, null),
-                async ct => await StartCoreClrAdapterAsync(ct, console).ConfigureAwait(false),
+                async ct => await StartCoreClrAdapterAsync(ct, console, RunsAsX64OnAppleSilicon(launch.Plan)).ConfigureAwait(false),
                 adapter => ((DebugAdapter)adapter).LaunchAsync(
                     CoreClrArguments(launch.Plan) with { Console = console is null ? null : inWindow ? "externalTerminal" : "integratedTerminal" },
                     DapJsonContext.Default.NetFxDebugArguments,
@@ -811,7 +866,7 @@ public sealed class DebugService : IAsyncDisposable
     {
         var codalus = UseCodalusAdapter(plan);
         return StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
                 ? ((DebugAdapter)adapter.Primary).LaunchAsync(CoreClrArguments(plan), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
@@ -830,7 +885,7 @@ public sealed class DebugService : IAsyncDisposable
     {
         var codalus = UseCodalusAdapter(plan);
         await StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
                 ? ((DebugAdapter)adapter.Primary).AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
@@ -932,7 +987,7 @@ public sealed class DebugService : IAsyncDisposable
         {
             // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
             await StartAsync(
-                StartDesktopClrAdapterAsync,
+                ct => StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProcess(processId)),
                 adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
@@ -942,7 +997,7 @@ public sealed class DebugService : IAsyncDisposable
         {
             // Codalus IDE's CoreCLR adapter (M54, ADR 0086).
             await StartAsync(
-                ct => StartCoreClrAdapterAsync(ct),
+                ct => StartCoreClrAdapterAsync(ct, x64: IsX64ProcessOnArm64Mac(processId)),
                 adapter => adapter.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
@@ -955,8 +1010,10 @@ public sealed class DebugService : IAsyncDisposable
         else
         {
             await StartAsync(
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+                ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
+                adapter => remote.Adapter.IsCodalus
+                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);

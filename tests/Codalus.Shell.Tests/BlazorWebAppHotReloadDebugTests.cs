@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Codalus.Debugging;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Debugging;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.Node;
 
 namespace Codalus.Shell.Tests;
@@ -32,9 +33,16 @@ public sealed class BlazorWebAppHotReloadDebugTests
         return ((IPEndPoint)socket.LocalEndpoint).Port;
     }
 
-    /// <summary>The dotnet watch cases are netcoredbg's: the Codalus debugger launches the server (the debug-codalus shard).</summary>
-    private static void SkipUnderTheCodalusDebugger(ShellFixture f) =>
-        Assert.SkipWhen(f.Shell.Debugger.UsesCodalusAdapter, "Under the Codalus debugger F5 launches the server, without dotnet watch (ADR 0090).");
+    /// <summary>
+    /// The dotnet watch cases are netcoredbg's, the fallback's (the Codalus debugger launches the server, ADR 0090): they
+    /// choose it, as a user does, for as long as it ships (ADR 0094).
+    /// </summary>
+    private static async Task UnderNetcoredbgAsync(ShellFixture f)
+    {
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.CodalusAdapter, "CODALUS_DEBUG_ADAPTER chooses the Codalus debugger over the setting.");
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None);
+        Assert.False(f.Shell.Debugger.UsesCodalusAdapter);
+    }
 
     private static void SkipWithoutPrerequisites()
     {
@@ -125,7 +133,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
-                SkipUnderTheCodalusDebugger(f);
+                await UnderNetcoredbgAsync(f);
                 var initialized = Line(counter, "initialized");
                 f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
                 await f.RunAsync("debug.start");
@@ -213,6 +221,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
     [AvaloniaFact]
     public async Task Under_the_Codalus_debugger_F5_launches_the_server_and_edits_apply_to_it_and_to_the_page()
     {
+        // The debug-netcoredbg shard runs this class with every session under netcoredbg, where the two tests above are.
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.NetcoredbgAdapter, "CODALUS_DEBUG_ADAPTER chooses netcoredbg over the setting.");
         SkipWithoutPrerequisites();
         var (f, folder, counter) = await OpenAsync(sdk10: true);
         await using (f)
@@ -321,7 +331,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
-                SkipUnderTheCodalusDebugger(f);
+                await UnderNetcoredbgAsync(f);
                 await ReportingAsync(f, () => RudeEditAsync(f, counter));
             }
             finally

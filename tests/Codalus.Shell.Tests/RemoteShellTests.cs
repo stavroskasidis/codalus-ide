@@ -205,11 +205,34 @@ public sealed class RemoteShellTests
         Assert.False(FileSystems.IsRemote(program));
     }
 
+    /// <summary>Under the default: the Codalus debugger, started on the server's side as the server starts a host (M58b).</summary>
     [AvaloniaFact]
-    public async Task Debugging_in_a_remote_window_runs_netcoredbg_through_the_server_and_stops_at_a_breakpoint()
+    public async Task Debugging_in_a_remote_window_runs_the_debugger_through_the_server_and_stops_at_a_breakpoint()
+    {
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.NetcoredbgAdapter, "CODALUS_DEBUG_ADAPTER chooses netcoredbg over the setting.");
+        var log = await DebugInARemoteWindowAsync(netcoredbg: false);
+        Assert.Contains("Debugging with the Codalus debugger.", log, StringComparison.Ordinal);
+    }
+
+    /// <summary>The fallback, for as long as it ships (ADR 0094).</summary>
+    [AvaloniaFact]
+    public async Task Debugging_in_a_remote_window_under_netcoredbg_runs_it_through_the_server_and_stops_at_a_breakpoint()
     {
         Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.CodalusAdapter, "CODALUS_DEBUG_ADAPTER chooses the Codalus debugger over the setting.");
+        var log = await DebugInARemoteWindowAsync(netcoredbg: true);
+        Assert.DoesNotContain("Debugging with the Codalus debugger.", log, StringComparison.Ordinal);
+    }
+
+    /// <summary>F5 in a remote window (the local stand-in) to a breakpoint and on to the program's end; the Debug Console's text.</summary>
+    private static async Task<string> DebugInARemoteWindowAsync(bool netcoredbg)
+    {
         await using var f = ShellFixture.Create();
+        if (netcoredbg)
+        {
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.NetcoredbgAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
+        }
+
         var folder = Resolved(f.CopySample("BuildAndRun"));
         var remote = await ConnectAsync(f);
         var local = remote.Map.ToLocal(folder);
@@ -240,6 +263,7 @@ public sealed class RemoteShellTests
         await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
         Assert.Contains("exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+        return f.Shell.DebugLog.GetText();
     }
 
     /// <summary>

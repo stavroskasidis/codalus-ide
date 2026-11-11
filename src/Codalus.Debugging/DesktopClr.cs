@@ -47,6 +47,40 @@ public static class DesktopClr
     }
 
     /// <summary>
+    /// Whether a managed executable runs as a 32-bit process on 64-bit Windows: built for x86, or AnyCPU with
+    /// Prefer32Bit. A 32-bit debugger debugs it (M58b: the debugger's <c>win-x86</c> bundle).
+    /// </summary>
+    public static bool Runs32Bit(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var pe = new PEReader(stream);
+            var headers = pe.PEHeaders;
+            return headers.CorHeader is { } cor
+                && ((cor.Flags & (CorFlags.Requires32Bit | CorFlags.Prefers32Bit)) != 0 || (headers.CoffHeader.Machine == Machine.I386 && (cor.Flags & CorFlags.ILOnly) == 0));
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Whether a running process is such a program, by its executable.</summary>
+    public static bool Runs32Bit(int processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return process.MainModule?.FileName is { } path && Runs32Bit(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Why a managed executable can't be debugged by a debugger of this bitness (ICorDebug debugs processes of its own
     /// bitness): a 32-bit one (x86, or AnyCPU with Prefer32Bit) under a 64-bit debugger, or an x64 one under a 32-bit
     /// debugger; null when it can.
@@ -68,7 +102,7 @@ public static class DesktopClr
             var name = Path.GetFileName(path);
             if (debugger64 && (requires32 || prefers32))
             {
-                return $"{name} runs as a 32-bit process ({(prefers32 ? "AnyCPU with Prefer32Bit" : "x86")}), and the .NET Framework debugger here debugs 64-bit processes only. Set <Prefer32Bit>false</Prefer32Bit> (or PlatformTarget AnyCPU or x64) to debug it.";
+                return $"{name} runs as a 32-bit process ({(prefers32 ? "AnyCPU with Prefer32Bit" : "x86")}), and the .NET Framework debugger here debugs 64-bit processes only. Install the debugger for 32-bit .NET Framework programs from the Components page, or set <Prefer32Bit>false</Prefer32Bit> (or PlatformTarget AnyCPU or x64) to debug it.";
             }
 
             if (!debugger64 && headers.PEHeader?.Magic == PEMagic.PE32Plus)
