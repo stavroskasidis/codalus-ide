@@ -270,6 +270,12 @@ public sealed class DebugService : IAsyncDisposable
             ClientViews: CollectionViews.ViewedTypes,
             Symbols: Symbols?.Invoke());
 
+    /// <summary>
+    /// Whether a stop in one of several startup projects' programs pauses the others (M58, <c>debug.breakAllProcesses</c>),
+    /// read as such a session starts; on when unset.
+    /// </summary>
+    public Func<bool>? BreakAllProcesses { get; set; }
+
     /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
     public bool StepFiltering { get; set; } = true;
 
@@ -476,7 +482,7 @@ public sealed class DebugService : IAsyncDisposable
         await StartAsync(
             async ct =>
             {
-                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true);
+                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true) { BreakAllOnStop = BreakAllProcesses?.Invoke() ?? true };
                 compound.Reserve(parts.Count - 1); // the session waits for the others, even if the first program ends at once
                 compound.PartChanged += OnPartChanged;
                 return compound;

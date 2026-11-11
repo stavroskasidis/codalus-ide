@@ -84,6 +84,13 @@ internal static partial class BuiltIns
             Description = "Step Into steps over property getters and setters and operators (applies from the next session).",
             Order = 1,
         },
+        SettingDescriptor.Create(ShellHost.BreakAllProcessesSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Break all processes when one process breaks",
+            Category = "Debugging",
+            Description = "With several startup projects, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
+            Order = 1,
+        },
         SettingDescriptor.Create(Workbench.Debugging.Browsers.SettingKey, "\"auto\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Browser",
