@@ -136,7 +136,13 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <controls:GitGraphCell Grid.Column="1" Row="{Binding Graph}" IsHead="{Binding IsHead}" Lanes="{Binding $parent[ListBox].((vm:GitHistoryViewModel)DataContext).Lanes}" VerticalAlignment="Stretch" MinWidth="44" />
-              <TextBlock Grid.Column="2" Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" ToolTip.Tip="{Binding Subject}" />
+              <!-- An outgoing commit (the branch has it, its upstream doesn't) has an arrow before its message. -->
+              <DockPanel Grid.Column="2" Margin="4,0">
+                <Border DockPanel.Dock="Left" Background="Transparent" Margin="0,0,4,0" VerticalAlignment="Center" IsVisible="{Binding IsOutgoing}" ToolTip.Tip="{l:T gitHistory.outgoingCommit}">
+                  <controls:Icon Kind="arrow-up" Width="12" Height="12" />
+                </Border>
+                <TextBlock Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Subject}" />
+              </DockPanel>
               <TextBlock Grid.Column="3" Text="{Binding Author}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" />
               <TextBlock Grid.Column="4" Text="{Binding Date}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="4,0" />
               <TextBlock Grid.Column="5" Text="{Binding ShortHash}" Classes="muted" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" VerticalAlignment="Center" Margin="4,0" />

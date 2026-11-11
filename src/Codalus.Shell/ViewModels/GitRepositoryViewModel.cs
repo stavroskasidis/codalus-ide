@@ -1213,7 +1213,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
             local.Add(new GitHistoryLink(Localizer.Get("msg.gitRepository.sync", "Sync"), "git.sync"));
         }
 
-        return new GitHistorySections($"{reference}..{upstream}", branch.Behind, branch.Ahead, [fetch, pull], local);
+        return new GitHistorySections($"{reference}..{upstream}", $"{upstream}..{reference}", branch.Behind, branch.Ahead, [fetch, pull], local);
     }
 
     private void ShowHistory(GitService git, GitLogQuery query, string title, string? reference, GitHistorySections? sections, bool canShowAllBranches = true)
