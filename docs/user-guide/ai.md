@@ -173,7 +173,7 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 **The Connect dialog** checks, signs in and tests before anything is saved:
 
 1. **Requirements.** Each program the agent needs (Node.js and npx, or the agent's own CLI) is looked for on your PATH, with its version and the version the agent needs. **Check Again** looks again.
-2. **Installing what's missing**, with your own package manager, each option with its exact command: **winget** on Windows (it runs in the dialog, and Codalus reads the new PATH when it ends), **Homebrew** on macOS, **snap** on Ubuntu (in the Terminal, where it asks for your password), **apt** or **dnf** only when the Node.js they would install is new enough (with npm, which is a package of its own on Debian and Ubuntu), and nodejs.org's page everywhere. A Terminal install keeps the dialog open: it checks again when the command ends. Where none of your package managers can install a new enough Node.js, **Codalus's Node.js** (the checksum-verified 26.13.0 it already uses for npm scripts) is offered as an opt-in; the agent's entry then says `"node": "builtIn"`, and the agent runs with that Node.js first on its PATH. An agent's own CLI installs from npm, pinned (`npm install -g @earendil-works/pi-coding-agent@1.4.0` for pi, `npm install -g opencode-ai@1.19.4` for OpenCode; with `sudo` in the Terminal when npm's global folder isn't yours), or goose's from Homebrew.
+2. **Installing what's missing**, with your own package manager, each option with its exact command: **winget** on Windows (it runs in the dialog, and Codalus reads the new PATH when it ends), **Homebrew** on macOS, **snap** on Ubuntu (in the Terminal, where it asks for your password), **apt** or **dnf** only when the Node.js they would install is new enough (with npm, which is a package of its own on Debian and Ubuntu), and nodejs.org's page everywhere. A Terminal install keeps the dialog open: it checks again when the command ends. Where none of your package managers can install a new enough Node.js, **Codalus's Node.js** (the checksum-verified 26.13.0 it already uses for npm scripts) is offered as an opt-in; the agent's entry then says `"node": "builtIn"`, and the agent runs with that Node.js first on its PATH. An agent's own CLI installs from npm, pinned (`npm install -g @earendil-works/pi-coding-agent@1.5.2` for pi, `npm install -g opencode-ai@1.19.5` for OpenCode; with `sudo` in the Terminal when npm's global folder isn't yours), or goose's from Homebrew.
 3. **Sign in**, in one of the ways the agent offers (below).
 4. **What runs**: the exact command lines, the sign-in's command, and a variable's name, never its value.
 5. **Turn on AI assistance**: a check box, shown only while AI is off. Its text says what else comes back on (a provider you chose earlier, inline suggestions). **Connect** stays disabled until it's checked. Nothing is written yet.
@@ -183,15 +183,15 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 
 | Agent | What runs | Version | Sign-in | How the test checks it |
 |---|---|---|---|---|
-| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.94.0` | 0.94.0 | Claude subscription or Anthropic Console account (Claude Code's own login, in the Terminal), an API key (`ANTHROPIC_API_KEY`), or signed in already | Claude reports who is signed in |
-| Codex | `npx -y @agentclientprotocol/codex-acp@2.2.2` | 2.2.2 | ChatGPT (your browser), an API key (kept by Codex), or signed in already | the session is refused while signed out |
-| Gemini CLI | `npx -y @google/gemini-cli@0.65.0 --acp` | 0.65.0 | Google account (your browser), a Gemini API key (`GEMINI_API_KEY`), or signed in already | the session is refused while signed out |
-| GitHub Copilot | `npx -y @github/copilot@1.0.103 --acp` | 1.0.103 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
+| Claude | `npx -y @agentclientprotocol/claude-agent-acp@0.106.0` | 0.106.0 | Claude subscription or Anthropic Console account (Claude Code's own login, in the Terminal), an API key (`ANTHROPIC_API_KEY`), or signed in already | Claude reports who is signed in |
+| Codex | `npx -y @agentclientprotocol/codex-acp@2.6.0` | 2.6.0 | ChatGPT (your browser), an API key (kept by Codex), or signed in already | the session is refused while signed out |
+| Gemini CLI | `npx -y @google/gemini-cli@0.68.0 --acp` | 0.68.0 | Google account (your browser), a Gemini API key (`GEMINI_API_KEY`), or signed in already | the session is refused while signed out |
+| GitHub Copilot | `npx -y @github/copilot@1.0.109 --acp` | 1.0.109 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
 | pi | `npx -y pi-acp@0.0.34` (and pi's own CLI, 0.81 or later) | 0.0.34 | pi's setup in the Terminal, or signed in already | not confirmed |
-| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.4 | `opencode auth login` in the Terminal, or signed in already | not confirmed |
-| goose | `goose acp` (install goose first) | tested with 1.55.0 | `goose configure` in the Terminal, or signed in already | not confirmed |
+| OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.5 | `opencode auth login` in the Terminal, or signed in already | not confirmed |
+| goose | `goose acp` (install goose first) | tested with 1.59.0 | `goose configure` in the Terminal, or signed in already | not confirmed |
 
-The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-10-22 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-11-11 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
 
 Where Codalus can set an agent up without opening a page:
 
@@ -223,7 +223,7 @@ Connecting isn't possible from a remote window (WSL, SSH, containers): the agent
 
 ```json
 "ai.agents": {
-  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"], "secretEnv": ["ANTHROPIC_API_KEY"], "template": "claude@0.94.0" },
+  "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"], "secretEnv": ["ANTHROPIC_API_KEY"], "template": "claude@0.106.0" },
   "pi": { "command": "npx", "args": ["-y", "pi-acp@0.0.34"] },
   "my-agent": { "command": "/opt/my-agent/bin/my-agent", "args": ["--acp"] }
 }

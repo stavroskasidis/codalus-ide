@@ -1,0 +1,78 @@
+{
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-11",
+  "protocolVersion": 1,
+  "agentCapabilities": {
+    "_meta": {
+      "claudeCode": {
+        "promptQueueing": true
+      },
+      "authStatus": {}
+    },
+    "promptCapabilities": {
+      "image": true,
+      "embeddedContext": true
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    },
+    "auth": {
+      "logout": {},
+      "status": {}
+    },
+    "providers": {},
+    "loadSession": true,
+    "sessionCapabilities": {
+      "additionalDirectories": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "list": {},
+      "options": {},
+      "resume": {},
+      "status": {},
+      "systemPrompt": {
+        "mode": {
+          "override": {}
+        }
+      },
+      "title": {}
+    }
+  },
+  "agentInfo": {
+    "name": "@agentclientprotocol/claude-agent-acp",
+    "title": "Claude Agent",
+    "version": "0.106.0"
+  },
+  "authMethods": [
+    {
+      "description": "Use Claude subscription ",
+      "name": "Claude Subscription",
+      "id": "claude-ai-login",
+      "type": "terminal",
+      "args": [
+        "--cli",
+        "auth",
+        "login",
+        "--claudeai"
+      ]
+    },
+    {
+      "description": "Use Anthropic Console (API usage billing)",
+      "name": "Anthropic Console",
+      "id": "console-login",
+      "type": "terminal",
+      "args": [
+        "--cli",
+        "auth",
+        "login",
+        "--console"
+      ]
+    }
+  ],
+  "_meta": {
+    "steering": {
+      "supported": true
+    }
+  }
+}
