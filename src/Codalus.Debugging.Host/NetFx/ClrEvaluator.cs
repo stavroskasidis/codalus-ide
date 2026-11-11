@@ -541,6 +541,21 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
         return result;
     }
 
+    /// <summary>
+    /// <c>string.Empty</c>, read from its field: ICorDebug refuses to create a string without characters
+    /// (<c>NewString("")</c> is E_INVALIDARG), so <c>""</c> as an argument failed.
+    /// </summary>
+    private IClrValue? EmptyString()
+    {
+        if (types.CoreLibrary is not var (module, info) || info.FindType("System.String") is not (var token and not 0)
+            || info.Fields(token).FirstOrDefault(f => f.IsStatic && f.Name == "Empty") is not { } field)
+        {
+            return null;
+        }
+
+        return Live(() => process.GetStaticField(Thread, ClrTypeSystem.TypeOf(module, token), field.Token));
+    }
+
     private IClrValue ToRemote(EvalValue value, string? parameter)
     {
         switch (value)
@@ -550,6 +565,8 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                 return Live(() => process.NewPrimitive(Thread, converted));
             case RemoteValue remote:
                 return remote.Value;
+            case LocalValue { Value: string { Length: 0 } } when EmptyString() is { } empty:
+                return empty;
             case LocalValue { Value: string s }:
                 var text = process.NewString(Thread, s, timeout);
                 return ClrLiveValue.Of(process, text, () => text);

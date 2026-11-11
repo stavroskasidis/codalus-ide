@@ -756,6 +756,145 @@ internal sealed class CorDebugTarget : IClrProcess
             return CorValue.Wrap(this, raw);
         });
 
+    // ------------------------------------------------------------------ frozen threads, return values, kept objects (M58)
+
+    private readonly HashSet<int> _frozen = [];
+    private readonly List<CorDebugHandleValue> _kept = [];
+
+    internal bool IsFrozen(int threadId)
+    {
+        lock (_gate)
+        {
+            return _frozen.Contains(threadId);
+        }
+    }
+
+    internal void Freeze(CorThread thread, bool frozen) =>
+        Translate(() =>
+        {
+            thread.Raw.DebugState = frozen ? CorDebugThreadState.THREAD_SUSPEND : CorDebugThreadState.THREAD_RUN;
+            lock (_gate)
+            {
+                _ = frozen ? _frozen.Add(thread.Id) : _frozen.Remove(thread.Id);
+            }
+        });
+
+    /// <summary>A func-eval lets every thread run again when it's done: the frozen ones are suspended again.</summary>
+    private void FreezeAgain()
+    {
+        List<CorThread> frozen;
+        lock (_gate)
+        {
+            frozen = [.. _threads.Values.Where(t => _frozen.Contains(t.Id))];
+        }
+
+        foreach (var thread in frozen)
+        {
+            try
+            {
+                thread.Raw.DebugState = CorDebugThreadState.THREAD_SUSPEND;
+            }
+            catch (COMException)
+            {
+            }
+        }
+    }
+
+    /// <summary>The frames ICorDebug handed out are stale (Set Next Statement): they're read again.</summary>
+    internal void FramesChanged() => Generation++;
+
+    internal static string SetIpProblem(HRESULT result) => result switch
+    {
+        HRESULT.CORDBG_E_CANT_SET_IP_INTO_FINALLY => "The next statement can't be set into a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_FINALLY => "The next statement can't be set out of a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_INTO_CATCH => "The next statement can't be set into a catch block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_FINALLY_ON_WIN64 => "The next statement can't be set out of a finally block.",
+        HRESULT.CORDBG_E_CANT_SET_IP_OUT_OF_CATCH_ON_WIN64 => "The next statement can't be set out of a catch block.",
+        HRESULT.CORDBG_E_SET_IP_NOT_ALLOWED_ON_NONLEAF_FRAME => "The next statement can be set only in the innermost frame.",
+        HRESULT.CORDBG_E_SET_IP_IMPOSSIBLE => "The next statement can't be set there.",
+        HRESULT.CORDBG_E_SET_IP_NOT_ALLOWED_ON_EXCEPTION => "The next statement can't be set while an exception is being thrown.",
+        HRESULT.CORDBG_E_CANT_SETIP_INTO_OR_OUT_OF_FILTER => "The next statement can't be set into or out of an exception filter.",
+        _ => "The next statement can't be set there (" + (Enum.IsDefined(result) ? result.ToString() : "0x" + ((int)result).ToString("X8", CultureInfo.InvariantCulture)) + ").",
+    };
+
+    public IClrValue? ReturnValue(IClrThread thread, int callIlOffset)
+    {
+        try
+        {
+            var corThread = ((CorThread)thread).Raw;
+            if (corThread.ActiveFrame?.Raw is not ICorDebugILFrame il || new CorDebugILFrame(il).TryGetReturnValueForILOffset(callIlOffset, out var value) != HRESULT.S_OK || value is null)
+            {
+                return null;
+            }
+
+            if (StrongHandle(value) is { } handle)
+            {
+                lock (_gate)
+                {
+                    _kept.Add(handle);
+                }
+
+                return CorValue.OfHandle(this, handle);
+            }
+
+            return CorValue.Result(this, corThread, value);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A strong handle to the object a reference points at; null for null and for a value that isn't on the heap.</summary>
+    private static CorDebugHandleValue? StrongHandle(CorDebugValue value) =>
+        value.Raw is ICorDebugReferenceValue referenceRaw && new CorDebugReferenceValue(referenceRaw) is { IsNull: false } reference
+            && reference.Dereference().Raw is ICorDebugHeapValue2 heap
+            && heap.CreateHandle(CorDebugHandleType.HANDLE_STRONG, out var raw) == HRESULT.S_OK && raw is not null
+            ? new CorDebugHandleValue(raw)
+            : null;
+
+    public IClrValue? Keep(IClrValue value, out Action release)
+    {
+        release = static () => { };
+        if (ClrLiveValue.Unwrap(value) is not CorValue cor || Translate(() => StrongHandle(cor.Original)) is not { } handle)
+        {
+            return null;
+        }
+
+        release = () =>
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (COMException)
+            {
+            }
+        };
+        return CorValue.OfHandle(this, handle);
+    }
+
+    public void ReleaseKept()
+    {
+        List<CorDebugHandleValue> kept;
+        lock (_gate)
+        {
+            kept = [.. _kept];
+            _kept.Clear();
+        }
+
+        foreach (var handle in kept)
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (COMException)
+            {
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ func-eval
 
     public IClrValue Call(IClrThread thread, IClrModule module, int methodToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
@@ -891,6 +1030,8 @@ internal sealed class CorDebugTarget : IClrProcess
                 catch (COMException)
                 {
                 }
+
+                FreezeAgain();
             }
         }
     }
@@ -1156,6 +1297,10 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
     public IClrValue? CurrentException() => CorDebugTarget.Translate(() => Raw.CurrentException is { } value ? CorValue.Wrap(target, value) : null);
 
     public IClrValue? ThreadObject() => CorDebugTarget.Translate(() => Raw.Object is { } value ? CorValue.Wrap(target, value) : null);
+
+    public bool Frozen => target.IsFrozen(Id);
+
+    public void Freeze(bool frozen) => target.Freeze(this, frozen);
 }
 
 internal sealed class CorFrame : IClrFrame
@@ -1177,7 +1322,9 @@ internal sealed class CorFrame : IClrFrame
             var function = frame.Function;
             Module = thread.Target.Module(function.Module);
             MethodToken = (int)function.Token.Value;
-            IlOffset = frame.IP.pnOffset;
+            var ip = frame.IP;
+            IlOffset = ip.pnOffset;
+            IsIlOffsetExact = ip.pMappingResult == CorDebugMappingResult.MAPPING_EXACT;
             try
             {
                 CodeVersion = function.VersionNumber;
@@ -1210,12 +1357,14 @@ internal sealed class CorFrame : IClrFrame
 
     public int IlOffset { get; }
 
+    public bool IsIlOffsetExact { get; } = true;
+
     public string? Description { get; }
 
     public int CodeVersion { get; } = 1;
 
     /// <summary>The frame as ICorDebug has it now: the cached one until the process ran (a func-eval), then read again.</summary>
-    private CorDebugILFrame Il
+    private CorDebugILFrame Current
     {
         get
         {
@@ -1236,7 +1385,7 @@ internal sealed class CorFrame : IClrFrame
         {
             try
             {
-                return [.. Il.TypeParameters.Select(t => CorValue.TypeOf(_thread.Target, t))];
+                return [.. Current.TypeParameters.Select(t => CorValue.TypeOf(_thread.Target, t))];
             }
             catch (Exception ex) when (ex is COMException or InvalidCastException)
             {
@@ -1245,9 +1394,36 @@ internal sealed class CorFrame : IClrFrame
         }
     }
 
-    public IClrValue? Argument(int index) => Read(() => Il.GetArgument(index));
+    public IClrValue? Argument(int index) => Read(() => Current.GetArgument(index));
 
-    public IClrValue? Local(int slot) => Read(() => Il.GetLocalVariable(slot));
+    public IClrValue? Local(int slot) => Read(() => Current.GetLocalVariable(slot));
+
+    public byte[]? Il()
+    {
+        try
+        {
+            var code = Current.Function.ILCode;
+            var size = code.Size;
+            return size <= 0 ? [] : code.GetCode(0, size, size);
+        }
+        catch (Exception ex) when (ex is COMException or ClrException)
+        {
+            return null;
+        }
+    }
+
+    public void SetIp(int ilOffset) => CorDebugTarget.Translate(() =>
+    {
+        var frame = Current;
+        var allowed = frame.TryCanSetIP(ilOffset);
+        if ((int)allowed < 0)
+        {
+            throw new ClrException(CorDebugTarget.SetIpProblem(allowed));
+        }
+
+        frame.SetIP(ilOffset);
+        _thread.Target.FramesChanged();
+    });
 
     private CorValue? Read(Func<CorDebugValue> read)
     {
@@ -1344,8 +1520,11 @@ internal sealed class CorValue : IClrValue
 
     public string? Text => Kind == ClrValueKind.String ? CorDebugTarget.Translate(() =>
     {
+        // An empty string has nothing to read: ICorDebug answers a read of no characters with E_INVALIDARG, which showed
+        // every empty string of a program as an error.
         var text = new CorDebugStringValue((ICorDebugStringValue)Value.Raw);
-        return text.GetString(text.Length);
+        var length = text.Length;
+        return length == 0 ? string.Empty : text.GetString(length);
     }) : null;
 
     private CorDebugArrayValue Array => new((ICorDebugArrayValue)Value.Raw);
@@ -1421,6 +1600,9 @@ internal sealed class CorValue : IClrValue
 
         return result;
     }
+
+    /// <summary>A value behind a strong handle the target keeps: dereferenced again after the process ran.</summary>
+    public static CorValue OfHandle(CorDebugTarget target, CorDebugHandleValue handle) => new(target, handle, () => handle);
 
     private static bool IsCreatable(object value) => value is bool or char or sbyte or byte or short or ushort or int or uint or long or ulong or float or double;
 

@@ -406,6 +406,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>A different frame or thread was selected.</summary>
     public event EventHandler? FrameChanged;
 
+    /// <summary>A thread was frozen or thawed (M58): <see cref="Threads"/> changed without a stop.</summary>
+    public event EventHandler? ThreadsChanged;
+
     public event EventHandler<DebugOutput>? Output;
 
     /// <summary>The session ended (the exit code when the program exited).</summary>
@@ -1520,6 +1523,104 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
+    // ------------------------------------------------------------------ Set Next Statement, Step Into Specific, frozen threads (M58)
+
+    /// <summary>The capabilities of the debugger the current thread belongs to; none while nothing is stopped.</summary>
+    private Capabilities? StoppedCapabilities => State == DebugState.Stopped && _adapter is { } adapter ? adapter.CapabilitiesOf(CurrentThread) : null;
+
+    /// <summary>Whether the stopped thread's debugger can move its next statement (the Codalus debugger; not netcoredbg).</summary>
+    public bool CanSetNextStatement => StoppedCapabilities?.SupportsGotoTargetsRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger lists a line's calls to step into (the Codalus debugger).</summary>
+    public bool CanStepIntoSpecific => StoppedCapabilities?.SupportsStepInTargetsRequest == true;
+
+    /// <summary>Whether the session's debugger freezes threads (the Codalus debugger).</summary>
+    public bool CanFreezeThreads => _adapter is { } adapter && State != DebugState.Idle && adapter.CapabilitiesOf(CurrentThread).SupportsFreezingThreads;
+
+    /// <summary>
+    /// Set Next Statement: moves the current thread's next statement to <paramref name="line"/> of <paramref name="path"/>
+    /// without running anything in between; the stop that follows shows it there. Returns why it couldn't, or null.
+    /// </summary>
+    public async Task<string?> SetNextStatementAsync(string path, int line)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return "The program isn't stopped.";
+        }
+
+        var thread = CurrentThread;
+        if (!adapter.CapabilitiesOf(thread).SupportsGotoTargetsRequest)
+        {
+            return "This debugger can't set the next statement.";
+        }
+
+        try
+        {
+            var targets = await adapter.GotoTargetsAsync(thread, path, line, _session.Token).ConfigureAwait(false);
+            if (targets.Length == 0)
+            {
+                return "There's no code on that line.";
+            }
+
+            await adapter.GotoAsync(thread, targets[0].Id, _session.Token).ConfigureAwait(false);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
+    /// <summary>The calls of the rest of the current line, for Step Into Specific; none when the selected frame isn't its thread's innermost.</summary>
+    public async Task<IReadOnlyList<StepInTarget>> StepInTargetsAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || Frames.Count == 0 || !adapter.CapabilitiesOf(CurrentThread).SupportsStepInTargetsRequest)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.StepInTargetsAsync(Frames[0].Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Steps into one of <see cref="StepInTargetsAsync"/>'s calls: the line's other calls run without a stop.</summary>
+    public Task StepIntoSpecificAsync(int targetId) => ResumeAsync(a => a.StepInAsync(CurrentThread, targetId, _session.Token));
+
+    /// <summary>Freezes a thread (it doesn't run when the program runs on) or thaws it; <see cref="Threads"/> says which are.</summary>
+    public async Task<string?> FreezeThreadAsync(int threadId, bool frozen)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return "There's no debug session.";
+        }
+
+        try
+        {
+            await adapter.FreezeThreadAsync(threadId, frozen, _session.Token).ConfigureAwait(false);
+            Threads = [.. Threads.Select(t => t.Id == threadId ? t with { Frozen = frozen ? true : null } : t)];
+            ThreadsChanged?.Invoke(this, EventArgs.Empty);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
     /// <summary>
     /// Run to Cursor: continues until <paramref name="line"/> of <paramref name="path"/> is reached, through a hidden
     /// breakpoint there. Any other stop ends it, except that <paramref name="force"/> continues past other breakpoints.
@@ -1925,7 +2026,10 @@ public sealed class DebugService : IAsyncDisposable
     private async Task SendBreakpointsAsync(IDebugAdapter adapter, string path, CancellationToken cancellationToken)
     {
         var specs = Breakpoints.For(path).Where(b => b.Enabled).ToList();
-        var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition)).ToList();
+        // With everything it does: an adapter that applies hit counts, messages, filters and dependencies itself (the
+        // Codalus debugger, M58) takes them, and the others drop them (netcoredbg, the browser's) and stop at every hit.
+        var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition, HitCondition: b.HitCondition, LogMessage: b.LogMessage, Filter: b.Filter,
+            DependsOn: b.DependsOn is { } dependency ? new BreakpointDependency(dependency.Path, dependency.Line) : null)).ToList();
 
         // Run to Cursor's hidden breakpoint, unless a breakpoint without a condition is already on that line.
         var runTo = _runTo is { } target && SolutionService.PathComparer.Equals(target.Location.Path, path)
@@ -2111,7 +2215,7 @@ public sealed class DebugService : IAsyncDisposable
             }
 
             var breakpoint = stopped.Reason == "breakpoint" ? FindBreakpoint(stopped, frames) : null;
-            if (breakpoint is { NeedsClientHandling: true } && !atRunTarget
+            if (breakpoint is { NeedsClientHandling: true } && !atRunTarget && !adapter.AppliesBreakpointBehaviors(threadId)
                 && !await ShouldBreakAsync(adapter, breakpoint, frames, threadId).ConfigureAwait(false))
             {
                 await adapter.ContinueAsync(threadId, _session.Token).ConfigureAwait(false);

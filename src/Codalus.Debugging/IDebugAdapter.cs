@@ -29,6 +29,17 @@ public interface IDebugAdapter : IAsyncDisposable
 
     Task ConfigurationDoneAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Whether the adapter that stopped <paramref name="threadId"/> applies a breakpoint's hit condition, log message,
+    /// filter and dependency itself (the Codalus debugger, M58): then a stop at a breakpoint is one to show. Otherwise
+    /// the adapter is sent the breakpoint without them, stops at every hit, and the session decides (netcoredbg, the
+    /// browser's adapter).
+    /// </summary>
+    bool AppliesBreakpointBehaviors(int threadId) => Capabilities.AppliesBreakpointBehaviors;
+
+    /// <summary>The capabilities of the adapter <paramref name="threadId"/> belongs to (a compound session's parts differ).</summary>
+    Capabilities CapabilitiesOf(int threadId) => Capabilities;
+
     Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken);
 
     Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken);
@@ -42,6 +53,21 @@ public interface IDebugAdapter : IAsyncDisposable
     Task StepInAsync(int threadId, CancellationToken cancellationToken);
 
     Task StepOutAsync(int threadId, CancellationToken cancellationToken);
+
+    /// <summary>The calls of the rest of a frame's line that a step could go into (Step Into Specific); none when the adapter can't say.</summary>
+    Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken) => Task.FromResult<StepInTarget[]>([]);
+
+    /// <summary>Steps into one of <see cref="StepInTargetsAsync"/>'s calls.</summary>
+    Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) => StepInAsync(threadId, cancellationToken);
+
+    /// <summary>Where <paramref name="threadId"/>'s next statement could be set on a line (Set Next Statement); none when it can't be.</summary>
+    Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken) => Task.FromResult<GotoTarget[]>([]);
+
+    /// <summary>Moves <paramref name="threadId"/>'s next statement to one of <see cref="GotoTargetsAsync"/>'s targets; a <c>stopped</c> event with the reason <c>goto</c> follows.</summary>
+    Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) => throw new DapException("goto", "This debugger can't set the next statement.");
+
+    /// <summary>Keeps a thread from running when the program runs on, or lets it run again (<see cref="Capabilities.SupportsFreezingThreads"/>).</summary>
+    Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) => throw new DapException("codalus/freezeThread", "This debugger can't freeze threads.");
 
     Task PauseAsync(int threadId, CancellationToken cancellationToken);
 

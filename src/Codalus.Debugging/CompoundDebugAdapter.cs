@@ -801,6 +801,37 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) =>
         ResumeAsync(threadId, "stepOut", (adapter, thread) => adapter.StepOutAsync(thread, cancellationToken), cancellationToken);
 
+    public bool AppliesBreakpointBehaviors(int threadId) => Owner(threadId, "stopped") is var (part, thread) && part.Adapter.AppliesBreakpointBehaviors(thread);
+
+    public Capabilities CapabilitiesOf(int threadId) => Owner(threadId, "capabilities") is var (part, thread) ? part.Adapter.CapabilitiesOf(thread) : Capabilities;
+
+    public async Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId, "stepInTargets");
+        return [.. (await part.Adapter.StepInTargetsAsync(frame, cancellationToken).ConfigureAwait(false)).Select(t => t with { Id = Id(t.Id, part) })];
+    }
+
+    public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        ResumeAsync(threadId, "stepIn", (adapter, thread) => adapter.StepInAsync(thread, targetId / MaxParts, cancellationToken), cancellationToken);
+
+    public async Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "gotoTargets");
+        return [.. (await part.Adapter.GotoTargetsAsync(thread, path, line, cancellationToken).ConfigureAwait(false)).Select(t => t with { Id = Id(t.Id, part) })];
+    }
+
+    public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "goto");
+        return part.Adapter.GotoAsync(thread, targetId / MaxParts, cancellationToken);
+    }
+
+    public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "codalus/freezeThread");
+        return part.Adapter.FreezeThreadAsync(thread, frozen, cancellationToken);
+    }
+
     private async Task ResumeAsync(int threadId, string command, Func<IDebugAdapter, int, Task> resume, CancellationToken cancellationToken)
     {
         var (part, thread) = Owner(threadId, command);
@@ -885,7 +916,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}"));
+                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}", thread.Frozen));
                 }
             }
             catch (DapException) when (part.Index != 0 || Independent)

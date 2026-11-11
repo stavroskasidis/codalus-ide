@@ -729,11 +729,50 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// <summary>The launched program's <c>TMPDIR</c>, when the launch sets one (<see cref="HasRuntimeTransport"/>).</summary>
     private string? _programTemp;
 
-    public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
-        (await _connection.RequestAsync("setBreakpoints", new SetBreakpointsArguments(new Source(Path.GetFileName(path), path), breakpoints), Json.SetBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.AppliesBreakpointBehaviors)
+        {
+            // netcoredbg: it stops at every hit, and the session applies hit counts, messages, filters and dependencies.
+            breakpoints = [.. breakpoints.Select(b => b.WithoutBehaviors())];
+        }
 
-    public async Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
-        (await _connection.RequestAsync("setFunctionBreakpoints", new SetFunctionBreakpointsArguments(breakpoints), Json.SetFunctionBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+        return (await _connection.RequestAsync("setBreakpoints", new SetBreakpointsArguments(new Source(Path.GetFileName(path), path), breakpoints), Json.SetBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    }
+
+    public async Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.SupportsHitConditionalBreakpoints)
+        {
+            breakpoints = [.. breakpoints.Select(b => b.HitCondition is null ? b : b with { HitCondition = null })];
+        }
+
+        return (await _connection.RequestAsync("setFunctionBreakpoints", new SetFunctionBreakpointsArguments(breakpoints), Json.SetFunctionBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    }
+
+    public async Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsStepInTargetsRequest
+            ? (await _connection.RequestAsync("stepInTargets", new StepInTargetsArguments(frameId), Json.StepInTargetsArguments, Json.StepInTargetsResponse, cancellationToken).ConfigureAwait(false)).Targets
+            : [];
+
+    public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("stepIn", new StepInArguments(threadId, targetId), Json.StepInArguments, cancellationToken);
+
+    public async Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken) =>
+        Capabilities.SupportsGotoTargetsRequest
+            ? (await _connection.RequestAsync("gotoTargets", new GotoTargetsArguments(new Source(Path.GetFileName(path), path), line), Json.GotoTargetsArguments, Json.GotoTargetsResponse, cancellationToken).ConfigureAwait(false)).Targets
+            : [];
+
+    public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("goto", new GotoArguments(threadId, targetId), Json.GotoArguments, cancellationToken);
+
+    /// <summary>The Codalus debugger's <c>codalus/freezeThread</c> (M58).</summary>
+    public const string FreezeThreadCommand = "codalus/freezeThread";
+
+    public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) =>
+        Capabilities.SupportsFreezingThreads
+            ? _connection.RequestAsync(FreezeThreadCommand, new FreezeThreadArguments(threadId, frozen), Json.FreezeThreadArguments, cancellationToken)
+            : throw new DapException(FreezeThreadCommand, "This debugger can't freeze threads.");
 
     public Task SetExceptionBreakpointsAsync(string[] filters, CancellationToken cancellationToken, ExceptionFilterOptions[]? options = null) =>
         _connection.RequestAsync("setExceptionBreakpoints", new SetExceptionBreakpointsArguments(filters, options), Json.SetExceptionBreakpointsArguments, cancellationToken);

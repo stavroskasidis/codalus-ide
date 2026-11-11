@@ -21,6 +21,20 @@ internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterT
 
 internal sealed record ClrMethodInfo(int Token, string Name, bool IsStatic, bool IsVirtual, IReadOnlyList<string> ParameterTypes, IReadOnlyList<string> ParameterNames, int GenericParameters, string ReturnType, bool IsSpecialName);
 
+/// <summary>A called method, as a call instruction names it: its type as C# shows it, and its name as metadata spells it.</summary>
+internal sealed record ClrCallTarget(string TypeName, string Name, bool ReturnsVoid)
+{
+    /// <summary>As a list of calls shows it: <c>Ns.Type.Method</c>, a constructor as <c>new Ns.Type</c>, an accessor as <c>Ns.Type.Name.get</c>.</summary>
+    public string Display => Name switch
+    {
+        ".ctor" => "new " + TypeName,
+        ".cctor" => TypeName + " (static constructor)",
+        _ when Name.StartsWith("get_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".get",
+        _ when Name.StartsWith("set_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".set",
+        _ => TypeName + "." + Name,
+    };
+}
+
 /// <summary>
 /// A module's metadata and portable PDB, read from its file with System.Reflection.Metadata (M43b): type, method,
 /// field and property names; sequence points (lines to IL offsets and back); local variables' names by slot. Windows
@@ -544,6 +558,71 @@ internal sealed class ClrModuleInfo : IDisposable
 
         var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
         return TypeDisplayName(MetadataTokens.GetToken(method.GetDeclaringType())) + "." + Metadata.GetString(method.Name);
+    }
+
+    /// <summary>
+    /// The method a call instruction's token names (M58): a definition here, a reference to another module's, or a
+    /// generic method's instantiation. Its type's display name (<c>Ns.Type</c>) and its own, as metadata spells them
+    /// (<c>get_Count</c>, <c>.ctor</c>); null for a token that isn't a method's (a <c>calli</c> signature) or is an
+    /// edit's.
+    /// </summary>
+    public ClrCallTarget? CallTarget(int token)
+    {
+        try
+        {
+            var handle = MetadataTokens.EntityHandle(token);
+            switch (handle.Kind)
+            {
+                case HandleKind.MethodDefinition:
+                    if (Added(token) is { } added)
+                    {
+                        return new ClrCallTarget(TypeDisplayName(added.TypeToken), String(added.Method.Name), false);
+                    }
+
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.MethodDefinitions.Count)
+                    {
+                        return null;
+                    }
+
+                    var definition = Metadata.GetMethodDefinition((MethodDefinitionHandle)handle);
+                    return new ClrCallTarget(TypeDisplayName(MetadataTokens.GetToken(definition.GetDeclaringType())), Metadata.GetString(definition.Name), ReturnsVoid(definition.Signature));
+                case HandleKind.MemberReference:
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MemberRef))
+                    {
+                        return null;
+                    }
+
+                    var reference = Metadata.GetMemberReference((MemberReferenceHandle)handle);
+                    var parent = reference.Parent.Kind == HandleKind.MethodDefinition
+                        ? TypeDisplayName(MetadataTokens.GetToken(Metadata.GetMethodDefinition((MethodDefinitionHandle)reference.Parent).GetDeclaringType()))
+                        : NameOf(reference.Parent) is { } type ? DisplayName(type.FullName) : "?";
+                    return new ClrCallTarget(parent, Metadata.GetString(reference.Name), ReturnsVoid(reference.Signature));
+                case HandleKind.MethodSpecification:
+                    return MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MethodSpec)
+                        ? null
+                        : CallTarget(MetadataTokens.GetToken(Metadata.GetMethodSpecification((MethodSpecificationHandle)handle).Method));
+                default:
+                    return null;
+            }
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or ArgumentException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a method signature's return type is <c>void</c>.</summary>
+    private bool ReturnsVoid(BlobHandle signature)
+    {
+        var blob = Metadata.GetBlobReader(signature);
+        var header = blob.ReadSignatureHeader();
+        if (header.IsGeneric)
+        {
+            blob.ReadCompressedInteger();
+        }
+
+        blob.ReadCompressedInteger(); // the parameter count
+        return blob.RemainingBytes > 0 && blob.ReadSignatureTypeCode() == SignatureTypeCode.Void;
     }
 
     /// <summary>A method an edit added (M55), with its type: the module's own tables don't have it.</summary>

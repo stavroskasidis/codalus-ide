@@ -52,7 +52,27 @@ public sealed record Capabilities
 
     public bool SupportTerminateDebuggee { get; init; }
 
+    /// <summary>Set Next Statement: <c>gotoTargets</c> and <c>goto</c>.</summary>
+    public bool SupportsGotoTargetsRequest { get; init; }
+
+    /// <summary>Step Into Specific: <c>stepInTargets</c>, and <c>stepIn</c> with a target.</summary>
+    public bool SupportsStepInTargetsRequest { get; init; }
+
+    /// <summary>
+    /// The Codalus debugger's own (M58, ADR 0094): a breakpoint's <see cref="SourceBreakpoint.Filter"/> and
+    /// <see cref="SourceBreakpoint.DependsOn"/> are applied by the adapter, as its hit condition and log message are,
+    /// so a hit that doesn't break doesn't stop the program for the IDE to decide.
+    /// </summary>
+    public bool SupportsBreakpointFilters { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/freezeThread</c>, and <see cref="DapThread.Frozen"/>.</summary>
+    public bool SupportsFreezingThreads { get; init; }
+
     public ExceptionBreakpointsFilter[]? ExceptionBreakpointFilters { get; init; }
+
+    /// <summary>The adapter applies hit conditions, log messages, filters and dependencies itself (<see cref="IDebugAdapter.AppliesBreakpointBehaviors"/>).</summary>
+    [JsonIgnore]
+    public bool AppliesBreakpointBehaviors => SupportsHitConditionalBreakpoints && SupportsLogPoints && SupportsBreakpointFilters;
 }
 
 /// <summary>
@@ -179,7 +199,21 @@ public sealed record StartDebuggingArguments(string Request, JsonElement Configu
 
 public sealed record Source(string? Name = null, string? Path = null, int? SourceReference = null);
 
-public sealed record SourceBreakpoint(int Line, int? Column = null, string? Condition = null, string? HitCondition = null, string? LogMessage = null);
+/// <summary>
+/// <see cref="HitCondition"/> is <c>n</c> or <c>== n</c> (the n-th hit), <c>&gt;= n</c> or <c>% n</c> (<see cref="HitConditions"/>);
+/// <see cref="LogMessage"/> makes a logpoint (<c>{expressions}</c>, <c>$FUNCTION</c>, <c>$TID</c>). <see cref="Filter"/>
+/// (<see cref="BreakpointFilter"/>'s text) and <see cref="DependsOn"/> are the Codalus debugger's own
+/// (<see cref="Capabilities.SupportsBreakpointFilters"/>): a breakpoint that depends on another breaks only once that
+/// one was hit in the session.
+/// </summary>
+public sealed record SourceBreakpoint(int Line, int? Column = null, string? Condition = null, string? HitCondition = null, string? LogMessage = null, string? Filter = null, BreakpointDependency? DependsOn = null)
+{
+    /// <summary>The breakpoint as an adapter that doesn't apply those itself gets it: it stops at every hit (with its condition true).</summary>
+    public SourceBreakpoint WithoutBehaviors() => HitCondition is null && LogMessage is null && Filter is null && DependsOn is null ? this : new SourceBreakpoint(Line, Column, Condition);
+}
+
+/// <summary>The breakpoint (by its file and line) another one waits for.</summary>
+public sealed record BreakpointDependency(string Path, int Line);
 
 public sealed record SetBreakpointsArguments(Source Source, SourceBreakpoint[] Breakpoints, bool SourceModified = false);
 
@@ -207,7 +241,29 @@ public sealed record ContinueResponse(bool? AllThreadsContinued = null);
 
 public sealed record DisconnectArguments(bool? TerminateDebuggee = null, bool Restart = false);
 
-public sealed record DapThread(int Id, string Name);
+/// <summary><see cref="Frozen"/> is the Codalus debugger's own (M58): the thread doesn't run when the program does.</summary>
+public sealed record DapThread(int Id, string Name, bool? Frozen = null);
+
+/// <summary><c>codalus/freezeThread</c> (M58): keeps a thread from running when the program runs on, or lets it run again.</summary>
+public sealed record FreezeThreadArguments(int ThreadId, bool Frozen);
+
+/// <summary><c>gotoTargets</c>: where execution of a stopped thread could be moved to on a source line (Set Next Statement).</summary>
+public sealed record GotoTargetsArguments(Source Source, int Line, int? Column = null);
+
+public sealed record GotoTarget(int Id, string Label, int Line, int? Column = null, int? EndLine = null, int? EndColumn = null);
+
+public sealed record GotoTargetsResponse(GotoTarget[] Targets);
+
+public sealed record GotoArguments(int ThreadId, int TargetId);
+
+public sealed record StepInTargetsArguments(int FrameId);
+
+public sealed record StepInTarget(int Id, string Label);
+
+public sealed record StepInTargetsResponse(StepInTarget[] Targets);
+
+/// <summary><c>stepIn</c>'s arguments: with <see cref="TargetId"/>, into that call of the line (Step Into Specific).</summary>
+public sealed record StepInArguments(int ThreadId, int? TargetId = null);
 
 public sealed record ThreadsResponse(DapThread[] Threads);
 
@@ -332,6 +388,13 @@ public static class DapEvents
 [JsonSerializable(typeof(SetExceptionBreakpointsArguments))]
 [JsonSerializable(typeof(EmptyArguments))]
 [JsonSerializable(typeof(ThreadArguments))]
+[JsonSerializable(typeof(FreezeThreadArguments))]
+[JsonSerializable(typeof(GotoTargetsArguments))]
+[JsonSerializable(typeof(GotoTargetsResponse))]
+[JsonSerializable(typeof(GotoArguments))]
+[JsonSerializable(typeof(StepInTargetsArguments))]
+[JsonSerializable(typeof(StepInTargetsResponse))]
+[JsonSerializable(typeof(StepInArguments))]
 [JsonSerializable(typeof(ContinueResponse))]
 [JsonSerializable(typeof(DisconnectArguments))]
 [JsonSerializable(typeof(ThreadsResponse))]

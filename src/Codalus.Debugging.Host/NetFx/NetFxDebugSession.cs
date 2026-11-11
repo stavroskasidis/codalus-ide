@@ -46,6 +46,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly Dictionary<int, Lazy<Dictionary<string, IClrValue>>> _childValues = [];
     private readonly Dictionary<int, IClrValue> _exceptions = [];
     private readonly HashSet<int> _stoppedWhenThrown = [];
+    private readonly HashSet<(string Path, int Line)> _hitLocations = [];
+    private readonly Dictionary<int, (string Path, int Line)> _gotoTargets = [];
+
+    /// <summary>The frames handed out since the stop that are their thread's innermost managed one (frames are read anew each time, so not by reference to another read).</summary>
+    private readonly HashSet<IClrFrame> _innermost = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<int, (int FrameId, string Name, int Ordinal)> _stepInTargets = [];
+
+    /// <summary>What the method a step just returned from returned (M58): shown first in Locals, and <c>$ReturnValue</c>.</summary>
+    private (int ThreadId, string Method, IClrValue Value)? _returnValue;
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
@@ -81,6 +90,27 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         public string? Function { get; } = function;
 
+        /// <summary>Breaks on some of its hits only (<see cref="HitConditions"/>, M58).</summary>
+        public string? HitCondition { get; init; }
+
+        /// <summary>A logpoint (M58): the message is written and the program goes on.</summary>
+        public string? LogMessage { get; init; }
+
+        /// <summary>The filter's text, and the filter (null when the text isn't one: then it doesn't filter).</summary>
+        public string? FilterText { get; init; }
+
+        public BreakpointFilter? Filter { get; init; }
+
+        /// <summary>Breaks only once the breakpoint at this file and line was hit in the session.</summary>
+        public (string Path, int Line)? DependsOn { get; init; }
+
+        /// <summary>The times it was hit with its condition true, its filter matching and its dependency met.</summary>
+        public int Hits { get; set; }
+
+        /// <summary>The same breakpoint as <paramref name="other"/>, sent again: its hits are kept.</summary>
+        public bool SameAs(BreakpointState other) =>
+            Line == other.Line && Condition == other.Condition && HitCondition == other.HitCondition && LogMessage == other.LogMessage && FilterText == other.FilterText && DependsOn == other.DependsOn && Function == other.Function;
+
         public int? BoundLine { get; set; }
 
         public List<(IClrModule Module, int Method, int Offset, int Version, IClrBreakpoint Breakpoint)> Bound { get; } = [];
@@ -90,6 +120,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private sealed record StepState(ClrStepKind Kind, int ThreadId, IClrModule? Module, int Method)
     {
         public int Repeats { get; set; }
+
+        /// <summary>Step Into Specific (M58): the call to stop in, by its method's name, and which of the line's calls of that name.</summary>
+        public (string Name, int Ordinal)? Target { get; init; }
+
+        /// <summary>The calls of <see cref="Target"/>'s name the step went into so far.</summary>
+        public int TargetCalls { get; set; }
+
+        /// <summary>The frames the thread had when the step started: fewer at its end means the method returned.</summary>
+        public int Depth { get; set; }
 
         /// <summary>Stepping out of a filtered property or operator: then on into the rest of the line.</summary>
         public bool ResumeInto { get; set; }
@@ -124,6 +163,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     SupportsConfigurationDoneRequest = true,
                     SupportsFunctionBreakpoints = true,
                     SupportsConditionalBreakpoints = true,
+                    SupportsHitConditionalBreakpoints = true,
+                    SupportsLogPoints = true,
+                    SupportsBreakpointFilters = true,
+                    SupportsGotoTargetsRequest = true,
+                    SupportsStepInTargetsRequest = true,
+                    SupportsFreezingThreads = true,
                     SupportsExceptionInfoRequest = true,
                     SupportsExceptionFilterOptions = true,
                     SupportsSetVariable = true,
@@ -178,7 +223,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 Step(Read(arguments, json.ThreadArguments)!.ThreadId, ClrStepKind.Over);
                 return null;
             case "stepIn":
-                Step(Read(arguments, json.ThreadArguments)!.ThreadId, ClrStepKind.Into);
+                var stepIn = Read(arguments, json.StepInArguments)!;
+                Step(stepIn.ThreadId, ClrStepKind.Into, stepIn.TargetId);
+                return null;
+            case "stepInTargets":
+                return JsonSerializer.SerializeToElement(new StepInTargetsResponse(StepInTargets(Read(arguments, json.StepInTargetsArguments)!.FrameId)), json.StepInTargetsResponse);
+            case "gotoTargets":
+                return JsonSerializer.SerializeToElement(new GotoTargetsResponse(GotoTargets(Read(arguments, json.GotoTargetsArguments)!)), json.GotoTargetsResponse);
+            case "goto":
+                var jump = Read(arguments, json.GotoArguments)!;
+                await GotoAsync(jump.ThreadId, jump.TargetId).ConfigureAwait(false);
+                return null;
+            case FreezeThreadCommand:
+                var freeze = Read(arguments, json.FreezeThreadArguments)!;
+                lock (_gate)
+                {
+                    Thread(freeze.ThreadId).Freeze(freeze.Frozen);
+                }
+
                 return null;
             case "stepOut":
                 Step(Read(arguments, json.ThreadArguments)!.ThreadId, ClrStepKind.Out);
@@ -202,6 +264,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private static T? Read<T>(JsonElement arguments, JsonTypeInfo<T> info) =>
         arguments.ValueKind == JsonValueKind.Object ? arguments.Deserialize(info) : arguments.ValueKind == JsonValueKind.Undefined ? s_empty.Deserialize(info) : default;
+
+    /// <summary>Keeps a thread from running when the program runs on, or lets it run again (M58).</summary>
+    public const string FreezeThreadCommand = "codalus/freezeThread";
 
     // ------------------------------------------------------------------ code changes (M55)
 
@@ -611,7 +676,14 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     Remove(old);
                 }
 
-                states = [.. arguments.Breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, path, b.Line, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim()))];
+                states = [.. arguments.Breakpoints.Select(b => KeepHits(old, new BreakpointState(_nextBreakpoint++, path, b.Line, Text(b.Condition))
+                {
+                    HitCondition = Text(b.HitCondition),
+                    LogMessage = string.IsNullOrEmpty(b.LogMessage) ? null : b.LogMessage,
+                    FilterText = Text(b.Filter),
+                    Filter = Text(b.Filter) is { } filter && BreakpointFilter.TryParse(filter, out var parsed, out _) ? parsed : null,
+                    DependsOn = b.DependsOn is { } dependency ? (Path.GetFullPath(dependency.Path), dependency.Line) : null,
+                }))];
                 if (states.Count == 0)
                 {
                     _breakpoints.Remove(path);
@@ -629,6 +701,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         return new SetBreakpointsResponse([.. states.Select(s => Describe(s))]);
+    }
+
+    private static string? Text(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+
+    /// <summary>A breakpoint sent again keeps the hits it counted (the client sends a file's breakpoints whenever one changes).</summary>
+    private static BreakpointState KeepHits(List<BreakpointState>? old, BreakpointState state)
+    {
+        state.Hits = old?.FirstOrDefault(state.SameAs)?.Hits ?? 0;
+        return state;
     }
 
     /// <summary>
@@ -740,8 +821,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             WhileStopped(() =>
             {
                 Remove(_functionBreakpoints);
+                List<BreakpointState> old = [.. _functionBreakpoints];
                 _functionBreakpoints.Clear();
-                _functionBreakpoints.AddRange(breakpoints.Select(b => new BreakpointState(_nextBreakpoint++, null, 0, string.IsNullOrWhiteSpace(b.Condition) ? null : b.Condition.Trim(), b.Name.Trim())));
+                _functionBreakpoints.AddRange(breakpoints.Select(b => KeepHits(old, new BreakpointState(_nextBreakpoint++, null, 0, Text(b.Condition), b.Name.Trim()) { HitCondition = Text(b.HitCondition) })));
                 foreach (var (module, info) in _modules)
                 {
                     foreach (var state in _functionBreakpoints)
@@ -793,10 +875,115 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
         }
 
+        // Its filter, its dependency, its hit count and its message, here (M58): a hit that doesn't break doesn't stop
+        // the program for the IDE to decide, as netcoredbg's does.
+        if (state.Filter is { } filter && !filter.Matches(new BreakpointFilterContext(hit.Thread.Id, ThreadName(hit.Thread), Process.Id, ProcessName())))
+        {
+            return false;
+        }
+
+        if (state.DependsOn is { } dependency && !_hitLocations.Contains(dependency))
+        {
+            return false;
+        }
+
+        state.Hits++;
+        if (state.HitCondition is { } hitCondition && !HitConditions.Met(hitCondition, state.Hits))
+        {
+            return false;
+        }
+
+        if (state.Path is { } path)
+        {
+            _hitLocations.Add((path, state.Line));
+        }
+
+        if (state.LogMessage is { } message)
+        {
+            _ = dap.SendEventAsync(DapEvents.Output, new OutputEvent(LogMessage(message, hit.Thread) + "\n", "console"), DapJsonContext.Default.OutputEvent);
+            return false;
+        }
+
         Process.CancelStep();
         _step = null;
         Stop(state.Function is null ? "breakpoint" : "function breakpoint", hit.Thread, [state.Id]);
         return true;
+    }
+
+    private string? _processName;
+
+    /// <summary>The debugged process's name, for breakpoint filters (<c>ProcessName = "app"</c>).</summary>
+    private string? ProcessName()
+    {
+        if (_processName is null)
+        {
+            try
+            {
+                using var process = System.Diagnostics.Process.GetProcessById(Process.Id);
+                _processName = process.ProcessName;
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                _processName = string.Empty;
+            }
+        }
+
+        return _processName.Length == 0 ? null : _processName;
+    }
+
+    /// <summary>
+    /// A logpoint's message: <c>{expression}</c> is its value in the thread's top frame (<c>{{</c> and <c>}}</c> are
+    /// braces), <c>$FUNCTION</c> the frame's method and <c>$TID</c> the thread.
+    /// </summary>
+    private string LogMessage(string message, IClrThread thread)
+    {
+        var frame = TopFrame(thread);
+        ClrEvaluator? evaluator = null;
+        var result = new System.Text.StringBuilder();
+        for (var i = 0; i < message.Length; i++)
+        {
+            if (message[i] == '{' && i + 1 < message.Length && message[i + 1] == '{')
+            {
+                result.Append('{');
+                i++;
+            }
+            else if (message[i] == '}' && i + 1 < message.Length && message[i + 1] == '}')
+            {
+                result.Append('}');
+                i++;
+            }
+            else if (message[i] == '{' && message.IndexOf('}', i) is var end and > 0)
+            {
+                var expression = message[(i + 1)..end];
+                try
+                {
+                    if (frame is null)
+                    {
+                        throw new ClrException("no frame to evaluate it in");
+                    }
+
+                    result.Append((evaluator ??= Evaluator(frame)).Evaluate(expression) switch
+                    {
+                        LocalValue local => ClrTypeSystem.FormatPrimitive(local.Value),
+                        RemoteValue remote => Types.Format(remote.Value),
+                        _ => "<" + expression.Trim() + " isn't a value>",
+                    });
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
+                {
+                    result.Append('<').Append(ex.Message).Append('>');
+                }
+
+                i = end;
+            }
+            else
+            {
+                result.Append(message[i]);
+            }
+        }
+
+        var function = frame?.Module is { } module && Types.Info(module) is { } info ? info.MethodDisplayName(frame.MethodToken) : "?";
+        return result.ToString().Replace("$FUNCTION", function, StringComparison.Ordinal).Replace("$TID", thread.Id.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
     }
 
     private void SetExceptionBreakpoints(string[] filters, ExceptionFilterOptions[] options)
@@ -882,23 +1069,163 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _userStopped = false;
             ClearHandles();
             _exceptions.Clear();
+            RunsOn();
         }
 
         TryContinue(Process);
     }
 
-    private void Step(int threadId, ClrStepKind kind)
+    /// <summary>The user lets the program run on (continue or a step): what the last stop held is let go.</summary>
+    private void RunsOn()
+    {
+        _returnValue = null;
+        Process.ReleaseKept();
+    }
+
+    private void Step(int threadId, ClrStepKind kind, int? targetId = null)
     {
         lock (_gate)
         {
             RequireStopped();
             var thread = Thread(threadId);
+            (string Name, int Ordinal)? target = null;
+            if (targetId is { } id)
+            {
+                target = _stepInTargets.TryGetValue(id, out var found) ? (found.Name, found.Ordinal) : throw new DapRequestException("The call to step into is no longer valid: the program has run since.");
+            }
+
             _userStopped = false;
             ClearHandles();
             _exceptions.Clear();
+            RunsOn();
             var top = TopFrame(thread);
-            _step = new StepState(kind, threadId, top?.Module, top?.MethodToken ?? 0);
+            _step = new StepState(kind, threadId, top?.Module, top?.MethodToken ?? 0) { Target = target, Depth = SafeFrames(thread).Count };
             StartStep(thread, kind, top);
+        }
+    }
+
+    // ------------------------------------------------------------------ Step Into Specific, Set Next Statement (M58)
+
+    /// <summary>The calls of the rest of a frame's line, in IL order (the order they run in, but for branches): the frame must be its thread's innermost.</summary>
+    private StepInTarget[] StepInTargets(int frameId)
+    {
+        lock (_gate)
+        {
+            RequireStopped();
+            var frame = Frame(frameId);
+            if (frame.Module is not { } module || Types.Info(module) is not { } info || !_innermost.Contains(frame))
+            {
+                return [];
+            }
+
+            if (frame.Il() is not { Length: > 0 } il || info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is not var (_, end))
+            {
+                return [];
+            }
+
+            // Mid-line after a call returned (a step out), the frame's offset is the instruction boundary before that call
+            // (IsIlOffsetExact is false): the line's calls up to and including it ran already.
+            var calls = IlCalls.Of(il);
+            var first = frame.IsIlOffsetExact ? frame.IlOffset : IlCalls.ReturnedAt(il, frame.IlOffset) is { } returned ? returned.End : frame.IlOffset;
+            var targets = new List<StepInTarget>();
+            var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var call in calls)
+            {
+                if (call.Offset < first || call.Offset >= end || info.CallTarget(call.Token) is not { } target)
+                {
+                    continue;
+                }
+
+                var ordinal = seen[target.Name] = seen.GetValueOrDefault(target.Name) + 1;
+                var id = _nextHandle++;
+                _stepInTargets[id] = (frameId, target.Name, ordinal);
+                targets.Add(new StepInTarget(id, target.Display));
+            }
+
+            return [.. targets];
+        }
+    }
+
+    /// <summary>The places of a source line the next statement could be set to: one target for the line, resolved in the thread's method when it's used.</summary>
+    private GotoTarget[] GotoTargets(GotoTargetsArguments arguments)
+    {
+        var path = arguments.Source.Path is { } p ? Path.GetFullPath(p) : throw new DapRequestException("Set Next Statement needs a source file path.");
+        lock (_gate)
+        {
+            RequireStopped();
+            if (!_modules.Any(m => m.Info.MatchDocument(path) is { } document && m.Info.Locations(document, arguments.Line).Count > 0))
+            {
+                return [];
+            }
+
+            var id = _nextHandle++;
+            _gotoTargets[id] = (path, arguments.Line);
+            return [new GotoTarget(id, "Line " + arguments.Line.ToString(CultureInfo.InvariantCulture), arguments.Line)];
+        }
+    }
+
+    /// <summary>Set Next Statement: moves the thread's innermost frame to a line of its own method, and reports the new place as a stop.</summary>
+    private async Task GotoAsync(int threadId, int targetId)
+    {
+        IClrThread thread;
+        lock (_gate)
+        {
+            RequireStopped();
+            if (!_gotoTargets.TryGetValue(targetId, out var target))
+            {
+                throw new DapRequestException("The line is no longer valid: the program has run since.");
+            }
+
+            thread = Thread(threadId);
+            var frames = thread.Frames();
+            if (frames.Count == 0 || frames[0].Module is not { } module || Types.Info(module) is not { } info)
+            {
+                throw new DapRequestException("The next statement can be set only in a thread stopped in managed code.");
+            }
+
+            var frame = frames[0];
+            if (info.MatchDocument(target.Path) is not { } document
+                || info.SequencePoints(frame.MethodToken, frame.CodeVersion).Where(point => !point.IsHidden && point.Document == document && point.StartLine >= target.Line)
+                    .OrderBy(point => point.StartLine).ThenBy(point => point.Offset).Cast<ClrSequencePoint?>().FirstOrDefault() is not { } point
+                || (point.StartLine != target.Line && !info.Locations(document, target.Line).Any(l => l.Method == frame.MethodToken && l.Offset == point.Offset)))
+            {
+                throw new DapRequestException("The next statement can be set only to a line of the method the thread is in.");
+            }
+
+            try
+            {
+                frame.SetIp(point.Offset);
+            }
+            catch (ClrException ex)
+            {
+                throw new DapRequestException(ex.Message);
+            }
+
+            ClearHandles();
+        }
+
+        await dap.SendEventAsync(DapEvents.Stopped, new StoppedEvent("goto", ThreadId: thread.Id, AllThreadsStopped: true), DapJsonContext.Default.StoppedEvent).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// What the call the thread just returned from returned (M58): the stop is right after it, in its caller. Kept for
+    /// the Locals of the stop that follows.
+    /// </summary>
+    private void ReadReturnValue(IClrThread thread, IClrFrame frame, ClrModuleInfo info)
+    {
+        try
+        {
+            if (frame.Il() is not { Length: > 0 } il || IlCalls.ReturnedAt(il, frame.IlOffset) is not { } call || info.CallTarget(call.Token) is not { ReturnsVoid: false } target
+                || Process.ReturnValue(thread, call.Offset) is not { } value)
+            {
+                return;
+            }
+
+            _returnValue = (thread.Id, call.IsConstructor ? "new " + target.TypeName : target.TypeName + "." + target.Name, value);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("The returned value: " + ex.Message);
         }
     }
 
@@ -932,6 +1259,13 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return true;
         }
 
+        // Back in the caller, right after the call (a step out, or a step over or into at the method's end): what it returned.
+        if (info is not null && step.Depth > 0 && SafeFrames(thread).Count < step.Depth)
+        {
+            step.Depth = 0;
+            ReadReturnValue(thread, frame, info);
+        }
+
         var userCode = info is { HasSymbols: true } && !info.IsOptimized && !info.IsNonUserCode(frame.MethodToken);
         if (_justMyCode && !userCode)
         {
@@ -948,7 +1282,18 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         var sameMethod = ReferenceEquals(frame.Module, step.Module) && frame.MethodToken == step.Method;
-        if (_stepFiltering && step.Kind == ClrStepKind.Into && !sameMethod && info is not null && IsFiltered(info.Method(frame.MethodToken)))
+        if (step.Target is { } target && !sameMethod && info is not null)
+        {
+            // Step Into Specific: out of every call but the chosen one (by its name, and which of the line's calls of that
+            // name), then on into the rest of the line.
+            if (info.Method(frame.MethodToken).Name != target.Name || ++step.TargetCalls != target.Ordinal)
+            {
+                step.ResumeInto = true;
+                StartStep(thread, ClrStepKind.Out, frame);
+                return true;
+            }
+        }
+        else if (_stepFiltering && step.Kind == ClrStepKind.Into && !sameMethod && info is not null && IsFiltered(info.Method(frame.MethodToken)))
         {
             // Step filtering: a property accessor or an operator is stepped over, then on into the rest of the line.
             step.ResumeInto = true;
@@ -1043,7 +1388,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         lock (_gate)
         {
-            return [.. Process.Threads().Select(t => new DapThread(t.Id, ThreadName(t)))];
+            return [.. Process.Threads().Select(t => new DapThread(t.Id, ThreadName(t), t.Frozen ? true : null))];
         }
     }
 
@@ -1103,10 +1448,16 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
 
             var result = new List<StackFrame>();
+            var innermost = frames.FirstOrDefault(f => f.Module is not null);
             foreach (var frame in frames.Skip(start).Take(levels > 0 ? levels : int.MaxValue))
             {
                 var id = _nextHandle++;
                 _frames[id] = frame;
+                if (ReferenceEquals(frame, innermost))
+                {
+                    _innermost.Add(frame);
+                }
+
                 if (frame.Module is not { } module)
                 {
                     result.Add(new StackFrame(id, frame.Description ?? "[External Code]", null, 0, 0, PresentationHint: "label"));
@@ -1211,6 +1562,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
         }
 
+        if (_returnValue is { } returned && returned.ThreadId == frame.Thread.Id)
+        {
+            variables.Add((ReturnValueName, () => returned.Value));
+        }
+
         return new ClrFrameContext(frame, variables, self, declaring, ns);
     }
 
@@ -1235,12 +1591,18 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private List<Variable> Locals(ClrFrameContext context)
     {
         var result = new List<Variable>();
+        if (_returnValue is { } returned && returned.ThreadId == context.Frame.Thread.Id && _innermost.Contains(context.Frame))
+        {
+            // As the classic IDE lists it, first, under the method's name.
+            result.Add(VariableOf(returned.Method + " returned", returned.Value, ReturnValueName));
+        }
+
         if (context.This is { } self)
         {
             result.Add(VariableOf("this", SafeValue(self), "this"));
         }
 
-        foreach (var (name, read) in context.Variables)
+        foreach (var (name, read) in context.Variables.Where(v => !v.Name.StartsWith('$')))
         {
             result.Add(VariableOf(name, SafeValue(read), name));
         }
@@ -1248,10 +1610,13 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         return result;
     }
 
+    /// <summary>The pseudo-variable for the value the last step's method returned.</summary>
+    public const string ReturnValueName = "$ReturnValue";
+
     private Dictionary<string, IClrValue> Values(ClrFrameContext context)
     {
         var values = new Dictionary<string, IClrValue>(StringComparer.Ordinal);
-        foreach (var (name, read) in context.Variables)
+        foreach (var (name, read) in context.Variables.Where(v => !v.Name.StartsWith('$')))
         {
             if (SafeValue(read) is { } value)
             {
@@ -1758,5 +2123,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         _children.Clear();
         _childValues.Clear();
         _pages.Clear();
+        _gotoTargets.Clear();
+        _stepInTargets.Clear();
+        _innermost.Clear();
     }
 }
