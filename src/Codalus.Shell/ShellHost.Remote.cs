@@ -96,10 +96,6 @@ public sealed partial class ShellHost
         Add("buildhost", BuildHostLocator.Resolve());
         Add("lshost", PathOf(HostLaunchInfo.Resolve()));
         Add("markuphost", PathOf(MarkupHostLaunch.Resolve()));
-
-        // The debug companion host, whose --clr-dap mode is the Codalus debugger (M58b, ADR 0094): it debugs on the
-        // server with the server's .NET.
-        Add(RemoteSession.DebugHostPart, PathOf(DebugCompanion.Resolve()));
         return parts;
     }
 
@@ -534,8 +530,8 @@ public sealed partial class ShellHost
             Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
             Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
             Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
-            UseRemoteCompanion(start.IsCodalus ? remote.CodalusCompanion : null);
-            await Debugger.LaunchAsync([new DebugLaunch(name, plan) { Remote = new RemoteLaunch(start, arguments, new SourceMap(), remote.Display) }], CancellationToken.None).ConfigureAwait(true);
+            UseRemoteCompanion(start.Value.Companion);
+            await Debugger.LaunchAsync([new DebugLaunch(name, plan) { Remote = new RemoteLaunch(start.Value.Adapter, arguments, new SourceMap(), remote.Display) }], CancellationToken.None).ConfigureAwait(true);
         }
 
         if (plan.BrowserUrl is { } url && Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.IsLoopback)
@@ -545,39 +541,31 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// The debugger of a remote window, started through its server: the Codalus debugger the server's bundle carries
-    /// (M58b, ADR 0094), unless <c>debug.adapter</c> chooses netcoredbg, which is copied to the machine on first use;
-    /// this machine's netcoredbg for the local stand-in.
+    /// The debugger of a remote window, started through its server, and its companion there. On the machine it is what
+    /// a session on a remote target gets (<see cref="EnsureRemoteDebuggerAsync"/>): the Codalus debugger's bundle for
+    /// the machine's platform, copied on first use (M58b, ADR 0094), or netcoredbg when <c>debug.adapter</c> chooses it
+    /// or no bundle is shipped for the platform. The hosts a remote window carries can't be the debugger: the debug
+    /// host has a native library (dbgshim) of this machine's platform only, and the other machine is often another.
+    /// The local stand-in runs this machine's debugger.
     /// </summary>
-    private async Task<DebugAdapterStartInfo?> RemoteDebuggerAsync(RemoteSession remote)
+    private async Task<(DebugAdapterStartInfo Adapter, ProcessLaunchInfo? Companion)?> RemoteDebuggerAsync(RemoteSession remote)
     {
-        if (Debugger.UsesCodalusAdapter && remote.CodalusDebugger is { } codalus)
-        {
-            return codalus;
-        }
+        (DebugAdapterStartInfo, ProcessLaunchInfo?) Codalus(string program, IReadOnlyList<string> arguments) =>
+            (new DebugAdapterStartInfo(program, [.. arguments, CoreClrAdapter.AdapterArgument], null, null, remote.Display) { Launcher = remote.DebugLauncher, IsCodalus = true },
+             new ProcessLaunchInfo(program, arguments) { Launcher = remote.Launcher });
+        (DebugAdapterStartInfo, ProcessLaunchInfo?) Netcoredbg(string path) =>
+            (new DebugAdapterStartInfo(path, ["--interpreter=vscode"], null, null, remote.Display) { Launcher = remote.DebugLauncher }, null);
 
-        DebugAdapterStartInfo Netcoredbg(string path) => new(path, ["--interpreter=vscode"], null, null, remote.Display) { Launcher = remote.DebugLauncher };
         if (remote.Spec.Target is { } target)
         {
-            // Asked for netcoredbg: the target's own bundle isn't looked for.
-            UseAskpassForSsh();
-            try
-            {
-                return Netcoredbg(await RemoteDebuggers.EnsureAsync(
-                    target,
-                    question => Dialogs.ConfirmAsync(Localizer.Get("msg.debugSessions.copyTheDebugger", "Copy the Debugger"), question, Localizer.Get("msg.debugSessions.copy", "Copy")),
-                    new Progress<string>(line => DebugLog.AppendLine(line)),
-                    CancellationToken.None).ConfigureAwait(true));
-            }
-            catch (OperationCanceledException)
-            {
-                return null;
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or IOException or HttpRequestException or InvalidDataException or System.ComponentModel.Win32Exception)
-            {
-                Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.theDebuggerCouldntBeSetUp", "The debugger couldn't be set up on {0}: {1}", target.Display, ex.Message));
-                return null;
-            }
+            return await EnsureRemoteDebuggerAsync(target).ConfigureAwait(true) is { } debugger
+                ? debugger.IsCodalus ? Codalus(debugger.Path, []) : Netcoredbg(debugger.Path)
+                : null;
+        }
+
+        if (Debugger.UsesCodalusAdapter && DebugCompanion.Resolve() is { } host)
+        {
+            return Codalus(host.FileName, host.Arguments);
         }
 
         if (DebugAdapterLocator.Resolve() is { } local)
@@ -585,7 +573,9 @@ public sealed partial class ShellHost
             return Netcoredbg(local);
         }
 
-        Workbench.Notifications.Error(Localizer.Get("msg.remote.theDebuggerNetcoredbgWasNotFound", "The debugger (netcoredbg) was not found."));
+        Workbench.Notifications.Error(Debugger.UsesCodalusAdapter
+            ? Localizer.Get("msg.remote.theDebuggerWasNotFound", "The debugger (codalus-debughost) was not found.")
+            : Localizer.Get("msg.remote.theDebuggerNetcoredbgWasNotFound", "The debugger (netcoredbg) was not found."));
         return null;
     }
 

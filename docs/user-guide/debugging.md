@@ -51,7 +51,7 @@ Then pick the process (.NET processes come first). The first time, Codalus IDE o
 - On **Linux, x64 and Arm64**, it is the Codalus debugger, as a bundle with its own .NET runtime (about 15 MB to copy, 40 MB there), so the machine needs only the program's runtime. Everything the Codalus debugger does locally works there too, `[DebuggerDisplay]` and the members' icons included; the symbol settings and Hot Reload are for local programs.
 - On **macOS on Apple silicon**, and with `debug.adapter` set to `netcoredbg`, it is netcoredbg (about 15 MB), and the Debug Console says so.
 
-In a **remote window** ([Remote development](remote.md)) the debugger comes with the Codalus server and runs on the machine's own .NET, with nothing more to copy.
+A **remote window** ([Remote development](remote.md)) debugs the same way: the first `F5` there asks to copy the debugger to the machine, and the server starts it.
 
 **Source files**: frames of a program built elsewhere carry that machine's paths (`/src/App/Program.cs`). A file that isn't here is found in your solution by its folder and name, and its folder is then mapped for your breakpoints. To map folders yourself, add entries to **`debug.sourceFileMap`**, such as `"/src=C:\\work\\App"`.
 

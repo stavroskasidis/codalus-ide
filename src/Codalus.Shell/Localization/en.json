@@ -3222,6 +3222,7 @@
   "msg.remote.portsAreForwardedInARemote": "Ports are forwarded in a remote window.",
   "msg.remote.theConnectionToWasLostUnsaved": "The connection to {0} was lost. Unsaved changes are kept in the editor; reconnect by opening the remote window again.",
   "msg.remote.theDebuggerNetcoredbgWasNotFound": "The debugger (netcoredbg) was not found.",
+  "msg.remote.theDebuggerWasNotFound": "The debugger (codalus-debughost) was not found.",
   "msg.remote.theFolderSolutionOrProjectTo": "The folder, solution or project to open on {0} (an absolute path there; ~ is the home folder).",
   "msg.remote.theHostAsForSshUser": "The host, as for ssh: user@host, user@host:port, or a Host of ~/.ssh/config. Keys and agents only; a password prompt can't appear.",
   "msg.remote.thePortOnToReachFrom": "The port on {0} to reach from this machine.",

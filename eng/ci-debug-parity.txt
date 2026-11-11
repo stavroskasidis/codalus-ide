@@ -2,12 +2,14 @@
 # (`codalus-debughost --clr-dap`, ADR 0086; the default since M58, ADR 0094), in the shards of their projects, and again
 # under netcoredbg, the fallback, in the debug-netcoredbg shard (eng/ci-test.sh, CODALUS_DEBUG_ADAPTER=netcoredbg). Linux
 # arm64 runs them alone, under the Codalus debugger (debug-codalus). They are the parity set: every test here passes
-# under both adapters, with no skip for either (the M54 plan). Each line is a test class, or one test method (ending in
-# "()"), by its full name; its namespace names its test project (tests/<namespace>). Tests of one debugger aren't here:
-# NetcoredbgTests, DebugServiceStartTests (a missing netcoredbg, the x64 one), LateRuntimeTests (its 5-second wait),
-# RemoteTests and the Shell's RemoteShellTests (remote targets keep netcoredbg), nor DebugAdapterChoiceTests (the
-# variable overrides its setting). The classes that start the Codalus debugger themselves (ClrDebuggerTests,
-# ClrDebuggerFeatureTests, HotReloadDebuggingTests) run the same in every shard.
+# under both adapters (the M54 plan); the few that are one debugger's own inside these classes say so and skip where
+# the variable forces the other (the terminal's first-line stop, the Blazor Web App's dotnet watch cases). Each line is
+# a test class, or one test method (ending in "()"), by its full name; its namespace names its test project
+# (tests/<namespace>). Tests of one debugger aren't here: NetcoredbgTests, DebugServiceStartTests (a missing debugger,
+# the x64 one), LateRuntimeTests (netcoredbg's 5-second wait), RemoteTests (netcoredbg copied to a target) and
+# RemoteCodalusTests (the Codalus debugger's bundle), the Shell's RemoteShellTests (one test for each), nor
+# DebugAdapterChoiceTests (the variable overrides its setting). The classes that start the Codalus debugger themselves
+# (ClrDebuggerTests, ClrDebuggerFeatureTests, HotReloadDebuggingTests) run the same in every shard.
 Codalus.Debugging.Tests.ClrDebuggerTests
 Codalus.Debugging.Tests.ClrDebuggerFeatureTests
 Codalus.Debugging.Tests.HotReloadDebuggingTests

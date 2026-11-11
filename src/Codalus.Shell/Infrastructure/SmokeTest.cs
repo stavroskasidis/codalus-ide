@@ -1048,25 +1048,25 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
-        // Not on macOS, where debugged programs use the Debug Console (netcoredbg can't attach to a held program there).
-        if (!OperatingSystem.IsMacOS())
-        {
-            await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
-        }
+        // On macOS too: the Codalus debugger's launcher starts the program in the terminal there (M54b).
+        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
         if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
         {
-            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with netcoredbg copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
+            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with the debugger copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
         }
         else
         {
             Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
 
-        // M54 (ADR 0086): under the Codalus debugger too, the integrated terminal on macOS as well (its launcher starts the
-        // program there); remote targets keep netcoredbg.
+        // M58b (ADR 0094): again under netcoredbg, the fallback, for as long as it ships. Not the terminal on macOS:
+        // netcoredbg can't attach to a program held at its start there.
         await StepAsync("debug.compound.netcoredbg", "M58", "Under netcoredbg, the fallback: two startup projects in one session, each stopping at its breakpoint", () => UnderNetcoredbgAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
-        await StepAsync("debug.terminal.netcoredbg", "M58", "Under netcoredbg, the fallback: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderNetcoredbgAsync(DebugTerminalStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        if (!OperatingSystem.IsMacOS())
+        {
+            await StepAsync("debug.terminal.netcoredbg", "M58", "Under netcoredbg, the fallback: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderNetcoredbgAsync(DebugTerminalStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        }
         await StepAsync("debug.roslyn.netcoredbg", "M58", "Under netcoredbg, the fallback: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderNetcoredbgAsync(DebugRoslynStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
         await StepAsync("debug.applyChanges", "M55", "An edit made while stopped applies on Continue, and one made while running with Apply Code Changes", DebugApplyChangesStepAsync, "debug.compound").ConfigureAwait(true);
         // M58 (ADR 0094): the Codalus debugger's own features, in the shipped app.
@@ -1939,6 +1939,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         finally
         {
             await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+            // The profile is this step's: the steps run again under netcoredbg (M58b), and debug.compound's Debuggee,
+            // started with --read there, waited for a line on netcoredbg's pipe that nobody writes, and never reached its
+            // breakpoint (the Codalus debugger's Debug Console ends the input, so the order before M58b hid it).
+            File.Delete(Path.Combine(properties, "launchSettings.json"));
         }
     }
 
@@ -2029,7 +2034,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var attaching = shell.AttachToRemoteAsync(target, null, remote!.Id);
             while (!attaching.IsCompleted)
             {
-                // The first attach on a target asks to copy netcoredbg there.
+                // The first attach on a target asks to copy the debugger there (the Codalus debugger's bundle, M58b).
                 if (shell.Dialogs.IsOpen && shell.Dialogs.Title == "Copy the Debugger")
                 {
                     shell.Dialogs.Accept();
@@ -4788,10 +4793,6 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     // ------------------------------------------------------------------ report
 
     /// <summary>
-    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
-    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
-    /// </summary>
-    /// <summary>
     /// A debug step again under netcoredbg, the fallback debugger (<c>debug.adapter</c> <c>netcoredbg</c>; M58, ADR
     /// 0094: the first pass runs under the default, the Codalus debugger, and its screenshots are the website's). The
     /// second pass's screenshots are named <c>-netcoredbg</c>.
@@ -4812,6 +4813,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
 
+    /// <summary>
+    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
+    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// </summary>
     private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
         if (_screenshotSuffix.Length > 0)
