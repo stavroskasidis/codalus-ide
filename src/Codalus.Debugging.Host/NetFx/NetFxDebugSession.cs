@@ -1427,7 +1427,6 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private string LogMessage(string message, IClrThread thread)
     {
         var frame = TopFrame(thread);
-        ClrEvaluator? evaluator = null;
         var result = new System.Text.StringBuilder();
         for (var i = 0; i < message.Length; i++)
         {
@@ -1451,7 +1450,6 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                         throw new ClrException("no frame to evaluate it in");
                     }
 
-                    evaluator ??= Evaluator(frame);
                     result.Append(EvaluateIn(frame, expression) switch
                     {
                         LocalValue local => ClrTypeSystem.FormatPrimitive(local.Value),

@@ -1,4 +1,5 @@
 using Codalus.Debugging;
+using Codalus.Workbench.Debugging;
 
 namespace Codalus.Workbench.Tests;
 
