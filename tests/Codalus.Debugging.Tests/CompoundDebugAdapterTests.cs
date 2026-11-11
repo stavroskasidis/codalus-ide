@@ -537,6 +537,24 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task A_program_whose_debugger_cant_pause_for_another_keeps_running()
+    {
+        // netcoredbg: on Windows a program it paused for another's stop never went on (PR #323's run 43035898820).
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true, new FakeAdapter([new DapThread(1, "Main Thread")]) { Capabilities = new() });
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await compound.ContinueAsync(M, Ct);
+        await Task.Delay(100, Ct);
+        Assert.False(Requested(worker, "pause 0"));
+        Assert.False(Requested(worker, "continue 1"));
+
+        // Its own stop still pauses the program that can.
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Requested(api, "pause 0"));
+        Assert.Equal(2, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Length);
+    }
+
+    [Fact]
     public async Task With_the_setting_off_a_stop_leaves_the_other_programs_running()
     {
         var (compound, api, worker, _) = await ProgramsAsync(breakAll: false);
@@ -801,7 +819,7 @@ public sealed class CompoundDebugAdapterTests
 
         public Task DisconnectGate { get; init; } = Task.CompletedTask;
 
-        public Capabilities Capabilities { get; } = new();
+        public Capabilities Capabilities { get; init; } = new() { SupportsBreakWithOtherPrograms = true };
 
         public Task Initialized => Task.CompletedTask;
 

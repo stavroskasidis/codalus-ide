@@ -88,7 +88,7 @@ internal static partial class BuiltIns
         {
             Title = "Break all processes when one process breaks",
             Category = "Debugging",
-            Description = "With several startup projects, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
+            Description = "With several startup projects under the Codalus debugger, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
             Order = 1,
         },
         SettingDescriptor.Create(Workbench.Debugging.Browsers.SettingKey, "\"auto\"", SettingType.String, ContributionSource.Shell) with

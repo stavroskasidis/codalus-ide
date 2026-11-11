@@ -4172,7 +4172,7 @@
   "setting.debug.adapter.enum.codalus": "Codalus debugger (preview)",
   "setting.debug.adapter.enum.netcoredbg": "netcoredbg",
   "setting.debug.adapter.title": "Debugger for .NET programs",
-  "setting.debug.breakAllProcesses.description": "With several startup projects, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
+  "setting.debug.breakAllProcesses.description": "With several startup projects under the Codalus debugger, a breakpoint, a step's end or an exception in one program pauses the others, and they go on with it (applies from the next session).",
   "setting.debug.breakAllProcesses.title": "Break all processes when one process breaks",
   "setting.debug.browser.description": "The browser for debugging in the browser (Blazor WebAssembly, JavaScript): auto (Chrome, then Edge, then Chromium), chrome, edge, chromium, or the path of a Chromium browser.",
   "setting.debug.browser.title": "Browser",

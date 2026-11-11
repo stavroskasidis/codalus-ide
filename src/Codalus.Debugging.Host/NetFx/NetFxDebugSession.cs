@@ -209,6 +209,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                     SupportsFreezingThreads = true,
                     SupportsObjectIds = true,
                     SupportsSymbolLoading = true,
+                    SupportsBreakWithOtherPrograms = true,
                     SupportsReadMemoryRequest = true,
                     SupportsWriteMemoryRequest = true,
                     SupportsDisassembleRequest = Disassembler.IsSupported(Disassembler.Architecture),

@@ -86,7 +86,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
     /// <summary>
     /// In an independent session (M58): when a program stops (a breakpoint, a step's end, an exception), the others are
-    /// paused, and they go on when it does. A program still starting is left out, as by <see cref="PauseAsync"/>.
+    /// paused, and they go on when it does. A program still starting is left out, as by <see cref="PauseAsync"/>, and so
+    /// is one whose debugger doesn't say it can (<see cref="Capabilities.SupportsBreakWithOtherPrograms"/>: netcoredbg).
     /// </summary>
     public bool BreakAllOnStop { get; set; }
 
@@ -601,7 +602,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             return [];
         }
 
-        var others = _parts.Where(p => p != part && !p.Ended && !p.Stopped && !p.Starting && !p.BreakPending).ToList();
+        var others = _parts.Where(p => p != part && !p.Ended && !p.Stopped && !p.Starting && !p.BreakPending && p.Adapter.Capabilities.SupportsBreakWithOtherPrograms).ToList();
         foreach (var other in others)
         {
             other.BreakPending = true;

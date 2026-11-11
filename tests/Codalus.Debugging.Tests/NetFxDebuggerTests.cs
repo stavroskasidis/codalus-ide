@@ -162,8 +162,19 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
         // M58 (ADR 0094): DebugType full, as old-style projects built outside Codalus and older libraries have it. The
         // Windows PDB is read by the adapter's managed reader; the compiler writes one only on Windows.
         RequireWindows();
-        var output = Path.Combine(fixture.Folder, "bin-full");
-        var start = new ProcessStartInfo("dotnet", ["build", fixture.Folder, "-nologo", "-v", "quiet", "-p:DebugType=full", "-o", output]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+
+        // A copy of the project, built on its own: in the fixture's folder the compiler isn't run again for a property
+        // that changed (DebugType isn't among its inputs), and the first build's portable PDB was copied to the output
+        // (Windows CI, PR #323's run 43035898820: "the build wrote a Windows PDB" failed).
+        var folder = Path.Combine(Path.GetDirectoryName(fixture.Folder)!, "NetFxDebuggeeFull");
+        Directory.CreateDirectory(folder);
+        foreach (var file in Directory.EnumerateFiles(fixture.Folder))
+        {
+            File.Copy(file, Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
+        }
+
+        var program = Path.Combine(folder, Path.GetFileName(fixture.Program));
+        var start = new ProcessStartInfo("dotnet", ["build", folder, "-nologo", "-v", "quiet", "-p:DebugType=full"]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         using (var build = Process.Start(start)!)
         {
             var printed = build.StandardOutput.ReadToEndAsync(Ct);
@@ -172,17 +183,19 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
             Assert.True(build.ExitCode == 0, await printed + await failed);
         }
 
-        var exe = Path.Combine(output, "NetFxDebuggee.exe");
-        Assert.True(Host.NetFx.WindowsPdbSymbols.IsWindowsPdb(Path.ChangeExtension(exe, ".pdb")), "the build wrote a Windows PDB");
+        var exe = Path.Combine(folder, "bin", "Debug", "net48", "NetFxDebuggee.exe");
+        var pdb = Path.ChangeExtension(exe, ".pdb");
+        Assert.True(File.Exists(pdb), $"{pdb} was built; the folder has: {string.Join(", ", Directory.Exists(Path.GetDirectoryName(exe)) ? Directory.EnumerateFiles(Path.GetDirectoryName(exe)!).Select(Path.GetFileName) : [])}");
+        Assert.True(Host.NetFx.WindowsPdbSymbols.IsWindowsPdb(pdb), $"the build wrote a Windows PDB; {pdb} starts with {Convert.ToHexString(File.ReadAllBytes(pdb).AsSpan(0, 8))}");
 
         var events = Channel.CreateUnbounded<DapEvent>();
         var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
         await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
         adapter.EventReceived += e => events.Writer.WriteAsync(e).AsTask();
         adapter.Log += (_, line) => log.Enqueue(line);
-        await adapter.LaunchAsync(new NetFxDebugArguments(exe, [], fixture.Folder), s_json.NetFxDebugArguments, Ct);
+        await adapter.LaunchAsync(new NetFxDebugArguments(exe, [], folder), s_json.NetFxDebugArguments, Ct);
         await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
-        await adapter.SetBreakpointsAsync(fixture.Program, [new SourceBreakpoint(Line("netfx-sum"))], Ct);
+        await adapter.SetBreakpointsAsync(program, [new SourceBreakpoint(Line("netfx-sum"))], Ct);
         await adapter.ConfigurationDoneAsync(Ct);
 
         var stopped = await NextAsync(events, DapEvents.Stopped, log);

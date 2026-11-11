@@ -92,6 +92,13 @@ public sealed record Capabilities
     /// <summary>The Codalus debugger's own (M58): <c>codalus/loadSymbols</c>, a module's symbols looked up on demand.</summary>
     public bool SupportsSymbolLoading { get; init; }
 
+    /// <summary>
+    /// The program can be paused for another program's stop and go on with it (M58, several startup projects): the
+    /// Codalus debugger. netcoredbg isn't asked to: on Windows a program it paused at such a moment never went on
+    /// after <c>continue</c> (PR #323's run 43035898820).
+    /// </summary>
+    public bool SupportsBreakWithOtherPrograms { get; init; }
+
     /// <summary>The Codalus debugger's own (M58): <c>codalus/makeObjectId</c> and <c>codalus/deleteObjectId</c>.</summary>
     public bool SupportsObjectIds { get; init; }
 

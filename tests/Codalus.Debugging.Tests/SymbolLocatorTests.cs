@@ -139,12 +139,15 @@ public sealed class SymbolLocatorTests(DebuggeeFixture fixture) : IClassFixture<
     [Fact]
     public async Task A_pdb_of_another_build_in_a_search_path_is_skipped()
     {
+        // Two folders: a loose Debuggee.pdb and a store's debuggee.pdb folder are one name on Windows and macOS, where
+        // the store's folder couldn't be made beside the file (Windows CI, PR #323's run 43035898820).
         var folder = Directory.CreateDirectory(Path.Combine(_root, "symbols")).FullName;
+        var store = Directory.CreateDirectory(Path.Combine(_root, "store")).FullName;
         var other = Path.Combine(folder, "Debuggee.pdb");
         File.WriteAllBytes(other, OtherBuild());
-        var notPdb = Store(folder, Key, "<html>Sign in</html>"u8.ToArray());
+        var notPdb = Store(store, Key, "<html>Sign in</html>"u8.ToArray());
 
-        var result = await Locator(new SymbolOptions { SearchPaths = [folder] }).FindAsync(Module(), ignoreFilter: false, Token);
+        var result = await Locator(new SymbolOptions { SearchPaths = [folder, store] }).FindAsync(Module(), ignoreFilter: false, Token);
 
         Assert.Equal(new SymbolResult(null, $"Skipped {other}: it belongs to another build of the module. Skipped {notPdb}: it isn't a portable PDB."), result);
     }
@@ -464,9 +467,11 @@ public sealed class SymbolLocatorTests(DebuggeeFixture fixture) : IClassFixture<
         var skipped = await Locator(new SymbolOptions { SearchPaths = [folder] }).FindAsync(module, ignoreFilter: false, Token);
         Assert.Equal(new SymbolResult(null, $"Skipped {loose}: a Windows PDB outside a symbol store can't be checked against the module."), skipped);
 
-        var stored = Store(folder, key, s_windowsPdb);
-        var found = await Locator(new SymbolOptions { SearchPaths = [folder] }).FindAsync(module, ignoreFilter: false, Token);
-        Assert.Equal(new SymbolResult(stored, $"Symbols loaded from {folder}."), found);
+        // The store is another folder: its legacy.pdb folder and the loose Legacy.pdb are one name on Windows and macOS.
+        var store = Directory.CreateDirectory(Path.Combine(_root, "store")).FullName;
+        var stored = Store(store, key, s_windowsPdb);
+        var found = await Locator(new SymbolOptions { SearchPaths = [folder, store] }).FindAsync(module, ignoreFilter: false, Token);
+        Assert.Equal(new SymbolResult(stored, $"Symbols loaded from {store}."), found);
 
         // From a server: by the key, without the portable PDB's checksum header; an error page isn't kept as a PDB.
         var answer = "<html>Sign in</html>"u8.ToArray();
