@@ -100,36 +100,42 @@ public sealed class RemoteShellTests
         var completion = await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
         Assert.Contains(completion.Items, i => i.Label == "WriteLine");
 
-        // Budget (M21): completion ≤ local + RTT + 20 ms at a simulated 50 and 150 ms (asserted off CI).
-        // Each median comes with its samples: one slow sample or all of them tells a busy machine from a slower path
-        // (a local full run over the budget by 5 ms at 150 ms, 2026-10-31; docs/ci-flakes.md).
-        async Task<(double Median, string Samples)> CompletionMilliseconds()
+        // Budget (M21): completion ≤ local + RTT + 20 ms at a simulated 50 and 150 ms (asserted off CI). The three are
+        // measured in alternating rounds (no latency, 50 ms, 150 ms, five times), as the benchmarks do, so load that
+        // comes and goes during a full run falls on all three alike: measured one after the other, the baseline's five
+        // samples and each RTT's fell on different moments (full local runs over the budget, 2026-10-31 and 2026-11-11,
+        // where the baseline was 77 ms against 19 to 38 ms alone; docs/ci-flakes.md). Each median comes with its samples.
+        int[] rtts = [0, 50, 150];
+        var times = rtts.ToDictionary(rtt => rtt, _ => new List<double>());
+        for (var round = 0; round < 5; round++)
         {
-            var times = new List<double>();
-            for (var i = 0; i < 5; i++)
+            foreach (var rtt in rtts)
             {
+                remote.Connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
                 var watch = Stopwatch.StartNew();
                 await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
-                times.Add(watch.Elapsed.TotalMilliseconds);
-            }
-
-            return (times.Order().ElementAt(times.Count / 2), string.Join(", ", times.Select(t => t.ToString("F0", CultureInfo.InvariantCulture))));
-        }
-
-        var (baseline, baselineSamples) = await CompletionMilliseconds();
-        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms [{baselineSamples}]"));
-        foreach (var rtt in (int[])[50, 150])
-        {
-            remote.Connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
-            var (slower, samples) = await CompletionMilliseconds();
-            report.Append(CultureInfo.InvariantCulture, $"; {slower:F0} ms at {rtt} ms RTT [{samples}]");
-            if (Environment.GetEnvironmentVariable("CI") != "true")
-            {
-                Assert.True(slower <= baseline + rtt + 20, $"Completion took {slower:F0} ms at {rtt} ms RTT: over the budget of {baseline + rtt + 20:F0} ms ({report}).");
+                times[rtt].Add(watch.Elapsed.TotalMilliseconds);
             }
         }
 
         remote.Connection.SimulatedLatency = TimeSpan.Zero;
+        double Median(int rtt) => times[rtt].Order().ElementAt(times[rtt].Count / 2);
+        string Samples(int rtt) => string.Join(", ", times[rtt].Select(t => t.ToString("F0", CultureInfo.InvariantCulture)));
+        var baseline = Median(0);
+        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms [{Samples(0)}]"));
+        foreach (var rtt in rtts.Skip(1))
+        {
+            report.Append(CultureInfo.InvariantCulture, $"; {Median(rtt):F0} ms at {rtt} ms RTT [{Samples(rtt)}]");
+        }
+
+        if (Environment.GetEnvironmentVariable("CI") != "true")
+        {
+            foreach (var rtt in rtts.Skip(1))
+            {
+                Assert.True(Median(rtt) <= baseline + rtt + 20, $"Completion took {Median(rtt):F0} ms at {rtt} ms RTT: over the budget of {baseline + rtt + 20:F0} ms ({report}).");
+            }
+        }
+
         TestContext.Current.SendDiagnosticMessage(report.ToString());
 
         // An edit saved through the server reaches the file there.
