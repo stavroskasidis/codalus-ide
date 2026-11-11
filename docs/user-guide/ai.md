@@ -4,7 +4,7 @@ Codalus IDE can send questions about your code to a language model you choose, s
 
 ## Turning it on
 
-1. **Tools > AI > Turn On AI Assistance**, or **Turn On AI Assistance** in the AI Chat window (**View > AI Chat**, `Ctrl+Alt+I`).
+1. **Tools > AI > Turn On AI Assistance**, or **Turn On AI Assistance** in the AI Chat window (**View > AI Chat**; `Ctrl+Alt+I` opens it until an agent with its own CLI is connected, then it opens [AI Console](#ai-console)).
 2. Choose a provider:
    - **OpenAI-compatible**: OpenAI, or any server that speaks OpenAI's chat completions API, such as LM Studio (`http://localhost:1234/v1`), llama.cpp's server, vLLM or a company gateway. Set the address in **Tools > Options > AI: OpenAI-compatible** (`ai.openai.endpoint`). A key is optional for a local server.
    - **Ollama**: the models of Ollama on this machine (`ai.ollama.endpoint`, `http://localhost:11434/v1` by default). Nothing leaves your computer, and no key is needed.
@@ -162,7 +162,7 @@ AI agents that run outside the IDE (in a terminal, or another editor) can use [t
 
 ## External agents (ACP)
 
-AI Chat can also run a coding agent that is a program of its own, such as pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode or Goose, next to the built-in assistant. Codalus talks to it over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP, version 1): it starts the agent, shows its answers, plans and steps in the chat, and serves what the agent asks of the IDE (reading and writing files, running commands, asking your permission) with the same checks as agent mode.
+AI Chat can also run a coding agent that is a program of its own (to use the agent's own command-line interface instead, see [AI Console](#ai-console)), such as pi, Claude, Codex, Gemini CLI, GitHub Copilot, OpenCode or Goose, next to the built-in assistant. Codalus talks to it over the [Agent Client Protocol](https://agentclientprotocol.com) (ACP, version 1): it starts the agent, shows its answers, plans and steps in the chat, and serves what the agent asks of the IDE (reading and writing files, running commands, asking your permission) with the same checks as agent mode.
 
 > **External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.** An external agent calls its own model provider with its own account. What it reads (through the IDE or by itself) goes there, under that provider's terms, not through Codalus's AI boundary. The built-in assistant stays the default and keeps the full boundary. AI Chat shows this label whenever an external agent is chosen.
 
@@ -179,7 +179,7 @@ AI Chat can also run a coding agent that is a program of its own, such as pi, Cl
 5. **Turn on AI assistance**: a check box, shown only while AI is off. Its text says what else comes back on (a provider you chose earlier, inline suggestions). **Connect** stays disabled until it's checked. Nothing is written yet.
 6. **Connect** runs the test: the requirements, the download (npm's own progress), the agent's start, the sign-in, and a check that it's signed in. The test runs in an empty folder of the IDE's (`<state>/external-agents/connect-test`), with no workspace, no MCP servers and no prompt, and Codalus refuses anything the agent asks the IDE for meanwhile. Its session may stay in the agent's own history. Cancel stops it and writes nothing.
 
-**Only when the test passes** does Codalus write the agent's entry (`ai.agents.<agent>`) to your user settings, and `ai.enabled` when the check box turned AI on; **Start a Chat** picks the agent. When the agent didn't say whether you're signed in, **Save Anyway** writes it (your first question then asks you to sign in if you aren't), **Sign In…** goes back, and **Cancel** writes nothing. A failed test says why in plain words, with its fixes as buttons (**Sign In with Claude subscription…**, **Use an API Key…**, npm's proxy settings) and **Try Again**; nothing is written. Connect keeps the comments and the other entries in your `ai.agents`.
+**Only when the test passes** does Codalus write the agent's entry (`ai.agents.<agent>`) to your user settings, and `ai.enabled` when the check box turned AI on; **Start a Chat** opens the agent's own CLI in [AI Console](#ai-console) (AI Chat for an agent without one), and AI Chat answers with it too. When the agent didn't say whether you're signed in, **Save Anyway** writes it (your first question then asks you to sign in if you aren't), **Sign In…** goes back, and **Cancel** writes nothing. A failed test says why in plain words, with its fixes as buttons (**Sign In with Claude subscription…**, **Use an API Key…**, npm's proxy settings) and **Try Again**; nothing is written. Connect keeps the comments and the other entries in your `ai.agents`.
 
 | Agent | What runs | Version | Sign-in | How the test checks it |
 |---|---|---|---|---|
@@ -265,6 +265,28 @@ What Codalus can't check:
 
 Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), resuming an earlier session, and an Options page for External Agents (edit the JSON, or use Manage Agents…). External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
 
+## AI Console
+
+AI Console runs a connected agent's own command-line interface (Claude's, Codex's, Gemini CLI, GitHub Copilot's, pi, OpenCode, goose) in the IDE's terminal: its prompt, its slash commands, its history and its own approvals, as you know them from a terminal. It opens at the bottom, beside the Output and the Terminal (**View > AI Console**, or `Ctrl+Alt+I` once an agent with a CLI is connected), and it's the recommended way to work with an agent; AI Chat stays for the built-in assistant, for agents without a CLI, and for the editor's AI actions.
+
+> **External agent's own CLI: it uses its own provider and data policy, and changes files and runs commands itself, asking you with its own prompts. Codalus doesn't preview its edits.** Every console shows this label. In AI Chat, an agent's edits go through Codalus's preview and its commands through Codalus's approval; in AI Console, the CLI's own permission prompts are what asks you.
+
+**Starting one.** Connect an agent first ([Connecting one](#connecting-one)); **Start a Chat** then opens its console. The console starts the agent's CLI from your `PATH`, in the solution's folder, with the keys you gave Connect. If the CLI isn't installed, the window says so and **Install Its CLI** shows the exact command before running it, or opens the CLI's own install page (Claude, Codex). A program of that name inside the folder you have open is never started.
+
+**Tabs.** **+** starts another console, and the picker beside it starts one for another connected agent; with two or more, a list on the right switches between them. **Restart** starts a new conversation in the tab, and **Close** ends its CLI. When a CLI exits by itself, its tab stays with what it printed.
+
+**Across a restart.** The consoles you had open come back when the window is shown again, with their conversations where the CLI can resume one: Claude resumes each console's own conversation; Codex, Gemini CLI, GitHub Copilot and goose continue their last conversation in the folder (one console of each); pi and OpenCode start fresh. A console nothing was said in starts a new conversation.
+
+**The IDE's tools.** A console gives its CLI [the IDE's tools](#the-ides-tools) through `codalus mcp` on a pipe of its own, for that run only, where the CLI takes an MCP server on its command line: Claude, Codex, GitHub Copilot and goose. Nothing is written to the CLI's own configuration. The label says whether they're connected; for Gemini CLI, pi and OpenCode they aren't (turn on **MCP Server** and add `codalus mcp` to the CLI yourself, as [Codalus as an MCP server](#codalus-as-an-mcp-server) describes). Actions follow `ai.agent.ideActions`.
+
+**Pointing it at code.** **Add Selection to AI Console** and **Add File to AI Console** (the editor's **AI** menu, Solution Explorer's context menu, or a file dragged onto the console) type a reference into the prompt, such as `@src/App/Program.cs#L10-24`, without sending it. The agent reads the file itself, from the disk: save first if you have unsaved changes. Files that are [never sent](#what-is-never-sent) aren't named.
+
+**Where it runs.** Only where an external agent may: AI assistance on, the agent in your user settings, a trusted folder, and not a remote window. When that changes, the consoles end and the window says why; they come back when it may run them again.
+
+**Your own CLI.** An entry of `ai.agents` you wrote by hand names its CLI with `console`: `"console": "mycli"`, or `"console": { "command": "mycli", "args": ["chat"] }`. It runs as written, without the IDE's tools.
+
+Not supported yet: find in a console, the IDE's tools and resuming for pi and OpenCode, and AI Console in remote windows.
+
 ## What is never sent
 
 AI assistance has one gate that every request goes through:
@@ -303,8 +325,9 @@ AI assistance has one gate that every request goes through:
 | `ai.chat.density` | `compact` | `compact` folds each answer's steps into a line; `detailed` shows every step |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
 | `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE's tools (external agents' own pipes don't need it) |
-| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices`) |
+| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices", "console" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices`, and `console` names the agent's own CLI for AI Console) |
 | `ai.chat.agent` | `""` | Who answers in AI Chat: empty for the built-in assistant, or an agent of `ai.agents` (the picker writes it) |
+| `ai.console.agent` | `""` | The agent whose CLI a new AI Console starts (AI Console writes it) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
 | `ai.anthropic.endpoint` | `https://api.anthropic.com` | Anthropic's API, or a gateway |

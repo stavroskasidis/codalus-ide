@@ -1,0 +1,72 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:terminal="using:Codalus.Shell.Terminal"
+             x:Class="Codalus.Shell.Views.AiConsoleView"
+             x:DataType="vm:AiConsoleViewModel">
+  <!--
+    AI Console (ADR 0094): a connected agent's own CLI in the IDE's terminal. The top row is the label every console
+    shows (one line, its whole text in its tooltip, as AI Chat's) with whether the IDE's tools are connected, then the
+    agent a new console starts, New, Restart, Close and AI Chat. Under it, why nothing runs, with Connect or Install.
+    The consoles are tabs in a list on the right once there are two.
+  -->
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="4,2">
+      <DockPanel x:Name="LabelRow" ToolTip.Tip="{x:Static vm:AiConsoleViewModel.Label}" VerticalAlignment="Center" Margin="2,0,8,0">
+        <controls:Icon DockPanel.Dock="Left" Kind="info" Margin="0,0,6,0" VerticalAlignment="Center" Foreground="{DynamicResource Shell.Status.Info.Foreground}" />
+        <TextBlock x:Name="ToolsNote" DockPanel.Dock="Right" Classes="small" Text="{Binding ToolsNote}" Margin="8,0,0,0" VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis" MaxWidth="360" ToolTip.Tip="{Binding ToolsNote}" />
+        <TextBlock x:Name="ConsoleLabel" Classes="small" Text="{x:Static vm:AiConsoleViewModel.Label}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      </DockPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+        <ComboBox x:Name="AgentPicker" MinWidth="130" ItemsSource="{Binding Agents}" AutomationProperties.Name="{l:T aiConsole.agent}" ToolTip.Tip="{l:T aiConsole.newConsoleWithThisAgent}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:AiConsoleAgentChoice">
+              <TextBlock Text="{Binding DisplayName}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <Button x:Name="NewButton" Classes="toolbar" Command="{Binding NewCommand}" ToolTip.Tip="{l:T aiConsole.newConsole}" AutomationProperties.Name="{l:T aiConsole.newConsole}">
+          <TextBlock Text="+" FontWeight="Bold" />
+        </Button>
+        <Button x:Name="RestartButton" Classes="toolbar" Command="{Binding RestartCommand}" ToolTip.Tip="{l:T aiConsole.restart}" AutomationProperties.Name="{l:T aiConsole.restart}">
+          <controls:Icon Kind="restart" />
+        </Button>
+        <Button x:Name="KillButton" Classes="toolbar" Command="{Binding KillCommand}" ToolTip.Tip="{l:T aiConsole.close}" AutomationProperties.Name="{l:T aiConsole.close}">
+          <controls:Icon Kind="trash" />
+        </Button>
+        <Button x:Name="ChatButton" Classes="toolbar" Command="{Binding ShowChatCommand}" ToolTip.Tip="{l:T aiConsole.openAiChat}" AutomationProperties.Name="{l:T aiConsole.openAiChat}">
+          <controls:Icon Kind="sparkle" />
+        </Button>
+      </StackPanel>
+    </Grid>
+    <Border x:Name="NoticeBanner" DockPanel.Dock="Top" Margin="4,0,4,2" Padding="8,4" CornerRadius="{DynamicResource Shell.Control.CornerRadius}" IsVisible="{Binding HasNotice}"
+            Background="{DynamicResource Shell.Status.Warning}" BorderBrush="{DynamicResource Shell.Status.Warning.Foreground}" BorderThickness="{DynamicResource Shell.Chip.BorderThickness}">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0" VerticalAlignment="Center">
+          <Button x:Name="ConnectButton" Content="{l:T aiConsole.connectToAnAgent}" Command="{Binding ConnectCommand}" IsVisible="{Binding CanConnect}" />
+          <Button x:Name="InstallButton" Content="{l:T aiConsole.installItsCli}" Command="{Binding InstallCommand}" IsVisible="{Binding CanInstall}" />
+        </StackPanel>
+        <TextBlock x:Name="NoticeText" Text="{Binding Notice}" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Foreground="{DynamicResource Shell.Status.Warning.Foreground}" AutomationProperties.LiveSetting="Polite" />
+      </DockPanel>
+    </Border>
+    <Grid ColumnDefinitions="*,Auto">
+      <DockPanel x:Name="Pane" DragDrop.AllowDrop="True">
+        <ScrollBar x:Name="ConsoleScroll" DockPanel.Dock="Right" Orientation="Vertical" AllowAutoHide="True" />
+        <terminal:TerminalControl x:Name="Console" />
+      </DockPanel>
+      <TextBlock Classes="emptyState" Text="{l:T aiConsole.noConsoleIsOpen}" IsVisible="{Binding ShowEmptyState}" />
+      <ListBox Grid.Column="1" x:Name="TabList" Width="160" ItemsSource="{Binding Tabs}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T aiConsole.consoles}"
+               IsVisible="{Binding Tabs.Count, Converter={x:Static vm:TerminalViewConverters.MoreThanOne}}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:AiConsoleTabViewModel">
+            <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </DockPanel>
+</UserControl>
