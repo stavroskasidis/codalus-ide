@@ -567,8 +567,18 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
         return _loading = LoadCoreAsync(pullRequests);
     }
 
+    /// <summary>
+    /// A read of the pull requests has started and hasn't shown them yet. A read of the refs alone (git changed the
+    /// repository) cancels the one before it: without this, one that arrived while the first read still asked the hosts
+    /// left Pull Requests at "Loading…" for good, since nothing asked for them again (Windows CI, run 43087646182).
+    /// </summary>
+    private bool _pullRequestsOwed;
+
     private async Task LoadCoreAsync(bool pullRequests)
     {
+        // The read this one replaces owed the pull requests: this one reads them.
+        pullRequests |= _pullRequestsOwed;
+        _pullRequestsOwed = pullRequests;
         _loadCts?.Cancel();
         var cts = _loadCts = new CancellationTokenSource();
         var token = cts.Token;
@@ -629,6 +639,7 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                     _data[git] = current with { PullRequests = result };
                 }
 
+                _pullRequestsOwed = false;
                 await RebuildAsync().ConfigureAwait(true);
             }
         }

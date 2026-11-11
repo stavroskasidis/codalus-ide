@@ -547,6 +547,68 @@ public sealed class GitTreesRowsTests
         }
     }
 
+    /// <summary>
+    /// Git changes the repository (its status) while the document's first read still asks the host for the pull
+    /// requests: the read of the refs alone that follows cancels it, and reads the pull requests itself. It didn't, and
+    /// Pull Requests stayed at "Loading…" until Refresh (Windows CI, run 43087646182, where a test's own git merge
+    /// landed in that window).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_repository_reads_the_pull_requests_a_refs_reload_cancelled()
+    {
+        var temp = Directory.CreateTempSubdirectory("codalus-repository-").FullName;
+        var folder = CreateManyRefs(Path.Combine(temp, "Refs"), tags: 2, branches: 2);
+        try
+        {
+            using var git = new Codalus.Workbench.Git.GitService(watch: false);
+            Assert.True(await git.OpenAsync(folder, TestContext.Current.CancellationToken));
+            await git.RefreshAsync(TestContext.Current.CancellationToken);
+            var asked = 0;
+            var firstAsked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var vm = new GitRepositoryViewModel(new GitRepositoryActions
+            {
+                Repositories = () => [git],
+
+                // The first request waits on its host until it is cancelled; the one after it answers.
+                PullRequests = async (_, token) =>
+                {
+                    if (++asked == 1)
+                    {
+                        firstAsked.TrySetResult();
+                        await Task.Delay(Timeout.Infinite, token);
+                    }
+
+                    return new GitRepositoryPullRequests([], null);
+                },
+                CreateHistory = (service, query, title, _) => new GitHistoryViewModel(service, query, title, (_, _) => Task.CompletedTask),
+                Run = (_, _, _) => Task.CompletedTask,
+            });
+            string PullRequests() => string.Join(", ", vm.Roots.Single(r => r.Text == "Pull Requests").Children.Select(c => c.Text));
+
+            var first = vm.LoadAsync();
+            await firstAsked.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+            await ShellFixture.PumpUntil(() => vm.TreesBuilt == 1);
+            Assert.Equal("Loading…", PullRequests());
+
+            // Git changed the repository: the refs are read again, and so are the pull requests the first read owed.
+            await vm.LoadAsync(pullRequests: false);
+            await first;
+            Assert.Equal(2, asked);
+            Assert.False(vm.IsLoading);
+            await ShellFixture.PumpUntil(() => PullRequests().Contains("All open (0)", StringComparison.Ordinal), describe: PullRequests);
+            Assert.DoesNotContain("Loading", PullRequests(), StringComparison.Ordinal);
+
+            // With them shown, a read of the refs alone asks no host again.
+            await vm.LoadAsync(pullRequests: false);
+            Assert.Equal(2, asked);
+            Assert.Contains("All open (0)", PullRequests(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            DeleteFolder(temp);
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_commit_of_ten_thousand_files_shows_rows_selects_its_first_file_and_keeps_them_across_tabs()
     {
