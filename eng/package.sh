@@ -71,6 +71,21 @@ if [ "$rid" = osx-arm64 ] && [ -d "$app/debugger" ] && "$repo/eng/get-netcoredbg
   cp -R "$stage/netcoredbg-x64" "$app/debugger/x64"
 fi
 
+# The Codalus debugger's other build, offered as a component (M58b, ADR 0094): for x64 programs on Apple silicon in
+# the macOS package, for 32-bit .NET Framework programs in the Windows one. It is a release asset next to the packages;
+# the package only names it, with its SHA-256 (debughost/debugger-components.json). A release's builds only: the asset
+# is downloaded from the release of the app's own version, which a dev or update-test build doesn't have.
+component=""
+case "$rid" in
+  osx-arm64) component=osx-x64 ;;
+  win-x64) component=win-x86 ;;
+esac
+rm -f "$out"/codalus-debugger-*.tar.gz
+if [ -n "$component" ] && { [ "$kind" = stable ] || [ "$kind" = nightly ]; }; then
+  echo "== The Codalus debugger's $component bundle (a component)"
+  bash "$repo/eng/package-debugger-component.sh" "$component" "$version" "$app" "$out" "$stage/debugger-$component"
+fi
+
 cp "$repo/LICENSE" "$repo/THIRD-PARTY-NOTICES.md" "$repo/README.md" "$app/"
 
 # Velopack's packaging tool, pinned to the library's version (a mismatch is reported by vpk).
@@ -240,7 +255,7 @@ else
 fi
 
 echo "== Checksums"
-(cd "$out" && for file in "$name".* "$name"-* velopack/*; do
+(cd "$out" && for file in "$name".* "$name"-* codalus-debugger-"$version"-*.tar.gz velopack/*; do
   [ -f "$file" ] && printf '%s  %s\n' "$(sha256 "$file")" "$(basename "$file")"
 done) > "$out/SHA256SUMS-$rid.txt"
 

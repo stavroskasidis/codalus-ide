@@ -68,7 +68,7 @@ public sealed class OwnedAttachTests : IDisposable
     [Fact]
     public async Task The_session_owns_the_server_it_attached_to_and_stop_ends_it()
     {
-        await using var debug = new DebugService(() => NetcoredbgStandIn);
+        await using var debug = new DebugService(() => NetcoredbgStandIn) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         debug.Ended += (_, _) => ended.TrySetResult(debug.StopRequested);
         await debug.AttachOwnedCompoundAsync(_server.Id, "BlazorHosted", Plan, Timeout());
@@ -91,7 +91,7 @@ public sealed class OwnedAttachTests : IDisposable
     [Fact]
     public async Task Releasing_the_server_detaches_and_leaves_it_running()
     {
-        await using var debug = new DebugService(() => NetcoredbgStandIn);
+        await using var debug = new DebugService(() => NetcoredbgStandIn) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var ended = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         debug.Ended += (_, _) => ended.TrySetResult(debug.StopRequested);
         await debug.AttachOwnedCompoundAsync(_server.Id, "BlazorHosted", Plan, Timeout());
@@ -109,7 +109,7 @@ public sealed class OwnedAttachTests : IDisposable
     {
         // (A start netcoredbg gave up on waits for the runtime while the server runs, as any attach: DebugAdapter.AttachAsync.)
         await File.WriteAllTextAsync(_script, "fail", TestContext.Current.CancellationToken);
-        await using var debug = new DebugService(() => NetcoredbgStandIn);
+        await using var debug = new DebugService(() => NetcoredbgStandIn) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         await Assert.ThrowsAsync<InvalidOperationException>(() => debug.AttachOwnedCompoundAsync(_server.Id, "BlazorHosted", Plan, Timeout()));
         Assert.Equal(DebugState.Idle, debug.State);
         await WaitForAsync(() => Requests().Any(r => r.StartsWith("disconnect", StringComparison.Ordinal)), "the disconnect");
