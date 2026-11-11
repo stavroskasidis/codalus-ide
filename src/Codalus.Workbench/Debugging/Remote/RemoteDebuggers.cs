@@ -6,13 +6,19 @@ using Codalus.Debugging;
 
 namespace Codalus.Workbench.Debugging.Remote;
 
+/// <summary>
+/// The Codalus debugger's bundle for a platform on this machine: a folder, or the <c>.tar.gz</c> of one (its top folder
+/// is <c>codalus-debugger/</c>), and the id of its build, which names its folder on a target.
+/// </summary>
+public sealed record CodalusDebuggerBundle(string Path, bool IsArchive, string Id);
+
 /// <summary>The debugger found or copied on a target: its path there, and whether it is the Codalus debugger's bundle (M58b) or netcoredbg.</summary>
 public sealed record RemoteDebugger(string Path, bool IsCodalus);
 
 /// <summary>
 /// The debugger on a <see cref="RemoteTarget"/>. The Codalus debugger (M58b, ADR 0094) is a bundle of
 /// <c>codalus-debughost</c> with its own .NET runtime, so the target needs only the program's: it ships next to the
-/// shell for Linux x64 and arm64 (<c>remote/&lt;platform&gt;/debugger/</c>), and comes from
+/// shell for Linux x64 and arm64 (<c>remote/&lt;platform&gt;/debugger.tar.gz</c>), and comes from
 /// <c>CODALUS_DEBUGGER_LINUX_X64</c> (and the other platforms; a folder) or <c>.work/codalus-debugger-&lt;platform&gt;</c>
 /// in a source checkout (<c>eng/get-codalus-debugger.sh</c>). A target without a bundle for its platform gets netcoredbg.
 ///
@@ -75,29 +81,44 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
         return new RemoteDebugger(await EnsureAsync(target, consent, progress, cancellationToken).ConfigureAwait(false), IsCodalus: false);
     }
 
+    /// <summary>The archive a published install carries for a platform, next to the shell in <c>remote/&lt;platform&gt;/</c>, and the file that names its build.</summary>
+    public const string CodalusArchive = "debugger.tar.gz";
+
+    public const string CodalusArchiveId = "debugger.id";
+
     /// <summary>
-    /// The Codalus debugger's bundle for <paramref name="platform"/> on this machine (a folder with
-    /// <c>codalus-debughost</c>), or null: the variable, next to the shell, or a source checkout's <c>.work</c>.
+    /// The Codalus debugger's bundle for <paramref name="platform"/> on this machine, or null: the variable's folder,
+    /// the archive next to the shell (a published install: the bundle as it travels, so it is neither unpacked here
+    /// nor packed again), or a source checkout's folder in <c>.work</c>. A folder has <c>codalus-debughost</c> and a
+    /// <c>bundle.id</c>.
     /// </summary>
-    public static string? CodalusBundle(string platform)
+    public static CodalusDebuggerBundle? CodalusBundle(string platform)
     {
-        var candidates = new List<string>();
-        if (Environment.GetEnvironmentVariable("CODALUS_DEBUGGER_" + platform.Replace('-', '_').ToUpperInvariant()) is { Length: > 0 } fromEnv)
+        static CodalusDebuggerBundle? Folder(string folder) =>
+            File.Exists(Path.Combine(folder, CodalusExecutable))
+                ? new CodalusDebuggerBundle(folder, IsArchive: false, File.Exists(Path.Combine(folder, CodalusBundleId)) ? File.ReadAllText(Path.Combine(folder, CodalusBundleId)).Trim() : "0")
+                : null;
+
+        if (Environment.GetEnvironmentVariable("CODALUS_DEBUGGER_" + platform.Replace('-', '_').ToUpperInvariant()) is { Length: > 0 } fromEnv && Folder(fromEnv) is { } given)
         {
-            candidates.Add(fromEnv);
+            return given;
         }
 
-        candidates.Add(Path.Combine(AppContext.BaseDirectory, "remote", platform, "debugger"));
+        var shipped = Path.Combine(AppContext.BaseDirectory, "remote", platform);
+        if (File.Exists(Path.Combine(shipped, CodalusArchive)) && File.Exists(Path.Combine(shipped, CodalusArchiveId)))
+        {
+            return new CodalusDebuggerBundle(Path.Combine(shipped, CodalusArchive), IsArchive: true, File.ReadAllText(Path.Combine(shipped, CodalusArchiveId)).Trim());
+        }
+
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
             if (File.Exists(Path.Combine(directory.FullName, "Codalus.slnx")))
             {
-                candidates.Add(Path.Combine(directory.FullName, ".work", "codalus-debugger-" + platform));
-                break;
+                return Folder(Path.Combine(directory.FullName, ".work", "codalus-debugger-" + platform));
             }
         }
 
-        return candidates.FirstOrDefault(c => File.Exists(Path.Combine(c, CodalusExecutable)));
+        return null;
     }
 
     /// <summary>
@@ -105,7 +126,8 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
     /// <paramref name="consent"/> agrees; null when there's no bundle for the target's platform here (netcoredbg
     /// debugs there then). The folder on the target is named after the bundle's build, so another build is another copy.
     /// </summary>
-    public static async Task<string?> EnsureCodalusAsync(RemoteTarget target, Func<string, Task<bool>> consent, IProgress<string>? progress, CancellationToken cancellationToken)
+    /// <param name="given">The bundle to copy, when it isn't this machine's for the target's platform (tests).</param>
+    public static async Task<string?> EnsureCodalusAsync(RemoteTarget target, Func<string, Task<bool>> consent, IProgress<string>? progress, CancellationToken cancellationToken, CodalusDebuggerBundle? given = null)
     {
         var system = await RemoteShell.RunAsync(target, "echo \"system $(uname -s) $(uname -m)\"", cancellationToken).ConfigureAwait(false);
         var answer = system.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault(l => l.StartsWith("system ", StringComparison.Ordinal));
@@ -116,16 +138,16 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
 
         var parts = answer.Split(' ');
         var platform = parts.Length == 3 ? Platform(parts[1], parts[2]) : null;
-        if (platform is null || CodalusBundle(platform) is not { } bundle)
+        if (platform is null || (given ?? CodalusBundle(platform)) is not { } bundle)
         {
             progress?.Report($"The Codalus debugger has no bundle here for {target.Display} ({answer["system ".Length..]}): netcoredbg debugs there.");
             return null;
         }
 
-        var id = File.Exists(Path.Combine(bundle, CodalusBundleId)) ? File.ReadAllText(Path.Combine(bundle, CodalusBundleId)).Trim() : "0";
+        var id = bundle.Id;
         if (id.Length == 0 || id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or '+')))
         {
-            throw new InvalidOperationException($"{Path.Combine(bundle, CodalusBundleId)} doesn't name the bundle's build.");
+            throw new InvalidOperationException($"{bundle.Path}'s id doesn't name the bundle's build.");
         }
 
         var folder = $"{target.DebuggerHome}/codalus-{id}";
@@ -136,13 +158,12 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
             return found[3..];
         }
 
-        var size = Directory.EnumerateFiles(bundle, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length) / (1024 * 1024);
-        if (!await consent($"The Codalus debugger ({id}, MIT) isn't on {target.Display}. Copy its {platform} bundle ({size.ToString(System.Globalization.CultureInfo.InvariantCulture)} MB, with its own .NET runtime) to {folder} there?").ConfigureAwait(false))
+        if (!await consent($"The Codalus debugger ({id}, MIT) isn't on {target.Display}. Copy its {platform} bundle (with its own .NET runtime, about 40 MB there) to {folder}?").ConfigureAwait(false))
         {
             throw new OperationCanceledException("The debugger wasn't copied.");
         }
 
-        var archive = await PackAsync(bundle, cancellationToken, CodalusFolder).ConfigureAwait(false);
+        var archive = bundle.IsArchive ? bundle.Path : await PackAsync(bundle.Path, cancellationToken, CodalusFolder).ConfigureAwait(false);
         try
         {
             progress?.Report($"Copying the Codalus debugger to {target.Display}…");
@@ -159,7 +180,10 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
         }
         finally
         {
-            File.Delete(archive);
+            if (!bundle.IsArchive)
+            {
+                File.Delete(archive);
+            }
         }
     }
 

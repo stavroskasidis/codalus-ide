@@ -208,6 +208,32 @@ public sealed class RemoteCodalusTests(DebuggeeFixture debuggee) : IClassFixture
     }
 
     [Fact]
+    public async Task A_published_installs_archive_is_copied_as_it_is_under_its_own_id()
+    {
+        // A published install carries the bundle as the archive that travels (remote/<platform>/debugger.tar.gz, with
+        // debugger.id): made here from the checkout's folder, under another id, so it is another copy on the target.
+        var target = Target();
+        var folder = RemoteDebuggers.CodalusBundle(RemoteDebuggers.LocalPlatform!)!;
+        Assert.False(folder.IsArchive);
+        var archive = await RemoteDebuggers.PackAsync(folder.Path, Ct, "codalus-debugger");
+        try
+        {
+            var id = "0.0.0-archive" + Guid.NewGuid().ToString("N")[..8];
+            var asked = 0;
+            var path = await RemoteDebuggers.EnsureCodalusAsync(target, _ => { asked++; return Task.FromResult(true); }, null, Ct, new CodalusDebuggerBundle(archive, IsArchive: true, id));
+            Assert.Equal($"{TestHome}/codalus-{id}/{RemoteDebuggers.CodalusExecutable}", path);
+            Assert.Equal(1, asked);
+            Assert.True(File.Exists(archive), "the install's archive stays");
+            Assert.True(File.Exists(path), "the stand-in is this machine: the debugger is there");
+            Directory.Delete(Path.GetDirectoryName(path!)!, recursive: true);
+        }
+        finally
+        {
+            File.Delete(archive);
+        }
+    }
+
+    [Fact]
     public async Task A_target_without_a_bundle_for_its_platform_gets_netcoredbg_and_is_told_so()
     {
         var ssh = RemoteFixture.FakeSsh(_folder);

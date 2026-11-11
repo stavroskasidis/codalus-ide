@@ -5,7 +5,9 @@
 # (remote/<rid>/debugger/, built by Codalus.Shell's publish); this is for a source checkout: remote debugging there, and
 # the tests of it (RemoteTests), which skip without the bundle locally and fail without it in CI.
 #
-# Usage: eng/get-codalus-debugger.sh [rid…]     default: this machine's (linux-x64, linux-arm64, osx-arm64, osx-x64)
+# Usage: eng/get-codalus-debugger.sh [rid…]     default: this machine's; any of linux-x64, linux-arm64, osx-arm64, and
+#        the two a package offers as components: osx-x64 (x64 programs on Apple silicon) and win-x86 (32-bit .NET
+#        Framework programs). A bundle builds on any OS.
 # It builds in .work/debugger-build (its own obj and bin: the solution's aren't touched), and does nothing for a bundle
 # that is already built from the same sources (bundle.id).
 set -euo pipefail
@@ -28,7 +30,7 @@ id="$version-$(printf '%s' "$sources" | sha256sum | cut -c1-12)"
 
 for rid in "$@"; do
   out="$repo/.work/codalus-debugger-$rid"
-  if [ -x "$out/codalus-debughost" ] && [ "$(cat "$out/bundle.id" 2> /dev/null)" = "$id" ]; then
+  if { [ -x "$out/codalus-debughost" ] || [ -f "$out/codalus-debughost.exe" ]; } && [ "$(cat "$out/bundle.id" 2> /dev/null)" = "$id" ]; then
     echo "codalus-debugger $id ($rid) -> $out (up to date)"
     continue
   fi

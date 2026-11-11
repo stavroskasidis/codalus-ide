@@ -72,6 +72,8 @@
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-x64" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-arm64" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-arm64" />
+    <!-- Only in the debugger's osx-x64 bundle (M58b): x64 programs on Apple silicon are debugged by an x64 debugger, under Rosetta 2. -->
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-x64" Condition="'$(CodalusDebuggerBundle)' == 'true' And '$(RuntimeIdentifier)' == 'osx-x64'" />
   </ItemGroup>
 
   <ItemGroup>

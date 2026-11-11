@@ -1,3 +1,4 @@
+using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Localization;
 
@@ -8,6 +9,77 @@ namespace Codalus.Shell;
 // netcoredbg, or in the browser, they're off.
 public sealed partial class ShellHost
 {
+    /// <summary>
+    /// The Codalus debugger's bundles this install offers as components (M58b, ADR 0094): for x64 programs on Apple
+    /// silicon, and for 32-bit .NET Framework programs on Windows.
+    /// </summary>
+    public Codalus.Workbench.Debugging.DebuggerComponents DebuggerBundles { get; private set; } = null!;
+
+    /// <summary>
+    /// Offers the debug service the bundles that fit this machine: each is downloaded the first time such a program is
+    /// debugged, after the user agrees, and used from the cache after that.
+    /// </summary>
+    private void InitializeDebuggerBundles(string cache)
+    {
+        DebuggerBundles = new Codalus.Workbench.Debugging.DebuggerComponents(cache);
+        if (OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64
+            && DebuggerBundles.Offers(Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon))
+        {
+            Debugger.X64CoreClrAdapter = ct => DebuggerBundleAsync(
+                Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon,
+                Codalus.Debugging.CoreClrAdapter.AdapterArgument,
+                codalus: true,
+                Localizer.Get("msg.debugBundles.x64Programs", "x64 programs (.NET 5 and earlier, which run under Rosetta 2)"),
+                ct);
+        }
+
+        if (OperatingSystem.IsWindows() && DebuggerBundles.Offers(Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows))
+        {
+            Debugger.X86DesktopClrAdapter = ct => DebuggerBundleAsync(
+                Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows,
+                Codalus.Debugging.DesktopClr.AdapterArgument,
+                codalus: false,
+                Localizer.Get("msg.debugBundles.x86Programs", "32-bit .NET Framework programs"),
+                ct);
+        }
+    }
+
+    /// <summary>
+    /// The debugger of <paramref name="platform"/>'s bundle, as an adapter to start: downloaded first when it isn't here,
+    /// after the user agrees (the question names its size). Null when they declined or it couldn't be had (reported).
+    /// </summary>
+    private async Task<Codalus.Debugging.DebugAdapterStartInfo?> DebuggerBundleAsync(string platform, string argument, bool codalus, string programs, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (DebuggerBundles.Installed(platform) is not { } path)
+            {
+                var component = DebuggerBundles.Available.First(c => c.Platform == platform);
+                var agreed = false;
+                await Ui.RunAsync(async () =>
+                {
+                    agreed = await Dialogs.ConfirmAsync(
+                        Localizer.Get("msg.debugBundles.downloadTheDebugger", "Download the Debugger"),
+                        Localizer.Format("msg.debugBundles.question", "Debugging {0} needs another build of the Codalus debugger ({1} MB, MIT), which this installation downloads from its release once. Download it now?", programs, Math.Max(1, component.Size / (1024 * 1024))),
+                        Localizer.Get("msg.debugBundles.download", "Download")).ConfigureAwait(true);
+                }).ConfigureAwait(false);
+                if (!agreed)
+                {
+                    return null;
+                }
+
+                path = await DebuggerBundles.EnsureAsync(platform, new Progress<string>(line => DebugLog.AppendLine(line)), cancellationToken).ConfigureAwait(false);
+            }
+
+            return new Codalus.Debugging.DebugAdapterStartInfo(path, [argument], Path.GetDirectoryName(path)) { IsCodalus = codalus };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.debugBundles.couldNotDownload", "The debugger for {0} couldn't be downloaded: {1}", programs, ex.Message));
+            return null;
+        }
+    }
+
     public const string SymbolsMicrosoftServerSetting = "debug.symbols.microsoftServer";
     public const string SymbolsNuGetServerSetting = "debug.symbols.nugetServer";
     public const string SymbolsServersSetting = "debug.symbols.servers";

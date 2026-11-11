@@ -56,6 +56,7 @@ public sealed partial class ShellHost
         Debugger.StartupHook = HeldLaunch.ResolveHook();
         var cache = Environment.GetEnvironmentVariable(NodeCacheVariable) is { Length: > 0 } shared ? shared : Paths.Cache;
         RemoteDebuggers = new RemoteDebuggers(cache);
+        InitializeDebuggerBundles(cache);
         Jit = new JitDebugging(JitDebugging.ForThisSystem(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)), Path.Combine(Paths.Logs, "crash-dumps"));
         _ = Task.Run(() =>
         {
