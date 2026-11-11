@@ -2,6 +2,7 @@
              xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
              x:Class="Codalus.Shell.Views.ThreadsView"
              x:DataType="vm:ThreadsViewModel">
   <DockPanel>
@@ -36,10 +37,10 @@
       </ListBox.ItemTemplate>
       <ListBox.ContextMenu>
         <ContextMenu x:Name="ThreadMenu">
-          <MenuItem Header="{l:T threads.switchToThread}" Tag="switch" Click="OnThreadAction" FontWeight="SemiBold" />
+          <MenuItem controls:MenuEntry.Icon="go-to" Header="{l:T threads.switchToThread}" Tag="switch" Click="OnThreadAction" FontWeight="SemiBold" />
           <Separator />
-          <MenuItem x:Name="FreezeItem" Header="{l:T threads.freeze}" Tag="freeze" Click="OnThreadAction" />
-          <MenuItem x:Name="ThawItem" Header="{l:T threads.thaw}" Tag="thaw" Click="OnThreadAction" />
+          <MenuItem x:Name="FreezeItem" controls:MenuEntry.Icon="pause" Header="{l:T threads.freeze}" Tag="freeze" Click="OnThreadAction" />
+          <MenuItem x:Name="ThawItem" controls:MenuEntry.Icon="play-outline" Header="{l:T threads.thaw}" Tag="thaw" Click="OnThreadAction" />
         </ContextMenu>
       </ListBox.ContextMenu>
     </ListBox>

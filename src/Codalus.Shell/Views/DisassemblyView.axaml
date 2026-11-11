@@ -6,10 +6,10 @@
              x:Class="Codalus.Shell.Views.DisassemblyView"
              x:DataType="vm:DisassemblyViewModel">
   <DockPanel>
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="6,4">
+    <WrapPanel DockPanel.Dock="Top" ItemSpacing="6" LineSpacing="4" Margin="6,4">
       <Button x:Name="StepOver" Content="{l:T disassembly.stepOverInstruction}" IsEnabled="{Binding CanStep}" Click="OnStepOver" AutomationProperties.Name="{l:T disassembly.stepOverInstruction}" />
       <Button x:Name="StepInto" Content="{l:T disassembly.stepIntoInstruction}" IsEnabled="{Binding CanStep}" Click="OnStepInto" AutomationProperties.Name="{l:T disassembly.stepIntoInstruction}" />
-    </StackPanel>
+    </WrapPanel>
     <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T disassembly.codeAppearsHereWhilePaused}">
       <TextBlock.IsVisible>
         <MultiBinding Converter="{x:Static BoolConverters.And}">

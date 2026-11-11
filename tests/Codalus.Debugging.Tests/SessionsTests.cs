@@ -115,8 +115,72 @@ public sealed class SessionsTests(SessionsFixture fixture) : IClassFixture<Sessi
     }
 
     [Fact]
+    public async Task A_stop_in_one_program_pauses_the_other_and_they_go_on_together()
+    {
+        // M58, on by default: the first program waits for a file in a loop; the second stops at its breakpoint, and the
+        // first is paused with it, where its frames can be read. Continue lets both go on: the first one finds the file
+        // and reaches the same breakpoint, its own stop.
+        var go = Path.Combine(Path.GetTempPath(), "codalus-go-" + Guid.NewGuid().ToString("N"));
+        var debuggee = fixture.Source("Debuggee", "Program.cs");
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee, DebuggeeFixture.Line(debuggee, "done")));
+        try
+        {
+            await _debug.LaunchAsync([new DebugLaunch("Waiter", Plan("Debuggee", "--wait-for", go)), new DebugLaunch("Debuggee", Plan("Debuggee"))], TestContext.Current.CancellationToken);
+            await NextStopAsync();
+            Assert.Equal(DebuggeeFixture.Line(debuggee, "done"), _debug.SelectedFrame?.Line);
+            var stopped = _debug.SelectedThreadId;
+
+            // The waiting program is paused in its loop: its main thread's frames are there to read.
+            var waitLines = new[] { DebuggeeFixture.Line(debuggee, "wait-check"), DebuggeeFixture.Line(debuggee, "wait") };
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            var paused = false;
+            var seen = string.Empty;
+            while (!paused && DateTime.UtcNow < deadline)
+            {
+                try
+                {
+                    foreach (var (thread, frames) in await _debug.AllStacksAsync(20, TestContext.Current.CancellationToken))
+                    {
+                        paused |= thread != stopped && frames.Any(f => f.Source?.Path is { } path && path.EndsWith("Program.cs", StringComparison.Ordinal) && waitLines.Contains(f.Line));
+                    }
+
+                    seen = string.Join(", ", _debug.Threads.Select(t => t.Name));
+                }
+                catch (DapException ex)
+                {
+                    seen = ex.Message; // still running: its frames can't be read yet
+                }
+
+                if (!paused)
+                {
+                    await Task.Delay(100, TestContext.Current.CancellationToken);
+                }
+            }
+
+            Assert.True(paused, $"The waiting program is paused in its loop. Threads: {seen}. Output:\n{Output}");
+            Assert.Equal(DebugState.Stopped, _debug.State);
+
+            // Both go on: the waiting program finds its file and stops at the breakpoint itself.
+            File.WriteAllText(go, string.Empty);
+            await _debug.ContinueAsync();
+            await NextStopAsync();
+            Assert.Equal(DebuggeeFixture.Line(debuggee, "done"), _debug.SelectedFrame?.Line);
+            Assert.NotEqual(stopped, _debug.SelectedThreadId);
+            await _debug.ContinueAsync();
+            await _ended.Task.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            File.Delete(go);
+        }
+    }
+
+    [Fact]
     public async Task One_program_ending_leaves_the_session_to_the_other()
     {
+        // Without pausing the other programs at a stop (M58's debug.breakAllProcesses off), so Partner runs to its end
+        // while Debuggee is stopped.
+        _debug.BreakAllProcesses = () => false;
         var debuggee = fixture.Source("Debuggee", "Program.cs");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee, DebuggeeFixture.Line(debuggee, "done")));
 

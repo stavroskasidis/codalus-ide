@@ -34,7 +34,7 @@ Debug → **Configure Startup Projects** (or right-click the solution) opens the
 F5 then builds the solution once and starts the projects in that order. Those set to Start are debugged in **one session**:
 - the Call Stack, Threads and Debug Location toolbar name each thread after its program (`Partner: Main Thread`);
 - the Processes window lists every program;
-- each program stops at its own breakpoints. Under [the Codalus debugger](#the-codalus-debugger-preview), a stop in one program (a breakpoint, a step's end, an exception) pauses the others too, as the classic IDE's "Break all processes when one process breaks": their threads and values can be read while you're stopped, and they go on when you continue or step (during a step they run, and pause again at its end). Turn it off with `debug.breakAllProcesses`. Under netcoredbg the others keep running;
+- each program stops at its own breakpoints, and a stop in one program (a breakpoint, a step's end, an exception) pauses the others too, as the classic IDE's "Break all processes when one process breaks": their threads and values can be read while you're stopped, and they go on when you continue or step (during a step they run, and pause again at its end). A program that is still starting isn't paused. Turn it off with `debug.breakAllProcesses`, and the others keep running;
 - Break All stops every program except a later one that is still starting, which keeps running (Break All waits for the first program to be attached to, as above);
 - the session ends when the last program ends.
 
@@ -209,7 +209,6 @@ What it does that netcoredbg doesn't:
 - `[DebuggerTypeProxy]`, Results View and Raw View ([Data tips](#data-tips))
 - the Disassembly, Registers and Memory windows ([The machine's side](#the-machines-side))
 - symbol paths and symbol servers ([Symbols](#symbols)), and Windows PDBs
-- with several startup projects, a stop in one program pauses the others
 - the program's own exit code on macOS (netcoredbg reports 0 there)
 - programs in the integrated terminal or a console window start under the debugger, so a breakpoint on `Main`'s first line stops there; the integrated terminal works on macOS too, and no startup hook is needed
 - exception module conditions on .NET 11 programs
@@ -281,7 +280,7 @@ Under netcoredbg, the first edit you save while debugging offers the Codalus deb
 - `debug.adapter`: the debugger for .NET programs, `netcoredbg` (the default) or `codalus` ([the Codalus debugger](#the-codalus-debugger-preview), a preview).
 - `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger). Off, a Blazor Web App's WebAssembly edits wait for a restart.
 - `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
-- `debug.breakAllProcesses`: with several startup projects, a stop in one program pauses the others (the Codalus debugger; on by default).
+- `debug.breakAllProcesses`: with several startup projects, a stop in one program pauses the others (on by default).
 - `debug.symbols.*`: symbol paths, symbol servers (off by default), the cache and the modules to look up, for [the Codalus debugger](#symbols).
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
@@ -301,7 +300,7 @@ The Codalus debugger's own limits:
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
 
-These come from netcoredbg, which is the default debugger for now; [the Codalus debugger](#the-codalus-debugger-preview) does the first eight:
+These come from netcoredbg, which is the default debugger for now; [the Codalus debugger](#the-codalus-debugger-preview) does the first seven:
 - no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.
 - no Set Next Statement and no Step Into Specific
 - no Memory, Disassembly or Registers windows
@@ -309,7 +308,6 @@ These come from netcoredbg, which is the default debugger for now; [the Codalus 
 - no Make Object ID, no return values after Step Out, and no freezing of threads
 - no symbol servers or symbol paths: the debugger reads the PDBs next to the assemblies, and library sources come from embedded sources and Source Link
 - no `new`, lambdas or generic methods in expressions, and hit counts and logpoints stop the program at each hit
-- with several startup projects, a stop in one program doesn't pause the others
 - no data breakpoints and no mixed-mode debugging
 - Detach All applies to attached programs and to programs launched in the integrated terminal or a console window: a program launched with the Debug Console has the debugger's console, so it can't keep running without it
 - dumps written on another operating system don't open
