@@ -93,6 +93,34 @@ public sealed class NetFrameworkShellTests
     }
 
     [AvaloniaFact]
+    public async Task Activating_a_project_opens_its_project_file_unless_it_is_non_sdk_style()
+    {
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var console = Project(folder, "ConsoleApp");
+        var legacy = Project(folder, "LegacyApp");
+        var explorer = f.Shell.Explorer;
+        await ShellFixture.PumpUntil(() => explorer.Root is { } root && Find(root, "p:" + console) is not null && Find(root, "p:" + legacy) is { Detail: "(non-SDK-style)" }, seconds: 60);
+
+        // Enter or a double-click on an SDK-style project opens its project file, and leaves its expansion alone.
+        explorer.Reveal("p:" + console);
+        var consoleRow = explorer.Rows.First(r => r.Id == "p:" + console);
+        var expanded = consoleRow.IsExpanded;
+        await explorer.ActivateAsync(consoleRow);
+        await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor?.Model.Path == console);
+        Assert.Equal(expanded, explorer.Rows.First(r => r.Id == "p:" + console).IsExpanded);
+
+        // A non-SDK-style project expands or collapses, as before.
+        explorer.Reveal("p:" + legacy);
+        var legacyRow = explorer.Rows.First(r => r.Id == "p:" + legacy);
+        expanded = legacyRow.IsExpanded;
+        await explorer.ActivateAsync(legacyRow);
+        await ShellFixture.PumpUntil(() => explorer.Rows.First(r => r.Id == "p:" + legacy).IsExpanded != expanded);
+        Assert.Equal(console, f.Shell.ActiveEditor?.Model.Path);
+        Assert.DoesNotContain(f.Shell.Editors, e => e.Model.Path == legacy);
+    }
+
+    [AvaloniaFact]
     public async Task Convert_to_sdk_style_previews_the_change_and_applies_it()
     {
         var (f, folder) = await OpenAsync();
