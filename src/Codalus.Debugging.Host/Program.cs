@@ -29,6 +29,21 @@ if (args.Contains("--mono-dap"))
 
 if (args.Contains(Codalus.Debugging.CoreClrAdapter.AdapterArgument))
 {
+    // The adapter doesn't use its working directory (a program's is given with its launch), and it mustn't be a folder
+    // that holds a .NET runtime: the debugged runtime's own debugging libraries are opened by name, and a library by
+    // name is looked for in the current directory on macOS, and on Linux when the library path has an empty entry (a
+    // trailing colon). The debugger's bundle is such a folder, with its own runtime, and it was started in it: a
+    // program then failed to start under it ("couldn't attach: ERROR_INSUFFICIENT_BUFFER", or
+    // CORDBG_E_DEBUG_COMPONENT_MISSING for a runtime of another version; M58b's follow-up).
+    try
+    {
+        Directory.SetCurrentDirectory(Path.GetPathRoot(Environment.CurrentDirectory) is { Length: > 0 } root ? root : "/");
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+    {
+        // It stays where it was started.
+    }
+
     await using var trace = Codalus.Debugging.Host.CoreClr.TeeWriter.OpenLog();
     return await Codalus.Debugging.Host.NetFx.NetFxAdapter.RunAsync(stdin, stdout, Console.Error, new Codalus.Debugging.Host.CoreClr.DbgShimDebugger(), trace).ConfigureAwait(false);
 }

@@ -230,6 +230,35 @@ public sealed class ExpressionCompilerTests
         Assert.Contains("isn't in a loaded project", Assert.Single(elsewhere.Errors), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A project whose references haven't arrived (the workspace has it before its design-time build ends): the answer
+    /// says so, in both languages, where it was the compiler's errors for a program with no core library ("BC30002: Type
+    /// 'System.String' is not defined"; a Visual Basic expression evaluated right after the stop, in the shell's tests).
+    /// </summary>
+    [Theory]
+    [InlineData(LanguageNames.CSharp, "Cart.cs", "namespace Shop { public class Cart { public int Total() { return 1; } } }", "1 + 1")]
+    [InlineData(LanguageNames.VisualBasic, "Basket.vb", "Public Class Basket\n    Public Function Total() As Integer\n        Return 1\n    End Function\nEnd Class\n", "1 + 1")]
+    public async Task A_project_without_its_references_yet_says_it_is_still_loading(string language, string file, string source, string expression)
+    {
+        using var workspace = new AdhocWorkspace();
+        var project = ProjectId.CreateNewId();
+        var path = Path.Combine(Path.GetTempPath(), "codalus-expressions-loading", file);
+        CompilationOptions options = language == LanguageNames.CSharp
+            ? new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
+            : new Microsoft.CodeAnalysis.VisualBasic.VisualBasicCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+        Assert.True(workspace.TryApplyChanges(workspace.CurrentSolution
+            .AddProject(ProjectInfo.Create(project, VersionStamp.Create(), "Shop", "Shop", language, compilationOptions: options))
+            .AddDocument(DocumentId.CreateNewId(project), file, SourceText.From(source.Replace("\\n", "\n", StringComparison.Ordinal)), filePath: path)));
+        var feature = new ExpressionCompilerFeature(() => workspace.CurrentSolution);
+
+        var result = await feature.CompileAsync(new CompileExpressionParams(expression, path, 3, 0, "/out/Shop.dll"), TestContext.Current.CancellationToken);
+
+        Assert.Null(result.Assembly);
+        var error = Assert.Single(result.Errors);
+        Assert.Contains("isn't in a loaded project yet", error, StringComparison.Ordinal);
+        Assert.Contains("still loading", error, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_compiler_options_that_ignore_accessibility_are_still_there()
     {
