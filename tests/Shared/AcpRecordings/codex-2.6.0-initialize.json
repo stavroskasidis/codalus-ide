@@ -1,0 +1,61 @@
+{
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-11",
+  "protocolVersion": 1,
+  "agentInfo": {
+    "name": "@agentclientprotocol/codex-acp",
+    "title": "Codex",
+    "version": "2.6.0"
+  },
+  "agentCapabilities": {
+    "auth": {
+      "logout": {}
+    },
+    "providers": {},
+    "loadSession": true,
+    "promptCapabilities": {
+      "embeddedContext": true,
+      "image": true
+    },
+    "sessionCapabilities": {
+      "resume": {},
+      "list": {},
+      "close": {},
+      "delete": {},
+      "fork": {},
+      "title": {},
+      "additionalDirectories": {},
+      "subagents": {},
+      "systemPrompt": {}
+    },
+    "mcpCapabilities": {
+      "acp": false,
+      "http": true,
+      "sse": false
+    },
+    "_meta": {
+      "authStatus": {}
+    }
+  },
+  "authMethods": [
+    {
+      "id": "api-key",
+      "name": "API Key",
+      "description": "Use an API key to authenticate",
+      "_meta": {
+        "api-key": {
+          "provider": "openai"
+        }
+      }
+    },
+    {
+      "id": "chat-gpt",
+      "name": "ChatGPT",
+      "description": "Use ChatGPT to authenticate"
+    }
+  ],
+  "_meta": {
+    "steering": {
+      "supported": true
+    }
+  }
+}

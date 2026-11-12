@@ -117,11 +117,11 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
         Assert.Equal(["mine", "claude"], user.EnumerateObject().Select(p => p.Name));
         Assert.Equal(
-            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.94.0"]}""",
+            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.106.0"]}""",
             user.GetProperty("claude").GetRawText().Replace(" ", "", StringComparison.Ordinal).Replace("\n", "", StringComparison.Ordinal).Replace("\r", "", StringComparison.Ordinal));
         var configured = AcpAgents.Parse(user);
         Assert.Equal("npx", configured["claude"].Command);
-        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"], configured["claude"].Args);
+        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"], configured["claude"].Args);
         Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.Workspace));
         Assert.Equal("{}", File.ReadAllText(_workspaceFile));
 
@@ -187,7 +187,8 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         Assert.Equal(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"], claude.SignIn.Single(o => o.Id == "subscription").UnsetEnv);
         Assert.Equal("claude-login", claude.SignIn.Single(o => o.Id == "subscription").RemoteMethodId);
         using var ssh = JsonDocument.Parse(File.ReadAllText(Path.Combine(recordings, $"claude-{claude.Version}-initialize-ssh.json")));
-        Assert.Equal(["claude-login"], ssh.RootElement.GetProperty("authMethods").EnumerateArray().Select(m => m.GetProperty("id").GetString()));
+        // Over SSH Claude offers its own login and, since 0.106.0, the Console one too: the Console option takes it there.
+        Assert.Equal(["claude-login", "console-login"], ssh.RootElement.GetProperty("authMethods").EnumerateArray().Select(m => m.GetProperty("id").GetString()));
         Assert.Equal(AcpSignInCheck.SessionNew, AcpAgentTemplates.Find("codex")!.SignInCheck);
         Assert.Equal(AcpSignInCheck.SessionNew, AcpAgentTemplates.Find("gemini")!.SignInCheck);
         Assert.Equal(["copilot", "pi", "opencode", "goose"], AcpAgentTemplates.All.Where(t => t.SignInCheck == AcpSignInCheck.Unknown).Select(t => t.Id));
