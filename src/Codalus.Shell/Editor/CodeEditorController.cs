@@ -492,6 +492,13 @@ public sealed partial class CodeEditorController : IDisposable
             ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
             : null;
 
+    /// <summary>The tokenizer's state and its first lines', for a test's failure: whether each is waiting to be tokenized, and its tokens.</summary>
+    internal string DescribeGrammar() =>
+        _textMate is { } installation && Tokenizer(installation) is { } model
+            ? $"tokenizer {(model.IsStopped ? "stopped" : "running")}; lines " + string.Join(", ", Enumerable.Range(0, Math.Min(model.GetLines().GetNumberOfLines(), 20))
+                .Select(line => $"{line + 1} {(model.IsLineInvalid(line) ? "waiting" : "tokenized")} ({model.GetLineTokens(line)?.Count ?? 0} tokens)"))
+            : "no tokenizer";
+
     private static bool s_noTokenizer;
     private bool _grammarCheckScheduled;
 
@@ -553,7 +560,27 @@ public sealed partial class CodeEditorController : IDisposable
             // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
             // redraw, after the listener is in, shows them.
             model.AddModelTokensChangedListener(transformer);
+            QueueFirstWaitingLine(model);
             Editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    /// <summary>
+    /// Queues again the first line still waiting to be tokenized. A worker stopped just after it took a line off the
+    /// model's queue drops it: the line stays waiting, nothing queues it again, and the next worker waits for work with
+    /// the file uncolored (TextMateSharp 2.0.5: an editor hidden and shown as it opened, <c>LanguageTests</c>, half its
+    /// runs). The worker walks on from that line to the end, as it would have.
+    /// </summary>
+    private static void QueueFirstWaitingLine(TextMateSharp.Model.TMModel model)
+    {
+        var count = model.GetLines().GetNumberOfLines();
+        for (var line = 0; line < count; line++)
+        {
+            if (model.IsLineInvalid(line))
+            {
+                model.InvalidateLine(line);
+                return;
+            }
         }
     }
 
