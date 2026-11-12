@@ -128,13 +128,13 @@ internal static partial class BuiltIns
             EnumDescriptions = ["Debug Console", "Integrated terminal", "Console window (Windows)"],
             Order = 5,
         },
-        SettingDescriptor.Create(ShellHost.DebugAdapterSetting, $"\"{Workbench.Debugging.DebugService.NetcoredbgAdapter}\"", SettingType.String, ContributionSource.Shell) with
+        SettingDescriptor.Create(ShellHost.DebugAdapterSetting, $"\"{Workbench.Debugging.DebugService.CodalusAdapter}\"", SettingType.String, ContributionSource.Shell) with
         {
             Title = "Debugger for .NET programs",
             Category = "Debugging",
-            Description = "The debugger that debugs .NET programs from the next session: netcoredbg, or the Codalus debugger, Codalus IDE's own (a preview). The Codalus debugger reports exit codes on macOS, evaluates casts and C#'s operators, and starts programs in the integrated terminal on every OS, stopping on Main's first line; it doesn't yet debug remote targets or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
-            Enum = [Workbench.Debugging.DebugService.NetcoredbgAdapter, Workbench.Debugging.DebugService.CodalusAdapter],
-            EnumDescriptions = ["netcoredbg", "Codalus debugger (preview)"],
+            Description = "The debugger that debugs .NET programs from the next session: the Codalus debugger, Codalus IDE's own (the default), or netcoredbg, kept for one release as a fallback when something goes wrong under the Codalus debugger. Hot Reload and Edit and Continue while debugging, Set Next Statement, lambdas in expressions, the Disassembly, Registers and Memory windows and symbol servers need the Codalus debugger. It doesn't yet debug remote targets or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
+            Enum = [Workbench.Debugging.DebugService.CodalusAdapter, Workbench.Debugging.DebugService.NetcoredbgAdapter],
+            EnumDescriptions = ["Codalus debugger", "netcoredbg (fallback)"],
             Order = 8,
         },
         SettingDescriptor.Create(ShellHost.DebugEditsOfferSetting, "true", SettingType.Boolean, ContributionSource.Shell) with

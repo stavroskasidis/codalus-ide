@@ -3,12 +3,14 @@
 # pipeline.yml):
 #   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
 #   shell-2  those classes
-#   others   every other test project (CI runs debug-codalus after it, in the same job)
-#   debug-codalus  the debugger classes in eng/ci-debug-codalus.txt, under Codalus IDE's own CoreCLR adapter (M54)
+#   others   every other test project (CI runs debug-netcoredbg after it, in the same job)
+#   debug-netcoredbg  the debugger classes in eng/ci-debug-parity.txt again under netcoredbg, the fallback (M58, ADR
+#                     0094: every other shard runs them under the default, Codalus IDE's own CoreCLR adapter)
+#   debug-codalus     those classes under the Codalus debugger, for a runner that runs no other shard (Linux arm64)
 # Usage: eng/ci-test.sh <shard> [Release|Debug]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
-shard="${1:?shard: shell-1, shell-2, others or debug-codalus}"
+shard="${1:?shard: shell-1, shell-2, others, debug-netcoredbg or debug-codalus}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -228,11 +230,12 @@ case "$shard" in
     # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
     dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
     ;;
-  debug-codalus)
-    # The parity set under Codalus IDE's CoreCLR adapter (ADR 0086), with its DAP log of every session in the results
-    # folder (uploaded when the shard fails; set above for every shard): ADR 0086's one silent attach failure on Linux is
-    # watched for here.
-    export CODALUS_DEBUG_ADAPTER=codalus
+  debug-netcoredbg | debug-codalus)
+    # The parity set under one debugger, whatever debug.adapter's default: netcoredbg, the fallback (after the others
+    # shard, which ran it under the default), or Codalus IDE's CoreCLR adapter (ADR 0086; Linux arm64, which runs no
+    # other shard), with its DAP log of every session in the results folder (uploaded when the shard fails; set above
+    # for every shard).
+    export CODALUS_DEBUG_ADAPTER="${shard#debug-}"
     export CODALUS_DEBUGHOST="$PWD/src/Codalus.Debugging.Host/bin/$configuration/net11.0/codalus-debughost.dll"
     # One test project at a time (each line's namespace names it), every one run whatever the one before did.
     projects=()
@@ -244,7 +247,7 @@ case "$shard" in
       [[ "$name" != "$line" ]] && name="${name%.*}" # a method: its class
       project="${name%.*}"
       [[ " ${projects[*]-} " == *" $project "* ]] || projects+=("$project")
-    done < eng/ci-debug-codalus.txt
+    done < eng/ci-debug-parity.txt
     status=0
     for project in "${projects[@]}"; do
       filters=()
@@ -253,12 +256,28 @@ case "$shard" in
         line="$(echo "$line" | tr -d '[:space:]')"
         [[ "$line" == "$project".* ]] || continue
         if [[ "$line" == *"()" ]]; then filters+=(--filter-method "${line%()}"); else filters+=(--filter-class "$line"); fi
-      done < eng/ci-debug-codalus.txt
+      done < eng/ci-debug-parity.txt
       dotnet test --project "tests/$project" --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1 || status=$?
     done
     exit "$status"
     ;;
   others)
+    # The Codalus debugger's bundle for this machine's remote stand-ins (M58b, ADR 0094; the fake ssh on Linux and
+    # macOS): RemoteCodalusTests copy it to them, and fail without it in CI. It builds in .work, apart from the solution.
+    # And the two bundles a package offers as components, each debugging a real program where it is for: osx-x64 on
+    # Apple silicon, with the x64 .NET runtime that starts the program under Rosetta 2 (DebuggerBundleTests), and
+    # win-x86 on Windows, for a 32-bit .NET Framework program (NetFxDebuggerTests).
+    case "$(uname -s)" in
+      Linux) bash eng/get-codalus-debugger.sh ;;
+      Darwin)
+        bash eng/get-codalus-debugger.sh
+        if [ "$(uname -m)" = arm64 ]; then
+          bash eng/get-codalus-debugger.sh osx-x64
+          bash eng/get-dotnet-x64.sh
+        fi
+        ;;
+      MINGW* | MSYS* | CYGWIN*) bash eng/get-codalus-debugger.sh win-x86 ;;
+    esac
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random, and three at a time still
     # starved a test now and then (a plugin host's start, a trace's start, Aspire's orchestrator check): two there.

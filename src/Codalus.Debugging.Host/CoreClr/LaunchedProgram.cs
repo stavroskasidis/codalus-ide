@@ -151,6 +151,9 @@ internal sealed class LaunchedProgram : IDisposable
     /// <summary>The adapter detached: the program goes on when the pipe closes.</summary>
     public void Detach() => Send("detach");
 
+    /// <summary>Completes when the launcher says the program ended, with its exit code when it has one.</summary>
+    public Task<int?> Exited => _exit.Task;
+
     /// <summary>The program's exit code, once the launcher has sent it, and its last output; null when it doesn't come in time.</summary>
     public int? WaitForExit(TimeSpan timeout)
     {

@@ -6,6 +6,7 @@
 agent-connect.png         Linux     agent-connect.png
 ai-chat-agent.png         Linux     ai-chat-agent.png
 ai-chat.png               Linux     ai-chat.png
+ai-console.png            Linux     ai-console.png
 aspire.png                Linux     smoke-test-aspire.png
 blazor.png                Linux     smoke-test-blazor-compound-debug.png
 code-search.png           Linux     smoke-test-code-search.png

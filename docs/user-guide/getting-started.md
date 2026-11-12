@@ -8,7 +8,7 @@
 - **git** (2.30 or newer) on the `PATH`, for the Git features.
 - A 64-bit OS: Windows 11 (x64); macOS 15 or newer on Apple silicon (the macOS versions .NET supports); or a current Linux distribution (x64 or arm64) with X11, or Wayland through XWayland.
 
-The debugger (netcoredbg) is included in the packages.
+The debugger is included in the packages: the Codalus debugger, Codalus IDE's own, and netcoredbg as a fallback for one release.
 
 **Missing something?** The [first-run setup](#the-first-run-setup)'s Tools step checks for the .NET SDK and git. On later starts without them, Codalus IDE offers to install them. When a solution's `global.json` asks for an SDK that isn't installed, it offers that SDK when the solution opens.
 - **The .NET runtime Codalus IDE needs**: its helper processes (the plugin, build, language, debug and other hosts) ask for a .NET runtime (`11.0.0` or a later version). Before it starts one, Codalus IDE checks that the runtime is installed in the .NET folder it uses, by .NET's own roll-forward rules. When it isn't, you get one notification, not one error per plugin: "Codalus IDE needs the .NET 11.0.0 runtime, which isn't installed (found: …)", with **Install .NET 11.0**. That installs the .NET 11 SDK, which brings the runtime, the same way as the SDK below, and then starts the plugins, language services and solution that couldn't start, without a restart. Check Environment lists it as **.NET runtime for Codalus IDE**.

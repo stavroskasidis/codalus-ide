@@ -46,6 +46,15 @@ internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
             return Failed("The frame's source file isn't in a loaded project, so the expression can't be compiled.");
         }
 
+        // A project is in the workspace before its references are: they come with its design-time build. Compiled in
+        // between, the expression's errors were the compiler's for a program with no core library ("BC30002: Type
+        // 'System.String' is not defined", four of them), which say nothing of the cause; a moment later it compiles.
+        if (await document.Project.GetCompilationAsync(cancellationToken).ConfigureAwait(false) is not { } compilation
+            || compilation.GetSpecialType(SpecialType.System_Object).TypeKind == TypeKind.Error)
+        {
+            return Failed("The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment.");
+        }
+
         try
         {
             return document.Project.Language switch

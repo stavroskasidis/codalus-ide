@@ -188,7 +188,7 @@ public sealed class AcpAgents : IAsyncDisposable
 
     /// <summary>
     /// Parses <c>{ "name": { "command": "…", "args": ["…"], "env": { "K": "V" }, "secretEnv": ["K"], "unsetEnv": ["K"],
-    /// "template": "…", "node": "builtIn" } }</c>; entries without a command are skipped, and so are entries whose
+    /// "template": "…", "node": "builtIn", "console": "…" } }</c>; entries without a command are skipped, and so are entries whose
     /// <c>secretEnv</c> or <c>unsetEnv</c> has a name that isn't a variable's, is one Codalus refuses an agent to set
     /// (<see cref="AcpTerminals.RefusedVariable"/>), or is also in <c>env</c> (why goes to <paramref name="problems"/>).
     /// </summary>
@@ -224,6 +224,7 @@ public sealed class AcpAgents : IAsyncDisposable
                 UnsetEnv = unsetEnv,
                 Template = entry.TryGetProperty("template", out var template) && template.ValueKind == JsonValueKind.String ? template.GetString() : null,
                 Node = entry.TryGetProperty("node", out var node) && node.ValueKind == JsonValueKind.String ? node.GetString() : null,
+                Console = ConsoleOf(entry),
                 Choices = entry.TryGetProperty(ChoicesMember, out var choices) && choices.ValueKind == JsonValueKind.Object
                     ? choices.EnumerateObject().Where(c => c.Value.ValueKind == JsonValueKind.String).ToDictionary(c => c.Name, c => c.Value.GetString()!, StringComparer.Ordinal)
                     : new Dictionary<string, string>(StringComparer.Ordinal),
@@ -231,6 +232,29 @@ public sealed class AcpAgents : IAsyncDisposable
         }
 
         return agents;
+
+        // "console": "mycli", or { "command": "mycli", "args": ["chat"] }; anything else is no console.
+        static AcpConsoleCommand? ConsoleOf(JsonElement entry)
+        {
+            if (!entry.TryGetProperty("console", out var console))
+            {
+                return null;
+            }
+
+            if (console.ValueKind == JsonValueKind.String)
+            {
+                return console.GetString() is { Length: > 0 } program ? new AcpConsoleCommand(program, []) : null;
+            }
+
+            if (console.ValueKind != JsonValueKind.Object || !console.TryGetProperty("command", out var command) || command.ValueKind != JsonValueKind.String || command.GetString() is not { Length: > 0 } name)
+            {
+                return null;
+            }
+
+            return console.TryGetProperty("args", out var args) && args.ValueKind == JsonValueKind.Array
+                ? args.EnumerateArray().All(a => a.ValueKind == JsonValueKind.String) ? new AcpConsoleCommand(name, [.. args.EnumerateArray().Select(a => a.GetString()!)]) : null
+                : new AcpConsoleCommand(name, []);
+        }
 
         static IReadOnlyList<string> Names(JsonElement entry, string property) =>
             entry.TryGetProperty(property, out var list) && list.ValueKind == JsonValueKind.Array

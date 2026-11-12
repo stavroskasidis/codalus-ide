@@ -7,6 +7,21 @@ using Codalus.Debugging;
 namespace Codalus.Workbench.Debugging.Remote;
 
 /// <summary>
+/// The Codalus debugger's bundle for a platform on this machine: a folder, or the <c>.tar.gz</c> of one (its top folder
+/// is <c>codalus-debugger/</c>), and the id of its build, which names its folder on a target.
+/// </summary>
+public sealed record CodalusDebuggerBundle(string Path, bool IsArchive, string Id);
+
+/// <summary>The debugger found or copied on a target: its path there, and whether it is the Codalus debugger's bundle (M58b) or netcoredbg.</summary>
+public sealed record RemoteDebugger(string Path, bool IsCodalus);
+
+/// <summary>
+/// The debugger on a <see cref="RemoteTarget"/>. The Codalus debugger (M58b, ADR 0094) is a bundle of
+/// <c>codalus-debughost</c> with its own .NET runtime, so the target needs only the program's: it ships next to the
+/// shell for Linux x64 and arm64 (<c>remote/&lt;platform&gt;/debugger.tar.gz</c>), and comes from
+/// <c>CODALUS_DEBUGGER_LINUX_X64</c> (and the other platforms; a folder) or <c>.work/codalus-debugger-&lt;platform&gt;</c>
+/// in a source checkout (<c>eng/get-codalus-debugger.sh</c>). A target without a bundle for its platform gets netcoredbg.
+///
 /// netcoredbg on a <see cref="RemoteTarget"/> (M14c, ADR 0039): found in <see cref="RemoteTarget.DebuggerHome"/>, or
 /// copied there with the user's consent, streamed as a <c>.tar.gz</c> into <c>tar -xzf -</c> on the target (so the
 /// target needs <c>tar</c> and <c>gzip</c>, not network access). The archive is the pinned release of the target's
@@ -43,6 +58,134 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
         : OperatingSystem.IsLinux() ? Platform("Linux", RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "aarch64" : "x86_64")
         : OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "osx-arm64"
         : null;
+
+    /// <summary>The folder inside a bundle's archive, and the file that names the bundle's build (its folder on a target).</summary>
+    private const string CodalusFolder = "codalus-debugger";
+
+    public const string CodalusExecutable = "codalus-debughost";
+
+    public const string CodalusBundleId = "bundle.id";
+
+    /// <summary>
+    /// The debugger for <paramref name="target"/>: with <paramref name="codalus"/>, the Codalus debugger's bundle when
+    /// there is one for the target's platform, else netcoredbg (<paramref name="progress"/> says so); copied there first
+    /// when it's missing and <paramref name="consent"/> agrees. Throws when it can't be had.
+    /// </summary>
+    public async Task<RemoteDebugger> EnsureAsync(RemoteTarget target, bool codalus, Func<string, Task<bool>> consent, IProgress<string>? progress, CancellationToken cancellationToken)
+    {
+        if (codalus && await EnsureCodalusAsync(target, consent, progress, cancellationToken).ConfigureAwait(false) is { } path)
+        {
+            return new RemoteDebugger(path, IsCodalus: true);
+        }
+
+        return new RemoteDebugger(await EnsureAsync(target, consent, progress, cancellationToken).ConfigureAwait(false), IsCodalus: false);
+    }
+
+    /// <summary>The archive a published install carries for a platform, next to the shell in <c>remote/&lt;platform&gt;/</c>, and the file that names its build.</summary>
+    public const string CodalusArchive = "debugger.tar.gz";
+
+    public const string CodalusArchiveId = "debugger.id";
+
+    /// <summary>
+    /// The Codalus debugger's bundle for <paramref name="platform"/> on this machine, or null: the variable's folder,
+    /// the archive next to the shell (a published install: the bundle as it travels, so it is neither unpacked here
+    /// nor packed again), or a source checkout's folder in <c>.work</c>. A folder has <c>codalus-debughost</c> and a
+    /// <c>bundle.id</c>.
+    /// </summary>
+    public static CodalusDebuggerBundle? CodalusBundle(string platform)
+    {
+        static CodalusDebuggerBundle? Folder(string folder) =>
+            File.Exists(Path.Combine(folder, CodalusExecutable))
+                ? new CodalusDebuggerBundle(folder, IsArchive: false, File.Exists(Path.Combine(folder, CodalusBundleId)) ? File.ReadAllText(Path.Combine(folder, CodalusBundleId)).Trim() : "0")
+                : null;
+
+        if (Environment.GetEnvironmentVariable("CODALUS_DEBUGGER_" + platform.Replace('-', '_').ToUpperInvariant()) is { Length: > 0 } fromEnv && Folder(fromEnv) is { } given)
+        {
+            return given;
+        }
+
+        var shipped = Path.Combine(AppContext.BaseDirectory, "remote", platform);
+        if (File.Exists(Path.Combine(shipped, CodalusArchive)) && File.Exists(Path.Combine(shipped, CodalusArchiveId)))
+        {
+            return new CodalusDebuggerBundle(Path.Combine(shipped, CodalusArchive), IsArchive: true, File.ReadAllText(Path.Combine(shipped, CodalusArchiveId)).Trim());
+        }
+
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "Codalus.slnx")))
+            {
+                return Folder(Path.Combine(directory.FullName, ".work", "codalus-debugger-" + platform));
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The path of the Codalus debugger on <paramref name="target"/>, copied there first when it's missing and
+    /// <paramref name="consent"/> agrees; null when there's no bundle for the target's platform here (netcoredbg
+    /// debugs there then). The folder on the target is named after the bundle's build, so another build is another copy.
+    /// </summary>
+    /// <param name="given">The bundle to copy, when it isn't this machine's for the target's platform (tests).</param>
+    public static async Task<string?> EnsureCodalusAsync(RemoteTarget target, Func<string, Task<bool>> consent, IProgress<string>? progress, CancellationToken cancellationToken, CodalusDebuggerBundle? given = null)
+    {
+        var system = await RemoteShell.RunAsync(target, "echo \"system $(uname -s) $(uname -m)\"", cancellationToken).ConfigureAwait(false);
+        var answer = system.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault(l => l.StartsWith("system ", StringComparison.Ordinal));
+        if (answer is null)
+        {
+            throw new InvalidOperationException($"Couldn't reach {target.Display}: {RemoteShell.Trim(system.Error + system.Output)}");
+        }
+
+        var parts = answer.Split(' ');
+        var platform = parts.Length == 3 ? Platform(parts[1], parts[2]) : null;
+        if (platform is null || (given ?? CodalusBundle(platform)) is not { } bundle)
+        {
+            progress?.Report($"The Codalus debugger has no bundle here for {target.Display} ({answer["system ".Length..]}): netcoredbg debugs there.");
+            return null;
+        }
+
+        var id = bundle.Id;
+        if (id.Length == 0 || id.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_' or '+')))
+        {
+            throw new InvalidOperationException($"{bundle.Path}'s id doesn't name the bundle's build.");
+        }
+
+        var folder = $"{target.DebuggerHome}/codalus-{id}";
+        var probe = await RemoteShell.RunAsync(target, $"d=\"{folder}\"; if [ -x \"$d/{CodalusExecutable}\" ]; then echo \"ok $d/{CodalusExecutable}\"; else echo missing; fi", cancellationToken).ConfigureAwait(false);
+        var found = probe.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? string.Empty;
+        if (found.StartsWith("ok ", StringComparison.Ordinal))
+        {
+            return found[3..];
+        }
+
+        if (!await consent($"The Codalus debugger ({id}, MIT) isn't on {target.Display}. Copy its {platform} bundle (with its own .NET runtime, about 40 MB there) to {folder}?").ConfigureAwait(false))
+        {
+            throw new OperationCanceledException("The debugger wasn't copied.");
+        }
+
+        var archive = bundle.IsArchive ? bundle.Path : await PackAsync(bundle.Path, cancellationToken, CodalusFolder).ConfigureAwait(false);
+        try
+        {
+            progress?.Report($"Copying the Codalus debugger to {target.Display}…");
+            await using var stream = File.OpenRead(archive);
+            var install = await RemoteShell.RunAsync(
+                target,
+                $"d=\"{folder}\"; rm -rf \"$d.tmp\" && mkdir -p \"$d.tmp\" && tar -xzf - -C \"$d.tmp\" && rm -rf \"$d\" && mv \"$d.tmp/{CodalusFolder}\" \"$d\" && rm -rf \"$d.tmp\" && chmod +x \"$d/{CodalusExecutable}\" && echo \"ok $d/{CodalusExecutable}\"",
+                cancellationToken,
+                stream).ConfigureAwait(false);
+            var installed = install.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault() ?? string.Empty;
+            return installed.StartsWith("ok ", StringComparison.Ordinal)
+                ? installed[3..]
+                : throw new InvalidOperationException($"Couldn't copy the Codalus debugger to {target.Display} (it needs tar and gzip): {RemoteShell.Trim(install.Error + install.Output)}");
+        }
+        finally
+        {
+            if (!bundle.IsArchive)
+            {
+                File.Delete(archive);
+            }
+        }
+    }
 
     /// <summary>
     /// The path of netcoredbg on <paramref name="target"/>, copying it there first when it's missing and
@@ -192,16 +335,16 @@ public sealed class RemoteDebuggers(string cacheFolder, HttpClient? http = null)
         }
     }
 
-    /// <summary>A folder with netcoredbg as a temporary <c>.tar.gz</c> (executables marked so).</summary>
-    public static async Task<string> PackAsync(string folder, CancellationToken cancellationToken)
+    /// <summary>A folder with a debugger as a temporary <c>.tar.gz</c> (executables marked so), under <paramref name="root"/> inside it.</summary>
+    public static async Task<string> PackAsync(string folder, CancellationToken cancellationToken, string root = "netcoredbg")
     {
-        var archive = Path.Combine(Path.GetTempPath(), "codalus-netcoredbg-" + Guid.NewGuid().ToString("N")[..8] + ".tar.gz");
+        var archive = Path.Combine(Path.GetTempPath(), "codalus-" + root + "-" + Guid.NewGuid().ToString("N")[..8] + ".tar.gz");
         await using var file = File.Create(archive);
         await using var gzip = new GZipStream(file, CompressionLevel.Fastest);
         await using var tar = new TarWriter(gzip, TarEntryFormat.Pax, leaveOpen: false);
         foreach (var path in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
         {
-            var name = "netcoredbg/" + Path.GetRelativePath(folder, path).Replace('\\', '/');
+            var name = root + "/" + Path.GetRelativePath(folder, path).Replace('\\', '/');
             await using var data = File.OpenRead(path);
             var entry = new PaxTarEntry(TarEntryType.RegularFile, name) { DataStream = data, Mode = Executable };
             await tar.WriteEntryAsync(entry, cancellationToken).ConfigureAwait(false);

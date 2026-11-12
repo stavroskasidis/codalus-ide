@@ -244,6 +244,130 @@ public sealed class NetFxDebuggerTests(NetFxDebuggeeFixture fixture) : IClassFix
     }
 
     [Fact]
+    public async Task A_32_bit_net48_program_is_debugged_by_the_debuggers_32_bit_build_to_its_end()
+    {
+        // M58b (ADR 0094): ICorDebug debugs processes of its own size, so a program built for x86 (or AnyCPU with
+        // Prefer32Bit) goes to the debugger's win-x86 bundle, a 32-bit process with its own 32-bit .NET. The bundle is
+        // built by eng/get-codalus-debugger.sh win-x86: skipped without it locally, failed without it in CI.
+        RequireWindows();
+        var cache = Directory.CreateTempSubdirectory("codalus-debugger-components-").FullName;
+        try
+        {
+            var debugger = new DebuggerComponents(cache).Installed(DebuggerComponents.X86OnWindows);
+            Assert.True(debugger is not null || Environment.GetEnvironmentVariable("CI") != "true", "The Codalus debugger's win-x86 bundle isn't built (eng/get-codalus-debugger.sh win-x86).");
+            Assert.SkipWhen(debugger is null, "The Codalus debugger's win-x86 bundle isn't built (eng/get-codalus-debugger.sh win-x86).");
+
+            // A copy of the project built for x86 (see the Windows PDB test: a changed property doesn't rebuild in place).
+            var folder = Path.Combine(Path.GetDirectoryName(fixture.Folder)!, "NetFxDebuggeeX86");
+            Directory.CreateDirectory(folder);
+            foreach (var file in Directory.EnumerateFiles(fixture.Folder))
+            {
+                File.Copy(file, Path.Combine(folder, Path.GetFileName(file)), overwrite: true);
+            }
+
+            var program = Path.Combine(folder, Path.GetFileName(fixture.Program));
+            var start = new ProcessStartInfo("dotnet", ["build", folder, "-nologo", "-v", "quiet", "-p:PlatformTarget=x86"]) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            using (var build = Process.Start(start)!)
+            {
+                var printed = build.StandardOutput.ReadToEndAsync(Ct);
+                var failed = build.StandardError.ReadToEndAsync(Ct);
+                await build.WaitForExitAsync(Ct);
+                Assert.True(build.ExitCode == 0, await printed + await failed);
+            }
+
+            var exe = Path.Combine(folder, "bin", "Debug", "net48", "NetFxDebuggee.exe");
+            Assert.True(File.Exists(exe), $"{exe} was built");
+            Assert.True(DesktopClr.Runs32Bit(exe), "the program runs as a 32-bit process");
+            Assert.NotNull(DesktopClr.BitnessProblem(exe, debugger64: true));
+
+            var (asked32, asked64) = (false, false);
+            await using var debug = new DebugService(() => null)
+            {
+                DesktopClrAdapter = () =>
+                {
+                    asked64 = true;
+                    return Adapter();
+                },
+                X86DesktopClrAdapter = _ =>
+                {
+                    asked32 = true;
+                    return Task.FromResult<DebugAdapterStartInfo?>(new DebugAdapterStartInfo(debugger!, [DesktopClr.AdapterArgument], Path.GetDirectoryName(debugger)));
+                },
+            };
+            var stops = Channel.CreateUnbounded<StopInfo>();
+            var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var output = new System.Text.StringBuilder();
+            debug.Stopped += (_, stop) => stops.Writer.TryWrite(stop);
+            debug.Ended += (_, code) => ended.TrySetResult(code);
+            debug.Output += (_, o) =>
+            {
+                lock (output)
+                {
+                    output.Append(o.Text);
+                }
+            };
+            string Output()
+            {
+                lock (output)
+                {
+                    return output.ToString();
+                }
+            }
+
+            async Task<StopInfo> NextStopAsync()
+            {
+                try
+                {
+                    return await stops.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(120), Ct);
+                }
+                catch (TimeoutException)
+                {
+                    throw new TimeoutException($"The program did not stop. {debug.Describe()}. The Debug Console:\n{Output()}");
+                }
+            }
+
+            var total = DebuggeeFixture.Line(program, "netfx-total");
+            var checkout = DebuggeeFixture.Line(program, "netfx-checkout");
+            debug.Breakpoints.Toggle(program, total);
+            await debug.LaunchAsync(new Codalus.Workbench.Build.LaunchPlan(exe, string.Empty, folder, new Dictionary<string, string>(), null), Ct);
+            var stop = await NextStopAsync();
+            Assert.Equal("breakpoint", stop.Reason);
+            Assert.True(asked32, "the 32-bit program went to the win-x86 bundle");
+            Assert.False(asked64, "the 64-bit debugger wasn't started for it");
+            Assert.Equal(total, debug.SelectedFrame?.Line);
+            Assert.True(debug.Breakpoints.StateOf(debug.Breakpoints.All.Single())?.Verified);
+            var id = Assert.NotNull(debug.ProcessId);
+            Assert.True(DesktopClr.Runs32Bit(id), "the debugged process is a 32-bit one");
+            Assert.Contains(debug.Modules, m => m.Name == "NetFxDebuggee.exe" && m.IsUserCode == true);
+
+            // A member read in the program (func-eval), as the 64-bit adapter reads it; a step over the call.
+            Assert.Equal("\"Ada\"", (await debug.EvaluateAsync("cart.Owner", "watch", Ct)).Result);
+            await debug.StepOverAsync();
+            Assert.Equal("step", (await NextStopAsync()).Reason);
+            Assert.Equal("5", (await debug.EvaluateAsync("total", "watch", Ct)).Result);
+
+            // On to another breakpoint (past an awaited task), then to the program's end with its exit code and output.
+            debug.Breakpoints.Clear();
+            debug.Breakpoints.Toggle(program, checkout);
+            await debug.ContinueAsync();
+            Assert.Equal("breakpoint", (await NextStopAsync()).Reason);
+            Assert.Equal(checkout, debug.SelectedFrame?.Line);
+            Assert.Equal("10", (await debug.EvaluateAsync("doubled", "watch", Ct)).Result);
+            Assert.Equal("15", (await debug.EvaluateAsync("total + doubled", "watch", Ct)).Result);
+            debug.Breakpoints.Clear();
+            await debug.ContinueAsync();
+            var code = await ended.Task.WaitAsync(TimeSpan.FromSeconds(120), Ct);
+            Assert.True(code == 3, $"The program's exit code was {code?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "not reported"}, not 3. The Debug Console:\n{Output()}");
+            Assert.Contains("Ada: 5", Output(), StringComparison.Ordinal);
+            Assert.Contains("caught: The till is closed.", Output(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(cache, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Attach_to_a_running_net48_process_stops_evaluates_and_detaches()
     {
         RequireWindows();

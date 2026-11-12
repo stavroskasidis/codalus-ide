@@ -293,6 +293,31 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_page_shows_the_ai_features_with_their_pictures_and_guide_sections()
+    {
+        var html = await Get(Options(), "");
+
+        // A spotlight of its own under the app models', AI Console first.
+        var tabs = Regex.Matches(html, "role=\"tab\" id=\"aitab-(?<key>[a-z]+)\" aria-controls=\"ai-\\k<key>\"").Select(m => m.Groups["key"].Value).ToList();
+        Assert.Equal(["console", "agent", "chat", "connect"], tabs);
+        Assert.InRange(html.IndexOf("id=\"ai\"", StringComparison.Ordinal), html.IndexOf("id=\"app-models\"", StringComparison.Ordinal), html.IndexOf("id=\"everything\"", StringComparison.Ordinal));
+        var guide = await Get(Options(), "docs/ai/");
+        foreach (var key in tabs)
+        {
+            var panel = Regex.Match(html, $"<div class=\"shot model\" role=\"tabpanel\" id=\"ai-{key}\"[^>]*>\\s*<figure><img src=\"(?<file>assets/screenshots/[^\"]+)\"(?<rest>.*?)href=\"docs/ai/#(?<anchor>[a-z-]+)\"", RegexOptions.Singleline);
+            Assert.True(panel.Success, $"no panel with a picture and a guide link for {key}");
+            Assert.True(File.Exists(Path.Combine(s_repoRoot, "website", "wwwroot", panel.Groups["file"].Value)), $"{key}'s {panel.Groups["file"].Value} doesn't exist");
+            Assert.Contains("loading=\"lazy\"", panel.Groups["rest"].Value, StringComparison.Ordinal);
+
+            // The section of the guide each one links to exists.
+            Assert.Contains($"id=\"{panel.Groups["anchor"].Value}\"", guide, StringComparison.Ordinal);
+        }
+
+        // Only the first shows as the page loads.
+        Assert.Single(Regex.Matches(html, "role=\"tabpanel\" id=\"ai-[a-z]+\" aria-labelledby=\"aitab-[a-z]+\">"));
+    }
+
+    [Fact]
     public void Every_screenshot_on_the_site_is_a_picture_the_smoke_test_saves()
     {
         // website/screenshots.txt: <picture on the site> <runner> <the smoke test's picture> (eng/update-screenshots.sh).
@@ -369,7 +394,7 @@ public sealed class WebsiteTests : IDisposable
         Directory.CreateDirectory(guide);
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
         File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n\n### The first-run setup\n");
-        // The guide's pages and headings the Home page's hero and app models link to.
+        // The guide's pages and headings the Home page's hero, app models and AI features link to.
         foreach (var (page, body) in new[]
         {
             ("editing.md", "# Editing and navigating code\n"),
@@ -381,7 +406,7 @@ public sealed class WebsiteTests : IDisposable
             ("wcf.md", "# WCF\n"),
             ("net-framework.md", "# .NET Framework\n"),
             ("remote.md", "# Remote development\n"),
-            ("ai.md", "# AI\n\n## Codalus as an MCP server\n"),
+            ("ai.md", "# AI assistance\n\n## AI Chat\n\n## The IDE's tools\n\n## Codalus as an MCP server\n\n### Connecting one\n\n## AI Console\n"),
         })
         {
             File.WriteAllText(Path.Combine(guide, page), body);

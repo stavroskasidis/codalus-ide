@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Codalus.Debugging;
 using Codalus.Workbench.Build;
 using Codalus.Workbench.Debugging;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.Node;
 
 namespace Codalus.Shell.Tests;
@@ -32,9 +33,16 @@ public sealed class BlazorWebAppHotReloadDebugTests
         return ((IPEndPoint)socket.LocalEndpoint).Port;
     }
 
-    /// <summary>The dotnet watch cases are netcoredbg's: the Codalus debugger launches the server (the debug-codalus shard).</summary>
-    private static void SkipUnderTheCodalusDebugger(ShellFixture f) =>
-        Assert.SkipWhen(f.Shell.Debugger.UsesCodalusAdapter, "Under the Codalus debugger F5 launches the server, without dotnet watch (ADR 0090).");
+    /// <summary>
+    /// The dotnet watch cases are netcoredbg's, the fallback's (the Codalus debugger launches the server, ADR 0090): they
+    /// choose it, as a user does, for as long as it ships (ADR 0094).
+    /// </summary>
+    private static async Task UnderNetcoredbgAsync(ShellFixture f)
+    {
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.CodalusAdapter, "CODALUS_DEBUG_ADAPTER chooses the Codalus debugger over the setting.");
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None);
+        Assert.False(f.Shell.Debugger.UsesCodalusAdapter);
+    }
 
     private static void SkipWithoutPrerequisites()
     {
@@ -125,7 +133,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
-                SkipUnderTheCodalusDebugger(f);
+                await UnderNetcoredbgAsync(f);
                 var initialized = Line(counter, "initialized");
                 f.Shell.Debugger.Breakpoints.Toggle(counter, initialized);
                 await f.RunAsync("debug.start");
@@ -213,6 +221,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
     [AvaloniaFact]
     public async Task Under_the_Codalus_debugger_F5_launches_the_server_and_edits_apply_to_it_and_to_the_page()
     {
+        // The debug-netcoredbg shard runs this class with every session under netcoredbg, where the two tests above are.
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.NetcoredbgAdapter, "CODALUS_DEBUG_ADAPTER chooses netcoredbg over the setting.");
         SkipWithoutPrerequisites();
         var (f, folder, counter) = await OpenAsync(sdk10: true);
         await using (f)
@@ -228,6 +238,27 @@ public sealed class BlazorWebAppHotReloadDebugTests
         }
     }
 
+    /// <summary>
+    /// Whether the debugged server answers the page's address, asked from the test: on Linux arm64 CI the browser began
+    /// loading /counter and nothing came back for 10 minutes, while the server, under the Codalus debugger, ran on (PR
+    /// #325's run 43131131250; docs/ci-flakes.md). It tells a server that doesn't answer from a browser that never got
+    /// or took its answer. TODO(issue)
+    /// </summary>
+    private static string Answers(string url)
+    {
+        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            using var response = http.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+            return $"{url} answered {(int)response.StatusCode} in {watch.ElapsedMilliseconds} ms";
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+        {
+            return $"{url} didn't answer: {ex.GetType().Name} after {watch.ElapsedMilliseconds} ms ({ex.Message})";
+        }
+    }
+
     private static async Task LaunchedServerAndPageAsync(ShellFixture f, string folder, string counter)
     {
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
@@ -235,7 +266,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
         await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running && f.Shell.Debugger.IsCompound
-            && f.Shell.DebugEdits.Browser?.Server is { Pages: > 0 }, seconds: 600, describe: () => Diagnostics(f));
+            && f.Shell.DebugEdits.Browser?.Server is { Pages: > 0 }, seconds: 600, describe: () => Diagnostics(f) + "; " + Answers(url + "/counter"));
         Assert.Null(f.Shell.HotReloadProgram); // no dotnet watch
         Assert.Null(f.Shell.WatchedServerDebugSession);
         var server = f.Shell.Debugger.ProcessId!.Value;
@@ -321,7 +352,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         {
             try
             {
-                SkipUnderTheCodalusDebugger(f);
+                await UnderNetcoredbgAsync(f);
                 await ReportingAsync(f, () => RudeEditAsync(f, counter));
             }
             finally

@@ -85,6 +85,15 @@ A release that fails only a benchmark gate the maintainer accepts gets its `benc
 way, through the release branch. The evidence is a same-runner A/B on CI (both versions on one runner, alternating
 rounds; `benchmarks/README.md`), never numbers from a developer's machine.
 
+**The debugger's downloaded builds.** The macOS and Windows packages name two more release assets,
+`codalus-debugger-<version>-osx-x64.tar.gz` and `codalus-debugger-<version>-win-x86.tar.gz`, with their SHA-256 in
+`debughost/debugger-components.json` (`eng/package-debugger-component.sh`, M58b, ADR 0094): Codalus IDE downloads them
+from the release the first time an x64 program on Apple silicon, or a 32-bit .NET Framework program, is debugged. They
+are published with the other assets; a release without them leaves that version unable to debug those programs with
+the Codalus debugger. The first release with them (0.13.0) also carries the debugger's two Linux bundles for remote
+targets (`remote/<rid>/debugger.tar.gz`, about 15 MB each), which the binary-size gate sees as growth of the shell's
+folder: that is the accepted value's case above.
+
 ## 5. Merge the release
 
 Once the release pull request's run passes:

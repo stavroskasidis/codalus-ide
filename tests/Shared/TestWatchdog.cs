@@ -164,6 +164,15 @@ internal static class TestWatchdog
         Write($"===== Test watchdog: end of the report on {subject} ====={Environment.NewLine}");
     }
 
+    /// <summary>
+    /// The managed stacks of this process, now (dotnet-stack), for the failure message of a test that caught something
+    /// blocked: the watchdog itself reports only after minutes, by when a bounded wait has let go of what blocked.
+    /// </summary>
+    public static string ManagedStacks() =>
+        FindTool("dotnet-stack") is { } tool
+            ? Run(tool, ["report", "-p", Environment.ProcessId.ToString(CultureInfo.InvariantCulture)], TimeSpan.FromSeconds(60))
+            : "dotnet-stack isn't installed (dotnet tool install -g dotnet-stack), so there are no stacks.";
+
     /// <summary>This process and the processes it started (<c>ps</c>; this process alone on Windows), with a table of them.</summary>
     private static List<(int Pid, string Command)> ProcessTree(out string table)
     {

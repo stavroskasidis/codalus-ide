@@ -42,7 +42,7 @@ public sealed class LanguageTests
         var json = await OpenAsync(f, "appsettings.json", "{\n  \"Logging\": { \"Level\": 3, \"On\": true }\n}\n");
         Assert.Equal("json", json.Model.LanguageId);
         Assert.Equal("source.json", json.GrammarScope);
-        await ShellFixture.PumpUntil(() => Colors(json, 2).Count >= 3, seconds: 20);
+        await ShellFixture.PumpUntil(() => Colors(json, 2).Count >= 3, seconds: 20, describe: json.DescribeGrammar);
 
         var project = await OpenAsync(f, "Sample.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
         Assert.Equal("msbuild", project.Model.LanguageId);

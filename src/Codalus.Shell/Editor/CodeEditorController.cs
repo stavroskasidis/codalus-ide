@@ -492,6 +492,13 @@ public sealed partial class CodeEditorController : IDisposable
             ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
             : null;
 
+    /// <summary>The tokenizer's state and its first lines', for a test's failure: whether each is waiting to be tokenized, and its tokens.</summary>
+    internal string DescribeGrammar() =>
+        _textMate is { } installation && Tokenizer(installation) is { } model
+            ? $"tokenizer {(model.IsStopped ? "stopped" : "running")}; lines " + string.Join(", ", Enumerable.Range(0, Math.Min(model.GetLines().GetNumberOfLines(), 20))
+                .Select(line => $"{line + 1} {(model.IsLineInvalid(line) ? "waiting" : "tokenized")} ({model.GetLineTokens(line)?.Count ?? 0} tokens)"))
+            : "no tokenizer";
+
     private static bool s_noTokenizer;
     private bool _grammarCheckScheduled;
 
@@ -525,14 +532,16 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>
     /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
-    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each
-    /// editor as long as its tab is open, and a session of many JSON, XML or Markdown tabs starved the pool (M56). The
+    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread blocked for each editor as long
+    /// as its tab is open (a thread-pool thread up to TextMateSharp 2.0.3, its own thread since 2.0.5), and a session of
+    /// many JSON, XML or Markdown tabs starved the pool (M56). The
     /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
     /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
     /// <para>
     /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
     /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
-    /// visible lines on the UI thread at each scroll, beside the worker), and TextMateSharp queues a line that failed again.
+    /// visible lines on the UI thread at each scroll, beside the worker): TextMateSharp serializes them since 2.0.5 (2.0.3
+    /// gave a line wrong tokens; <c>GrammarTokenizerThreadTests</c>), and queues a line that failed again.
     /// </para>
     /// </summary>
     private void MatchGrammarToView()
@@ -551,7 +560,27 @@ public sealed partial class CodeEditorController : IDisposable
             // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
             // redraw, after the listener is in, shows them.
             model.AddModelTokensChangedListener(transformer);
+            QueueFirstWaitingLine(model);
             Editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    /// <summary>
+    /// Queues again the first line still waiting to be tokenized. A worker stopped just after it took a line off the
+    /// model's queue drops it: the line stays waiting, nothing queues it again, and the next worker waits for work with
+    /// the file uncolored (TextMateSharp 2.0.5: an editor hidden and shown as it opened, <c>LanguageTests</c>, half its
+    /// runs). The worker walks on from that line to the end, as it would have.
+    /// </summary>
+    private static void QueueFirstWaitingLine(TextMateSharp.Model.TMModel model)
+    {
+        var count = model.GetLines().GetNumberOfLines();
+        for (var line = 0; line < count; line++)
+        {
+            if (model.IsLineInvalid(line))
+            {
+                model.InvalidateLine(line);
+                return;
+            }
         }
     }
 

@@ -260,9 +260,10 @@ public sealed partial class ShellHost
         Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
         try
         {
-            // The container is ours: netcoredbg is copied into it without asking.
-            var debugger = await RemoteDebuggers.EnsureAsync(target, _ => Task.FromResult(true), new Progress<string>(line => DebugLog.AppendLine(line)), CancellationToken.None).ConfigureAwait(true);
+            // The container is ours: the debugger is copied into it without asking.
+            var debugger = await RemoteDebuggers.EnsureAsync(target, Debugger.UsesCodalusAdapter, _ => Task.FromResult(true), new Progress<string>(line => DebugLog.AppendLine(line)), CancellationToken.None).ConfigureAwait(true);
             var map = new SourceMap(SourceFileMap(), SolutionFiles());
+            UseRemoteCompanion(RemoteShell.Companion(target, debugger));
             _debugContainer = launch.Name;
             if (launch.FastMode)
             {

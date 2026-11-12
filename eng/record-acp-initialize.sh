@@ -17,10 +17,10 @@ ssh="${2:-}"
 
 # The pinned packages, as src/Codalus.Workbench/Ai/Acp/AcpAgentCatalog.cs has them.
 case "$template" in
-  claude) package="@agentclientprotocol/claude-agent-acp"; version="0.94.0"; args=() ;;
-  codex) package="@agentclientprotocol/codex-acp"; version="2.2.2"; args=() ;;
-  gemini) package="@google/gemini-cli"; version="0.65.0"; args=(--acp) ;;
-  copilot) package="@github/copilot"; version="1.0.103"; args=(--acp) ;;
+  claude) package="@agentclientprotocol/claude-agent-acp"; version="0.106.0"; args=() ;;
+  codex) package="@agentclientprotocol/codex-acp"; version="2.6.0"; args=() ;;
+  gemini) package="@google/gemini-cli"; version="0.68.0"; args=(--acp) ;;
+  copilot) package="@github/copilot"; version="1.0.109"; args=(--acp) ;;
   pi) package="pi-acp"; version="0.0.34"; args=() ;;
   *) echo "Unknown template: $template" >&2; exit 2 ;;
 esac
@@ -30,7 +30,8 @@ command -v npx >/dev/null || { echo "npx is needed on the PATH" >&2; exit 1; }
 
 home="$(mktemp -d)"
 trap 'rm -rf "$home"' EXIT
-mkdir -p "$home/work"
+# The folders the agents are pointed at exist, empty: Codex 2.6 refuses a CODEX_HOME that doesn't.
+mkdir -p "$home/work" "$home/.config" "$home/.codex" "$home/.claude"
 out="$repo/tests/Shared/AcpRecordings"
 mkdir -p "$out"
 suffix=""

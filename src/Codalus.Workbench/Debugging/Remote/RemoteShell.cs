@@ -144,13 +144,32 @@ public static class RemoteShell
         ?? processes.FirstOrDefault(p => p.IsDotnet && p.CommandLine == last.CommandLine);
 
     /// <summary>
-    /// The adapter's pipe transport: netcoredbg at <paramref name="debuggerPath"/> on the target, speaking DAP on its
-    /// stdin and stdout.
+    /// The adapter's pipe transport: the debugger at <paramref name="debuggerPath"/> on the target, speaking DAP on its
+    /// stdin and stdout: netcoredbg, or with <paramref name="codalus"/> the Codalus debugger's bundle (M58b, ADR 0094).
     /// </summary>
-    public static DebugAdapterStartInfo Adapter(RemoteTarget target, string debuggerPath)
+    public static DebugAdapterStartInfo Adapter(RemoteTarget target, string debuggerPath, bool codalus = false)
     {
-        var (program, arguments) = target.Shell("exec " + Build.WslLaunch.ShellQuote(debuggerPath) + " --interpreter=vscode");
-        return new DebugAdapterStartInfo(program, arguments, null, new Dictionary<string, string>(Environment), target.Display);
+        var (program, arguments) = target.Shell("exec " + Build.WslLaunch.ShellQuote(debuggerPath) + (codalus ? " " + CoreClrAdapter.AdapterArgument : " --interpreter=vscode"));
+        return new DebugAdapterStartInfo(program, arguments, null, new Dictionary<string, string>(Environment), target.Display) { IsCodalus = codalus };
+    }
+
+    /// <summary>As <see cref="Adapter(RemoteTarget, string, bool)"/>, for what <see cref="RemoteDebuggers.EnsureAsync(RemoteTarget, bool, Func{string, Task{bool}}, IProgress{string}?, CancellationToken)"/> found.</summary>
+    public static DebugAdapterStartInfo Adapter(RemoteTarget target, RemoteDebugger debugger) => Adapter(target, debugger.Path, debugger.IsCodalus);
+
+    /// <summary>
+    /// The debug companion on the target for a session there (M58b, ADR 0094): the Codalus debugger's bundle is the
+    /// companion host too, so started without <c>--clr-dap</c> it reads the program's modules where they are, for
+    /// <c>[DebuggerDisplay]</c>, hidden members and the members' kinds. Null under netcoredbg, which has no companion there.
+    /// </summary>
+    public static Codalus.Rpc.ProcessLaunchInfo? Companion(RemoteTarget target, RemoteDebugger debugger)
+    {
+        if (!debugger.IsCodalus)
+        {
+            return null;
+        }
+
+        var (program, arguments) = target.Shell("exec " + Build.WslLaunch.ShellQuote(debugger.Path));
+        return new Codalus.Rpc.ProcessLaunchInfo(program, arguments) { Environment = new Dictionary<string, string>(Environment) };
     }
 
     internal static string Trim(string text)

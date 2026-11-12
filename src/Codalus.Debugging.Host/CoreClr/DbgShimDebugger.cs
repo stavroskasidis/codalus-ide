@@ -12,6 +12,12 @@ namespace Codalus.Debugging.Host.CoreClr;
 /// and the startup callback hands over the program's own runtime's ICorDebug, which attaches. An attach finds the
 /// loaded runtime (<c>EnumerateCLRs</c>) and its ICorDebug by its version; breakpoints bind on the attach's module
 /// loads, which arrive after <c>DebugActiveProcess</c> returns.
+/// <para>
+/// Where dbgshim's own search for the runtime can't be used (<see cref="RuntimeLocator.StartsHeld"/>: as x64 under
+/// Rosetta 2, where it crashed), a launch is a held start instead (<see cref="LaunchHeld"/>): the program waits in the
+/// startup hook, as a program in the terminal does for netcoredbg, and the debugger attaches to it by its runtime's
+/// path.
+/// </para>
 /// </summary>
 internal sealed class DbgShimDebugger : IClrDebugger
 {
@@ -28,6 +34,11 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
     public IClrProcess Launch(NetFxDebugArguments arguments, Action<string, string> output)
     {
+        if (RuntimeLocator.StartsHeld)
+        {
+            return LaunchHeld(arguments, output);
+        }
+
         var shim = DbgShimLibrary.Shim;
         var program = arguments.Program!;
         var launched = LaunchedProgram.Start(arguments, output, RunInTerminal);
@@ -62,7 +73,16 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             registration = shim.RegisterForRuntimeStartup(pid, startup, IntPtr.Zero);
             launched.Resume();
-            if (!attached.Task.Wait(RuntimeStartTimeout))
+
+            // A program that ends without starting a .NET runtime (a script that failed, a native program) says so at
+            // once, instead of after the whole wait. One that ends right after its runtime started was attached to first.
+            if (Task.WaitAny([attached.Task, launched.Exited], RuntimeStartTimeout) == 1 && !attached.Task.Wait(TimeSpan.FromMilliseconds(500)))
+            {
+                var code = launched.Exited.Result is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
+                throw new ClrException($"{Path.GetFileName(program)} ended{code} before a .NET runtime started in it: is it a .NET program?");
+            }
+
+            if (!attached.Task.Wait(attached.Task.IsCompleted ? TimeSpan.Zero : RuntimeStartTimeout))
             {
                 throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => LoadedRuntime(shim, id))}");
             }
@@ -86,6 +106,118 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
     }
 
+    /// <summary>How long a held start waits for the startup hook before it looks whether the runtime runs without one.</summary>
+    internal static readonly TimeSpan HookTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>The startup hook's file, next to this host (and in the debugger's bundle).</summary>
+    private const string HookFile = "Codalus.Debugging.StartupHook.dll";
+
+    /// <summary>
+    /// A launch without dbgshim's wait for the runtime (see the class): the program starts with the startup hook, which
+    /// reports its process id before <c>Main</c> and waits; the debugger attaches by the runtime's path, and lets the
+    /// hook go once the program is stopped for it. The breakpoints set meanwhile bind as the program's modules load. A
+    /// runtime without startup hooks (.NET Core 2) is attached to as it runs, and is told so.
+    /// </summary>
+    private CorDebugTarget LaunchHeld(NetFxDebugArguments arguments, Action<string, string> output)
+    {
+        var shim = DbgShimLibrary.Shim;
+        var program = arguments.Program!;
+        var hook = Path.Combine(AppContext.BaseDirectory, HookFile);
+        if (!File.Exists(hook))
+        {
+            throw new ClrException($"The debugger's startup hook ({HookFile}) isn't next to it, so it can't start {Path.GetFileName(program)}.");
+        }
+
+        var wait = Directory.CreateTempSubdirectory("codalus-debug-wait-").FullName;
+        var environment = new Dictionary<string, string>(arguments.Env ?? [], StringComparer.Ordinal) { ["CODALUS_DEBUG_WAIT"] = wait };
+        var hooks = (environment.GetValueOrDefault("DOTNET_STARTUP_HOOKS") ?? Environment.GetEnvironmentVariable("DOTNET_STARTUP_HOOKS") ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        if (!hooks.Any(h => Path.GetFileName(h) == HookFile))
+        {
+            environment["DOTNET_STARTUP_HOOKS"] = string.Join(Path.PathSeparator, [hook, .. hooks]);
+        }
+
+        // An attached program takes edits (Hot Reload, Edit and Continue) only if its runtime started knowing it would:
+        // a launch says so to each module as it loads, which an attach isn't allowed to (CORDBG_E_ENC_MODULE_NOT_ENC_ENABLED).
+        environment.TryAdd("DOTNET_MODIFIABLE_ASSEMBLIES", "debug");
+
+        var launched = LaunchedProgram.Start(arguments with { Env = environment }, output, RunInTerminal);
+        var pid = launched.ProcessId;
+        CorDebugTarget? target = null;
+        try
+        {
+            launched.Resume();
+
+            // The hook's file, the program's end, or a runtime that runs without having run the hook.
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var held = false;
+            while (true)
+            {
+                if (File.Exists(Path.Combine(wait, "pid")))
+                {
+                    held = true;
+                    break;
+                }
+
+                if (launched.Exited.IsCompleted)
+                {
+                    var code = launched.Exited.Result is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
+                    throw new ClrException($"{Path.GetFileName(program)} ended{code} before a .NET runtime started in it: is it a .NET program?");
+                }
+
+                if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program).Count > 0)
+                {
+                    output("console", "The program's .NET runtime doesn't run startup hooks (.NET Core 2), so it started before the debugger attached: breakpoints in its first lines may have been passed.\n");
+                    break;
+                }
+
+                if (started.Elapsed >= RuntimeStartTimeout)
+                {
+                    throw new ClrException($"{Path.GetFileName(program)}'s .NET runtime didn't start in {RuntimeStartTimeout.TotalSeconds:0} seconds: is it a .NET program? {StartState(pid, id => RuntimeLocator.Find(id, program) is [var loaded, ..] ? loaded : null)}");
+                }
+
+                Thread.Sleep(20);
+            }
+
+            var (corDebug, runtime) = CorDebugByPath(shim, pid, Path.GetFileName(program), program);
+            target = new CorDebugTarget(corDebug, VersionOf(runtime), arguments.JustMyCode) { Launched = launched };
+            target.Attach(System.Diagnostics.Process.GetProcessById(pid));
+            if (held)
+            {
+                // Once the program is stopped for the debugger (its first event is here, and the session answers events
+                // only after configurationDone), the hook may go: it runs on when the session continues the program.
+                target.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
+                File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+            }
+
+            return target;
+        }
+        catch (Exception ex)
+        {
+            target?.Dispose();
+            if (target is null)
+            {
+                // The launcher ends the program when its pipe closes.
+                launched.Dispose();
+            }
+
+            throw ex is AggregateException { InnerException: { } inner } ? inner : ex is DebugException debug ? new ClrException($"{Path.GetFileName(program)} couldn't be debugged: {debug.Message}", debug) : ex;
+        }
+        finally
+        {
+            if (target is null)
+            {
+                try
+                {
+                    Directory.Delete(wait, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
     public IClrProcess Attach(int processId)
     {
         System.Diagnostics.Process process;
@@ -99,16 +231,24 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
 
         var shim = DbgShimLibrary.Shim;
-        var runtime = LoadedRuntime(shim, processId) ?? throw new ClrException($"Process {processId.ToString(CultureInfo.InvariantCulture)} ({process.ProcessName}) isn't running .NET.");
         CorDebug corDebug;
-        try
+        string runtime;
+        if (RuntimeLocator.StartsHeld)
         {
-            corDebug = shim.CreateDebuggingInterfaceFromVersion(shim.CreateVersionStringFromModule(processId, runtime));
-            corDebug.Initialize();
+            (corDebug, runtime) = CorDebugByPath(shim, processId, process.ProcessName, ProgramOf(process));
         }
-        catch (DebugException ex)
+        else
         {
-            throw new ClrException($"The debugger couldn't load the debugging API of {process.ProcessName}'s runtime: {ex.Message}", ex);
+            runtime = LoadedRuntime(shim, processId) ?? throw new ClrException($"Process {processId.ToString(CultureInfo.InvariantCulture)} ({process.ProcessName}) isn't running .NET.");
+            try
+            {
+                corDebug = shim.CreateDebuggingInterfaceFromVersion(shim.CreateVersionStringFromModule(processId, runtime));
+                corDebug.Initialize();
+            }
+            catch (DebugException ex)
+            {
+                throw new ClrException($"The debugger couldn't load the debugging API of {process.ProcessName}'s runtime: {ex.Message}", ex);
+            }
         }
 
         var target = new CorDebugTarget(corDebug, VersionOf(runtime), justMyCode: true);
@@ -121,6 +261,49 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             target.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// The ICorDebug of the runtime a process loaded, found by that runtime's path (<see cref="RuntimeLocator"/>), and
+    /// the path: dbgshim reads only that library. Of several candidates, the one the process maps answers.
+    /// </summary>
+    private static (CorDebug CorDebug, string Runtime) CorDebugByPath(DbgShim shim, int processId, string name, string? program)
+    {
+        var candidates = RuntimeLocator.Find(processId, program);
+        if (candidates.Count == 0)
+        {
+            throw new ClrException($"Process {processId.ToString(CultureInfo.InvariantCulture)} ({name}) isn't running .NET.");
+        }
+
+        DebugException? last = null;
+        foreach (var runtime in candidates)
+        {
+            try
+            {
+                var corDebug = shim.CreateDebuggingInterfaceFromVersion(shim.CreateVersionStringFromModule(processId, runtime));
+                corDebug.Initialize();
+                return (corDebug, runtime);
+            }
+            catch (DebugException ex)
+            {
+                last = ex; // not the one it maps, or its debugging API didn't load
+            }
+        }
+
+        throw new ClrException($"The debugger couldn't load the debugging API of {name}'s runtime ({string.Join(", ", candidates)}): {last!.Message}", last);
+    }
+
+    /// <summary>A process's executable, when it can be read.</summary>
+    private static string? ProgramOf(System.Diagnostics.Process process)
+    {
+        try
+        {
+            return process.MainModule?.FileName;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return null;
         }
     }
 

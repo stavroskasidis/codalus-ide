@@ -16,10 +16,14 @@ public abstract record RemoteTarget
     /// <summary>The program and arguments that run <paramref name="script"/> with <c>sh</c> on the target.</summary>
     public abstract (string Program, IReadOnlyList<string> Arguments) Shell(string script);
 
-    /// <summary>Where netcoredbg is installed on the target (a shell expression): <see cref="Home"/>, else the target's default.</summary>
+    /// <summary>
+    /// Where the debuggers are installed on the target (a shell expression): <see cref="Home"/>, else the target's
+    /// default. netcoredbg is in a folder named after its version there, the Codalus debugger's bundle in
+    /// <c>codalus-&lt;build&gt;</c> beside it (M58b; the default folder keeps its first name).
+    /// </summary>
     public string DebuggerHome => Home ?? DefaultHome;
 
-    /// <summary>Another folder for netcoredbg on the target (tests use <c>/tmp</c>).</summary>
+    /// <summary>Another folder for the debuggers on the target (tests use <c>/tmp</c>).</summary>
     public string? Home { get; init; }
 
     protected virtual string DefaultHome => "${HOME:-/tmp}/.codalus/netcoredbg";

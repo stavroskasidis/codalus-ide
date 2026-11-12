@@ -28,7 +28,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 - Command-line options: `codalus --help` (`src/Codalus.Shell/Program.cs`).
 - Every `CODALUS_*` environment variable is in `docs/environment-variables.md`; a new one gets a row there in the same change.
-- Debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
+- The netcoredbg debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); the Codalus debugger's bundle tests need its bundles (`eng/get-codalus-debugger.sh`, with `osx-x64` and `eng/get-dotnet-x64.sh` on Apple silicon, `win-x86` on Windows); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
 - NativeAOT publish on Windows needs `vswhere.exe` on `PATH`.
 
 ## Where things are
@@ -54,7 +54,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Git, docker/podman, `dotnet ef`, netcoredbg and similar are the user's CLIs, one process per operation, parsing machine-readable output.
 - Never run managed code in a forked child (the terminal uses `openpty` + `posix_spawn`, not `forkpty`).
 - End a process tree with `ProcessTree.Kill` (`Codalus.Platform`), never `Process.Kill(entireProcessTree: true)`: on macOS .NET's walk reads every process's task information and blocks for minutes while ReportCrash holds a crashed one (`ProcessTreeTests` checks `src/`).
-- `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals).
+- `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals). AI Console (ADR 0095) starts such an agent's own CLI in the terminal under the same gate and a label of its own: the CLI edits and runs by itself, and only the IDE's tools it gets pass the IDE's checks.
 - Secrets go only to the OS credential store through `SecretStorage`.
 - The plugin API is a public contract (ADR 0003, 0058): `PublicAPI.txt` is checked by `PublicApiTests`; deprecate with `[Obsolete(DiagnosticId = "CODALUS0001")]`, never remove in a minor version; note changes in `docs/plugins.md`.
 - New dependencies: central package management (`Directory.Packages.props`), license recorded in `THIRD-PARTY-NOTICES.md`. No proprietary native binaries.
