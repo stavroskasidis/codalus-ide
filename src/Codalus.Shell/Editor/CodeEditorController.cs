@@ -525,14 +525,16 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>
     /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
-    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each
-    /// editor as long as its tab is open, and a session of many JSON, XML or Markdown tabs starved the pool (M56). The
+    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread blocked for each editor as long
+    /// as its tab is open (a thread-pool thread up to TextMateSharp 2.0.3, its own thread since 2.0.5), and a session of
+    /// many JSON, XML or Markdown tabs starved the pool (M56). The
     /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
     /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
     /// <para>
     /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
     /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
-    /// visible lines on the UI thread at each scroll, beside the worker), and TextMateSharp queues a line that failed again.
+    /// visible lines on the UI thread at each scroll, beside the worker): TextMateSharp serializes them since 2.0.5 (2.0.3
+    /// gave a line wrong tokens; <c>GrammarTokenizerThreadTests</c>), and queues a line that failed again.
     /// </para>
     /// </summary>
     private void MatchGrammarToView()

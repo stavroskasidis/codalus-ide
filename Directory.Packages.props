@@ -23,7 +23,10 @@
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
-    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
+    <!-- Above AvaloniaEdit.TextMate's 2.0.3, whose model tokenized one editor's lines from two threads unsynchronized
+         (its worker and the UI thread's view port): lines got wrong tokens (PR #328's run 43168967815; docs/ci-flakes.md). -->
+    <PackageVersion Include="TextMateSharp" Version="2.0.5" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.5" />
     <PackageVersion Include="Dock.Avalonia" Version="12.1.5" />
     <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.5" />
     <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.5" />

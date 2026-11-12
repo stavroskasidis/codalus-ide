@@ -62,6 +62,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
     <PackageReference Include="Avalonia.AvaloniaEdit" />
     <PackageReference Include="AvaloniaEdit.TextMate" />
+    <!-- Referenced directly to take a newer version than AvaloniaEdit.TextMate's (Directory.Packages.props). -->
+    <PackageReference Include="TextMateSharp" />
+    <PackageReference Include="TextMateSharp.Grammars" />
     <PackageReference Include="Dock.Avalonia" />
     <PackageReference Include="Dock.Model.Mvvm" />
     <PackageReference Include="Dock.Avalonia.Themes.Fluent" />
