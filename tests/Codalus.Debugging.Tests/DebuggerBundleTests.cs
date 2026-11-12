@@ -93,8 +93,15 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
     private static string HostPlatform =>
         (OperatingSystem.IsMacOS() ? "osx" : "linux") + "-" + (RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64");
 
-    [Fact]
-    public async Task This_machines_bundle_debugs_a_program_here_to_its_end()
+    /// <summary>
+    /// With <paramref name="held"/>, through the held start (<c>CODALUS_DEBUG_HELD_START</c>): what the x64 bundle does
+    /// under Rosetta 2, where dbgshim's own wait for the runtime crashed, run here on this machine's bundle. The program
+    /// waits in the startup hook, which the bundle carries, and the debugger attaches by the runtime's path.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task This_machines_bundle_debugs_a_program_here_to_its_end(bool held)
     {
         Assert.SkipWhen(OperatingSystem.IsWindows(), "The bundles for a machine's own platform are Linux's and macOS's (remote targets).");
         var bundle = RemoteDebuggers.CodalusBundle(HostPlatform);
@@ -108,13 +115,26 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
         // own runtime, and the debugged runtime's debugging libraries were taken from it: "The debugger couldn't attach
         // (ERROR_INSUFFICIENT_BUFFER)" for a .NET 11 program, CORDBG_E_DEBUG_COMPONENT_MISSING for .NET 8 and 10. The
         // adapter leaves that folder as it starts.
-        var environment = OperatingSystem.IsLinux() ? new Dictionary<string, string> { ["LD_LIBRARY_PATH"] = ":" } : null;
+        var environment = new Dictionary<string, string> { ["CODALUS_DEBUG_HELD_START"] = held ? "1" : "0" };
+        if (OperatingSystem.IsLinux())
+        {
+            environment["LD_LIBRARY_PATH"] = ":";
+        }
+
         await using var debug = new DebugService(() => null)
         {
             AdapterSetting = () => DebugService.CodalusAdapter,
             CoreClrAdapter = () => new DebugAdapterStartInfo(debugger, [CoreClrAdapter.AdapterArgument], bundle.Path, environment) { IsCodalus = true },
         };
-        await SessionAsync(debug, DebuggeeFixture.DotnetHost, debuggee.Program, debuggee.Dll, debuggee.Folder);
+        await SessionAsync(debug, DebuggeeFixture.DotnetHost, debuggee.Program, debuggee.Dll, debuggee.Folder, atFirstStop: async () =>
+        {
+            // A held start is the one that gives the program the startup hook, and the hook took its wait folder's
+            // variable away: the program waited in it. (The session starts no Hot Reload agent, which adds the hook too.)
+            var hooks = (await debug.EvaluateAsync("System.Environment.GetEnvironmentVariable(\"DOTNET_STARTUP_HOOKS\")", "watch", Ct)).Result;
+            var wait = (await debug.EvaluateAsync("System.Environment.GetEnvironmentVariable(\"CODALUS_DEBUG_WAIT\")", "watch", Ct)).Result;
+            Assert.Equal(held, hooks.Contains("Codalus.Debugging.StartupHook.dll", StringComparison.Ordinal));
+            Assert.Equal("null", wait);
+        });
     }
 
     /// <summary>
@@ -178,7 +198,7 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
     /// a breakpoint with a hit count (the debugger applies it), values and a property read in the program, a step,
     /// another breakpoint, and the program's end with its output (and <paramref name="printed"/>, when given).
     /// </summary>
-    private static async Task<(int Id, bool WasX64)> SessionAsync(DebugService debug, string dotnet, string program, string dll, string folder, string? printed = null)
+    private static async Task<(int Id, bool WasX64)> SessionAsync(DebugService debug, string dotnet, string program, string dll, string folder, string? printed = null, Func<Task>? atFirstStop = null)
     {
         var stops = Channel.CreateUnbounded<StopInfo>();
         var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -235,6 +255,11 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
         Assert.True(debug.Breakpoints.StateOf(debug.Breakpoints.All.Single())?.Verified);
         Assert.Equal("2", (await debug.EvaluateAsync("i", "watch", Ct)).Result);
         Assert.Equal("3", (await debug.EvaluateAsync("total", "watch", Ct)).Result);
+
+        if (atFirstStop is not null)
+        {
+            await atFirstStop();
+        }
 
         // A property read in the program (a func-eval), and arithmetic on it.
         Assert.Equal("5", (await debug.EvaluateAsync("numbers.Count", "watch", Ct)).Result);

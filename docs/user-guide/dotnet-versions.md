@@ -36,7 +36,7 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 
 ### macOS on Apple silicon
 
-.NET 6 and later run natively. .NET 5 and earlier have no Arm64 runtime: they run as x64 programs under Rosetta 2, on the x64 runtime (`/usr/local/share/dotnet/x64`, where the x64 installers put it). Codalus starts them with the x64 `dotnet` and debugs them with the Codalus debugger's x64 build, which it downloads the first time you debug one, after you agree (about 15 MB; Tools → Components lists it). With `debug.adapter` set to `netcoredbg`, or if you decline, the x64 netcoredbg the package ships debugs them (`debugger/x64/`).
+.NET 6 and later run natively. .NET 5 and earlier have no Arm64 runtime: they run as x64 programs under Rosetta 2, on the x64 runtime (`/usr/local/share/dotnet/x64`, where the x64 installers put it). Codalus starts them with the x64 `dotnet` and debugs them with the Codalus debugger's x64 build, which it downloads the first time you debug one, after you agree (about 15 MB; Tools → Components lists it). With `debug.adapter` set to `netcoredbg`, or if you decline, the x64 netcoredbg the package ships debugs them (`debugger/x64/`). Under the x64 build a program is held at its start by a startup hook while the debugger attaches; .NET Core 2 programs have no startup hooks, so they are attached to as they run, and a breakpoint in their first lines may be passed (the Debug Console says so).
 
 | Framework | Open | Editor | Build | Run | Debug | Tests | Coverage | Hot Reload | NuGet |
 |---|---|---|---|---|---|---|---|---|---|
