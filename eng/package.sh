@@ -57,8 +57,10 @@ if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ] && command -v xcrun > /de
 fi
 echo "== Publishing the shell ($rid, $version, channel $channel)"
 dotnet publish "$repo/src/Codalus.Shell" -c Release -r "$rid" -o "$app" -p:Version="$version" -p:DebugType=none -p:DebugSymbols=false
-# Symbols stay out of packages (they are large); CI keeps them as a separate artifact.
+# Symbols stay out of packages (they are large); CI keeps them as a separate artifact. On macOS, Native AOT writes the
+# shell's as codalus.dSYM, a folder.
 find "$app" -name '*.pdb' -delete
+find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
 
 echo "== Debugger (netcoredbg)"
 if "$repo/eng/get-netcoredbg.sh" "$stage/netcoredbg"; then
