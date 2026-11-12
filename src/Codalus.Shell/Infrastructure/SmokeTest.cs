@@ -59,8 +59,25 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Appended to the screenshots' names: <c>-netcoredbg</c> while a step runs again under netcoredbg, the fallback (M58).</summary>
     private string _screenshotSuffix = string.Empty;
 
+    /// <summary>The step running now, as the report names it; null between steps.</summary>
+    private string? _runningStep;
+
+    /// <summary>Whether the run got to its end (its report and its own exit), so an exit isn't an interruption.</summary>
+    private bool _finished;
+
     public async Task RunAsync()
     {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+        {
+            lifetime.Exit += (_, e) =>
+            {
+                if (Interrupted() is { } code)
+                {
+                    e.ApplicationExitCode = code;
+                }
+            };
+        }
+
         DispatcherTimer.RunOnce(() =>
         {
             Report("watchdog", "-", $"The smoke test did not finish within {s_watchdog.TotalMinutes} minutes.", "failed", 0, null);
@@ -79,6 +96,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("driver", "-", "Smoke test driver", "failed", 0, ex.ToString());
         }
 
+        _finished = true;
         try
         {
             await shell.SaveAllAsync().ConfigureAwait(true);
@@ -4514,6 +4532,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
+        _runningStep = id;
         var start = Stopwatch.GetTimestamp();
         Task? running = null;
         try
@@ -4575,8 +4594,31 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
         finally
         {
+            _runningStep = null;
             WriteReport();
         }
+    }
+
+    /// <summary>
+    /// The app is ending before the run did (its window closed by hand, a shutdown the run didn't ask for): a failed
+    /// step, "interrupted", naming the step that was running, goes in the report, and the exit code (returned) is 3. Before,
+    /// the app exited with 0 and a report of the steps that had run, all passed (a local macOS run, 2026-11-12: its window
+    /// closed during testing.run, it reported 54 steps passed). Null once the run has ended.
+    /// </summary>
+    internal int? Interrupted()
+    {
+        if (_finished)
+        {
+            return null;
+        }
+
+        _finished = true;
+        Report("interrupted", "-", "The app ended before the smoke test did", "failed", 0,
+            _runningStep is { } step ? $"It ended during '{step}'; the steps after it didn't run." : "It ended between steps; the steps after them didn't run.");
+        WriteReport();
+        Console.Out.WriteLine("SMOKE TEST FAILED");
+        Console.Out.Flush();
+        return 3;
     }
 
     /// <summary>
