@@ -7,6 +7,12 @@
 
 Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux: a rich semantic editor, a real project system, and integrated build, debugging and Git.
 
+What sets it apart:
+
+- **The classic IDE's look and feel, on macOS and Linux too**: its layout, themes and keyboard scheme ([the first-run setup](docs/user-guide/getting-started.md#the-first-run-setup)).
+- **Remote development** over SSH, in WSL and in Dev Containers, with the build, language services and debugger on the far side ([remote](docs/user-guide/remote.md)).
+- **An MCP server for coding agents**: `codalus mcp` gives agents outside the IDE its compiler, tests and debugger ([AI](docs/user-guide/ai.md#codalus-as-an-mcp-server)).
+
 **Website: [codalus.dev](https://codalus.dev/)**: [download](https://codalus.dev/download/), [features](https://codalus.dev/features/) and the [user guide](https://codalus.dev/docs/).
 
 > **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [download page](https://codalus.dev/download/) and the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): stable releases come from `master`, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).

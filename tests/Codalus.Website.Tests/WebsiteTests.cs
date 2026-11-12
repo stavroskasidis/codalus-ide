@@ -368,8 +368,8 @@ public sealed class WebsiteTests : IDisposable
         var guide = Path.Combine(repo, "docs", "user-guide");
         Directory.CreateDirectory(guide);
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
-        File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n");
-        // The guide's pages and headings the Home page's app models link to.
+        File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n\n### The first-run setup\n");
+        // The guide's pages and headings the Home page's hero and app models link to.
         foreach (var (page, body) in new[]
         {
             ("editing.md", "# Editing and navigating code\n"),
@@ -380,6 +380,8 @@ public sealed class WebsiteTests : IDisposable
             ("containers.md", "# Containers, Aspire and publishing\n\n## .NET Aspire\n"),
             ("wcf.md", "# WCF\n"),
             ("net-framework.md", "# .NET Framework\n"),
+            ("remote.md", "# Remote development\n"),
+            ("ai.md", "# AI\n\n## Codalus as an MCP server\n"),
         })
         {
             File.WriteAllText(Path.Combine(guide, page), body);
