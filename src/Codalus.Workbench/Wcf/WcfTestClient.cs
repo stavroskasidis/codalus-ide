@@ -18,6 +18,15 @@ public sealed class WcfTestClient : IDisposable
 
     public SoapClient Soap { get; }
 
+    /// <summary>Discovery's limit for each metadata request, which keeps a discovery over several addresses short.</summary>
+    internal TimeSpan QuickLimit { get; init; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Its limit for asking again an address whose request ran out of <see cref="QuickLimit"/>: a service that listens
+    /// and is slow with its first WSDL. Inside the 30 seconds the shell gives a whole discovery.
+    /// </summary>
+    internal TimeSpan SlowLimit { get; init; } = TimeSpan.FromSeconds(20);
+
     public Task<WsdlDocument> LoadAsync(string location, CancellationToken cancellationToken) =>
         WsdlReader.LoadAsync(location, Soap.FetchAsync, cancellationToken);
 
@@ -40,14 +49,15 @@ public sealed class WcfTestClient : IDisposable
 
             var addresses = WcfServiceDiscovery.ListeningAddresses(output);
             var paths = WcfServiceDiscovery.EndpointPaths(Path.GetDirectoryName(project)!);
-            async Task<string> Fetch(Uri uri, CancellationToken ct)
+            async Task<string> Fetch(Uri uri, TimeSpan time, CancellationToken ct)
             {
                 using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                limit.CancelAfter(TimeSpan.FromSeconds(5));
+                limit.CancelAfter(time);
                 return await Soap.FetchAsync(uri, limit.Token).ConfigureAwait(false);
             }
 
-            foreach (var url in await WcfServiceDiscovery.ProbeAsync(addresses, paths, Fetch, cancellationToken).ConfigureAwait(false))
+            var urls = await WcfServiceDiscovery.ProbeAsync(addresses, paths, (uri, ct) => Fetch(uri, QuickLimit, ct), cancellationToken, (uri, ct) => Fetch(uri, SlowLimit, ct)).ConfigureAwait(false);
+            foreach (var url in urls)
             {
                 found.Add(new DiscoveredService(project, url));
             }

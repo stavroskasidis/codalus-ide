@@ -296,6 +296,97 @@ public sealed class WcfTestClientTests
         }
     }
 
+    /// <summary>
+    /// A CoreWCF service builds its WSDL when first asked, which took longer than discovery's limit for a request on
+    /// a busy machine: discovery found no service, and the same address answered in 4.6 seconds right after (Windows
+    /// CI, run 43204581362). Here the first request for the WSDL is never answered and the next one is at once.
+    /// </summary>
+    [Fact]
+    public async Task A_service_slow_with_its_first_wsdl_is_asked_again_and_found()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var held = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var asked = 0;
+        var server = new MockHttpServer(async request =>
+        {
+            if (request.Path.EndsWith("Ws.svc", StringComparison.Ordinal))
+            {
+                return MockHttpResponse.Text(string.Empty, 400); // as CoreWCF answers a GET on a SOAP 1.2 endpoint
+            }
+
+            if (Interlocked.Increment(ref asked) == 1)
+            {
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, held.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                return MockHttpResponse.NotFound();
+            }
+
+            return MockHttpResponse.Text(File.ReadAllText(TestData("wsdl.xml")), contentType: "text/xml; charset=UTF-8");
+        });
+        await using (server)
+        {
+            // The second limit is the test's own: only the first request may run out.
+            using var client = new WcfTestClient(new HttpClient()) { QuickLimit = TimeSpan.FromMilliseconds(250), SlowLimit = System.Threading.Timeout.InfiniteTimeSpan };
+            var service = Path.Combine(ContainerToolsTests.RepoRoot, "samples", "Wcf", "CalculatorService", "CalculatorService.csproj");
+            var found = await client.DiscoverAsync([(service, "Now listening on: " + server.BaseUrl + "\n")], ct);
+            held.Cancel();
+
+            Assert.Equal([server.BaseUrl + "/CalculatorService.svc?wsdl"], found.Select(s => s.MetadataUrl));
+            // Asked again only after every address had its quick request: the others aren't kept waiting.
+            Assert.Equal(["/CalculatorService.svc", "/CalculatorServiceWs.svc", "/CalculatorService.svc"], server.Requests.Select(r => r.Path));
+        }
+    }
+
+    /// <summary>An address with no metadata answered: it is not asked again, and a cancelled discovery asks nothing more.</summary>
+    [Fact]
+    public async Task Only_a_request_that_ran_out_is_asked_again()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var slow = new List<string>();
+        Task<string> Slow(Uri uri, CancellationToken token)
+        {
+            slow.Add(uri.AbsolutePath);
+            return Task.FromResult("<definitions xmlns=\"" + WsdlReader.WsdlNamespace + "\"/>");
+        }
+
+        var addresses = new[] { new Uri("http://localhost:5280") };
+        var found = await WcfServiceDiscovery.ProbeAsync(
+            addresses,
+            ["/None.svc", "/Late.svc", "/Html.svc"],
+            (uri, _) => uri.AbsolutePath switch
+            {
+                "/None.svc" => Task.FromException<string>(new HttpRequestException("400")),
+                "/Late.svc" => Task.FromException<string>(new TaskCanceledException()),
+                _ => Task.FromResult("<html/>"),
+            },
+            ct,
+            Slow);
+        Assert.Equal(["http://localhost:5280/Late.svc?wsdl"], found);
+        Assert.Equal(["/Late.svc"], slow);
+
+        // The whole discovery cancelled (the shell's limit): what ran out then isn't asked again.
+        slow.Clear();
+        using var cancelled = new CancellationTokenSource();
+        found = await WcfServiceDiscovery.ProbeAsync(
+            addresses,
+            ["/Late.svc"],
+            (_, _) =>
+            {
+                cancelled.Cancel();
+                return Task.FromException<string>(new TaskCanceledException());
+            },
+            cancelled.Token,
+            Slow);
+        Assert.Empty(found);
+        Assert.Empty(slow);
+    }
+
     [Fact]
     public void Running_services_are_found_from_their_sources_and_output()
     {
