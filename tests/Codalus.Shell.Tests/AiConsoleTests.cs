@@ -283,6 +283,32 @@ public sealed class AiConsoleTests
     }
 
     [AvaloniaFact]
+    public async Task Resizing_the_window_resizes_the_console()
+    {
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f);
+        await f.RunAsync("ai.console.show");
+        var tab = await ShownAsync(f);
+        var control = View(f).Terminal;
+        var session = tab.Session!;
+        string Sizes() => $"control {control.Columns}x{control.Rows} in {control.Bounds.Size}, terminal {session.Terminal.Columns}x{session.Terminal.Rows}";
+        bool Follows() => (session.Terminal.Columns, session.Terminal.Rows) == (control.Columns, control.Rows);
+
+        // The CLI's terminal is as wide and high as the console shows it (what tells the CLI is PseudoTerminalTests').
+        await ShellFixture.PumpUntil(() => control.Columns > 20 && Follows(), 20, Sizes);
+        var (columns, rows) = (control.Columns, control.Rows);
+
+        f.Window.Width = 1600;
+        f.Window.Height = 1100;
+        await ShellFixture.PumpUntil(() => control.Columns > columns && control.Rows > rows && Follows(), 20, Sizes);
+        (columns, rows) = (control.Columns, control.Rows);
+
+        f.Window.Width = 1000;
+        f.Window.Height = 900;
+        await ShellFixture.PumpUntil(() => control.Columns < columns && control.Rows < rows && Follows(), 20, Sizes);
+    }
+
+    [AvaloniaFact]
     public async Task A_cli_that_isnt_installed_or_sits_in_the_workspace_doesnt_start()
     {
         await using var f = ShellFixture.Create();
