@@ -18,6 +18,20 @@ set -euo pipefail
 keychain="${RUNNER_TEMP:?run in a GitHub Actions job}/codalus-signing.keychain-db"
 profile=codalus-notary
 
+# security import, where an item the keychain has already counts as imported: a .p12 exported from Keychain Access
+# can hold the Developer ID intermediate too, or one private key twice (two certificates from one request).
+import_item() {
+  local output
+  if output="$(security import "$@" 2>&1)"; then
+    echo "$output"
+  elif [[ "$output" == *"already exists"* ]]; then
+    echo "$output (already imported)"
+  else
+    echo "$output" >&2
+    return 1
+  fi
+}
+
 case "${1:-}" in
   setup)
     if [ -z "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
@@ -42,13 +56,13 @@ case "${1:-}" in
     p12="$RUNNER_TEMP/codalus-signing.p12"
     trap 'rm -f "$p12" "$RUNNER_TEMP/codalus-notary.p8"' EXIT
     printf '%s' "$MACOS_CERTIFICATE_P12" | base64 --decode > "$p12"
-    security import "$p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -f pkcs12 \
+    import_item "$p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -f pkcs12 \
       -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/security
     # The Developer ID intermediates (the current G2 and the previous one): codesign embeds the chain, and a .p12
     # exported from Keychain Access holds only the certificates and their keys.
     for ca in DeveloperIDG2CA DeveloperIDCA; do
       curl -fsSL --retry 3 "https://www.apple.com/certificateauthority/$ca.cer" -o "$RUNNER_TEMP/$ca.cer"
-      security import "$RUNNER_TEMP/$ca.cer" -k "$keychain"
+      import_item "$RUNNER_TEMP/$ca.cer" -k "$keychain"
       rm "$RUNNER_TEMP/$ca.cer"
     done
     # Lets codesign and productsign use the keys without a prompt nobody can answer.
