@@ -384,10 +384,21 @@ public sealed partial class ShellHost
             shell.AiChat.Refresh();
         });
 
+        /// <summary>
+        /// Start a Chat after Connect: the agent's own CLI in AI Console when it has one (ADR 0095), else AI Chat. AI
+        /// Chat answers with it too, either way.
+        /// </summary>
         public void StartChat(string agent)
         {
-            shell.ShowAiChat();
             shell.AiChat.SelectAgent(agent);
+            if (shell.AiConsoleAgents.Any(a => a.Name == agent))
+            {
+                _ = shell.NewAiConsoleAsync(agent);
+            }
+            else
+            {
+                shell.ShowAiChat();
+            }
         }
 
         public Task<int?> RunInTerminalAsync(string title, string commandLine, ProcessLaunchInfo launch, string? hint, CancellationToken cancellationToken) =>

@@ -29,7 +29,7 @@ public sealed partial class SolutionExplorerView : UserControl, IPaneView
     public const string EntityFrameworkMenuLocation = "solutionExplorer/context/entityFramework";
 
     /// <summary>Drag payload: paths of the dragged files and folders, within this process.</summary>
-    private static readonly DataFormat<string[]> s_paths = DataFormat.CreateInProcessFormat<string[]>("codalus.explorer.paths");
+    internal static readonly DataFormat<string[]> s_paths = DataFormat.CreateInProcessFormat<string[]>("codalus.explorer.paths");
 
     private PointerPressedEventArgs? _dragStart;
     private Point _dragOrigin;
