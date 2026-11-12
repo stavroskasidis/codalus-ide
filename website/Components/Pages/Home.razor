@@ -3,7 +3,7 @@
 @inject SiteOptions Site
 
 <PageMeta Exact="true" Software="true" Title="Codalus IDE: the open-source .NET IDE for Windows, macOS and Linux"
-          Description="Codalus IDE is a free, open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git, native on Windows, macOS and Linux." />
+          Description="Codalus IDE is a free, open-source IDE for .NET, native on Windows, macOS and Linux: the classic IDE's look and feel everywhere, remote development over SSH, in WSL and in containers, and an MCP server that gives your coding agents the IDE's compiler, tests and debugger." />
 
 <div class="container">
     <section class="hero">
@@ -17,7 +17,12 @@
                 <a class="pill rise" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
             }
             <h1 class="display display-xl rise rise-1">A real .NET IDE.<br /><span class="accent">Native on every desktop.</span></h1>
-            <p class="lead rise rise-2">An open-source IDE for .NET: a semantic C# editor on Roslyn, a real project system, and integrated build, debugging, testing and Git. Free, MIT-licensed, and without telemetry.</p>
+            <p class="lead rise rise-2">An open-source IDE for .NET, free, MIT-licensed and without telemetry. What sets it apart:</p>
+            <ul class="hero-points rise rise-2">
+                <li><a href="docs/getting-started/#the-first-run-setup">The classic IDE's look and feel, on macOS and Linux too</a></li>
+                <li><a href="docs/remote/">Remote development over SSH, in WSL and in Dev Containers</a></li>
+                <li><a href="docs/ai/#codalus-as-an-mcp-server">An MCP server that gives your coding agents the IDE's compiler, tests and debugger</a></li>
+            </ul>
             <div class="hero-actions rise rise-3">
                 <a class="button" href="download/" data-download-os @attributes="DownloadFiles">
                     <Icon Name="download" Size="18" />

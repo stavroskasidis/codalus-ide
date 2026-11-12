@@ -39,8 +39,8 @@ public sealed class OlderFrameworksTests
     }
 
     [Theory]
-    [InlineData("netcoreapp2.0", "collector-netstandard2.0")]
-    [InlineData("net7.0", "collector-netstandard2.0")]
+    [InlineData("netcoreapp2.0", "collector-netstandard")]
+    [InlineData("net7.0", "collector-netstandard")]
     [InlineData("net8.0", "collector")]
     [InlineData("net10.0", "collector")]
     [InlineData(null, "collector")]
