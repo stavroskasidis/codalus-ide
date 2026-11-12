@@ -87,6 +87,16 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     private readonly ConcurrentDictionary<WebSocket, SemaphoreSlim> _sockets = new();
 
     /// <summary>
+    /// Each running session's last lines of output (<see cref="TailLines"/> at most), for the log line of its end: its
+    /// output goes only to the dashboard, so a program that exited at once said nothing in the IDE (the Linux smoke
+    /// test's aspire.run, PR #338's run 43302285600: the api's process ended as it started, and nothing said why).
+    /// </summary>
+    private readonly ConcurrentDictionary<string, Queue<string>> _tails = new(StringComparer.Ordinal);
+
+    /// <summary>How many of a session's last lines its end's log line quotes.</summary>
+    internal const int TailLines = 20;
+
+    /// <summary>
     /// Each notification socket's request. Aborting the WebSocket doesn't always drop its connection on Windows: http.sys
     /// keeps the upgraded connection with the request, and the orchestrator's pending read never ends. Aborting the
     /// request's response closes the connection itself.
@@ -314,6 +324,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
 
         _sessions[id] = session;
+        _tails[id] = new Queue<string>();
         response.Headers["Location"] = string.Create(CultureInfo.InvariantCulture, $"http://localhost:{Port}/run_session/{id}");
         await RespondAsync(response, HttpStatusCode.Created, null).ConfigureAwait(false);
         _ = session.Started.ContinueWith(t => t.IsCompletedSuccessfully ? SendAsync(new IdeNotification("processRestarted", id, t.Result)) : Task.CompletedTask, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
@@ -322,6 +333,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             {
                 _sessions.TryRemove(id, out _);
                 var pid = session.Started.IsCompletedSuccessfully ? session.Started.Result : (int?)null;
+                Log?.Invoke(Ended(id, t.IsCompletedSuccessfully ? t.Result : null));
                 await SendAsync(new IdeNotification("sessionTerminated", id, pid, t.IsCompletedSuccessfully ? t.Result ?? 0 : 0)).ConfigureAwait(false);
             },
             CancellationToken.None,
@@ -329,8 +341,42 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             TaskScheduler.Default).Unwrap();
     }
 
-    /// <summary>A line of a session's output, for the dashboard's console logs.</summary>
-    public Task LogAsync(string sessionId, string line, bool isError) => SendAsync(new IdeNotification("serviceLogs", sessionId, IsStdErr: isError, LogMessage: line));
+    /// <summary>A line of a session's output, for the dashboard's console logs (and the last ones for the log line of its end).</summary>
+    public Task LogAsync(string sessionId, string line, bool isError)
+    {
+        if (_tails.TryGetValue(sessionId, out var tail))
+        {
+            lock (tail)
+            {
+                if (tail.Count == TailLines)
+                {
+                    tail.Dequeue();
+                }
+
+                tail.Enqueue(line);
+            }
+        }
+
+        return SendAsync(new IdeNotification("serviceLogs", sessionId, IsStdErr: isError, LogMessage: line));
+    }
+
+    /// <summary>The log line of a session's end: its exit code, and its last lines of output, which went only to the dashboard.</summary>
+    private string Ended(string id, int? exitCode)
+    {
+        string[] lines = [];
+        if (_tails.TryRemove(id, out var tail))
+        {
+            lock (tail)
+            {
+                lines = [.. tail];
+            }
+        }
+
+        var code = exitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
+        return lines.Length == 0
+            ? $"Run session {id} ended (exit code {code}) without output."
+            : $"Run session {id} ended (exit code {code}). Its last output:\n" + string.Join('\n', lines.Select(l => "  " + l));
+    }
 
     private async Task SendAsync(IdeNotification notification)
     {

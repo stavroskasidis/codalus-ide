@@ -121,15 +121,21 @@ public sealed class SetupChoice : ObservableObject
 public sealed class SetupToolRowViewModel : ObservableObject
 {
     private readonly Func<ToolStatus, Task> _install;
+    private readonly bool _picksInDialog;
     private bool _isConfirming;
     private bool _isInstalling;
 
-    public SetupToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<ToolStatus, Task> install)
+    /// <param name="picksInDialog">
+    /// Install… opens the dialog where the user picks one of the ways to install it (.NET's), each with its command,
+    /// instead of showing this row's plan.
+    /// </param>
+    public SetupToolRowViewModel(ToolStatus tool, InstallPlan? plan, Func<ToolStatus, Task> install, bool picksInDialog = false)
     {
         Tool = tool;
         Plan = plan;
         _install = install;
-        InstallCommand = new RelayCommand(() => IsConfirming = true);
+        _picksInDialog = picksInDialog;
+        InstallCommand = new RelayCommand(() => { if (picksInDialog) { _ = ConfirmAsync(); } else { IsConfirming = true; } });
         CancelCommand = new RelayCommand(() => IsConfirming = false);
         ConfirmCommand = new RelayCommand(() => _ = ConfirmAsync());
     }
@@ -158,7 +164,7 @@ public sealed class SetupToolRowViewModel : ObservableObject
     /// <summary>Whether it can be fixed from here: it needs it, and there's a plan.</summary>
     public bool CanInstall => Plan is not null && Tool.NeedsAttention && !_isConfirming && !_isInstalling;
 
-    public string InstallTitle => Plan?.Kind switch
+    public string InstallTitle => _picksInDialog ? Localizer.Get("msg.setup.fixInstall", "Install…") : Plan?.Kind switch
     {
         InstallKind.OpenPage => Localizer.Get("msg.setup.fixPage", "Open Download Page…"),
         InstallKind.Terminal => Localizer.Get("msg.setup.fixTerminal", "Install in Terminal…"),
@@ -704,8 +710,11 @@ public sealed class SetupViewModel : ObservableObject
         Tools.Clear();
         foreach (var tool in tools.Where(t => t.Id is "dotnet" or "git" || t is { Id: "dotnet-runtime", NeedsAttention: true }))
         {
-            // The row showed the plan and the user said yes: the install doesn't ask again.
-            Tools.Add(new SetupToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t, _ => Task.FromResult(true), InstallRunner)));
+            // The row showed the plan and the user said yes: the install doesn't ask again. .NET's ways are picked in the
+            // install's dialog, which shows each one's command.
+            Tools.Add(tool.Id is "dotnet" or "dotnet-runtime"
+                ? new SetupToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t, run: InstallRunner), picksInDialog: true)
+                : new SetupToolRowViewModel(tool, _shell.PlanFor(tool), t => _shell.InstallToolAsync(t, _ => Task.FromResult(true), InstallRunner)));
         }
     }
 
