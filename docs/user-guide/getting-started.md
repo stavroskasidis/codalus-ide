@@ -100,14 +100,14 @@ The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE**
 2. **Keyboard**: the keyboard scheme: **Default** (the classic IDE's keys: F5 debugs, F6 builds, Ctrl+Q searches), VS Code's, ReSharper's or Emacs. Your own key bindings go over any of them ([Keyboard shortcuts](settings.md#keyboard-shortcuts)).
 3. **Your settings**: import from VS Code (its settings and key bindings, found in its user folder), from a `.vssettings` file another IDE exported, or from a file exported with Tools → Export Settings ([Moving your settings](settings.md#moving-your-settings)); or turn on [Settings Sync](settings.md#settings-sync) with a folder or a Git repository. When the folder or repository already has settings, they replace this machine's, without asking.
 4. **Tools**: the .NET SDK and git, found or offered. **Install…** shows exactly what would run; nothing installs until you choose **Install** (or **Run in Terminal**, or **Open Page**). Help → Check Environment lists everything else. Under **Your system**, two choices, both off: **Open Folders from the File Manager** (Open with Codalus IDE on a folder's right-click) and **Open Solutions and Project Files** (`.sln`, `.slnx`, `.slnf`, `.csproj`, `.vbproj`, `.fsproj` open in Codalus IDE). Leaving the step registers what you checked, for you alone ([System integration](settings.md#system-integration)); Skip setup doesn't.
-5. **AI**: your AI experience, as three cards with the same four facts each, so you can compare them: who answers, what it does, what leaves this machine, and what you need.
+5. **AI**: your AI experience, as three cards. **No AI** is the IDE as it is: nothing is sent anywhere. The other two carry the same four facts, so you can compare them: who answers, what it does, what leaves this machine, and what you need.
 
-   | | No AI | A coding agent | The built-in assistant |
-   |---|---|---|---|
-   | Who answers | No one. | Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account. | A model you choose, hosted or on this machine. |
-   | What it does | Nothing. | Works through a task by itself. No suggestions as you type. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
-   | What leaves this machine | Nothing. | What the agent reads, to its own provider. | Only what a question needs. Secrets and ignored files are never sent. |
-   | What you need | Nothing. | Its CLI or Node.js, and a sign-in. | An API key, or a model server on this machine. |
+   | | A coding agent | The built-in assistant |
+   |---|---|---|
+   | Who answers | Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account. | A model you choose, hosted or on this machine. |
+   | What it does | Works through a task by itself. No suggestions as you type. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
+   | What leaves this machine | What the agent reads, to its own provider. | Only what a question needs. Secrets and ignored files are never sent. |
+   | What you need | Its CLI or Node.js, and a sign-in. | An API key, or a model server on this machine. |
 
    The cards are short on purpose; the details are in [AI assistance](ai.md). Without AI, completion, refactorings and quick fixes still work: they are the compiler's. An agent works in [AI Console](ai.md#ai-console) or [AI Chat](ai.md#external-agents-acp), and what it reads goes to its provider under that provider's terms: Codalus IDE checks what it asks the IDE for, not what it reads by itself. The built-in assistant sends only what passes Codalus IDE's own checks ([What is never sent](ai.md#what-is-never-sent)).
 

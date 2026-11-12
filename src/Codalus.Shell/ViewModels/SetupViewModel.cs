@@ -453,13 +453,9 @@ public sealed class SetupViewModel : ObservableObject
         var needs = Localizer.Get("msg.firstRun.aiFactNeeds", "What you need");
         AiPaths =
         [
-            new(SetupAiPath.None, Localizer.Get("msg.firstRun.aiNone", "No AI"), Localizer.Get("msg.firstRun.aiNoneDescription", "The IDE as it is. Completion and refactorings need no AI."),
-            [
-                new(who, Localizer.Get("msg.firstRun.aiNoneWho", "No one.")),
-                new(does, Localizer.Get("msg.firstRun.aiNoneDoes", "Nothing.")),
-                new(leaves, Localizer.Get("msg.firstRun.aiNoneLeaves", "Nothing.")),
-                new(needs, Localizer.Get("msg.firstRun.aiNoneNeeds", "Nothing.")),
-            ], SelectAiPath),
+            // No AI has nothing to compare ("No one", "Nothing" four times was noise): its line says it all.
+            new(SetupAiPath.None, Localizer.Get("msg.firstRun.aiNone", "No AI"), Localizer.Get("msg.firstRun.aiNoneDescription", "The IDE as it is: nothing is sent anywhere. Completion and refactorings need no AI, and Tools → AI turns it on later."),
+            [], SelectAiPath),
             new(SetupAiPath.Agent, Localizer.Get("msg.firstRun.aiAgent", "A coding agent"), Localizer.Get("msg.firstRun.aiAgentDescription", "Your own agent, with the IDE's tools."),
             [
                 new(who, Localizer.Get("msg.firstRun.aiAgentWho", "Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account.")),
@@ -1051,7 +1047,7 @@ public sealed class SetupViewModel : ObservableObject
 
     // ------------------------------------------------------------------ AI
 
-    /// <summary>No AI, a coding agent, or the built-in assistant, each with the same facts to compare.</summary>
+    /// <summary>No AI (a line, no facts), a coding agent, or the built-in assistant, the last two with the same facts to compare.</summary>
     public IReadOnlyList<SetupAiPathOption> AiPaths { get; }
 
     /// <summary>Why to run an agent from Codalus IDE instead of a plain terminal (ADR 0092, 0095), shown with the agents: three short lines; the user guide has the rest.</summary>

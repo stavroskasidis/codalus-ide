@@ -89,7 +89,7 @@ internal sealed partial class SmokeTest
             // AI (ADR 0096): the three ways with the same facts each. A coding agent, with Claude, is the website's
             // picture; then the step is put back as it was, so the summary's button connects nothing.
             await model.NextAsync().ConfigureAwait(true);
-            Check(model.IsAi && model.AiPaths.Count == 3 && model.AiPaths.All(p => p.Facts.Count == 4), "the AI step compares three ways");
+            Check(model.IsAi && model.AiPaths.Count == 3 && model.AiPaths.Skip(1).All(p => p.Facts.Count == 4), "the AI step compares three ways");
             Check(!model.AiChanged, "the AI step shows what the settings have");
             var ai = model.AiChoice;
             model.AiPaths.Single(p => p.Path == SetupAiPath.Agent).SelectCommand.Execute(null);

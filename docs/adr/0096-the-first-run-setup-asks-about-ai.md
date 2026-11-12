@@ -38,14 +38,14 @@ The setup is a welcome page (a first start only), five steps and a summary (`Set
 
 ### The AI step
 
-Three cards, each with the same four facts so they read side by side: who answers, what it does, what leaves this machine, what you need.
+Three cards. No AI has a line: the IDE as it is, nothing sent anywhere, completion and refactorings need no AI, Tools → AI turns it on later. The other two carry the same four facts so they read side by side: who answers, what it does, what leaves this machine, what you need. (The first build gave No AI the four facts too, "No one" and "Nothing" three times; the maintainer called it noise, 2026-11-12.)
 
-| | No AI | A coding agent | The built-in assistant |
-|---|---|---|---|
-| Who answers | No one | The agent's own program, with the user's account there | A model of the provider the user chooses |
-| What it does | Nothing; completion and refactorings are the compiler's | Works through a task by itself, in AI Console or AI Chat; no suggestions as you type | AI Chat with agent mode, the AI actions, and suggestions as you type when ticked |
-| What leaves | Nothing | What the agent reads, to its own provider (ADR 0079) | Only through `AiService`'s checks (ADR 0062) |
-| What it needs | Nothing | Node.js or its CLI, and a sign-in or key | A key, or a model server on this machine |
+| | A coding agent | The built-in assistant |
+|---|---|---|
+| Who answers | The agent's own program, with the user's account there | A model of the provider the user chooses |
+| What it does | Works through a task by itself, in AI Console or AI Chat; no suggestions as you type | AI Chat with agent mode, the AI actions, and suggestions as you type when ticked |
+| What leaves | What the agent reads, to its own provider (ADR 0079) | Only through `AiService`'s checks (ADR 0062) |
+| What it needs | Node.js or its CLI, and a sign-in or key | A key, or a model server on this machine |
 
 - **A coding agent is the recommended way** (the maintainer, 2026-11-12), as AI Console is the recommended window for one (ADR 0095): its card says "(recommended)" beside its title. Recommended isn't preselected.
 - **No AI is chosen unless the user chooses another.** An agent or a provider is chosen, never assumed: neither list has a preselected entry.

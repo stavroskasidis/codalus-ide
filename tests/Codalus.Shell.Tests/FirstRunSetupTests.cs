@@ -757,9 +757,10 @@ public sealed class FirstRunSetupTests
         // Three ways, No AI chosen, each with the same four facts so they compare.
         Assert.Equal(["No AI", "A coding agent", "The built-in assistant"], model.AiPaths.Select(p => p.Title));
         Assert.True(model.AiPaths[0].IsSelected);
-        Assert.All(model.AiPaths, p => Assert.Equal(["Who answers", "What it does", "What leaves this machine", "What you need"], p.Facts.Select(fact => fact.Label)));
+        Assert.Empty(model.AiPaths[0].Facts); // No AI is a line, without "No one" and "Nothing" four times
+        Assert.Contains("nothing is sent", model.AiPaths[0].Description, StringComparison.Ordinal);
+        Assert.All(model.AiPaths.Skip(1), p => Assert.Equal(["Who answers", "What it does", "What leaves this machine", "What you need"], p.Facts.Select(fact => fact.Label)));
         Assert.All(model.AiPaths, p => Assert.All(p.Facts, fact => Assert.False(string.IsNullOrWhiteSpace(fact.Value))));
-        Assert.Equal("Nothing.", model.AiPaths[0].Facts[2].Value);
         Assert.Contains("its own provider", model.AiPaths[1].Facts[2].Value, StringComparison.Ordinal);
         Assert.Contains("never sent", model.AiPaths[2].Facts[2].Value, StringComparison.Ordinal);
         Assert.All(model.AiPaths, p => Assert.All(p.Facts, fact => Assert.InRange(fact.Value.Length, 1, 80))); // a line or two each, not a paragraph
@@ -772,7 +773,8 @@ public sealed class FirstRunSetupTests
         Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "(recommended)");
         Assert.Equal(SetupAiPath.None, model.AiPath);
         Assert.True(cards[0].IsFocused);
-        Assert.All(cards, c => Assert.Contains("Who answers:", AutomationProperties.GetHelpText(c), StringComparison.Ordinal));
+        Assert.Equal(model.AiPaths[0].Description, AutomationProperties.GetHelpText(cards[0]));
+        Assert.All(cards.Skip(1), c => Assert.Contains("Who answers:", AutomationProperties.GetHelpText(c), StringComparison.Ordinal));
         Assert.False(window.FindControl<StackPanel>("AiAgentPanel")!.IsEffectivelyVisible);
         Assert.False(window.FindControl<StackPanel>("AiAssistantPanel")!.IsEffectivelyVisible);
         Snapshot(f, "first-run-setup-ai-none");
