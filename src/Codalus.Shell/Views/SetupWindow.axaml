@@ -423,10 +423,14 @@
                 <!-- 252 px: the three cards fit one row at the window's 1120 px, and wrap in a narrower one. -->
                 <DataTemplate x:DataType="vm:SetupAiPathOption">
                   <ToggleButton Classes="setupCard" Width="252" Padding="14,12" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
-                                AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding HelpText}">
+                                AutomationProperties.Name="{Binding AccessibleName}" AutomationProperties.HelpText="{Binding HelpText}">
                     <StackPanel Spacing="4">
                       <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" TextWrapping="Wrap" VerticalAlignment="Center" />
+                        <!-- The recommended way says so beside its title, and under it when the card is too narrow for both. -->
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,6,0" />
+                          <TextBlock Classes="small" Text="{Binding RecommendedText}" IsVisible="{Binding IsRecommended}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </WrapPanel>
                         <controls:Icon Grid.Column="1" Kind="check-circle" IsVisible="{Binding IsSelected}" />
                       </Grid>
                       <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,0,0,4" />
@@ -469,7 +473,7 @@
               </ItemsControl>
               <TextBlock Text="{Binding AgentsBlockedReason}" IsVisible="{Binding AreAgentsBlocked}" TextWrapping="Wrap" Margin="0,0,0,8" />
               <TextBlock Classes="muted small" Text="{l:T setupWindow.agentConnectsAfter}" TextWrapping="Wrap" />
-              <TextBlock Classes="subheading" Text="{l:T setupWindow.whyRunItFromCodalusIde}" Margin="0,16,0,8" />
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.whyRunItFromCodalusIde}" Margin="0,14,0,8" />
               <ItemsControl x:Name="AgentBenefitList" ItemsSource="{Binding AgentBenefits}" AutomationProperties.Name="{l:T setupWindow.whyRunItFromCodalusIde}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="x:String">
@@ -484,12 +488,10 @@
               <ItemsControl x:Name="AgentWindowList" ItemsSource="{Binding AgentWindows}" AutomationProperties.Name="{l:T setupWindow.twoWindowsForAnAgent}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:SetupSummaryRow">
-                    <Border Classes="section">
-                      <StackPanel Spacing="4">
-                        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
-                        <TextBlock Classes="muted small" Text="{Binding Value}" TextWrapping="Wrap" />
-                      </StackPanel>
-                    </Border>
+                    <Grid ColumnDefinitions="96,*" Margin="0,0,0,6">
+                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -506,7 +508,7 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:SetupChoice">
-                    <ToggleButton Classes="setupCard" Width="236" Margin="0,0,10,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                    <ToggleButton Classes="setupCard" Width="180" Margin="0,0,10,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
                                   AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
                       <StackPanel Spacing="2">
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />

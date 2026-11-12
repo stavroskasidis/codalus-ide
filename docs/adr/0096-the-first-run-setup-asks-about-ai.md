@@ -47,10 +47,12 @@ Three cards, each with the same four facts so they read side by side: who answer
 | What leaves | Nothing | What the agent reads, to its own provider (ADR 0079) | Only through `AiService`'s checks (ADR 0062) |
 | What it needs | Nothing | Node.js or its CLI, and a sign-in or key | A key, or a model server on this machine |
 
+- **A coding agent is the recommended way** (the maintainer, 2026-11-12), as AI Console is the recommended window for one (ADR 0095): its card says "(recommended)" beside its title. Recommended isn't preselected.
 - **No AI is chosen unless the user chooses another.** An agent or a provider is chosen, never assumed: neither list has a preselected entry.
-- **A coding agent** shows the one-click templates (ADR 0083), the user's other connected agents (marked Connected) and More agents…; why to run an agent from Codalus IDE and not from a terminal (the IDE's tools of ADR 0092, the preview and approvals of AI Chat, references from the editor, consoles that come back, Connect); and its two windows, AI Console and AI Chat, with what each does (ADR 0095). A remote window says why no agent connects (ADR 0083) and disables the list.
+- **A coding agent** shows the one-click templates (ADR 0083), the user's other connected agents (marked Connected) and More agents…; why to run an agent from Codalus IDE and not from a terminal, in three lines (the IDE's tools of ADR 0092, the preview and approvals of AI Chat, references from the editor); and its two windows, AI Console and AI Chat, with a line on what each does (ADR 0095). A remote window says why no agent connects (ADR 0083) and disables the list.
 - **The built-in assistant** shows the providers the installed plugins declare, a local one marked, and the two as-you-type switches with what each sends, both off.
 - **One path.** An agent and a provider aren't combined in the setup; either is added later from Tools → AI.
+- **Short.** The maintainer, seeing the first build, asked for a less verbose step (2026-11-12): each fact is a line or two (80 characters at most, which `FirstRunSetupTests` holds it to), the reasons are three lines, the windows two, and the providers show by name. The user guide carries what was cut: which CLIs take the IDE's tools in AI Console, what an agent reads by itself, consoles that come back, and what Connect does.
 
 ### Nothing before Done
 

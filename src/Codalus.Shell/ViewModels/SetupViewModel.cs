@@ -85,6 +85,18 @@ public sealed class SetupAiPathOption : ObservableObject
 
     public IReadOnlyList<SetupSummaryRow> Facts { get; }
 
+    /// <summary>
+    /// The way Codalus IDE recommends (a coding agent, ADR 0096): its card says so beside its title. Recommended isn't
+    /// preselected: No AI stays chosen until the user chooses.
+    /// </summary>
+    public bool IsRecommended { get; init; }
+
+    /// <summary>"(recommended)", beside the title of the recommended way.</summary>
+    public string RecommendedText { get; } = Localizer.Get("msg.firstRun.aiRecommended", "(recommended)");
+
+    /// <summary>The title, with "(recommended)" on the recommended way.</summary>
+    public string AccessibleName => IsRecommended ? $"{Title} {RecommendedText}" : Title;
+
     /// <summary>The line and the facts in one text, for a screen reader.</summary>
     public string HelpText => string.Join(" ", new[] { Description }.Concat(Facts.Select(f => $"{f.Label}: {f.Value}")));
 
@@ -441,40 +453,38 @@ public sealed class SetupViewModel : ObservableObject
         var needs = Localizer.Get("msg.firstRun.aiFactNeeds", "What you need");
         AiPaths =
         [
-            new(SetupAiPath.None, Localizer.Get("msg.firstRun.aiNone", "No AI"), Localizer.Get("msg.firstRun.aiNoneDescription", "The IDE as it is, with no AI in it."),
+            new(SetupAiPath.None, Localizer.Get("msg.firstRun.aiNone", "No AI"), Localizer.Get("msg.firstRun.aiNoneDescription", "The IDE as it is. Completion and refactorings need no AI."),
             [
-                new(who, Localizer.Get("msg.firstRun.aiNoneWho", "No one. No AI window, command or suggestion shows.")),
-                new(does, Localizer.Get("msg.firstRun.aiNoneDoes", "Nothing. Completion, refactorings and quick fixes are the compiler's and need no AI.")),
+                new(who, Localizer.Get("msg.firstRun.aiNoneWho", "No one.")),
+                new(does, Localizer.Get("msg.firstRun.aiNoneDoes", "Nothing.")),
                 new(leaves, Localizer.Get("msg.firstRun.aiNoneLeaves", "Nothing.")),
-                new(needs, Localizer.Get("msg.firstRun.aiNoneNeeds", "Nothing. Tools → AI turns it on later.")),
+                new(needs, Localizer.Get("msg.firstRun.aiNoneNeeds", "Nothing.")),
             ], SelectAiPath),
-            new(SetupAiPath.Agent, Localizer.Get("msg.firstRun.aiAgent", "A coding agent"), Localizer.Get("msg.firstRun.aiAgentDescription", "Your own agent, working on a task with the IDE's tools."),
+            new(SetupAiPath.Agent, Localizer.Get("msg.firstRun.aiAgent", "A coding agent"), Localizer.Get("msg.firstRun.aiAgentDescription", "Your own agent, with the IDE's tools."),
             [
-                new(who, Localizer.Get("msg.firstRun.aiAgentWho", "The agent's own program with your account there: Claude, Codex, Gemini CLI, GitHub Copilot and others.")),
-                new(does, Localizer.Get("msg.firstRun.aiAgentDoes", "Works through a task by itself: it reads the code, edits files and runs commands, in AI Console or AI Chat. No suggestions as you type.")),
-                new(leaves, Localizer.Get("msg.firstRun.aiAgentLeaves", "What the agent reads goes to its own provider, under that provider's terms. Codalus IDE checks what it asks the IDE for, not what it reads by itself.")),
-                new(needs, Localizer.Get("msg.firstRun.aiAgentNeeds", "Node.js or the agent's CLI, and its sign-in or key. Connect checks for them, installs after your yes, and tests the connection.")),
-            ], SelectAiPath),
+                new(who, Localizer.Get("msg.firstRun.aiAgentWho", "Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account.")),
+                new(does, Localizer.Get("msg.firstRun.aiAgentDoes", "Works through a task by itself. No suggestions as you type.")),
+                new(leaves, Localizer.Get("msg.firstRun.aiAgentLeaves", "What the agent reads, to its own provider.")),
+                new(needs, Localizer.Get("msg.firstRun.aiAgentNeeds", "Its CLI or Node.js, and a sign-in.")),
+            ], SelectAiPath) { IsRecommended = true },
             new(SetupAiPath.Assistant, Localizer.Get("msg.firstRun.aiAssistant", "The built-in assistant"), Localizer.Get("msg.firstRun.aiAssistantDescription", "Codalus IDE's own AI, with a model you choose."),
             [
-                new(who, Localizer.Get("msg.firstRun.aiAssistantWho", "A model of the provider you choose: a hosted one with your key, or one on this machine.")),
-                new(does, Localizer.Get("msg.firstRun.aiAssistantDoes", "AI Chat with agent mode, the AI actions (Fix, Explain, Generate Tests, commit messages) and, if you tick them, suggestions as you type.")),
-                new(leaves, Localizer.Get("msg.firstRun.aiAssistantLeaves", "Only what a question or an action needs, through Codalus IDE's own checks: files .gitignore excludes and secrets are never sent, and the AI Output lists every request.")),
-                new(needs, Localizer.Get("msg.firstRun.aiAssistantNeeds", "The provider's API key, kept in your system's credential store, or a model server on this machine.")),
+                new(who, Localizer.Get("msg.firstRun.aiAssistantWho", "A model you choose, hosted or on this machine.")),
+                new(does, Localizer.Get("msg.firstRun.aiAssistantDoes", "AI Chat, the AI actions and, if ticked, suggestions as you type.")),
+                new(leaves, Localizer.Get("msg.firstRun.aiAssistantLeaves", "Only what a question needs. Secrets and ignored files are never sent.")),
+                new(needs, Localizer.Get("msg.firstRun.aiAssistantNeeds", "An API key, or a model server on this machine.")),
             ], SelectAiPath),
         ];
         AgentBenefits =
         [
-            Localizer.Get("msg.firstRun.aiBenefitTools", "It gets the IDE's tools: symbols, references and callers from the compiler, the Error List, builds, tests, and running and debugging your program. It works from what the IDE knows, your unsaved edits included, where a plain terminal leaves it with grep and the command line. (Every agent in AI Chat; in AI Console the CLIs that take them: Claude, Codex, GitHub Copilot and goose.)"),
-            Localizer.Get("msg.firstRun.aiBenefitChecks", "In AI Chat, every change it asks the IDE to write shows in a preview first, every command asks you, and secrets are redacted from what it's given and what it shows."),
-            Localizer.Get("msg.firstRun.aiBenefitContext", "The editor points it at code: Add Selection and Add File put a reference to what you're looking at in its prompt."),
-            Localizer.Get("msg.firstRun.aiBenefitPlace", "It works beside your code, build output and terminal, and its consoles come back with their conversations after a restart."),
-            Localizer.Get("msg.firstRun.aiBenefitConnect", "Connect sets it up once: it checks what the agent needs, signs you in and tests the connection. A key you give stays in your system's credential store."),
+            Localizer.Get("msg.firstRun.aiBenefitTools", "It gets the IDE's tools: the compiler's symbols and references, the Error List, builds, tests and debugging."),
+            Localizer.Get("msg.firstRun.aiBenefitChecks", "AI Chat shows its edits in a preview and asks before its commands."),
+            Localizer.Get("msg.firstRun.aiBenefitContext", "Add Selection and Add File point it at the code you're looking at."),
         ];
         AgentWindows =
         [
-            new(Localizer.Get("msg.firstRun.aiWindowConsole", "AI Console"), Localizer.Get("msg.firstRun.aiWindowConsoleDescription", "The agent's own CLI in a terminal tab at the bottom: its prompt, slash commands and approvals as you know them. It changes files and runs commands itself, asking with its own prompts.")),
-            new(Localizer.Get("msg.firstRun.aiWindowChat", "AI Chat"), Localizer.Get("msg.firstRun.aiWindowChatDescription", "A conversation the IDE draws, on the right: the agent's steps folded into a line, its edits previewed and its commands approved by the IDE. The editor's AI actions ask here.")),
+            new(Localizer.Get("msg.firstRun.aiWindowConsole", "AI Console"), Localizer.Get("msg.firstRun.aiWindowConsoleDescription", "The agent's own CLI in a terminal tab. It edits and runs by itself.")),
+            new(Localizer.Get("msg.firstRun.aiWindowChat", "AI Chat"), Localizer.Get("msg.firstRun.aiWindowChatDescription", "A conversation in the IDE. Its edits are previewed and its commands approved.")),
         ];
         DecreaseFontSizeCommand = new RelayCommand(() => FontSize -= 1, () => _fontSize > MinFontSize);
         IncreaseFontSizeCommand = new RelayCommand(() => FontSize += 1, () => _fontSize < MaxFontSize);
@@ -1044,7 +1054,7 @@ public sealed class SetupViewModel : ObservableObject
     /// <summary>No AI, a coding agent, or the built-in assistant, each with the same facts to compare.</summary>
     public IReadOnlyList<SetupAiPathOption> AiPaths { get; }
 
-    /// <summary>Why to run an agent from Codalus IDE instead of a plain terminal (ADR 0092, 0095), shown with the agents.</summary>
+    /// <summary>Why to run an agent from Codalus IDE instead of a plain terminal (ADR 0092, 0095), shown with the agents: three short lines; the user guide has the rest.</summary>
     public IReadOnlyList<string> AgentBenefits { get; }
 
     /// <summary>The two windows an agent works in, and how they differ (ADR 0095).</summary>
@@ -1056,7 +1066,7 @@ public sealed class SetupViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<SetupChoice> AiAgents { get; } = [];
 
-    /// <summary>The providers the installed plugins declare (ADR 0062), a local one marked.</summary>
+    /// <summary>The providers the installed plugins declare (ADR 0062), by name, a local one marked (their descriptions are in Options).</summary>
     public ObservableCollection<SetupChoice> AiProviders { get; } = [];
 
     public SetupAiPath AiPath => _aiPath;
@@ -1206,7 +1216,7 @@ public sealed class SetupViewModel : ObservableObject
         AiProviders.Clear();
         foreach (var provider in _shell.LanguageModels.Providers)
         {
-            AiProviders.Add(new SetupChoice(provider.Id, provider.Label, provider.IsLocal ? Localizer.Get("msg.firstRun.aiOnThisMachine", "On this machine") : provider.Description ?? string.Empty, SelectAiProvider));
+            AiProviders.Add(new SetupChoice(provider.Id, provider.Label, provider.IsLocal ? Localizer.Get("msg.firstRun.aiOnThisMachine", "On this machine") : string.Empty, SelectAiProvider));
         }
 
         if (untouched)

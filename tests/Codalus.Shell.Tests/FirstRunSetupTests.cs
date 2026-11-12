@@ -762,9 +762,15 @@ public sealed class FirstRunSetupTests
         Assert.Equal("Nothing.", model.AiPaths[0].Facts[2].Value);
         Assert.Contains("its own provider", model.AiPaths[1].Facts[2].Value, StringComparison.Ordinal);
         Assert.Contains("never sent", model.AiPaths[2].Facts[2].Value, StringComparison.Ordinal);
+        Assert.All(model.AiPaths, p => Assert.All(p.Facts, fact => Assert.InRange(fact.Value.Length, 1, 80))); // a line or two each, not a paragraph
         var cards = window.FindControl<ItemsControl>("AiPathList")!.GetVisualDescendants().OfType<ToggleButton>().ToList();
-        Assert.Equal(["No AI", "A coding agent", "The built-in assistant"], cards.Select(AutomationProperties.GetName));
+        Assert.Equal(["No AI", "A coding agent (recommended)", "The built-in assistant"], cards.Select(AutomationProperties.GetName));
         Assert.True(cards[0].IsChecked);
+
+        // A coding agent is the recommended way, and its card says so; recommended isn't preselected.
+        Assert.Equal([false, true, false], model.AiPaths.Select(p => p.IsRecommended));
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "(recommended)");
+        Assert.Equal(SetupAiPath.None, model.AiPath);
         Assert.True(cards[0].IsFocused);
         Assert.All(cards, c => Assert.Contains("Who answers:", AutomationProperties.GetHelpText(c), StringComparison.Ordinal));
         Assert.False(window.FindControl<StackPanel>("AiAgentPanel")!.IsEffectivelyVisible);
@@ -783,13 +789,13 @@ public sealed class FirstRunSetupTests
         Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "More agents…"], model.AiAgents.Select(a => a.Title));
         Assert.Equal(["Anthropic", "OpenAI", "Google", "GitHub", "pi, OpenCode, goose"], model.AiAgents.Select(a => a.Description));
         Assert.All(model.AiAgents, a => Assert.False(a.IsSelected)); // an agent is chosen, never assumed
-        Assert.Equal(5, model.AgentBenefits.Count);
+        Assert.Equal(3, model.AgentBenefits.Count); // short lines: the user guide has the rest
         Assert.Contains("the IDE's tools", model.AgentBenefits[0], StringComparison.Ordinal);
         Assert.Contains("debugging", model.AgentBenefits[0], StringComparison.Ordinal);
         Assert.Contains("preview", model.AgentBenefits[1], StringComparison.Ordinal);
         Assert.Equal(["AI Console", "AI Chat"], model.AgentWindows.Select(w => w.Label));
         var shown = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
-        Assert.Contains("Why run it from Codalus IDE and not from a terminal", shown);
+        Assert.Contains("Why run it from Codalus IDE", shown);
         Assert.All(model.AgentBenefits, benefit => Assert.Contains(benefit, shown));
         Assert.All(model.AgentWindows, w => Assert.Contains(w.Value, shown));
         Assert.True(model.AiChanged);
@@ -1054,7 +1060,12 @@ public sealed class FirstRunSetupTests
     private static void Press(Window window, Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
         window.KeyPress(key, modifiers, PhysicalKey.None, null);
-        if (window.IsVisible) // Escape closes it
+
+        // Escape skips the setup, which closes the window once its setting is written: a moment later, from another
+        // thread's continuation. So no release for it. Asking whether the window is still visible first wasn't enough:
+        // the release runs the pending jobs before it reaches the window, and when the write had finished in between,
+        // that closed the window under it (ObjectDisposedException, in some runs and not others; docs/ci-flakes.md).
+        if (key != Key.Escape)
         {
             window.KeyRelease(key, modifiers, PhysicalKey.None, null);
         }
