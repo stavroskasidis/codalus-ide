@@ -232,14 +232,16 @@ public class GatesTests
     {
         var root = typeof(GatesTests).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>().Single(a => a.Key == "CodalusRepoRoot").Value!;
         var accepted = Gates.LoadAccepted(Path.Combine(root, "benchmarks", "accepted.json"));
-        var day = new DateOnly(2026, 11, 5).DayNumber - s_epoch.DayNumber;
+        // The newest accepted size counts: 270.2 MB, with the Codalus debugger's two Linux bundles (M58b, run 43271886735),
+        // which took over from 0.12.0's 232.7 MB of 2026-11-05, the first without the symbols.
+        var day = new DateOnly(2026, 11, 12).DayNumber - s_epoch.DayNumber;
         // 0.11.0's release run counted codalus.dbg: 419.2 MB, against which up to 440 MB would have passed.
-        ScenarioResult[] earlier = [Result("binary-size", day - 4, ("shell_mb", [419.249]))];
+        ScenarioResult[] earlier = [Result("binary-size", day - 11, ("shell_mb", [419.249]))];
 
-        Assert.False(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [233.0]))], earlier, accepted)).Failed);
-        var grown = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [245.0]))], earlier, accepted));
+        Assert.False(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [271.0]))], earlier, accepted)).Failed);
+        var grown = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("binary-size", day + 1, ("shell_mb", [290.0]))], earlier, accepted));
         Assert.True(grown.Failed);
-        Assert.Contains("the value accepted on 2026-11-05 (232.7)", grown.Rule, StringComparison.Ordinal);
+        Assert.Contains("the value accepted on 2026-11-12 (270.2)", grown.Rule, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -161,8 +161,10 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
                 if (launched.Exited.IsCompleted)
                 {
+                    // Not "is it a .NET program?": a program of .NET Core 2.0 or 2.1 ends here too, having run without
+                    // the hook (the old-.NET matrix through this start, 2026-11-12).
                     var code = launched.Exited.Result is { } exit ? $" (exit code {exit.ToString(CultureInfo.InvariantCulture)})" : string.Empty;
-                    throw new ClrException($"{Path.GetFileName(program)} ended{code} before a .NET runtime started in it: is it a .NET program?");
+                    throw new ClrException($"{Path.GetFileName(program)} ended{code} before the debugger could attach to it: the startup hook that holds a program at its start didn't run in it. .NET Core 2.0 and 2.1 run no startup hooks; a program that isn't .NET's doesn't either.");
                 }
 
                 if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program).Count > 0)
