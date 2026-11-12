@@ -16,7 +16,8 @@ public sealed class IdeExecutionServerTests
     /// <summary>
     /// How long disposal may take, and the orchestrator's read then, when the server doesn't wait for the socket: under the
     /// 15 s after which the server leaves a teardown that doesn't finish behind, so a disposal that waited for the peer's
-    /// close (or a socket it never closed) fails, rather than passing on that fallback.
+    /// close (or a socket it never closed) fails, rather than passing on that fallback. The two don't agree on purpose;
+    /// a healthy teardown takes milliseconds, and the tests also fail when one of its steps runs out of its own time.
     /// </summary>
     private static readonly TimeSpan s_noWait = TimeSpan.FromSeconds(10);
 
@@ -102,6 +103,7 @@ public sealed class IdeExecutionServerTests
             // Disposing ends the session (its sessionTerminated races the teardown) and doesn't wait on the socket.
             await server.DisposeAsync().AsTask().WaitAsync(s_noWait, ct);
             Assert.Equal(1, session.Terminated);
+            Assert.False(server.DescribeState().Contains("ran out", StringComparison.Ordinal), $"Server: {server.DescribeState()}\n{Log()}");
 
             // The orchestrator's read ends: the server is gone.
             try
@@ -138,9 +140,10 @@ public sealed class IdeExecutionServerTests
     /// <summary>
     /// Disposal while sessions end and orchestrators listen, over and over: each round races the sessions' last
     /// notifications against the teardown, which is where disposal blocked on Windows CI (runs 41849511374 and
-    /// 43184717554: the lifetime's cancellation never returned, and the listener's close after it took over 5 s). No step
-    /// of the teardown may run out of its time, and a disposal that is still running after a few seconds fails with the
-    /// stacks of every thread, taken while it is blocked.
+    /// 43184717554). Before the sockets stopped taking the lifetime token this failed in its 23rd round on Windows (run
+    /// 43192618601), with the cancellation and a notification's send waiting for each other. No step of the teardown
+    /// may run out of its time, and a disposal that is still running after a few seconds fails with the stacks of every
+    /// thread, taken while it is blocked.
     /// </summary>
     [Fact]
     public async Task Disposal_never_blocks_while_sessions_end_and_orchestrators_listen()

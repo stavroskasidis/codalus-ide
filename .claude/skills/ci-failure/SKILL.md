@@ -53,6 +53,7 @@ test to pass, and what else could run in between on a slow or loaded runner. The
 - A process tree ended with .NET's own walk, which blocks for minutes on macOS (`ProcessTree.Kill` instead).
 - A cancellation and an answer racing: the answer that lands first wins unless the code checks the cancellation again.
 - A file polled while the IDE writes it: on Windows the read throws (a sharing violation) instead of returning old text.
+- A cancellation token given to a Windows `HttpListener` WebSocket's read or send: cancelling it and the socket's abort wait for each other (abort the socket instead).
 
 Reproduce it when you can: run the test in a loop, under CPU load, or force the interleaving (start the second load
 before awaiting the first, delay the process, fire the event early). A fix is proven by a test that fails without it.
