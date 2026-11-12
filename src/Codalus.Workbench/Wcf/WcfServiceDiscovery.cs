@@ -94,33 +94,83 @@ public static partial class WcfServiceDiscovery
 
     /// <summary>
     /// The metadata addresses that answer with a WSDL document: each endpoint path under the first listening address
-    /// where it does. <paramref name="fetch"/> reads a URL (with a short time limit).
+    /// where it does. <paramref name="fetch"/> reads a URL (with a short time limit). A request that ran out of that
+    /// limit is not an address without metadata: something listened and was slow, as a CoreWCF service is with its
+    /// first WSDL, which it builds when first asked (over 5 seconds on a busy machine, then 4.6 seconds for the same
+    /// address: Windows CI, run 43204581362). Those addresses are asked again with <paramref name="fetchSlow"/> (a
+    /// longer limit) once the quick pass is over, so the addresses that answer at once aren't kept waiting.
     /// </summary>
-    public static async Task<IReadOnlyList<string>> ProbeAsync(IReadOnlyList<Uri> addresses, IReadOnlyList<string> paths, Func<Uri, CancellationToken, Task<string>> fetch, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<string>> ProbeAsync(
+        IReadOnlyList<Uri> addresses,
+        IReadOnlyList<string> paths,
+        Func<Uri, CancellationToken, Task<string>> fetch,
+        CancellationToken cancellationToken,
+        Func<Uri, CancellationToken, Task<string>>? fetchSlow = null)
     {
-        var found = new List<string>();
-        foreach (var path in paths)
+        var found = new string?[paths.Count];
+        var ranOut = new List<string>[paths.Count];
+        for (var i = 0; i < paths.Count; i++)
         {
+            ranOut[i] = [];
             foreach (var address in addresses)
             {
-                var url = new Uri(address, path.StartsWith('/') ? path : "/" + path).GetLeftPart(UriPartial.Path) + "?wsdl";
-                try
+                var url = new Uri(address, paths[i].StartsWith('/') ? paths[i] : "/" + paths[i]).GetLeftPart(UriPartial.Path) + "?wsdl";
+                var answer = await AskAsync(url, fetch, cancellationToken).ConfigureAwait(false);
+                if (answer == Answer.Wsdl)
                 {
-                    var text = await fetch(new Uri(url), cancellationToken).ConfigureAwait(false);
-                    if (XDocument.Parse(text).Root?.Name == XName.Get("definitions", WsdlReader.WsdlNamespace))
-                    {
-                        found.Add(url);
-                        break;
-                    }
+                    found[i] = url;
+                    break;
                 }
-                catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or XmlException or TaskCanceledException or IOException)
+
+                if (answer == Answer.RanOut)
                 {
-                    // Not there, or no metadata (HttpGetEnabled off): try the next address.
+                    ranOut[i].Add(url);
                 }
             }
         }
 
-        return found;
+        if (fetchSlow is not null)
+        {
+            for (var i = 0; i < paths.Count; i++)
+            {
+                foreach (var url in found[i] is null ? ranOut[i] : [])
+                {
+                    if (await AskAsync(url, fetchSlow, cancellationToken).ConfigureAwait(false) == Answer.Wsdl)
+                    {
+                        found[i] = url;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return [.. found.OfType<string>()];
+    }
+
+    private enum Answer
+    {
+        Wsdl,
+        None,
+        RanOut,
+    }
+
+    private static async Task<Answer> AskAsync(string url, Func<Uri, CancellationToken, Task<string>> fetch, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var text = await fetch(new Uri(url), cancellationToken).ConfigureAwait(false);
+            return XDocument.Parse(text).Root?.Name == XName.Get("definitions", WsdlReader.WsdlNamespace) ? Answer.Wsdl : Answer.None;
+        }
+        catch (OperationCanceledException)
+        {
+            // The request's own limit, unless the whole discovery was cancelled: then nothing is asked again.
+            return cancellationToken.IsCancellationRequested ? Answer.None : Answer.RanOut;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or XmlException or IOException)
+        {
+            // Not there, or no metadata (HttpGetEnabled off): try the next address.
+            return Answer.None;
+        }
     }
 
     [GeneratedRegex(@"<PackageReference\s+Include\s*=\s*""CoreWCF\.", RegexOptions.IgnoreCase)]
