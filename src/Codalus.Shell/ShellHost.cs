@@ -697,6 +697,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             QueryResultsViewModel.ToolWindowId => QueryResults,
             ContainersViewModel.ToolWindowId => ContainersWindow,
             AiChatViewModel.ToolWindowId => AiChat,
+            AiConsoleViewModel.ToolWindowId => AiConsole,
             AspireViewModel.ToolWindowId => AspireWindow,
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,

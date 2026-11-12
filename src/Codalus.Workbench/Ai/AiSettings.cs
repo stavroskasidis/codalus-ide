@@ -140,7 +140,7 @@ public static class AiSettings
         {
             Title = "External Agents",
             Category = "AI",
-            Description = "External coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI. AI: Connect to an Agent… sets one up, tests it and writes its entry here; by hand: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { }, \"secretEnv\": [\"NAME\"] } }, where secretEnv names variables whose values Connect keeps in the OS credential store, never in this file. They use their own provider and data policy; Codalus checks what they ask the IDE for. They run only while AI assistance is on, in trusted folders. Read from your user settings only.",
+            Description = "External coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI. AI: Connect to an Agent… sets one up, tests it and writes its entry here; by hand: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { }, \"secretEnv\": [\"NAME\"], \"console\": \"…\" } }, where secretEnv names variables whose values Connect keeps in the OS credential store, never in this file, and console names the agent's own CLI for AI Console. They use their own provider and data policy; Codalus checks what they ask the IDE for. They run only while AI assistance is on, in trusted folders. Read from your user settings only.",
             Scope = SettingScope.User,
             Order = 24,
         },
@@ -151,6 +151,14 @@ public static class AiSettings
             Description = "Who answers in AI Chat: empty for the built-in assistant, or the name of an agent of External Agents (ai.agents). AI Chat's picker writes it, so the chat opens with the agent you chose last.",
             Scope = SettingScope.User,
             Order = 25,
+        },
+        SettingDescriptor.Create(Cli.AgentClis.ConsoleAgentSetting, "\"\"", SettingType.String, source) with
+        {
+            Title = "AI Console Agent",
+            Category = "AI",
+            Description = "The agent whose own CLI a new AI Console starts: the name of an agent of External Agents (ai.agents). AI Console writes it, so the next console starts the agent you chose last.",
+            Scope = SettingScope.User,
+            Order = 27,
         },
         SettingDescriptor.Create("ai.mcpServer.enabled", "false", SettingType.Boolean, source) with
         {

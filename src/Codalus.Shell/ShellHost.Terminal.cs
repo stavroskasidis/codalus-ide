@@ -28,7 +28,7 @@ public sealed partial class ShellHost
     public static readonly string[] DefaultCommandsToSkipShell =
     [
         "workbench.showCommandPalette", "workbench.action.featureSearch", "workbench.focusNextPane", "workbench.focusPreviousPane", "workbench.quit",
-        "workbench.view.terminal", "terminal.new", "terminal.split", "terminal.find", "terminal.focusNext", "terminal.focusPrevious",
+        "workbench.view.terminal", "ai.console.show", "terminal.new", "terminal.split", "terminal.find", "terminal.focusNext", "terminal.focusPrevious",
         "build.buildSolution", "build.cancel", "debug.start", "debug.stop", "run.startWithoutDebugging", "run.stop",
         "workbench.openSettings", "workbench.view.solutionExplorer", "workbench.view.output",
     ];
