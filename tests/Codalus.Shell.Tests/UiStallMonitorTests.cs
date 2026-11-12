@@ -97,6 +97,40 @@ public sealed class UiStallMonitorTests
     }
 
     [AvaloniaFact]
+    public async Task A_block_held_until_a_probe_waited_through_it_is_measured_whole_though_the_probe_is_posted_late()
+    {
+        // The monitor's thread kept from posting for the block's first 150 ms, as a busy runner can keep it: a sleep of
+        // 300 ms then measures about 140 (Windows CI, run 43178619011: 154 ms), and tests that need a wait of a known
+        // length hold the UI thread until a probe has waited it.
+        using var monitor = new UiStallMonitor();
+        using var kept = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var keep = 0;
+        monitor.BeforeRecord = () =>
+        {
+            if (Interlocked.CompareExchange(ref keep, 2, 1) == 1)
+            {
+                kept.Set();
+                release.Wait(TimeSpan.FromSeconds(30));
+            }
+        };
+
+        await ShellFixture.PumpUntil(() => monitor.Report().Probes > 0);
+        Volatile.Write(ref keep, 1);
+        await ShellFixture.PumpUntil(() => kept.IsSet);
+        monitor.Reset();
+        using var later = new Timer(_ => release.Set(), null, 150, Timeout.Infinite);
+        var held = System.Diagnostics.Stopwatch.StartNew();
+        monitor.HoldUntilAProbeWaited(300);
+        var heldFor = held.Elapsed.TotalMilliseconds;
+        await ShellFixture.PumpUntil(() => monitor.Report().LongestMilliseconds > 0);
+
+        var report = monitor.Report();
+        Assert.True(report.LongestMilliseconds + report.LongestGcMilliseconds >= 300, $"{report.Describe()}; the UI thread was held for {heldFor:0} ms");
+        Assert.True(heldFor >= 440, $"The probe was posted at once: the UI thread was held for {heldFor:0} ms");
+    }
+
+    [AvaloniaFact]
     public void A_flow_over_before_any_probe_was_answered_is_measured_all_the_same()
     {
         // Nothing runs the dispatcher between the reset and the check, as after a flow that ended within one of the
