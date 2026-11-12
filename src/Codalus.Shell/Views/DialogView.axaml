@@ -148,6 +148,35 @@
             </ScrollViewer>
           </Border>
         </StackPanel>
+        <!-- Ways to do it, one picked (Install .NET's): each with what it does, its exact command and what to know first. -->
+        <ScrollViewer DockPanel.Dock="Top" Margin="0,0,0,8" MaxHeight="420" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasAlternatives}">
+          <ItemsControl x:Name="Alternatives" ItemsSource="{Binding Alternatives}" AutomationProperties.Name="{Binding Title}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="10" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DialogAlternativeViewModel">
+                <StackPanel Spacing="4">
+                  <RadioButton GroupName="dialogAlternatives" IsChecked="{Binding IsSelected}" AutomationProperties.Name="{Binding Label}">
+                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  </RadioButton>
+                  <TextBlock Margin="28,0,0,0" Classes="muted" Text="{Binding Description}" TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                  <Border Margin="28,0,0,0" Padding="8,4" IsVisible="{Binding HasCommand}" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1"
+                          CornerRadius="{DynamicResource Shell.Control.CornerRadius}" Background="{DynamicResource Shell.Editor.Background}">
+                    <SelectableTextBlock Text="{Binding Command}" TextWrapping="Wrap" Foreground="{DynamicResource Shell.Editor.Foreground}"
+                                         FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12" />
+                  </Border>
+                  <DockPanel Margin="28,0,0,0" IsVisible="{Binding HasNote}">
+                    <controls:Icon DockPanel.Dock="Left" Kind="warning" Width="12" Height="12" Margin="0,2,6,0" VerticalAlignment="Top" />
+                    <TextBlock Classes="small" Text="{Binding Note}" TextWrapping="Wrap" />
+                  </DockPanel>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding HasChoices}" DockPanel.Dock="Top">
           <Border BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1" CornerRadius="{DynamicResource Shell.Control.CornerRadius}"
                   Background="{DynamicResource Shell.Input}" ClipToBounds="True">

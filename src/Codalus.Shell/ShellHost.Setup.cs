@@ -69,6 +69,7 @@ public sealed partial class ShellHost
     /// </remarks>
     private void UseUserDotnet()
     {
+        _terminalPath ??= Environment.GetEnvironmentVariable("PATH");
         if (EnvironmentCheck.ChooseDotnetRoot() is not { } choice)
         {
             Workbench.Log.AppendLine("[setup] No .NET SDK found (DOTNET_ROOT, PATH, or where the installers put it); Help → Check Environment offers to install one.");
@@ -81,6 +82,69 @@ public sealed partial class ShellHost
             Workbench.Log.AppendLine($"[setup] {missing}");
         }
     }
+
+    /// <summary>
+    /// The <c>PATH</c> the user's terminal has: the login shell's (or the terminal's that started the IDE), kept before
+    /// <see cref="UseUserDotnet"/> first puts a .NET root first on the IDE's own. The <c>dotnet</c> on it is the one
+    /// typed in a terminal, which Install .NET's options are measured against (<see cref="DotnetFacts"/>).
+    /// </summary>
+    private string? _terminalPath;
+
+    /// <summary>Tests: the machine Install .NET's options are for, in place of this one's (<see cref="DotnetFacts"/>).</summary>
+    internal Func<DotnetInstallFacts>? DescribeDotnetMachine { get; set; }
+
+    /// <summary>
+    /// What decides Install .NET's options here (<see cref="InstallPlans.DotnetOptions"/>): the <c>dotnet</c> the
+    /// user's terminal runs and its real folder, and winget. <paramref name="packageCandidate"/> is what the distribution
+    /// has of the channel's SDK (<see cref="PackageCandidateAsync"/>).
+    /// </summary>
+    private DotnetInstallFacts DotnetFacts(string? packageCandidate = null)
+    {
+        if (DescribeDotnetMachine is { } describe)
+        {
+            return describe();
+        }
+
+        var path = _terminalPath ?? Environment.GetEnvironmentVariable("PATH");
+        var terminal = new EnvironmentCheck(Workbench.Platform, name => name == "PATH" ? path : Environment.GetEnvironmentVariable(name));
+        var dotnet = terminal.FindOnPath("dotnet");
+        // The dotnet-sdk snap's dotnet links to /usr/bin/snap: its root is the snap's.
+        var snap = Workbench.Platform == PlatformKind.Linux && dotnet is not null && dotnet.StartsWith("/snap/", StringComparison.Ordinal) && Directory.Exists("/snap/dotnet-sdk/current");
+        return new DotnetInstallFacts(Workbench.Platform, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile))
+        {
+            ShellDotnet = dotnet,
+            ShellRoot = dotnet is null ? null : snap ? "/snap/dotnet-sdk/current" : Path.GetDirectoryName(terminal.RealPath(dotnet)),
+            IsSdkSnap = snap,
+            HasWinget = Workbench.Platform == PlatformKind.Windows && EnvironmentCheck.FindOnPath("winget") is not null,
+            LinuxDistribution = Workbench.Platform == PlatformKind.Linux ? InstallPlans.LinuxDistribution() : null,
+            PackageCandidate = packageCandidate,
+            EmulatedX64 = EnvironmentCheck.EmulatedX64,
+            WindowsRoot = Path.Combine(Environment.GetEnvironmentVariable("ProgramFiles") ?? @"C:\Program Files", "dotnet"),
+        };
+    }
+
+    /// <summary>
+    /// The version apt, dnf or zypper has of the SDK package of the tool's channel (<c>dotnet-sdk-11.0</c>), asked from
+    /// what's on the machine (no download, at most 10 s); null when it has none, or on another OS.
+    /// </summary>
+    private async Task<string?> PackageCandidateAsync(ToolStatus tool, CancellationToken cancellationToken)
+    {
+        if (DescribeDotnetMachine is not null || Workbench.Platform != PlatformKind.Linux
+            || InstallPlans.PackageQuery(InstallPlans.LinuxDistribution(), $"dotnet-sdk-{InstallPlans.DotnetChannel(tool)}") is not (string program, string[] arguments)
+            || EnvironmentCheck.FindOnPath(program) is not { } found)
+        {
+            return null;
+        }
+
+        var (code, output) = await EnvironmentCheck.RunProcessAsync(found, arguments, null, TimeSpan.FromSeconds(10), cancellationToken).ConfigureAwait(true);
+        return code == 0 ? InstallPlans.PackageCandidate(output) : null;
+    }
+
+    /// <summary>The ways to install a tool here, the one that fits first; empty when there's none.</summary>
+    internal async Task<IReadOnlyList<InstallPlan>> InstallOptionsAsync(ToolStatus tool, CancellationToken cancellationToken) =>
+        tool.Id is "dotnet" or "dotnet-runtime"
+            ? InstallPlans.DotnetOptions(tool, DotnetFacts(await PackageCandidateAsync(tool, cancellationToken).ConfigureAwait(true)))
+            : PlanFor(tool) is { } plan ? [plan] : [];
 
     private void AddDotnetToEnvironment(string folder) =>
         ApplyDotnetRoot(new DotnetRootChoice(folder, AddToPath: true, EnvironmentCheck.PointHostsAt(folder), $"Using the .NET SDK in {folder} (DOTNET_ROOT)."));
@@ -394,6 +458,8 @@ public sealed partial class ShellHost
         ? windowsApp // Developer Mode's Settings page, the Windows App SDK runtime (M44)
         : NetFrameworkProjects.PlanFor(tool) is { } netFramework
         ? netFramework // .NET Framework's download page (M43a)
+        : tool.Id is "dotnet" or "dotnet-runtime"
+        ? InstallPlans.DotnetOptions(tool, DotnetFacts())[0] // the one that fits; installing offers the others (InstallOptionsAsync)
         : InstallPlans.For(
         tool,
         Workbench.Platform,
@@ -404,10 +470,12 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// Installs a tool after the user agrees to the exact command (<paramref name="confirm"/>: tests answer for the user),
-    /// then checks again.
+    /// then checks again. With several ways to install it (.NET's, <see cref="InstallPlans.DotnetOptions"/>), the user
+    /// picks one first, the one that fits this machine picked already (<paramref name="choose"/>: tests pick).
     /// </summary>
+    /// <param name="confirm">Answers for the user about the way that fits (tests, and the setup's rows, which showed it).</param>
     /// <param name="then">After a successful install, in place of the usual follow-up (M49: an update checks again).</param>
-    public async Task InstallToolAsync(ToolStatus tool, Func<InstallPlan, Task<bool>>? confirm = null, ProcessRunner? run = null, Func<Task>? then = null)
+    public async Task InstallToolAsync(ToolStatus tool, Func<InstallPlan, Task<bool>>? confirm = null, ProcessRunner? run = null, Func<Task>? then = null, Func<IReadOnlyList<InstallPlan>, Task<InstallPlan?>>? choose = null)
     {
         if (tool.Id is "android-sdk" or "jdk")
         {
@@ -417,29 +485,32 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (PlanFor(tool) is not { } plan)
+        var plans = await InstallOptionsAsync(tool, _lifetime.Token).ConfigureAwait(true);
+        if (plans.Count == 0)
         {
             Workbench.Notifications.Info(Localizer.Format("msg.setup.noPlan", "There's no way to install {0} from here on this system.", tool.Title));
             return;
         }
 
-        var agreed = confirm is not null
-            ? await confirm(plan).ConfigureAwait(true)
+        var plan = choose is not null ? await choose(plans).ConfigureAwait(true)
+            : confirm is not null ? (await confirm(plans[0]).ConfigureAwait(true) ? plans[0] : null)
+            : plans.Count > 1 ? await ChooseInstallAsync(tool, plans).ConfigureAwait(true)
             : await Dialogs.ConfirmAsync(
                 Localizer.Format("msg.setup.installTitle", "Install {0}", tool.Title),
-                Localizer.Format("msg.setup.installMessage", "{0}.\n\nThis runs:\n{1}", plan.Summary, plan.Command),
-                plan.Kind switch
+                Localizer.Format("msg.setup.installMessage", "{0}.\n\nThis runs:\n{1}", plans[0].Summary, plans[0].Command),
+                plans[0].Kind switch
                 {
                     InstallKind.OpenPage => Localizer.Get("msg.setup.openPage", "Open Page"),
                     InstallKind.Terminal => Localizer.Get("msg.setup.runInTerminal", "Run in Terminal"),
                     _ => Localizer.Get("msg.setup.installNow", "Install"),
-                }).ConfigureAwait(true);
-        if (!agreed)
+                }).ConfigureAwait(true) ? plans[0] : null;
+        if (plan is null)
         {
             return;
         }
 
         SetupLog.AppendLine($"[{DateTime.Now:T}] {plan.Summary}: {plan.Command}");
+        int code;
         switch (plan.Kind)
         {
             case InstallKind.OpenPage:
@@ -453,18 +524,26 @@ public sealed partial class ShellHost
                 }
 
                 return;
+            case InstallKind.Terminal when tool.Id is "dotnet" or "dotnet-runtime":
+                // Microsoft's .pkg, the distribution's package, the snap: sudo asks in the terminal. When it ends, the
+                // IDE checks again and moves to the new .NET as after an install it runs itself.
+                Workbench.Notifications.Info(Localizer.Get("msg.setup.terminalWaits", "The install runs in the terminal, where it asks for your password. Codalus IDE checks again when it ends."));
+                code = await RunInstallInTerminalAsync(plan).ConfigureAwait(true);
+                break;
             case InstallKind.Terminal:
                 RunInstallInTerminal(plan);
                 Workbench.Notifications.Info(Localizer.Get("msg.setup.terminalStarted", "The install runs in the terminal. When it's done, check the environment again (Help → Check Environment)."));
                 return;
-        }
+            default:
+                StatusBar.ShowMessage(Localizer.Format("msg.setup.installing", "Installing {0}…", tool.Title), TimeSpan.FromSeconds(10));
+                Workbench.Output.Show(SetupLog);
+                (code, var output) = await (run ?? StreamInstallAsync)(plan.Program!, plan.Arguments ?? [], null, CancellationToken.None).ConfigureAwait(true);
+                if (run is not null)
+                {
+                    SetupLog.Append(output);
+                }
 
-        StatusBar.ShowMessage(Localizer.Format("msg.setup.installing", "Installing {0}…", tool.Title), TimeSpan.FromSeconds(10));
-        Workbench.Output.Show(SetupLog);
-        var (code, output) = await (run ?? StreamInstallAsync)(plan.Program!, plan.Arguments ?? [], null, CancellationToken.None).ConfigureAwait(true);
-        if (run is not null)
-        {
-            SetupLog.Append(output);
+                break;
         }
 
         if (code != 0)
@@ -473,6 +552,46 @@ public sealed partial class ShellHost
             return;
         }
 
+        await AfterInstallAsync(tool, plan, then).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The ways to install a tool, to pick one (Install .NET's): what each does, its command, and what to know first,
+    /// such as that the terminal's <c>dotnet</c> won't see it. The one that fits is picked already. Null: cancelled.
+    /// </summary>
+    private async Task<InstallPlan?> ChooseInstallAsync(ToolStatus tool, IReadOnlyList<InstallPlan> plans)
+    {
+        var request = InstallChoice(tool, plans);
+        var result = await Dialogs.ShowAsync(request).ConfigureAwait(true);
+        return result.Button == request.Buttons[0] && result.Checked.Count > 0 ? plans.FirstOrDefault(p => p.Option == result.Checked[^1]) : null;
+    }
+
+    /// <summary>The dialog of <see cref="ChooseInstallAsync"/> (the smoke test's gallery shows it): Install first.</summary>
+    internal static DialogRequest InstallChoice(ToolStatus tool, IReadOnlyList<InstallPlan> plans) => new(
+        Localizer.Format("msg.setup.installTitle", "Install {0}", tool.Title),
+        Localizer.Get("msg.setup.chooseHow", "Choose how to install it. The recommended way installs it where the dotnet your terminal runs is."),
+        [Localizer.Get("msg.setup.installNow", "Install"), Localizer.Get("msg.setup.cancel", "Cancel")])
+    {
+        Icon = "download",
+        Alternatives = [.. plans.Select(p => new DialogAlternative(
+            p.Option,
+            p.Recommended ? Localizer.Format("msg.setup.recommended", "{0} (recommended)", p.Title ?? p.Summary) : p.Title ?? p.Summary,
+            p.Recommended)
+        {
+            Description = p.Kind switch
+            {
+                InstallKind.OpenPage => Localizer.Get("msg.setup.howPage", "Opens the page in your browser: you download and install it yourself."),
+                InstallKind.Terminal => Localizer.Get("msg.setup.howTerminal", "Runs in the terminal, where it asks for your password:"),
+                _ => Localizer.Get("msg.setup.howRun", "Codalus IDE runs, with no password:"),
+            },
+            Command = p.Command,
+            Note = p.Note,
+        })],
+    };
+
+    /// <summary>After an install: the IDE moves to the new .NET, checks again, starts what failed again, and says how it went.</summary>
+    private async Task AfterInstallAsync(ToolStatus tool, InstallPlan plan, Func<Task>? then)
+    {
         if (plan.AddsToPath is { } folder)
         {
             AddDotnetToEnvironment(folder);
@@ -517,14 +636,36 @@ public sealed partial class ShellHost
         }
     }
 
-    private void RunInstallInTerminal(InstallPlan plan)
+    private Codalus.Workbench.Terminal.TerminalSession RunInstallInTerminal(InstallPlan plan)
     {
+        // The command's exit code is the terminal's (Unix): the one awaiting it tells a failed install from a done one.
         var (program, arguments) = Workbench.Platform == PlatformKind.Windows
             ? ("cmd.exe", (IReadOnlyList<string>)["/c", plan.Command + " & echo. & pause"])
-            : ("bash", ["-c", plan.Command + "; echo; read -r -p 'Done. Press Enter to close. '"]);
+            : ("bash", ["-c", plan.Command + "; status=$?; echo; read -r -p 'Done. Press Enter to close. '; exit $status"]);
         var session = Terminals.Run(plan.Summary, program, arguments, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
         Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
         TerminalWindow.Show(session);
+        return session;
+    }
+
+    /// <summary>
+    /// Runs an install in the terminal and waits for it to end: its exit code (Unix; 0 on Windows, where the check after
+    /// it tells), or -1 when the IDE closes first.
+    /// </summary>
+    private async Task<int> RunInstallInTerminalAsync(InstallPlan plan)
+    {
+        var ended = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var session = RunInstallInTerminal(plan);
+        session.Exited += (_, code) => ended.TrySetResult(Workbench.Platform == PlatformKind.Windows ? 0 : code);
+        if (session.ExitCode is { } already)
+        {
+            ended.TrySetResult(Workbench.Platform == PlatformKind.Windows ? 0 : already);
+        }
+
+        using var closing = _lifetime.Token.Register(() => ended.TrySetResult(-1));
+        var code = await ended.Task.ConfigureAwait(true);
+        SetupLog.AppendLine($"[{DateTime.Now:T}] The terminal's install ended (exit code {code}).");
+        return code;
     }
 
     /// <summary>Runs an install, its output going to the Environment Setup channel as it comes.</summary>

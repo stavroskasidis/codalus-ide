@@ -54,6 +54,52 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
     /// a single choice rather than <see cref="Choices"/>' checklist; its id is in <see cref="DialogResult.Checked"/> when checked.
     /// </summary>
     public DialogOption? Option { get; init; }
+
+    /// <summary>
+    /// Ways to do it, one picked (Install .NET's: the .pkg, dotnet-install, the distribution's package…): radio buttons,
+    /// each with what it does, its command and its note; the picked one's id is in <see cref="DialogResult.Checked"/>.
+    /// </summary>
+    public IReadOnlyList<DialogAlternative>? Alternatives { get; init; }
+}
+
+/// <summary>One way of a dialog's <see cref="DialogRequest.Alternatives"/>: its name, and under it what it does, its command and a note.</summary>
+public sealed record DialogAlternative(string Id, string Label, bool Selected)
+{
+    public string? Description { get; init; }
+
+    /// <summary>The command it runs, in the editor's font.</summary>
+    public string? Command { get; init; }
+
+    /// <summary>What to know before picking it, with the warning icon.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>A radio button of the dialog's alternatives.</summary>
+public sealed class DialogAlternativeViewModel(DialogAlternative alternative) : ObservableObject
+{
+    private bool _isSelected = alternative.Selected;
+
+    public string Id { get; } = alternative.Id;
+
+    public string Label { get; } = alternative.Label;
+
+    public string? Description { get; } = alternative.Description;
+
+    public bool HasDescription => Description is { Length: > 0 };
+
+    public string? Command { get; } = alternative.Command;
+
+    public bool HasCommand => Command is { Length: > 0 };
+
+    public string? Note { get; } = alternative.Note;
+
+    public bool HasNote => Note is { Length: > 0 };
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
 }
 
 /// <summary>A dialog's single check box: its note (wrapped under it) and lines (a list in the editor's font), and whether it can change.</summary>
@@ -284,6 +330,11 @@ public sealed class DialogViewModel : ObservableObject
 
     public bool HasChoices => Choices.Count > 0;
 
+    /// <summary>The ways to pick one of (<see cref="DialogRequest.Alternatives"/>).</summary>
+    public ObservableCollection<DialogAlternativeViewModel> Alternatives { get; } = [];
+
+    public bool HasAlternatives => Alternatives.Count > 0;
+
     /// <summary>
     /// The checklist's Select all: true when every item is checked, false when none, null (mixed) otherwise. Checking it
     /// checks all; unchecking it unchecks all, except from mixed, which checks all (as a click on a mixed box expects).
@@ -401,6 +452,20 @@ public sealed class DialogViewModel : ObservableObject
         }
 
         SelectedChoice = Choices.FirstOrDefault();
+        Alternatives.Clear();
+        foreach (var alternative in request.Alternatives ?? [])
+        {
+            var row = new DialogAlternativeViewModel(alternative);
+            row.PropertyChanged += OnAlternativeChanged;
+            Alternatives.Add(row);
+        }
+
+        if (Alternatives.Count > 0 && !Alternatives.Any(a => a.IsSelected))
+        {
+            Alternatives[0].IsSelected = true;
+        }
+
+        OnPropertyChanged(nameof(HasAlternatives));
         OnPropertyChanged(nameof(HasChoices));
         OnPropertyChanged(nameof(Reorderable));
         OnPropertyChanged(nameof(ShowsMoveHint));
@@ -416,6 +481,18 @@ public sealed class DialogViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(AllChecked));
             OnPropertyChanged(nameof(CheckedSummary));
+        }
+    }
+
+    /// <summary>One way picked at a time: picking one unpicks the others (as the radio buttons show it).</summary>
+    private void OnAlternativeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DialogAlternativeViewModel.IsSelected) && sender is DialogAlternativeViewModel { IsSelected: true } picked)
+        {
+            foreach (var other in Alternatives.Where(a => a != picked && a.IsSelected))
+            {
+                other.IsSelected = false;
+            }
         }
     }
 
@@ -452,7 +529,7 @@ public sealed class DialogViewModel : ObservableObject
         }
 
         IEnumerable<string> option = _request?.Option is { } single && _optionChecked ? [single.Id] : [];
-        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id), .. option] });
+        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id), .. option, .. Alternatives.Where(a => a.IsSelected).Select(a => a.Id)] });
     }
 
     private void Close(DialogResult result)
@@ -471,7 +548,14 @@ public sealed class DialogViewModel : ObservableObject
         }
 
         Choices.Clear();
+        foreach (var alternative in Alternatives)
+        {
+            alternative.PropertyChanged -= OnAlternativeChanged;
+        }
+
+        Alternatives.Clear();
         OnPropertyChanged(nameof(HasChoices));
+        OnPropertyChanged(nameof(HasAlternatives));
         Closed?.Invoke(this, EventArgs.Empty);
         pending.TrySetResult(result);
     }
