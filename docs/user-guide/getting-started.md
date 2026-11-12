@@ -39,9 +39,9 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 
 The packages (and the Arch Linux install script's) add Codalus IDE to the applications menu and `codalus` to your `PATH`. The AppImage and the `.tar.gz` don't.
 
-**The installers aren't code-signed yet**, so the first start asks for confirmation:
-- **Windows** (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
-- **macOS** (Gatekeeper, "Apple could not verify…"): close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
+**The macOS installer and app are signed and notarized** (from 0.13.0), so they open without a warning. **The Windows installer isn't code-signed yet**, so its first start asks for confirmation (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
+
+A macOS build from before 0.13.0 isn't signed: if Gatekeeper says "Apple could not verify…", close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
 
 From a Windows terminal, `codalus` runs the installed app and waits for it, so `git config core.editor "codalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
 
