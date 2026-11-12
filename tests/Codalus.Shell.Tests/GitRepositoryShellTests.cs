@@ -93,16 +93,14 @@ public sealed class GitRepositoryShellTests
         await f.RunAsync("git.manageBranches");
         await ShellFixture.PumpUntil(
             () => f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { IsLoading: false, Roots.Count: 3 } vm } && vm.Find("refs/heads/main") is not null && vm.Roots[1].Children.All(c => !c.Text.StartsWith("Loading", StringComparison.Ordinal)),
-            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}{Loaded(f.Shell.Layout.ActiveDocument as GitRepositoryDocument)}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}");
+            // What the document shows goes with a timeout: it once said only that the document was there (Windows CI, runs
+            // 43087646182 and 43130624207), not which of these it waited for.
+            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}"
+                + (f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { } shown }
+                    ? $"; loading {shown.IsLoading}, reading {shown.IsReading}, error {shown.Error ?? "none"}; roots: {string.Join(" | ", shown.Roots.Select(r => $"{r.Text} [{string.Join(", ", r.Children.Select(c => c.Text))}]"))}"
+                    : string.Empty));
         return ((GitRepositoryDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
     }
-
-    /// <summary>
-    /// How far the Git Repository window got, for a wait's failure: on Windows CI the window was active and 30 s later
-    /// still not loaded, and the message didn't say which part (PR #325's run 43076875911; docs/ci-flakes.md). TODO(issue)
-    /// </summary>
-    private static string Loaded(GitRepositoryDocument? document) => document?.ViewModel is not { } vm ? string.Empty
-        : $" (loading {vm.IsLoading}, error {vm.Error ?? "none"}; roots [{string.Join(" | ", vm.Roots.Select(r => $"{r.Text}: {string.Join(", ", r.Children.Select(c => c.Text).Take(6))}"))}]; main {(vm.Find("refs/heads/main") is null ? "not found" : "found")})";
 
     /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>, the window in Harbor Light, Classic Dark and Harbor High contrast, saved there.</summary>
     internal static void Snapshots(Window window, string name)
