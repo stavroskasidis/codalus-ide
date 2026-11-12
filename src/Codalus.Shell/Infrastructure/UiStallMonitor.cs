@@ -31,6 +31,7 @@ internal sealed class UiStallMonitor : IDisposable
     private int _stalls;
     private double _stalled;
     private long _firstSent;
+    private long _waitingSince;
     private long _resetAt;
 
     public UiStallMonitor()
@@ -75,6 +76,13 @@ internal sealed class UiStallMonitor : IDisposable
     /// </summary>
     internal long FirstSent => Interlocked.Read(ref _firstSent);
 
+    /// <summary>
+    /// When the probe now waiting for the UI thread was posted (a <see cref="Stopwatch"/> timestamp; 0 while none waits):
+    /// a test that holds the UI thread holds it until a probe has waited as long as it means to measure, whenever the
+    /// monitor's thread got to post it (Windows CI, run 43178619011: 154 ms measured of a 300 ms block).
+    /// </summary>
+    internal long WaitingSince => Interlocked.Read(ref _waitingSince);
+
     /// <summary>Runs on the monitor's thread after a probe is answered, before it is recorded (tests force interleavings with it).</summary>
     internal Action? BeforeRecord { get; set; }
 
@@ -117,6 +125,7 @@ internal sealed class UiStallMonitor : IDisposable
                 answered.Set();
             }, DispatcherPriority.Input);
             Interlocked.CompareExchange(ref _firstSent, sent, 0);
+            Interlocked.Exchange(ref _waitingSince, sent);
 
             jobs.Clear();
             steps.Clear();
@@ -134,6 +143,7 @@ internal sealed class UiStallMonitor : IDisposable
                 steps[step] = steps.GetValueOrDefault(step) + 1;
             }
 
+            Interlocked.Exchange(ref _waitingSince, 0);
             var gc = (GC.GetTotalPauseDuration() - gcMark.Paused).TotalMilliseconds;
             var waited = Stopwatch.GetElapsedTime(sent, Volatile.Read(ref ran)).TotalMilliseconds - gc;
             BeforeRecord?.Invoke();

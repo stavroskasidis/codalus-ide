@@ -17,13 +17,14 @@ public class EverydayBenchTests
         using var monitor = new UiStallMonitor();
         await ShellFixture.PumpUntil(() => monitor.Report().Probes >= 3);
         monitor.Reset();
-        Thread.Sleep(300); // a job that holds the UI thread
+        monitor.HoldUntilAProbeWaited(300); // a job that holds the UI thread
         await ShellFixture.PumpUntil(() => monitor.Report().Probes >= 3);
 
-        // The 300 ms the UI thread was held: the wait the probe measured, and the garbage collector's pauses in it, which
-        // the monitor takes out of the wait and reports apart. The wait alone was 154 ms once (Windows CI, run
-        // 43178619011) and the failure said only that number: a collection of the whole test process in those 300 ms, or
-        // a probe posted late by a monitor thread that didn't get to run. A failure says what the monitor saw.
+        // The 300 ms a probe waited: the wait the monitor measured, and the garbage collector's pauses in it, which it
+        // takes out of the wait and reports apart. After a sleep of 300 ms the wait alone was 154 ms once (Windows CI,
+        // run 43178619011) and the failure said only that number: a collection of the whole test process in those
+        // 300 ms, or a probe posted late by a monitor thread that didn't get to run. Neither fails this now: the UI
+        // thread is held until a probe has waited that long, and the pauses count. A failure says what the monitor saw.
         var report = monitor.Report();
         Assert.True(report.LongestMilliseconds + report.LongestGcMilliseconds >= 200, report.Describe());
         Assert.InRange(report.LongestMilliseconds, 0, 60_000);
