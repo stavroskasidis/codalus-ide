@@ -40,6 +40,12 @@ internal sealed class ShellSystemFonts : FontCollectionBase
     /// </summary>
     private readonly ConcurrentDictionary<(string Family, FontCollectionKey Key), (string Family, FontCollectionKey Key)> _normalized = new();
 
+    /// <summary>The exception that kept <see cref="Create(IPlatformTypeface, FontSimulations)"/> from making a glyph typeface, on this thread.</summary>
+    [ThreadStatic]
+    private static Exception? t_createError;
+
+    private volatile string? _lastFailure;
+
     public ShellSystemFonts(IFontManagerImpl platform)
     {
         _platform = platform;
@@ -48,6 +54,13 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             AddFontFamily(familyName);
         }
     }
+
+    /// <summary>
+    /// Why the last lookup of a family's face found none, or null: Avalonia says only "Could not create glyphTypeface"
+    /// when the default family has no face, which a shell window's first layout once did in the middle of a test run
+    /// with the same fonts every window before it had found (Linux CI, run 43245449152; docs/ci-flakes.md).
+    /// </summary>
+    internal string? LastFailure => _lastFailure;
 
     /// <summary>Avalonia's system font collection key: the font manager uses this collection instead of creating its own.</summary>
     public override Uri Key => s_key;
@@ -79,6 +92,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         {
             _missing.TryAdd((familyName, key), 0);
             TryAddGlyphTypeface(familyName, key, null);
+            _lastFailure = $"the platform matched no font for '{familyName}' ({style}, {weight}, {stretch}), and it is noted as missing";
             return false;
         }
 
@@ -90,6 +104,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
 
         if (Create(platformTypeface, FontSimulations.None) is not { } created)
         {
+            _lastFailure = $"no glyph typeface could be made of '{platformTypeface.FamilyName}', the platform's match for '{familyName}' ({style}, {weight}, {stretch}): {t_createError?.GetType().Name}: {t_createError?.Message}";
             return false;
         }
 
@@ -108,7 +123,13 @@ internal sealed class ShellSystemFonts : FontCollectionBase
             TryAddGlyphTypeface(created, KeyOf(platformTypeface));
         }
 
-        return TryGetGlyphTypeface(familyName, key, allowNearestMatch: false, out glyphTypeface);
+        if (TryGetGlyphTypeface(familyName, key, allowNearestMatch: false, out glyphTypeface))
+        {
+            return true;
+        }
+
+        _lastFailure = $"the face made of '{platformTypeface.FamilyName}' for '{familyName}' ({style}, {weight}, {stretch}) wasn't in the collection once added";
+        return false;
     }
 
     public override bool TryGetFamilyTypefaces(string familyName, [NotNullWhen(true)] out IReadOnlyList<Typeface>? familyTypefaces) =>
@@ -275,6 +296,7 @@ internal sealed class ShellSystemFonts : FontCollectionBase
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IndexOutOfRangeException or NotSupportedException)
         {
+            t_createError = ex;
             return null;
         }
     }

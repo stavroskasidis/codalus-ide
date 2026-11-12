@@ -79,6 +79,38 @@ public sealed class DebugServiceStartTests
         Assert.Contains("Debugging with netcoredbg: it runs as x64 on Apple silicon", output.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task An_x64_program_of_dotnet_core_2_0_or_2_1_stays_netcoredbgs_though_the_installation_offers_the_x64_bundle()
+    {
+        // The x64 bundle holds a program at its start in the startup hook (ADR 0094's amendment), and .NET Core 2.0 and
+        // 2.1 run none: the old-.NET matrix's programs of those two ran to their end before the debugger attached
+        // (through that start on Linux, 2026-11-12). netcoredbg's x64 build holds them, for as long as it ships.
+        var asked = 0;
+        var debug = new DebugService(() => null, resolveX64Adapter: () => null)
+        {
+            CoreClrAdapter = () => null,
+            X64CoreClrAdapter = _ =>
+            {
+                asked++;
+                return Task.FromResult<DebugAdapterStartInfo?>(null);
+            },
+        };
+        var output = new System.Text.StringBuilder();
+        debug.Output += (_, o) => output.Append(o.Text);
+        var plan = new Workbench.Build.LaunchPlan("dotnet", "exec app.dll", ".", new Dictionary<string, string>(), null) { RunsAsX64 = true, StartsWithoutStartupHooks = true };
+
+        Assert.False(debug.WillUseCodalusAdapter(plan));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan, TestContext.Current.CancellationToken));
+
+        // Neither debugger is here, so the start fails: what counts is which one was asked for, and what the console said.
+        Assert.Contains("x64 debugger", error.Message, StringComparison.Ordinal);
+        Assert.Equal(0, asked);
+        Assert.Contains("Debugging with netcoredbg: it runs on .NET Core 2.0 or 2.1 as x64 on Apple silicon", output.ToString(), StringComparison.Ordinal);
+
+        // The same runtime where it runs natively (Linux, Windows, an Intel Mac) is the Codalus debugger's: dbgshim holds it.
+        Assert.True(debug.WillUseCodalusAdapter(plan with { RunsAsX64 = false }));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
