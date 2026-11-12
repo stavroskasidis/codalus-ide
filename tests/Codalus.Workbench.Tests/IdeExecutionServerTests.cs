@@ -135,6 +135,104 @@ public sealed class IdeExecutionServerTests
         }
     }
 
+    /// <summary>
+    /// Disposal while sessions end and orchestrators listen, over and over: each round races the sessions' last
+    /// notifications against the teardown, which is where disposal blocked on Windows CI (runs 41849511374 and
+    /// 43184717554: the lifetime's cancellation never returned, and the listener's close after it took over 5 s). No step
+    /// of the teardown may run out of its time, and a disposal that is still running after a few seconds fails with the
+    /// stacks of every thread, taken while it is blocked.
+    /// </summary>
+    [Fact]
+    public async Task Disposal_never_blocks_while_sessions_end_and_orchestrators_listen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        for (var round = 1; round <= 300 && clock.Elapsed < TimeSpan.FromSeconds(20); round++)
+        {
+            var log = new List<string>();
+            var server = new IdeExecutionServer((_, _) => Task.FromResult<IIdeRunSession>(new FakeSession()));
+            server.Log += line =>
+            {
+                lock (log)
+                {
+                    log.Add(line);
+                }
+            };
+            server.Start();
+            string Describe()
+            {
+                lock (log)
+                {
+                    return $"Round {round}. Server: {server.DescribeState()}\n{string.Join('\n', log)}";
+                }
+            }
+
+            var sockets = new List<ClientWebSocket>();
+            try
+            {
+                // Each orchestrator keeps a read pending, as DCP does, until the server is gone.
+                var reads = new List<Task>();
+                for (var i = 0; i < 3; i++)
+                {
+                    var socket = new ClientWebSocket();
+                    sockets.Add(socket);
+                    socket.Options.SetRequestHeader("Authorization", "Bearer " + server.Token);
+                    await socket.ConnectAsync(new Uri($"ws://localhost:{server.Port}/run_session/notify"), ct);
+                    reads.Add(Task.Run(
+                        async () =>
+                        {
+                            var buffer = new byte[4096];
+                            try
+                            {
+                                while ((await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None)).MessageType != WebSocketMessageType.Close)
+                                {
+                                }
+                            }
+                            catch (WebSocketException)
+                            {
+                            }
+                        },
+                        ct));
+                }
+
+                using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{server.Port}/") };
+                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
+                for (var i = 0; i < 3; i++)
+                {
+                    using var body = new StringContent("""{"launch_configurations":[{"type":"project","project_path":"/app/Api/Api.csproj","mode":"NoDebug"}]}""", Encoding.UTF8, "application/json");
+                    using var created = await http.PutAsync("run_session", body, ct);
+                    Assert.Equal(System.Net.HttpStatusCode.Created, created.StatusCode);
+                }
+
+                // Disposing ends the sessions, whose sessionTerminated notifications race the teardown.
+                var disposal = server.DisposeAsync().AsTask();
+                if (await Task.WhenAny(disposal, Task.Delay(TimeSpan.FromSeconds(3), ct)) != disposal)
+                {
+                    Assert.Fail($"Disposal still runs after 3 s. {Describe()}\n{Codalus.Tests.TestWatchdog.ManagedStacks()}");
+                }
+
+                await disposal;
+                Assert.False(server.DescribeState().Contains("ran out", StringComparison.Ordinal), Describe());
+                try
+                {
+                    await Task.WhenAll(reads).WaitAsync(s_noWait, ct);
+                }
+                catch (TimeoutException)
+                {
+                    Assert.Fail($"An orchestrator's read didn't end. {Describe()}\n{Codalus.Tests.TestWatchdog.ManagedStacks()}");
+                }
+            }
+            finally
+            {
+                await server.DisposeAsync();
+                foreach (var socket in sockets)
+                {
+                    socket.Dispose();
+                }
+            }
+        }
+    }
+
     [Fact]
     public async Task A_notification_sent_before_the_orchestrator_listens_reaches_it_once_it_does()
     {
