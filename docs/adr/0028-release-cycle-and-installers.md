@@ -63,6 +63,8 @@ M7 shipped hand-run packages (ADR 0009): a portable zip, a `.dmg`, a `.tar.gz`, 
 
 **Signing** (D19). The installers aren't code-signed. Every release has `SHA256SUMS.txt`, and M32 signs the update feed. The macOS signing step waits behind `DAEDALUS_CODESIGN_IDENTITY` (and a notary profile); Windows signing is a Velopack `--signParams`/Trusted Signing option to add then.
 
+*Update 2026-11-12:* macOS signing is wired up. With the `CODALUS_CODESIGN_IDENTITY` secret set, the package job's keychain step (`eng/macos-signing.sh`) imports the Developer ID Application and Installer certificates and an App Store Connect API key into a throwaway keychain; vpk signs the app deeply with the hardened runtime and `eng/packaging/macos/Codalus.entitlements` and notarizes it, and `eng/package.sh` signs, notarizes and staples the `.pkg`. The entitlements are vpk's default from the .NET notarization guide (JIT, and no library validation, since the hosts run on the user's .NET install and load native libraries from plugins and packages) plus `com.apple.security.cs.debugger` for netcoredbg and the debug host. A half-set configuration fails the job instead of shipping a package Gatekeeper refuses. Windows signing is still to come.
+
 ## Consequences
 
 - A release is a dispatch (while private) or a merge into `master` (once public); nothing is uploaded by hand.

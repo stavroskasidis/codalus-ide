@@ -153,3 +153,45 @@ one-time setup, the maintainer's:
 Without `NUGET_USER` the job packs the packages and pushes nothing, with a notice. When the push fails (the policy
 inactive, nuget.org down), the release is already out and only `finish` waits: fix the cause and use **Re-run failed
 jobs**. Reserve the `Codalus.*` prefix too ([nuget-prefix-reservation.md](nuget-prefix-reservation.md)).
+
+## macOS signing
+
+With the secrets below, every release signs the macOS app and `.pkg` with the maintainer's Developer ID and has Apple
+notarize them, so Gatekeeper opens them without a warning (D19,
+[ADR 0028](../adr/0028-release-cycle-and-installers.md)'s 2026-11-12 update). The package job's keychain step
+(`eng/macos-signing.sh`) puts the certificates and the notary key in a throwaway keychain, `eng/package.sh` signs and
+notarizes, and the keychain is deleted after the Package step. Without `CODALUS_CODESIGN_IDENTITY` the packages are
+unsigned; with it but not the others, the job fails.
+
+| Secret | What |
+|---|---|
+| `CODALUS_CODESIGN_IDENTITY` | The app's identity, as `security find-identity -v` lists it: `Developer ID Application: <name> (<team ID>)`. Set it last: it turns signing on. |
+| `CODALUS_INSTALLER_IDENTITY` | The `.pkg`'s identity: `Developer ID Installer: <name> (<team ID>)`. |
+| `MACOS_CERTIFICATE_P12` | Base64 of a `.p12` with both certificates and their private keys. |
+| `MACOS_CERTIFICATE_PASSWORD` | The `.p12`'s password. |
+| `APPLE_NOTARY_KEY` | An App Store Connect API key's `.p8`, its whole text. |
+| `APPLE_NOTARY_KEY_ID` | That key's ID. |
+| `APPLE_NOTARY_ISSUER` | The issuer ID shown above the keys. |
+
+The one-time setup, the maintainer's (only the Apple Developer account's Account Holder can make Developer ID
+certificates):
+
+1. Create a **Developer ID Application** and a **Developer ID Installer** certificate, G2 Sub-CA (Xcode → Settings →
+   Accounts → Manage Certificates, or Certificates on developer.apple.com with a request from Keychain Access).
+2. In Keychain Access → login → My Certificates, select both (each with its private key) → Export 2 items → a `.p12`
+   with a strong password.
+3. In App Store Connect → Users and Access → Integrations → App Store Connect API → Team Keys, generate a key with the
+   Developer role and download its `.p8` (once only); note its key ID and the issuer ID.
+4. Set the secrets (Settings → Secrets and variables → Actions, or `gh secret set NAME -R stavroskasidis/codalus-ide`,
+   which reads a value from standard input: `base64 -i codalus-signing.p12 | gh secret set MACOS_CERTIFICATE_P12 …`).
+   Keep the `.p12`, its password and the `.p8` in a password manager: secrets can't be read back.
+
+To sign on a Mac by hand, store the key as a notary profile, then package:
+
+```bash
+xcrun notarytool store-credentials codalus-notary --key AuthKey_<key ID>.p8 --key-id <key ID> --issuer <issuer ID>
+CODALUS_CODESIGN_IDENTITY="Developer ID Application: <name> (<team ID>)" CODALUS_INSTALLER_IDENTITY="Developer ID Installer: <name> (<team ID>)" CODALUS_NOTARY_PROFILE=codalus-notary bash eng/package.sh
+```
+
+`spctl --assess -vv "/Applications/Codalus IDE.app"` (and `--type install` on the `.pkg`) should then say
+`source=Notarized Developer ID`. The certificates last five years; the pipeline fails once one has expired.

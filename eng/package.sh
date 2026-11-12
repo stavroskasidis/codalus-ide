@@ -138,11 +138,24 @@ case "$rid" in
     # Bundle versions are numeric on macOS: the nightly part stays in the app's own version (`codalus --version`).
     sed -e "s/{{BUNDLE_VERSION}}/${version%%-*}/g" "$repo/eng/packaging/macos/Info.plist" > "$stage/Info.plist"
     sign_args=()
+    keychain_args=()
     if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
-      # D19: unsigned until the repository goes public; the signing step waits behind this variable. vpk signs and
-      # notarizes the app; the installer is signed and notarized below, once its postinstall is ours.
-      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY")
-      [ -n "${CODALUS_NOTARY_PROFILE:-}" ] && sign_args+=(--notaryProfile "$CODALUS_NOTARY_PROFILE")
+      # D19: a Developer ID signs and Apple notarizes the app; the installer is signed and notarized below, once its
+      # postinstall is ours. vpk signs the bundle deeply, so one entitlements file covers the shell, the hosts and
+      # netcoredbg (Codalus.entitlements): vpk's default, from the .NET notarization guide (the hosts' runtime JITs
+      # and is the user's .NET install, signed by Microsoft; plugins and packages bring native libraries signed by
+      # anyone), plus com.apple.security.cs.debugger, since netcoredbg and the debug host read their debuggee's memory.
+      # The plist has no comments: the kernel parses it too.
+      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY" --signEntitlements "$repo/eng/packaging/macos/Codalus.entitlements")
+      if [ -n "${CODALUS_KEYCHAIN:-}" ]; then
+        sign_args+=(--keychain "$CODALUS_KEYCHAIN")
+        keychain_args=(--keychain "$CODALUS_KEYCHAIN")
+      fi
+      if [ -n "${CODALUS_NOTARY_PROFILE:-}" ]; then
+        sign_args+=(--notaryProfile "$CODALUS_NOTARY_PROFILE")
+      else
+        echo "CODALUS_NOTARY_PROFILE isn't set: the app and the installer are signed but not notarized, and Gatekeeper refuses them." >&2
+      fi
     fi
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe codalus --icon "$stage/codalus.icns" --plist "$stage/Info.plist" \
       ${sign_args[@]+"${sign_args[@]}"} # macOS bash 3.2 calls an empty array unbound under set -u
@@ -150,11 +163,16 @@ case "$rid" in
     bash "$repo/eng/packaging/macos/user-owned-pkg.sh" "$feed/$packid-$channel-Setup.pkg" "$out/$name.pkg" "Codalus IDE.app"
     rm "$feed/$packid-$channel-Setup.pkg"
     if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
-      productsign --sign "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}" "$out/$name.pkg" "$stage/signed.pkg"
+      # A .pkg takes a Developer ID Installer certificate: the app's Developer ID Application one can't sign it.
+      productsign --sign "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}" ${keychain_args[@]+"${keychain_args[@]}"} \
+        "$out/$name.pkg" "$stage/signed.pkg"
       mv "$stage/signed.pkg" "$out/$name.pkg"
       if [ -n "${CODALUS_NOTARY_PROFILE:-}" ]; then
-        xcrun notarytool submit "$out/$name.pkg" --keychain-profile "$CODALUS_NOTARY_PROFILE" --wait
+        xcrun notarytool submit "$out/$name.pkg" --keychain-profile "$CODALUS_NOTARY_PROFILE" \
+          ${keychain_args[@]+"${keychain_args[@]}"} --wait
         xcrun stapler staple "$out/$name.pkg"
+        # What a downloaded copy meets: Gatekeeper's verdict on the installer and on the app the portable zip holds.
+        spctl --assess --type install -vv "$out/$name.pkg"
       fi
     fi
     mv "$feed/$packid-$channel-Portable.zip" "$out/$name.app.zip"

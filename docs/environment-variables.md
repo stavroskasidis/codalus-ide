@@ -113,9 +113,10 @@ Each host variable takes the path of the host's apphost or its `.dll` (run with 
 | `CODALUS_PREVIOUS_RELEASE` | A folder with the previous release of the channel (its `releases.<channel>.json` and full `.nupkg`), so Velopack also builds a delta package. `eng/package.sh` |
 | `CODALUS_RELEASE_NOTES` | A Markdown file with the release notes that the update feed shows. `eng/package.sh` |
 | `CODALUS_PACKAGES_OUT` | The output folder instead of `artifacts/packages`. `eng/test-update.sh` builds into its own. `eng/package.sh` |
-| `CODALUS_CODESIGN_IDENTITY` | macOS: the identity that signs the app (and the `.pkg`, unless `CODALUS_INSTALLER_IDENTITY` is set). Without it the packages are unsigned. The pipeline passes the secret of the same name. `eng/package.sh` |
-| `CODALUS_INSTALLER_IDENTITY` | macOS, with `CODALUS_CODESIGN_IDENTITY`: the identity that signs the `.pkg` (default: the app's). `eng/package.sh` |
-| `CODALUS_NOTARY_PROFILE` | macOS, with `CODALUS_CODESIGN_IDENTITY`: the notarytool keychain profile that notarizes the packages. `eng/package.sh` |
+| `CODALUS_CODESIGN_IDENTITY` | macOS: the Developer ID Application identity that signs the app, with the hardened runtime and `eng/packaging/macos/Codalus.entitlements`. Without it the packages are unsigned. The pipeline passes the secret of the same name ([macOS signing](release/releasing.md#macos-signing)). `eng/package.sh`, `eng/macos-signing.sh` |
+| `CODALUS_INSTALLER_IDENTITY` | macOS, with `CODALUS_CODESIGN_IDENTITY`: the Developer ID Installer identity that signs the `.pkg` (default: the app's, which only an installer certificate can be). The pipeline passes the secret of the same name. `eng/package.sh`, `eng/macos-signing.sh` |
+| `CODALUS_KEYCHAIN` | macOS, with `CODALUS_CODESIGN_IDENTITY`: the keychain with the certificates and the notary profile, instead of the search list. The pipeline's keychain step sets it. `eng/package.sh` |
+| `CODALUS_NOTARY_PROFILE` | macOS, with `CODALUS_CODESIGN_IDENTITY`: the notarytool keychain profile that notarizes the app and the `.pkg`; without it they're signed but not notarized, which Gatekeeper refuses. The pipeline's keychain step sets it. `eng/package.sh` |
 | `CODALUS_UPDATE_SOURCE` | A local folder with update feeds and packages that the app updates from instead of GitHub's releases (`eng/test-update.sh`, `codalus --update-now`). `src/Codalus.Shell/Infrastructure/Updates.cs` |
 | `CODALUS_UPDATE_TEST_KEY` | The feed public key to trust instead of the project's (base64 of the DER public key), for a `CODALUS_UPDATE_SOURCE` folder only. `src/Codalus.Shell/Infrastructure/Updates.cs` |
 
