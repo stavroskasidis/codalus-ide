@@ -238,6 +238,27 @@ public sealed class BlazorWebAppHotReloadDebugTests
         }
     }
 
+    /// <summary>
+    /// Whether the debugged server answers the page's address, asked from the test: on Linux arm64 CI the browser began
+    /// loading /counter and nothing came back for 10 minutes, while the server, under the Codalus debugger, ran on (PR
+    /// #325's run 43131131250; docs/ci-flakes.md). It tells a server that doesn't answer from a browser that never got
+    /// or took its answer. TODO(issue)
+    /// </summary>
+    private static string Answers(string url)
+    {
+        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            using var response = http.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+            return $"{url} answered {(int)response.StatusCode} in {watch.ElapsedMilliseconds} ms";
+        }
+        catch (Exception ex) when (ex is System.Net.Http.HttpRequestException or TaskCanceledException)
+        {
+            return $"{url} didn't answer: {ex.GetType().Name} after {watch.ElapsedMilliseconds} ms ({ex.Message})";
+        }
+    }
+
     private static async Task LaunchedServerAndPageAsync(ShellFixture f, string folder, string counter)
     {
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
@@ -245,7 +266,7 @@ public sealed class BlazorWebAppHotReloadDebugTests
         var url = System.Text.RegularExpressions.Regex.Match(settings, "http://localhost:[0-9]+").Value;
         await f.RunAsync("debug.start");
         await ShellFixture.PumpUntil(() => f.Shell.DebugEdits.IsActive && f.Shell.Debugger.State == DebugState.Running && f.Shell.Debugger.IsCompound
-            && f.Shell.DebugEdits.Browser?.Server is { Pages: > 0 }, seconds: 600, describe: () => Diagnostics(f));
+            && f.Shell.DebugEdits.Browser?.Server is { Pages: > 0 }, seconds: 600, describe: () => Diagnostics(f) + "; " + Answers(url + "/counter"));
         Assert.Null(f.Shell.HotReloadProgram); // no dotnet watch
         Assert.Null(f.Shell.WatchedServerDebugSession);
         var server = f.Shell.Debugger.ProcessId!.Value;

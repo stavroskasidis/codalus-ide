@@ -548,13 +548,14 @@ public sealed class GitTreesRowsTests
     }
 
     /// <summary>
-    /// Git changes the repository (its status) while the document's first read still asks the host for the pull
-    /// requests: the read of the refs alone that follows cancels it, and reads the pull requests itself. It didn't, and
-    /// Pull Requests stayed at "Loading…" until Refresh (Windows CI, run 43087646182, where a test's own git merge
-    /// landed in that window).
+    /// The refs are read again (git changed the repository: a commit, a fetch, the watcher) while the document's first
+    /// read still waits for its pull requests. That newer read doesn't ask for them, and the first one's are dropped with
+    /// it, so nothing ever read them: Pull Requests stayed at "Loading…" until Refresh. On Windows CI a test that
+    /// commits and merges just before it opens the document waited 30 s for that node (runs 43087646182 and
+    /// 43130624207).
     /// </summary>
     [AvaloniaFact]
-    public async Task Git_repository_reads_the_pull_requests_a_refs_reload_cancelled()
+    public async Task Git_repository_reloaded_during_its_first_read_still_reads_the_pull_requests()
     {
         var temp = Directory.CreateTempSubdirectory("codalus-repository-").FullName;
         var folder = CreateManyRefs(Path.Combine(temp, "Refs"), tags: 2, branches: 2);
@@ -564,44 +565,30 @@ public sealed class GitTreesRowsTests
             Assert.True(await git.OpenAsync(folder, TestContext.Current.CancellationToken));
             await git.RefreshAsync(TestContext.Current.CancellationToken);
             var asked = 0;
-            var firstAsked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var first = new TaskCompletionSource<GitRepositoryPullRequests>(TaskCreationOptions.RunContinuationsAsynchronously);
             using var vm = new GitRepositoryViewModel(new GitRepositoryActions
             {
                 Repositories = () => [git],
 
-                // The first request waits on its host until it is cancelled; the one after it answers.
-                PullRequests = async (_, token) =>
-                {
-                    if (++asked == 1)
-                    {
-                        firstAsked.TrySetResult();
-                        await Task.Delay(Timeout.Infinite, token);
-                    }
-
-                    return new GitRepositoryPullRequests([], null);
-                },
+                // The first read's pull requests don't come before it is replaced; the next ones come at once.
+                PullRequests = (_, token) => ++asked == 1
+                    ? first.Task.WaitAsync(token)
+                    : Task.FromResult(new GitRepositoryPullRequests([], "This repository isn't on a hosting service.")),
                 CreateHistory = (service, query, title, _) => new GitHistoryViewModel(service, query, title, (_, _) => Task.CompletedTask),
                 Run = (_, _, _) => Task.CompletedTask,
             });
-            string PullRequests() => string.Join(", ", vm.Roots.Single(r => r.Text == "Pull Requests").Children.Select(c => c.Text));
 
-            var first = vm.LoadAsync();
-            await firstAsked.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
-            await ShellFixture.PumpUntil(() => vm.TreesBuilt == 1);
-            Assert.Equal("Loading…", PullRequests());
-
-            // Git changed the repository: the refs are read again, and so are the pull requests the first read owed.
+            var opening = vm.LoadAsync();
+            await ShellFixture.PumpUntil(() => asked == 1);
             await vm.LoadAsync(pullRequests: false);
-            await first;
-            Assert.Equal(2, asked);
-            Assert.False(vm.IsLoading);
-            await ShellFixture.PumpUntil(() => PullRequests().Contains("All open (0)", StringComparison.Ordinal), describe: PullRequests);
-            Assert.DoesNotContain("Loading", PullRequests(), StringComparison.Ordinal);
+            await opening;
+            await ShellFixture.PumpUntil(() => !vm.IsReading);
 
-            // With them shown, a read of the refs alone asks no host again.
-            await vm.LoadAsync(pullRequests: false);
+            static IEnumerable<GitRepositoryNode> All(IEnumerable<GitRepositoryNode> nodes) => nodes.SelectMany(n => All(n.Children).Prepend(n));
+            var texts = All(vm.Roots).Select(n => n.Text).ToList();
             Assert.Equal(2, asked);
-            Assert.Contains("All open (0)", PullRequests(), StringComparison.Ordinal);
+            Assert.DoesNotContain(texts, t => t.StartsWith("Loading", StringComparison.Ordinal));
+            Assert.Contains("This repository isn't on a hosting service.", texts);
         }
         finally
         {

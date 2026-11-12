@@ -337,6 +337,12 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     private int _version;
     private bool _rebuilding;
     private bool _stale;
+
+    /// <summary>
+    /// A read was asked for the pull requests and none has shown them yet: the read that replaces it reads them, whatever
+    /// it was asked for (<see cref="LoadCoreAsync"/>).
+    /// </summary>
+    private bool _pullRequestsOwed;
     private Task? _loading;
     private Task? _building;
     private bool _buildAgain;
@@ -567,22 +573,18 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
         return _loading = LoadCoreAsync(pullRequests);
     }
 
-    /// <summary>
-    /// A read of the pull requests has started and hasn't shown them yet. A read of the refs alone (git changed the
-    /// repository) cancels the one before it: without this, one that arrived while the first read still asked the hosts
-    /// left Pull Requests at "Loading…" for good, since nothing asked for them again (Windows CI, run 43087646182).
-    /// </summary>
-    private bool _pullRequestsOwed;
-
     private async Task LoadCoreAsync(bool pullRequests)
     {
-        // The read this one replaces owed the pull requests: this one reads them.
-        pullRequests |= _pullRequestsOwed;
-        _pullRequestsOwed = pullRequests;
         _loadCts?.Cancel();
         var cts = _loadCts = new CancellationTokenSource();
         var token = cts.Token;
         var version = ++_version;
+
+        // A read of the refs alone (git changed the repository) can replace the first read while its pull requests are
+        // on their way: they are dropped with that read, and this one wasn't asked for them, so Pull Requests stayed at
+        // "Loading…" until Refresh. What a replaced read owed, this one reads.
+        pullRequests |= _pullRequestsOwed;
+        _pullRequestsOwed = pullRequests;
         IsLoading = Roots.Count == 0;
         Error = null;
         try
@@ -639,7 +641,11 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                     _data[git] = current with { PullRequests = result };
                 }
 
-                _pullRequestsOwed = false;
+                if (version == _version)
+                {
+                    _pullRequestsOwed = false;
+                }
+
                 await RebuildAsync().ConfigureAwait(true);
             }
         }

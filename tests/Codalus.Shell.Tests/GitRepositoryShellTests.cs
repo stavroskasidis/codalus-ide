@@ -88,22 +88,17 @@ public sealed class GitRepositoryShellTests
         return (f, folder);
     }
 
-    /// <summary>
-    /// What the tree's wait saw (Windows CI, run 43079975320: the document was active, the wait timed out on an idle
-    /// machine, and nothing said which of its conditions didn't hold): whether it still loads, its error, its roots with
-    /// their children, and whether main is in it.
-    /// </summary>
-    private static string TreeState(GitRepositoryViewModel? vm) =>
-        vm is null
-            ? "no view model"
-            : $"loading {vm.IsLoading}, error '{vm.Error}', refs reads {vm.RefsReads}, trees built {vm.TreesBuilt}, main {(vm.Find("refs/heads/main") is null ? "missing" : "there")}, roots [{string.Join("; ", vm.Roots.Select(r => $"{r.Text}: {string.Join(", ", r.Children.Select(c => c.Text))}"))}]";
-
     private static async Task<GitRepositoryViewModel> OpenDocumentAsync(ShellFixture f)
     {
         await f.RunAsync("git.manageBranches");
         await ShellFixture.PumpUntil(
             () => f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { IsLoading: false, Roots.Count: 3 } vm } && vm.Find("refs/heads/main") is not null && vm.Roots[1].Children.All(c => !c.Text.StartsWith("Loading", StringComparison.Ordinal)),
-            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}; {TreeState((f.Shell.Layout.ActiveDocument as GitRepositoryDocument)?.ViewModel)}; git status {f.Shell.Git.Status?.Branch ?? "(none)"}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}");
+            // What the document shows goes with a timeout: it once said only that the document was there (Windows CI, runs
+            // 43087646182 and 43130624207), not which of these it waited for.
+            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}"
+                + (f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { } shown }
+                    ? $"; loading {shown.IsLoading}, reading {shown.IsReading}, error {shown.Error ?? "none"}; roots: {string.Join(" | ", shown.Roots.Select(r => $"{r.Text} [{string.Join(", ", r.Children.Select(c => c.Text))}]"))}"
+                    : string.Empty));
         return ((GitRepositoryDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
     }
 
