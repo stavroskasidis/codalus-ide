@@ -4,6 +4,8 @@ Codalus IDE can send questions about your code to a language model you choose, s
 
 ## Turning it on
 
+The [first-run setup](getting-started.md#the-first-run-setup) asks once, on its AI step: no AI (the default), a coding agent, or the built-in assistant with a provider, compared side by side. Whatever you chose there, the steps below change it at any time; Help > Set Up Codalus IDE shows that step again.
+
 1. **Tools > AI > Turn On AI Assistance**, or **Turn On AI Assistance** in the AI Chat window (**View > AI Chat**; `Ctrl+Alt+I` opens it until an agent with its own CLI is connected, then it opens [AI Console](#ai-console)).
 2. Choose a provider:
    - **OpenAI-compatible**: OpenAI, or any server that speaks OpenAI's chat completions API, such as LM Studio (`http://localhost:1234/v1`), llama.cpp's server, vLLM or a company gateway. Set the address in **Tools > Options > AI: OpenAI-compatible** (`ai.openai.endpoint`). A key is optional for a local server.
