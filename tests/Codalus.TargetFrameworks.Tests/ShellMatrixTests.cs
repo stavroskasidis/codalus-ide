@@ -26,7 +26,13 @@ public sealed class ShellMatrixTests
         f.Shell.Solutions.RestoreStateChanged += (_, e) => restored = e.State is "succeeded" or "failed" ? DateTime.UtcNow : restored;
         await f.Shell.OpenSolutionAsync(Path.Combine(folder, "TargetFrameworks.sln"));
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 38 && f.Shell.Solutions.Progress is { Completed: true } && f.Shell.Solutions.RestoreState is "succeeded" or "failed", seconds: 600);
-        Assert.Equal("succeeded", f.Shell.Solutions.RestoreState);
+        // With the output channels: the restore failed once in a whole run of this project and passed alone, and the
+        // state alone doesn't say what NuGet said (M58b's follow-up, local validation; docs/ci-flakes.md).
+        Assert.True(
+            f.Shell.Solutions.RestoreState == "succeeded",
+            $"The restore {f.Shell.Solutions.RestoreState}.\n" + string.Join('\n', f.Shell.Workbench.Output.Channels.Select(c => c.GetText() is var text && text.Length > 6000
+                ? $"Output '{c.Name}' (the last 6000 characters):\n{text[^6000..]}"
+                : $"Output '{c.Name}':\n{text}")));
 
         // The design-time builds after the restore: .NET Core 2.x and 3.0 get their framework from packages.
         await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Keys.All(p => MatrixFixture.HasReferences(f.Shell.Solutions, p)), seconds: 600, describe: () => Unreferenced(f, arrived, restored));

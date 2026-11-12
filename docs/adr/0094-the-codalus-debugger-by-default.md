@@ -76,3 +76,15 @@ Remote targets, the two downloaded builds and the default ([m58b](../checkpoints
 - **CI.** The test shard that ran the parity classes under the Codalus debugger now runs them under netcoredbg (`debug-netcoredbg`, `eng/ci-debug-parity.txt`), for as long as the fallback ships; Linux arm64, which has no netcoredbg, runs them under the default as before. The smoke test's debug steps run under the default and once more under netcoredbg.
 
 Not built, against the decision table: the bundle carried by `codalus-server` (it is copied beside it, for the reason above), Hot Reload and the symbol settings in remote sessions (the language host and the symbol cache are on this machine, the modules on the other), and a shipped macOS bundle. Both are in the checkpoint's deferred list.
+
+## Amendment (2026-11-12): the x64 build starts programs held
+
+The first sessions run under the `osx-x64` bundle (GitHub's macOS runner, #329) crashed inside dbgshim for every runtime. dbgshim finds the runtime of a started process by calling back for every file the process maps, and reads each one that isn't `libcoreclr.dylib` as an executable, for a single-file app's runtime; under Rosetta 2 one of those files breaks its reader. It reads only one file when it is given the runtime library's path (`CreateVersionStringFromModule`).
+
+So where the debugger runs as x64 under Rosetta 2 it doesn't use `RegisterForRuntimeStartup` or `EnumerateCLRs`:
+
+- **A launch is a held start.** The launcher starts the program with the startup hook (ADR 0039's, which the bundle carries now) and `DOTNET_MODIFIABLE_ASSEMBLIES=debug`; the hook reports before `Main` and waits; the debugger attaches, and lets the hook go once the program is stopped for it. Breakpoints set meanwhile bind as modules load, so a breakpoint on `Main`'s first line holds. Edits apply as in a launch.
+- **The runtime's library is found by listing the process's files** (its memory regions on macOS, as dbgshim lists them, or `lsof`; `/proc/<pid>/maps` on Linux), or among the runtimes next to the program, of which dbgshim says which one the process maps.
+- **.NET Core 2** has no startup hooks: its programs are attached to as they run, and the Debug Console says that their first breakpoints may have been passed.
+
+Elsewhere dbgshim's own wait stays: it holds the runtime earlier (before any managed code), needs no hook, and covers .NET Core 2. `CODALUS_DEBUG_HELD_START` chooses either path on any machine, which is how the held start is tested on Linux.

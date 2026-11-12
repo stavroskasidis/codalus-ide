@@ -24,8 +24,10 @@ host_rid() {
 
 [ "$#" -gt 0 ] || set -- "$(host_rid)"
 version="$(tr -d '[:space:]' < VERSION)"
-# The sources the bundle is built from: another commit or an uncommitted change to them is another bundle.
-sources="$(git rev-parse HEAD 2> /dev/null || echo none)$(git status --porcelain -- src/Codalus.Debugging.Host src/Codalus.Debugging src/Codalus.Rpc src/ThirdParty Directory.Packages.props 2> /dev/null | sha256sum | cut -c1-12)"
+# The sources the bundle is built from: another commit or an uncommitted change to them (its files, and what changed in
+# them, new files too) is another bundle.
+paths=(src/Codalus.Debugging.Host src/Codalus.Debugging src/Codalus.Debugging.StartupHook src/Codalus.Rpc src/ThirdParty Directory.Packages.props)
+sources="$(git rev-parse HEAD 2> /dev/null || echo none)$(git status --porcelain -- "${paths[@]}" 2> /dev/null || true)$(git diff HEAD -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -o --exclude-standard -z -- "${paths[@]}" 2> /dev/null | xargs -0 cat 2> /dev/null | sha256sum | cut -c1-16)"
 id="$version-$(printf '%s' "$sources" | sha256sum | cut -c1-12)"
 
 for rid in "$@"; do

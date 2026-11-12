@@ -40,8 +40,8 @@
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
     <!-- The Mono debugger adapter's protocol client (M20b, ADR 0065; MIT, vendored). -->
     <ProjectReference Include="..\ThirdParty\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
-    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). Not in the debugger's bundle. -->
-    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
+    <!-- Shipped beside the host in debughost/, for programs debugged in the terminal (M14c), and in the debugger's bundle: a held start waits in it (DbgShimDebugger). -->
+    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" />
     <!-- Likewise: the XAML previewer's agent, loaded into Avalonia's designer host (M19a, ADR 0048). -->
     <ProjectReference Include="..\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
   </ItemGroup>

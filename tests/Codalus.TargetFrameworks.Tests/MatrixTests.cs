@@ -133,12 +133,41 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         }
     }
 
+    /// <summary>
+    /// The Codalus debugger the solution built, started by the matrix's dotnet. The shell's tests point
+    /// <c>CODALUS_DEBUGHOST</c> at the same file; this class starts no shell, and without it every framework said the
+    /// debugger wasn't found once it became the default (M58b: the matrix isn't part of a pull request's run).
+    /// </summary>
+    private static DebugAdapterStartInfo? CodalusDebugger()
+    {
+        var folder = Path.Combine(Codalus.Shell.Tests.ShellFixture.RepoRoot, "src", "Codalus.Debugging.Host", "bin", Codalus.Shell.Tests.ShellFixture.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
+        var host = Path.Combine(folder, "codalus-debughost.dll");
+        return File.Exists(host) ? new DebugAdapterStartInfo(CompatRoot.Dotnet, [host, CoreClrAdapter.AdapterArgument], folder) : null;
+    }
+
+    /// <summary>Under the default, the Codalus debugger (M58, ADR 0094): .NET Core 2.0 to .NET 10 through the runtime's own mscordbi.</summary>
     [Theory]
     [MemberData(nameof(Matrix.Ids), MemberType = typeof(Matrix))]
-    public async Task Each_framework_debugs_to_a_breakpoint(string id)
+    public Task Each_framework_debugs_to_a_breakpoint(string id) => DebugsToABreakpointAsync(id, netcoredbg: false);
+
+    /// <summary>Under netcoredbg, the fallback, for as long as it ships.</summary>
+    [Theory]
+    [MemberData(nameof(Matrix.Ids), MemberType = typeof(Matrix))]
+    public Task Each_framework_debugs_to_a_breakpoint_under_netcoredbg(string id) => DebugsToABreakpointAsync(id, netcoredbg: true);
+
+    private async Task DebugsToABreakpointAsync(string id, bool netcoredbg)
     {
         matrix.RequireBuild();
-        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && !CompatRoot.Required, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) is { Length: > 0 }, "CODALUS_DEBUG_ADAPTER overrides the debugger these tests choose.");
+        if (netcoredbg)
+        {
+            Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && !CompatRoot.Required, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        }
+        else
+        {
+            Assert.True(CodalusDebugger() is not null, "The Codalus debugger (codalus-debughost) isn't built: build the solution.");
+        }
+
         var framework = Matrix.Get(id);
         var project = matrix.Project(framework.App);
         var program = Path.Combine(Path.GetDirectoryName(project)!, "Program.cs");
@@ -146,7 +175,11 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         using var runs = new RunService(matrix.Solutions, matrix.Output, _ => { }) { DotnetRoot = CompatRoot.Path };
         var (plan, _, _) = await runs.LaunchPlanAsync(project, Timeout());
 
-        await using var debug = new DebugService(DebugAdapterLocator.Resolve);
+        await using var debug = new DebugService(DebugAdapterLocator.Resolve)
+        {
+            AdapterSetting = () => netcoredbg ? DebugService.NetcoredbgAdapter : DebugService.CodalusAdapter,
+            CoreClrAdapter = CodalusDebugger,
+        };
         var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new System.Text.StringBuilder();
