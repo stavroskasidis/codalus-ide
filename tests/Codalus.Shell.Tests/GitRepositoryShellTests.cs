@@ -93,7 +93,12 @@ public sealed class GitRepositoryShellTests
         await f.RunAsync("git.manageBranches");
         await ShellFixture.PumpUntil(
             () => f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { IsLoading: false, Roots.Count: 3 } vm } && vm.Find("refs/heads/main") is not null && vm.Roots[1].Children.All(c => !c.Text.StartsWith("Loading", StringComparison.Ordinal)),
-            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}");
+            // What the document shows goes with a timeout: it once said only that the document was there (Windows CI, runs
+            // 43087646182 and 43130624207), not which of these it waited for.
+            describe: () => $"active {f.Shell.Layout.ActiveDocument?.GetType().Name}; notifications: {string.Join(" | ", f.Shell.Notifications.Items.Select(n => n.Message))}"
+                + (f.Shell.Layout.ActiveDocument is GitRepositoryDocument { ViewModel: { } shown }
+                    ? $"; loading {shown.IsLoading}, reading {shown.IsReading}, error {shown.Error ?? "none"}; roots: {string.Join(" | ", shown.Roots.Select(r => $"{r.Text} [{string.Join(", ", r.Children.Select(c => c.Text))}]"))}"
+                    : string.Empty));
         return ((GitRepositoryDocument)f.Shell.Layout.ActiveDocument!).ViewModel;
     }
 

@@ -337,6 +337,12 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
     private int _version;
     private bool _rebuilding;
     private bool _stale;
+
+    /// <summary>
+    /// A read was asked for the pull requests and none has shown them yet: the read that replaces it reads them, whatever
+    /// it was asked for (<see cref="LoadCoreAsync"/>).
+    /// </summary>
+    private bool _pullRequestsOwed;
     private Task? _loading;
     private Task? _building;
     private bool _buildAgain;
@@ -573,6 +579,12 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
         var cts = _loadCts = new CancellationTokenSource();
         var token = cts.Token;
         var version = ++_version;
+
+        // A read of the refs alone (git changed the repository) can replace the first read while its pull requests are
+        // on their way: they are dropped with that read, and this one wasn't asked for them, so Pull Requests stayed at
+        // "Loading…" until Refresh. What a replaced read owed, this one reads.
+        pullRequests |= _pullRequestsOwed;
+        _pullRequestsOwed = pullRequests;
         IsLoading = Roots.Count == 0;
         Error = null;
         try
@@ -627,6 +639,11 @@ public sealed class GitRepositoryViewModel : ObservableObject, IDisposable, ISho
                     }
 
                     _data[git] = current with { PullRequests = result };
+                }
+
+                if (version == _version)
+                {
+                    _pullRequestsOwed = false;
                 }
 
                 await RebuildAsync().ConfigureAwait(true);
