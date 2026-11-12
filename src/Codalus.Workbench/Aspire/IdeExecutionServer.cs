@@ -362,7 +362,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             {
                 if (socket.State == WebSocketState.Open)
                 {
-                    await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, _lifetime.Token).ConfigureAwait(false);
+                    await SendToAsync(socket, bytes).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                     if (notification.Type != "serviceLogs")
                     {
                         Log?.Invoke($"Sent {notification.Type} for run session {notification.SessionId}{(notification.ProcessId is { } pid ? $" (process {pid})" : string.Empty)}.");
@@ -407,9 +407,12 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             try
             {
+                // A socket accepted while the server is disposed ends here: the teardown may have aborted the sockets
+                // before this one was among them.
+                cancellationToken.ThrowIfCancellationRequested();
                 foreach (var bytes in waiting)
                 {
-                    await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                    await SendToAsync(socket, bytes).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 }
 
                 if (waiting.Length > 0)
@@ -424,7 +427,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
 
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
-                var result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
+                var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     break;
@@ -444,6 +447,19 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Sends on a notification socket. Neither this nor the socket's read takes the server's lifetime token, and both
+    /// continue on the thread pool; disposal ends them by aborting the socket (<see cref="TearDownAsync"/>). On Windows,
+    /// HttpListener's WebSocket links each operation to the token it is given, runs that link's callback and the
+    /// operation's continuation inside the token's cancellation, and takes the socket's locks in both; its own abort
+    /// (which a failed send calls) holds those locks while it waits for a cancellation callback that is running to
+    /// return. A session's last notification failing on one thread while the lifetime was cancelled on another left each
+    /// waiting for the other: the cancellation never returned, and disposal ran into its limits (Windows CI, runs
+    /// 41849511374 and 43184717554). A socket that only its own abort ends has no callback in anyone's cancellation.
+    /// </summary>
+    private static Task SendToAsync(WebSocket socket, byte[] bytes) =>
+        socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
 
     private static void AbortConnection(HttpListenerContext context)
     {
@@ -560,20 +576,8 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             TeardownStep("the cancellation's 5 s ran out");
         }
 
-        CloseListener(_listener);
-        TeardownStep("listener closed");
-
-        try
-        {
-            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            TeardownStep("accept loop ended");
-        }
-        catch (TimeoutException)
-        {
-            // A listener that won't stop doesn't hold whoever disposes it.
-            TeardownStep("the accept loop's 5 s ran out");
-        }
-
+        // The sockets, then their connections, then the listener: http.sys keeps an upgraded connection with its request,
+        // and the listener closes with nothing of its own still open.
         foreach (var socket in _sockets.Keys)
         {
             socket.Abort(); // no closing handshake to wait for
@@ -590,5 +594,18 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
 
         TeardownStep("connections aborted");
+        CloseListener(_listener);
+        TeardownStep("listener closed");
+
+        try
+        {
+            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TeardownStep("accept loop ended");
+        }
+        catch (TimeoutException)
+        {
+            // A listener that won't stop doesn't hold whoever disposes it.
+            TeardownStep("the accept loop's 5 s ran out");
+        }
     }
 }

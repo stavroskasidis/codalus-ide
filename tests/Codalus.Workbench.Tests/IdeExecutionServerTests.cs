@@ -51,7 +51,7 @@ public sealed class IdeExecutionServerTests
         await server.DisposeAsync().AsTask().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
 
         var state = server.DescribeState();
-        Assert.Matches(@"teardown [0-9.]+ s in: sessions stopped at [0-9.]+ s, teardown started at [0-9.]+ s, cancelled at [0-9.]+ s, listener closed at [0-9.]+ s, accept loop ended at [0-9.]+ s, sockets aborted at [0-9.]+ s, connections aborted at [0-9.]+ s$", state);
+        Assert.Matches(@"teardown [0-9.]+ s in: sessions stopped at [0-9.]+ s, teardown started at [0-9.]+ s, cancelled at [0-9.]+ s, sockets aborted at [0-9.]+ s, connections aborted at [0-9.]+ s, listener closed at [0-9.]+ s, accept loop ended at [0-9.]+ s$", state);
     }
 
     [Fact]
