@@ -39,6 +39,11 @@ jobs:
           bash eng/get-runtimes.sh
           echo "CODALUS_DOTNET_COMPAT=${{ github.workspace }}/.work/dotnet-compat" >> "$GITHUB_ENV"
           bash eng/get-netcoredbg.sh --x64
+          # The Codalus debugger's x64 bundle (M58b): under the default it debugs the frameworks that run as x64 on
+          # Apple silicon, .NET Core 2.2 to .NET 5; without it they'd all be netcoredbg's, and the tests say it is missing.
+          if [ "$(uname -s)-$(uname -m)" = Darwin-arm64 ]; then
+            bash eng/get-codalus-debugger.sh osx-x64
+          fi
       - run: dotnet restore Codalus.slnx
       - run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Test
