@@ -710,6 +710,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // commands and the consent shown; Cancel writes nothing. No network, no agent.
         await StepAsync("ai.connect", "D43", "AI Chat's off state offers the one-click agents; Connect to Claude shows its requirements, sign-in and exact commands, and Cancel writes nothing", AiConnectStepAsync).ConfigureAwait(true);
 
+        // ADR 0095: AI Console, with a stand-in for the agent's CLI on the shell's agent search path. No network, no agent.
+        await StepAsync("ai.console", "ADR 0095", "AI Console runs a connected agent's own CLI in the bottom group: its label, the IDE's tools on a pipe of its own, a reference typed into its prompt, and Close ending it", AiConsoleStepAsync, "projects.open").ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {
@@ -4215,6 +4218,76 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             {
                 shell.ConnectAgent.Cancel();
             }
+        }
+    }
+
+    /// <summary>
+    /// The ai.console step (ADR 0095): AI on and Claude connected in the user's settings, with a stand-in <c>claude</c> on
+    /// the shell's agent search path (it says it is ready and echoes each line; nothing reaches an agent or the network).
+    /// The console opens in the bottom group and starts it with a conversation id and the IDE's tools; Add File types a
+    /// reference into its prompt; Close ends it and its pipe. The settings are put back.
+    /// </summary>
+    private async Task AiConsoleStepAsync()
+    {
+        var settings = shell.Workbench.Settings;
+        var bin = Path.Combine(Work, "console-stand-ins");
+        Directory.CreateDirectory(bin);
+        var cli = Path.Combine(bin, OperatingSystem.IsWindows() ? "claude.cmd" : "claude");
+        File.WriteAllText(cli, OperatingSystem.IsWindows()
+            ? "@echo off\r\necho Claude stand-in ready (%1)\r\n:loop\r\nset \"line=\"\r\nset /p line=\r\nif \"%line%\"==\"exit\" exit /b 0\r\necho got: %line%\r\ngoto loop\r\n"
+            : "#!/bin/sh\necho \"Claude stand-in ready ($1)\"\nwhile IFS= read -r line; do [ \"$line\" = \"exit\" ] && exit 0; echo \"got: $line\"; done\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(cli, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var console = shell.AiConsole;
+        string Screen() => console.Selected?.Session is { } session ? session.Terminal.ScreenText() : string.Empty;
+        try
+        {
+            shell.AgentSearchPath = bin;
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            using (var agents = JsonDocument.Parse("""{ "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"], "template": "claude@0.94.0" } }"""))
+            {
+                await settings.SetAsync(Workbench.Ai.Acp.AcpAgents.AgentsSetting, agents.RootElement.Clone(), SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            await WaitAsync(() => shell.AiConsoleAgents.Count == 1, "Claude is an agent AI Console can start").ConfigureAwait(true);
+            Check(shell.Workbench.ToolWindows.All.Single(w => w.Id == AiConsoleViewModel.ToolWindowId).Location == Workbench.ToolWindows.ToolWindowLocation.Bottom, "AI Console's place is the bottom group");
+            // AI Chat (the ai.connect step's) closed first, so the console has the window's width for its picture.
+            shell.Layout.CloseToolWindow(AiChatViewModel.ToolWindowId);
+            await shell.Workbench.Commands.ExecuteAsync("ai.console.show", [], CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiConsoleView>().Any(v => v.IsEffectivelyVisible), "AI Console opens").ConfigureAwait(true);
+            await WaitAsync(() => Screen().Contains("Claude stand-in ready (--session-id)", StringComparison.Ordinal), $"the agent's CLI starts with a conversation id ({console.Notice})", 60).ConfigureAwait(true);
+            var tab = console.Selected!;
+            Check(tab.Title == "Claude" && Guid.TryParse(tab.SessionId, out _), "the console is Claude's, with its own conversation");
+            Check(tab.IdeTools && shell.OpenAgentMcpPipes == 1, "the CLI got the IDE's tools on a pipe of its own");
+            var view = window.GetVisualDescendants().OfType<AiConsoleView>().First(v => v.IsEffectivelyVisible);
+            Check(view.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Name == "ConsoleLabel" && t.IsEffectivelyVisible && t.Text == AiConsoleViewModel.Label), "the console's label shows");
+
+            // A reference to a file goes into the prompt, and Enter sends it: the path, never the text.
+            await shell.AddFileToAiConsoleAsync(Path.Combine(_folder, "src", "Greetings", "Greeter.cs")).ConfigureAwait(true);
+            await WaitAsync(() => Screen().Contains("@src/Greetings/Greeter.cs", StringComparison.Ordinal), "Add File types a reference into the prompt").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-console.png");
+            tab.Session!.Write("\r");
+            await WaitAsync(() => Screen().Contains("got: @src/Greetings/Greeter.cs", StringComparison.Ordinal), "the CLI reads the reference").ConfigureAwait(true);
+
+            shell.KillAiConsole(tab);
+            await WaitAsync(() => console.Tabs.Count == 0 && shell.OpenAgentMcpPipes == 0, "Close ends the CLI and its pipe").ConfigureAwait(true);
+        }
+        finally
+        {
+            foreach (var open in console.Tabs.ToList())
+            {
+                shell.KillAiConsole(open);
+            }
+
+            shell.AgentSearchPath = null;
+            await settings.SetAsync(Workbench.Ai.Acp.AcpAgents.AgentsSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.Cli.AgentClis.ConsoleAgentSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            shell.Layout.CloseToolWindow(AiConsoleViewModel.ToolWindowId);
         }
     }
 

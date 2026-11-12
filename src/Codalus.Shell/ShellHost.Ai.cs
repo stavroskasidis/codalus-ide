@@ -50,6 +50,7 @@ public sealed partial class ShellHost : IAiChatHost
         InitializeExternalAgents();
         AiChat = new AiChatViewModel(this);
         InitializeAiChatChanges();
+        InitializeAiConsole();
         AiCompletions = new AiCompletions(Ai, Workbench.Settings);
         AiNextEdit = new AiNextEdit(Ai, Workbench.Settings);
         Ai.Changed += (_, _) => Ui.Post(UpdateAiStatus);

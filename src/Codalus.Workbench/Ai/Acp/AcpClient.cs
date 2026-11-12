@@ -4,6 +4,9 @@ using Codalus.Rpc;
 
 namespace Codalus.Workbench.Ai.Acp;
 
+/// <summary>An entry's <c>console</c>: the program AI Console starts for it, and its arguments.</summary>
+public sealed record AcpConsoleCommand(string Command, IReadOnlyList<string> Args);
+
 /// <summary>An external agent from <c>ai.agents</c>: the command that starts it (the user's CLI).</summary>
 public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, IReadOnlyDictionary<string, string> Env)
 {
@@ -27,6 +30,13 @@ public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, 
 
     /// <summary><c>node</c>: <c>builtIn</c> when Codalus's own Node.js runs it (D-node, ADR 0083); null for the user's.</summary>
     public string? Node { get; init; }
+
+    /// <summary>
+    /// <c>console</c>: the agent's own CLI for AI Console (ADR 0095), for an entry written by hand: a program's name or
+    /// path, or <c>{ "command": "…", "args": ["…"] }</c>. Null: the CLI of the template it was connected from. Not part
+    /// of <see cref="SameAs"/>: it doesn't change the agent AI Chat runs.
+    /// </summary>
+    public AcpConsoleCommand? Console { get; init; }
 
     /// <summary>
     /// <c>choices</c>: the values the user picked in AI Chat for the agent's model, mode, effort and other choices, by the
