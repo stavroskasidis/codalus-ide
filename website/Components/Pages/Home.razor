@@ -81,6 +81,48 @@
         </div>
     </section>
 
+    <section class="spotlight reveal" aria-labelledby="ai">
+        <div class="head-row">
+            <div class="section-head">
+                <p class="eyebrow">AI, on your terms</p>
+                <h2 class="heading" id="ai">Your agent, with the whole IDE behind it.</h2>
+            </div>
+            <a class="link-arrow" href="docs/ai/">AI assistance in the guide <Icon Name="arrow" Size="16" /></a>
+        </div>
+        <div class="viewer tour" data-tabs>
+            <div class="tabs tabs-rail" role="tablist" aria-label="AI features" aria-orientation="vertical" hidden>
+                @foreach (var feature in s_ai)
+                {
+                    <button class="tab" type="button" role="tab" id="aitab-@feature.Key" aria-controls="ai-@feature.Key" data-key="ai-@feature.Key"><span>@feature.Label</span><span class="tab-ext">@feature.Ext</span></button>
+                }
+            </div>
+            <div class="tour-shots">
+                @foreach (var (feature, i) in s_ai.Select((f, i) => (f, i)))
+                {
+                    <div class="shot model" role="tabpanel" id="ai-@feature.Key" aria-labelledby="aitab-@feature.Key" hidden="@(i != 0)">
+                        <figure><img src="assets/screenshots/@feature.File" width="1280" height="800" loading="lazy" alt="@feature.Alt" /></figure>
+                        <div class="model-text">
+                            <div class="model-what">
+                                <h3>@feature.Label</h3>
+                                <ul>
+                                    @foreach (var point in feature.Points)
+                                    {
+                                        <li>@point</li>
+                                    }
+                                </ul>
+                            </div>
+                            <div class="model-where">
+                                <p class="model-where-label">What stays yours</p>
+                                <p>@feature.Where</p>
+                                <a class="link-arrow" href="@feature.Guide">@feature.Label in the guide <Icon Name="arrow" Size="16" /></a>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
     <section class="section" aria-labelledby="everything">
         <div class="head-row">
             <div class="section-head">
@@ -183,6 +225,38 @@
         ["data-windows"] = Releases.AssetUrl("win-x64-setup.exe"),
         ["data-macos"] = Releases.AssetUrl("osx-arm64.pkg"),
     };
+
+    /// <summary>
+    /// The AI features the second spotlight shows, each with its picture from the smoke test (website/screenshots.txt)
+    /// and, where the app models say where they run, what stays under the user's control.
+    /// </summary>
+    private static readonly Model[] s_ai =
+    [
+        new("console", "AI Console", "agent CLI", "ai-console.png",
+            "AI Console at the bottom of the window, beside the Output and the Terminal: the agent's own CLI with its label, the IDE's tools connected, and a reference to Greeter.cs typed into its prompt",
+            ["Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode or goose in their own command-line interface, in a console beside the Output and the Terminal",
+             "The IDE's tools connected for that run where the CLI takes them, with nothing written to its own configuration",
+             "Tabs that come back with their conversations, and Add Selection to send a reference instead of the text"],
+            "It runs only while AI assistance is on, in folders you trust, and says that the agent changes files with its own approvals.", "docs/ai/#ai-console"),
+        new("agent", "An agent that uses the IDE", "MCP", "ai-chat-agent.png",
+            "AI Chat's agent: its step folded into one line, Read 1 file, and its explanation with the code it suggests",
+            ["Symbols, references, implementations and callers through the compiler instead of grep",
+             "Build, run the tests, start the program, and debug it with breakpoints, variables and steps",
+             "A web app's page driven under the debugger, so its breakpoints stop"],
+            "Every change shows in a preview first, every command runs after you allow it, and each answer lists the files it changed, with Revert.", "docs/ai/#the-ides-tools"),
+        new("chat", "AI Chat", "@-mentions", "ai-chat.png",
+            "AI Chat beside the editor: a question about the selected method that mentions @selection, the file sent with it, and the answer with its code block",
+            ["Ask about your code and @-mention what goes with it: the selection, the errors, the build, any file",
+             "Each answer's steps folded into one line, and code blocks in your editor's colors",
+             "Inline and next edit suggestions, commit messages, Fix with AI, and tests for the selection"],
+            "Off until you turn it on, with your own key or a model on your machine. Only what a question mentions is sent; secrets and ignored files never are.", "docs/ai/#ai-chat"),
+        new("connect", "Connect your agent", "ACP", "agent-connect.png",
+            "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
+            ["Claude, Codex, Gemini CLI or GitHub Copilot connected from one dialog",
+             "Node.js found or installed with your own package manager, and the agent signed in its own way",
+             "The connection tested in an empty folder before anything is saved"],
+            "The exact commands show before they run, keys go to the OS credential store, and Disconnect undoes it.", "docs/ai/#connecting-one"),
+    ];
 
     private static readonly (string Name, string Role)[] s_hosts =
     [
