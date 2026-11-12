@@ -362,7 +362,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             {
                 if (socket.State == WebSocketState.Open)
                 {
-                    await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, _lifetime.Token).ConfigureAwait(false);
+                    await SendToAsync(socket, bytes).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                     if (notification.Type != "serviceLogs")
                     {
                         Log?.Invoke($"Sent {notification.Type} for run session {notification.SessionId}{(notification.ProcessId is { } pid ? $" (process {pid})" : string.Empty)}.");
@@ -407,9 +407,12 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         {
             try
             {
+                // A socket accepted while the server is disposed ends here: the teardown may have aborted the sockets
+                // before this one was among them.
+                cancellationToken.ThrowIfCancellationRequested();
                 foreach (var bytes in waiting)
                 {
-                    await socket.SendAsync(bytes, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                    await SendToAsync(socket, bytes).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 }
 
                 if (waiting.Length > 0)
@@ -424,7 +427,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
 
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
-                var result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
+                var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     break;
@@ -444,6 +447,21 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Sends on a notification socket. Neither this nor the socket's read takes the server's lifetime token, and both
+    /// continue on the thread pool; disposal ends them by aborting the socket (<see cref="TearDownAsync"/>). On Windows,
+    /// HttpListener's WebSocket links each operation to the token it is given and, when that token is cancelled, runs the
+    /// link's callback and the operation's continuation inside the cancellation; the continuation aborts the socket, which
+    /// takes the socket's locks. The socket's abort, in turn, holds those locks while it disposes the links, and disposing
+    /// a link waits for its callback when that is running on another thread. So a session's last notification, sent with
+    /// the lifetime token as disposal cancelled it, aborted the socket on its thread and waited for the read's callback,
+    /// which the cancelling thread was in, waiting for the socket's locks: neither returned, and disposal ran into its
+    /// limits (Windows CI, runs 41849511374 and 43184717554; both stacks in run 43192618601). A socket that takes no
+    /// token has no callback in anyone's cancellation.
+    /// </summary>
+    private static Task SendToAsync(WebSocket socket, byte[] bytes) =>
+        socket.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
 
     private static void AbortConnection(HttpListenerContext context)
     {
@@ -497,9 +515,11 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     }
 
     /// <summary>
-    /// When disposal reached each step of the teardown, from its start: a disposal that took longer than the test allows
-    /// (over 10 s, Windows CI, PR #300's run 41849511374, with the runner's CPU at 99%) said nothing of which step took
-    /// the time. TODO(issue): the cause, once a failure names the step.
+    /// When disposal reached each step of the teardown, from its start, for a test's failure and the log of a teardown
+    /// left behind: this named the cancellation as what blocked on Windows CI (run 43184717554; the cause is at
+    /// <see cref="SendToAsync"/>). TODO(issue): in that run the listener's close, after the cancellation's 5 s, also took
+    /// over 5 s, with the two blocked threads still holding the socket; why isn't known, and it hasn't been seen without
+    /// them (HttpListener.Abort makes the same calls as Close but for removing the prefixes, so it is no way around it).
     /// </summary>
     private readonly Stopwatch _teardownClock = new();
 
@@ -526,11 +546,10 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         TeardownStep("sessions stopped");
 
         // The sockets and the listener close on the thread pool, and disposal waits for that a bounded time: on Windows,
-        // HttpListener's WebSocket takes its locks to abort and to dispose, and a pending read's cancellation callback
-        // that blocks inside its abort keeps them, so a later Abort or Dispose waits as long. The Aspire test hung after
-        // its last step on Windows CI in this disposal: first in the cancellation, then, once that was bounded, past it.
-        // A teardown that doesn't finish is reported and left behind; it never holds whoever disposes the server (the UI
-        // thread, in the shell).
+        // HttpListener's WebSocket takes its locks to abort and to dispose, and whatever keeps them makes a later Abort
+        // or Dispose wait as long (the Aspire test hung after its last step on Windows CI in this disposal; the cause
+        // found since is at SendToAsync). A teardown that doesn't finish is reported and left behind; it never holds
+        // whoever disposes the server (the UI thread, in the shell).
         var teardown = Task.Run(TearDownAsync);
         try
         {
@@ -547,8 +566,8 @@ public sealed class IdeExecutionServer : IAsyncDisposable
 
     private async Task TearDownAsync()
     {
-        // Bounded, like the loop below: cancelling runs the notification sockets' pending reads' callbacks, which an
-        // HttpListener WebSocket on Windows can block in.
+        // The cancellation ends the accept loop and the requests being handled; no socket operation takes the token
+        // (SendToAsync). Still bounded, like the loop below, and its step named if it ever runs out.
         TeardownStep("teardown started");
         try
         {
@@ -560,20 +579,8 @@ public sealed class IdeExecutionServer : IAsyncDisposable
             TeardownStep("the cancellation's 5 s ran out");
         }
 
-        CloseListener(_listener);
-        TeardownStep("listener closed");
-
-        try
-        {
-            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            TeardownStep("accept loop ended");
-        }
-        catch (TimeoutException)
-        {
-            // A listener that won't stop doesn't hold whoever disposes it.
-            TeardownStep("the accept loop's 5 s ran out");
-        }
-
+        // The sockets, then their connections, then the listener: http.sys keeps an upgraded connection with its request,
+        // and the listener closes with nothing of its own still open.
         foreach (var socket in _sockets.Keys)
         {
             socket.Abort(); // no closing handshake to wait for
@@ -590,5 +597,18 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         }
 
         TeardownStep("connections aborted");
+        CloseListener(_listener);
+        TeardownStep("listener closed");
+
+        try
+        {
+            await _loop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            TeardownStep("accept loop ended");
+        }
+        catch (TimeoutException)
+        {
+            // A listener that won't stop doesn't hold whoever disposes it.
+            TeardownStep("the accept loop's 5 s ran out");
+        }
     }
 }

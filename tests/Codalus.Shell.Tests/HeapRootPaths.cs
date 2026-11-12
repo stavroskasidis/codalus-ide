@@ -38,10 +38,10 @@ internal static class HeapRootPaths
                 var chain = new List<string>();
                 for (var link = path; link is not null; link = link.Next)
                 {
-                    chain.Add(heap.GetObject(link.Object).Type?.Name ?? $"0x{link.Object:x}");
+                    chain.Add(Name(heap.GetObject(link.Object), link.Object));
                 }
 
-                lines.Add($"{root.RootKind}{(root.IsPinned ? " (pinned)" : string.Empty)}: {string.Join(" -> ", chain)}");
+                lines.Add($"{root.RootKind}{(root.IsPinned ? " (pinned)" : string.Empty)}{Frame(root)}: {string.Join(" -> ", chain)}");
             }
 
             return lines.Count == 0
@@ -55,6 +55,48 @@ internal static class HeapRootPaths
         catch (Exception ex)
         {
             return $"no snapshot of the process ({ex.GetType().Name}: {ex.Message})";
+        }
+    }
+
+    /// <summary>
+    /// An object's type and, for a delegate, the method it calls: a shell held 30 s through "System.Action ->
+    /// System.Delegate+Wrapper[] -> System.Action -> ShellHost" from a stack root said neither whose event that was nor
+    /// which handler (Linux CI, run 43200651803).
+    /// </summary>
+    private static string Name(ClrObject item, ulong address)
+    {
+        var name = item.Type?.Name ?? $"0x{address:x}";
+        try
+        {
+            if (item.IsDelegate && item.AsDelegate().GetDelegateTarget() is { Method: { } method })
+            {
+                name += $" ({method.Type?.Name}.{method.Name})";
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+        }
+
+        return name;
+    }
+
+    /// <summary>For a root on a thread's stack, the frame that holds it and where that thread is: which code keeps the object, and what it waits for.</summary>
+    private static string Frame(ClrRoot root)
+    {
+        if (root is not ClrStackRoot { StackFrame: { } frame })
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var thread = frame.Thread;
+            var stack = thread is null ? [] : thread.EnumerateStackTrace().Select(f => f.Method is { } m ? $"{m.Type?.Name}.{m.Name}" : null).OfType<string>().Take(12).ToArray();
+            return $" in {(frame.Method is { } method ? $"{method.Type?.Name}.{method.Name}" : frame.FrameName ?? "a frame")} (thread {thread?.ManagedThreadId}, at {string.Join(" < ", stack)})";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return " in a frame that can't be read";
         }
     }
 
