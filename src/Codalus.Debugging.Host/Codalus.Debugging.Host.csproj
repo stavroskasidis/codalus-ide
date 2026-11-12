@@ -19,15 +19,31 @@
     <StartupHookSupport>false</StartupHookSupport>
   </PropertyGroup>
 
+  <!--
+    The Codalus debugger's bundle for a platform (M58b, ADR 0094; -p:CodalusDebuggerBundle=true with a runtime
+    identifier): this host with its own .NET runtime, so a remote target needs only the program's. Partial trimming:
+    the runtime is trimmed to what the host's assemblies use, which stay whole (ClrMD, the DAP types' JSON). The
+    settings are here, not on the command line, where they would reach the netstandard projects below too.
+  -->
+  <PropertyGroup Condition="'$(CodalusDebuggerBundle)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <DebugType>none</DebugType>
+    <UseAppHost>true</UseAppHost>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Codalus.Rpc\Codalus.Rpc.csproj" />
     <ProjectReference Include="..\Codalus.Debugging\Codalus.Debugging.csproj" />
     <!-- The Mono debugger adapter's protocol client (M20b, ADR 0065; MIT, vendored). -->
     <ProjectReference Include="..\ThirdParty\Mono.Debugger.Soft\Mono.Debugger.Soft.csproj" />
-    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). -->
-    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" />
+    <!-- Not used by the host: shipped beside it in debughost/, for programs debugged in the terminal (M14c). Not in the debugger's bundle. -->
+    <ProjectReference Include="..\Codalus.Debugging.StartupHook\Codalus.Debugging.StartupHook.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
     <!-- Likewise: the XAML previewer's agent, loaded into Avalonia's designer host (M19a, ADR 0048). -->
-    <ProjectReference Include="..\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" />
+    <ProjectReference Include="..\Codalus.Previewer.Agent\Codalus.Previewer.Agent.csproj" Condition="'$(CodalusDebuggerBundle)' != 'true'" />
   </ItemGroup>
 
   <ItemGroup>
@@ -44,6 +60,9 @@
       (M54, ADR 0086): COM interop only, the runtime's own mscordbi does the work.
     -->
     <PackageReference Include="ClrDebug" />
+    <!-- x64 instructions as text, for the Disassembly window (M58, ADR 0094; MIT); arm64's decoder is ours (Disassembly/). -->
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Mono.Cecil" />
     <!--
       dbgshim (MIT), which starts CoreCLR programs for the debugger and finds their runtime's mscordbi (ADR 0086): a
       publish for a runtime identifier takes its platform's library, a build without one (the tests) every platform's
@@ -53,6 +72,8 @@
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-x64" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.linux-arm64" />
     <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-arm64" />
+    <!-- Only in the debugger's osx-x64 bundle (M58b): x64 programs on Apple silicon are debugged by an x64 debugger, under Rosetta 2. -->
+    <PackageReference Include="Microsoft.Diagnostics.DbgShim.osx-x64" Condition="'$(CodalusDebuggerBundle)' == 'true' And '$(RuntimeIdentifier)' == 'osx-x64'" />
   </ItemGroup>
 
   <ItemGroup>

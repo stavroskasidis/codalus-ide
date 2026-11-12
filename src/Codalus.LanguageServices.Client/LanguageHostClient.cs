@@ -682,9 +682,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<bool> HotReloadStartAsync(string session, string[] projects, string[] capabilities, CancellationToken cancellationToken) =>
         Invoke(Methods.HotReloadStart, new HotReloadStartParams(session, projects, capabilities), ProtocolJsonContext.Default.HotReloadStartParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
 
+    /// <summary><c>codalus/debug/compileExpression</c> (M58): a debugger expression compiled where a frame is stopped.</summary>
+    public Task<CompileExpressionResult> CompileExpressionAsync(CompileExpressionParams parameters, CancellationToken cancellationToken) =>
+        Invoke(Methods.CompileExpression, parameters, ProtocolJsonContext.Default.CompileExpressionParams, ProtocolJsonContext.Default.CompileExpressionResult, cancellationToken);
+
     /// <summary><c>codalus/hotReload/update</c>: the edits since the session's start or last commit, as deltas or rude edits.</summary>
-    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken) =>
-        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
+    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken, HotReloadActiveStatement[]? activeStatements = null) =>
+        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session, activeStatements), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
 
     /// <summary><c>codalus/hotReload/commit</c>: the debugger applied the last update.</summary>
     public Task<bool> HotReloadCommitAsync(string session, CancellationToken cancellationToken) =>

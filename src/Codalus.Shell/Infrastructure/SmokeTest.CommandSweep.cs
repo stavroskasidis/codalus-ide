@@ -193,6 +193,8 @@ internal sealed partial class SmokeTest
         ("hotReloadRunning", "needs a program running with Hot Reload (the web.hotReload step covers it)"),
         ("testsRunning", "needs a test run in progress"),
         ("debugCanDetach", "needs an attached debug session"),
+        ("debugCanSetNextStatement", "needs a program stopped under the Codalus debugger (the debug.codalus step covers it)"),
+        ("debugCanStepIntoSpecific", "needs a program stopped under the Codalus debugger (the debug.codalus step covers it)"),
         ("mobileStartup", "needs a .NET MAUI startup project (the maui.* steps cover it)"),
         ("gitRepositories", "needs several Git repositories in one solution"),
         ("!gitRepository", "needs a solution outside a Git repository"),

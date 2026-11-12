@@ -26,6 +26,9 @@ public sealed partial class ShellHost
     /// <summary>Step over properties and operators (M14b).</summary>
     public const string StepFilteringSetting = "debug.stepOverPropertiesAndOperators";
 
+    /// <summary>With several startup projects, a stop in one program pauses the others (M58); on by default.</summary>
+    public const string BreakAllProcessesSetting = "debug.breakAllProcesses";
+
     /// <summary>The adapter that debugs .NET programs: netcoredbg, or Codalus IDE's own, a preview (M54, ADR 0086).</summary>
     public const string DebugAdapterSetting = "debug.adapter";
 
@@ -56,11 +59,14 @@ public sealed partial class ShellHost
         Debugger = new DebugService(DebugAdapterLocator.Resolve)
         {
             JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true),
-            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter),
+            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.CodalusAdapter),
         };
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
+        // A remote session's modules are read where they are, by the companion in the debugger's bundle there (M58b).
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
-            await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+            (_remoteCompanion is { } remote ? await RemoteTypeDisplayAsync(remote, type, modules, cancellationToken).ConfigureAwait(false) : null)
+            ?? await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+        Debugger.Ended += (_, _) => UseRemoteCompanion(null);
         // The solution's own code (D44): a module named as one of its projects, or built under one's folder.
         Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
             string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
@@ -81,6 +87,9 @@ public sealed partial class ShellHost
         VariableActions.VisualizeWithPlugin = VisualizeWithPluginAsync;
         VariableActions.AskAi = AskAiAboutValueAsync;
         VariableActions.CanAskAi = () => Ai.IsEnabled;
+        VariableActions.MakeObjectId = expression => MakeObjectIdAsync(expression);
+        VariableActions.CanMakeObjectId = () => Debugger.CanMakeObjectIds;
+        VariableActions.DeleteObjectId = DeleteObjectIdAsync;
         VariableActions.CopyText = async text =>
         {
             if (Window?.Clipboard is { } clipboard)
@@ -587,6 +596,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+        UpdateDebuggerAbilities();
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);

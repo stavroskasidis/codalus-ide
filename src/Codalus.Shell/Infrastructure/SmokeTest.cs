@@ -56,7 +56,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private string Program => Path.Combine(_folder, "src", "Hello", "Program.cs");
 
-    /// <summary>Appended to the screenshots' names: <c>-codalus</c> while a step runs again under the Codalus debugger (M54).</summary>
+    /// <summary>Appended to the screenshots' names: <c>-netcoredbg</c> while a step runs again under netcoredbg, the fallback (M58).</summary>
     private string _screenshotSuffix = string.Empty;
 
     public async Task RunAsync()
@@ -592,11 +592,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", DebugDataTipStepAsync, "debug.session").ConfigureAwait(true);
 
-        // M54 (ADR 0086): the same steps under the Codalus debugger (debug.adapter), whose screenshots end in -codalus.
-        await StepAsync("debug.session.codalus", "M54", "Under the Codalus debugger: F5 stops at a breakpoint; locals, evaluation and continue to exit", () => UnderCodalusDebuggerAsync(DebugSessionStepAsync), "debug.session").ConfigureAwait(true);
-        await StepAsync("debug.depth.codalus", "M54", "Under the Codalus debugger: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", () => UnderCodalusDebuggerAsync(DebugDepthStepAsync), "debug.session.codalus").ConfigureAwait(true);
-        await StepAsync("debug.companion.codalus", "M54", "Under the Codalus debugger: Parallel Stacks, the grid visualizer, a pinned data tip, and a dump", () => UnderCodalusDebuggerAsync(DebugCompanionStepAsync), "debug.session.codalus").ConfigureAwait(true);
-        await StepAsync("debug.dataTip.codalus", "M54", "Under the Codalus debugger: the data tip, its elements in a child tip, and the same rows in Locals", () => UnderCodalusDebuggerAsync(DebugDataTipStepAsync), "debug.session.codalus").ConfigureAwait(true);
+        // M58 (ADR 0094): the steps above ran under the Codalus debugger, the default; the same steps under netcoredbg, the
+        // fallback (debug.adapter), whose screenshots end in -netcoredbg.
+        await StepAsync("debug.session.netcoredbg", "M58", "Under netcoredbg, the fallback: F5 stops at a breakpoint; locals, evaluation and continue to exit", () => UnderNetcoredbgAsync(DebugSessionStepAsync), "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.depth.netcoredbg", "M58", "Under netcoredbg, the fallback: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", () => UnderNetcoredbgAsync(DebugDepthStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.companion.netcoredbg", "M58", "Under netcoredbg, the fallback: Parallel Stacks, the grid visualizer, a pinned data tip, and a dump", () => UnderNetcoredbgAsync(DebugCompanionStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.dataTip.netcoredbg", "M58", "Under netcoredbg, the fallback: the data tip, its elements in a child tip, and the same rows in Locals", () => UnderNetcoredbgAsync(DebugDataTipStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
 
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
@@ -1047,27 +1048,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
-        // Not on macOS, where debugged programs use the Debug Console (netcoredbg can't attach to a held program there).
-        if (!OperatingSystem.IsMacOS())
-        {
-            await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
-        }
+        // On macOS too: the Codalus debugger's launcher starts the program in the terminal there (M54b).
+        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
         if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
         {
-            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with netcoredbg copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
+            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with the debugger copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
         }
         else
         {
             Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
 
-        // M54 (ADR 0086): under the Codalus debugger too, the integrated terminal on macOS as well (its launcher starts the
-        // program there); remote targets keep netcoredbg.
-        await StepAsync("debug.compound.codalus", "M54", "Under the Codalus debugger: two startup projects in one session, each stopping at its breakpoint", () => UnderCodalusDebuggerAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
-        await StepAsync("debug.terminal.codalus", "M54", "Under the Codalus debugger: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderCodalusDebuggerAsync(DebugTerminalStepAsync), "debug.compound.codalus").ConfigureAwait(true);
-        await StepAsync("debug.roslyn.codalus", "M54", "Under the Codalus debugger: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderCodalusDebuggerAsync(DebugRoslynStepAsync), "debug.compound.codalus").ConfigureAwait(true);
-        await StepAsync("debug.applyChanges.codalus", "M55", "Under the Codalus debugger: an edit made while stopped applies on Continue, and one made while running with Apply Code Changes", () => UnderCodalusDebuggerAsync(DebugApplyChangesStepAsync), "debug.compound.codalus").ConfigureAwait(true);
+        // M58b (ADR 0094): again under netcoredbg, the fallback, for as long as it ships. Not the terminal on macOS:
+        // netcoredbg can't attach to a program held at its start there.
+        await StepAsync("debug.compound.netcoredbg", "M58", "Under netcoredbg, the fallback: two startup projects in one session, each stopping at its breakpoint", () => UnderNetcoredbgAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
+        if (!OperatingSystem.IsMacOS())
+        {
+            await StepAsync("debug.terminal.netcoredbg", "M58", "Under netcoredbg, the fallback: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderNetcoredbgAsync(DebugTerminalStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        }
+        await StepAsync("debug.roslyn.netcoredbg", "M58", "Under netcoredbg, the fallback: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderNetcoredbgAsync(DebugRoslynStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.applyChanges", "M55", "An edit made while stopped applies on Continue, and one made while running with Apply Code Changes", DebugApplyChangesStepAsync, "debug.compound").ConfigureAwait(true);
+        // M58 (ADR 0094): the Codalus debugger's own features, in the shipped app.
+        await StepAsync("debug.codalus", "M58", "The Codalus debugger's own: a hit count, Set Next Statement, a lambda in an expression, the Disassembly, Registers and Memory windows, and an edit that moves the stopped frame into its new code", DebugCodalusStepAsync, "debug.session").ConfigureAwait(true);
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
         {
@@ -1292,18 +1295,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 : ("skipped", "No Chrome, Edge or Chromium is installed.");
             Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
             Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
-            Report("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, outcome, 0, reason);
+            Report("blazor.compoundHotReload.netcoredbg", "0.6", compoundHotReloadTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
-            await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
+            // The server under the Codalus debugger, the default (the page's debugger is the browser's either way). Its Hot
+            // Reload doesn't use dotnet watch: the debugger launches the server, and the IDE sends the page its edits (ADR 0090).
+            await StepAsync("blazor.browserHotReload", "ADR 0090", "F5 on a Blazor Web App (SDK 10) launches the server without dotnet watch, a WebAssembly edit applies to the server and runs in the browser, and a rude edit asks to restart", BrowserHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
 
-            // M54: the server under the Codalus debugger (the page's debugger is the browser's either way). Its Hot Reload
-            // doesn't use dotnet watch: the debugger launches the server, and the IDE sends the page its edits (ADR 0090).
-            await StepAsync("blazor.compoundDebug.codalus", "M54", "Under the Codalus debugger: " + compoundTitle, () => UnderCodalusDebuggerAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
-            await StepAsync("blazor.compoundHotReload.codalus", "ADR 0090", "Under the Codalus debugger: F5 on a Blazor Web App (SDK 10) launches the server without dotnet watch, a WebAssembly edit applies to the server and runs in the browser, and a rude edit asks to restart", () => UnderCodalusDebuggerAsync(BrowserHotReloadStepAsync), "blazor.compoundDebug.codalus").ConfigureAwait(true);
+            // Under netcoredbg, the fallback: the same session, and Hot Reload through dotnet watch with the debugger attached
+            // to the server it runs (0.6).
+            await StepAsync("blazor.compoundDebug.netcoredbg", "M58", "Under netcoredbg, the fallback: " + compoundTitle, () => UnderNetcoredbgAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload.netcoredbg", "0.6", "Under netcoredbg, the fallback: " + compoundHotReloadTitle, () => UnderNetcoredbgAsync(CompoundHotReloadStepAsync), "blazor.compoundDebug.netcoredbg").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -1747,6 +1752,101 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
     }
 
+    /// <summary>
+    /// M58 (ADR 0094), on samples/Debugging: the debugger applies a hit count itself, Set Next Statement moves the
+    /// thread, an expression with a lambda is compiled and run in the program, the Disassembly, Registers and Memory
+    /// windows show the stopped frame's machine state; then, on HotReload.slnx, an edit applied while stopped in the
+    /// method it changes moves the frame into the new code (Edit and Continue).
+    /// </summary>
+    private async Task DebugCodalusStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        if (!Directory.Exists(Sessions))
+        {
+            Copy(Path.Combine(samples, "Debugging"), Sessions);
+        }
+
+        // Debuggee's --features mode, as a launch profile for this step only.
+        var launchSettings = SessionSource("Debuggee", Path.Combine("Properties", "launchSettings.json"));
+        Directory.CreateDirectory(Path.GetDirectoryName(launchSettings)!);
+        File.WriteAllText(launchSettings, """{ "profiles": { "Features": { "commandName": "Project", "commandLineArgs": "--features" } } }""");
+        try
+        {
+            await shell.OpenSolutionAsync(Path.Combine(Sessions, "Debugging.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Debugging solution is open", 300).ConfigureAwait(true);
+            var features = SessionSource("Debuggee", "Features.cs");
+            var loop = MarkerLine(features, "features-loop");
+            var measure = MarkerLine(features, "features-measure");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, loop, HitCondition: "== 4"));
+            shell.Run("debug.start");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == loop, "the debugger stops at the loop's breakpoint", 300).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "i", Value: "3" }), "the hit count stopped the fourth pass (i is 3): the debugger counted, with no stop before").ConfigureAwait(true);
+
+            // Set Next Statement: on to the line after the loop, the rest of the loop not run; then a step over it.
+            shell.Debugger.Breakpoints.Clear();
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugCanSetNextStatement"), true), "Set Next Statement is offered").ConfigureAwait(true);
+            Check(await shell.SetNextStatementAsync(features, measure - 1).ConfigureAwait(true), "Set Next Statement moves the thread: " + shell.StatusBar.Message);
+            await WaitAsync(() => shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure - 1, "the current line is the one chosen").ConfigureAwait(true);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "count", Value: "3" }), "the loop's later passes didn't run (count is 3)").ConfigureAwait(true);
+            shell.Run("debug.stepOver");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
+
+            // A lambda: the C# language host compiles it, and the program runs it.
+            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
+
+            // The machine's side of the stopped frame.
+            Check(shell.Debugger.CanReadMemory && shell.Debugger.CanDisassemble && shell.Debugger.CanShowRegisters, "the debugger reads memory, registers and machine code");
+            shell.Layout.ShowToolWindow(MemoryViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<MemoryView>().Any(), "the Memory window renders").ConfigureAwait(true);
+            shell.MemoryWindow.AddressText = "text";
+            await shell.MemoryWindow.GoAsync().ConfigureAwait(true);
+            Check(shell.MemoryWindow.Message is null && shell.MemoryWindow.Rows.Count > 0, "the Memory window shows the bytes of an object: " + shell.MemoryWindow.Message);
+            shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<RegistersView>().Any() && shell.RegistersWindow.Rows.Any(r => r.Name is "rip" or "pc"), "the Registers window lists the instruction pointer").ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<DisassemblyView>().Any() && shell.DisassemblyWindow.CurrentIndex >= 0, "the Disassembly window marks the frame's instruction").ConfigureAwait(true);
+            Check(shell.DisassemblyWindow.Rows.Any(r => r.Heading == $"Features.cs:{measure}"), "the instructions are under their source lines");
+            Screenshot("smoke-test-debug-disassembly.png");
+
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            File.Delete(launchSettings);
+        }
+
+        // Edit and Continue: stopped in Greeter.Message, an edit to it is applied, and a step goes on in the new code.
+        await shell.OpenSolutionAsync(Path.Combine(Sessions, "HotReload.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the HotReload solution is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(SessionSource("HotReload", "HotReload.csproj"));
+        var program = SessionSource("HotReload", "Program.cs");
+        var message = MarkerLine(program, "message");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(program, message);
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message, "the debugger stops in Greeter.Message", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.DebugEdits.IsActive, "the session takes edits", 60).ConfigureAwait(true);
+        var editor = await shell.OpenFileAsync(program, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Program.cs did not open.");
+        await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
+        const string Old = "        return text;";
+        const string New = "        var more = \" moved\";\n        return text + more;";
+        var offset = editor.Model.Text.Text.IndexOf(Old, StringComparison.Ordinal);
+        Check(offset >= 0, "Program.cs has Greeter.Message's return");
+        editor.Model.Text.Replace(offset, Old.Length, New);
+        shell.Debugger.Breakpoints.Clear();
+        shell.Run("debug.stepOver");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message + 1, "the step applied the edit and stopped on the line it added, in the new code", 120).ConfigureAwait(true);
+        shell.Run("debug.continue");
+        await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 moved", StringComparison.Ordinal), "the frame that was stopped ran the new code: its call prints it", 60).ConfigureAwait(true);
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
+    }
+
     /// <summary>Multiple startup projects (M14c): Partner and Debuggee from the Startup Projects page, in one session.</summary>
     private async Task DebugCompoundStepAsync()
     {
@@ -1839,6 +1939,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         finally
         {
             await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+            // The profile is this step's: the steps run again under netcoredbg (M58b), and debug.compound's Debuggee,
+            // started with --read there, waited for a line on netcoredbg's pipe that nobody writes, and never reached its
+            // breakpoint (the Codalus debugger's Debug Console ends the input, so the order before M58b hid it).
+            File.Delete(Path.Combine(properties, "launchSettings.json"));
         }
     }
 
@@ -1929,7 +2034,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var attaching = shell.AttachToRemoteAsync(target, null, remote!.Id);
             while (!attaching.IsCompleted)
             {
-                // The first attach on a target asks to copy netcoredbg there.
+                // The first attach on a target asks to copy the debugger there (the Codalus debugger's bundle, M58b).
                 if (shell.Dialogs.IsOpen && shell.Dialogs.Title == "Copy the Debugger")
                 {
                     shell.Dialogs.Accept();
@@ -4688,30 +4793,30 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     // ------------------------------------------------------------------ report
 
     /// <summary>
-    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
-    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// A debug step again under netcoredbg, the fallback debugger (<c>debug.adapter</c> <c>netcoredbg</c>; M58, ADR
+    /// 0094: the first pass runs under the default, the Codalus debugger, and its screenshots are the website's). The
+    /// second pass's screenshots are named <c>-netcoredbg</c>.
     /// </summary>
-    /// <summary>
-    /// A debug step again under the Codalus debugger (M54, ADR 0086: <c>debug.adapter</c> <c>codalus</c>), its screenshots
-    /// named <c>-codalus</c> (the first pass's are the website's); the Debug Console has to say which debugger it was.
-    /// </summary>
-    private async Task UnderCodalusDebuggerAsync(Func<Task> step)
+    private async Task UnderNetcoredbgAsync(Func<Task> step)
     {
-        await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
-        _screenshotSuffix = "-codalus";
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        _screenshotSuffix = "-netcoredbg";
         try
         {
+            Check(!shell.Debugger.UsesCodalusAdapter, "the setting chooses netcoredbg");
             await step().ConfigureAwait(true);
-            var text = shell.DebugLog.GetText();
-            Check(text.Contains("Debugging with the Codalus debugger (preview).", StringComparison.Ordinal), "the Debug Console says the Codalus debugger debugged it:\n" + Tail(text, 1500));
         }
         finally
         {
             _screenshotSuffix = string.Empty;
-            await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }
     }
 
+    /// <summary>
+    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
+    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// </summary>
     private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
         if (_screenshotSuffix.Length > 0)

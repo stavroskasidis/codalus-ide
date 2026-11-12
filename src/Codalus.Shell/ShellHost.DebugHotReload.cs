@@ -37,6 +37,9 @@ public sealed partial class ShellHost
     private void InitializeDebugHotReload()
     {
         DebugEdits = new DebugHotReload(Debugger, () => Languages.RunningClient(CSharpLanguageId));
+        Debugger.ExpressionCompiler = CompileDebuggerExpressionAsync;
+        Debugger.Symbols = SymbolOptions;
+        Debugger.BreakAllProcesses = () => Workbench.Settings.GetBoolean(BreakAllProcessesSetting, true);
         DebugEdits.ActiveChanged += (_, _) => Ui.Post(() =>
         {
             if (!DebugEdits.IsActive)
@@ -161,14 +164,14 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// A C#, Visual Basic or Razor edit saved while netcoredbg debugs a .NET program: once, an offer to debug with the
-    /// Codalus debugger (a preview), which would apply it. Use It sets <c>debug.adapter</c> (the next start takes it).
+    /// Codalus debugger (the default since M58; netcoredbg was chosen in the settings), which would apply it. Use It sets <c>debug.adapter</c> (the next start takes it).
     /// </summary>
     private void OfferCodalusDebugger(string path)
     {
         if (_debugEditsOffered || !Debugger.IsActive || Debugger.UsesCodalusAdapter || Debugger.CodalusAdapters.Count > 0
             || Path.GetExtension(path).ToLowerInvariant() is not (".cs" or ".vb" or ".razor" or ".cshtml")
             || !Workbench.Settings.GetBoolean(DebugEditsOfferSetting, true)
-            || Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter) != DebugService.NetcoredbgAdapter)
+            || Workbench.Settings.GetString(DebugAdapterSetting, DebugService.CodalusAdapter) != DebugService.NetcoredbgAdapter)
         {
             return;
         }
@@ -177,7 +180,7 @@ public sealed partial class ShellHost
         var use = Localizer.Get("action.debugHotReload.useCodalus", "Use It");
         var never = Localizer.Get("action.debugHotReload.dontShowAgain", "Don't Show Again");
         _ = Workbench.Notifications.Info(
-            Localizer.Get("msg.debugHotReload.offer", "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger (a preview) applies them as you save, continue or press Alt+F10. Debug with it from the next start?"),
+            Localizer.Get("msg.debugHotReload.offer", "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger, the default, applies them as you save, continue or press Alt+F10. Debug with it from the next start?"),
             use, never).Result.ContinueWith(t =>
         {
             if (t.Result == use)

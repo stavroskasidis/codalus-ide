@@ -62,6 +62,37 @@ internal interface IClrProcess : IDisposable
     /// <summary>A primitive value created in the debuggee, to pass to a call.</summary>
     IClrValue NewPrimitive(IClrThread thread, object value);
 
+    /// <summary>
+    /// A primitive boxed in the debuggee (M58), to pass where an object is expected: func-eval doesn't box what it's
+    /// given (a bare int there ended the program). <paramref name="module"/> and <paramref name="typeToken"/> are the
+    /// primitive's type in the core library (<c>System.Int32</c>).
+    /// </summary>
+    IClrValue Box(IClrThread thread, IClrModule module, int typeToken, object value, TimeSpan timeout) =>
+        throw new ClrException("A number can't be passed where an object is expected here (it would need boxing).");
+
+    /// <summary>
+    /// A module the program loaded from bytes (no file), by its MVID: the assembly of a compiled expression (M58), right
+    /// after <c>Assembly.Load</c> returned, before its load event is handled. Null when there's none.
+    /// </summary>
+    IClrModule? FindModule(Guid mvid) => null;
+
+    /// <summary>The program's memory at an address (M58): as many of <paramref name="count"/> bytes as can be read, none when the address isn't readable.</summary>
+    byte[] ReadMemory(ulong address, int count) => [];
+
+    /// <summary>Writes the program's memory; the number of bytes written. Throws <see cref="ClrException"/> when it can't be.</summary>
+    int WriteMemory(ulong address, byte[] data) => throw new ClrException("This debugger can't write the program's memory.");
+
+    /// <summary>A null reference, to pass to a call (M58).</summary>
+    IClrValue NewNull(IClrThread thread) => throw new ClrException("null can't be passed as an argument here.");
+
+    /// <summary>
+    /// Creates an object in the debuggee by running one of its type's constructors (func-eval, M58: <c>new</c> in
+    /// expressions and <c>[DebuggerTypeProxy]</c> types). <paramref name="typeArguments"/> are a generic type's. Throws as
+    /// <see cref="Call"/> does; the object stays valid as a call's result does.
+    /// </summary>
+    IClrValue NewObject(IClrThread thread, IClrModule module, int constructorToken, IReadOnlyList<ClrType> typeArguments, IReadOnlyList<IClrValue> arguments, TimeSpan timeout) =>
+        throw new ClrException("This debugger can't create objects.");
+
     /// <summary>Ends the process.</summary>
     void Terminate();
 
@@ -88,6 +119,39 @@ internal interface IClrProcess : IDisposable
     /// and <see cref="CreateBreakpoint"/> sets breakpoints in it.
     /// </summary>
     int CodeVersion(IClrModule module, int methodToken) => 1;
+
+    /// <summary>
+    /// Moves <paramref name="thread"/>'s innermost frame into its method's newest version, at <paramref name="ilOffset"/>
+    /// there (M58: <c>ICorDebugILFrame2::RemapFunction</c>), while a <see cref="ClrRemapOpportunity"/> is being handled.
+    /// Its locals keep their values. Throws <see cref="ClrException"/> when the runtime refuses.
+    /// </summary>
+    void Remap(IClrThread thread, int ilOffset) => throw new ClrException("This debugger can't move a frame into edited code.");
+
+    /// <summary>The IL of a method's newest version (the one new calls run); null when it can't be read.</summary>
+    byte[]? Il(IClrModule module, int methodToken) => null;
+
+    /// <summary>
+    /// The value the call at <paramref name="callIlOffset"/> of <paramref name="thread"/>'s top frame returned, read
+    /// right after it returned (a step out's stop, M58); null when the runtime has none there (a method that returns
+    /// nothing, a platform without it). Valid as a func-eval's result is, until <see cref="ReleaseKept"/>.
+    /// </summary>
+    IClrValue? ReturnValue(IClrThread thread, int callIlOffset) => null;
+
+    /// <summary>Lets go of what <see cref="ReturnValue"/> and <see cref="Keep"/> hold: the user let the program run on.</summary>
+    void ReleaseKept()
+    {
+    }
+
+    /// <summary>
+    /// Holds an object beyond the stop (M58: Make Object ID), until <see cref="ReleaseKept"/> or <paramref name="release"/>
+    /// is called: a strong handle, so the object is neither collected nor lost when the process runs. Null for a value
+    /// that isn't an object on the heap.
+    /// </summary>
+    IClrValue? Keep(IClrValue value, out Action release)
+    {
+        release = static () => { };
+        return null;
+    }
 }
 
 /// <summary>A module loaded in an application domain.</summary>
@@ -113,6 +177,11 @@ internal interface IClrThread
 
     /// <summary>Its <c>System.Threading.Thread</c> object, for its name.</summary>
     IClrValue? ThreadObject();
+
+    /// <summary>Frozen (M58): it doesn't run when the process does, until thawed.</summary>
+    bool Frozen => false;
+
+    void Freeze(bool frozen) => throw new ClrException("This debugger can't freeze threads.");
 }
 
 internal interface IClrFrame
@@ -126,6 +195,13 @@ internal interface IClrFrame
 
     /// <summary>The IL offset the frame is at (or returns to).</summary>
     int IlOffset { get; }
+
+    /// <summary>
+    /// Whether <see cref="IlOffset"/> is exactly where the frame is (a stop at a sequence point), or the instruction
+    /// boundary its native code belongs to: a frame a call just returned to reports the boundary before that call (M58,
+    /// <see cref="IlCalls.ReturnedAt"/>).
+    /// </summary>
+    bool IsIlOffsetExact => true;
 
     /// <summary>What a frame without a module is (<c>[Managed to Native Transition]</c>).</summary>
     string? Description { get; }
@@ -141,7 +217,30 @@ internal interface IClrFrame
 
     /// <summary>The version of its method the frame runs (1 until an edit changed the method, M55).</summary>
     int CodeVersion => 1;
+
+    /// <summary>The IL of the method's version the frame runs; null when it can't be read.</summary>
+    byte[]? Il() => null;
+
+    /// <summary>The machine code the frame runs (M58: the Disassembly window); null for a frame without any here.</summary>
+    ClrNativeCode? NativeCode() => null;
+
+    /// <summary>The frame's registers, by the runtime's numbering (index, value), for those it has (M58: the Registers window).</summary>
+    IReadOnlyList<(int Register, ulong Value)> Registers() => [];
+
+    /// <summary>
+    /// Moves the thread's next instruction to <paramref name="ilOffset"/> of the frame's method (M58: Set Next
+    /// Statement); the innermost frame only. Throws <see cref="ClrException"/> with the runtime's reason when it can't.
+    /// The thread's frames are read again after it.
+    /// </summary>
+    void SetIp(int ilOffset) => throw new ClrException("This debugger can't set the next statement.");
 }
+
+/// <summary>
+/// A frame's machine code: where it starts and how long it is, where the frame is in it (<see cref="Ip"/>, an address),
+/// and which IL offsets its parts were compiled from (<see cref="Map"/>: offsets from <see cref="Start"/>; an IL
+/// offset below 0 is the prolog, the epilog or code without one).
+/// </summary>
+internal sealed record ClrNativeCode(ulong Start, int Size, ulong Ip, IReadOnlyList<(int IlOffset, int NativeStart, int NativeEnd)> Map);
 
 internal enum ClrValueKind
 {
@@ -335,7 +434,14 @@ internal interface IClrBreakpoint
 }
 
 /// <summary>A step: into, over or out; <see cref="Ranges"/> are the IL ranges of the current line (over and into).</summary>
-internal sealed record ClrStep(ClrStepKind Kind, IReadOnlyList<(int Start, int End)> Ranges, bool JustMyCode);
+internal sealed record ClrStep(ClrStepKind Kind, IReadOnlyList<(int Start, int End)> Ranges, bool JustMyCode)
+{
+    /// <summary>
+    /// The ranges are of the method's machine code (offsets from its start), not of its IL: a step of one instruction
+    /// (M58, the Disassembly window).
+    /// </summary>
+    public bool Native { get; init; }
+}
 
 internal enum ClrStepKind
 {
@@ -372,6 +478,16 @@ internal sealed record ClrThreadExited(IClrThread Thread) : ClrEvent;
 internal sealed record ClrBreakpointHit(IClrThread Thread, IClrBreakpoint Breakpoint) : ClrEvent;
 
 internal sealed record ClrStepCompleted(IClrThread Thread) : ClrEvent;
+
+/// <summary>
+/// A thread running an old version of an edited method reached a place where it can go on in the new one (M58,
+/// ICorDebug's <c>FunctionRemapOpportunity</c>): the session says where (<see cref="IClrProcess.Remap"/>), or lets it
+/// run on in the old version.
+/// </summary>
+internal sealed record ClrRemapOpportunity(IClrThread Thread, IClrModule Module, int MethodToken, int OldIlOffset) : ClrEvent;
+
+/// <summary>The frame <see cref="IClrProcess.Remap"/> moved is in its method's new version now (ICorDebug's <c>FunctionRemapComplete</c>): a step from it starts again there.</summary>
+internal sealed record ClrRemapCompleted(IClrThread Thread) : ClrEvent;
 
 /// <summary><c>Debugger.Break()</c>.</summary>
 internal sealed record ClrUserBreak(IClrThread Thread) : ClrEvent;

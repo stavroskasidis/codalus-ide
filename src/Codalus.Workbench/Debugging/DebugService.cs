@@ -123,26 +123,43 @@ public sealed class DebugService : IAsyncDisposable
     private static DebugAdapterStartInfo? DefaultDesktopClrAdapter() =>
         DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, DesktopClr.AdapterArgument], host.WorkingDirectory) : null;
 
-    /// <summary>Starts the desktop-CLR adapter, or says it isn't installed.</summary>
-    private Task<DebugAdapter> StartDesktopClrAdapterAsync(CancellationToken cancellationToken) =>
-        DebugAdapter.StartAsync(
-            DesktopClrAdapter() ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
-            cancellationToken);
+    /// <summary>
+    /// The .NET Framework debugger for 32-bit programs (M58b, ADR 0094): the debugger's <c>win-x86</c> bundle, a 32-bit
+    /// process as ICorDebug needs for a 32-bit program, which the shell downloads on first use after asking (a
+    /// component); it answers null when the user declined or it couldn't be had. Null here: this installation offers
+    /// none, and the 64-bit adapter says what to change in the project.
+    /// </summary>
+    public Func<CancellationToken, Task<DebugAdapterStartInfo?>>? X86DesktopClrAdapter { get; set; }
 
-    /// <summary>The <c>debug.adapter</c> setting's value for CoreCLR's adapter (M54, ADR 0086).</summary>
+    /// <summary>Whether a .NET Framework program runs as a 32-bit process (x86, or AnyCPU with Prefer32Bit).</summary>
+    public Func<string, bool> Is32BitDesktopClrProgram { get; set; } = DesktopClr.Runs32Bit;
+
+    /// <summary>Whether a .NET Framework process to attach to is a 32-bit one.</summary>
+    public Func<int, bool> Is32BitDesktopClrProcess { get; set; } = DesktopClr.Runs32Bit;
+
+    /// <summary>Starts the desktop-CLR adapter (the 32-bit one for a 32-bit program, when there is one), or says it isn't installed.</summary>
+    private async Task<DebugAdapter> StartDesktopClrAdapterAsync(CancellationToken cancellationToken, bool x86 = false)
+    {
+        var info = (x86 && X86DesktopClrAdapter is { } resolve ? await resolve(cancellationToken).ConfigureAwait(false) : null)
+            ?? DesktopClrAdapter()
+            ?? throw new InvalidOperationException("The .NET Framework debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST.");
+        return await DebugAdapter.StartAsync(info, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>The <c>debug.adapter</c> setting's value for netcoredbg, the fallback since M58 (ADR 0094).</summary>
     public const string NetcoredbgAdapter = "netcoredbg";
 
-    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter (a preview in M54).</summary>
+    /// <summary>The <c>debug.adapter</c> setting's value for Codalus IDE's own adapter: the default since M58 (ADR 0094).</summary>
     public const string CodalusAdapter = "codalus";
 
     /// <summary>Overrides <c>debug.adapter</c>: <c>netcoredbg</c> or <c>codalus</c> (the tests' <c>debug-codalus</c> shard).</summary>
     public const string AdapterVariable = "CODALUS_DEBUG_ADAPTER";
 
     /// <summary>
-    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>netcoredbg</c> (the
-    /// default, ADR 0007) or <c>codalus</c>, Codalus IDE's own (<c>codalus-debughost --clr-dap</c>, M54, ADR 0086).
-    /// <see cref="AdapterVariable"/> overrides it. Remote targets, .NET Framework programs and x64 programs on Apple
-    /// silicon don't follow it.
+    /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>codalus</c>, Codalus
+    /// IDE's own (<c>codalus-debughost --clr-dap</c>, ADR 0086), the default since M58 (ADR 0094), also when nothing is
+    /// set; or <c>netcoredbg</c>, the fallback for one release. <see cref="AdapterVariable"/> overrides it. Remote
+    /// targets, .NET Framework programs and x64 programs on Apple silicon don't follow it.
     /// </summary>
     public Func<string?> AdapterSetting { get; set; } = () => null;
 
@@ -152,9 +169,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>Whether a process runs as x64 on an Arm64 Mac (under Rosetta 2), which keeps netcoredbg 3.1.3 (ADR 0030).</summary>
     public Func<int, bool> IsX64ProcessOnArm64Mac { get; set; } = DefaultIsX64ProcessOnArm64Mac;
 
-    /// <summary>Whether sessions use Codalus IDE's adapter: the setting, or the variable over it.</summary>
+    /// <summary>Whether sessions use Codalus IDE's adapter: unless the setting, or the variable over it, asks for netcoredbg.</summary>
     public bool UsesCodalusAdapter =>
-        string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), CodalusAdapter, StringComparison.OrdinalIgnoreCase);
+        !string.Equals((Environment.GetEnvironmentVariable(AdapterVariable) is { Length: > 0 } variable ? variable : AdapterSetting())?.Trim(), NetcoredbgAdapter, StringComparison.OrdinalIgnoreCase);
 
     private static DebugAdapterStartInfo? DefaultCoreClrAdapter() =>
         DebugCompanion.Resolve() is { } host ? new DebugAdapterStartInfo(host.FileName, [.. host.Arguments, Codalus.Debugging.CoreClrAdapter.AdapterArgument], host.WorkingDirectory) : null;
@@ -181,11 +198,55 @@ public sealed class DebugService : IAsyncDisposable
     /// Starts Codalus IDE's CoreCLR adapter, or says it isn't installed; with <paramref name="terminal"/>, it can start
     /// programs there (its launcher, through <c>runInTerminal</c>, M54b).
     /// </summary>
-    private Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken, ITerminalLauncher? terminal = null) =>
-        DebugAdapter.StartAsync(
-            CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST."),
-            cancellationToken,
-            terminal);
+    private async Task<DebugAdapter> StartCoreClrAdapterAsync(CancellationToken cancellationToken, ITerminalLauncher? terminal = null, bool x64 = false)
+    {
+        // An x64 program on Apple silicon is debugged by the x64 bundle of the same debugger (M58b), a component.
+        var info = x64
+            ? (X64CoreClrAdapter is { } resolve ? await resolve(cancellationToken).ConfigureAwait(false) : null)
+                ?? throw new InvalidOperationException("The Codalus debugger for x64 programs (a component, downloaded on first use) isn't installed. Install it from the Components page, or set debug.adapter to netcoredbg to debug this program with netcoredbg.")
+            : CoreClrAdapter() ?? throw new InvalidOperationException("The Codalus debugger (codalus-debughost) wasn't found next to Codalus IDE (debughost/), or in CODALUS_DEBUGHOST.");
+        return await DebugAdapter.StartAsync(info, cancellationToken, terminal, ExpressionCompiler).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The Codalus debugger for x64 programs on Apple silicon (M58b, ADR 0094): its <c>osx-x64</c> bundle, which the shell
+    /// downloads on first use after asking (a component); it answers null when the user declined or it couldn't be had.
+    /// Null here: this installation offers none, and netcoredbg's x64 build debugs those programs.
+    /// </summary>
+    public Func<CancellationToken, Task<DebugAdapterStartInfo?>>? X64CoreClrAdapter { get; set; }
+
+    /// <summary>
+    /// The debugger on another machine, through its pipe transport, its paths mapped to this machine's. The Codalus
+    /// debugger there (M58b) gets the expression compiler too, asked with this machine's path of the frame's source;
+    /// the program's console is the Debug Console (no terminal on that side).
+    /// </summary>
+    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken)
+    {
+        if (!info.IsCodalus)
+        {
+            return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken).ConfigureAwait(false), map);
+        }
+
+        AnnounceAdapter(null);
+        var compiler = ExpressionCompiler is { } compile
+            ? (Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>)((request, ct) => compile(request with { SourcePath = map.ToLocal(request.SourcePath), ModulePath = null }, ct))
+            : null;
+        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map);
+    }
+
+    /// <summary>
+    /// The Codalus debugger's launch on another machine: the program, its arguments and environment as they are there.
+    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally.
+    /// </summary>
+    private NetFxDebugArguments RemoteCoreClrArguments(LaunchArguments arguments) =>
+        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes);
+
+    /// <summary>
+    /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
+    /// where the frame is stopped; the shell sets it to the language host's compiler. Null: those expressions say what
+    /// the evaluator didn't read.
+    /// </summary>
+    public Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>? ExpressionCompiler { get; set; }
 
     /// <summary>Codalus IDE's CoreCLR adapter's launch arguments for a plan (M54): the desktop-CLR adapter's, as a launch of .NET.</summary>
     public NetFxDebugArguments CoreClrArguments(LaunchPlan plan) =>
@@ -223,13 +284,13 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var reason = RunsAsX64OnAppleSilicon(plan) ? "it runs as x64 on Apple silicon" : null;
+        var reason = RunsAsX64OnAppleSilicon(plan) && X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
 
     /// <summary>Whether a local launch of <paramref name="plan"/> will use Codalus IDE's adapter (nothing said).</summary>
-    public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && !RunsAsX64OnAppleSilicon(plan);
+    public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && (X64CoreClrAdapter is not null || !RunsAsX64OnAppleSilicon(plan));
 
     private static bool RunsAsX64OnAppleSilicon(LaunchPlan plan) => plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName);
 
@@ -241,7 +302,7 @@ public sealed class DebugService : IAsyncDisposable
             return false;
         }
 
-        var reason = IsX64ProcessOnArm64Mac(processId) ? "it runs as x64 on Apple silicon" : null;
+        var reason = IsX64ProcessOnArm64Mac(processId) && X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon" : null;
         AnnounceAdapter(reason);
         return reason is null;
     }
@@ -250,15 +311,23 @@ public sealed class DebugService : IAsyncDisposable
     private NetFxDebugArguments CoreClrAttach(int processId) =>
         new(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET Attach", Type: "coreclr", Request: "attach");
 
-    /// <summary>The Debug Console's first line under <c>debug.adapter</c> <c>codalus</c>: the adapter, or why it isn't (M54).</summary>
+    /// <summary>The Debug Console's first line under the Codalus debugger: the adapter, or why it isn't (M54).</summary>
     private void AnnounceAdapter(string? fallback) =>
         Output?.Invoke(this, new DebugOutput("console", fallback is null
-            ? "Debugging with the Codalus debugger (preview).\n"
+            ? "Debugging with the Codalus debugger.\n"
             : $"Debugging with netcoredbg: {fallback}, which the Codalus debugger doesn't debug yet.\n"));
 
     /// <summary>The desktop-CLR adapter's launch arguments for a plan (M43b).</summary>
     public NetFxDebugArguments DesktopClrArguments(LaunchPlan plan, bool newConsole) =>
-        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole);
+        new(plan.FileName, [.. plan.SplitArguments()], plan.WorkingDirectory, new Dictionary<string, string>(plan.Environment), JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, NewConsole: newConsole,
+            ClientViews: CollectionViews.ViewedTypes,
+            Symbols: Symbols?.Invoke());
+
+    /// <summary>
+    /// Whether a stop in one of several startup projects' programs pauses the others (M58, <c>debug.breakAllProcesses</c>),
+    /// read as such a session starts; on when unset.
+    /// </summary>
+    public Func<bool>? BreakAllProcesses { get; set; }
 
     /// <summary>Step over properties and operators (netcoredbg's <c>enableStepFiltering</c>, M14b).</summary>
     public bool StepFiltering { get; set; } = true;
@@ -406,6 +475,9 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>A different frame or thread was selected.</summary>
     public event EventHandler? FrameChanged;
 
+    /// <summary>A thread was frozen or thawed (M58): <see cref="Threads"/> changed without a stop.</summary>
+    public event EventHandler? ThreadsChanged;
+
     public event EventHandler<DebugOutput>? Output;
 
     /// <summary>The session ended (the exit code when the program exited).</summary>
@@ -463,7 +535,7 @@ public sealed class DebugService : IAsyncDisposable
         await StartAsync(
             async ct =>
             {
-                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true);
+                var compound = new CompoundDebugAdapter(await parts[0].CreateAsync(ct).ConfigureAwait(false), parts[0].Name, independent: true) { BreakAllOnStop = BreakAllProcesses?.Invoke() ?? true };
                 compound.Reserve(parts.Count - 1); // the session waits for the others, even if the first program ends at once
                 compound.PartChanged += OnPartChanged;
                 return compound;
@@ -626,7 +698,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, window ? DebugProcess.ConsoleWindow : DebugProcess.Launched, null),
-                async ct => await StartDesktopClrAdapterAsync(ct).ConfigureAwait(false),
+                async ct => await StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProgram(launch.Plan.FileName)).ConfigureAwait(false),
                 adapter => ((DebugAdapter)adapter).LaunchAsync(DesktopClrArguments(launch.Plan, window), DapJsonContext.Default.NetFxDebugArguments, cancellationToken));
         }
 
@@ -636,8 +708,10 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
+                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct).ConfigureAwait(false),
+                adapter => remote.Adapter.IsCodalus
+                    ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
         }
 
         if (UseCodalusAdapter(launch.Plan))
@@ -661,7 +735,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, console is null ? DebugProcess.Launched : inWindow ? DebugProcess.ConsoleWindow : DebugProcess.Terminal, null),
-                async ct => await StartCoreClrAdapterAsync(ct, console).ConfigureAwait(false),
+                async ct => await StartCoreClrAdapterAsync(ct, console, RunsAsX64OnAppleSilicon(launch.Plan)).ConfigureAwait(false),
                 adapter => ((DebugAdapter)adapter).LaunchAsync(
                     CoreClrArguments(launch.Plan) with { Console = console is null ? null : inWindow ? "externalTerminal" : "integratedTerminal" },
                     DapJsonContext.Default.NetFxDebugArguments,
@@ -792,7 +866,7 @@ public sealed class DebugService : IAsyncDisposable
     {
         var codalus = UseCodalusAdapter(plan);
         return StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
                 ? ((DebugAdapter)adapter.Primary).LaunchAsync(CoreClrArguments(plan), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).LaunchAsync(Arguments(plan), cancellationToken),
@@ -811,7 +885,7 @@ public sealed class DebugService : IAsyncDisposable
     {
         var codalus = UseCodalusAdapter(plan);
         await StartAsync(
-            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
+            async ct => new CompoundDebugAdapter(await (codalus ? StartCoreClrAdapterAsync(ct, x64: RunsAsX64OnAppleSilicon(plan)) : plan.RunsAsX64 ? StartX64NetcoredbgAsync(ct, plan.Environment) : StartNetcoredbgAsync(ct, plan.Environment)).ConfigureAwait(false), "Server"),
             adapter => codalus
                 ? ((DebugAdapter)adapter.Primary).AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                 : ((DebugAdapter)adapter.Primary).AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
@@ -913,8 +987,8 @@ public sealed class DebugService : IAsyncDisposable
         {
             // A .NET Framework process (M43b): the desktop-CLR adapter attaches.
             await StartAsync(
-                StartDesktopClrAdapterAsync,
-                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach"), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
+                ct => StartDesktopClrAdapterAsync(ct, Is32BitDesktopClrProcess(processId)),
+                adapter => adapter.AttachAsync(new NetFxDebugArguments(ProcessId: processId, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Request: "attach", ClientViews: CollectionViews.ViewedTypes, Symbols: Symbols?.Invoke()), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);
@@ -923,7 +997,7 @@ public sealed class DebugService : IAsyncDisposable
         {
             // Codalus IDE's CoreCLR adapter (M54, ADR 0086).
             await StartAsync(
-                ct => StartCoreClrAdapterAsync(ct),
+                ct => StartCoreClrAdapterAsync(ct, x64: IsX64ProcessOnArm64Mac(processId)),
                 adapter => adapter.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken),
                 attached: true,
                 [process],
@@ -936,8 +1010,10 @@ public sealed class DebugService : IAsyncDisposable
         else
         {
             await StartAsync(
-                async ct => new PathMappingDebugAdapter(await DebugAdapter.StartAsync(remote.Adapter, ct).ConfigureAwait(false), remote.Map),
-                adapter => adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
+                ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
+                adapter => remote.Adapter.IsCodalus
+                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
                 [process],
                 cancellationToken).ConfigureAwait(false);
@@ -1520,6 +1596,104 @@ public sealed class DebugService : IAsyncDisposable
         }
     }
 
+    // ------------------------------------------------------------------ Set Next Statement, Step Into Specific, frozen threads (M58)
+
+    /// <summary>The capabilities of the debugger the current thread belongs to; none while nothing is stopped.</summary>
+    private Capabilities? StoppedCapabilities => State == DebugState.Stopped && _adapter is { } adapter ? adapter.CapabilitiesOf(CurrentThread) : null;
+
+    /// <summary>Whether the stopped thread's debugger can move its next statement (the Codalus debugger; not netcoredbg).</summary>
+    public bool CanSetNextStatement => StoppedCapabilities?.SupportsGotoTargetsRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger lists a line's calls to step into (the Codalus debugger).</summary>
+    public bool CanStepIntoSpecific => StoppedCapabilities?.SupportsStepInTargetsRequest == true;
+
+    /// <summary>Whether the session's debugger freezes threads (the Codalus debugger).</summary>
+    public bool CanFreezeThreads => _adapter is { } adapter && State != DebugState.Idle && adapter.CapabilitiesOf(CurrentThread).SupportsFreezingThreads;
+
+    /// <summary>
+    /// Set Next Statement: moves the current thread's next statement to <paramref name="line"/> of <paramref name="path"/>
+    /// without running anything in between; the stop that follows shows it there. Returns why it couldn't, or null.
+    /// </summary>
+    public async Task<string?> SetNextStatementAsync(string path, int line)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return "The program isn't stopped.";
+        }
+
+        var thread = CurrentThread;
+        if (!adapter.CapabilitiesOf(thread).SupportsGotoTargetsRequest)
+        {
+            return "This debugger can't set the next statement.";
+        }
+
+        try
+        {
+            var targets = await adapter.GotoTargetsAsync(thread, path, line, _session.Token).ConfigureAwait(false);
+            if (targets.Length == 0)
+            {
+                return "There's no code on that line.";
+            }
+
+            await adapter.GotoAsync(thread, targets[0].Id, _session.Token).ConfigureAwait(false);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
+    /// <summary>The calls of the rest of the current line, for Step Into Specific; none when the selected frame isn't its thread's innermost.</summary>
+    public async Task<IReadOnlyList<StepInTarget>> StepInTargetsAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || Frames.Count == 0 || !adapter.CapabilitiesOf(CurrentThread).SupportsStepInTargetsRequest)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.StepInTargetsAsync(Frames[0].Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Steps into one of <see cref="StepInTargetsAsync"/>'s calls: the line's other calls run without a stop.</summary>
+    public Task StepIntoSpecificAsync(int targetId) => ResumeAsync(a => a.StepInAsync(CurrentThread, targetId, _session.Token));
+
+    /// <summary>Freezes a thread (it doesn't run when the program runs on) or thaws it; <see cref="Threads"/> says which are.</summary>
+    public async Task<string?> FreezeThreadAsync(int threadId, bool frozen)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return "There's no debug session.";
+        }
+
+        try
+        {
+            await adapter.FreezeThreadAsync(threadId, frozen, _session.Token).ConfigureAwait(false);
+            Threads = [.. Threads.Select(t => t.Id == threadId ? t with { Frozen = frozen ? true : null } : t)];
+            ThreadsChanged?.Invoke(this, EventArgs.Empty);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
     /// <summary>
     /// Run to Cursor: continues until <paramref name="line"/> of <paramref name="path"/> is reached, through a hidden
     /// breakpoint there. Any other stop ends it, except that <paramref name="force"/> continues past other breakpoints.
@@ -1627,6 +1801,37 @@ public sealed class DebugService : IAsyncDisposable
         SelectedFrame = Frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (Frames.Count > 0 ? Frames[0] : null);
         FrameChanged?.Invoke(this, EventArgs.Empty);
         RefreshPinnedTips();
+    }
+
+    /// <summary>
+    /// Reads the selected thread's frames again while stopped, keeping the selected one by its place: after an edit was
+    /// applied (M58), the frames in edited methods are shown where their statements are now.
+    /// </summary>
+    public async Task RefreshFramesAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || SelectedThreadId is not { } threadId)
+        {
+            return;
+        }
+
+        var index = SelectedFrame is { } selected ? Frames.ToList().FindIndex(f => f.Id == selected.Id) : -1;
+        try
+        {
+            var frames = await adapter.StackTraceAsync(threadId, 200, _session.Token).ConfigureAwait(false);
+            if (State != DebugState.Stopped || SelectedThreadId != threadId)
+            {
+                return;
+            }
+
+            Frames = frames.StackFrames;
+            SelectedFrame = index >= 0 && index < Frames.Count ? Frames[index] : Frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (Frames.Count > 0 ? Frames[0] : null);
+            FrameChanged?.Invoke(this, EventArgs.Empty);
+            RefreshPinnedTips();
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or OperationCanceledException)
+        {
+            // The program went on or ended meanwhile.
+        }
     }
 
     public void SelectFrame(StackFrame frame)
@@ -1784,6 +1989,179 @@ public sealed class DebugService : IAsyncDisposable
         return await adapter.SetExpressionAsync(expression, value, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
     }
 
+    // ------------------------------------------------------------------ symbols (M58)
+
+    /// <summary>
+    /// Where the Codalus debugger looks for PDBs that aren't next to their modules (the shell reads it from the
+    /// settings at each start): symbol paths, symbol servers and their cache. Null, or nothing listed: nowhere.
+    /// </summary>
+    public Func<Codalus.Debugging.Symbols.SymbolOptions?>? Symbols { get; set; }
+
+    /// <summary>Whether the session's debugger looks symbols up on demand (the Codalus debugger).</summary>
+    public bool CanLoadSymbols => _adapter is { } adapter && State != DebugState.Idle && adapter.Adapters.Any(a => a.Capabilities.SupportsSymbolLoading);
+
+    /// <summary>
+    /// Load Symbols: looks for a module's symbols in the symbol paths and on the symbol servers, whatever the module
+    /// lists say; the module's status says what was found. Why it couldn't be asked, or null.
+    /// </summary>
+    public async Task<string?> LoadSymbolsAsync(string moduleId)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return "There's no debug session.";
+        }
+
+        try
+        {
+            return await adapter.LoadSymbolsAsync(moduleId, _session.Token).ConfigureAwait(false) ? null : "This debugger doesn't look symbols up (the Codalus debugger does).";
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
+    // ------------------------------------------------------------------ memory, machine code and registers (M58)
+
+    /// <summary>Whether the stopped thread's debugger reads the program's memory (the Codalus debugger).</summary>
+    public bool CanReadMemory => StoppedCapabilities?.SupportsReadMemoryRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger shows machine code and steps by instruction (the Codalus debugger, on x64 and arm64).</summary>
+    public bool CanDisassemble => StoppedCapabilities?.SupportsDisassembleRequest == true;
+
+    /// <summary>Whether the stopped thread's debugger shows a frame's registers.</summary>
+    public bool CanShowRegisters => StoppedCapabilities?.SupportsRegisters == true;
+
+    /// <summary>The program's memory: <paramref name="count"/> bytes from an address (<c>0x…</c>) plus <paramref name="offset"/>; null when it can't be asked.</summary>
+    public async Task<ReadMemoryResponse?> ReadMemoryAsync(string reference, long offset, int count)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await adapter.ReadMemoryAsync(CurrentThread, reference, offset, count, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Writes bytes into the program's memory; why it couldn't, or null.</summary>
+    public async Task<string?> WriteMemoryAsync(string reference, long offset, byte[] data)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return "Memory can be written only while the program is stopped.";
+        }
+
+        try
+        {
+            await adapter.WriteMemoryAsync(CurrentThread, reference, offset, data, _session.Token).ConfigureAwait(false);
+            return null;
+        }
+        catch (DapException ex)
+        {
+            return ex.Message;
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return "The debug session ended.";
+        }
+    }
+
+    /// <summary>The machine instructions around an address: <paramref name="count"/> from the one there, moved by <paramref name="instructionOffset"/>.</summary>
+    public async Task<IReadOnlyList<DisassembledInstruction>> DisassembleAsync(string reference, int instructionOffset, int count)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.DisassembleAsync(CurrentThread, reference, instructionOffset, count, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The selected frame's registers.</summary>
+    public async Task<IReadOnlyList<RegisterValue>> RegistersAsync()
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped || SelectedFrame is not { } frame)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await adapter.RegistersAsync(frame.Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>Steps one machine instruction: over a call, or into it.</summary>
+    public Task StepInstructionAsync(bool into) => ResumeAsync(a => a.StepInstructionAsync(CurrentThread, into, _session.Token));
+
+    /// <summary>Whether the stopped thread's debugger gives objects IDs (the Codalus debugger, M58).</summary>
+    public bool CanMakeObjectIds => StoppedCapabilities?.SupportsObjectIds == true;
+
+    /// <summary>
+    /// Make Object ID: the object <paramref name="expression"/> evaluates to in the selected frame gets a name
+    /// (<c>$1</c>) that Watch, conditions and other expressions reach it by for the rest of the session. Returns the
+    /// name, or why it couldn't be made.
+    /// </summary>
+    public async Task<(string? Name, string? Problem)> MakeObjectIdAsync(string expression)
+    {
+        if (_adapter is not { } adapter || State != DebugState.Stopped)
+        {
+            return (null, "Object IDs can be made only while the program is stopped.");
+        }
+
+        try
+        {
+            return (await adapter.MakeObjectIdAsync(expression, SelectedFrame?.Id, _session.Token).ConfigureAwait(false), null);
+        }
+        catch (DapException ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            return (null, "The debug session ended.");
+        }
+    }
+
+    /// <summary>Lets go of an object ID (<c>$1</c>).</summary>
+    public async Task DeleteObjectIdAsync(string name)
+    {
+        if (_adapter is not { } adapter || State == DebugState.Idle)
+        {
+            return;
+        }
+
+        try
+        {
+            await adapter.DeleteObjectIdAsync(name, SelectedFrame?.Id, _session.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or OperationCanceledException)
+        {
+        }
+    }
+
     /// <summary>
     /// Counts the stops and resumes: a loop over the threads (one request each, which the adapter answers one at a time)
     /// stops asking once the program has run on, and doesn't hold up the next stop's own requests behind its own (M56).
@@ -1925,7 +2303,10 @@ public sealed class DebugService : IAsyncDisposable
     private async Task SendBreakpointsAsync(IDebugAdapter adapter, string path, CancellationToken cancellationToken)
     {
         var specs = Breakpoints.For(path).Where(b => b.Enabled).ToList();
-        var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition)).ToList();
+        // With everything it does: an adapter that applies hit counts, messages, filters and dependencies itself (the
+        // Codalus debugger, M58) takes them, and the others drop them (netcoredbg, the browser's) and stop at every hit.
+        var sent = specs.Select(b => new SourceBreakpoint(b.Line, Condition: b.Condition, HitCondition: b.HitCondition, LogMessage: b.LogMessage, Filter: b.Filter,
+            DependsOn: b.DependsOn is { } dependency ? new BreakpointDependency(dependency.Path, dependency.Line) : null)).ToList();
 
         // Run to Cursor's hidden breakpoint, unless a breakpoint without a condition is already on that line.
         var runTo = _runTo is { } target && SolutionService.PathComparer.Equals(target.Location.Path, path)
@@ -2111,7 +2492,7 @@ public sealed class DebugService : IAsyncDisposable
             }
 
             var breakpoint = stopped.Reason == "breakpoint" ? FindBreakpoint(stopped, frames) : null;
-            if (breakpoint is { NeedsClientHandling: true } && !atRunTarget
+            if (breakpoint is { NeedsClientHandling: true } && !atRunTarget && !adapter.AppliesBreakpointBehaviors(threadId)
                 && !await ShouldBreakAsync(adapter, breakpoint, frames, threadId).ConfigureAwait(false))
             {
                 await adapter.ContinueAsync(threadId, _session.Token).ConfigureAwait(false);

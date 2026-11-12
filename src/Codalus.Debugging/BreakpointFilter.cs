@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Codalus.Workbench.Debugging;
+namespace Codalus.Debugging;
 
 /// <summary>Where a breakpoint was hit, for its filter.</summary>
 public sealed record BreakpointFilterContext(int ThreadId, string? ThreadName, int? ProcessId, string? ProcessName);
@@ -8,8 +8,8 @@ public sealed record BreakpointFilterContext(int ThreadId, string? ThreadName, i
 /// <summary>
 /// A breakpoint filter (M14b), as in the classic IDE: <c>ThreadId = 5</c>, <c>ThreadName = "Worker"</c>,
 /// <c>ProcessId = 1234</c> or <c>ProcessName = "app"</c>, with <c>=</c>/<c>==</c>/<c>!=</c>, combined with
-/// <c>&amp;</c>/<c>&amp;&amp;</c>, <c>|</c>/<c>||</c>, <c>!</c> and parentheses. netcoredbg has no filters, so the debugger
-/// stops and continues when the filter doesn't match.
+/// <c>&amp;</c>/<c>&amp;&amp;</c>, <c>|</c>/<c>||</c>, <c>!</c> and parentheses. The Codalus debugger applies it itself
+/// (M58); netcoredbg has no filters, so under it the IDE stops and continues when the filter doesn't match.
 /// </summary>
 public sealed class BreakpointFilter
 {
@@ -172,5 +172,36 @@ public sealed class BreakpointFilter
 
             return start == _at ? throw new FormatException("A value is missing.") : text[start.._at];
         }
+    }
+}
+
+/// <summary>
+/// A breakpoint's hit condition: <c>n</c> or <c>== n</c> (break on the n-th hit), <c>&gt;= n</c> (from the n-th hit on)
+/// or <c>% n</c> (every n-th hit).
+/// </summary>
+public static class HitConditions
+{
+    /// <summary>Whether a breakpoint with <paramref name="hitCondition"/> breaks on its <paramref name="hits"/>-th hit.</summary>
+    public static bool Met(string hitCondition, int hits)
+    {
+        var text = hitCondition.Trim();
+        static int Number(string s) => int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 1;
+        if (text.StartsWith(">=", StringComparison.Ordinal))
+        {
+            return hits >= Number(text[2..]);
+        }
+
+        if (text.StartsWith('%'))
+        {
+            var n = Number(text[1..]);
+            return n > 0 && hits % n == 0;
+        }
+
+        if (text.StartsWith("==", StringComparison.Ordinal))
+        {
+            return hits == Number(text[2..]);
+        }
+
+        return hits == Number(text.TrimStart('='));
     }
 }

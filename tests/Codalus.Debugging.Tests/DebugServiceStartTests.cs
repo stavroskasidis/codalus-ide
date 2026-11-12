@@ -6,9 +6,20 @@ namespace Codalus.Debugging.Tests;
 public sealed class DebugServiceStartTests
 {
     [Fact]
+    public async Task A_missing_codalus_debugger_fails_the_start_and_says_where_it_goes()
+    {
+        // The default (M58): the Codalus debugger, whose host isn't installed here.
+        var debug = new DebugService(() => null) { CoreClrAdapter = () => null };
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync("app", [], ".", new Dictionary<string, string>(), TestContext.Current.CancellationToken));
+        Assert.Contains("The Codalus debugger (codalus-debughost) wasn't found", error.Message, StringComparison.Ordinal);
+        Assert.Equal(DebugState.Idle, debug.State);
+        Assert.False(debug.IsActive);
+    }
+
+    [Fact]
     public async Task A_missing_debugger_fails_the_start_and_the_next_start_fails_the_same_way()
     {
-        var debug = new DebugService(() => null);
+        var debug = new DebugService(() => null) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var environment = new Dictionary<string, string>();
         var first = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync("app", [], ".", environment, TestContext.Current.CancellationToken));
         Assert.Contains("netcoredbg", first.Message, StringComparison.Ordinal);
@@ -32,6 +43,65 @@ public sealed class DebugServiceStartTests
         Assert.Contains("debugger/x64/", error.Message, StringComparison.Ordinal);
         Assert.Contains(DebugAdapterLocator.X64EnvironmentVariable, error.Message, StringComparison.Ordinal);
         Assert.Equal(DebugState.Idle, debug.State);
+    }
+
+    [Fact]
+    public async Task An_x64_program_goes_to_the_debuggers_x64_bundle_when_the_installation_offers_one()
+    {
+        // M58b (ADR 0094): the osx-x64 bundle, a component. Here the user declines it (the resolver answers null).
+        var asked = 0;
+        var debug = new DebugService(() => null, resolveX64Adapter: () => null)
+        {
+            CoreClrAdapter = () => null,
+            X64CoreClrAdapter = _ =>
+            {
+                asked++;
+                return Task.FromResult<DebugAdapterStartInfo?>(null);
+            },
+        };
+        var output = new System.Text.StringBuilder();
+        debug.Output += (_, o) => output.Append(o.Text);
+        var plan = new Workbench.Build.LaunchPlan("dotnet", "exec app.dll", ".", new Dictionary<string, string>(), null) { RunsAsX64 = true };
+        Assert.True(debug.WillUseCodalusAdapter(plan));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan, TestContext.Current.CancellationToken));
+        Assert.Contains("The Codalus debugger for x64 programs", error.Message, StringComparison.Ordinal);
+        Assert.Contains("Components page", error.Message, StringComparison.Ordinal);
+        Assert.True(asked >= 1);
+        Assert.StartsWith("Debugging with the Codalus debugger.", output.ToString(), StringComparison.Ordinal);
+        Assert.Equal(DebugState.Idle, debug.State);
+
+        // Without one, netcoredbg's x64 build debugs it, and the Debug Console says why.
+        debug.X64CoreClrAdapter = null;
+        Assert.False(debug.WillUseCodalusAdapter(plan));
+        output.Clear();
+        var fallback = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan, TestContext.Current.CancellationToken));
+        Assert.Contains("x64 debugger", fallback.Message, StringComparison.Ordinal);
+        Assert.Contains("Debugging with netcoredbg: it runs as x64 on Apple silicon", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_32_bit_dotnet_framework_program_goes_to_the_debuggers_32_bit_bundle(bool runs32Bit)
+    {
+        // M58b (ADR 0094): the win-x86 bundle, a component; a 64-bit program never asks for it. Neither adapter is
+        // here, so the start fails either way: what counts is which one was asked for.
+        var asked = 0;
+        var debug = new DebugService(() => null)
+        {
+            IsDesktopClrProgram = _ => true,
+            Is32BitDesktopClrProgram = _ => runs32Bit,
+            DesktopClrAdapter = () => null,
+            X86DesktopClrAdapter = _ =>
+            {
+                asked++;
+                return Task.FromResult<DebugAdapterStartInfo?>(null);
+            },
+        };
+        var plan = new Workbench.Build.LaunchPlan(Path.Combine(Path.GetTempPath(), "app.exe"), string.Empty, Path.GetTempPath(), new Dictionary<string, string>(), null);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan, TestContext.Current.CancellationToken));
+        Assert.Contains("The .NET Framework debugger (codalus-debughost) wasn't found", error.Message, StringComparison.Ordinal);
+        Assert.Equal(runs32Bit, asked >= 1);
     }
 
     [Fact]

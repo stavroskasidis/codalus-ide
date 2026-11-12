@@ -201,6 +201,7 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
             await _stop.CancelAsync();
             await Client.DisposeAsync();
             _server.Dispose();
+            Session.Dispose();
             _stop.Dispose();
         }
     }
@@ -583,6 +584,7 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         // netcoredbg isn't there (null): the launch and the attach go to codalus-debughost --netfx-dap instead.
         await using var debug = new Codalus.Workbench.Debugging.DebugService(() => null)
         {
+            AdapterSetting = () => Codalus.Workbench.Debugging.DebugService.NetcoredbgAdapter, // "other programs" below go to netcoredbg, which isn't here
             DesktopClrAdapter = Adapter,
             IsDesktopClrProgram = program => program.EndsWith("codalus-no-such-program.exe", StringComparison.Ordinal),
             IsDesktopClrProcess = id => id == 1,

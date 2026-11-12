@@ -403,28 +403,7 @@ public sealed class BreakpointStore
     }
 
     /// <summary>Whether a breakpoint with <paramref name="hitCondition"/> breaks on its <paramref name="hits"/>-th hit.</summary>
-    public static bool HitConditionMet(string hitCondition, int hits)
-    {
-        var text = hitCondition.Trim();
-        static int Number(string s) => int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 1;
-        if (text.StartsWith(">=", StringComparison.Ordinal))
-        {
-            return hits >= Number(text[2..]);
-        }
-
-        if (text.StartsWith('%'))
-        {
-            var n = Number(text[1..]);
-            return n > 0 && hits % n == 0;
-        }
-
-        if (text.StartsWith("==", StringComparison.Ordinal))
-        {
-            return hits == Number(text[2..]);
-        }
-
-        return hits == Number(text.TrimStart('='));
-    }
+    public static bool HitConditionMet(string hitCondition, int hits) => Codalus.Debugging.HitConditions.Met(hitCondition, hits);
 
     private sealed class LocationComparer : IEqualityComparer<(string Path, int Line)>
     {

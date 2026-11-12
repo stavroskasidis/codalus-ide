@@ -178,10 +178,11 @@ jobs:
           fi
 
   # The tests in shards (eng/ci-test.sh) on separate runners at the same time: the Shell tests in two halves (they take 15
-  # to 25 minutes on their own) and every other project with, after it, debug-codalus, the debugger classes under Codalus
-  # IDE's own CoreCLR adapter (M54, ADR 0086). With the smoke test on a runner of its own, a run takes as long as its
-  # longest job, not the sum of them (it took 55 minutes on Windows). Linux arm64 runs debug-codalus alone (the M54 plan:
-  # the other shards' coverage there is the packages' smoke test).
+  # to 25 minutes on their own) and every other project with, after it, debug-netcoredbg, the debugger classes again
+  # under netcoredbg, the fallback (M58, ADR 0094: the shards run them under the default, Codalus IDE's own CoreCLR
+  # adapter). With the smoke test on a runner of its own, a run takes as long as its longest job, not the sum of them
+  # (it took 55 minutes on Windows). Linux arm64 runs those classes alone, under the Codalus debugger (debug-codalus,
+  # the M54 plan: the other shards' coverage there is the packages' smoke test).
   # macOS runs every shard one after another in one job (the maintainer's decision, 2026-11-04, ADR 0028): GitHub runs
   # five macOS jobs at a time, which one run's four shards and smoke took, so a few pull requests queued their macOS jobs
   # for hours. One job takes about 75 minutes, the longest of a run. A job GitHub can't place for want of macOS arm64
@@ -201,12 +202,12 @@ jobs:
         include:
           - { os: ubuntu-latest, shard: shell-1, shards: shell-1, timeout: 50 }
           - { os: ubuntu-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: ubuntu-latest, shard: others, shards: others debug-codalus, timeout: 70 }
+          - { os: ubuntu-latest, shard: others, shards: others debug-netcoredbg, timeout: 70 }
           - { os: windows-latest, shard: shell-1, shards: shell-1, timeout: 50 }
           - { os: windows-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: windows-latest, shard: others, shards: others debug-codalus, timeout: 70 }
+          - { os: windows-latest, shard: others, shards: others debug-netcoredbg, timeout: 70 }
           # About 20 + 23 + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
-          - { os: macos-latest, shard: all, shards: shell-1 shell-2 others debug-codalus, timeout: 150 }
+          - { os: macos-latest, shard: all, shards: shell-1 shell-2 others debug-netcoredbg, timeout: 150 }
           - { os: ubuntu-24.04-arm, shard: debug-codalus, shards: debug-codalus, timeout: 50 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
@@ -240,7 +241,7 @@ jobs:
       # A hang is reported and ended by 15 minutes (eng/ci-test.sh): a step's limit is the last resort, leaving the job time
       # for the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
       # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
-      # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS debug-codalus
+      # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS's debug shard
       # (7 to 13 minutes) too: its runner was lost 44.5 minutes into this step (run 41115971500). Both stop at 30: the
       # runners went silent 35 to 45 minutes into the step, before a stop at 40 could act (runs 40862137560 and
       # 41129614137), and shell-2 takes about 20.
@@ -259,10 +260,15 @@ jobs:
         shell: bash
         timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
         run: bash eng/ci-test.sh others
+      - name: Test (debug-netcoredbg)
+        if: contains(format(' {0} ', matrix.shards), ' debug-netcoredbg ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        run: bash eng/ci-test.sh debug-netcoredbg
       - name: Test (debug-codalus)
         if: contains(format(' {0} ', matrix.shards), ' debug-codalus ')
         shell: bash
-        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        timeout-minutes: 40
         run: bash eng/ci-test.sh debug-codalus
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded

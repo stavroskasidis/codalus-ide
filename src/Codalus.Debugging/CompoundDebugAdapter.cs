@@ -22,7 +22,9 @@ namespace Codalus.Debugging;
 /// </list>
 /// With <c>independent</c> (M14c, multiple startup projects), each adapter debugs a program of its own: the session
 /// ends when the last one ends, every thread is named after its program, and <see cref="PartChanged"/> reports each
-/// program's process and exit.
+/// program's process and exit. With <see cref="BreakAllOnStop"/> (M58) a stop in one program pauses the others, as
+/// the classic IDE does: their threads and values can be read while the stop shows, and they go on with it (Continue,
+/// and during a step, at whose end they pause again).
 /// </summary>
 public sealed class CompoundDebugAdapter : IDebugAdapter
 {
@@ -82,6 +84,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     /// <summary>Each adapter debugs a program of its own, and the session lasts until the last one ends (multiple startup projects).</summary>
     public bool Independent { get; }
 
+    /// <summary>
+    /// In an independent session (M58): when a program stops (a breakpoint, a step's end, an exception), the others are
+    /// paused, and they go on when it does. A program still starting is left out, as by <see cref="PauseAsync"/>, and so
+    /// is one whose debugger doesn't say it can (<see cref="Capabilities.SupportsBreakWithOtherPrograms"/>: netcoredbg).
+    /// </summary>
+    public bool BreakAllOnStop { get; set; }
+
     /// <summary>A program of an independent session started (its process id) or ended (its exit code).</summary>
     public event EventHandler<CompoundPartEvent>? PartChanged;
 
@@ -118,6 +127,15 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         public Dictionary<int, int> Ids { get; } = [];
 
         public bool Stopped { get; set; }
+
+        /// <summary>Another program's stop asked this one to pause (<see cref="BreakAllOnStop"/>), and it hasn't yet.</summary>
+        public bool BreakPending { get; set; }
+
+        /// <summary>The program that stopped went on before this one paused for it: it goes on as soon as it has.</summary>
+        public bool ResumeOnBreak { get; set; }
+
+        /// <summary>It is paused because another program stopped: it goes on when that one does.</summary>
+        public bool Broken { get; set; }
 
         /// <summary>The thread of this adapter's last stop (its own id).</summary>
         public int StoppedThread { get; set; }
@@ -442,10 +460,29 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                 return;
             case DapEvents.Stopped when DebugAdapter.Read(e.Body, Json.StoppedEvent) is { } stopped:
                 StoppedEvent? show = null;
+                List<Part> others = [];
+                var goOn = false;
                 lock (_gate)
                 {
-                    part.Stopped = true;
+                    // Paused for another program's stop (BreakAllOnStop): it waits with that stop, or, when that
+                    // program went on or ended meanwhile, goes on too.
+                    var forAnother = part.BreakPending && stopped.Reason == "pause";
+                    part.BreakPending = false;
+                    goOn = forAnother && (part.ResumeOnBreak || _shown is null);
+                    part.ResumeOnBreak = false;
+                    part.Broken = forAnother && !goOn;
+                    part.Stopped = !goOn;
                     part.StoppedThread = stopped.ThreadId ?? 0;
+                }
+
+                if (goOn)
+                {
+                    await ContinueQuietlyAsync(part).ConfigureAwait(false);
+                    return;
+                }
+
+                lock (_gate)
+                {
                     var mapped = stopped with
                     {
                         ThreadId = stopped.ThreadId is { } thread ? Id(thread, part) : null,
@@ -456,6 +493,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                         _shown = part;
                         _shownReason = stopped.Reason;
                         show = mapped;
+                        others = OthersToBreak(part, stopped.Reason);
                     }
                     else
                     {
@@ -468,6 +506,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                     await RaiseAsync(e.Name, JsonSerializer.SerializeToElement(show, Json.StoppedEvent)).ConfigureAwait(false);
                 }
 
+                Break(others);
                 return;
             case DapEvents.Continued when DebugAdapter.Read(e.Body, Json.ContinuedEvent) is { } continued:
                 bool forward;
@@ -552,6 +591,66 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         return best with { Id = id };
     }
 
+    /// <summary>
+    /// The programs to pause for <paramref name="part"/>'s stop (<see cref="BreakAllOnStop"/>), marked as asked: the
+    /// running ones, but not for a pause (Break All pauses each itself). Under the lock.
+    /// </summary>
+    private List<Part> OthersToBreak(Part part, string? reason)
+    {
+        if (!BreakAllOnStop || !Independent || reason == "pause")
+        {
+            return [];
+        }
+
+        var others = _parts.Where(p => p != part && !p.Ended && !p.Stopped && !p.Starting && !p.BreakPending && p.Adapter.Capabilities.SupportsBreakWithOtherPrograms).ToList();
+        foreach (var other in others)
+        {
+            other.BreakPending = true;
+            other.ResumeOnBreak = false;
+        }
+
+        return others;
+    }
+
+    /// <summary>Pauses the programs <see cref="OthersToBreak"/> chose, off the event that stopped the first one.</summary>
+    private void Break(List<Part> others)
+    {
+        foreach (var other in others)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await other.Adapter.PauseAsync(0, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or InvalidOperationException)
+                {
+                    // Its program is ending, or stopped by itself meanwhile: no pause comes.
+                    lock (_gate)
+                    {
+                        other.BreakPending = false;
+                        other.ResumeOnBreak = false;
+                    }
+
+                    Log?.Invoke(this, $"[{other.Name}] Not paused with the other program: {ex.Message}");
+                }
+            });
+        }
+    }
+
+    /// <summary>A program paused for another's stop goes on with it (its stop never showed).</summary>
+    private async Task ContinueQuietlyAsync(Part part)
+    {
+        try
+        {
+            await part.Adapter.ContinueAsync(part.StoppedThread, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or InvalidOperationException)
+        {
+            Log?.Invoke(this, $"[{part.Name}] Didn't go on with the other program: {ex.Message}");
+        }
+    }
+
     private void Unqueue(Part part)
     {
         var keep = _waiting.Where(w => w.Part != part).ToList();
@@ -566,6 +665,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     private void ShowNext()
     {
         StoppedEvent? next = null;
+        List<Part> others = [];
         lock (_gate)
         {
             while (_shown is null && _waiting.TryDequeue(out var waiting))
@@ -575,6 +675,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                     _shown = waiting.Part;
                     _shownReason = waiting.Stop.Reason;
                     next = waiting.Stop;
+                    waiting.Part.Broken = false;
+                    others = OthersToBreak(waiting.Part, waiting.Stop.Reason);
                 }
             }
         }
@@ -582,6 +684,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         if (next is not null)
         {
             _ = Task.Run(() => RaiseAsync(DapEvents.Stopped, JsonSerializer.SerializeToElement(next, Json.StoppedEvent)));
+            Break(others);
         }
     }
 
@@ -801,24 +904,135 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
     public Task StepOutAsync(int threadId, CancellationToken cancellationToken) =>
         ResumeAsync(threadId, "stepOut", (adapter, thread) => adapter.StepOutAsync(thread, cancellationToken), cancellationToken);
 
+    public bool AppliesBreakpointBehaviors(int threadId) => Owner(threadId, "stopped") is var (part, thread) && part.Adapter.AppliesBreakpointBehaviors(thread);
+
+    public Capabilities CapabilitiesOf(int threadId) => Owner(threadId, "capabilities") is var (part, thread) ? part.Adapter.CapabilitiesOf(thread) : Capabilities;
+
+    public async Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId, "stepInTargets");
+        return [.. (await part.Adapter.StepInTargetsAsync(frame, cancellationToken).ConfigureAwait(false)).Select(t => t with { Id = Id(t.Id, part) })];
+    }
+
+    public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        ResumeAsync(threadId, "stepIn", (adapter, thread) => adapter.StepInAsync(thread, targetId / MaxParts, cancellationToken), cancellationToken);
+
+    public async Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "gotoTargets");
+        return [.. (await part.Adapter.GotoTargetsAsync(thread, path, line, cancellationToken).ConfigureAwait(false)).Select(t => t with { Id = Id(t.Id, part) })];
+    }
+
+    public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "goto");
+        return part.Adapter.GotoAsync(thread, targetId / MaxParts, cancellationToken);
+    }
+
+    public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "readMemory");
+        return part.Adapter.ReadMemoryAsync(thread, memoryReference, offset, count, cancellationToken);
+    }
+
+    public Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "writeMemory");
+        return part.Adapter.WriteMemoryAsync(thread, memoryReference, offset, data, cancellationToken);
+    }
+
+    public Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "disassemble");
+        return part.Adapter.DisassembleAsync(thread, memoryReference, instructionOffset, count, cancellationToken);
+    }
+
+    public async Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        // A module's id names it in its own adapter: the one that has it takes the request.
+        DapException? refused = null;
+        foreach (var part in Parts())
+        {
+            try
+            {
+                if (await part.Adapter.LoadSymbolsAsync(moduleId, cancellationToken).ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+            catch (DapException ex)
+            {
+                refused ??= ex;
+            }
+        }
+
+        return refused is null ? false : throw refused;
+    }
+
+    public Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId, "codalus/registers");
+        return part.Adapter.RegistersAsync(frame, cancellationToken);
+    }
+
+    public Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) =>
+        ResumeAsync(threadId, into ? "stepIn" : "next", (adapter, thread) => adapter.StepInstructionAsync(thread, into, cancellationToken), cancellationToken);
+
+    public Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId ?? 0, "codalus/makeObjectId");
+        return part.Adapter.MakeObjectIdAsync(expression, frameId is null ? null : frame, cancellationToken);
+    }
+
+    public Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken)
+    {
+        var (part, frame) = Owner(frameId ?? 0, "codalus/deleteObjectId");
+        return part.Adapter.DeleteObjectIdAsync(name, frameId is null ? null : frame, cancellationToken);
+    }
+
+    public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken)
+    {
+        var (part, thread) = Owner(threadId, "codalus/freezeThread");
+        return part.Adapter.FreezeThreadAsync(thread, frozen, cancellationToken);
+    }
+
     private async Task ResumeAsync(int threadId, string command, Func<IDebugAdapter, int, Task> resume, CancellationToken cancellationToken)
     {
         var (part, thread) = Owner(threadId, command);
         List<Part> paused = [];
         lock (_gate)
         {
-            if (command == "continue" && _shown == part && _shownReason == "pause")
+            if (BreakAllOnStop && Independent)
+            {
+                // Every program goes on with this one, for a step too (they pause again at its end): the ones paused
+                // for a stop or by Break All, and the one whose stop shows when this isn't it. A program waiting to
+                // show a stop of its own stays, and shows it next.
+                paused = [.. _parts.Where(p => p != part && !p.Ended && p.Stopped && (p.Broken || p == _shown || _waiting.Any(w => w.Part == p && w.Stop.Reason == "pause")))];
+                foreach (var other in _parts.Where(p => p != part && p.BreakPending))
+                {
+                    other.ResumeOnBreak = true;
+                }
+            }
+            else if (command == "continue" && _shown == part && _shownReason == "pause")
             {
                 // Continue after Pause: every adapter the pause stopped goes on.
                 paused = [.. _waiting.Where(w => w.Stop.Reason == "pause").Select(w => w.Part).Distinct()];
-                foreach (var other in paused)
+            }
+
+            foreach (var other in paused)
+            {
+                Unqueue(other);
+                other.Stopped = false;
+                other.Broken = false;
+                if (_shown == other)
                 {
-                    Unqueue(other);
-                    other.Stopped = false;
+                    _shown = null;
                 }
             }
 
+            Unqueue(part);
             part.Stopped = false;
+            part.Broken = false;
             if (_shown == part)
             {
                 _shown = null;
@@ -828,7 +1042,14 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         await resume(part.Adapter, thread).ConfigureAwait(false);
         foreach (var other in paused)
         {
-            await other.Adapter.ContinueAsync(other.StoppedThread, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await other.Adapter.ContinueAsync(other.StoppedThread, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (Independent && ex is DapException or DapConnectionLostException)
+            {
+                Log?.Invoke(this, $"[{other.Name}] Continue failed: {ex.Message}"); // its program ended meanwhile
+            }
         }
 
         ShowNext();
@@ -885,7 +1106,7 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 foreach (var thread in await part.Adapter.ThreadsAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}"));
+                    result.Add(new DapThread(Id(thread.Id, part), part.Index == 0 && !Independent ? thread.Name : $"{part.Name}: {thread.Name}", thread.Frozen));
                 }
             }
             catch (DapException) when (part.Index != 0 || Independent)

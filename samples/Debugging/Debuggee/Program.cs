@@ -39,6 +39,11 @@ if (args is ["--depth"])
     return Depth.Run(); // [depth-call]
 }
 
+if (args is ["--features"])
+{
+    return Features.Run(); // [features-call]
+}
+
 if (args is ["--datatip"])
 {
     return DataTip.Run(); // [datatip-call]
