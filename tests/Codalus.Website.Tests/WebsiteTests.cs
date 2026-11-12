@@ -293,6 +293,29 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_page_fetches_one_screenshot_as_it_loads_and_the_rest_when_they_near_the_viewport()
+    {
+        // Lighthouse's throttled model counts every picture fetched before the headline's paint against the largest
+        // contentful paint: with the two spotlights' first pictures fetched at load (loading="lazy" alone fetches a
+        // picture a screen or two below the fold), the home page's was 3.1 s and its performance 94, under the 95 that
+        // eng/lighthouse.sh needs. So only the main screenshot is fetched with the page; every other one is lazy, inside
+        // the frame (.shot > figure, the picture its only child) that site.css doesn't render until it nears the viewport,
+        // which site.js does early.
+        var html = await Get(Options(), "");
+        var pictures = Regex.Matches(html, "<img src=\"assets/screenshots/(?<file>[^\"]+)\"(?<rest>[^>]*)>").ToList();
+        Assert.True(pictures.Count > 10, $"{pictures.Count} screenshots on the home page");
+        Assert.Equal(["editor-dark.png"], pictures.Where(p => !p.Groups["rest"].Value.Contains("loading=\"lazy\"", StringComparison.Ordinal)).Select(p => p.Groups["file"].Value));
+        var framed = Regex.Count(html, "<div class=\"shot[^\"]*\"[^>]*>\\s*<figure><img src=\"assets/screenshots/[^\"]+\"[^>]*loading=\"lazy\"[^>]*></figure>");
+        Assert.Equal(pictures.Count - 1, framed);
+
+        var css = await File.ReadAllTextAsync(Path.Combine(s_repoRoot, "website", "wwwroot", "assets", "site.css"), TestContext.Current.CancellationToken);
+        Assert.Matches(@"\.shot > figure:has\(> img\[loading=""lazy""\]:only-child\) \{[^}]*content-visibility: auto;[^}]*aspect-ratio: 1280 / 800;", css);
+        var script = await File.ReadAllTextAsync(Path.Combine(s_repoRoot, "website", "wwwroot", "assets", "site.js"), TestContext.Current.CancellationToken);
+        Assert.Contains("'.shot > figure > img[loading=\"lazy\"]:only-child'", script, StringComparison.Ordinal);
+        Assert.Contains("contentVisibility = \"visible\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_home_page_shows_the_ai_features_with_their_pictures_and_guide_sections()
     {
         var html = await Get(Options(), "");
