@@ -81,7 +81,7 @@ The plugin ships Coverlet's VSTest data collector (`coverage/collector`, from `c
 | System.CommandLine (console) | 2.0.12 | MIT |
 | NuGet.Frameworks (collector), NuGet.Versioning | 7.6.0 | Apache-2.0 |
 
-For test hosts of .NET Core 2.0 to .NET 7 (M33, ADR 0030), the plugin also ships the last collector built for netstandard2.0, in `coverage/collector-netstandard2.0`, with what its package carries:
+For test hosts of .NET Core 2.0 to .NET 7 (M33, ADR 0030), the plugin also ships the last collector built for netstandard2.0, in `coverage/collector-netstandard`, with what its package carries:
 
 | Component | Version | License |
 |---|---|---|

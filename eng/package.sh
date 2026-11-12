@@ -128,6 +128,16 @@ case "$rid" in
     ;;
   osx-*)
     echo "== macOS: .pkg and .app (Velopack)"
+    # Velopack puts the app in Contents/MacOS, where codesign takes a folder with a dot in its name for a nested bundle
+    # and refuses to sign the app ("bundle format unrecognized"). Coverlet's Windows-only assemblies (runtimes/win/lib/
+    # net8.0) are never loaded on macOS; anything else dotted is a layout to fix where it's made.
+    find "$app/plugins" -path '*/coverage/*/runtimes/win' -type d -prune -exec rm -rf {} +
+    dotted="$(cd "$app" && find . -mindepth 1 -type d -name '*.*')"
+    if [ -n "$dotted" ]; then
+      echo "These folders have a dot in their names, which macOS signing takes for bundles:" >&2
+      echo "$dotted" >&2
+      exit 1
+    fi
     iconset="$stage/codalus.iconset"
     mkdir -p "$iconset"
     for size in 16 32 128 256 512; do
