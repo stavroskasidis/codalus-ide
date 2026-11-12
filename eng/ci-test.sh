@@ -264,8 +264,19 @@ case "$shard" in
   others)
     # The Codalus debugger's bundle for this machine's remote stand-ins (M58b, ADR 0094; the fake ssh on Linux and
     # macOS): RemoteCodalusTests copy it to them, and fail without it in CI. It builds in .work, apart from the solution.
+    # And the two bundles a package offers as components, each debugging a real program where it is for: osx-x64 on
+    # Apple silicon, with the x64 .NET runtime that starts the program under Rosetta 2 (DebuggerBundleTests), and
+    # win-x86 on Windows, for a 32-bit .NET Framework program (NetFxDebuggerTests).
     case "$(uname -s)" in
-      Linux | Darwin) bash eng/get-codalus-debugger.sh ;;
+      Linux) bash eng/get-codalus-debugger.sh ;;
+      Darwin)
+        bash eng/get-codalus-debugger.sh
+        if [ "$(uname -m)" = arm64 ]; then
+          bash eng/get-codalus-debugger.sh osx-x64
+          bash eng/get-dotnet-x64.sh
+        fi
+        ;;
+      MINGW* | MSYS* | CYGWIN*) bash eng/get-codalus-debugger.sh win-x86 ;;
     esac
     # The Shell tests' namespace is left out: that module runs no tests, which isn't a failure (exit code 8). The
     # Windows runner has four cores, where all the projects at once timed out at random, and three at a time still

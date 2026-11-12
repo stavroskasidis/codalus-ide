@@ -44,9 +44,14 @@ bash eng/get-netcoredbg.sh
 export CODALUS_NETCOREDBG="$repo/.work/netcoredbg"
 # The x64 debugger on Apple silicon, for .NET 5 and earlier under Rosetta 2 (M33; does nothing elsewhere).
 bash eng/get-netcoredbg.sh --x64
-# The Codalus debugger's bundle for this machine's remote stand-ins (M58b): RemoteCodalusTests copy it to them.
+# The Codalus debugger's bundle for this machine's remote stand-ins (M58b): RemoteCodalusTests copy it to them. On
+# Apple silicon also its osx-x64 bundle and the x64 .NET runtime, for a program under Rosetta 2 (DebuggerBundleTests).
 echo "== codalus-debugger"
 bash eng/get-codalus-debugger.sh
+if [ "$(uname -sm)" = "Darwin arm64" ]; then
+  bash eng/get-codalus-debugger.sh osx-x64
+  bash eng/get-dotnet-x64.sh
+fi
 
 # The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 10 and older SDKs, pinned, in .work/dotnet-compat.
 # The first run downloads about 1.5 GB; Codalus.TargetFrameworks.Tests runs against it.
