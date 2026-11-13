@@ -157,7 +157,7 @@ public sealed class AcpAgentSecretsTests : IAsyncDisposable
             await _secrets.StoreAsync("stand-in", "MY_AGENT_KEY", Key, Ct);
             await ConfigureAsync(Entry(unsetEnv: ["ACP_FAKE_UNSET_ME"]));
             Assert.Null((await AskAsync("hello")).Error);
-            var start = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).First(m => m.TryGetProperty("env", out _)).GetProperty("env");
+            var start = Codalus.Tests.StandInAcpAgentLog.Read(_log).First(m => m.TryGetProperty("env", out _)).GetProperty("env");
             Assert.Equal(JsonValueKind.Null, start.GetProperty("ACP_FAKE_UNSET_ME").ValueKind);
         }
         finally

@@ -95,7 +95,10 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
 
     /// <summary>The messages the stand-in received with this method, as JSON.</summary>
     private List<JsonElement> Received(string method) =>
-        [.. File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Where(m => m.TryGetProperty("method", out var name) && name.GetString() == method)];
+        [.. LogLines().Where(m => m.TryGetProperty("method", out var name) && name.GetString() == method)];
+
+    /// <summary>The stand-in's log, read beside it (<see cref="Codalus.Tests.StandInAcpAgentLog.Read"/>).</summary>
+    private List<JsonElement> LogLines() => Codalus.Tests.StandInAcpAgentLog.Read(_log);
 
     private string AiLog => _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText();
 
@@ -625,7 +628,7 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
         _agents.ProcessDirectory = neutral;
         await ConfigureAsync();
         Assert.Null((await AskAsync("hello")).Error);
-        var started = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).First(m => m.TryGetProperty("cwd", out _));
+        var started = LogLines().First(m => m.TryGetProperty("cwd", out _));
         // The stand-in reports its working directory with links resolved (macOS: /var is /private/var).
         static string Real(string path) => Codalus.Platform.RealPath.Resolve(Path.GetFullPath(path)).TrimEnd(Path.DirectorySeparatorChar);
         Assert.Equal(Real(neutral), Real(started.GetProperty("cwd").GetString()!));
@@ -705,7 +708,7 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
 
         // The login ran in the agent's own folder (created first), the agent started again and initialized again, and
         // authenticate never went to it for a terminal method.
-        var login = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Single(m => m.TryGetProperty("login", out _));
+        var login = LogLines().Single(m => m.TryGetProperty("login", out _));
         Assert.Equal(("--login", _agents.ProcessDirectory, "1"), (login.GetProperty("login").GetString()!.Split(' ')[^1], login.GetProperty("cwd").GetString(), login.GetProperty("mode").GetString()));
         Assert.Equal(2, Received("initialize").Count);
         Assert.Empty(Received("authenticate"));
@@ -844,7 +847,7 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
         }
 
         Assert.Equal(3, handler.Refused);
-        var answers = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _) && m.TryGetProperty("error", out _)).ToList();
+        var answers = LogLines().Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _) && m.TryGetProperty("error", out _)).ToList();
         Assert.Equal(3, answers.Count);
     }
 

@@ -161,7 +161,7 @@ public sealed class AcpShellTests
         Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && b.Child is TextBlock { Text: "External agent" });
 
         // The session got the workspace and codalus mcp by its absolute path, with this session's pipe.
-        var created = File.ReadAllLines(log).Select(l => JsonElement.Parse(l)).Single(m => m.TryGetProperty("method", out var method) && method.GetString() == "session/new").GetProperty("params");
+        var created = Codalus.Tests.StandInAcpAgentLog.Read(log).Single(m => m.TryGetProperty("method", out var method) && method.GetString() == "session/new").GetProperty("params");
         Assert.Equal(Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar), created.GetProperty("cwd").GetString());
         var mcp = created.GetProperty("mcpServers")[0];
         var command = mcp.GetProperty("command").GetString()!;
@@ -608,6 +608,6 @@ public sealed class AcpShellTests
         Assert.Equal(("stopped", "Permission: cancelled"), (turn.FinishReason, turn.Answer));
         Assert.Equal("cancelled", turn.Steps.Single().Status);
         await ShellFixture.PumpUntil(() => Step(f, s => s.Status == AiStepStatus.Cancelled) is not null);
-        Assert.Contains(File.ReadAllLines(log), l => l.Contains("\"session/cancel\"", StringComparison.Ordinal));
+        Assert.Contains(Codalus.Tests.StandInAcpAgentLog.Read(log), m => m.TryGetProperty("method", out var method) && method.GetString() == "session/cancel");
     }
 }
