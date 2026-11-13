@@ -173,7 +173,7 @@ public sealed record LaunchPlan(
     /// <summary>
     /// The program's runtime runs no startup hooks (.NET Core 2.0 and 2.1; <see cref="RuntimeSelection"/>): a debugger that
     /// holds a program at its start in the hook, as the Codalus debugger's x64 build on Apple silicon does (ADR 0094's
-    /// amendment), can't hold this one.
+    /// amendment), can't hold this one, and the Debug Console says so before it starts.
     /// </summary>
     public bool StartsWithoutStartupHooks { get; init; }
 
