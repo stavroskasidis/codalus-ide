@@ -149,7 +149,10 @@ public sealed partial class ShellHost
     /// too), or a running process. The trace and the counters go to a new session folder; stopping (or the process
     /// exiting) saves the session and opens its report.
     /// </summary>
-    public async Task<ProfilingRun?> StartProfilingAsync(ProfilerRequest request, string? processName = null)
+    /// <param name="request">The tools, and whether to launch or which process.</param>
+    /// <param name="processName">The name of the process attached to, for the session.</param>
+    /// <param name="launchProject">The project to launch (an agent's profile_start, M60); the startup project by default.</param>
+    public async Task<ProfilingRun?> StartProfilingAsync(ProfilerRequest request, string? processName = null, string? launchProject = null)
     {
         if (_profiling is not null)
         {
@@ -169,7 +172,7 @@ public sealed partial class ShellHost
         int processId;
         if (request.Launch)
         {
-            project = Runs.StartupProject;
+            project = launchProject ?? Runs.StartupProject;
             if (project is null || !RequireTrustedSolution("Profiling the startup project"))
             {
                 if (project is null)
