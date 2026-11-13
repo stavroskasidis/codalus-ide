@@ -118,7 +118,28 @@ public sealed class AiConsoleTests
         }
     }
 
-    private static string[] Starts(string log) => File.Exists(log) ? [.. File.ReadAllLines(log).Where(l => l.StartsWith("args:", StringComparison.Ordinal)).Select(l => l["args:".Length..].Trim())] : [];
+    /// <summary>
+    /// The arguments of each start the stand-in CLI wrote to its log. Read while it may be appending a line: shared for
+    /// writing (a read that wasn't failed on Windows, "being used by another process", run 43376893535, and could make
+    /// the CLI's own append fail), and a last line without its line break isn't counted yet.
+    /// </summary>
+    private static string[] Starts(string log)
+    {
+        if (!File.Exists(log))
+        {
+            return [];
+        }
+
+        string text;
+        using (var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+        using (var reader = new StreamReader(stream))
+        {
+            text = reader.ReadToEnd();
+        }
+
+        var lines = text.Split('\n');
+        return [.. lines.Take(lines.Length - 1).Select(l => l.TrimEnd('\r')).Where(l => l.StartsWith("args:", StringComparison.Ordinal)).Select(l => l["args:".Length..].Trim())];
+    }
 
     private static async Task<AiConsoleTabViewModel> ShownAsync(ShellFixture f, int tabs = 1)
     {
