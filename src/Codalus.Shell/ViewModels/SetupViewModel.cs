@@ -465,7 +465,7 @@ public sealed class SetupViewModel : ObservableObject
             new(SetupAiPath.Agent, Localizer.Get("msg.firstRun.aiAgent", "A coding agent"), Localizer.Get("msg.firstRun.aiAgentDescription", "Your own agent, with the IDE's tools."),
             [
                 new(who, Localizer.Get("msg.firstRun.aiAgentWho", "Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account.")),
-                new(does, Localizer.Get("msg.firstRun.aiAgentDoes", "Works through a task by itself, and answers the AI actions and, once turned on, suggestions as you type.")),
+                new(does, Localizer.Get("msg.firstRun.aiAgentDoes", "Works through a task by itself, and answers the AI actions and suggestions.")),
                 new(leaves, Localizer.Get("msg.firstRun.aiAgentLeaves", "What the agent reads, to its own provider.")),
                 new(needs, Localizer.Get("msg.firstRun.aiAgentNeeds", "Its CLI or Node.js, and a sign-in.")),
             ], SelectAiPath) { IsRecommended = true },

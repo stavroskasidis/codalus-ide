@@ -105,7 +105,7 @@ The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE**
    | | A coding agent | The built-in assistant |
    |---|---|---|
    | Who answers | Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account. | A model you choose, hosted or on this machine. |
-   | What it does | Works through a task by itself, and answers the AI actions and, once turned on, suggestions as you type. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
+   | What it does | Works through a task by itself, and answers the AI actions and suggestions. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
    | What leaves this machine | What the agent reads, to its own provider. | Only what a question needs. Secrets and ignored files are never sent. |
    | What you need | Its CLI or Node.js, and a sign-in. | An API key, or a model server on this machine. |
 

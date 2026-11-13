@@ -2612,7 +2612,7 @@
   "msg.firstRun.ai": "AI",
   "msg.firstRun.aiAgent": "A coding agent",
   "msg.firstRun.aiAgentDescription": "Your own agent, with the IDE's tools.",
-  "msg.firstRun.aiAgentDoes": "Works through a task by itself, and answers the AI actions and, once turned on, suggestions as you type.",
+  "msg.firstRun.aiAgentDoes": "Works through a task by itself, and answers the AI actions and suggestions.",
   "msg.firstRun.aiAgentLeaves": "What the agent reads, to its own provider.",
   "msg.firstRun.aiAgentNeeds": "Its CLI or Node.js, and a sign-in.",
   "msg.firstRun.aiAgentWho": "Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account.",
