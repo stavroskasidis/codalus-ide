@@ -1,0 +1,6 @@
+# The test classes that read every tracked file (or every source folder: src, tests, samples, benchmarks, eng,
+# website), so a change anywhere can fail them. A pull request that tests only the projects of eng/ci-isolated-paths.txt
+# runs these too (eng/ci-test.sh projects). One class per line, its project the namespace.
+Codalus.Workbench.Tests.ProductNameTests
+Codalus.LanguageServices.Host.Tests.CSharpLensScannerTests
+Codalus.LanguageServices.Host.Tests.DeclarationScannersTests

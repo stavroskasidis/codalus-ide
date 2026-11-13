@@ -7,10 +7,13 @@
 #   debug-netcoredbg  the debugger classes in eng/ci-debug-parity.txt again under netcoredbg, the fallback (M58, ADR
 #                     0094: every other shard runs them under the default, Codalus IDE's own CoreCLR adapter)
 #   debug-codalus     those classes under the Codalus debugger, for a runner that runs no other shard (Linux arm64)
-# Usage: eng/ci-test.sh <shard> [Release|Debug]
+#   projects          the test projects given after the configuration, which it builds itself, and the classes that
+#                     scan every tracked file (eng/ci-repo-scan.txt): a pull request that changes only the areas of
+#                     eng/ci-isolated-paths.txt (eng/ci-scope.sh)
+# Usage: eng/ci-test.sh <shard> [Release|Debug] [test project...]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
-shard="${1:?shard: shell-1, shell-2, others, debug-netcoredbg or debug-codalus}"
+shard="${1:?shard: shell-1, shell-2, others, debug-netcoredbg, debug-codalus or projects}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -284,6 +287,41 @@ case "$shard" in
         if [[ "$line" == *"()" ]]; then filters+=(--filter-method "${line%()}"); else filters+=(--filter-class "$line"); fi
       done < eng/ci-debug-parity.txt
       dotnet test --project "tests/$project" --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1 || status=$?
+    done
+    exit "$status"
+    ;;
+  projects)
+    # The job builds nothing for this shard (pipeline.yml): each project builds here, the ones the classes of
+    # eng/ci-repo-scan.txt are in too, and every one runs whatever the one before did.
+    listed=("${@:3}")
+    if [[ ${#listed[@]} -eq 0 ]]; then
+      echo "projects: no test project given" >&2
+      exit 2
+    fi
+    scans=()
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%%#*}"
+      line="$(echo "$line" | tr -d '[:space:]')"
+      [[ -n "$line" ]] && scans+=("$line")
+    done < eng/ci-repo-scan.txt
+    status=0
+    for class in "${scans[@]}"; do
+      project="${class%.*}"
+      [[ " ${listed[*]} " == *" $project "* ]] || listed+=("$project")
+    done
+    for project in "${listed[@]}"; do
+      echo "== $project" >> "$console"
+      if ! dotnet build "tests/$project" -c "$configuration" >> "$console" 2>&1; then
+        status=1
+        continue
+      fi
+      filters=()
+      for class in "${scans[@]}"; do
+        [[ "${class%.*}" == "$project" ]] && filters+=(--filter-class "$class")
+      done
+      # A project given whole runs whole, even when classes of it are listed for the scan.
+      [[ " ${*:3} " == *" $project "* ]] && filters=()
+      dotnet test --project "tests/$project" --output detailed "${common[@]}" ${filters[@]+"${filters[@]}"} >> "$console" 2>&1 || status=$?
     done
     exit "$status"
     ;;
