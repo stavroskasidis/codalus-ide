@@ -108,6 +108,9 @@ public interface IAiChatHost
     /// <summary>Writes <c>ai.chat.density</c> to the user's settings.</summary>
     Task SetChatDensityAsync(string density);
 
+    /// <summary>Suggestions while typing are on (<c>ai.completions.enabled</c> or <c>ai.nextEdit.enabled</c>): AI Chat offers an agent's model for them (ADR 0097).</summary>
+    bool SuggestionsEnabled => false;
+
     /// <summary>Compares a file a turn changed with what it was before the turn.</summary>
     Task OpenAiChangeDiffAsync(AiChangedFile change);
 
@@ -483,8 +486,36 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// (empty when it offers none, or hasn't started). A pick is sent to the agent and kept for its next sessions.
     /// </summary>
     public IReadOnlyList<AiAgentChoiceItem> AgentChoicePickers => IsExternal && Session is { } session
-        ? [.. session.Choices.Select(c => new AiAgentChoiceItem(c.Id, ChoiceName(c), c.CurrentName, [.. c.Values.Select(v => v.Name)], c.Values.ToList().FindIndex(v => v.Value == c.CurrentValue)))]
+        ? [.. session.Choices.Select(c => new AiAgentChoiceItem(c.Id, ChoiceName(c), c.CurrentName, [.. c.Values.Select(v => v.Name)], c.Values.ToList().FindIndex(v => v.Value == c.CurrentValue))), .. SuggestionsPicker(session)]
         : [];
+
+    /// <summary>The id of the picker of the model for suggestions while typing (ADR 0097), after the agent's own choices.</summary>
+    // TODO(issue): offer it in the Options page's External Agents editor too, when that page is built (ADR 0083's phase 2).
+    public const string SuggestionsChoiceId = "codalus.suggestionsModel";
+
+    /// <summary>
+    /// The model for suggestions while typing (ADR 0097), shown while they are on and the agent offers models: Automatic
+    /// (a small model guessed by its name, else the chat's), then the agent's models; kept in its entry's <c>suggestions</c>.
+    /// </summary>
+    private IEnumerable<AiAgentChoiceItem> SuggestionsPicker(AcpAgentSession session)
+    {
+        if (!_host.SuggestionsEnabled || session.Choices.FirstOrDefault(c => c.Category == AcpSessionChoices.ModelCategory) is not { } models)
+        {
+            yield break;
+        }
+
+        var guessed = AcpTextSession.GuessFastModel(models.Values) ?? models.CurrentValue;
+        var automatic = Localizer.Format("msg.acp.suggestionsAutomatic", "Automatic ({0})", models.Values.FirstOrDefault(v => v.Value == guessed)?.Name ?? guessed ?? "");
+        var picked = _host.ExternalAgents.Configured.GetValueOrDefault(session.Name)?.SuggestionsModel;
+        var index = picked is null ? -1 : models.Values.ToList().FindIndex(v => v.Value == picked);
+        var current = index >= 0 ? models.Values[index].Name : automatic;
+        yield return new AiAgentChoiceItem(
+            SuggestionsChoiceId,
+            Localizer.Get("msg.acp.choice.suggestions", "Model for suggestions"),
+            Localizer.Format("msg.acp.suggestionsCurrent", "Suggestions: {0}", current),
+            [automatic, .. models.Values.Select(v => v.Name)],
+            index + 1);
+    }
 
     public bool HasAgentChoices => AgentChoicePickers.Count > 0;
 
@@ -536,6 +567,12 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
     /// <summary>Picks the value at <paramref name="index"/> of the choice <paramref name="id"/>: sent to the agent, then kept in its entry.</summary>
     public async Task ChooseAsync(string id, int index)
     {
+        if (id == SuggestionsChoiceId)
+        {
+            await ChooseSuggestionsModelAsync(index).ConfigureAwait(true);
+            return;
+        }
+
         if (Session is not { } session || session.Choices.FirstOrDefault(c => c.Id == id) is not { } choice || index < 0 || index >= choice.Values.Count)
         {
             return;
@@ -557,6 +594,18 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
         }
 
         await _host.ExternalAgents.SaveChoiceAsync(session.Name, id, value, CancellationToken.None).ConfigureAwait(true);
+        OnChoicesChanged();
+    }
+
+    /// <summary>Keeps the model for suggestions (0: Automatic) in the agent's entry; the next suggestion uses it (ADR 0097).</summary>
+    private async Task ChooseSuggestionsModelAsync(int index)
+    {
+        if (Session is not { } session || session.Choices.FirstOrDefault(c => c.Category == AcpSessionChoices.ModelCategory) is not { } models || index < 0 || index > models.Values.Count)
+        {
+            return;
+        }
+
+        await _host.ExternalAgents.SaveSuggestionsModelAsync(session.Name, index == 0 ? null : models.Values[index - 1].Value, CancellationToken.None).ConfigureAwait(true);
         OnChoicesChanged();
     }
 
@@ -835,7 +884,20 @@ public sealed class AiChatViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // An action's question goes to the agent too (ADR 0092): Generate Tests creates the file through the preview.
+        // An action's question goes to the agent too (ADR 0092): Generate Tests creates the file through the preview. With an
+        // external agent picked, to that agent's chat (ADR 0097), as a typed question would.
+        if (SelectedAgent is { } external)
+        {
+            if (IsAgentBlocked)
+            {
+                return; // the chat shows why
+            }
+
+            _stopped = false;
+            await AnswerAsync(token => Chat.SendExternalAsync(question, items, _host.ExternalAgents, external, _host.AcpHost, token, anchor, [])).ConfigureAwait(true);
+            return;
+        }
+
         await AnswerAsync(token => _host.RunAgentAsync(question, items, anchor, token)).ConfigureAwait(true);
     }
 

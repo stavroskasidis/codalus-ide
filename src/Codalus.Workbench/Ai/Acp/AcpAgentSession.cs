@@ -39,6 +39,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     private IReadOnlyList<AcpSessionConfigOption>? _configOptions;
     private AcpSessionModelState? _models;
     private IReadOnlyList<AcpSessionChoice> _choices = [];
+    private readonly Dictionary<AcpTextPurpose, Task<AcpTextSession>> _textSessions = [];
     private bool _signIn = true;
     private int _prompts;
     private int _disposed;
@@ -206,6 +207,7 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
     private void UseSession(AcpNewSessionResponse created)
     {
         _sessionId = created.SessionId;
+        _client!.PrimarySession = created.SessionId; // another session's messages never reach the chat (ADR 0097)
         lock (_gate)
         {
             _modes = created.Modes?.AvailableModes ?? [];
@@ -338,10 +340,59 @@ public sealed class AcpAgentSession : IAcpClientHandler, IAsyncDisposable
             _ai.LogAgent(Name, "stopped");
         }
 
+        await DropTextSessionsAsync().ConfigureAwait(false);
         await _terminals.DisposeAsync().ConfigureAwait(false);
         _mcpLifetime?.Dispose();
         _turnCancelled.Dispose();
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ------------------------------------------------------------------ text sessions (ADR 0097)
+
+    /// <summary>
+    /// The text session for <paramref name="purpose"/> on this agent's connection (ADR 0097), created on first use: no tools,
+    /// every request refused, never shown in the chat. Suggestions use <paramref name="suggestionsModel"/> (the user's pick)
+    /// or a small model guessed by its name; AI actions use the chat's current model.
+    /// </summary>
+    public async Task<AcpTextSession> GetTextSessionAsync(AcpTextPurpose purpose, string? suggestionsModel, CancellationToken cancellationToken)
+    {
+        if (!IsAlive || _client is not { } client)
+        {
+            throw new AcpException(_client?.StoppedMessage() ?? $"The agent '{Name}' isn't running.");
+        }
+
+        Task<AcpTextSession> pending;
+        lock (_gate)
+        {
+            if (!_textSessions.TryGetValue(purpose, out pending!) || pending.IsFaulted || pending.IsCanceled
+                || (pending.IsCompletedSuccessfully && (!pending.Result.IsAlive || pending.Result.Client != client)))
+            {
+                var chatModel = _choices.FirstOrDefault(c => c.Category == AcpSessionChoices.ModelCategory)?.CurrentValue;
+                pending = AcpTextSession.CreateAsync(Name, client, _ai, WorkspaceRoot, purpose, suggestionsModel, chatModel, CancellationToken.None);
+                _textSessions[purpose] = pending;
+            }
+        }
+
+        return await pending.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Forgets the text sessions (a new pick of the model for suggestions, or the end): the next use creates them again.</summary>
+    public async Task DropTextSessionsAsync()
+    {
+        List<Task<AcpTextSession>> sessions;
+        lock (_gate)
+        {
+            sessions = [.. _textSessions.Values];
+            _textSessions.Clear();
+        }
+
+        foreach (var session in sessions)
+        {
+            if (session.IsCompletedSuccessfully)
+            {
+                await session.Result.DisposeAsync().ConfigureAwait(false);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ turns

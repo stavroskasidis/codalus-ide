@@ -3,6 +3,7 @@
 - **Status:** accepted (0.13, 2026-11-12)
 - **Date:** 2026-11-12
 - **Deciders:** maintainer (the grilling of 2026-11-12, below)
+- **Amended by:** [ADR 0097](0097-the-ides-ai-features-through-an-external-agent.md) (an agent answers the AI actions and, once turned on, suggestions as you type: the agent card says so)
 - **Amends:** [ADR 0062](0062-ai-provider-api-and-data-boundaries.md) (the first-run setup offers AI; it stays off unless chosen there), M46 ([checkpoint](../checkpoints/m46.md): "AI stays off and isn't mentioned" no longer holds; the setup has five steps, a welcome page and a summary)
 
 ## Context

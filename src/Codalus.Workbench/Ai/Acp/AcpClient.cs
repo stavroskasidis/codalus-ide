@@ -44,6 +44,12 @@ public sealed record AcpAgentConfig(string Command, IReadOnlyList<string> Args, 
     /// </summary>
     public IReadOnlyDictionary<string, string> Choices { get; init; } = s_none;
 
+    /// <summary>
+    /// <c>suggestions.model</c>: the model the user picked for suggestions while typing (ADR 0097), or null to guess a small
+    /// one. Not part of <see cref="SameAs"/>: a pick doesn't restart the agent.
+    /// </summary>
+    public string? SuggestionsModel { get; init; }
+
     /// <summary>The <see cref="SecretEnv"/> values, read when the session starts; never in settings, the log or a message.</summary>
     public IReadOnlyDictionary<string, string> SecretValues { get; init; } = s_none;
 
@@ -123,6 +129,8 @@ public sealed class AcpClient : IAsyncDisposable
     private readonly SupervisedProcess _process;
     private readonly StringBuilder _stderr = new();
     private readonly TaskCompletionSource<AcpAuthStatus> _firstAuthStatus = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IAcpClientHandler> _routes = new(StringComparer.Ordinal);
+    private readonly RefusingClientHandler _stranger;
     private AcpAuthStatus? _authStatus;
     private int _exited;
 
@@ -130,6 +138,7 @@ public sealed class AcpClient : IAsyncDisposable
     {
         Name = name;
         _process = process;
+        _stranger = new RefusingClientHandler(_ => { }, "not a session of this window", "Codalus IDE doesn't know this session, so it refuses what the agent asks for.");
     }
 
     public string Name { get; }
@@ -300,9 +309,35 @@ public sealed class AcpClient : IAsyncDisposable
         }
     }
 
-    private void Register(JsonRpcConnection connection, IAcpClientHandler handler)
+    /// <summary>
+    /// The session the handler given to <see cref="StartAsync(string, AcpAgentConfig, string, IAcpClientHandler, CancellationToken)"/>
+    /// serves (AI Chat's). Once it is set, a message of another session that has no handler of its own (<see cref="Route"/>)
+    /// is refused, or ignored when it is an update: one session never sees another's (ADR 0097).
+    /// </summary>
+    public string? PrimarySession { get; set; }
+
+    /// <summary>Gives the messages of <paramref name="sessionId"/> to <paramref name="handler"/> (another session on this connection, ADR 0097) until disposed.</summary>
+    public IDisposable Route(string sessionId, IAcpClientHandler handler)
+    {
+        _routes[sessionId] = handler;
+        return new Unroute(this, sessionId);
+    }
+
+    private sealed class Unroute(AcpClient client, string sessionId) : IDisposable
+    {
+        public void Dispose() => client._routes.TryRemove(sessionId, out _);
+    }
+
+    /// <summary>Who handles a message of <paramref name="sessionId"/>.</summary>
+    private IAcpClientHandler For(string sessionId, IAcpClientHandler primary) =>
+        _routes.TryGetValue(sessionId, out var routed) ? routed
+        : PrimarySession is not { } own || sessionId.Length == 0 || sessionId == own ? primary
+        : _stranger;
+
+    private void Register(JsonRpcConnection connection, IAcpClientHandler primary)
     {
         var json = AcpJsonContext.Default;
+        var handler = new Router(this, primary);
         connection.CancelNotification = JsonRpcCancelNotification.Acp;
         connection.OnNotification(AcpMethods.SessionUpdate, json.AcpSessionNotification, handler.OnUpdateAsync);
         connection.OnNotification(AcpMethods.AuthStatusUpdate, json.AcpAuthStatusUpdate, update =>
@@ -311,7 +346,7 @@ public sealed class AcpClient : IAsyncDisposable
             {
                 Volatile.Write(ref _authStatus, status);
                 _firstAuthStatus.TrySetResult(status);
-                handler.OnAuthStatus(status);
+                primary.OnAuthStatus(status);
                 AuthStatusChanged?.Invoke(this, status);
             }
         });
@@ -335,6 +370,36 @@ public sealed class AcpClient : IAsyncDisposable
             await handler.ReleaseTerminalAsync(request, ct).ConfigureAwait(false);
             return AcpEmpty.Instance;
         });
+    }
+
+    /// <summary>Gives each message to the handler of its session (<see cref="For"/>).</summary>
+    private sealed class Router(AcpClient client, IAcpClientHandler primary) : IAcpClientHandler
+    {
+        public Task OnUpdateAsync(AcpSessionNotification notification) => client.For(notification.SessionId, primary).OnUpdateAsync(notification);
+
+        public Task<AcpRequestPermissionResponse> RequestPermissionAsync(AcpRequestPermissionRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).RequestPermissionAsync(request, cancellationToken);
+
+        public Task<AcpReadTextFileResponse> ReadTextFileAsync(AcpReadTextFileRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).ReadTextFileAsync(request, cancellationToken);
+
+        public Task WriteTextFileAsync(AcpWriteTextFileRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).WriteTextFileAsync(request, cancellationToken);
+
+        public Task<AcpCreateTerminalResponse> CreateTerminalAsync(AcpCreateTerminalRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).CreateTerminalAsync(request, cancellationToken);
+
+        public Task<AcpTerminalOutputResponse> TerminalOutputAsync(AcpTerminalRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).TerminalOutputAsync(request, cancellationToken);
+
+        public Task<AcpTerminalExitStatus> WaitForTerminalExitAsync(AcpTerminalRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).WaitForTerminalExitAsync(request, cancellationToken);
+
+        public Task KillTerminalAsync(AcpTerminalRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).KillTerminalAsync(request, cancellationToken);
+
+        public Task ReleaseTerminalAsync(AcpTerminalRequest request, CancellationToken cancellationToken) =>
+            client.For(request.SessionId, primary).ReleaseTerminalAsync(request, cancellationToken);
     }
 
     /// <summary><c>authenticate</c> with an agent method; <paramref name="apiKey"/> goes once in <c>_meta["api-key"]</c> (Codex).</summary>

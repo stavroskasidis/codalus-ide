@@ -51,14 +51,14 @@ public static class AiSettings
         {
             Title = "Inline Suggestions",
             Category = "AI",
-            Description = "Suggest code as you type, shown in gray at the caret: Tab accepts, Ctrl+Right accepts a word, Esc dismisses. It sends the text around the caret to the provider as you type, so it has its own switch, off by default.",
+            Description = "Suggest code as you type, shown in gray at the caret: Tab accepts, Ctrl+Right accepts a word, Esc dismisses. It sends the text around the caret to the provider (or the external agent picked in AI Chat) as you type, so it has its own switch, off by default.",
             Order = 10,
         },
         SettingDescriptor.Create(AiCompletions.ModelSetting, "\"\"", SettingType.String, source) with
         {
             Title = "Inline Suggestions Model",
             Category = "AI",
-            Description = "The provider's model for inline suggestions, when it should be a faster one than the chat's. Empty: the chat's model.",
+            Description = "The provider's model for inline suggestions, when it should be a faster one than the chat's. Empty: the chat's model. An external agent uses the model picked with Suggestions: in AI Chat instead.",
             Scope = SettingScope.User,
             Order = 11,
         },
@@ -66,7 +66,7 @@ public static class AiSettings
         {
             Title = "Inline Suggestions Delay",
             Category = "AI",
-            Description = "How long typing pauses, in milliseconds, before a suggestion is asked for.",
+            Description = "How long typing pauses, in milliseconds, before a suggestion is asked for. Unset: 400, or 1000 with an external agent.",
             Minimum = 100,
             Maximum = 5000,
             Scope = SettingScope.User,

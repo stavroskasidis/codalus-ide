@@ -105,7 +105,7 @@ The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE**
    | | A coding agent | The built-in assistant |
    |---|---|---|
    | Who answers | Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account. | A model you choose, hosted or on this machine. |
-   | What it does | Works through a task by itself. No suggestions as you type. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
+   | What it does | Works through a task by itself, and answers the AI actions and, once turned on, suggestions as you type. | AI Chat, the AI actions and, if ticked, suggestions as you type. |
    | What leaves this machine | What the agent reads, to its own provider. | Only what a question needs. Secrets and ignored files are never sent. |
    | What you need | Its CLI or Node.js, and a sign-in. | An API key, or a model server on this machine. |
 
@@ -114,7 +114,7 @@ The first time Codalus IDE starts for a user data folder, **Set up Codalus IDE**
    **A coding agent** is marked **(recommended)**: it is the way that gets the most from the IDE. **No AI** is still the one chosen unless you choose another, and nothing on this step turns anything on: what you choose is applied only when you end the setup from the summary.
    - **A coding agent** lists Claude, Codex, Gemini CLI and GitHub Copilot, **More agents…** (pi, OpenCode, goose), and any agent you've connected already, marked **Connected**. Below them the step says, in three lines, why to run an agent from Codalus IDE and not from a plain terminal: it gets [the IDE's tools](ai.md#the-ides-tools) (the compiler's symbols and references, the Error List, builds, tests and debugging; in AI Console, for the CLIs that take them), AI Chat shows its edits in a preview and asks before its commands, and Add Selection and Add File point it at the code you're looking at. Two more lines say how its windows differ: AI Console is the agent's own CLI in a terminal tab, which edits and runs by itself; AI Chat is a conversation in the IDE, with the agent's edits previewed and its commands approved.
    - **The built-in assistant** lists the providers by name (OpenAI-compatible, Ollama, Anthropic, and any a plugin adds) and two boxes, both unticked: **Inline suggestions** and **Next edit suggestions**, each with a line on what it sends as you type ([Inline suggestions](ai.md#inline-suggestions)).
-   - One or the other: suggestions as you type need the built-in assistant, and an agent brings none. You can add the other later from **Tools > AI**.
+   - One or the other. An agent also answers the AI actions and, once you turn them on in **Tools > Options > AI**, suggestions as you type ([The AI features with an external agent](ai.md#the-ai-features-with-an-external-agent)); the setup's suggestion boxes are the built-in assistant's. You can add the other later from **Tools > AI**.
 
 **The summary** ("You're all set") lists what you chose (the theme, the keys, the font size, the tools found and AI), a few keys worth knowing as your keyboard scheme has them (every command, Go To All, build, start debugging), and what its button does:
 - **Done** when AI is as it was: the start window opens.

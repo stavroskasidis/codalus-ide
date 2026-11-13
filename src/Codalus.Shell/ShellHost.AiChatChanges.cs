@@ -43,6 +43,9 @@ public sealed partial class ShellHost
             .Take(MaxMentionableFiles)];
     }
 
+    bool IAiChatHost.SuggestionsEnabled =>
+        Workbench.Settings.GetBoolean(Codalus.Workbench.Ai.AiCompletions.EnabledSetting, false) || Workbench.Settings.GetBoolean(Codalus.Workbench.Ai.AiNextEdit.EnabledSetting, false);
+
     public string ChatDensity => Workbench.Settings.GetString(Codalus.Workbench.Ai.AiChat.DensitySetting, "compact") is "detailed" ? "detailed" : "compact";
 
     public Task SetChatDensityAsync(string density) =>

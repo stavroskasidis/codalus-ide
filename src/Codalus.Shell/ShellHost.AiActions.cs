@@ -22,9 +22,14 @@ public sealed partial class ShellHost
 
     void Editor.IEditorServices.AskAiAboutException(string description) => _ = ExplainExceptionWithAiAsync(description);
 
-    /// <summary>Tells the user AI is off or has no provider; true when it can be used.</summary>
+    /// <summary>Tells the user AI is off or has no provider; true when it can be used (a provider, or AI Chat's agent, ADR 0097).</summary>
     private async Task<bool> EnsureAiAsync()
     {
+        if (Ai.ExternalAgent is not null)
+        {
+            return true; // whether it may run here is checked when it is asked, and a refusal says why
+        }
+
         switch (Ai.State)
         {
             case AiState.Off:

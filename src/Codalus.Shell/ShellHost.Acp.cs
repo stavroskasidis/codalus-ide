@@ -45,6 +45,7 @@ public sealed partial class ShellHost
             ProcessDirectory = Path.Combine(Paths.State, "external-agents"),
         };
         AcpHost = new ShellAcpHost(this);
+        ExternalAgents.Host = AcpHost; // the IDE's AI features start AI Chat's agent when it hasn't (ADR 0097)
         InitializeAgentConnect();
 
         // The agent works in one workspace: closing it, or opening another, stops it.
