@@ -30,6 +30,9 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 public sealed class FirstRunSetupTests
 {
+    /// <summary>The variables an install changes in this process (M49), restored after the test.</summary>
+    private static readonly string[] s_dotnetVariables = ["DOTNET_ROOT", "PATH", "DOTNET_ROOT_X64", "DOTNET_ROOT_ARM64"];
+
     // ------------------------------------------------------------------ when it shows
 
     [Fact]
@@ -261,15 +264,51 @@ public sealed class FirstRunSetupTests
         model.ShowTools([sdk, runtime with { State = ToolState.Found, Version = "11.0.0-rc.2.26504.105" }, git]);
         Assert.Equal(["dotnet", "git"], model.Tools.Select(t => t.Tool.Id));
 
-        // A missing SDK (a stand-in): Install… shows exactly what runs, and nothing runs without the yes.
+        // A missing SDK (a stand-in, on a machine described without dotnet): Install… opens the dialog of the ways to
+        // install it, each with its command, and nothing runs without the yes.
         var runs = new List<string>();
         model.InstallRunner = (program, arguments, _, _) =>
         {
             runs.Add(program + " " + string.Join(' ', arguments));
             return Task.FromResult((0, "installed\n"));
         };
+        f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(Codalus.Platform.PlatformKind.Linux, "/home/u");
         model.ShowTools([new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects")]);
         var row = Assert.Single(model.Tools);
+        Assert.True(row.CanInstall);
+        Assert.Equal("Install…", row.InstallTitle);
+        row.InstallCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.False(row.IsConfirming);
+        Assert.Equal(["dotnet-install", "page"], f.Shell.Dialogs.Alternatives.Select(a => a.Id));
+        Assert.Contains("--install-dir \"/home/u/.dotnet\"", f.Shell.Dialogs.Alternatives[0].Command, StringComparison.Ordinal);
+        f.Shell.Dialogs.Cancel();
+        await ShellFixture.PumpUntil(() => !row.IsInstalling);
+        Assert.Empty(runs);
+
+        // The yes: the way picked runs through the runner. The "install" points this process's DOTNET_ROOT and PATH at
+        // its folder: put back for the tests that run after this one.
+        var saved = s_dotnetVariables.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+        try
+        {
+            row.InstallCommand.Execute(null);
+            await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+            f.Shell.Dialogs.Accept();
+            await ShellFixture.PumpUntil(() => !row.IsInstalling && runs.Count == 1, seconds: 180);
+            Assert.Contains("dotnet-install.sh", runs[0], StringComparison.Ordinal);
+        }
+        finally
+        {
+            foreach (var (name, value) in saved)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+
+        // Missing git: Install… shows exactly what runs on the row, and nothing runs without the yes.
+        runs.Clear();
+        model.ShowTools([new ToolStatus("git", "Git", true, ToolState.Missing, "Source control")]);
+        row = Assert.Single(model.Tools);
         Assert.True(row.CanInstall);
         row.InstallCommand.Execute(null);
         Assert.True(row.IsConfirming);
@@ -279,12 +318,6 @@ public sealed class FirstRunSetupTests
         row.CancelCommand.Execute(null);
         Assert.False(row.IsConfirming);
         Assert.Empty(runs);
-        if (row.Plan.Kind == InstallKind.Run)
-        {
-            row.InstallCommand.Execute(null);
-            await row.ConfirmAsync();
-            Assert.Single(runs);
-        }
 
         // AI: no AI unless chosen. The summary says what was set, with a few of the chosen scheme's keys.
         model.ShowTools([sdk, git]);

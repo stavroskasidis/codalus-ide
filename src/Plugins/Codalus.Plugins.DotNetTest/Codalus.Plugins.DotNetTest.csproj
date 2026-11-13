@@ -21,8 +21,8 @@
     Coverlet (ADR 0011), shipped in the plugin folder rather than referenced: coverage/collector is the VSTest data
     collector (its net8.0 build, which loads into test hosts of .NET 8 and later) and coverage/console the console tool
     that wraps Microsoft.Testing.Platform applications (net10.0, run on the SDK's runtime). Test hosts of older
-    frameworks (.NET Core 2.0 to .NET 7) get coverage/collector-netstandard2.0, the last collector built for
-    netstandard2.0 (M33, ADR 0030).
+    frameworks (.NET Core 2.0 to .NET 7) get coverage/collector-netstandard, the last collector built for
+    netstandard2.0 (M33, ADR 0030). No folder name has a dot (see BuiltInPlugin in Codalus.Shell.csproj).
   -->
   <ItemGroup>
     <PackageDownload Include="coverlet.collector" Version="[$(CoverletVersion)];[$(CoverletLegacyCollectorVersion)]" />
@@ -36,7 +36,7 @@
     </ItemGroup>
     <Error Condition="'@(_CodalusCoverletCollector)' == '' or '@(_CodalusCoverletLegacyCollector)' == '' or '@(_CodalusCoverletConsole)' == ''" Text="Coverlet $(CoverletVersion) (and the collector $(CoverletLegacyCollectorVersion)) was not restored into $(NuGetPackageRoot)." />
     <Copy SourceFiles="@(_CodalusCoverletCollector)" DestinationFiles="@(_CodalusCoverletCollector->'$(OutDir)coverage/collector/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_CodalusCoverletLegacyCollector)" DestinationFiles="@(_CodalusCoverletLegacyCollector->'$(OutDir)coverage/collector-netstandard2.0/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusCoverletLegacyCollector)" DestinationFiles="@(_CodalusCoverletLegacyCollector->'$(OutDir)coverage/collector-netstandard/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(_CodalusCoverletConsole)" DestinationFiles="@(_CodalusCoverletConsole->'$(OutDir)coverage/console/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
   <ItemGroup>

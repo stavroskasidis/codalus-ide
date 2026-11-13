@@ -170,6 +170,13 @@ public sealed record LaunchPlan(
     /// <summary>The program runs as x64 on an Arm64 machine (M33, <see cref="RuntimeSelection"/>): it needs the x64 debugger.</summary>
     public bool RunsAsX64 { get; init; }
 
+    /// <summary>
+    /// The program's runtime runs no startup hooks (.NET Core 2.0 and 2.1; <see cref="RuntimeSelection"/>): a debugger that
+    /// holds a program at its start in the hook, as the Codalus debugger's x64 build on Apple silicon does (ADR 0094's
+    /// amendment), can't hold this one.
+    /// </summary>
+    public bool StartsWithoutStartupHooks { get; init; }
+
     /// <summary>What Codalus IDE changed about the launch and why (M33, <see cref="RuntimeSelection"/>), for the program's output.</summary>
     public IReadOnlyList<string> Notes { get; init; } = [];
 

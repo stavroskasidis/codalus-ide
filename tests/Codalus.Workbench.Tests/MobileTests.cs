@@ -137,6 +137,36 @@ public sealed class MobileTests : IDisposable
     }
 
     [Fact]
+    public void A_simulator_the_device_tool_lists_too_is_one_target_and_a_simulator()
+    {
+        // A booted simulator showed twice, as a simulator and as a device of the same name and identifier: both rows were
+        // where runs go, the run resolved to the "device", and debugging it was refused as an iPhone's.
+        var simulators = MobileDevices.ParseSimulators("""
+            {"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-18-2":[
+              {"udid":"B2B2-0001","isAvailable":true,"state":"Booted","name":"iPhone 16"},
+              {"udid":"C3C3-0002","isAvailable":true,"state":"Shutdown","name":"iPad Air"}]}}
+            """);
+        var listed = MobileDevices.ParseAppleDevices("""
+            {"result":{"devices":[
+              {"identifier":"S","deviceProperties":{"name":"iPhone 16","osVersionNumber":"18.2"},"hardwareProperties":{"udid":"b2b2-0001","platform":"iOS","deviceType":"iPhone"},"connectionProperties":{"pairingState":"paired"}},
+              {"identifier":"V","deviceProperties":{"name":"iPhone 16","osVersionNumber":"18.2"},"hardwareProperties":{"udid":"D4D4-0003","platform":"iOS","reality":"virtual"}},
+              {"identifier":"P","deviceProperties":{"name":"iPhone 16","osVersionNumber":"18.2"},"hardwareProperties":{"udid":"00008140-009","platform":"iOS","reality":"physical"},"connectionProperties":{"pairingState":"paired"}}]}}
+            """);
+
+        // The tool's own word for a simulator, where it gives one.
+        Assert.DoesNotContain(listed, d => d.Id == "D4D4-0003");
+
+        var targets = MobileDevices.MergeApple(simulators, listed);
+        Assert.Equal(["00008140-009", "C3C3-0002", "B2B2-0001"], targets.Select(t => t.Id)); // the phone, then the simulators by name
+        Assert.Equal([MobileDeviceKind.Device, MobileDeviceKind.Simulator, MobileDeviceKind.Simulator], targets.Select(t => t.Kind));
+
+        // A phone and a simulator of one name stay two targets, and only the phone's debugging is refused.
+        var simulator = targets.Single(t => t.Id == "B2B2-0001");
+        Assert.NotNull(MobileTargets.DebugArguments("net10.0-ios", simulator, 5000));
+        Assert.Null(MobileTargets.DebugArguments("net10.0-ios", targets[0], 5000));
+    }
+
+    [Fact]
     public void Signing_identities_and_provisioning_profiles_are_read()
     {
         var identities = AppleSigning.ParseIdentities("""

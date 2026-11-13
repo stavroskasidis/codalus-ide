@@ -46,13 +46,16 @@
     <!-- The remote development server (M21, ADR 0050): remote/server/ (framework-dependent, any OS) and remote/<rid>/ (self-contained). -->
     <RemoteServer Include="..\Codalus.Remote.Server\Codalus.Remote.Server.csproj" />
     <ProjectReference Include="@(RemoteServer)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" PluginId="codalus.welcome" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" PluginId="codalus.dotnettest" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" PluginId="codalus.github" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" PluginId="codalus.azuredevops" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" PluginId="codalus.gitlab" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" PluginId="codalus.openai" />
-    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" PluginId="codalus.anthropic" />
+    <!-- Built-in plugins, each in plugins/<Folder>/: the plugin's id with dashes for dots (discovery reads the id from
+         codalus-plugin.json). No folder name has a dot: codesign takes a dotted folder in a macOS app's Contents/MacOS for
+         a nested bundle and refuses to sign the app (eng/package.sh checks). -->
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Welcome\Codalus.Plugins.Welcome.csproj" Folder="codalus-welcome" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.DotNetTest\Codalus.Plugins.DotNetTest.csproj" Folder="codalus-dotnettest" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitHub\Codalus.Plugins.GitHub.csproj" Folder="codalus-github" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.AzureDevOps\Codalus.Plugins.AzureDevOps.csproj" Folder="codalus-azuredevops" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.GitLab\Codalus.Plugins.GitLab.csproj" Folder="codalus-gitlab" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.OpenAI\Codalus.Plugins.OpenAI.csproj" Folder="codalus-openai" />
+    <BuiltInPlugin Include="..\Plugins\Codalus.Plugins.Anthropic\Codalus.Plugins.Anthropic.csproj" Folder="codalus-anthropic" />
     <ProjectReference Include="@(BuiltInPlugin)" ReferenceOutputAssembly="false" Private="false" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot" />
   </ItemGroup>
 
@@ -249,16 +252,16 @@
   <Target Name="CodalusCopyBuiltInPlugins">
     <ItemGroup>
       <_CodalusPluginFiles Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\*.dll;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\*.pdb;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\codalus-plugin.json;%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\codalus-plugin.nls*.json">
-        <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
+        <Folder>%(BuiltInPlugin.Folder)</Folder>
       </_CodalusPluginFiles>
     </ItemGroup>
-    <Copy SourceFiles="@(_CodalusPluginFiles)" DestinationFiles="@(_CodalusPluginFiles->'$(CodalusPluginTarget)%(PluginId)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusPluginFiles)" DestinationFiles="@(_CodalusPluginFiles->'$(CodalusPluginTarget)%(Folder)\%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
     <!-- Tools a plugin bundles in a coverage/ subfolder (the .NET test plugin's Coverlet, ADR 0011). -->
     <ItemGroup>
       <_CodalusPluginTools Include="%(BuiltInPlugin.RootDir)%(BuiltInPlugin.Directory)bin\$(Configuration)\$(TargetFramework)\coverage\**\*">
-        <PluginId>%(BuiltInPlugin.PluginId)</PluginId>
+        <Folder>%(BuiltInPlugin.Folder)</Folder>
       </_CodalusPluginTools>
     </ItemGroup>
-    <Copy SourceFiles="@(_CodalusPluginTools)" DestinationFiles="@(_CodalusPluginTools->'$(CodalusPluginTarget)%(PluginId)\coverage\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusPluginTools)" DestinationFiles="@(_CodalusPluginTools->'$(CodalusPluginTarget)%(Folder)\coverage\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

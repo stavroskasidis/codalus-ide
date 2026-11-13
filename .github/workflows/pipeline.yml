@@ -471,6 +471,20 @@ jobs:
       - name: Release notes
         shell: bash
         run: dotnet run --project eng/Codalus.Release -- notes "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" --repo "$GITHUB_REPOSITORY" > release-notes.md
+      - name: Signing keychain (macOS)
+        # D19: the Developer ID certificates and the notary key in a throwaway keychain; without
+        # CODALUS_CODESIGN_IDENTITY the packages stay unsigned (docs/release/releasing.md#macos-signing).
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          CODALUS_INSTALLER_IDENTITY: ${{ secrets.CODALUS_INSTALLER_IDENTITY }}
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+        run: bash eng/macos-signing.sh setup
       - name: Package
         shell: bash
         env:
@@ -478,13 +492,18 @@ jobs:
           CODALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
           # The update feed's signature (M32): installed builds refuse a feed without it.
           CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
-          # Code signing (D19) waits behind this secret.
+          # macOS code signing (D19): the keychain step above exports CODALUS_KEYCHAIN and CODALUS_NOTARY_PROFILE.
           CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          CODALUS_INSTALLER_IDENTITY: ${{ secrets.CODALUS_INSTALLER_IDENTITY }}
           # The .rpm's signature: the dnf repository serves the release's own file with gpgcheck on (eng/linux-repos.sh).
           CODALUS_PACKAGES_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
+      - name: Delete the signing keychain (macOS)
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: bash eng/macos-signing.sh cleanup
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true

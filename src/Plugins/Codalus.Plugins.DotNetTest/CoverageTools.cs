@@ -20,7 +20,7 @@ internal static class CoverageTools
     /// </summary>
     public static string CollectorFolder(string? targetFramework) =>
         OlderFrameworks.NetCoreVersion(targetFramework) is { Major: < 8 }
-            ? Path.Combine(PluginFolder, "coverage", "collector-netstandard2.0")
+            ? Path.Combine(PluginFolder, "coverage", "collector-netstandard")
             : Path.GetDirectoryName(CollectorPath)!;
 
     /// <summary>The collector's in-process part, which VSTest loads into the test host (by its codebase from the adapter path).</summary>

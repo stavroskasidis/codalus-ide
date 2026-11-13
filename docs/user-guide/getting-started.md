@@ -14,11 +14,11 @@ The debugger is included in the packages: the Codalus debugger, Codalus IDE's ow
 - **The .NET runtime Codalus IDE needs**: its helper processes (the plugin, build, language, debug and other hosts) ask for a .NET runtime (`11.0.0` or a later version). Before it starts one, Codalus IDE checks that the runtime is installed in the .NET folder it uses, by .NET's own roll-forward rules. When it isn't, you get one notification, not one error per plugin: "Codalus IDE needs the .NET 11.0.0 runtime, which isn't installed (found: …)", with **Install .NET 11.0**. That installs the .NET 11 SDK, which brings the runtime, the same way as the SDK below, and then starts the plugins, language services and solution that couldn't start, without a restart. Check Environment lists it as **.NET runtime for Codalus IDE**.
 - **Which .NET folder**: with several (`/usr/local/share/dotnet` and `~/.dotnet` on a Mac, say), Codalus IDE uses the one on your `PATH` or in `DOTNET_ROOT` when it has the runtime, and otherwise a folder that has both an SDK and the runtime. A runtime installed on its own where .NET looks by default (a distribution's `dotnet-runtime-11.0`, Microsoft's runtime package) serves the helper processes as it is. After an install, the folder is chosen again.
 - **What's found**: Help → Check Environment lists every tool it uses, with its version, its path and what needs it: the .NET SDK, the .NET runtime Codalus IDE itself needs, git and Git LFS, Docker or Podman, and WSL on Windows. Each start checks only the first three, which it offers to install; the others are checked when Check Environment opens.
-- **How it installs**:
-  - Windows: winget, or the download page when winget isn't there.
-  - macOS: the .NET SDK into `~/.dotnet` through Microsoft's `dotnet-install` script, and git with Apple's Command Line Tools.
-  - Linux: the .NET SDK into `~/.dotnet` the same way. git comes from your distribution's package manager (apt, dnf, zypper, pacman or apk), in the integrated terminal, where `sudo` asks for your password.
-- **What it asks first**: every install shows the exact command it runs, and nothing runs until you agree. An SDK in `~/.dotnet` is used from then on, even though it isn't on the system's `PATH`.
+- **How it installs**: Install .NET lists the ways to install it on your machine and picks the one that fits. You can pick another. Each way shows its exact command, and says so when the `dotnet` you type in a terminal won't see what it installs. The way that fits installs where that `dotnet` is (the first on your login shell's `PATH`), so the terminal and Codalus IDE use the same SDKs:
+  - Windows: winget, or the download page.
+  - macOS: Microsoft's installer package (`.pkg`) into `/usr/local/share/dotnet`, which every shell has on its `PATH`. It runs in the integrated terminal (`curl`, then `sudo installer`), where `sudo` asks for your password. This fits unless your `dotnet` is in your home folder: then it's Microsoft's `dotnet-install` script into that folder (`~/.dotnet`), with no password. The download page is the third way. git comes with Apple's Command Line Tools.
+  - Linux: your distribution's `dotnet-sdk-11.0` package (apt, dnf or zypper) when it has that version and your `dotnet` is a package's, or there's none yet. It runs in the integrated terminal, where `sudo` asks for your password. When your `dotnet` is the `dotnet-sdk` snap, the snap's channel (this replaces the SDK the snap has). Otherwise `dotnet-install` into `~/.dotnet`, with no password: it doesn't install into a package manager's folder. A version a `global.json` pins comes from `dotnet-install` (or the Mac's `.pkg` of that version), since a package installs only its channel's newest. git comes from your distribution's package manager (apt, dnf, zypper, pacman or apk), in the integrated terminal.
+- **What it asks first**: every install shows the exact command it runs, and nothing runs until you agree. When an install in the terminal ends, Codalus IDE checks again and moves to the new .NET without a restart. An SDK in `~/.dotnet` is used from then on, even when it isn't on your `PATH`.
 
 ## Installing
 
@@ -39,9 +39,9 @@ Every release on the [releases page](https://github.com/stavroskasidis/codalus-i
 
 The packages (and the Arch Linux install script's) add Codalus IDE to the applications menu and `codalus` to your `PATH`. The AppImage and the `.tar.gz` don't.
 
-**The installers aren't code-signed yet**, so the first start asks for confirmation:
-- **Windows** (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
-- **macOS** (Gatekeeper, "Apple could not verify…"): close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
+**The macOS installer and app are signed and notarized** (from 0.13.0), so they open without a warning. **The Windows installer isn't code-signed yet**, so its first start asks for confirmation (SmartScreen, "Windows protected your PC"): choose **More info**, then **Run anyway**.
+
+A macOS build from before 0.13.0 isn't signed: if Gatekeeper says "Apple could not verify…", close the message, open System Settings → Privacy & Security, and choose **Open Anyway** next to the installer or the app, then open it again. (Since macOS 15, right-click → Open no longer skips the check.)
 
 From a Windows terminal, `codalus` runs the installed app and waits for it, so `git config core.editor "codalus --wait"` works. As a windowed program it prints `--version` and `--help` to the console window rather than to a pipe.
 

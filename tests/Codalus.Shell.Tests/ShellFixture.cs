@@ -97,8 +97,34 @@ internal sealed class ShellFixture : IAsyncDisposable
             (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
         Window = new MainWindow(Shell);
         Window.Closed += (_, _) => _closed = true;
-        Window.Show();
+        var collections = (Gen0: GC.CollectionCount(0), Gen1: GC.CollectionCount(1), Gen2: GC.CollectionCount(2));
+        try
+        {
+            Window.Show();
+        }
+        catch (InvalidOperationException e) when (e.Message.Contains("glyphTypeface", StringComparison.Ordinal))
+        {
+            // The default family had no face for one window's first layout, in a run in which the hundreds of windows
+            // before and after it found it, and Avalonia's message doesn't say why (Linux CI, run 43245449152).
+            throw new InvalidOperationException($"{e.Message}\n{FontState(collections)}", e);
+        }
+
         Pump();
+    }
+
+    /// <summary>What the font manager, the shell's system fonts and Skia say of the default family now, and the collections since <paramref name="before"/>.</summary>
+    internal static string FontState((int Gen0, int Gen1, int Gen2) before)
+    {
+        var fonts = Avalonia.Media.FontManager.Current;
+        var name = fonts.DefaultFontFamily.Name;
+        var system = fonts.SystemFonts;
+        var again = system.TryGetGlyphTypeface(name, Avalonia.Media.FontStyle.Normal, Avalonia.Media.FontWeight.Normal, Avalonia.Media.FontStretch.Normal, out var face)
+            ? $"found ('{face.FamilyName}')"
+            : "not found";
+        var skia = SkiaSharp.SKFontManager.Default.MatchFamily(name, SkiaSharp.SKFontStyle.Normal);
+        return $"The default family is '{name}'. The system fonts ({system.GetType().Name}) say of their last failed lookup: {(system as Infrastructure.ShellSystemFonts)?.LastFailure ?? "nothing"}. "
+            + $"Asked again, its regular face is {again}. Skia matches {(skia is null ? "nothing" : $"'{skia.FamilyName}'")} for it now, of {SkiaSharp.SKFontManager.Default.FontFamilyCount} families. "
+            + $"Collections since the window was made: gen0 +{GC.CollectionCount(0) - before.Gen0}, gen1 +{GC.CollectionCount(1) - before.Gen1}, gen2 +{GC.CollectionCount(2) - before.Gen2}.";
     }
 
     private bool _closed;
