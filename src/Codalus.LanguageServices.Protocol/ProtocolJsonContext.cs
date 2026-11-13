@@ -75,6 +75,8 @@ namespace Codalus.LanguageServices.Protocol;
 [JsonSerializable(typeof(TypeHierarchyParams))]
 [JsonSerializable(typeof(InlayHintParams))]
 [JsonSerializable(typeof(InlayHint[]))]
+[JsonSerializable(typeof(InlineValueParams))]
+[JsonSerializable(typeof(InlineValue[]))]
 [JsonSerializable(typeof(CodeLensParams))]
 [JsonSerializable(typeof(CodeLens[]))]
 [JsonSerializable(typeof(CodeLens))]

@@ -112,6 +112,13 @@ internal static partial class BuiltIns
             Description = "Saving a file applies the edit to the program being debugged. Under the Codalus debugger (Debugger for .NET programs) every program takes C#, Visual Basic and Razor edits while debugged: Apply Code Changes (Alt+F10) applies them any time, and Continue applies the ones made while stopped. Start Debugging also runs a Blazor WebAssembly app's dev server, and a Blazor Web App's server, under dotnet watch, so WebAssembly components take edits in the browser; in a Blazor Web App the debugger attaches to the server once it starts (breakpoints in its Program.cs debug it from the start, without Hot Reload), and edits that need a restart restart the app. Under netcoredbg the .NET runtime doesn't apply edits to a program the debugger runs: the server keeps the code it started with until you restart, and other apps need Start with Hot Reload.",
             Order = 5,
         },
+        SettingDescriptor.Create(Codalus.Shell.Editor.EditorOptions.InlineValuesKey, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Inline values",
+            Category = "Debugging",
+            Description = "While the debugger is stopped, draw each line's values after it (name = value), from the method's start to the current statement, for the frame selected in the Call Stack. Locals, parameters, fields and auto-properties are shown; other properties and calls are left to the data tip, so no code of yours runs. A value that changed since the last step is highlighted. Turn it off for one language in that language's settings (for example \"[csharp]\": { \"debug.inlineValues\": false }).",
+            Order = 3,
+        },
         SettingDescriptor.Create(Codalus.Shell.Editor.EditorOptions.PerfTipsKey, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "PerfTips",

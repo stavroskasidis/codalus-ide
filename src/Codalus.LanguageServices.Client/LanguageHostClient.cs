@@ -612,6 +612,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public async Task<TypeHierarchyItem[]> SubtypesAsync(TypeHierarchyItem item, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.TypeHierarchySubtypes, new TypeHierarchyParams(item), ProtocolJsonContext.Default.TypeHierarchyParams, ProtocolJsonContext.Default.TypeHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
 
+    /// <summary>LSP 3.17's <c>textDocument/inlineValue</c> (M62): the values to draw after the lines of a stopped frame's method.</summary>
+    public async Task<InlineValue[]> InlineValuesAsync(string uri, Protocol.Range range, InlineValueContext context, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.InlineValue, new InlineValueParams(new TextDocumentIdentifier(uri), range, context), ProtocolJsonContext.Default.InlineValueParams, ProtocolJsonContext.Default.InlineValueArray, cancellationToken).ConfigureAwait(false) ?? [];
+
     public async Task<InlayHint[]> InlayHintsAsync(string uri, Protocol.Range range, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.InlayHint, new InlayHintParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.InlayHintParams, ProtocolJsonContext.Default.InlayHintArray, cancellationToken).ConfigureAwait(false) ?? [];
 

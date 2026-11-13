@@ -314,4 +314,29 @@ public sealed partial class LanguageServiceTests
         var main = app.Children.SelectMany(n => n.Children).Single(t => t.Name == "Program").Children.Single(m => m.Name == "<top-level statements>");
         Assert.True(main.SourceLines > 0 && main.ExecutableLines > 0, $"{main.SourceLines} lines, {main.ExecutableLines} executable");
     }
+
+    [Fact]
+    public async Task Inline_values_name_each_lines_locals_parameters_and_fields_up_to_the_stop()
+    {
+        // M62: what textDocument/inlineValue returns for a frame stopped at [stop] in Values.Sum.
+        var values = fixture.File("src", "App", "Values.cs");
+        await fixture.OpenAsync(values);
+        var stop = fixture.At(values, "// [stop]");
+        var stopLine = stop.Line;
+        var answer = await fixture.Client.InlineValuesAsync(Uri(values), s_wholeFile, new InlineValueContext(1, new Protocol.Range(new Position(stopLine, 8), new Position(stopLine, 8))), Ct);
+
+        string[] On(string marker) =>
+            [.. answer.Where(v => v.Range.Start.Line == fixture.At(values, "// [" + marker + "]").Line).Select(v => v.VariableName ?? "=" + v.Expression)];
+
+        Assert.Equal(["total", "start"], On("declare"));
+        Assert.Equal(["total", "n", "=_count"], On("loop"));
+        Assert.Equal(["total", "first", "parsed", "=Limit"], On("patterns")); // Computed has a body: left to the data tip
+        Assert.Contains("twice", On("lambda"));
+        Assert.Equal(["=App.Values.s_label", "low", "high", "twice", "total"], On("stop")); // no Math.Abs, no Console
+
+        // Locals and parameters are looked up, case-sensitively in C#; fields are evaluated; nothing after the stop.
+        Assert.All(answer.Where(v => v.VariableName is not null), v => Assert.True(v.CaseSensitiveLookup));
+        Assert.DoesNotContain(answer, v => v.Range.Start.Line > stopLine);
+        Assert.DoesNotContain(answer, v => v.Range.Start.Line < fixture.At(values, "public int Sum").Line);
+    }
 }

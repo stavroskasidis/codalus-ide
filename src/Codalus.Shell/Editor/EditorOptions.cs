@@ -37,6 +37,7 @@ public sealed class EditorOptions : ObservableObject
     public const string OverviewRulerKey = "editor.overviewRuler";
     public const string NavigationBarKey = "editor.navigationBar";
     public const string PerfTipsKey = "debug.perfTips";
+    public const string InlineValuesKey = "debug.inlineValues";
 
     private readonly SettingsService _settings;
     private readonly string? _languageId;
@@ -48,7 +49,7 @@ public sealed class EditorOptions : ObservableObject
         Read();
         settings.Changed += (_, e) =>
         {
-            if (e.Affects("editor") || e.Affects(PerfTipsKey))
+            if (e.Affects("editor") || e.Affects(PerfTipsKey) || e.Affects(InlineValuesKey))
             {
                 Ui.Post(() =>
                 {
@@ -152,6 +153,9 @@ public sealed class EditorOptions : ObservableObject
     /// <summary>Show the elapsed time at the current statement while debugging (ADR 0021).</summary>
     public bool PerfTips { get; private set; }
 
+    /// <summary>Draw each line's values after it while the debugger is stopped (M62, ADR 0101); per language too.</summary>
+    public bool InlineValues { get; private set; }
+
     private void Read()
     {
         var settings = _settings.ForLanguage(_languageId);
@@ -168,6 +172,7 @@ public sealed class EditorOptions : ObservableObject
         OverviewRuler = settings.GetBoolean(OverviewRulerKey, true);
         NavigationBar = settings.GetBoolean(NavigationBarKey, true);
         PerfTips = settings.GetBoolean(PerfTipsKey, true);
+        InlineValues = settings.GetBoolean(InlineValuesKey, true);
         TabSize = Math.Clamp(settings.GetInt32(TabSizeKey, 4), 1, 16);
         InsertSpaces = settings.GetBoolean(InsertSpacesKey, true);
         WordWrap = settings.GetBoolean(WordWrapKey);
