@@ -75,7 +75,7 @@ public static class IdeTools
         "program in; read it before the next step instead of retrying. Positions are 1-based lines; give a symbol by name " +
         "(Namespace.Type.Member or Type.Member), or a path, line and the name on that line.";
 
-    private const string Position =
+    internal const string Position =
         """
         "symbol":{"type":"string","description":"The symbol's name: Type, Type.Member or Namespace.Type.Member. Use it, or path and line."},
         "path":{"type":"string","description":"A file, relative to the workspace root."},
@@ -83,8 +83,15 @@ public static class IdeTools
         "name":{"type":"string","description":"The identifier on that line; its first occurrence is used. Without it, the first identifier."}
         """;
 
-    /// <summary>The built-in tools, in the order agents see them.</summary>
-    public static readonly IReadOnlyList<IdeToolDefinition> BuiltIn =
+    /// <summary>
+    /// The built-in tools, in the order agents see them: round 1's (ADR 0092), then round 2's (M60), each group in a
+    /// class of its own (<see cref="IdeToolsRound2"/>).
+    /// </summary>
+    public static IReadOnlyList<IdeToolDefinition> BuiltIn => s_builtIn ??= [.. s_round1, .. IdeToolsRound2.All];
+
+    private static IReadOnlyList<IdeToolDefinition>? s_builtIn;
+
+    private static readonly IReadOnlyList<IdeToolDefinition> s_round1 =
     [
         // ---------------------------------------------------------- the solution and the editor
         Read("get_solution", "The solution open in Codalus IDE: its path and its projects, with their target frameworks, output types, whether they are test projects, and the startup project.", "{}"),
@@ -192,10 +199,10 @@ public static class IdeTools
         return tools;
     }
 
-    private static IdeToolDefinition Read(string name, string description, string properties, params string[] required) =>
+    internal static IdeToolDefinition Read(string name, string description, string properties, params string[] required) =>
         new(name, description, Schema(properties, required), IdeToolKind.Read);
 
-    private static IdeToolDefinition Action(string name, string description, string properties, params string[] required) =>
+    internal static IdeToolDefinition Action(string name, string description, string properties, params string[] required) =>
         new(name, description, Schema(properties, required), IdeToolKind.Action);
 
     private static string Schema(string properties, string[] required)

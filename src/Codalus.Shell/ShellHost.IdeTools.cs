@@ -430,7 +430,8 @@ public sealed partial class ShellHost
             }
 
             default:
-                throw new McpException($"There is no tool '{tool}'.");
+                return await Round2IdeToolAsync(tool, args, root, cancellationToken).ConfigureAwait(true)
+                    ?? throw new McpException($"There is no tool '{tool}'.");
         }
     }
 
