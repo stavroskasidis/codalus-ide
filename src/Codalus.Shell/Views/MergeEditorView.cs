@@ -29,9 +29,10 @@ internal enum MergePane
 /// <summary>
 /// Draws each conflict's block in a merge editor pane: a muted red fill with a dashed outline while it is unresolved
 /// (<c>Shell.Merge.Conflict</c>, <c>.Border</c>), a solid outline once resolved where the result took the block
-/// (<c>Shell.Merge.Resolved.Border</c>), and a quiet dashed outline on the side it didn't take.
+/// (<c>Shell.Merge.Resolved.Border</c>), and a quiet dashed outline on the side it didn't take. Filler rows are hatched
+/// (<c>Shell.Diff.Filler</c>; in an unresolved block, in the block's red), as the classic IDE draws them.
 /// </summary>
-internal sealed class ConflictBlockRenderer(MergeEditorViewModel viewModel, MergePane pane) : IBackgroundRenderer
+internal sealed class ConflictBlockRenderer(MergeEditorViewModel viewModel, MergePane pane, Func<MergePaneLayout?> layout) : IBackgroundRenderer
 {
     private static readonly DashStyle s_dash = new([4, 3], 0);
 
@@ -45,14 +46,33 @@ internal sealed class ConflictBlockRenderer(MergeEditorViewModel viewModel, Merg
         }
 
         var fill = MergeEditorView.Brush(textView, "Shell.Merge.Conflict");
-        var conflict = new Pen(MergeEditorView.Brush(textView, "Shell.Merge.Conflict.Border"), 1, s_dash);
+        var conflictBrush = MergeEditorView.Brush(textView, "Shell.Merge.Conflict.Border");
+        var conflict = new Pen(conflictBrush, 1, s_dash);
         var resolved = new Pen(MergeEditorView.Brush(textView, "Shell.Merge.Resolved.Border"), 1);
         var untaken = new Pen(MergeEditorView.Brush(textView, "Shell.Border"), 1, s_dash);
+        var filler = MergeEditorView.Brush(textView, "Shell.Diff.Filler") is { } f ? new Pen(f, 1) : null;
+        var conflictFiller = conflictBrush is null ? filler : new Pen(conflictBrush, 1);
         var width = textView.Bounds.Width;
+        var scrollY = textView.ScrollOffset.Y;
+        var current = layout();
+        if (current is not null && current.LineCount == document.LineCount && filler is not null)
+        {
+            var lineHeight = textView.DefaultLineHeight;
+            foreach (var line in textView.VisualLines)
+            {
+                var index = line.FirstDocumentLine.LineNumber - 1;
+                var top = line.VisualTop - scrollY;
+                var lead = index == 0 ? current.Lead : 0;
+                var trail = current.After(line.LastDocumentLine.LineNumber - 1);
+                MergeFillerHatch.Draw(drawingContext, filler, new Rect(0, top, width, lead * lineHeight), scrollY, width);
+                MergeFillerHatch.Draw(drawingContext, filler, new Rect(0, top + line.Height - (trail * lineHeight), width, trail * lineHeight), scrollY, width);
+            }
+        }
+
         foreach (var block in viewModel.Conflicts)
         {
             var range = MergeEditorView.RangeOf(block, pane);
-            if (range.End > document.TextLength || MergeEditorView.LinesOf(textView, document, range) is not var (top, bottom) || bottom < 0 || top > textView.Bounds.Height)
+            if (range.End > document.TextLength || MergeEditorView.BlockBounds(textView, document, range, current, block.Index) is not var (top, bottom, fillerTop) || bottom < 0 || top > textView.Bounds.Height)
             {
                 continue;
             }
@@ -60,7 +80,13 @@ internal sealed class ConflictBlockRenderer(MergeEditorViewModel viewModel, Merg
             var rect = new Rect(0.5, Math.Floor(top) + 0.5, Math.Max(0, width - 1), Math.Max(2, Math.Round(bottom - top) - 1));
             if (!block.IsResolved)
             {
-                drawingContext.DrawRectangle(fill, conflict, rect);
+                drawingContext.DrawRectangle(fill, null, rect);
+                if (conflictFiller is not null)
+                {
+                    MergeFillerHatch.Draw(drawingContext, conflictFiller, new Rect(0, fillerTop, width, bottom - fillerTop), scrollY, width);
+                }
+
+                drawingContext.DrawRectangle(null, conflict, rect);
             }
             else if (pane == MergePane.Result || block.Takes(pane == MergePane.Current ? MergeSide.Current : MergeSide.Incoming))
             {
@@ -83,14 +109,16 @@ internal sealed class ConflictCheckMargin : Canvas, ITextViewConnect
     private const double BoxSize = 16;
     private readonly MergeEditorViewModel _viewModel;
     private readonly MergeSide _side;
+    private readonly Func<MergePaneLayout?> _layout;
     private readonly List<(MergeConflictBlock Block, CheckBox Box)> _boxes = [];
     private TextView? _textView;
     private double _height;
 
-    public ConflictCheckMargin(MergeEditorViewModel viewModel, MergeSide side)
+    public ConflictCheckMargin(MergeEditorViewModel viewModel, MergeSide side, Func<MergePaneLayout?> layout)
     {
         _viewModel = viewModel;
         _side = side;
+        _layout = layout;
         Width = BoxSize + 8;
         ClipToBounds = true;
         foreach (var block in viewModel.Conflicts)
@@ -183,14 +211,13 @@ internal sealed class ConflictCheckMargin : Canvas, ITextViewConnect
         foreach (var (block, box) in _boxes)
         {
             var range = block.RangeIn(_side);
-            if (range.End > document.TextLength)
+            if (range.End > document.TextLength || MergeEditorView.BlockBounds(_textView, document, range, _layout(), block.Index) is not var (blockTop, _, _))
             {
                 box.IsVisible = false;
                 continue;
             }
 
-            var line = document.GetLineByOffset(range.Start);
-            var top = _textView.GetVisualTopByDocumentLine(line.LineNumber) - _textView.ScrollOffset.Y;
+            var top = blockTop;
             box.IsVisible = top + lineHeight > 0 && top < Math.Max(_height, Bounds.Height);
             SetLeft(box, 4);
             SetTop(box, top + Math.Max(0, (lineHeight - BoxSize) / 2));
@@ -202,7 +229,8 @@ internal sealed class ConflictCheckMargin : Canvas, ITextViewConnect
 /// The merge editor (M13; redesigned 2026-10-19 after a classic IDE's): the incoming and current versions side by side
 /// with a check box beside each conflict's block, and the editable result below them (or three columns), which shows the
 /// merge base's text for each conflict still to resolve. A compact toolbar moves between conflicts, counts them and
-/// accepts the merge; its gear menu holds the layout and the bulk actions. All three panes scroll together, and a status
+/// accepts the merge; its gear menu holds the layout and the bulk actions. All three panes line up row by row (filler rows
+/// pad a conflict's shorter sides, and lines only some panes have) and scroll together, and a status
 /// bar under them shows the zoom, the caret, the indentation, the line endings and the encoding.
 /// </summary>
 public sealed class MergeEditorView : UserControl, IPaneView
@@ -234,6 +262,13 @@ public sealed class MergeEditorView : UserControl, IPaneView
     private SourceTokens? _resultTokens;
     private int _colorsVersion;
     private Avalonia.Threading.DispatcherTimer? _resultColorsTimer;
+    private readonly string[] _currentLines;
+    private readonly string[] _incomingLines;
+    private MergePaneLayout? _currentLayout;
+    private MergePaneLayout? _incomingLayout;
+    private MergePaneLayout? _resultLayout;
+    private TextEditor? _leader;
+    private bool _syncPosted;
     private bool _syncing;
 
     public MergeEditorView(MergeEditorViewModel viewModel, EditorFont font)
@@ -253,15 +288,25 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _current.TextArea.TextView.LineTransformers.Add(_currentColors);
         _incoming.TextArea.TextView.LineTransformers.Add(_incomingColors);
         _result.TextArea.TextView.LineTransformers.Add(_resultColors);
-        _current.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Current));
-        _incoming.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Incoming));
-        _result.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Result));
-        _currentMargin = new ConflictCheckMargin(viewModel, MergeSide.Current);
-        _incomingMargin = new ConflictCheckMargin(viewModel, MergeSide.Incoming);
+        // The panes line up row by row (the maintainer's report, 2026-11-13): filler rows where another pane has lines.
+        _currentLines = [.. _current.Document.Lines.Select(_current.Document.GetText)];
+        _incomingLines = [.. _incoming.Document.Lines.Select(_incoming.Document.GetText)];
+        _current.TextArea.TextView.ElementGenerators.Add(new MergeFillerGenerator(() => _currentLayout));
+        _incoming.TextArea.TextView.ElementGenerators.Add(new MergeFillerGenerator(() => _incomingLayout));
+        _result.TextArea.TextView.ElementGenerators.Add(new MergeFillerGenerator(() => _resultLayout));
+        _current.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Current, () => _currentLayout));
+        _incoming.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Incoming, () => _incomingLayout));
+        _result.TextArea.TextView.BackgroundRenderers.Add(new ConflictBlockRenderer(viewModel, MergePane.Result, () => _resultLayout));
+        _currentMargin = new ConflictCheckMargin(viewModel, MergeSide.Current, () => _currentLayout);
+        _incomingMargin = new ConflictCheckMargin(viewModel, MergeSide.Incoming, () => _incomingLayout);
         _current.TextArea.LeftMargins.Add(_currentMargin);
         _incoming.TextArea.LeftMargins.Add(_incomingMargin);
+        Realign();
         foreach (var editor in (TextEditor[])[_current, _incoming, _result])
         {
+            // The editor's line numbers, each beside its line's text (not on the first line's filler rows above it).
+            editor.Bind(TextEditor.LineNumbersForegroundProperty, editor.GetResourceObservable("Shell.Editor.LineNumbers"));
+            CurrentLineNumberMargin.Install(editor, editor.GetResourceObservable("Shell.Editor.LineNumbers.Current"));
             var from = editor;
             editor.TextArea.TextView.ScrollOffsetChanged += (_, _) => Sync(from);
             editor.TextArea.Caret.PositionChanged += (_, _) => UpdatePosition(from);
@@ -379,11 +424,13 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _font.PropertyChanged += OnFontChanged;
         ActualThemeVariantChanged += OnThemeChanged;
         _result.Document.Changed += OnResultTextChanged;
+        _result.Document.TextChanged += OnResultTextUpdated;
         if (_viewModel.Services is { } services)
         {
             services.Editor.ThemeChanged += OnEditorThemeChanged;
         }
 
+        Realign();
         Refresh();
         _ = ColorAsync(all: true);
     }
@@ -395,6 +442,7 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _font.PropertyChanged -= OnFontChanged;
         ActualThemeVariantChanged -= OnThemeChanged;
         _result.Document.Changed -= OnResultTextChanged;
+        _result.Document.TextChanged -= OnResultTextUpdated;
         if (_viewModel.Services is { } services)
         {
             services.Editor.ThemeChanged -= OnEditorThemeChanged;
@@ -464,6 +512,71 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _resultColorsTimer.Stop();
         _resultColorsTimer.Start();
     }
+
+    // After the whole change (a resolution's replacements, an undo): the blocks are where the view model put them.
+    private void OnResultTextUpdated(object? sender, EventArgs e) => Realign();
+
+    /// <summary>
+    /// Works out the filler rows that line the panes up again (the result's lines and blocks change as it's edited) and,
+    /// when they changed, lays the panes' lines out again and scrolls the others back level with the last one scrolled.
+    /// </summary>
+    private void Realign()
+    {
+        var blocks = _viewModel.Conflicts;
+        var layouts = MergeAlignment.Align(
+        [
+            MergeAlignment.PaneOf(_current.Document, _currentLines, blocks.Select(b => (b.Current.Start, b.Current.Length))),
+            MergeAlignment.PaneOf(_incoming.Document, _incomingLines, blocks.Select(b => (b.Incoming.Start, b.Incoming.Length))),
+            MergeAlignment.PaneOf(_result.Document, null, blocks.Select(b => (b.ResultStart, b.ResultLength))),
+        ]);
+        var changed = false;
+        foreach (var (editor, layout) in (ReadOnlySpan<(TextEditor, MergePaneLayout)>)[(_current, layouts[0]), (_incoming, layouts[1]), (_result, layouts[2])])
+        {
+            if (!layout.SameAs(LayoutOf(editor)))
+            {
+                SetLayout(editor, layout);
+                editor.TextArea.TextView.Redraw();
+                changed = true;
+            }
+        }
+
+        if (changed && !_syncPosted)
+        {
+            _syncPosted = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () =>
+                {
+                    _syncPosted = false;
+                    Sync(_leader ?? _result);
+                },
+                Avalonia.Threading.DispatcherPriority.Background);
+        }
+    }
+
+    private MergePaneLayout? LayoutOf(TextEditor editor) => editor == _current ? _currentLayout : editor == _incoming ? _incomingLayout : _resultLayout;
+
+    private void SetLayout(TextEditor editor, MergePaneLayout layout)
+    {
+        if (editor == _current)
+        {
+            _currentLayout = layout;
+        }
+        else if (editor == _incoming)
+        {
+            _incomingLayout = layout;
+        }
+        else
+        {
+            _resultLayout = layout;
+        }
+    }
+
+    /// <summary>The filler rows above and after a 1-based line's text in a pane (tests).</summary>
+    internal (int Lead, int After) FillerAt(MergePane pane, int line) =>
+        LayoutFor(pane) is { } layout ? (line == 1 ? layout.Lead : 0, layout.After(line - 1)) : (0, 0);
+
+    /// <summary>How a pane lines up with the others (tests).</summary>
+    internal MergePaneLayout? LayoutFor(MergePane pane) => LayoutOf(pane switch { MergePane.Current => _current, MergePane.Incoming => _incoming, _ => _result });
 
     private void OnEditorThemeChanged(object? sender, EventArgs e) => Ui.Post(() => _ = ColorAsync(all: true));
 
@@ -629,7 +742,11 @@ public sealed class MergeEditorView : UserControl, IPaneView
 
     // ------------------------------------------------------------------ scrolling together
 
-    /// <summary>Scrolls the other panes with <paramref name="from"/>: the same column, and the matching line (conflict blocks line up).</summary>
+    /// <summary>
+    /// Scrolls the other panes with <paramref name="from"/>: the same column, and the same row (the panes line up row by
+    /// row). Rows map through each pane's lines rather than pixels: a line no pane has shown yet counts one line's height
+    /// whatever filler it has, until it's laid out.
+    /// </summary>
     private void Sync(TextEditor from)
     {
         if (_syncing)
@@ -637,18 +754,17 @@ public sealed class MergeEditorView : UserControl, IPaneView
             return;
         }
 
+        _leader = from;
         _syncing = true;
         try
         {
             var view = from.TextArea.TextView;
-            var lineHeight = view.DefaultLineHeight;
-            if (lineHeight <= 0 || view.Document is null)
+            if (view.DefaultLineHeight <= 0 || view.Document is null)
             {
                 return;
             }
 
-            var line = view.ScrollOffset.Y / lineHeight;
-            var fromAnchors = Anchors(from);
+            var row = RowAt(view, LayoutOf(from));
             foreach (var editor in (TextEditor[])[_current, _incoming, _result])
             {
                 if (editor == from || editor.TextArea.TextView is not { Document: not null } target)
@@ -657,10 +773,14 @@ public sealed class MergeEditorView : UserControl, IPaneView
                 }
 
                 var scrollable = (IScrollable)target;
-                var y = MapLine(fromAnchors, Anchors(editor), line) * target.DefaultLineHeight;
+                var y = row is { } r && LayoutOf(editor) is { } layout && layout.LineCount == target.Document.LineCount ? YOf(target, layout, r) : view.ScrollOffset.Y;
                 var maxX = Math.Max(0, scrollable.Extent.Width - scrollable.Viewport.Width);
                 var maxY = Math.Max(0, scrollable.Extent.Height - scrollable.Viewport.Height);
-                scrollable.Offset = new Vector(Math.Clamp(view.ScrollOffset.X, 0, maxX), Math.Clamp(y, 0, maxY));
+                var offset = new Vector(Math.Clamp(view.ScrollOffset.X, 0, maxX), Math.Clamp(y, 0, maxY));
+                if (Math.Abs(offset.X - target.ScrollOffset.X) > 0.5 || Math.Abs(offset.Y - target.ScrollOffset.Y) > 0.5)
+                {
+                    scrollable.Offset = offset;
+                }
             }
         }
         finally
@@ -669,49 +789,25 @@ public sealed class MergeEditorView : UserControl, IPaneView
         }
     }
 
-    /// <summary>A pane's lines where conflict blocks start and end: 0, then each block's first and after-last line, then the line count.</summary>
-    private double[] Anchors(TextEditor editor)
+    /// <summary>The row at the top of a pane (a fraction within a row), or null when its layout isn't for its text.</summary>
+    private static double? RowAt(TextView view, MergePaneLayout? layout)
     {
-        var pane = editor == _current ? MergePane.Current : editor == _incoming ? MergePane.Incoming : MergePane.Result;
-        var document = editor.Document;
-        var anchors = new List<double> { 0 };
-        foreach (var block in _viewModel.Conflicts)
+        if (layout is null || view.Document is not { } document || layout.LineCount != document.LineCount)
         {
-            var range = RangeOf(block, pane);
-            if (range.End > document.TextLength)
-            {
-                continue;
-            }
-
-            var first = document.GetLineByOffset(range.Start).LineNumber - 1;
-            var last = range.Length == 0 ? first : document.GetLineByOffset(range.End - 1).LineNumber;
-            anchors.Add(Math.Max(first, anchors[^1]));
-            anchors.Add(Math.Max(last, anchors[^1]));
+            return null;
         }
 
-        anchors.Add(Math.Max(document.LineCount, anchors[^1]));
-        return [.. anchors];
+        var y = view.ScrollOffset.Y;
+        var line = view.GetDocumentLineByVisualTop(y);
+        var top = view.GetVisualTopByDocumentLine(line.LineNumber);
+        return layout.RowsAbove(line.LineNumber - 1) + Math.Max(0, (y - top) / view.DefaultLineHeight);
     }
 
-    /// <summary>Maps a line between two panes' anchors, proportionally within each stretch.</summary>
-    internal static double MapLine(double[] from, double[] to, double line)
+    /// <summary>Where a row is in a pane.</summary>
+    private static double YOf(TextView view, MergePaneLayout layout, double row)
     {
-        if (from.Length != to.Length)
-        {
-            return line;
-        }
-
-        for (var i = 0; i < from.Length - 1; i++)
-        {
-            if (line < from[i + 1] || i == from.Length - 2)
-            {
-                var span = from[i + 1] - from[i];
-                var t = span <= 0 ? 0 : Math.Clamp((line - from[i]) / span, 0, 1);
-                return to[i] + (t * (to[i + 1] - to[i]));
-            }
-        }
-
-        return line;
+        var (line, rowInLine) = layout.LineAtRow(row);
+        return view.GetVisualTopByDocumentLine(line + 1) + (rowInLine * view.DefaultLineHeight);
     }
 
     // ------------------------------------------------------------------ pieces
@@ -723,8 +819,12 @@ public sealed class MergeEditorView : UserControl, IPaneView
         _ => block.Result,
     };
 
-    /// <summary>The top and bottom of a block's lines in a text view (an empty block: a thin band at its place).</summary>
-    internal static (double Top, double Bottom)? LinesOf(TextView textView, TextDocument document, MergeRange range)
+    /// <summary>
+    /// The top and bottom of a block in a text view, and where its filler rows start (its bottom when it has none): its
+    /// lines and the filler rows that make it as tall as the tallest side's, or a thin band at its place when every
+    /// side's is empty. Without a layout for the text, its lines alone.
+    /// </summary>
+    internal static (double Top, double Bottom, double FillerTop)? BlockBounds(TextView textView, TextDocument document, MergeRange range, MergePaneLayout? layout, int index)
     {
         if (range.Start > document.TextLength)
         {
@@ -732,15 +832,38 @@ public sealed class MergeEditorView : UserControl, IPaneView
         }
 
         var lineHeight = textView.DefaultLineHeight;
-        var first = document.GetLineByOffset(range.Start);
-        var top = textView.GetVisualTopByDocumentLine(first.LineNumber) - textView.ScrollOffset.Y;
-        if (range.Length == 0)
+        var scrollY = textView.ScrollOffset.Y;
+        if (layout is null || layout.LineCount != document.LineCount || (uint)index >= (uint)layout.Blocks.Length)
         {
-            return (top - 2, top + 2);
+            var first = document.GetLineByOffset(range.Start);
+            var top = textView.GetVisualTopByDocumentLine(first.LineNumber) - scrollY;
+            if (range.Length == 0)
+            {
+                return (top - 2, top + 2, top + 2);
+            }
+
+            var last = document.GetLineByOffset(Math.Max(range.Start, range.End - 1));
+            var bottom = textView.GetVisualTopByDocumentLine(last.LineNumber) - scrollY + lineHeight;
+            return (top, bottom, bottom);
         }
 
-        var last = document.GetLineByOffset(Math.Max(range.Start, range.End - 1));
-        return (top, textView.GetVisualTopByDocumentLine(last.LineNumber) - textView.ScrollOffset.Y + lineHeight);
+        var (start, end) = layout.Blocks[index];
+        var rows = layout.BlockRows[index];
+        if (start >= document.LineCount)
+        {
+            return null;
+        }
+
+        double TextTop(int line) => textView.GetVisualTopByDocumentLine(line + 1) - scrollY + (line == 0 ? layout.Lead * lineHeight : 0);
+        if (start == end)
+        {
+            // An empty block: its filler rows, just above the next line's text.
+            var bottom = TextTop(start);
+            return rows == 0 ? (bottom - 2, bottom + 2, bottom + 2) : (bottom - (rows * lineHeight), bottom, bottom - (rows * lineHeight));
+        }
+
+        var fillerTop = TextTop(end - 1) + lineHeight;
+        return (TextTop(start), fillerTop + (rows * lineHeight), fillerTop);
     }
 
     internal static IBrush? Brush(Control control, string key) =>
