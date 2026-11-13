@@ -215,6 +215,15 @@ public sealed partial class ShellHost : IAiChatHost
             return;
         }
 
+        await UseAiProviderAsync(providerId).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="providerId"/> the provider (Choose AI Provider…'s pick, or the first-run setup's): the setting,
+    /// then what the provider needs to be ready (a key), then its model. Another provider's model is forgotten first.
+    /// </summary>
+    internal async Task UseAiProviderAsync(string providerId)
+    {
         if (providerId != Ai.ProviderId)
         {
             await Workbench.Settings.SetAsync(AiService.ModelSetting, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);

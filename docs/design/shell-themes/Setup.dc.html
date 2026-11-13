@@ -32,7 +32,7 @@ body{margin:0}
 <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0">
   <nav aria-label="Setup steps" style="flex: 1 1 220px; max-width: 260px; padding: 28px 20px; background: {{w.chrome}}; border-right: 1px solid {{w.border}}">
     <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
-      <sc-for list="{{steps}}" as="step" hint-placeholder-count="4">
+      <sc-for list="{{steps}}" as="step" hint-placeholder-count="5">
         <li aria-current="{{step.current}}" style="display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px; border-radius: 8px; background: {{step.bg}}; color: {{step.fg}}; font-weight: {{step.weight}}">
           <span aria-hidden="true" style="width: 22px; height: 22px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; background: {{step.dotBg}}; color: {{step.dotFg}}; border: 1px solid {{step.dotEdge}}">{{step.n}}</span>
           {{step.label}}
@@ -89,6 +89,20 @@ body{margin:0}
         </button>
       </sc-for>
     </div>
+
+    <!-- The editor's font size, on a sample of code (ADR 0096). -->
+    <div style="display: flex; align-items: center; gap: 8px; margin: 14px 0 8px">
+      <span style="font-weight: 600; margin-right: 4px">Editor font size</span>
+      <button class="ghost" aria-label="Smaller font" style="border: 1px solid {{w.border}}; min-width: 32px">−</button>
+      <span style="min-width: 48px; text-align: center">13 px</span>
+      <button class="ghost" aria-label="Larger font" style="border: 1px solid {{w.border}}; min-width: 32px">+</button>
+    </div>
+    <pre style="margin: 0; padding: 10px 12px; min-width: 420px; align-self: flex-start; border: 1px solid {{w.border}}; border-radius: 8px; font: 13px/1.35 'Cascadia Mono', Consolas, Menlo, monospace; color: {{w.fg}}">public class Cart
+{
+    // The total
+    int Count()
+        =&gt; 42;
+}</pre>
 
     <span style="flex: 1; min-height: 20px"></span>
     <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 16px; border-top: 1px solid {{w.border}}">
@@ -181,7 +195,7 @@ class Component extends DCLogic {
       weight: label === mode ? '600' : '400',
       pick: () => this.setState({ mode: label })
     }));
-    const steps = ['Appearance', 'Keyboard', 'Your settings', 'Tools'].map((label, i) => ({
+    const steps = ['Appearance', 'Keyboard', 'Your settings', 'Tools', 'AI'].map((label, i) => ({
       n: i + 1,
       label,
       current: i === 0 ? 'step' : 'false',

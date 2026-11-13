@@ -236,6 +236,15 @@ jobs:
       - name: Stack traces for a hang (dotnet-stack)
         # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
         run: dotnet tool install -g dotnet-stack || true
+      # A runner that goes silent in a test step keeps neither its log nor its artifacts, and nothing names the test
+      # (docs/ci-flakes.md: macOS's Shell shards, and ubuntu-latest's shell-2 in run 43293835263). So while the shards
+      # below run, their console and their memory, load and disk samples go off the runner about once a minute, as an
+      # artifact of this name with a number, each upload replacing the one before; the job's end removes it. What is
+      # left of a lost runner is its last upload (eng/ci-failures.sh prints it). The name has the attempt: a re-run's
+      # uploads don't meet a lost attempt's.
+      - uses: ./.github/actions/live-output
+        with:
+          name: live-${{ matrix.os }}-${{ matrix.shard }}-${{ github.run_attempt }}
       # One step per shard of matrix.shards, in the order macOS runs them all. A shard runs only when the ones before it
       # passed: the first failure stops the run (the last step), so the rest wouldn't finish anyway.
       # A hang is reported and ended by 15 minutes (eng/ci-test.sh): a step's limit is the last resort, leaving the job time
