@@ -9,8 +9,8 @@ namespace Codalus.Debugging;
 /// the others join later (<see cref="AddAsync"/>, once the server listens) and get the session's breakpoints and
 /// exception settings replayed.
 /// <list type="bullet">
-/// <item>Thread and frame ids and variable references are the adapters' own times four plus the adapter's index, so a
-/// request goes to the adapter its id came from. Breakpoint ids are this class's own; a breakpoint is bound when any
+/// <item>Thread and frame ids and variable references are the adapters' own times <see cref="MaxParts"/> plus the
+/// adapter's index, so a request goes to the adapter its id came from. Breakpoint ids are this class's own; a breakpoint is bound when any
 /// adapter bound it.</item>
 /// <item>One stop shows at a time. A stop in another adapter while one shows waits, and shows once the shown one
 /// resumes. Pause pauses every adapter but one still joining, and Continue from a pause continues every paused one.</item>
@@ -28,8 +28,12 @@ namespace Codalus.Debugging;
 /// </summary>
 public sealed class CompoundDebugAdapter : IDebugAdapter
 {
-    /// <summary>The most adapters one session holds (ids keep the index in their low bits).</summary>
-    public const int MaxParts = 8;
+    /// <summary>
+    /// The most adapters one session holds (ids keep the index in their low bits). 64 since M63 (ADR 0102): every .NET
+    /// service of a compose file, every project of an Aspire AppHost, and their restarts (an ended program keeps its
+    /// place). The adapters' ids are small counters and thread ids (Linux's at most 2^22), so 64 times them stays an int.
+    /// </summary>
+    public const int MaxParts = 64;
 
     private readonly Lock _gate = new();
     private readonly List<Part> _parts = [];
@@ -696,6 +700,44 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         }
 
         _closed.TrySetResult();
+    }
+
+    /// <summary>
+    /// Ends one program of an independent session (M63, a compose service restarted, stopped or detached alone): its
+    /// adapter is disconnected, ending the program, and disposed; the other programs go on. The session ends with it
+    /// only when it was the last one and no place is <see cref="Reserve"/>d. Nothing happens when it ended already.
+    /// </summary>
+    public async Task EndPartAsync(int index, CancellationToken cancellationToken)
+    {
+        if (!Independent)
+        {
+            throw new InvalidOperationException("Only a session of independent programs ends one of them alone.");
+        }
+
+        Part? part;
+        lock (_gate)
+        {
+            part = _parts.Find(p => p.Index == index && !p.Ended);
+        }
+
+        if (part is null)
+        {
+            return;
+        }
+
+        var adapter = part.Adapter;
+        try
+        {
+            await adapter.DisconnectAsync(terminateDebuggee: true, cancellationToken).WaitAsync(TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException or TimeoutException)
+        {
+            // Ended all the same below.
+        }
+
+        // Its end through Closed (EndWith) and this one are the same: whichever comes first ends it.
+        await EndAsync(part).ConfigureAwait(false);
+        await adapter.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>

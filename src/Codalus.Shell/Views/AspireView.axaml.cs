@@ -28,6 +28,7 @@ public sealed partial class AspireView : UserControl, IPaneView
         Start.Click += (_, _) => _ = Vm()?.StartAsync();
         Stop.Click += (_, _) => _ = Vm()?.StopAsync();
         Restart.Click += (_, _) => _ = Vm()?.RestartAsync();
+        Debug.Click += (_, _) => _ = Vm()?.DebugAsync();
         Browse.Click += (_, _) => Vm()?.OpenEndpoint();
         ResourceList.DoubleTapped += (_, _) => Vm()?.OpenEndpoint();
     }
