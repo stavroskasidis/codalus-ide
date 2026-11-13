@@ -82,6 +82,7 @@ internal sealed class LanguageServer : IAsyncDisposable
                     CallHierarchyProvider = true,
                     TypeHierarchyProvider = true,
                     InlayHintProvider = true,
+                    InlineValueProvider = true,
                     CodeLensProvider = new CodeLensOptions(ResolveProvider: true),
                     SelectionRangeProvider = true,
                 },
@@ -262,6 +263,11 @@ internal sealed class LanguageServer : IAsyncDisposable
         }, []);
         OnPosition(Methods.SymbolInfo, json.TextDocumentPositionParams, json.SymbolDetails, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => HierarchyFeature.InfoAsync(document, offset, ct), null);
+        OnDocument(Methods.InlineValue, json.InlineValueParams, json.InlineValueArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await InlineValuesFeature.ValuesAsync(document, Positions.ToSpan(text, p.Range), Positions.ToSpan(text, p.Context.StoppedLocation), ct).ConfigureAwait(false);
+        }, [], semantics: Semantics.Analysis);
         OnDocument(Methods.InlayHint, json.InlayHintParams, json.InlayHintArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);

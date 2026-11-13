@@ -44,6 +44,7 @@ public static class Methods
     public const string TypeHierarchySupertypes = "typeHierarchy/supertypes";
     public const string TypeHierarchySubtypes = "typeHierarchy/subtypes";
     public const string InlayHint = "textDocument/inlayHint";
+    public const string InlineValue = "textDocument/inlineValue";
     public const string CodeLens = "textDocument/codeLens";
     public const string CodeLensResolve = "codeLens/resolve";
     public const string SelectionRange = "textDocument/selectionRange";

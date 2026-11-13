@@ -629,7 +629,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", DebugSessionStepAsync, "build.solution").ConfigureAwait(true);
 
-        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", DebugDepthStepAsync, "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, inline values, QuickWatch, the Threads, Modules and Exception Settings windows", DebugDepthStepAsync, "debug.session").ConfigureAwait(true);
 
         await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", DebugCompanionStepAsync, "debug.session").ConfigureAwait(true);
 
@@ -1587,6 +1587,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
         Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
+
+        // Inline values (M62): the lines above the stop show their variables' values, args among them.
+        await WaitAsync(() => shell.ActiveEditor?.Controller?.InlineValueLines.Any(l => l.Line == argsLine && l.Values.Any(v => v.Name == "args")) == true,
+            "inline values show args after its line").ConfigureAwait(true);
 
         // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
         shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
