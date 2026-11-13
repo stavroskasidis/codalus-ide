@@ -736,6 +736,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             target.DescribeThreads = ThreadsOfTimedOutEval;
             target.EvalTimedOut = log.WriteLine;
+            target.Continuing = log.WriteLine;
         }
 
         log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
