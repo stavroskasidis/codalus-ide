@@ -327,4 +327,34 @@ public class EditingDepthTests
         Assert.Equal(["guard"], guard.Prefixes);
         Assert.True(File.Exists(Path.Combine(f.UserData, "config", "snippets", "csharp.json")));
     }
+
+    [AvaloniaFact]
+    public async Task Enter_between_braces_opens_a_line_between_them_and_csharp_moves_the_brace_as_its_editorconfig_says()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = await f.OpenLanguageFeaturesAsync();
+        var editor = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
+        var text = editor.Model.Text;
+        await ShellFixture.PumpUntil(() => f.Shell.Languages.RunningClient("csharp")?.Capabilities?.DocumentOnTypeFormattingProvider is not null, seconds: 60);
+        var at = text.Text.IndexOf("public double Radius", StringComparison.Ordinal);
+        text.Insert(at, "\n    ");
+        editor.Editor.CaretOffset = at;
+        editor.Editor.TextArea.Focus();
+
+        // "{" closes itself, and Enter between the two puts each on a line of its own (the sample's .editorconfig is
+        // the default: an opening brace on a new line) with the caret indented on the line between.
+        f.Type("public static string Serialize(object value) ");
+        f.Type("{");
+        Assert.EndsWith("Serialize(object value) {}", text.GetText(text.GetLineByOffset(editor.Editor.CaretOffset)), StringComparison.Ordinal);
+        f.Press(Key.Enter);
+        const string Expected = "    public static string Serialize(object value)\n    {\n        \n    }\n";
+        await ShellFixture.PumpUntil(() => text.Text.Contains(Expected, StringComparison.Ordinal), seconds: 30, describe: () => text.GetText(at, 80));
+        Assert.Equal(text.Text.IndexOf(Expected, StringComparison.Ordinal) + Expected.IndexOf("\n        ", StringComparison.Ordinal) + "\n        ".Length, editor.Editor.CaretOffset);
+
+        // Typing goes on the line between; Enter elsewhere is a plain new line.
+        f.Type("return");
+        Assert.Contains("    {\n        return\n    }\n", text.Text, StringComparison.Ordinal);
+        f.Press(Key.Enter);
+        Assert.Contains("    {\n        return\n        \n    }\n", text.Text, StringComparison.Ordinal);
+    }
 }
