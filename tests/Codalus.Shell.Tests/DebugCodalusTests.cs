@@ -17,6 +17,22 @@ public sealed class DebugCodalusTests
     private static int Line(string file, string marker) =>
         Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
 
+    /// <summary>
+    /// What the solution has for its projects and what the hosts wrote, for an expression the language host still
+    /// couldn't compile after two minutes: the Visual Basic one once, among the shell's debugger classes run together,
+    /// and it passed alone and with its class (Linux, a local run, 2026-11-12; docs/ci-flakes.md).
+    /// </summary>
+    private static string StillLoading(ShellFixture f, Exception ex)
+    {
+        var projects = string.Join("; ", f.Shell.Solutions.Projects.Keys.Select(path => Path.GetFileName(path) + ": " + (f.Shell.Solutions.CompilerInputs.TryGetValue(path, out var i)
+            ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : string.Empty)}, {i.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))} references, {i.TargetFramework}"
+            : "no compiler inputs")));
+        var channels = string.Join('\n', f.Shell.Workbench.Output.Channels.Select(c => c.GetText() is var text && text.Length > 3000
+            ? $"Output '{c.Name}' (the last 3000 characters):\n{text[^3000..]}"
+            : $"Output '{c.Name}':\n{text}"));
+        return $"{ex.Message}\nThe solution's projects: {projects}. The restore {f.Shell.Solutions.RestoreState}.\n{channels}";
+    }
+
     private static async Task<string> OpenAsync(ShellFixture f)
     {
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None);
@@ -204,8 +220,9 @@ public sealed class DebugCodalusTests
             {
                 first = await EvalAsync("evens.Count()");
             }
-            catch (Codalus.Debugging.DapException ex) when (attempt < 240 && (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal)))
+            catch (Codalus.Debugging.DapException ex) when (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal))
             {
+                Assert.True(attempt < 240, StillLoading(f, ex));
                 await Task.Delay(500, ct);
             }
         }
@@ -269,8 +286,9 @@ public sealed class DebugCodalusTests
             {
                 first = await EvalAsync("product.Price = 3D");
             }
-            catch (Codalus.Debugging.DapException ex) when (attempt < 240 && (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal)))
+            catch (Codalus.Debugging.DapException ex) when (ex.Message.Contains("open the program's solution", StringComparison.Ordinal) || ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal))
             {
+                Assert.True(attempt < 240, StillLoading(f, ex));
                 await Task.Delay(500, ct);
             }
         }

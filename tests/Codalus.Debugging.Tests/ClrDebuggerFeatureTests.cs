@@ -101,7 +101,8 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
         Assert.Equal("\"Tagger B\"", (await adapter.EvaluateAsync("name", top.Id, "watch", Ct)).Result);
         Assert.Equal("Tagger B", (await adapter.ThreadsAsync(Ct)).Single(t => t.Id == filtered.ThreadId).Name);
         Assert.Contains($"measuring \"A-BB!\" after 15 in Debuggee.Features.Run on {{{third.ThreadId}}}", events.Output, StringComparison.Ordinal);
-        Assert.Contains("<Tagger A>", events.Output, StringComparison.Ordinal);
+        // What Tagger A wrote before Tagger B started: the program's stdout, which may arrive after the stop.
+        await events.OutputContainsAsync("<Tagger A>");
 
         // And the one that depends on the logpoint, which was hit.
         await adapter.ContinueAsync(filtered.ThreadId!.Value, Ct);

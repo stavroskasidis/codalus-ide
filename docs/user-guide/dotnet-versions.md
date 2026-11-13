@@ -36,7 +36,7 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 
 ### macOS on Apple silicon
 
-.NET 6 and later run natively. .NET 5 and earlier have no Arm64 runtime: they run as x64 programs under Rosetta 2, on the x64 runtime (`/usr/local/share/dotnet/x64`, where the x64 installers put it). Codalus starts them with the x64 `dotnet` and debugs them with the Codalus debugger's x64 build, which it downloads the first time you debug one, after you agree (about 15 MB; Tools → Components lists it). With `debug.adapter` set to `netcoredbg`, or if you decline, the x64 netcoredbg the package ships debugs them (`debugger/x64/`). Under the x64 build a program is held at its start by a startup hook while the debugger attaches. .NET Core 2.0 and 2.1 run no startup hooks, so their programs are debugged by the bundled x64 netcoredbg instead, for as long as it ships, and the Debug Console says so.
+.NET 6 and later run natively. .NET 5 and earlier have no Arm64 runtime: they run as x64 programs under Rosetta 2, on the x64 runtime (`/usr/local/share/dotnet/x64`, where the x64 installers put it). Codalus starts them with the x64 `dotnet` and debugs them with the Codalus debugger's x64 build, which it downloads the first time you debug one, after you agree (about 15 MB; Tools → Components lists it). With `debug.adapter` set to `netcoredbg`, or if you decline, the x64 netcoredbg the package ships debugs them (`debugger/x64/`). Under the x64 build a program is held at its start by a startup hook while the debugger attaches. .NET Core 2.0 and 2.1 run no startup hooks, so the debugger attaches once such a program runs, about five seconds in: a breakpoint in its first lines is passed, and a program that ends sooner isn't debugged (the Debug Console says so before it starts). A site or a service is debugged as usual from then on. Setting `debug.adapter` to `netcoredbg` uses its x64 build, which holds such a program at its start on some versions of macOS and crashes on others (macOS 26 on GitHub's runners).
 
 | Framework | Open | Editor | Build | Run | Debug | Tests | Coverage | Hot Reload | NuGet |
 |---|---|---|---|---|---|---|---|---|---|
@@ -44,7 +44,7 @@ Tested on Ubuntu 24.04 (WSL), and in containers of Ubuntu 18.04 and 20.04 for th
 | `net6.0` – `net10.0` | yes | yes | yes | yes | yes | yes | yes | yes | yes |
 | `netstandard2.0`, `2.1` | yes | yes | yes | – | – | – | – | – | yes |
 
-Validated on an Apple M4 (macOS 27.0.1). Every framework from `netcoreapp2.0` to `net10.0` evaluates, builds, runs and debugs to a breakpoint, the ones before `net6.0` as x64 under Rosetta. The ASP.NET Core 2.1 and 3.1 apps answer, and tests run with coverage on every framework's test host. The SDKs before 6.0 have no Arm64 build, so a `global.json` that pins one counts as not installed (note 6).
+Validated on an Apple M4 (macOS 27.0.1), under netcoredbg, before the Codalus debugger was the default: every framework from `netcoreapp2.0` to `net10.0` evaluates, builds, runs and debugs to a breakpoint, the ones before `net6.0` as x64 under Rosetta. Under the Codalus debugger, on GitHub's macOS 26 runner (2026-11-13): .NET Core 2.2 to .NET 5 debug to a breakpoint with its x64 build, and .NET 6 and later natively; .NET Core 2.0 and 2.1 are the two it can't hold at their start (above). The ASP.NET Core 2.1 and 3.1 apps answer, and tests run with coverage on every framework's test host. The SDKs before 6.0 have no Arm64 build, so a `global.json` that pins one counts as not installed (note 6).
 
 ### .NET Framework
 

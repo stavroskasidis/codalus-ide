@@ -872,18 +872,44 @@ internal sealed class ClrModuleInfo : IDisposable
         return (start, next < 0 ? int.MaxValue : next);
     }
 
-    /// <summary>Whether this module's PDB has <paramref name="path"/> (the same path, or the only document with its file name).</summary>
-    public string? MatchDocument(string path)
+    /// <summary>
+    /// Whether this module's PDB has <paramref name="path"/>: the same path, or the only document with its file name
+    /// whose folder is the path's too (<see cref="MatchDocument(IEnumerable{string}, string)"/>).
+    /// </summary>
+    public string? MatchDocument(string path) => MatchDocument(Documents.Keys, path);
+
+    /// <summary>
+    /// The document of <paramref name="documents"/> that is <paramref name="path"/>: the same path, else the only one
+    /// with its file name, for a PDB built under other paths (a deterministic build's <c>/_/</c>, a copied build), as long
+    /// as its folder has the path's folder's name, or is a path map's root. A file name alone matched another project's
+    /// file: in an Aspire session the Frontend's debugger bound the Api's breakpoint on <c>Program.cs</c>'s line 13 at
+    /// its own <c>Program.cs</c>'s line 13, <c>app.Run()</c>, and the Frontend never started (Linux CI, run 43371744474).
+    /// </summary>
+    internal static string? MatchDocument(IEnumerable<string> documents, string path)
     {
-        var documents = Documents.Keys;
         if (documents.FirstOrDefault(d => SamePath(d, path)) is { } exact)
         {
             return exact;
         }
 
-        var name = System.IO.Path.GetFileName(path);
+        var name = System.IO.Path.GetFileName(path.Replace('\\', '/'));
         var byName = documents.Where(d => s_paths.Equals(System.IO.Path.GetFileName(d.Replace('\\', '/')), name)).Take(2).ToList();
-        return byName.Count == 1 ? byName[0] : null;
+        return byName is [var only] && SameFolderName(only, path) ? only : null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="document"/>'s folder has <paramref name="path"/>'s folder's name, or is a root the
+    /// document's path was mapped to (<c>/_/</c>, <c>/_1/</c>: <c>PathMap</c>, deterministic builds), which says nothing.
+    /// </summary>
+    private static bool SameFolderName(string document, string path)
+    {
+        var documentFolder = FolderName(document);
+        return documentFolder is null || IsMappedRoot(documentFolder) || s_paths.Equals(documentFolder, FolderName(path));
+
+        static string? FolderName(string file) =>
+            System.IO.Path.GetDirectoryName(file.Replace('\\', '/')) is { Length: > 0 } folder ? System.IO.Path.GetFileName(folder.TrimEnd('/')) is { Length: > 0 } last ? last : null : null;
+
+        static bool IsMappedRoot(string folder) => folder[0] == '_' && folder.AsSpan(1).IndexOfAnyExceptInRange('0', '9') < 0;
     }
 
     /// <summary>Where a breakpoint on <paramref name="line"/> of <paramref name="document"/> binds: each method's first offset on the line, or on the next line with code in a method that spans it.</summary>

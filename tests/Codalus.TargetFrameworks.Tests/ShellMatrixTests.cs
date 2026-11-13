@@ -278,8 +278,19 @@ public sealed class ShellMatrixTests
         f.Shell.Debugger.Breakpoints.Toggle(program, stop);
         f.Shell.Run("debug.start");
         var started = System.Diagnostics.Stopwatch.StartNew();
+
+        // On Apple silicon the program runs as x64 and the debugger's x64 build can't hold .NET Core 2.1 at its start (no
+        // startup hooks): the Debug Console says so before the start, and this short program is over before it attaches.
+        bool NotHeld() => f.Shell.DebugLog.GetText().Contains(".NET Core 2.0 and 2.1 run no startup hooks", StringComparison.Ordinal);
+        string Said() => f.Shell.DebugLog.GetText() + "\n" + string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => n.Message));
         while (f.Shell.Debugger.State != DebugState.Stopped)
         {
+            if (NotHeld() && Said().Contains("before the debugger could attach", StringComparison.Ordinal))
+            {
+                await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+                return;
+            }
+
             Assert.True(started.Elapsed < TimeSpan.FromMinutes(5), $"No stop at the breakpoint (state {f.Shell.Debugger.State}). Debug Console:\n{f.Shell.DebugLog.GetText()}\nNotifications:\n"
                 + string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)) + "\nBuild:\n" + Tail(f.Shell.Builds.Channel.GetText()));
             ShellFixture.Pump();

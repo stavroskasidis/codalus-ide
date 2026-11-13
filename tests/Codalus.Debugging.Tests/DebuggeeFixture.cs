@@ -171,6 +171,25 @@ internal sealed class EventLog
 
     public string Output => string.Concat(All.Where(e => e.Name == DapEvents.Output).Select(e => DebugAdapter.Read(e.Body, DapJsonContext.Default.OutputEvent)?.Output));
 
+    /// <summary>
+    /// Waits until the output holds <paramref name="text"/>. What the program writes reaches the adapter through its own
+    /// reader of the program's stdout, not in order with the debugger's events, so a stop can be reported before a line
+    /// the program wrote just before it (macOS CI, run 43388676941). The adapter's own output (a logpoint's) is in order.
+    /// </summary>
+    public async Task OutputContainsAsync(string text, int seconds = 30)
+    {
+        var waited = Stopwatch.StartNew();
+        while (!Output.Contains(text, StringComparison.Ordinal))
+        {
+            if (waited.Elapsed > TimeSpan.FromSeconds(seconds))
+            {
+                throw new TimeoutException($"No '{text}' in the output after {seconds} s. The output: {Output}");
+            }
+
+            await Task.Delay(20);
+        }
+    }
+
     /// <summary>Waits for the next event named <paramref name="name"/> (skipping others).</summary>
     public async Task<DapEvent> NextAsync(string name, int seconds = 60)
     {

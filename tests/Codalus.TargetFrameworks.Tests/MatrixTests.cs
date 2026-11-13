@@ -167,8 +167,9 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
 
     /// <summary>
     /// Under the default, the Codalus debugger (M58, ADR 0094): .NET Core 2.0 to .NET 10 through the runtime's own
-    /// mscordbi. On Apple silicon the x64 frameworks go to its x64 bundle, but for .NET Core 2.0 and 2.1, which run no
-    /// startup hooks and stay netcoredbg's there (the Debug Console says so).
+    /// mscordbi. On Apple silicon the x64 frameworks go to its x64 bundle, which holds a program at its start in the
+    /// startup hook: .NET Core 2.0 and 2.1 run none, so this short program ends before it attaches, and both the Debug
+    /// Console and the launch say so.
     /// </summary>
     [Theory]
     [MemberData(nameof(Matrix.Ids), MemberType = typeof(Matrix))]
@@ -224,6 +225,18 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         }
         catch (InvalidOperationException ex)
         {
+            if (!netcoredbg && plan.RunsAsX64 && plan.StartsWithoutStartupHooks && debug.X64CoreClrAdapter is not null)
+            {
+                // Apple silicon, .NET Core 2.0 and 2.1: not held at its start, and over before the debugger attached.
+                Assert.Contains("before the debugger could attach", ex.Message, StringComparison.Ordinal);
+                lock (output)
+                {
+                    Assert.Contains(".NET Core 2.0 and 2.1 run no startup hooks", output.ToString(), StringComparison.Ordinal);
+                }
+
+                return;
+            }
+
             lock (output)
             {
                 Assert.Fail($"{framework.Tfm}: {ex.Message}\n> {plan.FileName} {plan.Arguments}\n{string.Join('\n', plan.Environment.Select(e => e.Key + "=" + e.Value))}\n{output}");
@@ -250,14 +263,11 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         {
             Assert.Contains($"runtime={framework.RuntimePrefix}", output.ToString(), StringComparison.Ordinal);
 
-            // Which debugger it was: the Codalus debugger under the default, but for an x64 program on Apple silicon of
-            // a runtime without startup hooks (or with no x64 bundle built: a local run), which the console explains.
+            // Which debugger it was: the Codalus debugger under the default, but for an x64 program on Apple silicon
+            // with no x64 bundle built (a local run), which the console explains.
             if (!netcoredbg)
             {
-                var hooks = plan.RunsAsX64 && plan.StartsWithoutStartupHooks;
-                var expected = hooks ? "Debugging with netcoredbg: it runs on .NET Core 2.0 or 2.1 as x64 on Apple silicon"
-                    : plan.RunsAsX64 && debug.X64CoreClrAdapter is null ? "Debugging with netcoredbg: it runs as x64 on Apple silicon"
-                    : "Debugging with the Codalus debugger.";
+                var expected = plan.RunsAsX64 && debug.X64CoreClrAdapter is null ? "Debugging with netcoredbg: it runs as x64 on Apple silicon" : "Debugging with the Codalus debugger.";
                 Assert.Contains(expected, output.ToString(), StringComparison.Ordinal);
             }
         }
