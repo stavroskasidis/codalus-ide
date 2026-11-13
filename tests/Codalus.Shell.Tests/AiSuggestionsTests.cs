@@ -71,6 +71,64 @@ public sealed class AiSuggestionsTests
         Assert.Contains("        return a + b;\n", editor.Model.Text.Text, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Trigger Inline Suggestion (Alt+\\) asks at the caret anywhere, also mid-line and with suggestions while typing off;
+    /// gray dots at the caret show while the answer is out (an agent can take seconds), moving away stops it, and a
+    /// request that finds nothing says so (ADR 0097's amendment).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Alt_Backslash_asks_for_a_suggestion_at_the_caret_and_dots_show_while_it_thinks()
+    {
+        using var release = new ManualResetEventSlim();
+        var answer = "a + b";
+        await using var server = MockModelServers.OpenAI(request =>
+        {
+            if (request.Body.Contains("code completion engine", StringComparison.Ordinal))
+            {
+                release.Wait(TimeSpan.FromSeconds(60));
+                return answer;
+            }
+
+            return "";
+        });
+        var (f, editor) = await OpenAsync(server, "class Calc\n{\n    int Add(int a, int b) => ;\n}\n", "Calc.txt");
+        await using var _ = f;
+        var inline = editor.InlineSuggestions;
+        Assert.False(f.Shell.Workbench.Settings.GetBoolean(AiCompletions.EnabledSetting, false)); // off: only on demand
+        editor.Editor.Focus();
+        var caret = editor.Model.Text.Text.IndexOf("=> ;", StringComparison.Ordinal) + 3; // mid-line, before the ';'
+        editor.Editor.CaretOffset = caret;
+
+        f.Press(Key.OemBackslash, RawInputModifiers.Alt);
+        await ShellFixture.PumpUntil(() => inline.IsThinking, 30);
+        Assert.Equal(caret, inline.ThinkingOffset);
+        Assert.False(inline.IsVisible);
+        release.Set();
+        await ShellFixture.PumpUntil(() => inline.IsVisible, 30);
+        Assert.False(inline.IsThinking);
+        Assert.Equal("a + b", inline.Text);
+        f.Press(Key.Tab);
+        Assert.Contains("=> a + b;", editor.Model.Text.Text, StringComparison.Ordinal);
+
+        // Moving away stops a request that is out, dots and all.
+        release.Reset();
+        editor.Editor.CaretOffset = editor.Model.Text.Text.IndexOf("int a", StringComparison.Ordinal);
+        f.Press(Key.OemBackslash, RawInputModifiers.Alt);
+        await ShellFixture.PumpUntil(() => inline.IsThinking, 30);
+        editor.Editor.CaretOffset = 0;
+        ShellFixture.Pump();
+        Assert.False(inline.IsThinking);
+        release.Set();
+
+        // Nothing to suggest: the status bar says so.
+        answer = "";
+        editor.Editor.CaretOffset = editor.Model.Text.Text.IndexOf('}', StringComparison.Ordinal);
+        f.Press(Key.OemBackslash, RawInputModifiers.Alt);
+        await ShellFixture.PumpUntil(() => f.Shell.StatusBar.Message?.StartsWith("No suggestion here", StringComparison.Ordinal) == true, 30, () => f.Shell.StatusBar.Message ?? "(no message)");
+        Assert.False(inline.IsThinking);
+        Assert.False(inline.IsVisible);
+    }
+
     [AvaloniaFact]
     public async Task A_next_edit_suggestion_follows_an_edit_and_Tab_applies_it()
     {

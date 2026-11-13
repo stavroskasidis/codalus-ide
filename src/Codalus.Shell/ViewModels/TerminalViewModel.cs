@@ -323,8 +323,12 @@ public sealed class TerminalViewModel : ObservableObject
             _service.Close(other);
         }
 
+        // Whether it was the shown one, read before the removal: the tab list's selection, bound both ways, is cleared as its
+        // item goes, so no terminal was shown after closing the selected one of several (as AI Console's tabs, the
+        // maintainer's report).
+        var wasSelected = _selected == tab;
         Tabs.Remove(tab);
-        if (_selected == tab)
+        if (wasSelected || _selected is null || !Tabs.Contains(_selected))
         {
             Selected = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
         }

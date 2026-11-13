@@ -69,6 +69,32 @@ public sealed class TerminalTests
         Assert.Empty(f.Shell.Terminals.Sessions);
     }
 
+    /// <summary>
+    /// Closing the shown one of two terminals shows the other: the tab list's selection, cleared as its item went, left none
+    /// selected and the window empty while the other ran on (found with AI Console's tabs, which had the same code).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Closing_the_shown_one_of_two_terminals_shows_the_other()
+    {
+        await using var f = ShellFixture.Create();
+        var first = f.Shell.ShowTerminal(newTerminal: true, profile: Profile());
+        var second = f.Shell.ShowTerminal(newTerminal: true, profile: Profile());
+        var vm = f.Shell.TerminalWindow;
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<TerminalView>().Any() && vm.Tabs.Count == 2);
+        Assert.Same(second, vm.Selected!.Primary);
+
+        vm.KillCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => vm.Tabs.Count == 1, seconds: 20);
+        ShellFixture.Pump();
+        Assert.NotNull(vm.Selected);
+        Assert.Same(first, vm.Selected!.Primary);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<TerminalControl>().Any(c => c.Session == first && c.IsEffectivelyVisible));
+
+        vm.KillCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => vm.Tabs.Count == 0, seconds: 20);
+        Assert.Null(vm.Selected);
+    }
+
     [AvaloniaFact]
     public async Task Ide_keys_still_work_from_the_terminal_and_links_open_files()
     {

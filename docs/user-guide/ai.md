@@ -59,7 +59,11 @@ With **Inline Suggestions** on (`ai.completions.enabled`, in **Tools > Options >
 - `Ctrl+Right` (`Alt+Right` on macOS) accepts its next word.
 - `Esc` dismisses it, and so does moving the caret. Typing what it shows keeps the rest.
 
-It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400, or 1,000 with an external agent unless you set it) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request. With an external agent picked in AI Chat, the agent suggests: see [The AI features with an external agent](#the-ai-features-with-an-external-agent).
+It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400, or 1,000 with an external agent unless you set it) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request.
+
+**On demand.** **Trigger Inline Suggestion** (`Alt+\`, `⌥\` on macOS) asks for a suggestion at the caret now: anywhere in a line, and with Inline Suggestions off too, whenever AI can answer (a provider, or the agent picked in AI Chat). When nothing comes back, the status bar says so.
+
+**While it thinks**, gray dots (`·`, `··`, `···`) pulse at the caret: at once for **Trigger Inline Suggestion**, and after 300 ms for a suggestion asked for while typing, so a fast provider's answer doesn't flicker them. An agent's turn takes seconds. Typing or moving the caret stops the request, and the dots with it. With an external agent picked in AI Chat, the agent suggests: see [The AI features with an external agent](#the-ai-features-with-an-external-agent).
 
 ## Next edit suggestions
 

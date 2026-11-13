@@ -296,9 +296,13 @@ public sealed class AiConsoleViewModel : ObservableObject
             return;
         }
 
+        // Whether it was the shown one, read before the removal: the tab list's selection, bound both ways, is cleared as
+        // its item goes, so after it _selected was already null, no tab was selected, and with one left the window read
+        // "No console is open" while that console ran on unseen (the maintainer's report: closing one of two closed both).
+        var wasSelected = _selected == tab;
         Tabs.RemoveAt(index);
         Renumber();
-        if (_selected == tab)
+        if (wasSelected || _selected is null || !Tabs.Contains(_selected))
         {
             Selected = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
         }
