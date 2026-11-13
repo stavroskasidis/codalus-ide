@@ -44,6 +44,14 @@ internal interface IClrProcess : IDisposable
     /// <summary>Marks a module's code as the user's (Just My Code steppers stop only there) or not.</summary>
     void SetUserCode(IClrModule module, bool userCode);
 
+    /// <summary>
+    /// Marks one method as the user's or not (M61: an async method's compiler-made kickoff and its state machine's
+    /// constructor, which a Just My Code step into the method then goes through to its body).
+    /// </summary>
+    void SetUserCode(IClrModule module, int methodToken, bool userCode)
+    {
+    }
+
     /// <summary>A static field's value (<paramref name="thread"/>'s top frame is its context).</summary>
     IClrValue GetStaticField(IClrThread thread, ClrType type, int fieldToken);
 

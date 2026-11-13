@@ -12,6 +12,19 @@ internal readonly record struct ClrSequencePoint(int Offset, int StartLine, int 
     public bool IsHidden => StartLine == SequencePoint.HiddenLine;
 }
 
+/// <summary>How a method is async (M61, ADR 0100), for stepping over an <c>await</c>.</summary>
+internal enum ClrAsyncKind
+{
+    /// <summary>Not async (or an iterator).</summary>
+    None,
+
+    /// <summary>A compiler-made async state machine's <c>MoveNext</c>: the state machine is the call's identity, and its state says whether it suspended.</summary>
+    StateMachine,
+
+    /// <summary>Compiled for runtime async (.NET 11): no state machine; the runtime suspends and resumes the method.</summary>
+    Runtime,
+}
+
 /// <summary>A type named by a module's metadata: its assembly (null: the same module) and its full name (<c>Ns.Outer+Inner</c>).</summary>
 internal readonly record struct ClrTypeName(string? Assembly, string FullName, int Token);
 
@@ -745,6 +758,62 @@ internal sealed class ClrModuleInfo : IDisposable
     }
 
     // ------------------------------------------------------------------ attributes
+
+    /// <summary><c>MethodImplAttributes.Async</c> (.NET 11): a method compiled for runtime async, which the runtime suspends and resumes itself.</summary>
+    private const MethodImplAttributes RuntimeAsync = (MethodImplAttributes)0x2000;
+
+    /// <summary>
+    /// Whether a method is async code (M61, ADR 0100): compiled for runtime async (the method itself, with
+    /// <c>MethodImplAttributes.Async</c>), or the <c>MoveNext</c> of a compiler-made async state machine (a type
+    /// implementing <c>IAsyncStateMachine</c>); <see cref="ClrAsyncKind.None"/> otherwise (an iterator's too).
+    /// </summary>
+    public ClrAsyncKind AsyncKind(int methodToken)
+    {
+        if (Added(methodToken) is { } added)
+        {
+            return (added.Method.ImplAttributes & RuntimeAsync) != 0 ? ClrAsyncKind.Runtime : ClrAsyncKind.None;
+        }
+
+        var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
+        if ((method.ImplAttributes & RuntimeAsync) != 0)
+        {
+            return ClrAsyncKind.Runtime;
+        }
+
+        return Metadata.StringComparer.Equals(method.Name, "MoveNext")
+            && Metadata.GetTypeDefinition(method.GetDeclaringType()).GetInterfaceImplementations()
+                .Any(i => NameOf(Metadata.GetInterfaceImplementation(i).Interface)?.FullName == "System.Runtime.CompilerServices.IAsyncStateMachine")
+            ? ClrAsyncKind.StateMachine
+            : ClrAsyncKind.None;
+    }
+
+    /// <summary>
+    /// The compiler code of an async method built as a state machine, by its kickoff (M61): the kickoff itself and the
+    /// state machine's methods but <c>MoveNext</c> (its constructor). The state machines are the kickoff's type's
+    /// nested types named after it (<c>&lt;Name&gt;d__N</c>) that implement <c>IAsyncStateMachine</c>.
+    /// </summary>
+    public IReadOnlyList<int> AsyncKickoffCode(int kickoffToken)
+    {
+        if (Added(kickoffToken) is not null)
+        {
+            return [kickoffToken];
+        }
+
+        var kickoff = Metadata.GetMethodDefinition(MethodHandle(kickoffToken));
+        var prefix = "<" + Metadata.GetString(kickoff.Name) + ">";
+        var result = new List<int> { kickoffToken };
+        foreach (var nested in Metadata.GetTypeDefinition(kickoff.GetDeclaringType()).GetNestedTypes())
+        {
+            var type = Metadata.GetTypeDefinition(nested);
+            if (Metadata.GetString(type.Name).StartsWith(prefix, StringComparison.Ordinal)
+                && type.GetInterfaceImplementations().Any(i => NameOf(Metadata.GetInterfaceImplementation(i).Interface)?.FullName == "System.Runtime.CompilerServices.IAsyncStateMachine"))
+            {
+                result.AddRange(type.GetMethods().Where(m => !Metadata.StringComparer.Equals(Metadata.GetMethodDefinition(m).Name, "MoveNext")).Select(m => MetadataTokens.GetToken(m)));
+            }
+        }
+
+        return result;
+    }
 
     public bool MethodHasAttribute(int methodToken, string attribute) =>
         Added(methodToken) is null && Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);

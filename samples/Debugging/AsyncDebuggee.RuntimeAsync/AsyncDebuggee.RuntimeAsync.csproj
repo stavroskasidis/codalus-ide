@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- M61 (ADR 0100): AsyncDebuggee's files, compiled for runtime async (.NET 11): no state machines, the runtime
+       suspends and resumes the methods itself. It references the state-machine build of the library. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Features>$(Features);runtime-async=on</Features>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\AsyncDebuggee\*.cs" />
+    <ProjectReference Include="..\AsyncLib\AsyncLib.csproj" />
+  </ItemGroup>
+</Project>

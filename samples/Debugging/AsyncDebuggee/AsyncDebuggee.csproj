@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- M61 (ADR 0100): async code as compiler-made state machines. AsyncDebuggee.RuntimeAsync builds the same files with
+       runtime async; each references the library built the other way, so the two kinds meet in both directions. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AsyncLib.RuntimeAsync\AsyncLib.RuntimeAsync.csproj" />
+  </ItemGroup>
+</Project>
