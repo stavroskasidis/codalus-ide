@@ -13,6 +13,7 @@
 # Usage: eng/ci-test.sh <shard> [Release|Debug] [test project...]
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 shard="${1:?shard: shell-1, shell-2, others, debug-netcoredbg, debug-codalus or projects}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."

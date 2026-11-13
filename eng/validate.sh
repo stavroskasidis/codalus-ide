@@ -9,6 +9,7 @@
 #            zlib1g-dev; needs a display or xvfb-run, and on macOS a logged-in desktop session)
 # Results of the smoke test land in artifacts/smoke-test.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo"
@@ -16,7 +17,6 @@ cd "$repo"
 smoke=no
 if [ "${1:-}" = --smoke ]; then smoke=yes; shift; fi
 
-export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 TESTINGPLATFORM_TELEMETRY_OPTOUT=1
 
 sdk="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' global.json | head -1)"
 # `dotnet --version` here applies global.json (its version, roll-forward and prerelease rules) and fails without a

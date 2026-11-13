@@ -500,6 +500,9 @@ public sealed class RunService : IDisposable
             ["DOTNET_WATCH_RESTART_ON_RUDE_EDIT"] = "true",
             ["DOTNET_WATCH_SUPPRESS_LAUNCH_BROWSER"] = "1",
         };
+        // dotnet watch builds the project (Avalonia's build task among its targets): the tools' telemetry opt-outs
+        // (M59). The program it starts inherits them from it.
+        ToolTelemetry.OptOutOnTop(environment);
         if (announceProcess)
         {
             // dotnet watch sets this itself only at its Trace level, so ours reaches the agent in the app (it prints the

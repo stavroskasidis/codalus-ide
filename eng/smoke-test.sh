@@ -14,6 +14,7 @@
 # to the job summary. Needs the .NET SDK and git on the PATH (the app builds and commits), and a display: on Linux without
 # one, the test runs under xvfb-run.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 # Node.js and the web language servers (M16b) download once into the repository's .work folder, not every run.

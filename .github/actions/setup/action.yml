@@ -51,6 +51,20 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: The tools' telemetry opt-outs
+      # M59: the workflow's env sets them for every job (the .NET SDK's, Avalonia's build task's, which posts from every
+      # build of the Avalonia projects here, Microsoft.Testing.Platform's and dotnet-svcutil's; the list of
+      # eng/telemetry-optout.sh and ToolTelemetry.Variables). A job that runs without one fails here, before it builds.
+      shell: bash
+      run: |
+        missing=""
+        for name in DOTNET_CLI_TELEMETRY_OPTOUT AVALONIA_TELEMETRY_OPTOUT TESTINGPLATFORM_TELEMETRY_OPTOUT DOTNET_SVCUTIL_TELEMETRY_OPTOUT; do
+          if [ "${!name:-}" != 1 ]; then missing="$missing $name"; fi
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::The workflow's env doesn't set the tools' telemetry opt-outs:$missing (M59: set each to \"1\" in its top-level env)"
+          exit 1
+        fi
     - name: Room on a small Linux runner's disk
       # Some ubuntu-latest jobs get a runner with a 72 GB disk (a "Hosted Compute Agent" on AWS, /dev/mapper/cow-root)
       # instead of 145 GB: after restore and build 67 GB were used, so others filled it in its first minute (PR #268,

@@ -677,6 +677,8 @@ public sealed partial class ShellHost
             start.ArgumentList.Add(argument);
         }
 
+        ToolTelemetry.OptOut(start.Environment); // an install the IDE runs: the tools' telemetry opt-outs (M59)
+
         try
         {
             using var process = new Process { StartInfo = start };

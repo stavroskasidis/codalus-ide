@@ -104,7 +104,9 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo(dotnet, "--version") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false })!;
+            var version = new ProcessStartInfo(dotnet, "--version") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            ToolTelemetry.OptOut(version.Environment); // the tools' telemetry opt-outs (M59)
+            using var process = Process.Start(version)!;
             var output = process.StandardOutput.ReadToEnd().Trim();
             return process.WaitForExit(15000) && process.ExitCode == 0 ? output : null;
         }
@@ -156,6 +158,11 @@ public sealed partial class RemoteServer(ChannelMultiplexer multiplexer, JsonRpc
         foreach (var (key, value) in p.Environment ?? new Dictionary<string, string>())
         {
             start.Environment[key] = value;
+        }
+
+        if (p.ToolTelemetryOptOut)
+        {
+            ToolTelemetry.OptOut(start.Environment); // this machine's value, if the user set one, is kept
         }
 
         var channel = multiplexer.Open(p.Channel);

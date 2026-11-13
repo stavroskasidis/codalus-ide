@@ -6,6 +6,7 @@
 # It mirrors the repository into the Linux filesystem (~/codalus by default, CODALUS_WSL_DIR overrides) so the
 # Linux build never shares bin/ and obj/ with the Windows one, then runs eng/validate.sh there (same arguments).
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dst="${CODALUS_WSL_DIR:-$HOME/codalus}"

@@ -21,7 +21,7 @@ public static class InteractiveHostLaunch
         var exe = OperatingSystem.IsWindows() ? "codalus-replhost.exe" : "codalus-replhost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "replhost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "replhost", "codalus-replhost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 
