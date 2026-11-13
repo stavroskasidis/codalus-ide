@@ -149,6 +149,7 @@ public sealed partial class ShellHost
 
         var definition = IdeToolDefinitions.FirstOrDefault(t => t.Name == tool) ?? throw new McpException($"There is no tool '{tool}'.");
         var root = Solutions.Solution?.Directory;
+        var started = System.Diagnostics.Stopwatch.StartNew();
         IdeToolResult result;
         try
         {
@@ -181,7 +182,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI").AppendLine(string.Create(CultureInfo.InvariantCulture,
-            $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} IDE tool ({caller ?? "codalus mcp"}): {tool}{(result.IsError ? " → error" : "")}"));
+            $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} IDE tool ({caller ?? "codalus mcp"}): {tool}{(result.IsError ? " → error" : "")} ({started.Elapsed.TotalSeconds:0.0} s)"));
         var text = SecretRedactor.Redact(result.Text).Text;
         return result with { Text = text.Length > MaxIdeToolText ? text[..MaxIdeToolText] + "\n… (cut at " + MaxIdeToolText.ToString(CultureInfo.InvariantCulture) + " characters)" : text };
     }

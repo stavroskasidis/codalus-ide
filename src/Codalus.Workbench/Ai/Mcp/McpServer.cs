@@ -17,7 +17,14 @@ public sealed class McpStdioServer
     private readonly TextWriter _output;
     private readonly Func<CancellationToken, Task<IReadOnlyList<IdeToolDefinition>>> _list;
     private readonly Func<string, JsonElement, CancellationToken, Task<IdeToolResult>> _call;
+    private readonly Lock _writing = new();
     private IReadOnlyList<IdeToolDefinition> _listed = IdeTools.BuiltIn;
+
+    /// <summary>
+    /// How often a call that is still running reports progress when its client sent a progress token (M60: builds, tests,
+    /// debug waits and profiles take minutes; MCP clients time a quiet call out).
+    /// </summary>
+    public TimeSpan ProgressInterval { get; init; } = TimeSpan.FromSeconds(10);
 
     /// <summary>A server whose tools are the built-in ones and whose calls answer text (tests, and older callers).</summary>
     public McpStdioServer(TextReader input, TextWriter output, Func<string, JsonElement, CancellationToken, Task<string>> call)
@@ -123,7 +130,13 @@ public sealed class McpStdioServer
                     {
                         // Every name is relayed, a plugin's tool added since the list was read too: the IDE knows its
                         // tools and answers an unknown one with an error.
-                        result = await _call(tool, arguments, cancellationToken).ConfigureAwait(false);
+                        var call = _call(tool, arguments, cancellationToken);
+                        if (ProgressToken(args) is { } token)
+                        {
+                            await ReportProgressAsync(call, token, tool, cancellationToken).ConfigureAwait(false);
+                        }
+
+                        result = await call.ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is McpException or IOException or TimeoutException)
                     {
@@ -157,7 +170,46 @@ public sealed class McpStdioServer
         }
     }
 
-    private async Task WriteAsync(Action<Utf8JsonWriter> write)
+    /// <summary>The request's <c>_meta.progressToken</c> (a string or a number), or null.</summary>
+    private static JsonElement? ProgressToken(JsonElement args) =>
+        args.ValueKind == JsonValueKind.Object && args.TryGetProperty("_meta", out var meta) && meta.ValueKind == JsonValueKind.Object
+            && meta.TryGetProperty("progressToken", out var token) && token.ValueKind is JsonValueKind.String or JsonValueKind.Number
+            ? token.Clone()
+            : null;
+
+    /// <summary>
+    /// MCP's <c>notifications/progress</c> every <see cref="ProgressInterval"/> while <paramref name="call"/> runs: the
+    /// seconds so far as its progress, and the tool's name, never its content.
+    /// </summary>
+    private async Task ReportProgressAsync(Task call, JsonElement token, string tool, CancellationToken cancellationToken)
+    {
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        while (!call.IsCompleted)
+        {
+            var tick = Task.Delay(ProgressInterval, cancellationToken);
+            if (await Task.WhenAny(call, tick).ConfigureAwait(false) == call || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var seconds = (int)started.Elapsed.TotalSeconds;
+            await WriteAsync(w =>
+            {
+                w.WriteStartObject();
+                w.WriteString("jsonrpc", "2.0");
+                w.WriteString("method", "notifications/progress");
+                w.WriteStartObject("params");
+                w.WritePropertyName("progressToken");
+                token.WriteTo(w);
+                w.WriteNumber("progress", seconds);
+                w.WriteString("message", $"{tool} is still running ({seconds} s)");
+                w.WriteEndObject();
+                w.WriteEndObject();
+            }).ConfigureAwait(false);
+        }
+    }
+
+    private Task WriteAsync(Action<Utf8JsonWriter> write)
     {
         using var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -165,8 +217,15 @@ public sealed class McpStdioServer
             write(writer);
         }
 
-        await _output.WriteLineAsync(Encoding.UTF8.GetString(buffer.ToArray())).ConfigureAwait(false);
-        await _output.FlushAsync().ConfigureAwait(false);
+        // A progress notification and an answer can be written at once: one line at a time.
+        var line = Encoding.UTF8.GetString(buffer.ToArray());
+        lock (_writing)
+        {
+            _output.WriteLine(line);
+            _output.Flush();
+        }
+
+        return Task.CompletedTask;
     }
 
     private static void Result(Utf8JsonWriter w, JsonElement id, Action<Utf8JsonWriter> result)
