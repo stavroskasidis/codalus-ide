@@ -378,7 +378,19 @@ public sealed partial class ShellHost : IEditorServices
                     return null;
                 }
 
-                view = CreateView(model, primary: true);
+                // Another open of this file made its tab while this one read it (the debugger's stop opening the stopped
+                // frame's file while a click or a call opened it too): that tab, not a second one. Each made its own,
+                // and the one behind the other was never shown, so its editor never came (Windows CI, PR #345's smoke
+                // test, run 43397211609: debug.applyChanges waited for an editor that wasn't there).
+                if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null) is { } opened)
+                {
+                    view = opened;
+                }
+                else
+                {
+                    view = CreateView(model, primary: true);
+                }
+
                 Layout.OpenDocument(view, preview, focus: !preview, activate);
             }
             finally

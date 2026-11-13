@@ -104,7 +104,7 @@ public sealed partial class AcpAgentTests
         Assert.Empty(_host.Commands);
         Assert.Empty(_host.Permissions);
         Assert.Empty(_host.Proposed);
-        var answers = File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _)).ToList();
+        var answers = LogLines().Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _)).ToList();
         Assert.Equal(2, answers.Count(a => a.TryGetProperty("error", out _)));
         Assert.Contains(answers, a => a.TryGetProperty("result", out var result) && result.TryGetProperty("outcome", out var outcome) && outcome.GetProperty("outcome").GetString() == "cancelled");
         Assert.Contains("fs/read_text_file → refused (AI actions ask for text only)", AiLog, StringComparison.Ordinal);
@@ -123,7 +123,7 @@ public sealed partial class AcpAgentTests
         Assert.Null(await completions.CompleteAsync(new AiCompletionRequest(path, "csharp", "a", "b"), Ct));
         var refused = await Assert.ThrowsAsync<AiUnavailableException>(() => _ai.AskAsync("fix", AiActions.FixPrompt, "the code", [], Ct));
         Assert.Contains("trusted folders", refused.Message, StringComparison.Ordinal);
-        Assert.False(File.Exists(_log) && Received("initialize").Count > 0);
+        Assert.Empty(Received("initialize"));
 
         // The built-in assistant picked again: the provider answers, and there is none.
         _trusted = true;
@@ -155,7 +155,7 @@ public sealed partial class AcpAgentTests
         await PickAgentForFeaturesAsync("ACP_FAKE_TEXT_SLOW=1");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
         var asked = _ai.ChatAsync("completion", [new Codalus.Plugins.Protocol.ChatMessageDto("user", "x", null, null, false)], AiPreparedContext.None, _ => { }, cts.Token, quiet: true, route: AiRoute.Suggestion);
-        for (var i = 0; i < 400 && (!File.Exists(_log) || PromptsTo("sess_text_1").Count == 0); i++)
+        for (var i = 0; i < 400 && PromptsTo("sess_text_1").Count == 0; i++)
         {
             await Task.Delay(50, Ct);
         }

@@ -101,7 +101,7 @@ public sealed class AcpAgentConnectorTests : IAsyncDisposable
     private static readonly AcpSignInOption Already = new("already", AcpSignInKind.AlreadySignedIn, "I'm signed in already", "");
 
     private List<JsonElement> Received(string method) =>
-        File.Exists(_log) ? [.. File.ReadAllLines(_log).Select(l => JsonElement.Parse(l)).Where(m => m.TryGetProperty("method", out var name) && name.GetString() == method)] : [];
+        [.. Codalus.Tests.StandInAcpAgentLog.Read(_log).Where(m => m.TryGetProperty("method", out var name) && name.GetString() == method)];
 
     private string AiLog => _workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText();
 
