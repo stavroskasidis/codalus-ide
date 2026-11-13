@@ -101,6 +101,55 @@ public static partial class AiActions
         }
     }
 
+    /// <summary>The most new, untracked files whose text a commit message's diff carries (the rest are named).</summary>
+    public const int MaxNewFiles = 40;
+
+    /// <summary>
+    /// What the next commit in <paramref name="git"/>'s repository takes, as a diff: its staged changes when
+    /// <paramref name="staged"/>, else everything Git Changes' Commit All commits there (it stages new files, then commits
+    /// with <c>--all</c>): the tracked changes against HEAD (or the index and the work tree in a repository without one)
+    /// and each new file not ignored, as added from nothing. The message describes what Commit will commit.
+    /// </summary>
+    public static async Task<string> CommitDiffAsync(Git.GitService git, string root, bool staged, CancellationToken cancellationToken)
+    {
+        if (staged)
+        {
+            return (await git.RunAsync(root, ["diff", "--cached", "--no-ext-diff", "-M"], cancellationToken, readOnly: true).ConfigureAwait(false)).Output;
+        }
+
+        var text = new StringBuilder();
+        var head = await git.RunAsync(root, ["rev-parse", "--verify", "--quiet", "HEAD"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+        if (head.ExitCode == 0)
+        {
+            text.Append((await git.RunAsync(root, ["diff", "HEAD", "--no-ext-diff", "-M"], cancellationToken, readOnly: true).ConfigureAwait(false)).Output);
+        }
+        else
+        {
+            // No commit yet: the index against nothing, then the work tree against the index.
+            text.Append((await git.RunAsync(root, ["diff", "--cached", "--no-ext-diff"], cancellationToken, readOnly: true).ConfigureAwait(false)).Output);
+            text.Append((await git.RunAsync(root, ["diff", "--no-ext-diff"], cancellationToken, readOnly: true).ConfigureAwait(false)).Output);
+        }
+
+        var untracked = (await git.RunAsync(root, ["ls-files", "--others", "--exclude-standard", "-z"], cancellationToken, readOnly: true).ConfigureAwait(false)).Output
+            .Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var path in untracked.Take(MaxNewFiles))
+        {
+            // A new file's diff from nothing: git's own /dev/null, on Windows too; exit code 1 means the files differ.
+            var added = await git.RunAsync(root, ["diff", "--no-index", "--no-ext-diff", "--", "/dev/null", path], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+            if (added.ExitCode is 0 or 1)
+            {
+                text.Append(added.Output);
+            }
+        }
+
+        foreach (var path in untracked.Skip(MaxNewFiles))
+        {
+            text.Append("diff --git a/").Append(path).Append(" b/").Append(path).Append("\nnew file (not shown)\n");
+        }
+
+        return text.ToString();
+    }
+
     /// <summary>A commit message for the staged <paramref name="diff"/>.</summary>
     public static Task<string> CommitMessageAsync(AiService ai, string diff, string repositoryRoot, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken) =>
         CommitMessageAsync(ai, [(diff, repositoryRoot)], recentSubjects, cancellationToken);
@@ -109,7 +158,7 @@ public static partial class AiActions
     /// The commit message for several repositories' staged changes (Commit All Repos, ADR 0085): each diff is filtered
     /// against its own repository's exclusions, and headed by the repository's name when there are several.
     /// </summary>
-    public static async Task<string> CommitMessageAsync(AiService ai, IReadOnlyList<(string Diff, string RepositoryRoot)> diffs, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken)
+    public static async Task<string> CommitMessageAsync(AiService ai, IReadOnlyList<(string Diff, string RepositoryRoot)> diffs, IReadOnlyList<string> recentSubjects, CancellationToken cancellationToken, bool staged = true)
     {
         var parts = new List<string>();
         var excluded = new List<string>();
@@ -121,8 +170,8 @@ public static partial class AiActions
         }
 
         var filtered = string.Join('\n', parts);
-        var items = new List<AiContextItem> { new(AiContextKind.Changes, "staged changes", filtered) { Language = "diff" } };
-        var question = new StringBuilder("Write the commit message for these staged changes.");
+        var items = new List<AiContextItem> { new(AiContextKind.Changes, staged ? "staged changes" : "changes", filtered) { Language = "diff" } };
+        var question = new StringBuilder(staged ? "Write the commit message for these staged changes." : "Write the commit message for these changes: nothing is staged, so the commit takes all of them, new files included.");
         if (recentSubjects.Count > 0)
         {
             question.Append("\n\nRecent subjects in this repository:\n").AppendJoin('\n', recentSubjects.Take(10).Select(s => "- " + s));

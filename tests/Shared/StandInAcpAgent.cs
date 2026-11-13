@@ -46,7 +46,9 @@ namespace Codalus.Tests;
 /// <c>ACP_FAKE_TEXT_REPLY</c> (or "text reply") as one message chunk, after a thought; with <c>ACP_FAKE_TEXT_PROBE=1</c> it first
 /// asks the client to read a file, run a command and allow something, and logs the answers. <c>ACP_FAKE_TEXT_SLOW=1</c> waits for
 /// <c>session/cancel</c> instead. A model chosen in a text session is its own (the chat's stays). <c>ACP_FAKE_FAST_MODEL=1</c> adds a
-/// <c>haiku</c> model to the model choice.
+/// <c>haiku</c> model to the model choice. <c>ACP_FAKE_TEXT_TOOL=1</c> asks to run a tool first, as Claude's adapter does, and ends the
+/// turn without text unless the answer is one of its options; <c>ACP_FAKE_TEXT_DELAY</c> waits that many milliseconds before
+/// answering; <c>ACP_FAKE_TEXT_EMPTY=1</c> ends the turn without text.
 /// </para>
 /// The prompt's last line picks the script:
 /// <list type="bullet">
@@ -495,6 +497,34 @@ public static class StandInAcpAgent
                     ["toolCall"] = new JsonObject { ["toolCallId"] = "perm_text", ["title"] = "Edit a file" },
                     ["options"] = new JsonArray(new JsonObject { ["optionId"] = "allow", ["name"] = "Allow", ["kind"] = "allow_once" }),
                 }).ConfigureAwait(false);
+            }
+
+            // Claude's adapter (claude-agent-acp, ACP v1): a tool it reaches for asks first, and an answer that isn't one of
+            // its options (`cancelled` without a session/cancel) aborts the tool use, and the turn ends without text.
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_TOOL") == "1")
+            {
+                var asked = await RequestAsync("session/request_permission", new JsonObject
+                {
+                    ["sessionId"] = session,
+                    ["toolCall"] = new JsonObject { ["toolCallId"] = "tool_git", ["title"] = "git diff --cached", ["kind"] = "execute" },
+                    ["options"] = new JsonArray(
+                        new JsonObject { ["optionId"] = "allow", ["name"] = "Yes", ["kind"] = "allow_once" },
+                        new JsonObject { ["optionId"] = "reject", ["name"] = "No", ["kind"] = "reject_once" }),
+                }).ConfigureAwait(false);
+                if (asked["outcome"]?["outcome"]?.GetValue<string>() != "selected")
+                {
+                    return "end_turn";
+                }
+            }
+
+            if (int.TryParse(Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_DELAY"), CultureInfo.InvariantCulture, out var delay))
+            {
+                await Task.Delay(delay).ConfigureAwait(false);
+            }
+
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_EMPTY") == "1")
+            {
+                return "end_turn";
             }
 
             if (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_SLOW") == "1")

@@ -68,7 +68,7 @@ With **Next Edit Suggestions** on (`ai.nextEdit.enabled`), the IDE predicts your
 ## AI actions
 
 Where AI can help with something the IDE already shows, there's an action for it. Each one runs only when you choose it, and shows only while AI assistance is on.
-- **Git Changes: ✦** next to the message box writes the commit message for the staged changes, in the style of the repository's recent subjects. Staged files that are never sent are named, not shown.
+- **Git Changes: ✦** next to the message box writes the commit message for what **Commit** will commit, in the style of the repository's recent subjects: the staged changes, or, when nothing is staged, all the changes, new files included, as **Commit All** commits them. Files that are never sent are named, not shown. While it writes, the bottom of the message box says **Writing with AI…** with a moving bar, and ✦ waits until it's done; an answer with no message, or no changes to describe, says so in a notification.
 - **Create Pull Request: Write with AI** writes the title and description from the branch's commits and diff.
 - **The exception helper: Ask AI.** When the debugger stops on an exception, Ask AI asks AI Chat why it was thrown, with the exception, its stack, the call stack and the code around the current statement.
 - **Test Explorer: Ask AI Why It Fails** (on a failed test's context menu, or **Tools > AI**) asks AI Chat with the test's message, expected and actual values, stack, output and test file.
