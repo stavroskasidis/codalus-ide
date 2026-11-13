@@ -67,7 +67,11 @@ public static class IdeTools
         "get_diagnostics after an edit; build, run_tests and get_test_results instead of dotnet build or dotnet test; " +
         "debug_* to reproduce a bug under the debugger (breakpoints, stack, variables, evaluate) instead of adding prints. " +
         "When a web app runs, browser_* drives and reads its page (under the debugger, the very page being debugged, so " +
-        "its breakpoints stop). Check your own changes before you say they are done: get_diagnostics and build after an " +
+        "its breakpoints stop). Change code through the IDE where it can: rename_symbol, get_code_actions and " +
+        "apply_code_action, format_document and replace_in_files (each change one undo step in the IDE); apply_code_changes " +
+        "for Hot Reload; profile_start, profile_stop and memory_snapshot for performance; git_* for status, diffs, history, " +
+        "commits and conflicts (never a push); list_packages, add_package and the *_migrations tools for NuGet and EF Core; " +
+        "list_services and service_* for compose services and Aspire resources. Check your own changes before you say they are done: get_diagnostics and build after an " +
         "edit, run_tests for the tests that cover it, and when the change shows in a running app (a page, a window, its " +
         "output), start it with debug_start or run_project and check it, with browser_* for a web app; skip this only " +
         "when the user says so. The tools wait for what they need: debug_start returns once the program runs and a web " +

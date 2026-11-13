@@ -126,8 +126,9 @@ public sealed class IdeToolsPackagesShellTests
         await ListedAsync(f, """{"project":"Plain"}""", "Codalus.Sample.Text 1.0.0", present: false);
         Assert.Contains("doesn't reference Codalus.Sample.Text", await ErrorAsync(f, "remove_package", """{"project":"Plain","id":"Codalus.Sample.Text"}"""), StringComparison.Ordinal);
 
-        Assert.Equal(["list_packages", "search_packages", "list_migrations", "script_migrations"], IdePackageTools.Tools.Where(t => t.Kind == IdeToolKind.Read).Select(t => t.Name));
-        Assert.Equal(["add_package", "update_package", "remove_package", "add_migration", "apply_migrations"], IdePackageTools.Tools.Where(t => t.Kind == IdeToolKind.Action).Select(t => t.Name));
+        Assert.Equal(["list_packages", "search_packages"], IdePackageTools.Tools.Where(t => t.Kind == IdeToolKind.Read).Select(t => t.Name));
+        // Listing and scripting migrations build the startup project and run dotnet ef, the workspace's code: actions (D52).
+        Assert.Equal(["add_package", "update_package", "remove_package", "list_migrations", "add_migration", "apply_migrations", "script_migrations"], IdePackageTools.Tools.Where(t => t.Kind == IdeToolKind.Action).Select(t => t.Name));
     }
 
     [AvaloniaFact]
