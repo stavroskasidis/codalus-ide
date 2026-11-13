@@ -1537,7 +1537,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(shell.DebugLog.GetText().Contains("> args[1]\n\"two words\"", StringComparison.Ordinal), "the Debug Console evaluates args[1] to \"two words\":\n" + Tail(shell.DebugLog.GetText(), 1000));
 
         shell.Debugger.Breakpoints.Clear();
-        shell.Run("debug.continue");
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
         Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
     }
@@ -1758,7 +1758,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var offset = editor.Model.Text.Text.IndexOf("        return text;", StringComparison.Ordinal);
         editor.Model.Text.Replace(offset, "        return text;".Length, "        return text + \" from the smoke test\";");
         shell.Debugger.Breakpoints.Clear();
-        shell.Run("debug.continue");
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 from the smoke test", StringComparison.Ordinal), "Continue applied the edit: the first call prints it", 60).ConfigureAwait(true);
 
         offset = editor.Model.Text.Text.IndexOf(" from the smoke test", StringComparison.Ordinal);
@@ -1811,7 +1811,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Check(await shell.SetNextStatementAsync(features, measure - 1).ConfigureAwait(true), "Set Next Statement moves the thread: " + shell.StatusBar.Message);
             await WaitAsync(() => shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure - 1, "the current line is the one chosen").ConfigureAwait(true);
             await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "count", Value: "3" }), "the loop's later passes didn't run (count is 3)").ConfigureAwait(true);
-            shell.Run("debug.stepOver");
+            await RunWhenEnabledAsync("debug.stepOver").ConfigureAwait(true);
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
 
             // A lambda: the C# language host compiles it, and the program runs it.
@@ -1859,9 +1859,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(offset >= 0, "Program.cs has Greeter.Message's return");
         editor.Model.Text.Replace(offset, Old.Length, New);
         shell.Debugger.Breakpoints.Clear();
-        shell.Run("debug.stepOver");
+        await RunWhenEnabledAsync("debug.stepOver").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message + 1, "the step applied the edit and stopped on the line it added, in the new code", 120).ConfigureAwait(true);
-        shell.Run("debug.continue");
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 moved", StringComparison.Ordinal), "the frame that was stopped ran the new code: its call prints it", 60).ConfigureAwait(true);
         shell.Run("debug.stop");
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
@@ -4694,6 +4694,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     }
 
     private static Task WaitAsync(Func<bool> condition, string what, int seconds = 30) => WaitAsync(condition, () => what, seconds);
+
+    /// <summary>
+    /// Runs <paramref name="commandId"/> once its enablement allows it. The context keys follow the debugger's state on
+    /// the UI thread (<c>Ui.Post</c>), after the state the steps wait for, and a command run before them is refused with
+    /// only a status bar message: Step Over was, and the wait after it timed out with nothing sent to the debugger
+    /// (Linux smoke, debug.codalus, run 43415338526). The command sweep waits for the same keys (#145's Linux run).
+    /// </summary>
+    private async Task RunWhenEnabledAsync(string commandId, int seconds = 10)
+    {
+        var context = shell.Workbench.Context;
+        await WaitAsync(
+            () => shell.Workbench.Commands.IsEnabled(commandId),
+            () => $"“{commandId}” to be enabled (debugger {shell.Debugger.State}; context debugStopped={context.GetValue("debugStopped")}, debugRunning={context.GetValue("debugRunning")}, debugActive={context.GetValue("debugActive")})",
+            seconds).ConfigureAwait(true);
+        shell.Run(commandId);
+    }
 
     /// <summary>As above, with <paramref name="what"/> read when the wait times out (a log's tail at that moment).</summary>
     private static async Task WaitAsync(Func<bool> condition, Func<string> what, int seconds = 30)
