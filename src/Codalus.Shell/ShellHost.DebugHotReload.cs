@@ -79,11 +79,17 @@ public sealed partial class ShellHost
     /// Applies the edits to the program being debugged and says how it went: in the status bar, the Error List, and for a
     /// rude edit a question. False when the user chose to restart (the program doesn't go on).
     /// </summary>
-    private async Task<bool> ApplyDebugEditsAsync()
+    private async Task<bool> ApplyDebugEditsAsync() => (await ApplyDebugEditsAsync(ask: true, CancellationToken.None).ConfigureAwait(true)).Go;
+
+    /// <summary>
+    /// Applies the edits and says how it went, as <see cref="ApplyDebugEditsAsync()"/> does; a rude edit asks only when
+    /// <paramref name="ask"/> is true (an agent's apply_code_changes reads the outcome instead, M60).
+    /// </summary>
+    private async Task<(bool Go, HotReloadOutcome Outcome)> ApplyDebugEditsAsync(bool ask, CancellationToken cancellationToken)
     {
         _debugEditsStatus = Localizer.Get("status.debugHotReload.applying", "Hot Reload: applying…");
         UpdateHotReloadStatus();
-        var outcome = await DebugEdits.ApplyAsync(CancellationToken.None).ConfigureAwait(true);
+        var outcome = await DebugEdits.ApplyAsync(cancellationToken).ConfigureAwait(true);
         var time = DateTime.Now.ToString("T", CultureInfo.CurrentCulture);
         switch (outcome.Kind)
         {
@@ -112,13 +118,18 @@ public sealed partial class ShellHost
                 var first = outcome.Diagnostics is [var rude, ..] ? rude.Message : string.Empty;
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}",
                     string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}"))));
+                if (!ask)
+                {
+                    break;
+                }
+
                 var choice = await Workbench.Notifications.Warning(
                     Localizer.Format("msg.debugHotReload.rude", "An edit can't be applied while the program runs: {0} Restart to run it, or go on with the code it started with.", first),
                     restart, keepGoing).Result.ConfigureAwait(true);
                 if (choice == restart)
                 {
                     _ = RestartDebuggingAsync();
-                    return false;
+                    return (false, outcome);
                 }
 
                 break;
@@ -132,7 +143,7 @@ public sealed partial class ShellHost
         }
 
         UpdateHotReloadStatus();
-        return true;
+        return (true, outcome);
     }
 
     /// <summary>A save while the program runs applies the edits (with <c>debug.hotReload</c> on).</summary>

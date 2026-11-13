@@ -1178,27 +1178,6 @@ public sealed partial class ShellHost : IEditorServices
 
     // ------------------------------------------------------------------ saving and closing
 
-    private async Task ConfirmCloseAsync(Docking.ShellDocument document)
-    {
-        var name = document is CodeEditorDocument editor ? editor.Model.Name : document.Title;
-        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.saveChangesToBeforeClosing", "Save changes to {0} before closing?", name), "Save", "Don't Save").Result.ConfigureAwait(false);
-        await Ui.RunAsync(async () =>
-        {
-            if (choice == "Save")
-            {
-                if ((document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
-                    || (document is Views.ISavableDocument savable && await SaveDocumentAsync(document, savable).ConfigureAwait(true)))
-                {
-                    document.CloseConfirmed();
-                }
-            }
-            else if (choice == "Don't Save")
-            {
-                document.CloseConfirmed();
-            }
-        }).ConfigureAwait(false);
-    }
-
     public async Task SaveActiveDocumentAsync()
     {
         if (ActiveEditor is { } editor)
@@ -1267,58 +1246,6 @@ public sealed partial class ShellHost : IEditorServices
             Layout.CloseDocument(document);
         }
     }
-
-    /// <summary>Close All (or Close All But This): together, so no tab becomes active on the way (M56).</summary>
-    public void CloseAllDocuments(bool exceptActive)
-    {
-        var active = Layout.ActiveDocument;
-        Layout.CloseDocuments([.. Layout.Documents.Where(d => !exceptActive || d != active)]);
-    }
-
-    /// <summary>Closes every document that isn't pinned (M34d), together.</summary>
-    public void CloseUnpinnedDocuments() => Layout.CloseDocuments([.. Layout.Documents.Where(d => !d.IsPinned)]);
-
-    public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
-
-    /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>
-    public async Task<bool> ConfirmQuitAsync()
-    {
-        var unsaved = _models.Values.Where(m => m.IsModified).ToList();
-        if (unsaved.Count == 0)
-        {
-            DeleteAllBackups();
-            return true;
-        }
-
-        var names = string.Join(", ", unsaved.Select(m => m.Name));
-        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.youHaveUnsavedChangesIn", "You have unsaved changes in {0}.", names), "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
-        if (choice == "Save All and Exit")
-        {
-            foreach (var model in unsaved)
-            {
-                await SaveAsync(model).ConfigureAwait(true);
-            }
-
-            if (unsaved.All(m => !m.IsModified))
-            {
-                DeleteAllBackups();
-                return true;
-            }
-
-            return false;
-        }
-
-        if (choice == "Exit Without Saving")
-        {
-            DeleteAllBackups();
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>Closing a solution closes its documents together (unsaved ones stay open, as the user has to decide).</summary>
-    private void CloseSolutionDocuments() => Layout.CloseDocuments([.. Editors.Where(e => !e.Model.IsModified)]);
 
     // ------------------------------------------------------------------ split views
 

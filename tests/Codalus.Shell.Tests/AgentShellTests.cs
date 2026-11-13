@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
+using Codalus.Shell.Infrastructure;
 using Codalus.Tests;
 using Codalus.Workbench.Ai;
+using Codalus.Workbench.Ai.Ide;
 using Codalus.Workbench.Ai.Mcp;
 using Codalus.Workbench.Settings;
 
@@ -81,8 +83,87 @@ public sealed class AgentShellTests
 
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.McpServerSetting, true, SettingScope.User, CancellationToken.None);
         await ShellFixture.PumpUntil(() => f.Shell.IsMcpServerListening);
-        Assert.Equal("No solution is open.", await client.CallAsync("get_solution", empty.RootElement, CancellationToken.None));
+
+        // The first call asks once (M60): Allow, for this window.
+        var first = client.CallAsync("get_solution", empty.RootElement, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 60);
+        Assert.Equal("Allow an agent outside the IDE?", f.Shell.Dialogs.Title);
+        Assert.Equal("Don't Allow", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Allow").Command.Execute(null);
+        Assert.Equal("No solution is open.", await first);
         Assert.Equal("No errors or warnings.", await client.CallAsync("get_diagnostics", empty.RootElement, CancellationToken.None));
         Assert.Contains("IDE tool (codalus mcp): get_diagnostics", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
+    public async Task An_agent_outside_the_ide_is_asked_about_once_per_folder_and_refused_without_an_answer()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("BuildAndRun");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.McpServerSetting, true, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.IsMcpServerListening);
+        var pipe = McpBridge.PipeName(SingleInstance.PipeName(f.Shell.Paths.State));
+        using var empty = JsonDocument.Parse("{}");
+        Task<IdeToolResult> Call() => McpBridge.CallToolAsync(pipe, "get_diagnostics", empty.RootElement, null, CancellationToken.None);
+
+        // Listing the tools never asks.
+        Assert.NotEmpty(await McpBridge.ListToolsAsync(pipe, null, CancellationToken.None));
+        Assert.False(f.Shell.Dialogs.IsOpen);
+
+        // Unanswered: refused, and asked again next time.
+        f.Shell.OutsideAgentQuestionTimeout = TimeSpan.FromMilliseconds(300);
+        var unanswered = await Call();
+        Assert.True(unanswered.IsError);
+        Assert.Contains("didn't allow", unanswered.Text, StringComparison.Ordinal);
+        f.Shell.OutsideAgentQuestionTimeout = TimeSpan.FromMinutes(2);
+
+        // Don't Allow: refused for this folder without asking again.
+        var denied = Call();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 60);
+        Assert.Contains(folder, f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        f.Shell.Dialogs.Accept(); // the default: Don't Allow
+        Assert.True((await denied).IsError);
+        Assert.True((await Call()).IsError);
+        Assert.False(f.Shell.Dialogs.IsOpen);
+        Assert.Contains("get_diagnostics → not allowed in this folder", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+        Assert.False(f.Shell.OutsideAgentFolders.IsTrusted(folder));
+    }
+
+    [AvaloniaFact]
+    public async Task Always_for_this_folder_is_remembered_in_the_users_state()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = f.CopySample("BuildAndRun");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.McpServerSetting, true, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.IsMcpServerListening);
+        var pipe = McpBridge.PipeName(SingleInstance.PipeName(f.Shell.Paths.State));
+        using var empty = JsonDocument.Parse("{}");
+
+        var call = McpBridge.CallToolAsync(pipe, "get_solution", empty.RootElement, null, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 60);
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Always for This Folder").Command.Execute(null);
+        Assert.False((await call).IsError);
+        Assert.True(f.Shell.OutsideAgentFolders.IsTrusted(folder));
+        Assert.Contains(Path.Combine(f.Shell.Paths.State, "ai-outside-agents-allowed.json"), Directory.GetFiles(f.Shell.Paths.State));
+    }
+
+    [AvaloniaFact]
+    public async Task Set_up_agents_outside_the_ide_copies_a_setup_and_offers_to_turn_the_server_on()
+    {
+        await using var f = ShellFixture.Create();
+        var showing = f.Shell.ShowMcpSetupAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, 30);
+        Assert.Contains(f.Shell.Dialogs.Details, l => l.Text.StartsWith("claude mcp add codalus -- ", StringComparison.Ordinal));
+        Assert.Contains(f.Shell.Dialogs.Details, l => l.Text.Contains("\"mcpServers\"", StringComparison.Ordinal));
+        f.Shell.Dialogs.Buttons.Single(b => b.Label == "Copy for Claude Code").Command.Execute(null);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.Title == "Turn on MCP Server?", 30);
+        f.Shell.Dialogs.Accept();
+        await showing;
+        Assert.StartsWith("claude mcp add codalus -- ", f.Shell.LastMcpSetupCopy, StringComparison.Ordinal);
+        Assert.True(f.Shell.Workbench.Settings.GetBoolean(ShellHost.McpServerSetting, false));
     }
 }

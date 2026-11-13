@@ -244,6 +244,15 @@ public abstract class ShellDocument : Document, IShellTab
     /// <summary>Raised instead of closing when the document has unsaved changes.</summary>
     public event EventHandler? CloseRequested;
 
+    /// <summary>Closing it would ask to save first: it has unsaved changes, and nobody has answered for it yet.</summary>
+    public bool AsksToSave => NeedsSaveOnClose && !_closeConfirmed;
+
+    /// <summary>
+    /// Lets it close without asking (the save-changes dialog answered for it), for a close that comes after: Close All
+    /// closes its documents together, as one change.
+    /// </summary>
+    public void SkipSavePrompt() => _closeConfirmed = true;
+
     /// <summary>Closes without asking again (after the user chose Save or Discard).</summary>
     public void CloseConfirmed()
     {

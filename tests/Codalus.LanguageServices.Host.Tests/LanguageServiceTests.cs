@@ -420,6 +420,19 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public void Formatting_edits_keep_the_documents_line_endings()
+    {
+        // Roslyn's formatter inserts the OS's line break without end_of_line in the .editorconfig: CRLF on Windows put
+        // into LF files (Windows CI, runs 43452171892 and 43458220239). Not reproducible on Linux, so tested directly.
+        var lf = Microsoft.CodeAnalysis.Text.SourceText.From("a\nb\n");
+        var crlf = Microsoft.CodeAnalysis.Text.SourceText.From("a\r\nb\r\n");
+        Assert.Equal("\n    {\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\r\n    {\r\n", lf));
+        Assert.Equal("\r\n    {\r\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\n    {\n", crlf));
+        Assert.Equal(" ", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings(" ", lf));
+        Assert.Equal("\r\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\r\n", Microsoft.CodeAnalysis.Text.SourceText.From("one line")));
+    }
+
+    [Fact]
     public async Task Workspace_symbols_and_metadata_definitions()
     {
         var symbols = await fixture.Client.WorkspaceSymbolsAsync("Circ", Ct);
