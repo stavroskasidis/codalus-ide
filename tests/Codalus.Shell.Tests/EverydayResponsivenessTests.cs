@@ -142,7 +142,7 @@ public class EverydayResponsivenessTests
 
         await Flow("Close All Documents, then opening them again", async () =>
         {
-            f.Shell.CloseAllDocuments(exceptActive: false);
+            await f.Shell.CloseAllDocumentsAsync(exceptActive: false);
             await WaitAsync(100);
             foreach (var file in files)
             {

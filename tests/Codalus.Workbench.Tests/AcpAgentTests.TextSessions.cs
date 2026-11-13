@@ -106,9 +106,33 @@ public sealed partial class AcpAgentTests
         Assert.Empty(_host.Proposed);
         var answers = LogLines().Where(m => m.TryGetProperty("id", out _) && !m.TryGetProperty("method", out _)).ToList();
         Assert.Equal(2, answers.Count(a => a.TryGetProperty("error", out _)));
+        // The probe offers no reject option, so the answer is `cancelled`: the only refusal left.
         Assert.Contains(answers, a => a.TryGetProperty("result", out var result) && result.TryGetProperty("outcome", out var outcome) && outcome.GetProperty("outcome").GetString() == "cancelled");
         Assert.Contains("fs/read_text_file → refused (AI actions ask for text only)", AiLog, StringComparison.Ordinal);
         Assert.Contains("terminal/create → refused (AI actions ask for text only)", AiLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_tool_the_agent_reaches_for_is_rejected_with_its_own_option_and_the_turn_goes_on()
+    {
+        // Claude's adapter, given `cancelled` for its turn's tool, aborts the tool use and ends the turn without text: the
+        // commit message came back empty. Its own reject option is a refusal it carries on from (ADR 0097).
+        await PickAgentForFeaturesAsync("ACP_FAKE_TEXT_TOOL=1;ACP_FAKE_TEXT_REPLY=Add the greeting");
+        var (reply, _) = await _ai.AskAsync("commit message", AiActions.CommitMessagePrompt, "the diff", [], Ct);
+        Assert.Equal("Add the greeting", reply.Text);
+        var answer = LogLines().Single(m => m.TryGetProperty("result", out var result) && result.TryGetProperty("outcome", out _));
+        Assert.Equal(("selected", "reject"), (answer.GetProperty("result").GetProperty("outcome").GetProperty("outcome").GetString(), answer.GetProperty("result").GetProperty("outcome").GetProperty("optionId").GetString()));
+        Assert.Empty(_host.Permissions); // never the user's question
+        Assert.Contains("session/request_permission execute → rejected", AiLog, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_answer_without_text_is_a_failure_that_says_why_not_an_empty_message()
+    {
+        await PickAgentForFeaturesAsync("ACP_FAKE_TEXT_EMPTY=1");
+        var empty = await Assert.ThrowsAsync<AiUnavailableException>(() => _ai.AskAsync("commit message", AiActions.CommitMessagePrompt, "the diff", [], Ct));
+        Assert.Contains("ended its turn without an answer (end_turn)", empty.Message, StringComparison.Ordinal);
+        Assert.Contains("session/prompt → end_turn, 0 characters", AiLog, StringComparison.Ordinal);
     }
 
     [Fact]

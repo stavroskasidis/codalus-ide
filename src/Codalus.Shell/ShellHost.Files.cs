@@ -1,6 +1,5 @@
 using Codalus.Shell.Views;
 using Codalus.Workbench.Localization;
-using Dock.Model.Core;
 
 namespace Codalus.Shell;
 
@@ -30,21 +29,6 @@ public sealed partial class ShellHost
         }
 
         await OpenFileDiffAsync(left, right).ConfigureAwait(true);
-    }
-
-    /// <summary>Window > Close All to the Right: the tabs after the active one in its group.</summary>
-    public void CloseDocumentsToTheRight()
-    {
-        if (Layout.ActiveDocument is not { Owner: IDock { VisibleDockables: { } tabs } } active)
-        {
-            return;
-        }
-
-        var index = tabs.IndexOf(active);
-        foreach (var document in tabs.Skip(index + 1).OfType<Docking.ShellDocument>().ToList())
-        {
-            Layout.CloseDocument(document);
-        }
     }
 
     /// <summary>Opens a file in the hex viewer (read-only).</summary>

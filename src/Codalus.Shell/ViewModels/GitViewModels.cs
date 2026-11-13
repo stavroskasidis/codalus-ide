@@ -1497,6 +1497,18 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     public GitService StashRepository(GitStash stash) => stash.Repository is { } root ? _git.ServiceAt(root) ?? _git : _git;
 
     /// <summary>Amend the last commit: fills in its message (and restores the draft when unchecked).</summary>
+    /// <summary>
+    /// AI is writing the commit message: the message box says so with a bar, and its ✦ button waits. The status bar alone
+    /// didn't show it, and an agent can take a while (ADR 0097).
+    /// </summary>
+    public bool IsWritingMessage
+    {
+        get => _isWritingMessage;
+        set => SetField(ref _isWritingMessage, value);
+    }
+
+    private bool _isWritingMessage;
+
     public bool Amend
     {
         get => _amend;

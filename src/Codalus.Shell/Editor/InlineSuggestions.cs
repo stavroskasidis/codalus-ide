@@ -7,14 +7,16 @@ using AvaloniaEdit;
 using AvaloniaEdit.Document;
 using AvaloniaEdit.Rendering;
 using Codalus.Workbench.Ai;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Editor;
 
 /// <summary>
-/// AI inline suggestions in one editor (M28b, ADR 0062): after typing pauses at the end of a line, the suggestion from
-/// <see cref="AiCompletions"/> shows in gray at the caret (every line of it, the following lines pushed down). Tab accepts
-/// it, Ctrl+Right (Alt+Right on macOS) accepts its next word, Esc or moving away dismisses it, and typing what it shows
-/// keeps the rest. Asking never blocks typing: a newer keystroke cancels the request.
+/// AI inline suggestions in one editor (M28b, ADR 0062): after typing pauses at the end of a line, or anywhere on demand
+/// (Trigger Inline Suggestion, Alt+\), the suggestion from <see cref="AiCompletions"/> shows in gray at the caret (every
+/// line of it, the following lines pushed down). Tab accepts it, Ctrl+Right (Alt+Right on macOS) accepts its next word,
+/// Esc or moving away dismisses it, and typing what it shows keeps the rest. Asking never blocks typing: a newer keystroke
+/// cancels the request. While a request is out, gray dots at the caret say it's thinking (an agent can take seconds).
 /// </summary>
 public sealed class InlineSuggestions : IDisposable
 {
@@ -24,24 +26,34 @@ public sealed class InlineSuggestions : IDisposable
     private readonly Func<bool> _isCompletionOpen;
     private readonly Func<IBrush> _brush;
     private readonly DispatcherTimer _timer = new();
+    private readonly DispatcherTimer _thinking = new() { Interval = TimeSpan.FromMilliseconds(350) };
+    private readonly Action<string>? _message;
     private readonly GhostGenerator _generator;
+    private DateTime _thinkingFrom;
+    private int _dots;
     private CancellationTokenSource? _cts;
     private bool _typed;
     private bool _applying;
 
-    public InlineSuggestions(TextEditor editor, Func<CodeDocument> model, Func<AiCompletions?> completions, Func<bool> isCompletionOpen, Func<IBrush> brush)
+    /// <summary>How long an automatic request waits before the dots show: a provider's usually answers first, without a flicker.</summary>
+    public static TimeSpan ThinkingDelay { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <param name="message">Shows a short message (the status bar): an on-demand request that found nothing says so.</param>
+    public InlineSuggestions(TextEditor editor, Func<CodeDocument> model, Func<AiCompletions?> completions, Func<bool> isCompletionOpen, Func<IBrush> brush, Action<string>? message = null)
     {
         _editor = editor;
         _model = model;
         _completions = completions;
         _isCompletionOpen = isCompletionOpen;
         _brush = brush;
+        _message = message;
         _generator = new GhostGenerator(this);
         _timer.Tick += (_, _) =>
         {
             _timer.Stop();
             _ = RequestAsync();
         };
+        _thinking.Tick += (_, _) => OnThinkingTick();
         editor.TextArea.TextView.ElementGenerators.Add(_generator);
         editor.TextArea.TextEntered += OnTextEntered;
         editor.Document.Changed += OnDocumentChanged;
@@ -55,6 +67,11 @@ public sealed class InlineSuggestions : IDisposable
     public string? Text { get; private set; }
 
     public bool IsVisible => Text is not null;
+
+    /// <summary>The offset the thinking dots are at while a request is out, or -1 (none, or not shown yet).</summary>
+    public int ThinkingOffset { get; private set; } = -1;
+
+    public bool IsThinking => ThinkingOffset >= 0;
 
     /// <summary>Raised when a suggestion shows or goes (tests).</summary>
     public event EventHandler? Changed;
@@ -102,6 +119,12 @@ public sealed class InlineSuggestions : IDisposable
         if (Text is not null && _editor.CaretOffset != Offset)
         {
             Dismiss();
+        }
+
+        // Moving away from a request that is out: its answer would be for a place the caret left, so it stops, dots too.
+        if (_pendingThinking >= 0 && _editor.CaretOffset != _pendingThinking)
+        {
+            Cancel();
         }
 
         if (!_typed)
@@ -225,33 +248,54 @@ public sealed class InlineSuggestions : IDisposable
     private void Cancel()
     {
         _timer.Stop();
+        StopThinking();
         _cts?.Cancel();
         _cts?.Dispose();
         _cts = null;
     }
 
-    /// <summary>Asks for a suggestion when the caret is at the end of a line (or before closing characters) without a selection.</summary>
-    internal async Task RequestAsync()
+    /// <summary>
+    /// Asks for a suggestion at the caret now (Trigger Inline Suggestion): anywhere in a line, and with automatic
+    /// suggestions off too, as long as AI can answer. The dots show at once; finding nothing says so.
+    /// </summary>
+    public Task TriggerAsync() => RequestAsync(onDemand: true);
+
+    /// <summary>
+    /// Asks for a suggestion: after typing pauses, when the caret is at the end of a line (or before closing characters)
+    /// without a selection; on demand, wherever the caret is.
+    /// </summary>
+    internal async Task RequestAsync(bool onDemand = false)
     {
-        if (_completions() is not { IsEnabled: true } completions || _editor.TextArea.Selection.Length > 0 || _isCompletionOpen() || _editor.IsReadOnly)
+        if (_completions() is not { } completions || !(onDemand ? completions.CanCompleteOnDemand : completions.IsEnabled)
+            || _editor.TextArea.Selection.Length > 0 || _isCompletionOpen() || _editor.IsReadOnly)
         {
+            if (onDemand && _completions() is { CanCompleteOnDemand: false })
+            {
+                _message?.Invoke(Localizer.Get("msg.editor.inlineSuggestionNoAi", "Inline suggestions need AI assistance: turn it on and choose a provider, or connect an agent (Tools → AI)."));
+            }
+
             return;
         }
 
         var document = _editor.Document;
         var caret = _editor.CaretOffset;
         var line = document.GetLineByOffset(caret);
-        var rest = document.GetText(caret, line.EndOffset - caret);
-        if (rest.Any(c => !char.IsWhiteSpace(c) && c is not (')' or ']' or '}' or ';' or ',' or '"' or '\'' or '>')))
+        if (!onDemand)
         {
-            return;
+            var rest = document.GetText(caret, line.EndOffset - caret);
+            if (rest.Any(c => !char.IsWhiteSpace(c) && c is not (')' or ']' or '}' or ';' or ',' or '"' or '\'' or '>')))
+            {
+                return;
+            }
+
+            if (document.GetText(line.Offset, caret - line.Offset).Trim().Length == 0 && line.LineNumber > 1 && document.GetLineByNumber(line.LineNumber - 1).Length == 0)
+            {
+                // An empty line after an empty line: nothing to go on.
+                return;
+            }
         }
 
-        if (document.GetText(line.Offset, caret - line.Offset).Trim().Length == 0 && line.LineNumber > 1 && document.GetLineByNumber(line.LineNumber - 1).Length == 0)
-        {
-            // An empty line after an empty line: nothing to go on.
-            return;
-        }
+        Dismiss();
 
         Cancel();
         var cts = new CancellationTokenSource();
@@ -259,27 +303,92 @@ public sealed class InlineSuggestions : IDisposable
         var version = document.Version;
         var model = _model();
         var request = new AiCompletionRequest(model.Path, model.LanguageId, document.GetText(0, caret), document.GetText(caret, document.TextLength - caret));
+        StartThinking(caret, onDemand ? TimeSpan.Zero : ThinkingDelay);
         string? suggestion;
         try
         {
-            suggestion = await completions.CompleteAsync(request, cts.Token).ConfigureAwait(true);
+            suggestion = await completions.CompleteAsync(request, cts.Token, onDemand).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             return;
         }
-
-        if (suggestion is null || cts.IsCancellationRequested || !Equals(document.Version, version) || _editor.CaretOffset != caret)
+        finally
         {
+            if (_cts == cts)
+            {
+                StopThinking();
+            }
+        }
+
+        if (cts.IsCancellationRequested || !Equals(document.Version, version) || _editor.CaretOffset != caret)
+        {
+            return;
+        }
+
+        if (suggestion is null)
+        {
+            if (onDemand)
+            {
+                _message?.Invoke(Localizer.Get("msg.editor.noInlineSuggestion", "No suggestion here (the AI Output channel says why when a request failed)."));
+            }
+
             return;
         }
 
         Show(caret, suggestion);
     }
 
+    /// <summary>Shows the thinking dots at <paramref name="offset"/> after <paramref name="after"/>, animated until the request ends.</summary>
+    private void StartThinking(int offset, TimeSpan after)
+    {
+        StopThinking();
+        ThinkingOffset = -1;
+        _thinkingFrom = DateTime.UtcNow + after;
+        _pendingThinking = offset;
+        _dots = 0;
+        if (after <= TimeSpan.Zero)
+        {
+            OnThinkingTick();
+        }
+
+        _thinking.Start();
+    }
+
+    private int _pendingThinking = -1;
+
+    private void OnThinkingTick()
+    {
+        if (_pendingThinking < 0 || DateTime.UtcNow < _thinkingFrom)
+        {
+            return;
+        }
+
+        ThinkingOffset = _pendingThinking;
+        _dots = (_dots % 3) + 1;
+        Redraw();
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void StopThinking()
+    {
+        _thinking.Stop();
+        _pendingThinking = -1;
+        if (ThinkingOffset >= 0)
+        {
+            ThinkingOffset = -1;
+            Redraw();
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>The thinking dots as they are now (one to three), or null.</summary>
+    internal string? ThinkingText => ThinkingOffset >= 0 ? new string('·', Math.Max(1, _dots)) : null;
+
     public void Dispose()
     {
         Cancel();
+        _thinking.Stop();
         _editor.TextArea.TextView.ElementGenerators.Remove(_generator);
         _editor.TextArea.TextEntered -= OnTextEntered;
         _editor.Document.Changed -= OnDocumentChanged;
@@ -289,15 +398,20 @@ public sealed class InlineSuggestions : IDisposable
     /// <summary>Puts the ghost text at the suggestion's offset.</summary>
     private sealed class GhostGenerator(InlineSuggestions owner) : VisualLineElementGenerator
     {
+        /// <summary>Where the ghost goes: the suggestion's offset, or the thinking dots' while there is no suggestion.</summary>
+        private (int Offset, string? Text) Ghost => owner.Text is { } text ? (owner.Offset, text) : (owner.ThinkingOffset, owner.ThinkingText);
+
         public override int GetFirstInterestedOffset(int startOffset)
         {
             var line = CurrentContext.VisualLine.LastDocumentLine;
-            return owner.Text is not null && owner.Offset >= startOffset && owner.Offset <= line.EndOffset ? owner.Offset : -1;
+            var (at, text) = Ghost;
+            return text is not null && at >= startOffset && at <= line.EndOffset ? at : -1;
         }
 
         public override VisualLineElement? ConstructElement(int offset)
         {
-            if (owner.Text is not { } text || offset != owner.Offset)
+            var (at, text) = Ghost;
+            if (text is null || offset != at)
             {
                 return null;
             }

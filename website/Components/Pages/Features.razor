@@ -75,7 +75,8 @@
                     <li>Semantic highlighting, and IntelliSense like a classic IDE's: a completion list with an icon per kind, filters (Alt+C classes, Alt+M methods…, Alt+J target type matches), commit characters (Con then . gives Console.), the expected type preselected, and a description beside the selection; parameter info above the line with overloads and the active parameter in bold; Quick Info with fixes for the errors under the pointer. Signatures in your editor's colors, generics as you use them</li>
                     <li>Live diagnostics and an Error List, grouped by project, file, severity or code, with background analysis of open documents, the current project or the solution; filtering and grouping 100,000 diagnostics doesn't make you wait</li>
                     <li>Rename, code fixes and refactorings, all with previews</li>
-                    <li>Snippets, Code Cleanup, format on save and local history</li>
+                    <li>Brackets that close themselves, Enter between braces that opens an indented line with the C# brace where your .editorconfig puts it, snippets, Code Cleanup, format on save and local history</li>
+                    <li>Closing tabs, the solution or the IDE with unsaved files asks once, in a dialog that lists them under their solution and project, with a check box for each file to save</li>
                     <li>Pasted code brings its usings along; editor settings per language, and an EditorConfig settings page</li>
                     <li>CodeLens with references, Git history and test status, its rows in place from the moment a C# file opens, so the code doesn't jump</li>
                 </ul>
@@ -161,7 +162,7 @@
                     <li>A folder's menu in Git Changes, as in the classic IDE: stage, discard, stash, ignore, history, reveal, terminal, copy path</li>
                     <li>A history graph in the classic IDE's columns, filtered by message, author or commit ID, with incoming and outgoing commits, each commit's details in a tab of its own (its diff, Revert, Reset, Explain with AI), and any two commits, or a commit and its parent, compared file by file</li>
                     <li>Interactive rebase</li>
-                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions scrolling with it</li>
+                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions lined up with it row by row</li>
                     <li>Stash, tags, remotes, worktrees and Git LFS</li>
                     <li>Pull requests, with review comments in the editor</li>
                     <li>GitHub, Azure DevOps and GitLab, and their own servers: Azure DevOps Server found from the remote, signed in to with your Windows account</li>
@@ -212,7 +213,7 @@
                     <li>AI Chat that stays out of the way: each answer's steps fold into one line (or show in full, one click away), thinking is a short line, and questions you type while an answer runs wait in a queue</li>
                     <li>Context by @@-mention: <code>@@selection</code>, <code>@@errors</code>, <code>@@build</code>, any file of the workspace, and pasted screenshots for agents that take images, shown with each question</li>
                     <li>Answers in rendered Markdown, with code blocks in your editor's colors that wrap to the pane and fold when long</li>
-                    <li>Inline suggestions and next edit suggestions, each with its own switch</li>
+                    <li>Inline suggestions and next edit suggestions, each with its own switch, and a suggestion on demand at the caret (Alt+\) with dots while it thinks</li>
                     <li>Commit messages, pull request descriptions, Ask AI on an exception, a value at a stop or a failing test, Fix with AI and Explain with AI in quick actions and the Error List, tests for the selection, and profile summaries</li>
                     <li>The assistant is always an agent: it reads, searches, builds, tests and edits, each step shown in the chat, every change in a preview and every command after you allow it; without a trusted folder or a model that takes tools, it answers without them and says so</li>
                     <li>The IDE's tools for every agent: find symbols, references, implementations and callers through the compiler instead of grep, build, run and read tests, start the program, debug it with breakpoints, variables and steps, and drive a web app's page (under the debugger, the very page being debugged, so its breakpoints stop); every step waits for the app and says where it stands, agents check their own changes, and actions run in trusted folders or ask, as you choose</li>
@@ -442,7 +443,7 @@
             "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, the mode, and the editor's font size on a sample of code",
             "The first start sets it up your way: a theme family and its mode, previewed as you click, the editor's font size, then the keyboard scheme, your settings from elsewhere and a tools check."),
         new("setup-ai", "Your AI experience", "setup-ai.png",
-            "The first-run setup's AI step: No AI, A coding agent and The built-in assistant as three cards with the same four facts each, a coding agent chosen with Claude, and the reasons to run an agent from Codalus IDE",
-            "Choose your AI at the first start, or none: three ways compared by who answers, what they do, what leaves your machine and what they need. An agent run from the IDE gets its tools: the compiler, builds, tests and the debugger."),
+            "The first-run setup's AI step: No AI, A coding agent and The built-in assistant as three cards with the same four facts each, a coding agent chosen with Claude, the reasons to run an agent from Codalus IDE, and a note that the agent also answers the IDE's AI actions and suggestions as you type",
+            "Choose your AI at the first start, or none: three ways compared by who answers, what they do, what leaves your machine and what they need. An agent run from the IDE gets its tools: the compiler, builds, tests and the debugger, and answers the IDE's AI features too."),
     ];
 }

@@ -400,6 +400,26 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Enter_between_an_empty_blocks_braces_moves_the_opening_one_as_the_editorconfig_says()
+    {
+        var path = fixture.File("src", "App", "Braces.cs");
+        var source = "internal static class Braces\n{\n    public static int One() {\n        \n    }\n\n    public static int Two() { return 2;\n        \n    }\n}\n";
+        await File.WriteAllTextAsync(path, source, Ct);
+        await fixture.OpenAsync(path);
+        var options = new FormattingOptions(4, true);
+
+        // The caret on the line between the braces: the opening one goes on a line of its own; nothing else changes.
+        var edits = await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "One() {\n        ", "One() {\n        ".Length), "\n", options, Ct);
+        Assert.Contains("    public static int One()\n    {\n        \n    }\n", Apply(source, edits), StringComparison.Ordinal);
+        Assert.All(edits, e => Assert.True(e.Range.End.Line == 2, $"{e.Range} changes more than the brace's line"));
+
+        // Not an empty block, or not between braces: nothing.
+        Assert.Empty(await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "return 2;\n        ", "return 2;\n        ".Length), "\n", options, Ct));
+        Assert.Empty(await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "\n\n    public static int Two", 1), "\n", options, Ct));
+        await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
     public async Task Workspace_symbols_and_metadata_definitions()
     {
         var symbols = await fixture.Client.WorkspaceSymbolsAsync("Circ", Ct);

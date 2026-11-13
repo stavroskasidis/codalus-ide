@@ -59,7 +59,11 @@ With **Inline Suggestions** on (`ai.completions.enabled`, in **Tools > Options >
 - `Ctrl+Right` (`Alt+Right` on macOS) accepts its next word.
 - `Esc` dismisses it, and so does moving the caret. Typing what it shows keeps the rest.
 
-It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400, or 1,000 with an external agent unless you set it) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request. With an external agent picked in AI Chat, the agent suggests: see [The AI features with an external agent](#the-ai-features-with-an-external-agent).
+It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400, or 1,000 with an external agent unless you set it) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request.
+
+**On demand.** **Trigger Inline Suggestion** (`Alt+\`, `⌥\` on macOS) asks for a suggestion at the caret now: anywhere in a line, and with Inline Suggestions off too, whenever AI can answer (a provider, or the agent picked in AI Chat). When nothing comes back, the status bar says so.
+
+**While it thinks**, gray dots (`·`, `··`, `···`) pulse at the caret: at once for **Trigger Inline Suggestion**, and after 300 ms for a suggestion asked for while typing, so a fast provider's answer doesn't flicker them. An agent's turn takes seconds. Typing or moving the caret stops the request, and the dots with it. With an external agent picked in AI Chat, the agent suggests: see [The AI features with an external agent](#the-ai-features-with-an-external-agent).
 
 ## Next edit suggestions
 
@@ -68,7 +72,7 @@ With **Next Edit Suggestions** on (`ai.nextEdit.enabled`), the IDE predicts your
 ## AI actions
 
 Where AI can help with something the IDE already shows, there's an action for it. Each one runs only when you choose it, and shows only while AI assistance is on.
-- **Git Changes: ✦** next to the message box writes the commit message for the staged changes, in the style of the repository's recent subjects. Staged files that are never sent are named, not shown.
+- **Git Changes: ✦** next to the message box writes the commit message for what **Commit** will commit, in the style of the repository's recent subjects: the staged changes, or, when nothing is staged, all the changes, new files included, as **Commit All** commits them. Files that are never sent are named, not shown. While it writes, the bottom of the message box says **Writing with AI…** with a moving bar, and ✦ waits until it's done; an answer with no message, or no changes to describe, says so in a notification.
 - **Create Pull Request: Write with AI** writes the title and description from the branch's commits and diff.
 - **The exception helper: Ask AI.** When the debugger stops on an exception, Ask AI asks AI Chat why it was thrown, with the exception, its stack, the call stack and the code around the current statement.
 - **Test Explorer: Ask AI Why It Fails** (on a failed test's context menu, or **Tools > AI**) asks AI Chat with the test's message, expected and actual values, stack, output and test file.

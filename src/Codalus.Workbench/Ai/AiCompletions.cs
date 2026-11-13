@@ -70,10 +70,19 @@ public sealed class AiCompletions(AiService ai, SettingsService settings)
     public static string? ModelOverride(AiService ai, SettingsService settings) =>
         ai.ExternalAgent is null && settings.GetString(ModelSetting) is { Length: > 0 } model ? model : null;
 
-    /// <summary>The suggestion at the caret, or null (none, an excluded file, AI off, a failure).</summary>
-    public async Task<string?> CompleteAsync(AiCompletionRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// A suggestion may be asked for on demand (Trigger Inline Suggestion): AI can answer, with a provider or AI Chat's
+    /// agent. The user asks for it, so it doesn't need <c>ai.completions.enabled</c>, which governs asking while typing.
+    /// </summary>
+    public bool CanCompleteOnDemand => Ai.CanAnswer;
+
+    /// <summary>
+    /// The suggestion at the caret, or null (none, an excluded file, AI off, a failure). <paramref name="onDemand"/>: the
+    /// user asked for it, so <see cref="CanCompleteOnDemand"/> is enough.
+    /// </summary>
+    public async Task<string?> CompleteAsync(AiCompletionRequest request, CancellationToken cancellationToken, bool onDemand = false)
     {
-        if (!IsEnabled || !Ai.IsWorkspaceTrusted || await Ai.Exclusions.IsExcludedAsync(request.Path, Ai.WorkspaceRoot, cancellationToken).ConfigureAwait(false))
+        if (!(onDemand ? CanCompleteOnDemand : IsEnabled) || !Ai.IsWorkspaceTrusted || await Ai.Exclusions.IsExcludedAsync(request.Path, Ai.WorkspaceRoot, cancellationToken).ConfigureAwait(false))
         {
             return null;
         }
