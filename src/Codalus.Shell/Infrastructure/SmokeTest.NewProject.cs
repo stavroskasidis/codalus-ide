@@ -109,7 +109,7 @@ internal sealed partial class SmokeTest
             shell.NewProjectModel?.Cancel();
             if (shell.Solutions.IsOpen)
             {
-                await shell.CloseSolutionAsync().ConfigureAwait(true);
+                await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
             }
         }
     }

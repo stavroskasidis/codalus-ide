@@ -58,6 +58,11 @@
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Grid.Rule}" />
       <Setter Property="BorderThickness" Value="0,0,0,1" />
     </Style>
+    <!-- A checklist row's label: code (members, parameters) in the editor's font; names (files, projects) in the UI's. -->
+    <Style Selector="TextBlock.choice.code">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" />
+      <Setter Property="FontSize" Value="12" />
+    </Style>
     <Style Selector="TextBlock.message.label">
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
@@ -98,7 +103,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <WrapPanel VerticalAlignment="Center" IsVisible="{Binding HasChoices}" TextElement.FontSize="{DynamicResource Shell.FontSize.Small}">
+          <WrapPanel VerticalAlignment="Center" IsVisible="{Binding HasCheckableChoices}" TextElement.FontSize="{DynamicResource Shell.FontSize.Small}">
             <Border Classes="kbd" Margin="0,0,4,0"><TextBlock Text="{l:T dialog.keySpace}" /></Border>
             <TextBlock Classes="muted small" Text="{l:T dialog.hintChecks}" VerticalAlignment="Center" Margin="0,0,8,0" />
             <Border Classes="kbd" Margin="0,0,4,0" IsVisible="{Binding ShowsMoveHint}"><TextBlock Text="{l:T dialog.keyAltUp}" /></Border>
@@ -182,7 +187,7 @@
                   Background="{DynamicResource Shell.Input}" ClipToBounds="True">
             <DockPanel>
               <Border DockPanel.Dock="Top" Background="{DynamicResource Shell.Grid.Header}" BorderBrush="{DynamicResource Shell.Border}" BorderThickness="0,0,0,1"
-                      MinHeight="30" Padding="10,0">
+                      MinHeight="30" Padding="10,0" IsVisible="{Binding HasCheckableChoices}">
                 <DockPanel>
                   <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding CheckedSummary}" VerticalAlignment="Center" />
                   <CheckBox IsThreeState="False" IsChecked="{Binding AllChecked}" Content="{l:T dialog.selectAll}" />
@@ -192,11 +197,13 @@
                        MaxHeight="300" AutomationProperties.Name="{l:T dialog.choices}">
                 <ListBox.ItemTemplate>
                   <DataTemplate x:DataType="vm:DialogChoiceViewModel">
-                    <DockPanel>
-                      <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" AutomationProperties.Name="{Binding Label}" Margin="0,0,8,0" />
+                    <!-- A tree's rows (the save-changes dialog's) are indented by their level; a row that only groups others has no check box. -->
+                    <DockPanel Margin="{Binding Indent}">
+                      <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsChecked}" IsVisible="{Binding Checkable}" AutomationProperties.Name="{Binding Label}" Margin="0,0,8,0" />
                       <controls:Icon DockPanel.Dock="Left" Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="16" Height="16" Margin="0,0,8,0" VerticalAlignment="Center" />
-                      <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" FontFamily="Cascadia Mono, Consolas, Menlo, DejaVu Sans Mono, Noto Sans Mono, Ubuntu Mono, Liberation Mono, Noto Mono, monospace" FontSize="12"
+                      <TextBlock DockPanel.Dock="Right" Classes="muted small" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                 TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Detail}" />
+                      <TextBlock Classes="choice" Classes.code="{Binding IsCode}" Text="{Binding Label}" VerticalAlignment="Center"
                                  TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Label}" />
                     </DockPanel>
                   </DataTemplate>

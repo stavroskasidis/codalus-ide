@@ -197,6 +197,10 @@ internal sealed partial class SmokeTest
             }),
             ("dialog-checklist", checklist),
             ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null, Icon = "rename", Context = "Greeter · Greeter.cs" }),
+            // Exiting with unsaved files (the classic IDE's dialog): two of a project's files under the solution and the project.
+            ("dialog-save-changes", ShellHost.SaveChangesRequest(SaveChangesTree.Rows(shell.Solutions.Solution, [.. shell.Solutions.Projects.Values],
+                [.. shell.Solutions.Projects.Values.SelectMany(p => p.Items).Where(i => i.Path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase)).Take(2)
+                    .Select(i => (Path.GetFileName(i.Path), (string?)i.Path))]))),
             ("dialog-confirm", new DialogRequest("Remove Worktree", "Remove the worktree and its folder? Its uncommitted changes are lost.", ["Remove", "Cancel"]) { IsDanger = true }),
             // Ways to pick one of: Install .NET on a Mac whose terminal runs the .pkg's dotnet.
             ("dialog-alternatives", ShellHost.InstallChoice(sdk, Workbench.Setup.InstallPlans.DotnetOptions(sdk, new Workbench.Setup.DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/you")
@@ -208,6 +212,7 @@ internal sealed partial class SmokeTest
         };
         foreach (var (name, request) in dialogs)
         {
+            _galleryDialog = request;
             var shown = shell.Dialogs.ShowAsync(request);
             await GalleryThemesAsync(async theme =>
             {
@@ -216,6 +221,7 @@ internal sealed partial class SmokeTest
             }).ConfigureAwait(true);
             shell.Dialogs.Cancel();
             await shown.ConfigureAwait(true);
+            _galleryDialog = null;
         }
 
         await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order

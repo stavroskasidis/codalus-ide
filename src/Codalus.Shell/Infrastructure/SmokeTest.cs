@@ -59,11 +59,35 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// <summary>Appended to the screenshots' names: <c>-netcoredbg</c> while a step runs again under netcoredbg, the fallback (M58).</summary>
     private string _screenshotSuffix = string.Empty;
 
+    /// <summary>The dialog the gallery shows for its picture, which <see cref="OnDialogOpened"/> leaves alone.</summary>
+    private DialogRequest? _galleryDialog;
+
     /// <summary>The step running now, as the report names it; null between steps.</summary>
     private string? _runningStep;
 
     /// <summary>Whether the run got to its end (its report and its own exit), so an exit isn't an interruption.</summary>
     private bool _finished;
+
+    /// <summary>
+    /// Answers the save-changes dialog (closing a tab, Close All, the solution, the IDE with unsaved files) with Don't
+    /// Save, and says so: steps open the next sample's solution with files earlier steps edited still open, and the
+    /// dialog waited for an answer until each such step's limit (PR #351's run 43457479791: web.http and blazor.razor,
+    /// 12 minutes each). Don't Save leaves the files on the disk as they were, as closing a solution did before the dialog
+    /// (the unsaved ones stayed open, unasked); a step that wants the dialog itself can still look at it first, as this
+    /// answers it only once the dispatcher is free.
+    /// </summary>
+    private void OnDialogOpened(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+    {
+        if (shell.Dialogs is not { IsOpen: true, Request: { } request } dialogs || request.Title != ShellHost.SaveChangesTitle || ReferenceEquals(request, _galleryDialog)
+            || dialogs.Buttons.FirstOrDefault(b => b.Label == ShellHost.DontSaveButton) is not { } dontSave)
+        {
+            return;
+        }
+
+        var files = request.Choices?.Where(c => c.Id.StartsWith("file:", StringComparison.Ordinal)).Select(c => c.Label) ?? [];
+        Console.Out.WriteLine($"  [smoke] {request.Title} {string.Join(", ", files)}: Don't Save");
+        dontSave.Command.Execute(null);
+    }, DispatcherPriority.Background);
 
     public async Task RunAsync()
     {
@@ -85,6 +109,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Environment.Exit(2);
         }, s_watchdog);
 
+        shell.Dialogs.Opened += OnDialogOpened;
         var exitCode = 1;
         try
         {
@@ -128,7 +153,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             shell.StopRunning();
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -1353,7 +1378,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         if (shell.Solutions.IsOpen)
         {
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
 
         var folder = Path.Combine(Work, "RemoteBuildAndRun");
