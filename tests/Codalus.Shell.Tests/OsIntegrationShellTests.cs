@@ -73,16 +73,21 @@ public sealed class OsIntegrationShellTests
         await using var f = ShellFixture.Create(firstRun: true);
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         var model = f.Shell.SetupModel!;
-        await model.NextAsync();
-        await model.NextAsync();
-        await model.NextAsync();
+        while (!model.IsTools)
+        {
+            await model.NextAsync(); // the welcome page, then Appearance, Keyboard and Your settings
+        }
+
         Assert.Equal(SetupStep.Tools, model.Current);
         Assert.Equal([OsIntegrationFeature.Folders, OsIntegrationFeature.FileTypes], model.Integrations.Select(c => c.Feature));
         Assert.All(model.Integrations, c => Assert.False(c.IsChecked));
         Assert.All(model.Integrations, c => Assert.True(c.IsAvailable));
 
-        // Checked, then Done: that one is registered, the other isn't.
+        // Checked, then on to the AI step (leaving Tools registers it), the summary and Done: that one is registered, the other isn't.
         model.Integrations[1].IsChecked = true;
+        await model.NextAsync();
+        Assert.Equal(OsIntegrationState.Registered, f.Shell.OsIntegration.GetStatus(OsIntegrationFeature.FileTypes).State);
+        await model.NextAsync();
         await model.NextAsync();
         Assert.True(model.WasDone);
         Assert.Equal(OsIntegrationState.Registered, f.Shell.OsIntegration.GetStatus(OsIntegrationFeature.FileTypes).State);

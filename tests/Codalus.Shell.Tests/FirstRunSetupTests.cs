@@ -12,14 +12,21 @@ using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Codalus.Shell.Theming;
 using Codalus.Shell.ViewModels;
+using Codalus.Tests;
+using Codalus.Workbench.Ai;
+using Codalus.Workbench.Ai.Acp;
+using Codalus.Workbench.Settings;
 using Codalus.Workbench.Setup;
 
 namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// The first-run setup (M46): it shows once for a new user data folder, before the start window, and not for automation,
-/// a command line that opens something, a synced profile or a folder used before; each step writes its setting; the
-/// window and the IDE repaint live in the chosen theme; Skip keeps the defaults; Done opens the start window.
+/// a command line that opens something, a synced profile or a folder used before; a first start opens on the welcome
+/// page, whose "coming from" preselects the keys and marks an importer; each step writes its setting; the
+/// window and the IDE repaint live in the chosen theme; Skip keeps the defaults; the summary's Done opens the start
+/// window. The AI step (ADR 0096) changes nothing until the setup is done: then Connect, or the provider's prompts, open
+/// in the main window, and the start window waits for them.
 /// </summary>
 public sealed class FirstRunSetupTests
 {
@@ -99,15 +106,31 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         Assert.False(f.Shell.IsStartWindowOpen); // the setup comes first
 
-        // The defaults (D36): Classic, the first card, following the system; the default keys.
+        // A first start opens on the welcome page: Get Started, or Use the defaults; nothing to go back to.
         var model = f.Shell.SetupModel!;
+        Assert.Equal(SetupPage.Welcome, model.Page);
+        Assert.True(model.IsWelcome);
+        Assert.Equal("Get Started", model.NextTitle);
+        Assert.Equal("Use the defaults", model.SkipTitle);
+        Assert.False(model.CanGoBack);
+        Assert.Equal(["The classic IDE", "VS Code", "Rider or ReSharper", "Somewhere else"], model.Origins.Select(o => o.Title));
+        Assert.Null(model.SelectedOrigin);
+        Assert.All(model.Steps, s => Assert.False(s.IsCurrent));
+        Assert.Equal(["Appearance", "Keyboard", "Your settings", "Tools", "AI"], model.Steps.Select(s => s.Title));
+        Assert.Equal("Step 5 of 5: AI", model.Steps[4].AccessibleName);
+        await model.NextAsync();
+
+        // The defaults (D36): Classic, the first card, following the system; the default keys.
+        Assert.Equal(SetupPage.Steps, model.Page);
+        Assert.Equal("Skip setup", model.SkipTitle);
         Assert.Equal(SetupStep.Appearance, model.Current);
         Assert.Equal(["classic", "harbor", "graphite", "daylight", "ember"], model.Families.Select(c => c.Id));
         Assert.Equal("classic", model.SelectedFamily);
         Assert.True(model.IsMatchSystem);
         Assert.Equal(["Light", "Dark", "High contrast", "Match system"], model.Modes.Select(m => m.Title));
         Assert.Equal("Next: Keyboard", model.NextTitle);
-        Assert.False(model.CanGoBack);
+        Assert.True(model.CanGoBack); // to the welcome page
+        Assert.Equal(13, model.FontSize);
 
         // A family previews (the IDE and the window repaint) without saving.
         model.Families.Single(c => c.Id == "ember").SelectCommand.Execute(null);
@@ -121,6 +144,8 @@ public sealed class FirstRunSetupTests
         Assert.False(model.WasDone);
         Assert.Equal("classic", f.Shell.Theme.ActiveFamily);
         Assert.Null(f.Shell.Workbench.Settings.GetLayerValue(ThemeService.SettingKey, Workbench.Settings.SettingScope.User));
+        Assert.Null(f.Shell.Workbench.Settings.GetLayerValue(AiService.EnabledSetting, Workbench.Settings.SettingScope.User));
+        Assert.False(f.Shell.ConnectAgent.IsOpen);
         Assert.Contains("\"workbench.setupCompleted\": true", await File.ReadAllTextAsync(f.Shell.Paths.SettingsFile, TestContext.Current.CancellationToken), StringComparison.Ordinal);
 
         // Once: the next start of this folder doesn't show it.
@@ -138,15 +163,34 @@ public sealed class FirstRunSetupTests
         var settings = f.Shell.Workbench.Settings;
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         var model = f.Shell.SetupModel!;
+        Snapshot(f, "first-run-setup-welcome");
+        await model.NextAsync();
         Snapshot(f, "first-run-setup-appearance");
 
-        // Appearance: Graphite, Dark; Next saves it.
+        // Appearance: Graphite, Dark, and the editor's font three sizes up, on the sample; Next saves both.
         model.Families.Single(c => c.Id == "graphite").SelectCommand.Execute(null);
         model.Modes.Single(m => m.Id == "dark").SelectCommand.Execute(null);
         Assert.Equal("graphite.dark", model.ThemeSetting);
         await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == "graphite.dark");
+        Assert.Equal(7, model.CodeSample.Count);
+        for (var i = 0; i < 3; i++)
+        {
+            model.IncreaseFontSizeCommand.Execute(null);
+        }
+
+        Assert.Equal(16, model.FontSize);
+        Assert.Equal("16 px", model.FontSizeText);
+        Assert.Null(settings.GetLayerValue("editor.fontSize", SettingScope.User)); // shown on the sample, not saved yet
+        ShellFixture.Pump();
+        var sample = f.Shell.SetupWindowView!.FindControl<ItemsControl>("CodeSample")!;
+        Assert.All(sample.GetVisualDescendants().OfType<TextBlock>(), t => Assert.Equal(16, t.FontSize));
+        model.FontSize = 500; // the setup offers 8 to 32
+        Assert.Equal(SetupViewModel.MaxFontSize, model.FontSize);
+        Assert.False(model.IncreaseFontSizeCommand.CanExecute(null));
+        model.FontSize = 16;
         await model.NextAsync();
         Assert.Equal("graphite.dark", settings.GetString(ThemeService.SettingKey));
+        Assert.Equal(16, settings.GetInt32("editor.fontSize"));
         Assert.Equal(SetupStep.Keyboard, model.Current);
         Assert.True(model.CanGoBack);
 
@@ -203,7 +247,7 @@ public sealed class FirstRunSetupTests
 
         // Tools: M37's check, the .NET SDK and git (this machine builds the repository, so both are found).
         Assert.Equal(SetupStep.Tools, model.Current);
-        Assert.Equal("Done", model.NextTitle);
+        Assert.Equal("Next: AI", model.NextTitle);
         Assert.True(model.VisitedTools);
         await ShellFixture.PumpUntil(() => model.Tools.Count == 2, seconds: 60);
         Assert.All(model.Tools, t => Assert.Equal(ToolState.Found, t.Tool.State));
@@ -275,11 +319,44 @@ public sealed class FirstRunSetupTests
         Assert.False(row.IsConfirming);
         Assert.Empty(runs);
 
-        // Done: recorded, and the start window opens with everything applied.
+        // AI: no AI unless chosen. The summary says what was set, with a few of the chosen scheme's keys.
+        model.ShowTools([sdk, git]);
+        await model.NextAsync();
+        Assert.Equal(SetupStep.Ai, model.Current);
+        Assert.Equal("Next: Summary", model.NextTitle);
+        Assert.Equal(SetupAiPath.None, model.AiPath);
+        Assert.False(model.AiChanged);
+        Snapshot(f, "first-run-setup-ai");
+        await model.NextAsync();
+        Assert.Equal(SetupPage.Finish, model.Page);
+        Assert.All(model.Steps, s => Assert.False(s.IsCurrent));
+        Assert.Equal("Done", model.NextTitle);
+        Assert.False(model.CanSkip);
+        Assert.True(model.CanGoBack);
+        Assert.False(model.HasAiNext);
+        Assert.Equal(["Theme", "Keys", "Editor font size", "Tools", "AI"], model.Summary.Select(r => r.Label));
+        Assert.Equal("Graphite, Dark", model.Summary[0].Value);
+        Assert.Equal("VS Code", model.Summary[1].Value);
+        Assert.Equal("15 px", model.Summary[2].Value); // the imported export's
+        Assert.Equal("Off", model.Summary[4].Value);
+        Assert.Equal("Good to know (VS Code keys)", model.ShortcutsTitle);
+        Assert.Contains(model.Shortcuts, k => k.Title == "Start debugging" && k.Keys == "F5");
+        Assert.Contains(model.Shortcuts, k => k.Title == "Run any command");
+        Snapshot(f, "first-run-setup-summary");
+
+        // Back from the summary is the AI step; Next comes back.
+        await model.BackAsync();
+        Assert.Equal(SetupStep.Ai, model.Current);
+        Assert.True(model.IsAi);
+        await model.NextAsync();
+
+        // Done: recorded, and the start window opens with everything applied. AI stays as it was: off.
         await model.NextAsync();
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
         await ShellFixture.PumpUntil(() => f.Shell.IsStartWindowOpen);
         Assert.True(model.WasDone);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+        Assert.False(f.Shell.ConnectAgent.IsOpen);
         Assert.True(settings.GetBoolean(ShellHost.SetupCompletedSetting));
         Assert.Equal("graphite.dark", f.Shell.Theme.ActiveTheme);
         Assert.Equal("vscode", f.Shell.Workbench.Context.GetValue("keyboardScheme"));
@@ -308,6 +385,9 @@ public sealed class FirstRunSetupTests
         var model = f.Shell.SetupModel!;
         var window = f.Shell.SetupWindowView!;
         Assert.False(model.IsFirstStart);
+        Assert.Equal(SetupPage.Steps, model.Page); // no welcome page from Help
+        Assert.True(model.IsAppearance);
+        Assert.False(model.CanGoBack);
         for (var i = 0; i < 4; i++)
         {
             ShellFixture.Pump();
@@ -324,6 +404,17 @@ public sealed class FirstRunSetupTests
         {
             Assert.Equal(Token("Shell.Background", ThemeService.VariantOf(ThemeService.Resolve(card.Id + ".dark", null))), ((ISolidColorBrush)card.Picture.Background).Color);
         }
+
+        // The font sample follows the theme the window is drawn in: Ember Dark's syntax colors, and another theme's when
+        // the window's theme changes without a card being clicked (the system going dark under Match system).
+        Assert.Equal(Brushes(new ThemePicture(ThemeService.EmberDark).Code), Brushes(model.CodeSample));
+        window.RequestedThemeVariant = ThemeService.HighContrast;
+        ShellFixture.Pump();
+        Assert.Equal(Brushes(new ThemePicture(ThemeService.HighContrast).Code), Brushes(model.CodeSample));
+        Assert.NotEqual(Brushes(new ThemePicture(ThemeService.EmberDark).Code), Brushes(model.CodeSample));
+        window.RequestedThemeVariant = null;
+        ShellFixture.Pump();
+        Assert.Equal(Brushes(new ThemePicture(ThemeService.EmberDark).Code), Brushes(model.CodeSample));
 
         // The frame itself: the steps' column in Ember Dark's window color.
         for (var i = 0; i < 4; i++)
@@ -396,6 +487,7 @@ public sealed class FirstRunSetupTests
             """, TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => g.Shell.IsSetupOpen, seconds: 30);
         var model = g.Shell.SetupModel!;
+        await model.NextAsync(); // Get Started
         model.Modes.Single(m => m.Id == "light").SelectCommand.Execute(null);
         await model.NextAsync(); // classic.light saved: settings on both sides, and the synced ones win
         await model.NextAsync();
@@ -474,6 +566,7 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
         var model = f.Shell.SetupModel!;
         var window = f.Shell.SetupWindowView!;
+        await model.NextAsync(); // Get Started
         for (var i = 0; i < 4; i++)
         {
             ShellFixture.Pump();
@@ -582,6 +675,390 @@ public sealed class FirstRunSetupTests
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
     }
 
+
+    // ------------------------------------------------------------------ the welcome page
+
+    [AvaloniaFact]
+    public async Task Where_the_user_comes_from_preselects_the_keys_and_marks_an_importer_and_saves_nothing()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        var window = f.Shell.SetupWindowView!;
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        // The welcome page in the window: the logo, the four origins as cards with names, Get Started focused.
+        var origins = window.FindControl<ItemsControl>("OriginList")!.GetVisualDescendants().OfType<ToggleButton>().ToList();
+        Assert.Equal(["The classic IDE", "VS Code", "Rider or ReSharper", "Somewhere else"], origins.Select(AutomationProperties.GetName));
+        Assert.All(origins, o => Assert.True(o.IsEffectivelyVisible && o.IsChecked == false));
+        Assert.Equal("Get Started", window.FindControl<Button>("NextButton")!.Content);
+        Assert.Equal("Use the defaults", window.FindControl<Button>("SkipButton")!.Content);
+        Assert.True(window.FindControl<Button>("NextButton")!.IsFocused);
+
+        // VS Code: its keys are chosen on the Keyboard step, and its importer is marked on Your settings. Nothing is saved
+        // by saying where you come from.
+        origins[1].Focus();
+        Press(window, Key.Space);
+        Assert.Equal("vscode", model.SelectedOrigin);
+        Press(window, Key.Right, RawInputModifiers.Alt);
+        await ShellFixture.PumpUntil(() => model.IsAppearance);
+        Assert.Null(settings.GetLayerValue(BuiltIns.KeyboardSchemeSetting, SettingScope.User));
+        await model.NextAsync();
+        Assert.Equal("vscode", model.SelectedScheme);
+        Assert.True(model.Schemes.Single(s => s.Id == "vscode").IsSelected);
+        Assert.Null(settings.GetLayerValue(BuiltIns.KeyboardSchemeSetting, SettingScope.User));
+
+        // The step can still choose another: Emacs, saved on Next, and shown again on Back (the origin applies once).
+        model.Schemes.Single(s => s.Id == "emacs").SelectCommand.Execute(null);
+        await model.NextAsync();
+        Assert.Equal("emacs", settings.GetString(BuiltIns.KeyboardSchemeSetting));
+        Assert.True(model.SuggestsVsCode);
+        Assert.False(model.SuggestsVsSettings);
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        Assert.Contains("suggested", window.FindControl<Border>("VsCodeSection")!.Classes);
+        Assert.DoesNotContain("suggested", window.FindControl<Border>("VsSettingsSection")!.Classes);
+        Assert.Equal(1, window.GetVisualDescendants().OfType<TextBlock>().Count(t => t.IsEffectivelyVisible && t.Text == "Suggested for where you come from."));
+        Assert.Null(settings.GetLayerValue("editor.tabSize", SettingScope.User)); // nothing imported by the mark
+        await model.BackAsync();
+        Assert.Equal("emacs", model.SelectedScheme);
+
+        // Back to the welcome page: the classic IDE has the Default keys and the .vssettings importer; Rider, ReSharper's.
+        await model.BackAsync();
+        await model.BackAsync();
+        Assert.Equal(SetupPage.Welcome, model.Page);
+        Assert.True(model.Origins.Single(o => o.Id == "vscode").IsSelected);
+        model.Origins.Single(o => o.Id == "classic").SelectCommand.Execute(null);
+        Assert.True(model.SuggestsVsSettings);
+        await model.NextAsync();
+        await model.NextAsync();
+        Assert.Equal("default", model.SelectedScheme);
+        await model.NextAsync();
+        Assert.Equal("default", settings.GetString(BuiltIns.KeyboardSchemeSetting));
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        Assert.Contains("suggested", window.FindControl<Border>("VsSettingsSection")!.Classes);
+        Assert.True(window.FindControl<Button>("ImportVsSettingsButton")!.IsFocused);
+        await model.BackAsync();
+        await model.BackAsync();
+        await model.BackAsync();
+        model.Origins.Single(o => o.Id == "rider").SelectCommand.Execute(null);
+        Assert.Null(model.SuggestedImport);
+        await model.NextAsync();
+        await model.NextAsync();
+        Assert.Equal("resharper", model.SelectedScheme);
+
+        // Somewhere else preselects nothing: the step shows what is saved.
+        await model.BackAsync(); // saves ReSharper's
+        await model.BackAsync();
+        model.Origins.Single(o => o.Id == "other").SelectCommand.Execute(null);
+        await model.NextAsync();
+        await model.NextAsync();
+        Assert.Equal("resharper", model.SelectedScheme);
+        await model.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+    }
+
+    // ------------------------------------------------------------------ the AI step (ADR 0096)
+
+    [AvaloniaFact]
+    public async Task The_AI_step_compares_the_three_ways_and_an_agent_connects_only_after_the_summary()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        var window = f.Shell.SetupWindowView!;
+        await ToAiAsync(model);
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        // Three ways, No AI chosen, each with the same four facts so they compare.
+        Assert.Equal(["No AI", "A coding agent", "The built-in assistant"], model.AiPaths.Select(p => p.Title));
+        Assert.True(model.AiPaths[0].IsSelected);
+        Assert.Empty(model.AiPaths[0].Facts); // No AI is a line, without "No one" and "Nothing" four times
+        Assert.Contains("nothing is sent", model.AiPaths[0].Description, StringComparison.Ordinal);
+        Assert.All(model.AiPaths.Skip(1), p => Assert.Equal(["Who answers", "What it does", "What leaves this machine", "What you need"], p.Facts.Select(fact => fact.Label)));
+        Assert.All(model.AiPaths, p => Assert.All(p.Facts, fact => Assert.False(string.IsNullOrWhiteSpace(fact.Value))));
+        Assert.Contains("its own provider", model.AiPaths[1].Facts[2].Value, StringComparison.Ordinal);
+        Assert.Contains("never sent", model.AiPaths[2].Facts[2].Value, StringComparison.Ordinal);
+        Assert.All(model.AiPaths, p => Assert.All(p.Facts, fact => Assert.InRange(fact.Value.Length, 1, 80))); // a line or two each, not a paragraph
+        var cards = window.FindControl<ItemsControl>("AiPathList")!.GetVisualDescendants().OfType<ToggleButton>().ToList();
+        Assert.Equal(["No AI", "A coding agent (recommended)", "The built-in assistant"], cards.Select(AutomationProperties.GetName));
+        Assert.True(cards[0].IsChecked);
+
+        // A coding agent is the recommended way, and its card says so; recommended isn't preselected.
+        Assert.Equal([false, true, false], model.AiPaths.Select(p => p.IsRecommended));
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.IsEffectivelyVisible && t.Text == "(recommended)");
+        Assert.Equal(SetupAiPath.None, model.AiPath);
+        Assert.True(cards[0].IsFocused);
+        Assert.Equal(model.AiPaths[0].Description, AutomationProperties.GetHelpText(cards[0]));
+        Assert.All(cards.Skip(1), c => Assert.Contains("Who answers:", AutomationProperties.GetHelpText(c), StringComparison.Ordinal));
+        Assert.False(window.FindControl<StackPanel>("AiAgentPanel")!.IsEffectivelyVisible);
+        Assert.False(window.FindControl<StackPanel>("AiAssistantPanel")!.IsEffectivelyVisible);
+        Snapshot(f, "first-run-setup-ai-none");
+
+        // A coding agent, from the keyboard: the agents, why to run one from the IDE, and its two windows.
+        Press(window, Key.Right);
+        Assert.Equal(SetupAiPath.Agent, model.AiPath);
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        Assert.True(window.FindControl<StackPanel>("AiAgentPanel")!.IsEffectivelyVisible);
+        Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "More agents…"], model.AiAgents.Select(a => a.Title));
+        Assert.Equal(["Anthropic", "OpenAI", "Google", "GitHub", "pi, OpenCode, goose"], model.AiAgents.Select(a => a.Description));
+        Assert.All(model.AiAgents, a => Assert.False(a.IsSelected)); // an agent is chosen, never assumed
+        Assert.Equal(3, model.AgentBenefits.Count); // short lines: the user guide has the rest
+        Assert.Contains("the IDE's tools", model.AgentBenefits[0], StringComparison.Ordinal);
+        Assert.Contains("debugging", model.AgentBenefits[0], StringComparison.Ordinal);
+        Assert.Contains("preview", model.AgentBenefits[1], StringComparison.Ordinal);
+        Assert.Equal(["AI Console", "AI Chat"], model.AgentWindows.Select(w => w.Label));
+        var shown = window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text).ToList();
+        Assert.Contains("Why run it from Codalus IDE", shown);
+        Assert.All(model.AgentBenefits, benefit => Assert.Contains(benefit, shown));
+        Assert.All(model.AgentWindows, w => Assert.Contains(w.Value, shown));
+        Assert.True(model.AiChanged);
+        Assert.Equal(new SetupAiChoice(SetupAiPath.Agent), model.AiChoice);
+        Snapshot(f, "first-run-setup-ai-agent");
+
+        // Claude. Nothing is written or opened by choosing; the summary says what its button does.
+        model.AiAgents.Single(a => a.Id == "claude").SelectCommand.Execute(null);
+        Assert.Equal(new SetupAiChoice(SetupAiPath.Agent, Agent: "claude"), model.AiChoice);
+        await model.NextAsync();
+        Assert.Equal(SetupPage.Finish, model.Page);
+        Assert.Equal("Connect Claude…", model.NextTitle);
+        Assert.Equal("Claude, a coding agent (connects next)", model.Summary.Single(r => r.Label == "AI").Value);
+        Assert.True(model.HasAiNext);
+        Assert.Contains("Connect to Claude opens in the main window", model.AiNext, StringComparison.Ordinal);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+        Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User));
+        Assert.False(f.Shell.ConnectAgent.IsOpen);
+        Snapshot(f, "first-run-setup-summary-agent");
+
+        // Back keeps the choice; More agents… and no agent at all both lead to the list.
+        await model.BackAsync();
+        Assert.True(model.AiAgents.Single(a => a.Id == "claude").IsSelected);
+        model.AiAgents.Single(a => a.Id == SetupAiChoice.More).SelectCommand.Execute(null);
+        await model.NextAsync();
+        Assert.Equal("Choose an Agent…", model.NextTitle);
+        Assert.Equal("A coding agent (you choose it next)", model.Summary.Single(r => r.Label == "AI").Value);
+        await model.BackAsync();
+        model.AiAgents.Single(a => a.Id == "claude").SelectCommand.Execute(null);
+        await model.NextAsync();
+
+        // The summary's button: the setup closes, Connect to Claude opens in the main window, and the start window waits.
+        await model.NextAsync();
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.ConnectAgent.IsOpen);
+        Assert.True(model.WasDone);
+        Assert.Equal("Connect to Claude", f.Shell.ConnectAgent.Title);
+        Assert.False(f.Shell.IsStartWindowOpen);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User)); // Connect's own consent and test come first
+
+        // Cancel in Connect: nothing was turned on or written, and the start window follows.
+        f.Shell.ConnectAgent.Cancel();
+        await ShellFixture.PumpUntil(() => f.Shell.IsStartWindowOpen);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+        Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User));
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task Skipping_or_closing_the_setup_applies_nothing_of_the_AI_step()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        await ToAiAsync(model);
+        model.AiPaths.Single(p => p.Path == SetupAiPath.Agent).SelectCommand.Execute(null);
+        model.AiAgents.Single(a => a.Id == "codex").SelectCommand.Execute(null);
+        Assert.True(model.AiChanged);
+
+        // Esc on the step.
+        Press(f.Shell.SetupWindowView!, Key.Escape);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        Assert.False(model.WasDone);
+        Assert.False(f.Shell.ConnectAgent.IsOpen);
+        Assert.False(f.Shell.Palette.IsOpen);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+
+        // From Help, with the built-in assistant chosen: closing the window on the summary applies nothing either.
+        await f.RunAsync("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        model = f.Shell.SetupModel!;
+        await ToAiAsync(model);
+        Assert.Equal(SetupAiPath.None, model.AiPath);
+        model.AiPaths.Single(p => p.Path == SetupAiPath.Assistant).SelectCommand.Execute(null);
+        model.AiInlineSuggestions = true;
+        await model.NextAsync();
+        Assert.Equal("Choose a Provider…", model.NextTitle);
+        Assert.Equal("The built-in assistant (you choose the provider next)", model.Summary.Single(r => r.Label == "AI").Value);
+        f.Shell.SetupWindowView!.Close();
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
+        ShellFixture.Pump();
+        Assert.False(model.WasDone);
+        Assert.False(f.Shell.Palette.IsOpen);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+        Assert.Null(settings.GetLayerValue(AiCompletions.EnabledSetting, SettingScope.User));
+    }
+
+    [AvaloniaFact]
+    public async Task The_built_in_assistant_turns_on_with_its_provider_and_only_the_suggestions_that_were_ticked()
+    {
+        await using var server = MockModelServers.OpenAI("Hello.");
+        await using var f = ShellFixture.Create(builtInPlugins: ShellFixture.PluginBin("Codalus.Plugins.OpenAI"), firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        var model = f.Shell.SetupModel!;
+        var window = f.Shell.SetupWindowView!;
+        await ToAiAsync(model);
+
+        // The providers the plugins declare, none chosen; the two as-you-type switches, both off.
+        model.AiPaths.Single(p => p.Path == SetupAiPath.Assistant).SelectCommand.Execute(null);
+        for (var i = 0; i < 4; i++)
+        {
+            ShellFixture.Pump();
+        }
+
+        Assert.True(window.FindControl<StackPanel>("AiAssistantPanel")!.IsEffectivelyVisible);
+        Assert.False(window.FindControl<StackPanel>("AiAgentPanel")!.IsEffectivelyVisible);
+        Assert.Equal(["ollama", "openai"], model.AiProviders.Select(p => p.Id).Order());
+        Assert.Equal("On this machine", model.AiProviders.Single(p => p.Id == "ollama").Description);
+        Assert.All(model.AiProviders, p => Assert.False(p.IsSelected));
+        Assert.False(model.HasNoProviders);
+        Assert.False(window.FindControl<CheckBox>("InlineSuggestionsBox")!.IsChecked);
+        Assert.False(window.FindControl<CheckBox>("NextEditBox")!.IsChecked);
+        Snapshot(f, "first-run-setup-ai-assistant");
+
+        // The OpenAI-compatible provider, with inline suggestions ticked and next edit left off.
+        model.AiProviders.Single(p => p.Id == "openai").SelectCommand.Execute(null);
+        window.FindControl<CheckBox>("InlineSuggestionsBox")!.IsChecked = true;
+        Assert.Equal(new SetupAiChoice(SetupAiPath.Assistant, Provider: "openai", InlineSuggestions: true), model.AiChoice);
+        await model.NextAsync();
+        var provider = model.AiProviders.Single(p => p.Id == "openai").Title;
+        Assert.Equal($"Set Up {provider}…", model.NextTitle);
+        Assert.Equal($"The built-in assistant with {provider}, inline suggestions", model.Summary.Single(r => r.Label == "AI").Value);
+        Assert.Contains("credential store", model.AiNext, StringComparison.Ordinal);
+        Assert.Null(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User));
+
+        // The provider's endpoint and key are there (a model server stand-in), so what's left to ask is the model.
+        await settings.SetAsync("ai.openai.endpoint", server.BaseUrl + "/v1", SettingScope.User, CancellationToken.None);
+        await f.Shell.Secrets.StoreAsync("codalus.openai", "apiKey:openai", MockModelServers.Key, CancellationToken.None);
+        await model.NextAsync();
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.Palette.IsOpen, seconds: 60);
+        Assert.True(settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User)!.Value.GetBoolean());
+        Assert.Equal("openai", settings.GetString(AiService.ProviderSetting));
+        Assert.True(settings.GetLayerValue(AiCompletions.EnabledSetting, SettingScope.User)!.Value.GetBoolean());
+        Assert.Null(settings.GetLayerValue(AiNextEdit.EnabledSetting, SettingScope.User));
+        Assert.False(f.Shell.IsStartWindowOpen); // it waits for the model
+        var row = f.Shell.Palette.Rows[0];
+        f.Shell.Palette.Accept(row);
+        await ShellFixture.PumpUntil(() => f.Shell.IsStartWindowOpen);
+        Assert.False(string.IsNullOrEmpty(settings.GetString(AiService.ModelSetting)));
+        Assert.Equal(AiState.Ready, f.Shell.Ai.State);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+
+        // Run again from Help: the step shows what is on, and leaving it as it is changes nothing.
+        await f.RunAsync("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        model = f.Shell.SetupModel!;
+        await ToAiAsync(model);
+        Assert.Equal(SetupAiPath.Assistant, model.AiPath);
+        Assert.True(model.AiProviders.Single(p => p.Id == "openai").IsSelected);
+        Assert.True(model.AiInlineSuggestions);
+        Assert.False(model.AiNextEditSuggestions);
+        Assert.False(model.AiChanged);
+        await model.NextAsync();
+        Assert.Equal("Done", model.NextTitle);
+        Assert.False(model.HasAiNext);
+
+        // No AI, chosen and done: AI goes off; the provider and the switch stay for when it's turned on again.
+        await model.BackAsync();
+        model.AiPaths.Single(p => p.Path == SetupAiPath.None).SelectCommand.Execute(null);
+        Assert.True(model.AiChanged);
+        await model.NextAsync();
+        Assert.Equal("Off", model.Summary.Single(r => r.Label == "AI").Value);
+        await model.NextAsync();
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
+        await ShellFixture.PumpUntil(() => settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User) is { ValueKind: System.Text.Json.JsonValueKind.False });
+        Assert.Equal("openai", settings.GetString(AiService.ProviderSetting));
+        Assert.True(settings.GetBoolean(AiCompletions.EnabledSetting));
+        Assert.False(f.Shell.IsStartWindowOpen); // from Help
+    }
+
+    [AvaloniaFact]
+    public async Task A_connected_agent_shows_connected_and_choosing_it_again_only_turns_AI_on()
+    {
+        await using var f = ShellFixture.Create(firstRun: true);
+        var settings = f.Shell.Workbench.Settings;
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen, seconds: 30);
+        await f.Shell.SetupModel!.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen && f.Shell.IsStartWindowOpen);
+        f.Shell.StartWindowModel!.ContinueCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsStartWindowOpen);
+
+        // Two agents in the user's settings (one a template's, one written by hand), AI on, the hand-written one chatting.
+        await settings.SetMemberAsync(AcpAgents.AgentsSetting, "claude", AcpAgentCatalog.Entry("npx", ["-y", "stand-in"]), SettingScope.User, CancellationToken.None);
+        await settings.SetMemberAsync(AcpAgents.AgentsSetting, "mine", AcpAgentCatalog.Entry("mine-acp", []), SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None);
+        await settings.SetAsync(AcpAgents.ChatAgentSetting, "mine", SettingScope.User, CancellationToken.None);
+        await f.RunAsync("help.setUp");
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        var model = f.Shell.SetupModel!;
+        await ToAiAsync(model);
+        Assert.Equal(new SetupAiChoice(SetupAiPath.Agent, Agent: "mine"), model.AiChoice);
+        Assert.False(model.AiChanged);
+        Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "mine", "More agents…"], model.AiAgents.Select(a => a.Title));
+        Assert.Equal("Connected", model.AiAgents.Single(a => a.Id == "claude").Description);
+        Assert.Equal("Connected", model.AiAgents.Single(a => a.Id == "mine").Description);
+        Assert.True(model.AiAgents.Single(a => a.Id == "mine").IsSelected);
+        await model.NextAsync();
+        Assert.Equal("mine, connected", model.Summary.Single(r => r.Label == "AI").Value);
+        Assert.Equal("Done", model.NextTitle);
+
+        // Claude, connected already: Done makes it the chat's agent; no Connect.
+        await model.BackAsync();
+        model.AiAgents.Single(a => a.Id == "claude").SelectCommand.Execute(null);
+        await model.NextAsync();
+        Assert.Equal("Claude, connected", model.Summary.Single(r => r.Label == "AI").Value);
+        Assert.Equal("Done", model.NextTitle);
+        Assert.False(model.HasAiNext);
+        await model.NextAsync();
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
+        await ShellFixture.PumpUntil(() => settings.GetString(AcpAgents.ChatAgentSetting) == "claude");
+        Assert.False(f.Shell.ConnectAgent.IsOpen);
+        Assert.True(settings.GetBoolean(AiService.EnabledSetting));
+    }
+
+    /// <summary>From the welcome page (a first start) or Appearance to the AI step, saving each step as it is.</summary>
+    private static async Task ToAiAsync(SetupViewModel model)
+    {
+        while (!model.IsAi)
+        {
+            await model.NextAsync();
+        }
+    }
+
     /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>: the setup window's frame, for a look at each step.</summary>
     private static void Snapshot(ShellFixture f, string name)
     {
@@ -600,6 +1077,10 @@ public sealed class FirstRunSetupTests
         frame?.Save(Path.Combine(snapshots, name + ".png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
     }
 
+    /// <summary>Each segment's text and color, line by line.</summary>
+    private static List<(string Text, Color Color)> Brushes(IReadOnlyList<ThemePictureCodeLine> code) =>
+        [.. code.SelectMany(line => line.Segments).Select(segment => (segment.Text, ((ISolidColorBrush)segment.Brush).Color))];
+
     private static Color? Token(string key, Avalonia.Styling.ThemeVariant variant) =>
         Application.Current!.TryGetResource(key, variant, out var value) && value is ISolidColorBrush brush ? brush.Color : null;
 
@@ -614,7 +1095,12 @@ public sealed class FirstRunSetupTests
     private static void Press(Window window, Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
         window.KeyPress(key, modifiers, PhysicalKey.None, null);
-        if (window.IsVisible) // Escape closes it
+
+        // Escape skips the setup, which closes the window once its setting is written: a moment later, from another
+        // thread's continuation. So no release for it. Asking whether the window is still visible first wasn't enough:
+        // the release runs the pending jobs before it reaches the window, and when the write had finished in between,
+        // that closed the window under it (ObjectDisposedException, in some runs and not others; docs/ci-flakes.md).
+        if (key != Key.Escape)
         {
             window.KeyRelease(key, modifiers, PhysicalKey.None, null);
         }

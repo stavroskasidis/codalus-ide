@@ -251,7 +251,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "plugins.host").ConfigureAwait(true);
 
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
-        await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.setup", "M46", "The first-run setup: the welcome page's origin preselects the keys, a theme family previewed live, VS Code's settings imported, the tools checked, the AI step's three ways compared and left as they were; the summary's Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
