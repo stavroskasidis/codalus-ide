@@ -20,7 +20,7 @@ case "$template" in
   claude) package="@agentclientprotocol/claude-agent-acp"; version="0.106.0"; args=() ;;
   codex) package="@agentclientprotocol/codex-acp"; version="2.6.0"; args=() ;;
   gemini) package="@google/gemini-cli"; version="0.68.0"; args=(--acp) ;;
-  copilot) package="@github/copilot"; version="1.0.109"; args=(--acp) ;;
+  copilot) package="@github/copilot"; version="1.0.110"; args=(--acp) ;;
   pi) package="pi-acp"; version="0.0.34"; args=() ;;
   *) echo "Unknown template: $template" >&2; exit 2 ;;
 esac
