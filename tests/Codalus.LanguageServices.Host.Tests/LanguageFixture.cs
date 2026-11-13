@@ -49,6 +49,7 @@ public class LanguageFixture : IAsyncLifetime
         Assert.True(System.IO.File.Exists(RepoPaths.HostAssembly), $"Language host not built: {RepoPaths.HostAssembly}");
         Assert.True(System.IO.File.Exists(RepoPaths.BuildHostAssembly), $"Build host not built: {RepoPaths.BuildHostAssembly}");
         Fixture = RepoPaths.CopyFixture(Sample.Sample, _root);
+        Prepare();
         var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
         Solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
         var registry = new LanguageServiceRegistry();
@@ -81,6 +82,11 @@ public class LanguageFixture : IAsyncLifetime
         {
             await Languages.ClientAsync("csharp");
         }
+    }
+
+    /// <summary>Changes to the fixture's copy before it opens (a fixture's own files).</summary>
+    protected virtual void Prepare()
+    {
     }
 
     /// <summary>More to wait for once the projects are loaded (a fixture's own conditions).</summary>

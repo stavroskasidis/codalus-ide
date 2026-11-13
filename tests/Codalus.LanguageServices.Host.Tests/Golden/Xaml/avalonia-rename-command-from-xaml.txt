@@ -1,0 +1,8 @@
+=== AvaloniaApp/ViewModels/MainWindowViewModel.cs
+@@ 40
+-     public void Increment() => Count++;
++     public void Add() => Count++;
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 20
+-       <Button x:Name="IncrementButton" Content="Increment" Command="{Binding Increment}" />
++       <Button x:Name="IncrementButton" Content="Increment" Command="{Binding Add}" />

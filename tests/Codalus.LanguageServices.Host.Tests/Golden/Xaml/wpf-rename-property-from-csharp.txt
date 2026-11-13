@@ -1,0 +1,19 @@
+=== WpfApp/MainWindow.xaml
+@@ 29
+-             <TextBox x:Name="NewTitleBox" Text="{Binding NewTitle, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
++             <TextBox x:Name="NewTitleBox" Text="{Binding Draft, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
+=== WpfApp/ViewModels/MainViewModel.cs
+@@ 16
+-         AddCommand = new RelayCommand(Add, () => NewTitle.Trim().Length > 0);
++         AddCommand = new RelayCommand(Add, () => Draft.Trim().Length > 0);
+@@ 31
+-     public string NewTitle
++     public string Draft
+@@ 59
+-     /// <summary>Adds <see cref="NewTitle"/> to the list.</summary>
++     /// <summary>Adds <see cref="Draft"/> to the list.</summary>
+@@ 64
+-         Items.Add(new TodoItem(NewTitle.Trim()));
+-         NewTitle = string.Empty;
++         Items.Add(new TodoItem(Draft.Trim()));
++         Draft = string.Empty;

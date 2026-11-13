@@ -1,0 +1,19 @@
+=== AvaloniaApp/ViewModels/MainWindowViewModel.cs
+@@ 14
+-         Items.Add(new TodoItemViewModel { Title = "Write the XAML", Priority = Priority.High });
+-         Items.Add(new TodoItemViewModel { Title = "Preview it", IsDone = true });
+-         Items.Add(new TodoItemViewModel { Title = "Ship it", Priority = Priority.Low });
++         Items.Add(new TodoItemViewModel { Caption = "Write the XAML", Priority = Priority.High });
++         Items.Add(new TodoItemViewModel { Caption = "Preview it", IsDone = true });
++         Items.Add(new TodoItemViewModel { Caption = "Ship it", Priority = Priority.Low });
+=== AvaloniaApp/ViewModels/TodoItemViewModel.cs
+@@ 18
+-     public string Title
++     public string Caption
+=== AvaloniaApp/Views/TodoItemView.axaml
+@@ 11
+-     <vm:TodoItemViewModel Title="A design-time task" Priority="High" />
++     <vm:TodoItemViewModel Caption="A design-time task" Priority="High" />
+@@ 16
+-     <TextBlock VerticalAlignment="Center" Classes="task" Text="{Binding Title}" />
++     <TextBlock VerticalAlignment="Center" Classes="task" Text="{Binding Caption}" />

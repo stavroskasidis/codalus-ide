@@ -90,7 +90,10 @@ internal static class RenameFeature
 
         var solution = document.Project.Solution;
         var renamed = await Renamer.RenameSymbolAsync(solution, symbol, new SymbolRenameOptions(), newName, cancellationToken).ConfigureAwait(false);
-        return await WorkspaceEdits.ComputeAsync(solution, renamed, versionOf, cancellationToken).ConfigureAwait(false);
+        var edit = await WorkspaceEdits.ComputeAsync(solution, renamed, versionOf, cancellationToken).ConfigureAwait(false);
+
+        // Its uses in the solution's XAML (M64, ADR 0103): binding paths, x:Class, types, x:Static, event handlers.
+        return await Xaml.XamlRename.WithXamlAsync(edit, solution, symbol, newName, versionOf, cancellationToken).ConfigureAwait(false);
     }
 }
 

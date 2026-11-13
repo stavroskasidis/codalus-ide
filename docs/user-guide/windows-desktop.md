@@ -8,7 +8,8 @@ Codalus IDE opens, edits and builds WPF and Windows Forms projects on modern .NE
 | Build | ✓ | ✓ |
 | Run, debug, Hot Reload | ✓ | Windows only |
 | Run their tests (`net*-windows` test projects) | ✓ | Windows only |
-| WPF XAML Previewer, Live Visual Tree and Live Property Explorer | ✓ | Windows only |
+| WPF XAML Previewer, Live Visual Tree and Live Property Explorer, XAML Hot Reload, failed bindings | ✓ | Windows only |
+| WPF XAML rename across C# and XAML, Extract Resource and Style, generate from use | ✓ | ✓ |
 | Windows Forms designer and Toolbox | ✓ | Windows only (forms open as code) |
 | WinUI 3: open the project, IntelliSense, WinUI XAML editing | ✓ | ✓ |
 | WinUI 3: build, run, debug, Hot Reload, packaged (MSIX) apps | ✓ | Windows only |
@@ -24,7 +25,7 @@ A project, or an `EnableWindowsTargeting` environment variable you set yourself,
 WPF and Windows Forms apps on modern .NET run on CoreCLR, so they take the same paths as other .NET apps (see [Building and running](build-and-run.md) and [Debugging](debugging.md)):
 - **Start Without Debugging** (`Ctrl+F5`) builds the app and starts it; its window opens on the desktop.
 - **Start** (`F5`) debugs it with breakpoints, stepping, locals and the other debugger windows.
-- **Hot Reload** runs it under `dotnet watch`: C# changes apply when you save (or **Apply Code Changes**, `Alt+F10`). XAML Hot Reload isn't available.
+- **Hot Reload** runs it under `dotnet watch`: C# changes apply when you save (or **Apply Code Changes**, `Alt+F10`). A WPF app started with `Ctrl+F5` or `F5` takes saved XAML changes through [XAML Hot Reload](#xaml-hot-reload-and-failed-bindings-for-wpf-apps).
 - **Tests** in `net*-windows` test projects (xUnit, NUnit, MSTest) show in the Test Explorer and run there.
 
 On Linux and macOS, Start, Start Without Debugging and the Performance Profiler say that the app runs only on Windows, and build nothing. The Test Explorer shows these projects' tests from their source and says on the project that they run only on Windows.
@@ -61,7 +62,8 @@ Solution Explorer nests a window's `.xaml.cs` under its `.xaml`, and a form's `.
 - **Live errors:** syntax errors, unknown types, properties and setter properties, and invalid enum values. WPF resolves bindings and resources when the XAML loads, not when it builds, so a binding path the data context lacks, and a `StaticResource` key that the file, `App.xaml` and their merged dictionaries don't define, are **warnings**. Resource keys aren't checked in a class library (its resources come from the app that uses it), nor when a merged dictionary is in another assembly.
 - **The markup compiler's errors** (`MC…`) from the last build show in their `.xaml` files at their lines, until the file changes or the next build.
 - **Hover** and **Go to Definition** into WPF's types, your view models, controls and resources, the event handlers and the code-behind (`x:Class`); the markup compiler's generated `obj/*.g.cs` is left out.
-- **Rename** an `x:Name`: the name, `ElementName=` references, and its uses in the code-behind.
+- **Rename** across C# and XAML, both ways, as [in Avalonia](avalonia.md#rename-across-c-and-xaml): a view model property renamed in C# renames its binding paths (from `d:DataContext` and data templates' `DataType`), and so do types (`{x:Type}`, `x:Class`, elements) and event handlers; in XAML, renaming a binding path, a type or a `Click="…"` handler renames the C# symbol and its uses. A resource key renames its `x:Key` and its lookups through `App.xaml` and merged dictionaries. An `x:Name` renames the name, `ElementName=` references, and its uses in the code-behind. The markup compiler's `obj/*.g.cs` is never edited: the next build writes it again.
+- **Code actions** (`Ctrl+.`), as [in Avalonia](avalonia.md#xaml-code-actions): **Extract Resource** (to the file's resources or `App.xaml`, with `sys:` primitives, optionally for every equal value), **Extract Style** (a keyed `Style` with a `TargetType` in the root's resources, and `Style="{StaticResource …}"` on the element), and **generate from use** (a property, an `ICommand` property or a `[RelayCommand]` method with CommunityToolkit.Mvvm, a converter class).
 - **Formatting**, folding and the Document Outline.
 
 ## The WPF XAML Previewer
@@ -86,6 +88,14 @@ On Windows, run or debug a WPF app (`Ctrl+F5` or `F5`) and open Debug → Window
 - **Live Property Explorer** lists the selected element's dependency properties, and the attached properties set on it (`Grid.Row`, `DockPanel.Dock`), with where each value comes from: **Local** (set on the element, or bound, in bold), **Style**, **Style trigger**, **Implicit style**, **Theme style**, **Template**, **Template trigger**, **Inherited** or **Default**. Type a new value to set it in the running app, written as in XAML (`8,4`, `Red`, `Auto`, `Center`). It isn't written back to your XAML.
 
 Running or debugging a WPF app loads a small agent into it (a .NET startup hook). It connects only to this IDE, on this machine, and your app needs no package or code for it. It needs .NET 8 or later. To turn it off, set **Live Visual Tree for Avalonia and WPF apps** off (Settings → Debugging, `debug.liveVisualTree`). While the app is paused in the debugger, the tree can't refresh.
+
+## XAML Hot Reload and failed bindings for WPF apps
+
+On Windows, with a WPF app running from the IDE (`Ctrl+F5` or `F5`) and its agent:
+- **Saving** a `.xaml` file loads it again into each window or user control of its `x:Class` on screen, as [for Avalonia](avalonia.md#xaml-hot-reload): the data context and what XAML doesn't set stay; named fields and the event handlers the XAML names are connected again. An edit the running app can't take (a changed `x:Class`, a handler or type it doesn't have, XAML that doesn't parse) is an Error List error at its line, with **Restart** offered. **XAML Hot Reload** (Settings → Debugging, `debug.xamlHotReload`) turns it off.
+- **A binding that fails** (WPF's binding errors, `BindingExpression path error…`) is an Error List warning (source **Binding**) at the attribute that declares it: the property's binding with that path, on an element of that type and name.
+
+These run only on Windows, like the app, and are checked by the Windows test runs.
 
 ## The Windows Forms designer
 
@@ -266,7 +276,7 @@ There's no WinUI previewer (Microsoft has none either), and XAML Hot Reload isn'
 
 ## Not available yet
 
-- XAML Hot Reload (changes made in the Live Property Explorer stay in the running app).
+- XAML Hot Reload for WinUI 3, and for WPF resource dictionaries without an `x:Class`.
 - A WinUI 3 previewer, WinUI templates in New Project, and building WinUI apps on Linux and macOS.
 - The WPF previewer and the Live Visual Tree on Linux and macOS (through a Windows machine), and for WPF on .NET Framework.
 - The Windows Forms designer on Linux and macOS (through a Windows machine), and its later parts (snap lines, tab order, smart tags, menus and tool strips, localizable forms).

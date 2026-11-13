@@ -125,6 +125,24 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
             var chrome = visual.First(n => n.Name == "Chrome");
             Assert.Equal("Button", (await session.PathAsync(chrome.Id, Ct)).Steps[^1].Type); // out of the template first
             Assert.Equal("NewTitleBox", (await session.PathAsync(box.Id, Ct)).Steps[^1].Name);
+
+            // XAML Hot Reload (M64): the window loaded again from changed XAML, its handlers and named fields connected
+            // to the running class; a binding that fails in it is reported; what doesn't load leaves the window as it was.
+            var bindingsFailed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.BindingsFailed += (_, _) => bindingsFailed.TrySetResult();
+            var xaml = await File.ReadAllTextAsync(Path.Combine(wpf.App, "MainWindow.xaml"), Ct);
+            var changed = xaml.Replace("Title=\"{Binding Title}\"", "Title=\"Reloaded\"", StringComparison.Ordinal)
+                .Replace("Margin=\"0,0,8,0\"", "Margin=\"0,0,9,0\" Tag=\"{Binding NoSuchPath}\"", StringComparison.Ordinal);
+            var reloaded = await session.ReloadAsync("-", "-", "-", false, changed, Ct);
+            Assert.True(reloaded.Outcome == LiveReloadOutcome.Applied && reloaded.Count == 1, $"{reloaded.Outcome} {reloaded.Count} {reloaded.Message}");
+            Assert.Equal("Reloaded", Assert.Single(await session.WindowsAsync(Ct)).Title);
+            var newBox = Assert.Single(await session.TreeAsync(window.Id, visual: false, Ct), n => n.Name == "NewTitleBox");
+            Assert.Equal("0,0,9,0", (await session.PropertiesAsync(newBox.Id, Ct)).Single(p => p.Name == "Margin").Value);
+            await bindingsFailed.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+            Assert.Contains(await session.BindingFailuresAsync(Ct), f => f.Path == "NoSuchPath" && f.Property == "Tag" && f.ElementName == "NewTitleBox");
+            var failed = await session.ReloadAsync("-", "-", "-", false, changed.Replace("Click=\"OnAddClicked\"", "Click=\"NoSuchHandler\"", StringComparison.Ordinal), Ct);
+            Assert.True(failed.Outcome == LiveReloadOutcome.Failed && failed.Line > 0, $"{failed.Outcome} {failed.Line} {failed.Message}");
+            Assert.Equal("Reloaded", Assert.Single(await session.WindowsAsync(Ct)).Title);
         }
         finally
         {

@@ -1,0 +1,8 @@
+=== WpfApp/MainWindow.xaml
+@@ 28
+-             <Button DockPanel.Dock="Right" Content="Add" Command="{Binding AddCommand}" Style="{StaticResource AccentButton}" Click="OnAddClicked" />
++             <Button DockPanel.Dock="Right" Content="Add" Command="{Binding AddCommand}" Style="{StaticResource PrimaryButton}" Click="OnAddClicked" />
+=== WpfApp/Themes/Styles.xaml
+@@ 3
+-     <Style x:Key="AccentButton" TargetType="{x:Type Button}">
++     <Style x:Key="PrimaryButton" TargetType="{x:Type Button}">

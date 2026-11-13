@@ -86,6 +86,7 @@ public sealed partial class ShellHost
             }
         });
         session.Picked += (_, e) => Ui.Post(() => _ = LiveTree.SelectAsync(e.Element));
+        HookLiveXaml(session);
         if (previous is not null)
         {
             _ = previous.DisposeAsync().AsTask();

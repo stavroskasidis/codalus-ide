@@ -41,6 +41,13 @@ internal static class StartupHook
             Environment.SetEnvironmentVariable(variable, null);
         }
 
+        // A running app's binding failures (M64): Avalonia's logger is hooked before the app's first binding, the
+        // failures kept until the IDE's connection asks for them.
+        if (live)
+        {
+            LiveBindings.Install(null);
+        }
+
         var thread = new Thread(() => Run(port, token, live)) { IsBackground = true, Name = live ? "Codalus live agent" : "Codalus previewer agent" };
         thread.Start();
     }
@@ -66,6 +73,11 @@ internal static class StartupHook
 
             Send("hello\t" + token);
             Func<string[], string> handle = live ? new LiveAgent(Send).Handle : new PreviewAgent().Handle;
+            if (live)
+            {
+                LiveBindings.Install(Send);
+            }
+
             while (reader.ReadLine() is { } line)
             {
                 var parts = line.Split('\t');

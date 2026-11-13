@@ -31,6 +31,9 @@ namespace Codalus.Previewer.Wpf;
 /// <item><c>pick on|off</c> → <c>ok</c>: the next click in the app selects its element (<c>event picked id logicalId</c>)
 /// instead of reaching it</item>
 /// <item><c>path id</c> → the window's class and the element's logical path from it</item>
+/// <item><c>bindings</c> → the bindings that failed since the last request (M64, <see cref="WpfBindings"/>)</item>
+/// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="WpfReload"/>; the
+/// loader, assembly, URI and compiled arguments are Avalonia's and unused here)</item>
 /// </list>
 /// </summary>
 internal sealed class LiveAgent(Action<string> send)
@@ -63,6 +66,8 @@ internal sealed class LiveAgent(Action<string> send)
             "highlight" => Highlight(Arg(2) == "none" ? null : Element(Arg(2))),
             "pick" => Pick(Arg(2) == "on"),
             "path" => Path(Element(Arg(2))),
+            "bindings" => WpfBindings.Take(),
+            "reload" => WpfReload.Reload(application, WpfReload.Decode(Arg(6))),
             _ => throw new InvalidOperationException("Unknown command " + command),
         }, DispatcherPriority.Loaded);
     }

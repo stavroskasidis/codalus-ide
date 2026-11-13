@@ -24,8 +24,15 @@ internal static class StartupHook
         Environment.SetEnvironmentVariable(PortVariable, null);
         Environment.SetEnvironmentVariable(TokenVariable, null);
 
+        // Failed bindings (M64) from the app's first one on: WPF's trace source needs no UI thread.
+        WpfBindings.Install(null);
+
         // A background thread that never touches WPF before the app has made its Application on its own UI thread.
-        var thread = new Thread(() => AgentLink.Serve(port, token, send => new LiveAgent(send).Handle, "WPF live agent"))
+        var thread = new Thread(() => AgentLink.Serve(port, token, send =>
+        {
+            WpfBindings.Install(send);
+            return new LiveAgent(send).Handle;
+        }, "WPF live agent"))
         {
             IsBackground = true,
             Name = "Codalus WPF live agent",

@@ -1,0 +1,4 @@
+=== AvaloniaApp/ViewModels/MainWindowViewModel.cs
+@@ 41
++ 
++     public string Status { get; set; } = string.Empty;

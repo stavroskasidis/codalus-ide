@@ -25,12 +25,19 @@ namespace Codalus.Previewer.Agent;
 /// <c>event picked id logicalId</c> (the element hit, and the nearest one the XAML declares)</item>
 /// <item><c>path id</c> → the window's class and the element's logical path from it (<c>Type:ordinal:Name</c> steps
 /// joined by <c>/</c>), which the IDE resolves to a line of the window's XAML</item>
+/// <item><c>bindings</c> → the bindings that failed since the last request (M64, <see cref="LiveBindings"/>): property,
+/// path, message, element type, element name, its ancestors' classes; <c>event bindings</c> says new ones came</item>
+/// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="LiveReload"/>):
+/// <c>applied count</c>, <c>failed line column message</c> or <c>none</c></item>
 /// </list>
 /// </summary>
 internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? roots = null)
 {
     public const char Record = '\u001e';
     public const char Field = '\u001f';
+
+    /// <summary>A reload compiles XAML at run time: the first in a process loads the compiler (seconds on a slow machine).</summary>
+    private static readonly TimeSpan ReloadTimeout = TimeSpan.FromSeconds(60);
 
     private const BindingFlags Instance = BindingFlags.Public | BindingFlags.Instance;
     private const BindingFlags Static = BindingFlags.Public | BindingFlags.Static;
@@ -63,6 +70,8 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
             "highlight" => OnUiThread(() => Highlight(Arg(2) == "none" ? null : Element(Arg(2)))),
             "pick" => OnUiThread(() => Pick(Arg(2) == "on")),
             "path" => OnUiThread(() => Path(Element(Arg(2)))),
+            "bindings" => OnUiThread(() => LiveBindings.Take(OpenWindows())),
+            "reload" => OnUiThread(() => LiveReload.Reload(OpenWindows(), Arg(2), Arg(3), Arg(4), Arg(5) == "1", LiveReload.Decode(Arg(6))), ReloadTimeout),
             _ => throw new InvalidOperationException("Unknown command " + command),
         };
     }

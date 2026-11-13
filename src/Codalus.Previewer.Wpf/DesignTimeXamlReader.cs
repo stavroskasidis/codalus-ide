@@ -9,7 +9,7 @@ namespace Codalus.Previewer.Wpf;
 /// <c>x:FieldModifier</c> directives, <c>x:Code</c>, event handlers (<c>Click="OnClick"</c>, attached events) and
 /// <c>EventSetter</c>s. Everything else, line information included, passes through to <c>XamlReader.Load</c>.
 /// </summary>
-internal sealed class DesignTimeXamlReader(XamlXmlReader inner) : XamlReader, IXamlLineInfo
+internal sealed class DesignTimeXamlReader(XamlXmlReader inner, bool keepEvents = false) : XamlReader, IXamlLineInfo
 {
     private static readonly HashSet<XamlMember> s_directives =
     [
@@ -51,8 +51,8 @@ internal sealed class DesignTimeXamlReader(XamlXmlReader inner) : XamlReader, IX
 
     private bool DesignOnly() => inner.NodeType switch
     {
-        XamlNodeType.StartMember => inner.Member is { } member && (member.IsEvent || s_directives.Contains(member)),
-        XamlNodeType.StartObject => inner.Type?.UnderlyingType == typeof(EventSetter),
+        XamlNodeType.StartMember => inner.Member is { } member && ((member.IsEvent && !keepEvents) || s_directives.Contains(member)),
+        XamlNodeType.StartObject => !keepEvents && inner.Type?.UnderlyingType == typeof(EventSetter),
         _ => false,
     };
 

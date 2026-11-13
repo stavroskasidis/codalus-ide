@@ -20,6 +20,23 @@ public sealed record LiveProperty(string Name, string Value, string Type, string
 public sealed record LivePath(string WindowType, IReadOnlyList<PreviewPathStep> Steps);
 
 /// <summary>
+/// A binding that failed in the running app (M64): the target property, the binding's path, the framework's message,
+/// the element's type (its full name when the element was found, else as the log named it), its name, and the classes
+/// it sits in, nearest first (Avalonia only).
+/// </summary>
+public sealed record LiveBindingFailure(string Property, string Path, string Message, string ElementType, string ElementName, IReadOnlyList<string> Ancestors);
+
+/// <summary>What a XAML Hot Reload did: applied to <see cref="Count"/> instances, failed (at a line when known), or nothing to reload live (no <c>x:Class</c>).</summary>
+public sealed record LiveReloadResult(LiveReloadOutcome Outcome, int Count, int Line, int Column, string Message);
+
+public enum LiveReloadOutcome
+{
+    Applied,
+    Failed,
+    NotApplicable,
+}
+
+/// <summary>
 /// The IDE's side of the live agent (M19b, ADR 0052) in a running Avalonia app, or WPF app (M40b, ADR 0072: the WPF
 /// previewer's assembly is its agent, with the same protocol): a loopback listener whose port and token
 /// the app gets with the agent (<see cref="Environment"/>), the app's connection once it starts, its requests and its
@@ -68,6 +85,9 @@ public sealed class LiveSession : IAsyncDisposable
 
     /// <summary>Pick mode's click: the element hit and the nearest element of the logical tree (any thread).</summary>
     public event EventHandler<(int Hit, int Element)>? Picked;
+
+    /// <summary>Bindings failed in the app since the last <see cref="BindingFailuresAsync"/> (M64; any thread).</summary>
+    public event EventHandler? BindingsFailed;
 
     public bool IsConnected => _writer is not null;
 
@@ -140,6 +160,10 @@ public sealed class LiveSession : IAsyncDisposable
                     {
                         Picked?.Invoke(this, (hit, element));
                     }
+                    else if (parts.Length >= 2 && parts[1] == "bindings")
+                    {
+                        BindingsFailed?.Invoke(this, EventArgs.Empty);
+                    }
 
                     continue;
                 }
@@ -172,7 +196,9 @@ public sealed class LiveSession : IAsyncDisposable
         Disconnected?.Invoke(this, EventArgs.Empty);
     }
 
-    private async Task<string> RequestAsync(CancellationToken cancellationToken, params string[] request)
+    private Task<string> RequestAsync(CancellationToken cancellationToken, params string[] request) => RequestAsync(s_timeout, cancellationToken, request);
+
+    private async Task<string> RequestAsync(TimeSpan timeout, CancellationToken cancellationToken, params string[] request)
     {
         if (_writer is not { } writer)
         {
@@ -199,12 +225,12 @@ public sealed class LiveSession : IAsyncDisposable
 
         try
         {
-            return await reply.Task.WaitAsync(s_timeout, cancellationToken).ConfigureAwait(false);
+            return await reply.Task.WaitAsync(timeout, cancellationToken).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             _pending.TryRemove(id, out _);
-            throw new PreviewerException($"The app didn't answer '{request[0]}' within {s_timeout.TotalSeconds:0} s.");
+            throw new PreviewerException($"The app didn't answer '{request[0]}' within {timeout.TotalSeconds:0} s.");
         }
     }
 
@@ -241,6 +267,31 @@ public sealed class LiveSession : IAsyncDisposable
             p.Length > 1 ? Int(p[1]) : 0,
             p.Length > 2 && p[2].Length > 0 ? p[2] : null)).ToList();
         return new LivePath(reply[0], steps);
+    }
+
+    /// <summary>The bindings that failed in the app since the last call (M64).</summary>
+    public async Task<IReadOnlyList<LiveBindingFailure>> BindingFailuresAsync(CancellationToken cancellationToken) =>
+        [.. Records(await RequestAsync(cancellationToken, "bindings").ConfigureAwait(false))
+            .Where(r => r.Length >= 6)
+            .Select(r => new LiveBindingFailure(r[0], r[1], r[2], r[3], r[4], r[5].Split('|', StringSplitOptions.RemoveEmptyEntries)))];
+
+    /// <summary>
+    /// XAML Hot Reload (M64): the saved XAML loaded again into the app's live instances of its <c>x:Class</c>. Avalonia's
+    /// agent compiles it with <paramref name="loader"/> (the app's <c>Avalonia.Designer.HostApp.dll</c>), the file's
+    /// assembly and <c>avares://</c> URI; WPF's ignores them. A minute at most: the first reload loads the compiler.
+    /// </summary>
+    public async Task<LiveReloadResult> ReloadAsync(string loader, string assemblyName, string uri, bool compiledBindings, string xaml, CancellationToken cancellationToken)
+    {
+        var reply = await RequestAsync(TimeSpan.FromMinutes(1), cancellationToken, "reload", loader, assemblyName, uri, compiledBindings ? "1" : "0",
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(xaml))).ConfigureAwait(false);
+        var parts = reply.Split('\t', 4);
+        return parts[0] switch
+        {
+            "applied" => new LiveReloadResult(LiveReloadOutcome.Applied, parts.Length > 1 ? Int(parts[1]) : 0, 0, 0, string.Empty),
+            "failed" when parts.Length == 4 => new LiveReloadResult(LiveReloadOutcome.Failed, 0, Int(parts[1]), Int(parts[2]), parts[3]),
+            "none" => new LiveReloadResult(LiveReloadOutcome.NotApplicable, 0, 0, 0, string.Empty),
+            _ => new LiveReloadResult(LiveReloadOutcome.Failed, 0, 0, 0, reply),
+        };
     }
 
     private static string Id(int id) => id.ToString(CultureInfo.InvariantCulture);

@@ -1,0 +1,8 @@
+=== AvaloniaApp/ViewModels/DesignData.cs
+@@ 6
+-     public static MainWindowViewModel Main { get; } = new() { Greeting = "Hello from design-time data" };
++     public static MainWindowViewModel Sample { get; } = new() { Greeting = "Hello from design-time data" };
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 10
+-         d:DataContext="{x:Static vm:DesignData.Main}"
++         d:DataContext="{x:Static vm:DesignData.Sample}"

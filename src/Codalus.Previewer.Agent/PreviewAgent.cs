@@ -251,7 +251,7 @@ internal sealed class PreviewAgent
     }
 
     /// <summary>Runs <paramref name="work"/> on Avalonia's UI thread and waits for it (at most 10 s).</summary>
-    internal static string OnUiThread(Func<string> work)
+    internal static string OnUiThread(Func<string> work, TimeSpan? timeout = null)
     {
         var dispatcherType = AvaloniaType("Avalonia.Threading.Dispatcher");
         var dispatcher = dispatcherType.GetProperty("UIThread", Static)!.GetValue(null)!;
@@ -280,7 +280,7 @@ internal sealed class PreviewAgent
             .First();
         var arguments = post.GetParameters().Select((p, i) => i == 0 ? action : Normal(p.ParameterType)).ToArray();
         post.Invoke(dispatcher, arguments);
-        if (!done.Wait(s_uiTimeout))
+        if (!done.Wait(timeout ?? s_uiTimeout))
         {
             throw new TimeoutException("The previewer's UI thread didn't respond.");
         }
