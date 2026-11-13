@@ -131,7 +131,10 @@ public sealed class ComposeShellTests
             $"debugger {f.Shell.Debugger.State}, programs [{string.Join(", ", f.Shell.Debugger.Processes.Select(p => $"{p.Name} {p.Id?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "no id"}{(p.Ended ? " ended" : string.Empty)}"))}]\n"
             + $"Container Tools:\n{Tail(f.Shell.ContainerLog.GetText())}\nDebug Console:\n{Tail(f.Shell.DebugLog.GetText())}";
 
-        int Listening() => f.Shell.DebugLog.GetText().Split("Now listening on").Length - 1;
+        // Each program that bound its port: the console logger's event line, once per program. "Now listening on" is in
+        // the log twice per program (the console's text and the debug logger's), so counting it let the wait after the
+        // back's restart pass before the new back listened, and the front's request found it refused (CI, run 43521735997).
+        int Listening() => f.Shell.DebugLog.GetText().Split("Microsoft.Hosting.Lifetime[14]").Length - 1;
 
         async Task StopsAtAsync(string source, int line)
         {
@@ -159,9 +162,10 @@ public sealed class ComposeShellTests
 
             // The back restarts alone, under the debugger again; the front's program goes on.
             var frontProgram = f.Shell.Debugger.Processes.Single(p => p.Name == "front");
+            var listened = Listening();
             Assert.True(await f.Shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Restart, "back"), Describe());
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.Processes.Count == 3 && f.Shell.Debugger.Processes[^1].Id is not null, seconds: 180, Describe);
-            await ShellFixture.PumpUntil(() => Listening() >= 3, seconds: 120, Describe);
+            await ShellFixture.PumpUntil(() => Listening() > listened, seconds: 120, Describe); // the new back listens
             Assert.True(f.Shell.Debugger.Processes.Single(p => p.Name == "back" && p.Ended) is not null);
             Assert.Contains(f.Shell.Debugger.Processes, p => p == frontProgram && !p.Ended);
             request = http.GetStringAsync($"http://127.0.0.1:{port}/", TestContext.Current.CancellationToken);
