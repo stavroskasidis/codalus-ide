@@ -112,7 +112,7 @@ When the solution's projects are in more than one repository (a project in a rep
 - The [branch drop-down](#the-branch-drop-down) lists **Common branches**, the branches every repository has, checked when every repository is on that branch. Under **All branches** it lists each repository's branches, under its name and current branch. Clicking a common branch checks it out in every repository. Its menu has **New Local Branch From…** (one name, a branch in each repository), **Merge**, **Rebase** and **Delete in Each Repository…**. A repository's own rows act on that repository only. **New Branch…** creates a branch in every repository.
 - A merge, rebase, cherry-pick or revert in progress in any repository shows its banner, named for the repository. **Continue**, **Skip** and **Abort** act there.
 - **View all commits** shows the open repository's current branch in the Git Repository document, where each repository is a root of its own. A file's history is its own repository's.
-- **Write the Commit Message with AI** describes the staged changes of every repository.
+- **Write the Commit Message with AI** describes what **Commit All Repos** will commit: the staged changes of every repository, or, when nothing is staged, all their changes, new files included.
 
 Pick a repository in the picker (or Git → Switch Repository) to see that one alone, as with a single repository. The picker's filter box narrows the list. **Add Repository…** adds a repository that has no project in the solution (docs, build scripts). **Remove from the List** (the × beside a repository) leaves one out; the solution's own repository can't be removed. Your choice, and the repositories you added or removed, are kept with the solution.
 

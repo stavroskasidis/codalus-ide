@@ -176,7 +176,7 @@ public sealed partial class CodeEditorController : IDisposable
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
         _search = new FindWidget(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
-        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
+        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush, services.ShowMessage);
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;

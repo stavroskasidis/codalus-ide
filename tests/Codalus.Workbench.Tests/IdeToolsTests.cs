@@ -199,6 +199,7 @@ public sealed class IdeToolsTests : IDisposable
                 using var server = Bound();
                 var url = $"http://127.0.0.1:{((System.Net.IPEndPoint)server.LocalEndPoint!).Port}/";
                 var stopped = false;
+                var accepted = 0;
                 var serving = Task.Run(async () =>
                 {
                     await Task.Delay(1500, ct);
@@ -209,6 +210,7 @@ public sealed class IdeToolsTests : IDisposable
                         {
                             // Every connection gets the page: the browser may open more than one (a preconnect, the favicon).
                             var connection = await server.AcceptAsync(ct);
+                            Interlocked.Increment(ref accepted);
                             _ = Task.Run(() => ServeAsync(connection, "<title>Late</title><p>Started late</p>", ct), ct);
                         }
                     }
@@ -225,6 +227,12 @@ public sealed class IdeToolsTests : IDisposable
                 {
                     await serving; // why the server never answered
                     throw;
+                }
+                catch (IdeToolException ex)
+                {
+                    // Who answered the browser: none of this server's connections means another socket did (the diagnostic
+                    // for Windows CI's ERR_INVALID_HTTP_RESPONSE, develop's run 43424616628).
+                    throw new IdeToolException($"{ex.Message} The test's server accepted {Volatile.Read(ref accepted)} connection(s); it listened after 1.5 s.");
                 }
 
                 Assert.Contains("Started late", await attached.GetPageAsync(null, ct), StringComparison.Ordinal);
@@ -313,10 +321,20 @@ public sealed class IdeToolsTests : IDisposable
         await serving;
     }
 
-    /// <summary>A loopback TCP socket bound to a free port and not listening: connections to it are refused.</summary>
+    /// <summary>
+    /// A loopback TCP socket bound to a free port and not listening: connections to it are refused. On Windows it holds the
+    /// port on every address: another process's socket could otherwise bind the same port on the wildcard address, and while
+    /// this one isn't listening yet Windows hands it the connections, so the browser got another server's answer
+    /// (net::ERR_INVALID_HTTP_RESPONSE, Windows CI, develop's run 43424616628; inferred, not proven: see the ledger).
+    /// </summary>
     private static System.Net.Sockets.Socket Bound()
     {
         var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+        if (OperatingSystem.IsWindows())
+        {
+            socket.ExclusiveAddressUse = true;
+        }
+
         socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
         return socket;
     }

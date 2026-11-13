@@ -228,6 +228,43 @@ public sealed class AiConsoleTests
         Assert.Null(f.Shell.AiConsole.Selected);
     }
 
+    /// <summary>
+    /// Close (the trash button) ends the shown console only, and the other is shown: the tab list's selection, cleared as
+    /// its item went, left no console selected, so the window read "No console is open" while the other ran on unseen (the
+    /// maintainer's report: with two consoles, Delete closed both).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Closing_one_of_two_consoles_shows_the_other()
+    {
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f);
+        await f.RunAsync("ai.console.show");
+        var first = await ShownAsync(f);
+        await f.RunAsync("ai.console.new");
+        var second = await ShownAsync(f, tabs: 2);
+        Assert.Same(second, f.Shell.AiConsole.Selected);
+        var view = View(f);
+        var close = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "KillButton");
+        Assert.True(close.Command!.CanExecute(null));
+
+        close.Command.Execute(null);
+        ShellFixture.Pump();
+
+        var left = Assert.Single(f.Shell.AiConsole.Tabs);
+        Assert.Same(first, left);
+        Assert.Same(first, f.Shell.AiConsole.Selected);
+        Assert.False(f.Shell.AiConsole.ShowEmptyState);
+        await ShellFixture.PumpUntil(() => View(f).Terminal.Session == first.Session, 20);
+        Assert.NotNull(first.Session);
+        Assert.Equal("Claude", first.Title);
+
+        // Closing the last one leaves the empty window.
+        close.Command.Execute(null);
+        ShellFixture.Pump();
+        Assert.Empty(f.Shell.AiConsole.Tabs);
+        Assert.True(f.Shell.AiConsole.ShowEmptyState);
+    }
+
     [AvaloniaFact]
     public async Task The_console_runs_only_where_an_external_agent_may_and_comes_back_with_its_conversation()
     {

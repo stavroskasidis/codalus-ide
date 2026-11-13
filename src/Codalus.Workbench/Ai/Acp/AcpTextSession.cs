@@ -37,6 +37,7 @@ public sealed class AcpTextSession : IAcpClientHandler, IAsyncDisposable
     private readonly Lock _gate = new();
     private IDisposable? _route;
     private StringBuilder? _reply;
+    private int _refused;
     private int _disposed;
 
     private AcpTextSession(string agent, AcpClient client, AiService ai, AcpTextPurpose purpose)
@@ -192,10 +193,14 @@ public sealed class AcpTextSession : IAcpClientHandler, IAsyncDisposable
                 _reply = reply;
             }
 
+            Volatile.Write(ref _refused, 0);
+            var stopReason = "end_turn";
+
             var answer = _client.PromptAsync(new AcpPromptRequest(SessionId, [AcpContentBlock.FromText(prompt)]), CancellationToken.None);
             try
             {
                 var response = await answer.WaitAsync(cancellationToken).ConfigureAwait(false);
+                stopReason = response.StopReason;
                 if (response.StopReason == "refusal")
                 {
                     throw new AcpException($"{Agent} refused to answer.");
@@ -219,6 +224,17 @@ public sealed class AcpTextSession : IAcpClientHandler, IAsyncDisposable
             lock (_gate)
             {
                 _reply = null;
+            }
+
+            // An agent that ended its turn without text (it reached for a tool the session refuses, and gave up, or it
+            // stopped) is a failure the user sees, not an empty commit message or fix that looks like nothing happened.
+            var refused = Volatile.Read(ref _refused);
+            _ai.LogAgent(Agent, string.Create(CultureInfo.InvariantCulture, $"session/prompt → {stopReason}, {reply.Length:N0} characters{(refused > 0 ? $", {refused} request(s) refused" : "")}"));
+            if (reply.ToString().Trim().Length == 0)
+            {
+                throw new AcpException(refused > 0
+                    ? $"{Agent} ended its turn without an answer: it asked to use its own tools ({refused} time(s)), which Codalus IDE refuses for AI features, where everything it needs is in the request. Ask again, or use AI Chat."
+                    : $"{Agent} ended its turn without an answer ({stopReason}).");
             }
 
             return reply.ToString();
@@ -251,14 +267,23 @@ public sealed class AcpTextSession : IAcpClientHandler, IAsyncDisposable
 
     private JsonRpcHandlerException Refuse(string method)
     {
+        Interlocked.Increment(ref _refused);
         _ai.LogAgent(Agent, string.Create(CultureInfo.InvariantCulture, $"{method} → refused ({Describe(Purpose)} ask for text only)"));
         return new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, RefusalMessage);
     }
 
+    /// <summary>
+    /// A refusal, with the agent's own reject option: <c>cancelled</c> is only the answer to a turn the client cancelled
+    /// (ACP), and Claude's adapter, given it for its turn's tool, aborted the tool use, so the turn ended without text and
+    /// a commit message came back empty (ADR 0097). Without a reject option, <c>cancelled</c> is all that's left.
+    /// </summary>
     public Task<AcpRequestPermissionResponse> RequestPermissionAsync(AcpRequestPermissionRequest request, CancellationToken cancellationToken)
     {
-        _ai.LogAgent(Agent, $"{AcpMethods.SessionRequestPermission} → cancelled ({Describe(Purpose)} ask for text only)");
-        return Task.FromResult(new AcpRequestPermissionResponse(new AcpPermissionOutcome("cancelled", null)));
+        Interlocked.Increment(ref _refused);
+        var options = request.Options ?? [];
+        var reject = options.FirstOrDefault(o => o.Kind == "reject_once") ?? options.FirstOrDefault(o => o.Kind == "reject_always");
+        _ai.LogAgent(Agent, $"{AcpMethods.SessionRequestPermission} {request.ToolCall?.Kind ?? "tool"} → {(reject is null ? "cancelled" : "rejected")} ({Describe(Purpose)} ask for text only)");
+        return Task.FromResult(new AcpRequestPermissionResponse(reject is null ? AcpPermissionOutcome.Cancelled : AcpPermissionOutcome.Selected(reject.OptionId)));
     }
 
     public Task<AcpReadTextFileResponse> ReadTextFileAsync(AcpReadTextFileRequest request, CancellationToken cancellationToken) =>
