@@ -92,13 +92,16 @@ public sealed class DebuggeeFixture : IAsyncLifetime
             ? line
             : throw new InvalidOperationException($"No [{marker}] marker in {file}.");
 
-    public async ValueTask InitializeAsync()
+    public ValueTask InitializeAsync() => BuildAsync(_root, "Debugging.slnx");
+
+    /// <summary>Copies samples/Debugging into <paramref name="root"/> (with the samples' build files and the SDK pin) and builds <paramref name="solution"/> there.</summary>
+    internal static async ValueTask BuildAsync(string root, string solution)
     {
-        Copy(Path.Combine(RepoRoot, "samples", "Debugging"), Path.Combine(_root, "Debugging"));
-        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(_root, "Directory.Build.props"));
-        Codalus.Tests.FixtureSdk.Pin(_root);
-        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(_root, "Directory.Packages.props"));
-        var start = new ProcessStartInfo("dotnet", ["build", Path.Combine(_root, "Debugging", "Debugging.slnx"), "-nologo", "-v", "quiet"])
+        Copy(Path.Combine(RepoRoot, "samples", "Debugging"), Path.Combine(root, "Debugging"));
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(root, "Directory.Build.props"));
+        Codalus.Tests.FixtureSdk.Pin(root);
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(root, "Directory.Packages.props"));
+        var start = new ProcessStartInfo("dotnet", ["build", Path.Combine(root, "Debugging", solution), "-nologo", "-v", "quiet"])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -110,11 +113,13 @@ public sealed class DebuggeeFixture : IAsyncLifetime
         Assert.True(process.ExitCode == 0, await output);
     }
 
-    public ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => Delete(_root);
+
+    internal static ValueTask Delete(string root)
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            Directory.Delete(root, recursive: true);
         }
         catch (IOException)
         {

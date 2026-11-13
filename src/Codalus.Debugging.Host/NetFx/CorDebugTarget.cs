@@ -470,6 +470,12 @@ internal sealed class CorDebugTarget : IClrProcess
             case BreakpointCorDebugManagedCallbackEventArgs hit when Breakpoint(hit.Breakpoint) is { } breakpoint:
                 Queue(new ClrBreakpointHit(Thread(hit.Thread), breakpoint), e, false);
                 return;
+            case StepCompleteCorDebugManagedCallbackEventArgs step when Cancelled(step.Stepper):
+                // A stepper cancelled while its completion was already on its way (M61: a step over an await ends where
+                // the call resumes, on another thread, while the step's own stepper ran on): not the current step's end.
+                Continuing?.Invoke("[clr] a cancelled step's completion");
+                ContinueFromCallback(e);
+                return;
             case StepCompleteCorDebugManagedCallbackEventArgs step:
                 _stepper = null;
                 Queue(new ClrStepCompleted(Thread(step.Thread)), e, false);
@@ -771,10 +777,35 @@ internal sealed class CorDebugTarget : IClrProcess
             Process.Continue(false);
         });
 
+    /// <summary>The steppers cancelled last (M61), whose completions are dropped when they come after all.</summary>
+    private readonly Queue<CorDebugStepper> _cancelled = new();
+
+    /// <summary>
+    /// Whether a completed stepper is one that was cancelled. By reference: ClrDebug hands out one wrapper per stepper.
+    /// Were it ever another wrapper, the completion would be taken as the step's, as before.
+    /// </summary>
+    private bool Cancelled(CorDebugStepper? stepper)
+    {
+        lock (_gate)
+        {
+            return stepper is not null && _cancelled.Any(c => ReferenceEquals(c.Raw, stepper.Raw));
+        }
+    }
+
     public void CancelStep()
     {
         if (_stepper is { } stepper)
         {
+            lock (_gate)
+            {
+                if (_cancelled.Count >= 8)
+                {
+                    _cancelled.Dequeue();
+                }
+
+                _cancelled.Enqueue(stepper);
+            }
+
             _stepper = null;
             try
             {
@@ -788,6 +819,9 @@ internal sealed class CorDebugTarget : IClrProcess
 
     public void SetUserCode(IClrModule module, bool userCode) =>
         Translate(() => ((CorModule)module).Raw.SetJMCStatus(userCode, 0, []));
+
+    public void SetUserCode(IClrModule module, int methodToken, bool userCode) =>
+        Translate(() => ((CorModule)module).Raw.GetFunctionFromToken(new mdMethodDef(methodToken)).JMCStatus = userCode);
 
     public IClrValue GetStaticField(IClrThread thread, ClrType type, int fieldToken) =>
         Translate(() =>
