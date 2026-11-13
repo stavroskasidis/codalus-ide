@@ -36,7 +36,7 @@ Settings you may want first:
 | Setting | What it does |
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
-| Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`. |
+| Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`, and in C# puts an empty block's opening brace where `.editorconfig` says when you press Enter between its braces. |
 | Text Editor → Completion: Commit on Space | On (the default): Space inserts the completion list's selected item, as `(`, `.` and `;` do. Off: Space just types a space ([IntelliSense](editing.md#intellisense)). |
 | Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
 | Projects → Restore on Open | Restore packages when a trusted solution opens. |

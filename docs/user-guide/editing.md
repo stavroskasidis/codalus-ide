@@ -60,7 +60,7 @@ Every file type gets the basics, and many get more:
 
 - **Highlighting** for about forty languages from VS Code's TextMate grammars: XML and MSBuild, JSON, YAML, Markdown, HTML, CSS, JavaScript, TypeScript, F#, VB, SQL, PowerShell, shell scripts, Dockerfiles and more. The status bar shows the language.
 - **Comments**: Toggle Line Comment (`Ctrl+/`), Comment Selection (`Ctrl+K Ctrl+C`) and Uncomment Selection (`Ctrl+K Ctrl+U`) use each language's comment style.
-- **Brackets and quotes** close automatically, and typing the closing character steps over it (setting **Text Editor → Auto Closing Brackets**).
+- **Brackets and quotes** close automatically, and typing the closing character steps over it (setting **Text Editor → Auto Closing Brackets**). Enter between a pair (`{|}`) puts the closing one on a line of its own, below an indented line for the caret. In C#, the opening brace then goes where your `.editorconfig` puts it: on a line of its own by default (`csharp_new_line_before_open_brace`), as with **Format on Type**.
 - **Folding** follows the language server, or else XML elements, `#region`-style markers and indentation.
 - **Word completion** (`Ctrl+Alt+Space`, and while you type) offers the words of the document when no language service completes.
 

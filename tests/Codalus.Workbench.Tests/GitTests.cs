@@ -41,6 +41,54 @@ public sealed class GitServiceTests : IAsyncLifetime
     }
 
     /// <summary>
+    /// A commit message describes what Commit will commit (ADR 0097): the staged changes when there are some, else
+    /// everything Commit All commits: the tracked changes against HEAD, and each new file not ignored.
+    /// </summary>
+    [Fact]
+    public async Task The_commit_messages_diff_is_what_commit_takes_staged_or_all_with_new_files()
+    {
+        await File.WriteAllTextAsync(Path.Combine(Repo, ".gitignore"), "bin/\n", Ct);
+        await Git(Repo, "add", ".gitignore");
+        await Git(Repo, "commit", "-q", "-m", "ignore bin");
+        await File.WriteAllTextAsync(File1, "ONE\n" + string.Join('\n', s_lines.Skip(1)) + "\n", Ct);
+        await File.WriteAllTextAsync(Path.Combine(Repo, "new.txt"), "brand new\n", Ct);
+        Directory.CreateDirectory(Path.Combine(Repo, "bin"));
+        await File.WriteAllTextAsync(Path.Combine(Repo, "bin", "out.txt"), "ignored\n", Ct);
+
+        // Nothing staged: the change to a.txt and the new file, not the ignored one.
+        var all = await Codalus.Workbench.Ai.AiActions.CommitDiffAsync(_git, Repo, staged: false, Ct);
+        Assert.Contains("+ONE", all, StringComparison.Ordinal);
+        Assert.Contains("+brand new", all, StringComparison.Ordinal);
+        Assert.Contains("new.txt", all, StringComparison.Ordinal);
+        Assert.DoesNotContain("out.txt", all, StringComparison.Ordinal);
+        Assert.Empty(await Codalus.Workbench.Ai.AiActions.CommitDiffAsync(_git, Repo, staged: true, Ct));
+
+        // The new file staged: the staged diff is that file alone, as Commit then commits it alone.
+        await Git(Repo, "add", "new.txt");
+        var staged = await Codalus.Workbench.Ai.AiActions.CommitDiffAsync(_git, Repo, staged: true, Ct);
+        Assert.Contains("+brand new", staged, StringComparison.Ordinal);
+        Assert.DoesNotContain("+ONE", staged, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Without_a_commit_yet_the_commit_messages_diff_has_the_index_and_the_work_tree()
+    {
+        var fresh = Path.Combine(_root, "fresh");
+        Directory.CreateDirectory(fresh);
+        await Git(fresh, "init", "-q", "-b", "main");
+        await Configure(fresh);
+        await File.WriteAllTextAsync(Path.Combine(fresh, "added.txt"), "in the index\n", Ct);
+        await Git(fresh, "add", "added.txt");
+        await File.WriteAllTextAsync(Path.Combine(fresh, "added.txt"), "in the index\nand in the work tree\n", Ct);
+        await File.WriteAllTextAsync(Path.Combine(fresh, "loose.txt"), "untracked\n", Ct);
+
+        var all = await Codalus.Workbench.Ai.AiActions.CommitDiffAsync(_git, fresh, staged: false, Ct);
+        Assert.Contains("+in the index", all, StringComparison.Ordinal);
+        Assert.Contains("+and in the work tree", all, StringComparison.Ordinal);
+        Assert.Contains("+untracked", all, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// git starts on the thread pool, never on the caller's thread, which is often the UI thread (Sync, Git Changes): a
     /// start can take long (CreateProcess on Windows, a fork on Linux). Here the start, reading the variables it's given,
     /// waits for the call to have returned, which a start on the caller's thread can't see.

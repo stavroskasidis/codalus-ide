@@ -18,7 +18,8 @@ internal static partial class BuiltIns
     public const string AiKeybindings =
         """
         [
-          { "key": "primary+alt+i", "command": "ai.console.show" }
+          { "key": "primary+alt+i", "command": "ai.console.show" },
+          { "key": "alt+\\", "command": "ai.triggerInlineSuggestion", "when": "editorTextFocus" }
         ]
         """;
 
@@ -75,6 +76,7 @@ internal static partial class BuiltIns
         Add("ai.askAboutSelection", "Ask AI About the Selection", () => Sync(() => shell.AskAi(string.Empty)), "aiEnabled && editorHasSelection");
         Add("ai.explainSelection", "Explain the Selection", () => Sync(() => shell.AskAiNow("Explain what this code does.")), "aiEnabled && editorHasSelection");
         Add("ai.fixDiagnostic", "Fix with AI", shell.FixDiagnosticWithAiAsync, "aiEnabled && activeDocumentKind == textFile");
+        Add("ai.triggerInlineSuggestion", "Trigger Inline Suggestion", () => shell.ActiveEditor?.Controller?.InlineSuggestions.TriggerAsync() ?? Task.CompletedTask, "aiEnabled && activeDocumentKind == textFile");
         Add("ai.generateTests", "Generate Tests with AI", shell.GenerateTestsWithAiAsync, "aiEnabled && activeDocumentKind == textFile");
         Add("ai.generateCommitMessage", "Write the Commit Message with AI", shell.GenerateCommitMessageAsync, "aiEnabled && gitRepository");
         Add("ai.explainTest", "Ask AI Why the Test Fails", shell.ExplainTestWithAiAsync, "aiEnabled && testExplorerSelection");
