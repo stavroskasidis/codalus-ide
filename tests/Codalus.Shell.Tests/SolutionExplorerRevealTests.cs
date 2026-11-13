@@ -185,7 +185,7 @@ public class SolutionExplorerRevealTests
         explorer.CollapseAll();
         var shape = Shape(explorer);
         revealed.Clear();
-        f.Shell.CloseAllDocuments(exceptActive: false);
+        await f.Shell.CloseAllDocumentsAsync(exceptActive: false);
         for (var i = 0; i < 5; i++)
         {
             ShellFixture.Pump();

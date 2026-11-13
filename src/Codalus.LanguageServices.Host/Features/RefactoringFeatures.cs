@@ -110,7 +110,30 @@ internal static class FormattingFeature
             ? await Formatter.FormatAsync(document, s, cancellationToken: cancellationToken).ConfigureAwait(false)
             : await Formatter.FormatAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
         var changes = await formatted.GetTextChangesAsync(document, cancellationToken).ConfigureAwait(false);
-        return [.. changes.Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty))];
+        return [.. changes.Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), InDocumentsLineEndings(c.NewText, text)))];
+    }
+
+    /// <summary>
+    /// <paramref name="newText"/> with the document's own line ending: without <c>end_of_line</c> in the
+    /// <c>.editorconfig</c>, Roslyn's formatter inserts the OS's (CRLF on Windows), so a file with LF lines got CRLF
+    /// ones mixed in (Windows CI, runs 43452171892 and 43458220239).
+    /// </summary>
+    internal static string InDocumentsLineEndings(string? newText, SourceText text)
+    {
+        if (string.IsNullOrEmpty(newText) || !newText.Contains('\n', StringComparison.Ordinal))
+        {
+            return newText ?? string.Empty;
+        }
+
+        foreach (var line in text.Lines)
+        {
+            if (line.EndIncludingLineBreak > line.End)
+            {
+                return newText.ReplaceLineEndings(text.ToString(TextSpan.FromBounds(line.End, line.EndIncludingLineBreak)));
+            }
+        }
+
+        return newText; // no line break yet: the formatter's
     }
 
     /// <summary>
@@ -173,7 +196,7 @@ internal static class FormattingFeature
         var formatted = await Formatter.FormatAsync(document, TextSpan.FromBounds(before.Span.End, open.Span.End), cancellationToken: cancellationToken).ConfigureAwait(false);
         var changes = await formatted.GetTextChangesAsync(document, cancellationToken).ConfigureAwait(false);
         return [.. changes.Where(c => c.Span.Start >= before.Span.End && c.Span.End <= open.SpanStart)
-            .Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty))];
+            .Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), InDocumentsLineEndings(c.NewText, text)))];
     }
 }
 
