@@ -296,6 +296,25 @@ A program you **attach** to takes edits only if it was started with `DOTNET_MODI
 
 If you chose netcoredbg, the first edit you save while debugging offers the Codalus debugger again, once; **Don't Show Again** turns the offer off (`debug.codalusOffer`).
 
+### Async code and runtime async (.NET 11)
+
+The Codalus debugger steps through `async` methods as you read them, whether the compiler built them as state machines (every .NET version) or for **runtime async** (.NET 11 with `<Features>$(Features);runtime-async=on</Features>` in the project), where the runtime suspends and resumes the method itself ([ADR 0100](../adr/0100-debugging-runtime-async-code.md)):
+
+- **Step Over an `await`** stops on the method's next line once it resumes, on whichever thread it resumes on: the Threads window and the Call Stack follow it there. Code that runs meanwhile (the caller, other requests) doesn't stop the step, but a breakpoint does.
+- **Step Into** an awaited method stops on its opening brace; for a state machine the compiler's code that starts it is stepped through.
+- **Step Out** of an async method, or a step over its closing brace, goes back to the method that awaited it once that resumes, also when the method itself had resumed after an await (its caller is then the thread pool, not the awaiting method). For a state machine, Locals' first row and `$ReturnValue` show the value it returned.
+- **Breakpoints and Run to Cursor** after an `await` stop there, with the method's parameters, locals and `this`; so does an exception thrown after one, with the throwing method on top of the call stack.
+- **The call stack** of a resumed method starts with it; the thread pool's and the runtime's frames below it are folded into [External Code] under Just My Code.
+- **Set Next Statement** moves within the method after an `await` as anywhere else.
+- Libraries built either way await each other: breakpoints and steps work across them.
+
+What runtime async doesn't give the debugger yet (reported to the .NET runtime; until it ships):
+- **Step Out of a runtime-async method that has resumed** (and a step over its closing brace) stops in the method that awaited it only where that method next calls code of yours, and without the returned value; when it calls none, the program runs on as with Continue. The same holds for a state machine awaited by runtime-async code.
+- **The awaiting methods** aren't in the call stack once a method has resumed, for either kind (the classic IDE's async call stack): only what resumed it is.
+- A step over an `await` in a **static** runtime-async method can stop in another call of the same method, on another thread, when that one reaches one of its lines first.
+
+Edit and Continue after an `await` and the profiler's .NET Async view haven't been checked on runtime-async code yet.
+
 ## Settings
 
 - `debug.adapter`: the debugger for .NET programs, `codalus` ([the Codalus debugger](#the-codalus-debugger), the default) or `netcoredbg` (the fallback, for one release).
@@ -321,6 +340,7 @@ The Codalus debugger's own limits:
 - symbols found on a server give a module its lines and names; its source files still come from your disk (embedded sources and Source Link aren't read by the debugger yet)
 - F# expressions are read as C#'s subset
 - Edit and Continue doesn't cover modules built with Windows PDBs
+- no async call stack, and runtime async's limits for Step Out of a resumed method ([Async code](#async-code-and-runtime-async-net-11))
 
 These are netcoredbg's, when you choose it as the fallback; [the Codalus debugger](#the-codalus-debugger) does the first eight:
 - no Edit and Continue, and no hot reload while debugging a program netcoredbg runs: the .NET runtime refuses Hot Reload's updates while a debugger is attached, so Start with Hot Reload and Start Debugging are separate runs (see [ADR 0040](../adr/0040-hot-reload-while-debugging.md)). Blazor WebAssembly components are the exception, standalone or in a Blazor Web App: they run in the browser, and Hot Reload applies edits to them while you debug ([Web development](web.md#hot-reload)). A Blazor Web App's server still follows the runtime's rule: edits to it take effect after Restart.

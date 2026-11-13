@@ -172,7 +172,43 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         /// <summary>Stepping out of a filtered property or operator: then on into the rest of the line.</summary>
         public bool ResumeInto { get; set; }
+
+        /// <summary>The async method the step started in (M61), whose <c>await</c> may suspend it: then the step ends where it resumes.</summary>
+        public AsyncCall? Async { get; init; }
+
+        /// <summary>The IL range stepped last has a return: out of the method from there, it completed (M61).</summary>
+        public bool Returns { get; set; }
+
+        /// <summary>A step out of a resumed async call (M61): the method's name, as the value it returned is shown.</summary>
+        public string? AsyncOut { get; init; }
+
+        /// <summary>The task of a step out's state machine (M61), held: its result is what the method returned.</summary>
+        public IClrValue? AwaitedTask { get; init; }
+
+        /// <summary>A step out of a resumed async call went into a method the awaiting call calls, and out of it again.</summary>
+        public bool OutOfCallee { get; set; }
+
+        /// <summary>The resumed async call a step out started in, without a task naming its awaiting call (M61).</summary>
+        public AsyncCall? OutOf { get; init; }
     }
+
+    /// <summary>
+    /// A call of an async method (M61, ADR 0100): the method, and what tells this call from the method's other calls
+    /// (a state machine's object; a runtime-async method's <c>this</c>, when it's an object), held by a strong handle
+    /// until the user lets the program run on again. Null <see cref="Instance"/>: any call of the method.
+    /// </summary>
+    private sealed record AsyncCall(ClrAsyncKind Kind, IClrModule Module, int Method, IClrValue? Instance);
+
+    /// <summary>
+    /// The breakpoints of an async step (M61): on each line of the call's method, the step ending at the first of them
+    /// that the call reaches once an await has suspended and resumed it, on whichever thread. Any other stop ends it.
+    /// </summary>
+    private sealed record AsyncResume(AsyncCall Call, HashSet<int> Offsets, List<IClrBreakpoint> Breakpoints);
+
+    private AsyncResume? _asyncResume;
+
+    /// <summary>What <see cref="AsyncCall.Instance"/> holds: let go when the user lets the program run on.</summary>
+    private readonly List<Action> _stepHandles = [];
 
     private IClrProcess Process => _process ?? throw new DapRequestException("The debugger isn't attached to a program.");
 
@@ -860,6 +896,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
     private void Stop(string reason, IClrThread thread, int[]? hitBreakpoints = null, string? text = null, string? description = null)
     {
+        EndAsyncResume();
         _userStopped = true;
         ClearHandles();
         _ = dap.SendEventAsync(DapEvents.Stopped, new StoppedEvent(reason, description, thread.Id, AllThreadsStopped: true, text, hitBreakpoints is { Length: > 0 } ? hitBreakpoints : null), DapJsonContext.Default.StoppedEvent);
@@ -1350,13 +1387,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
     }
 
-    private bool BreakpointHit(ClrBreakpointHit hit)
-    {
-        if (!_byBreakpoint.TryGetValue(hit.Breakpoint, out var state))
-        {
-            return false; // removed meanwhile
-        }
+    /// <summary>A breakpoint hit: the user's that breaks, or a step over an <c>await</c> whose call resumed there (M61).</summary>
+    private bool BreakpointHit(ClrBreakpointHit hit) =>
+        (_byBreakpoint.TryGetValue(hit.Breakpoint, out var state) && UserBreakpointHit(hit, state)) || AsyncResumed(hit.Thread);
 
+    private bool UserBreakpointHit(ClrBreakpointHit hit, BreakpointState state)
+    {
         if (state.Condition is { } condition)
         {
             try
@@ -1576,6 +1612,12 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     {
         _returnValue = null;
         Process.ReleaseKept();
+        foreach (var release in _stepHandles)
+        {
+            release();
+        }
+
+        _stepHandles.Clear();
     }
 
     private void Step(int threadId, ClrStepKind kind, int? targetId = null, bool instruction = false)
@@ -1605,8 +1647,255 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 return;
             }
 
-            _step = new StepState(kind, threadId, top?.Module, top?.MethodToken ?? 0) { Target = target, Depth = SafeFrames(thread).Count };
+            // Out of a resumed async call, or over or into its end (M61): what called it is what resumed it (a task's
+            // continuation, the runtime's dispatcher), not the call awaiting it.
+            if ((kind == ClrStepKind.Out || (top is not null && EndsMethod(top))) && ResumedAsyncCall(thread, top) is { } resumed)
+            {
+                StepOutOfResumed(thread, top!, resumed);
+                return;
+            }
+
+            _step = new StepState(kind, threadId, top?.Module, top?.MethodToken ?? 0) { Target = target, Depth = SafeFrames(thread).Count, Async = kind == ClrStepKind.Out ? null : AsyncCallOf(top) };
+            if (_step.Async is { } call)
+            {
+                AwaitResume(call, top!.IlOffset);
+            }
+
             StartStep(thread, kind, top);
+        }
+    }
+
+    /// <summary>
+    /// Steps out of a resumed async call (M61). A state machine's task names its awaiting state machine: the step ends
+    /// where that call resumes once this one has completed (its breakpoints, on whichever thread), with the task's
+    /// result. Without one (runtime async: no task, the awaiting call is the runtime's continuation; a task whose
+    /// awaiting call hasn't set its continuation yet), a Just My Code step into the rest of the call and on, through
+    /// <see cref="AsyncOutGoesOn"/>, to the awaiting call that its completion resumes on this thread.
+    /// </summary>
+    private void StepOutOfResumed(IClrThread thread, IClrFrame top, string resumed)
+    {
+        var (awaiting, task) = AwaitingCall(thread, top);
+        var stateMachine = Types.Info(top.Module!)?.AsyncKind(top.MethodToken) == ClrAsyncKind.StateMachine;
+        if (awaiting is not null && stateMachine)
+        {
+            _step = new StepState(ClrStepKind.Out, thread.Id, top.Module, top.MethodToken) { AsyncOut = resumed, AwaitedTask = task };
+            AwaitResume(awaiting);
+            Process.Continue();
+            return;
+        }
+
+        // TODO(issue): runtime async's awaiting call, and the value the call returned, once the runtime exposes a call's
+        // continuations to debuggers and reports a resumption to Just My Code steppers (ADR 0100, reported upstream).
+        _step = new StepState(ClrStepKind.Out, thread.Id, top.Module, top.MethodToken) { AsyncOut = resumed, AwaitedTask = stateMachine ? task : null, OutOf = AsyncCallOf(top) };
+        if (awaiting is not null)
+        {
+            // Runtime async: the state machine awaiting the task of the calls the dispatcher runs gets the breakpoints
+            // too, for when it resumes where the stepper doesn't see it (the task completed before it set its
+            // continuation, which then runs on another thread).
+            AwaitResume(awaiting);
+        }
+
+        // Just My Code's stepper whatever the setting: the step looks for the user's code that runs next.
+        Process.Step(thread, new ClrStep(ClrStepKind.Into, [(0, int.MaxValue)], JustMyCode: true));
+    }
+
+    /// <summary>
+    /// A step out of a resumed async call without a task naming its awaiting call (M61) ended somewhere on the way: on
+    /// into what runs next from the call itself (back from one of its calls) or from code that isn't the user's (the
+    /// dispatcher or the task the call completed, which resume the awaiting call on this thread); out again from a
+    /// method the call calls, or one the resumed awaiting call calls (runtime async resumes a call where Just My Code's
+    /// stepper doesn't see it come in). False: the step ends here, in the awaiting call.
+    /// </summary>
+    private bool AsyncOutGoesOn(IClrThread thread, IClrFrame frame, StepState step)
+    {
+        if (!IsUserCode(frame) || (step.OutOf is { } call && IsCall(frame, call)))
+        {
+            Process.Step(thread, new ClrStep(ClrStepKind.Into, [(0, int.MaxValue)], JustMyCode: true));
+            return true;
+        }
+
+        if (VisibleFrames(thread).Where(f => f.Module is not null).Skip(1).FirstOrDefault() is not { } caller || !IsUserCode(caller))
+        {
+            return false;
+        }
+
+        if (step.OutOf is { } outOf && IsCall(caller, outOf))
+        {
+            StartStep(thread, ClrStepKind.Out, frame);
+            return true;
+        }
+
+        if (step.OutOfCallee)
+        {
+            return false;
+        }
+
+        step.OutOfCallee = true;
+        StartStep(thread, ClrStepKind.Out, frame);
+        return true;
+    }
+
+    /// <summary>Whether a frame is on its method's last line (its closing brace): no line of the method comes after it in its IL.</summary>
+    private bool EndsMethod(IClrFrame frame) =>
+        frame.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } range
+        && !info.SequencePoints(frame.MethodToken, frame.CodeVersion).Any(p => !p.IsHidden && p.Offset > range.Start);
+
+    /// <summary>The call of an async method <paramref name="frame"/> is (M61); null when its method isn't async.</summary>
+    private AsyncCall? AsyncCallOf(IClrFrame? frame)
+    {
+        if (frame?.Module is not { } module || Types.Info(module) is not { } info || info.AsyncKind(frame.MethodToken) is var kind && kind == ClrAsyncKind.None)
+        {
+            return null;
+        }
+
+        IClrValue? instance = null;
+        try
+        {
+            // TODO(issue): a static runtime-async method's calls can't be told apart (ADR 0100): another call of it on
+            // another thread can end the step, once the runtime exposes a call's continuation that can tell them.
+            // A state machine's MoveNext: its object (a class in a debug build). A runtime-async method: its this, when
+            // it has one and it's an object. Held, so a collection that moves it doesn't lose it.
+            if (!info.Method(frame.MethodToken).IsStatic && frame.Argument(0) is { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 } self
+                && Process.Keep(self, out var release) is { } kept)
+            {
+                instance = kept;
+                _stepHandles.Add(release);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("The async call's object: " + ex.Message);
+        }
+
+        return new AsyncCall(kind, module, frame.MethodToken, instance);
+    }
+
+    /// <summary>Whether <paramref name="frame"/> is <paramref name="call"/>: its method, and its object when it has one.</summary>
+    private bool IsCall(IClrFrame frame, AsyncCall call)
+    {
+        if (!ReferenceEquals(frame.Module, call.Module) || frame.MethodToken != call.Method)
+        {
+            return false;
+        }
+
+        try
+        {
+            return call.Instance is not { } instance || (frame.Argument(0) is { } self && self.Address == instance.Address);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("The async call's object: " + ex.Message);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Whether an async step's call suspended (M61), the step being in <paramref name="frame"/>, another method's,
+    /// without having reached another line of its own (where it would have stopped). A state machine says so by its
+    /// state (0 and up: waiting at an await; -1: running; -2: done). A runtime-async method has no state to read: it
+    /// suspended when its frame is gone from the thread and the thread is in code that isn't the user's (the runtime's
+    /// dispatcher) or right after the call in its caller, from a range of IL without a return (a completed method
+    /// returns from its closing brace's line; a caller's catch block, after an exception, is at no call).
+    /// </summary>
+    private bool Suspended(AsyncCall call, IClrFrame frame, StepState step, int depth)
+    {
+        if (call.Kind == ClrAsyncKind.StateMachine && call.Instance is { } machine && Types.Info(call.Module) is { } info)
+        {
+            try
+            {
+                var type = info.DeclaringType(call.Method);
+                if (info.Fields(type).FirstOrDefault(f => f.Name == "<>1__state") is { } state)
+                {
+                    return machine.Field(call.Module, type, state.Token).Primitive is int value && value >= 0;
+                }
+            }
+            catch (InvalidOperationException ex)
+            {
+                log.WriteLine("The state machine's state: " + ex.Message);
+            }
+        }
+
+        return step.Depth > 0 && depth < step.Depth && !step.Returns && (!IsUserCode(frame) || !frame.IsIlOffsetExact);
+    }
+
+    /// <summary>
+    /// Sets a breakpoint on each line of an async step's method (M61), but where one of the user's is bound already:
+    /// should an await suspend the call, the step ends at the first that the call reaches once it resumes, on whichever
+    /// thread (<see cref="AsyncResumed"/>). Set before the step starts: a call resumed by the runtime's thread pool
+    /// returns into code that isn't the user's, where the runtime's Just My Code stepper doesn't report back. None goes
+    /// where the step starts (<paramref name="origin"/>): one set where a thread stands is hit as soon as it runs on,
+    /// and a hit there may be an earlier one's, reported late (ICorDebug finds a breakpoint by its place).
+    /// </summary>
+    private void AwaitResume(AsyncCall call, int? origin = null)
+    {
+        EndAsyncResume();
+        if (Types.Info(call.Module) is not { } info)
+        {
+            return;
+        }
+
+        var version = Process.CodeVersion(call.Module, call.Method);
+        var users = _byBreakpoint.Values.SelectMany(s => s.Bound).Where(b => ReferenceEquals(b.Module, call.Module) && b.Method == call.Method && b.Version == version).Select(b => b.Offset).ToHashSet();
+        var offsets = info.SequencePoints(call.Method, version).Where(p => !p.IsHidden && p.Offset != origin).Select(p => p.Offset).ToHashSet();
+        var breakpoints = new List<IClrBreakpoint>();
+        foreach (var offset in offsets.Where(o => !users.Contains(o)))
+        {
+            try
+            {
+                breakpoints.Add(Process.CreateBreakpoint(call.Module, call.Method, offset));
+            }
+            catch (InvalidOperationException ex)
+            {
+                log.WriteLine($"The async step's breakpoint at IL {offset.ToString(CultureInfo.InvariantCulture)}: {ex.Message}");
+            }
+        }
+
+        _asyncResume = new AsyncResume(call, offsets, breakpoints);
+    }
+
+    /// <summary>
+    /// A breakpoint was hit during an async step (M61): when it's the step's call (not another call of its method), on
+    /// one of its lines, the step ends here, whichever thread it's on.
+    /// </summary>
+    private bool AsyncResumed(IClrThread thread)
+    {
+        if (_asyncResume is not { } pending || TopFrame(thread) is not { } frame || !pending.Offsets.Contains(frame.IlOffset) || !IsCall(frame, pending.Call))
+        {
+            return false;
+        }
+
+        if (_step is { AsyncOut: not null } outOfResumed)
+        {
+            ReadTaskResult(thread, outOfResumed);
+        }
+
+        // The step's own stepper, when it's still running: lost in code that isn't the user's, where the call returned,
+        // or ending here too (its completion, should it come after all, is dropped as a cancelled stepper's).
+        Process.CancelStep();
+        _step = null;
+        Stop("step", thread);
+        return true;
+    }
+
+    /// <summary>Ends a step over an <c>await</c> that is waiting for its method to resume: its breakpoints are removed.</summary>
+    private void EndAsyncResume()
+    {
+        if (_asyncResume is not { } pending)
+        {
+            return;
+        }
+
+        _asyncResume = null;
+        foreach (var breakpoint in pending.Breakpoints)
+        {
+            try
+            {
+                breakpoint.Activate(false);
+            }
+            catch (InvalidOperationException ex)
+            {
+                log.WriteLine("The async step's breakpoint: " + ex.Message);
+            }
         }
     }
 
@@ -1742,6 +2031,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         if (kind != ClrStepKind.Out && frame?.Module is { } module && Types.Info(module) is { } info && info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is { } range)
         {
             ranges.Add(range);
+            if (_step is { Async: not null } step)
+            {
+                step.Returns = frame.Il() is { } il && IlCalls.Returns(il, range.Start, range.End);
+            }
         }
 
         Process.Step(thread, new ClrStep(kind, ranges, _justMyCode));
@@ -1758,11 +2051,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
 
         var frame = TopFrame(thread);
         var info = frame?.Module is { } module ? Types.Info(module) : null;
+        if (step is { AsyncOut: not null, OutOf: not null } && frame is not null && step.Repeats++ <= 100 && AsyncOutGoesOn(thread, frame, step))
+        {
+            return true;
+        }
+
         if (frame is null || step.Instruction || step.Repeats++ > 50)
         {
             _step = null;
             Stop("step", thread);
             return true;
+        }
+
+        // Out of an async method's call, which an await suspended (M61): the step ends where the call resumes, on
+        // whichever thread (its breakpoints), not in what runs meanwhile (its caller, the runtime's code).
+        if (step.Async is { } async && _asyncResume is not null && !IsCall(frame, async) && Suspended(async, frame, step, SafeFrames(thread).Count))
+        {
+            _step = null;
+            return false;
         }
 
         // Back in the caller, right after the call (a step out, or a step over or into at the method's end): what it returned.
@@ -1773,6 +2079,28 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         var userCode = info is { HasSymbols: true } && !info.IsOptimized && !info.IsNonUserCode(frame.MethodToken);
+        if (step.Kind == ClrStepKind.Into && info is not null && info.MethodHasAttribute(frame.MethodToken, "System.Runtime.CompilerServices.AsyncStateMachineAttribute") && frame.Il() is { Length: > 0 } kickoff)
+        {
+            // Into an async method built as a state machine (M61): this is its kickoff, compiler code that is
+            // [DebuggerStepThrough] and starts the state machine. Stepping out of it missed the method's body. The kickoff
+            // and the state machine's constructor are made the runtime's non-user code, so this step and the next go
+            // through them, on into what the kickoff calls, to the state machine's MoveNext.
+            foreach (var token in info.AsyncKickoffCode(frame.MethodToken))
+            {
+                try
+                {
+                    Process.SetUserCode(frame.Module!, token, false);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    log.WriteLine("An async method's kickoff: " + ex.Message);
+                }
+            }
+
+            Process.Step(thread, new ClrStep(ClrStepKind.Into, [(0, kickoff.Length)], _justMyCode));
+            return true;
+        }
+
         if (_justMyCode && !userCode)
         {
             // Code without symbols (or [DebuggerNonUserCode]): out again, to the user's code.
@@ -1814,9 +2142,166 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return true;
         }
 
+        ReadTaskResult(thread, step, frame);
         _step = null;
         Stop("step", thread);
         return true;
+    }
+
+    /// <summary>
+    /// The async call a step out starts from when it has resumed (M61), named as the value it returns is shown: the
+    /// frame below it with a module isn't the user's code (the thread pool's, the runtime's dispatcher). Null when
+    /// <paramref name="frame"/> isn't an async call, or its caller is the call awaiting it (an ordinary step out).
+    /// </summary>
+    private string? ResumedAsyncCall(IClrThread thread, IClrFrame? frame)
+    {
+        if (frame?.Module is not { } module || Types.Info(module) is not { } info || info.AsyncKind(frame.MethodToken) is var kind && kind == ClrAsyncKind.None)
+        {
+            return null;
+        }
+
+        // The frames are read anew (each read makes new ones): the top one with a module is the frame's.
+        var below = VisibleFrames(thread).Where(f => f.Module is not null).Skip(1).FirstOrDefault();
+        if (below is null || IsUserCode(below))
+        {
+            return null;
+        }
+
+        // A state machine's MoveNext is shown by the method it is (its outer type and the name in <Name>d__N).
+        var name = info.MethodDisplayName(frame.MethodToken);
+        return kind == ClrAsyncKind.StateMachine && name.LastIndexOf(".<", StringComparison.Ordinal) is var at and > 0 && name.IndexOf('>', at) is var close and > 0
+            ? name[..at] + "." + name[(at + 2)..close]
+            : name;
+    }
+
+    /// <summary>
+    /// A resumed async call's task and the state machine awaiting it (M61), each held. The task: a state machine's
+    /// builder's, whose result is what the method returns; for runtime async, the dispatcher's, the task of the
+    /// outermost runtime-async call of the chain the call is in. The awaiting call: the continuation the task runs when
+    /// it completes, when that is another state machine's box (<c>StateMachine</c>, an await of the task in an async
+    /// method without a synchronization context), or a state machine about to set it (<see cref="AwaiterOnAStack"/>).
+    /// Either is null when there's none (another kind of continuation, a runtime-async awaiting call).
+    /// </summary>
+    private (AsyncCall? Awaiting, IClrValue? Task) AwaitingCall(IClrThread thread, IClrFrame frame)
+    {
+        try
+        {
+            if (frame.Module is not { } module || Types.Info(module)?.AsyncKind(frame.MethodToken) is not { } kind
+                || (kind == ClrAsyncKind.StateMachine ? StateMachineTask(frame) : DispatchedTask(thread)) is not { Kind: ClrValueKind.Object, Address: not 0 } task
+                || Process.Keep(task, out var releaseTask) is not { } keptTask)
+            {
+                return (null, null);
+            }
+
+            _stepHandles.Add(releaseTask);
+            var awaiting = Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation
+                ? Types.Field(continuation, "StateMachine")
+                : AwaiterOnAStack(task, frame.Thread);
+            if (awaiting is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 }
+                || Types.Definition(awaiting.Type) is not { } type || Types.Info(type.Module) is not { } info
+                || info.Methods(type.Token).FirstOrDefault(m => m.Name == "MoveNext") is not { } moveNext
+                || Process.Keep(awaiting, out var releaseAwaiting) is not { } keptAwaiting)
+            {
+                return (null, keptTask);
+            }
+
+            _stepHandles.Add(releaseAwaiting);
+            return (new AsyncCall(ClrAsyncKind.StateMachine, type.Module, moveNext.Token, keptAwaiting), keptTask);
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("The awaiting call: " + ex.Message);
+            return (null, null);
+        }
+    }
+
+    /// <summary>A state machine's task: its builder's (<c>&lt;&gt;t__builder.m_task</c>, or its inner builder's for a <c>Task</c>).</summary>
+    private IClrValue? StateMachineTask(IClrFrame frame) =>
+        frame.Argument(0) is { Kind: ClrValueKind.Object, IsValueType: false } machine && Types.Field(machine, "<>t__builder") is { } builder
+            ? Types.Field(builder, "m_task") ?? (Types.Field(builder, "m_builder") is { } inner ? Types.Field(inner, "m_task") : null)
+            : null;
+
+    /// <summary>
+    /// The task of the runtime-async calls the runtime's dispatcher is running on <paramref name="thread"/> (M61): the
+    /// dispatcher's <c>this</c> (<c>AsyncHelpers.RuntimeAsyncTask&lt;T&gt;.DispatchContinuations</c>), the task the
+    /// outermost of them returned to code that isn't runtime async.
+    /// </summary>
+    private IClrValue? DispatchedTask(IClrThread thread)
+    {
+        var dispatcher = VisibleFrames(thread).Where(f => f.Module is not null).Skip(1).FirstOrDefault();
+        return dispatcher?.Module is { } module && Types.Info(module)?.MethodDisplayName(dispatcher.MethodToken) is { } name
+            && name.StartsWith("System.Runtime.CompilerServices.AsyncHelpers.RuntimeAsyncTask", StringComparison.Ordinal) && name.EndsWith(".DispatchContinuations", StringComparison.Ordinal)
+            ? SafeValue(() => dispatcher.Argument(0))
+            : null;
+    }
+
+    /// <summary>
+    /// The state machine awaiting <paramref name="task"/> that hasn't set its continuation on it yet (M61): the call
+    /// that started the method goes on on its own thread while the method resumes on another, and the debugger can stop
+    /// it between taking the task and handing the task its continuation. It is a state machine's <c>MoveNext</c> on
+    /// another thread's stack, with an awaiter of the task in a field (<c>&lt;&gt;u__1</c>) or a local.
+    /// </summary>
+    private IClrValue? AwaiterOnAStack(IClrValue task, IClrThread except)
+    {
+        foreach (var thread in Process.Threads().Where(t => t.Id != except.Id))
+        {
+            foreach (var frame in SafeFrames(thread))
+            {
+                if (AwaiterOf(frame, task) is { } machine)
+                {
+                    return machine;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The state machine of <paramref name="frame"/> when it awaits <paramref name="task"/> (M61): an awaiter of the
+    /// task in one of its fields (<c>&lt;&gt;u__1</c>, while it waits) or in a local of its <c>MoveNext</c> (as it
+    /// takes the task, and once it has resumed). Null otherwise.
+    /// </summary>
+    private IClrValue? AwaiterOf(IClrFrame frame, IClrValue task)
+    {
+        if (frame.Module is not { } module || Types.Info(module) is not { } info || info.AsyncKind(frame.MethodToken) != ClrAsyncKind.StateMachine
+            || SafeValue(() => frame.Argument(0)) is not { Kind: ClrValueKind.Object, IsValueType: false } machine
+            || Types.Definition(machine.Type) is not { } type)
+        {
+            return null;
+        }
+
+        var awaiters = info.Fields(type.Token).Where(f => !f.IsStatic && f.Name.StartsWith("<>u__", StringComparison.Ordinal))
+            .Select(f => SafeValue(() => machine.Field(type.Module, type.Token, f.Token)))
+            .Concat(Enumerable.Range(0, 64).Select(slot => SafeValue(() => frame.Local(slot))).TakeWhile(v => v is not null));
+        return awaiters.Any(a => a is { Kind: ClrValueKind.Object } && SafeValue(() => Types.Field(a, "m_task")) is { Address: not 0 } awaited && awaited.Address == task.Address)
+            ? machine
+            : null;
+    }
+
+    /// <summary>
+    /// A step out of a resumed state machine ended (M61): its task's result, as what the method returned. When the step
+    /// found the awaiting call on its way (<paramref name="frame"/>, not by its breakpoints), only if that call awaits
+    /// the task: a call further out would show another method's value.
+    /// </summary>
+    private void ReadTaskResult(IClrThread thread, StepState step, IClrFrame? frame = null)
+    {
+        if (step is not { AsyncOut: { } method, AwaitedTask: { } task } || (step.OutOf is not null && (frame is null || AwaiterOf(frame, task) is null)))
+        {
+            return;
+        }
+
+        try
+        {
+            if (Types.Field(task, "m_result") is { } result)
+            {
+                _returnValue = (thread.Id, method, result);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            log.WriteLine("The awaited task's result: " + ex.Message);
+        }
     }
 
     private bool IsUserCode(IClrFrame? frame) =>
@@ -1839,6 +2324,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _userStopped = true;
             Process.CancelStep();
             _step = null;
+            EndAsyncResume();
             ClearHandles();
             var threads = Process.Threads();
             foreach (var module in threads.SelectMany(t => t.Frames()).Select(f => f.Module).OfType<IClrModule>().Distinct())
@@ -1942,6 +2428,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private bool IsExceptionDispatch(IClrFrame frame) =>
         frame.Module is { } module && Types.Info(module)?.MethodDisplayName(frame.MethodToken) is { } name && name.StartsWith("System.Runtime.EH.", StringComparison.Ordinal);
 
+    // TODO(issue): an async call stack (ADR 0100): the calls awaiting a resumed one, from state machines' tasks'
+    // continuations, and from runtime async's once the runtime exposes them.
     private StackTraceResponse StackTrace(int threadId, int start, int levels)
     {
         lock (_gate)
