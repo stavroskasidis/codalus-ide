@@ -80,11 +80,11 @@ public sealed class DebugServiceStartTests
     }
 
     [Fact]
-    public async Task An_x64_program_of_dotnet_core_2_0_or_2_1_stays_netcoredbgs_though_the_installation_offers_the_x64_bundle()
+    public async Task An_x64_program_of_dotnet_core_2_0_or_2_1_goes_to_the_x64_bundle_and_is_told_it_cant_be_held()
     {
         // The x64 bundle holds a program at its start in the startup hook (ADR 0094's amendment), and .NET Core 2.0 and
-        // 2.1 run none: the old-.NET matrix's programs of those two ran to their end before the debugger attached
-        // (through that start on Linux, 2026-11-12). netcoredbg's x64 build holds them, for as long as it ships.
+        // 2.1 run none: it attaches once the program runs, and the Debug Console says so before the start. For a day
+        // these two were netcoredbg's, whose x64 build then crashed on every x64 program on macOS 26 (run 43337656697).
         var asked = 0;
         var debug = new DebugService(() => null, resolveX64Adapter: () => null)
         {
@@ -99,16 +99,22 @@ public sealed class DebugServiceStartTests
         debug.Output += (_, o) => output.Append(o.Text);
         var plan = new Workbench.Build.LaunchPlan("dotnet", "exec app.dll", ".", new Dictionary<string, string>(), null) { RunsAsX64 = true, StartsWithoutStartupHooks = true };
 
-        Assert.False(debug.WillUseCodalusAdapter(plan));
+        Assert.True(debug.WillUseCodalusAdapter(plan));
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan, TestContext.Current.CancellationToken));
 
-        // Neither debugger is here, so the start fails: what counts is which one was asked for, and what the console said.
-        Assert.Contains("x64 debugger", error.Message, StringComparison.Ordinal);
-        Assert.Equal(0, asked);
-        Assert.Contains("Debugging with netcoredbg: it runs on .NET Core 2.0 or 2.1 as x64 on Apple silicon", output.ToString(), StringComparison.Ordinal);
+        // The bundle isn't here, so the start fails: what counts is which debugger was asked for, and what the console said.
+        Assert.Contains("The Codalus debugger for x64 programs", error.Message, StringComparison.Ordinal);
+        Assert.True(asked >= 1);
+        Assert.StartsWith("Debugging with the Codalus debugger.", output.ToString(), StringComparison.Ordinal);
+        Assert.Contains(".NET Core 2.0 and 2.1 run no startup hooks", output.ToString(), StringComparison.Ordinal);
 
-        // The same runtime where it runs natively (Linux, Windows, an Intel Mac) is the Codalus debugger's: dbgshim holds it.
-        Assert.True(debug.WillUseCodalusAdapter(plan with { RunsAsX64 = false }));
+        // A runtime with hooks, or the same runtime where it runs natively, is told nothing: it is held at its start.
+        output.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan with { StartsWithoutStartupHooks = false }, TestContext.Current.CancellationToken));
+        Assert.DoesNotContain("startup hooks", output.ToString(), StringComparison.Ordinal);
+        output.Clear();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => debug.LaunchAsync(plan with { RunsAsX64 = false }, TestContext.Current.CancellationToken));
+        Assert.DoesNotContain("startup hooks", output.ToString(), StringComparison.Ordinal);
     }
 
     [Theory]

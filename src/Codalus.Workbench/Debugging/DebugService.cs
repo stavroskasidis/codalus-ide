@@ -286,24 +286,30 @@ public sealed class DebugService : IAsyncDisposable
 
         var reason = X64Fallback(plan);
         AnnounceAdapter(reason);
+        if (reason is null && RunsAsX64OnAppleSilicon(plan) && plan.StartsWithoutStartupHooks)
+        {
+            Output?.Invoke(this, new DebugOutput("console", NoStartupHooksNote));
+        }
+
         return reason is null;
     }
+
+    /// <summary>
+    /// Said before an x64 program of .NET Core 2.0 or 2.1 starts on Apple silicon. The Codalus debugger's x64 build holds
+    /// a program at its start in the startup hook (ADR 0094's amendment), which these two runtimes don't run, so it
+    /// attaches once the program runs. They were netcoredbg's for a day (2026-11-12), until the old-.NET matrix ran on
+    /// macOS 26: netcoredbg's x64 build ended with a segmentation fault on every x64 program there (run 43337656697).
+    /// </summary>
+    internal const string NoStartupHooksNote =
+        ".NET Core 2.0 and 2.1 run no startup hooks, which is how an x64 program is held at its start on Apple silicon: the debugger attaches once this program runs, about five seconds in. "
+        + "Breakpoints in its first lines are passed, and a program that ends sooner isn't debugged.\n";
 
     /// <summary>Whether a local launch of <paramref name="plan"/> will use Codalus IDE's adapter (nothing said).</summary>
     public bool WillUseCodalusAdapter(LaunchPlan plan) => UsesCodalusAdapter && X64Fallback(plan) is null;
 
-    /// <summary>
-    /// Why an x64 program on Apple silicon is netcoredbg's to launch, or null: this installation has no x64 build of the
-    /// Codalus debugger, or the program's runtime runs no startup hooks (.NET Core 2.0 and 2.1). The x64 build can't have
-    /// dbgshim hold a program at its start under Rosetta 2, so it holds it in the startup hook (ADR 0094's amendment);
-    /// without hooks the program ran on, and a short one ended before the debugger attached. netcoredbg's x64 build holds
-    /// those, for as long as it ships.
-    /// </summary>
+    /// <summary>Why an x64 program on Apple silicon is netcoredbg's to launch, or null: this installation has no x64 build of the Codalus debugger.</summary>
     private string? X64Fallback(LaunchPlan plan) =>
-        !RunsAsX64OnAppleSilicon(plan) ? null
-        : X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon"
-        : plan.StartsWithoutStartupHooks ? "it runs on .NET Core 2.0 or 2.1 as x64 on Apple silicon"
-        : null;
+        RunsAsX64OnAppleSilicon(plan) && X64CoreClrAdapter is null ? "it runs as x64 on Apple silicon" : null;
 
     private static bool RunsAsX64OnAppleSilicon(LaunchPlan plan) => plan.RunsAsX64 || DebugAdapterLocator.RunsAsX64OnArm64Mac(plan.FileName);
 
