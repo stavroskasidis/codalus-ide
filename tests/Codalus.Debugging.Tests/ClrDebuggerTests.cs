@@ -138,7 +138,7 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         Assert.Equal(Line("loop"), top.Line);
         Assert.Equal("\"from the launch ü\"", (await adapter.EvaluateAsync("Environment.GetEnvironmentVariable(\"CODALUS_CLR_TEST\")", top.Id, "watch", Ct)).Result);
         Assert.Equal(Quoted(folder), (await adapter.EvaluateAsync("Environment.CurrentDirectory", top.Id, "watch", Ct)).Result);
-        Assert.Contains("waiting", events.Output, StringComparison.Ordinal);
+        await events.OutputContainsAsync("waiting");
 
         await adapter.SetBreakpointsAsync(fixture.Program, [], Ct);
         await adapter.ContinueAsync(stopped.ThreadId.Value, Ct);
