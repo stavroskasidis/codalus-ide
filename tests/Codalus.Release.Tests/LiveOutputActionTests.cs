@@ -137,7 +137,24 @@ public sealed class LiveOutputActionTests
             }
         }
 
-        private static string ReadOrEmpty(string path) => File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+    }
+
+    /// <summary>
+    /// A file the uploader may be writing, or holds open (its log): read beside it. On Windows File.ReadAllText's own
+    /// open doesn't share with a writer and throws (Windows CI, run 43332691641: the wait's message read the log).
+    /// </summary>
+    private static string ReadOrEmpty(string path)
+    {
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return string.Empty; // not there yet, or being replaced
+        }
     }
 
     private static Job NewJob(ArtifactService service, string token)
@@ -186,7 +203,11 @@ public sealed class LiveOutputActionTests
         var watch = Stopwatch.StartNew();
         while (!condition())
         {
-            Assert.True(watch.Elapsed < TimeSpan.FromSeconds(seconds), "Timed out: " + describe());
+            if (watch.Elapsed >= TimeSpan.FromSeconds(seconds))
+            {
+                Assert.Fail("Timed out: " + describe());
+            }
+
             await Task.Delay(50, Ct);
         }
     }
@@ -238,7 +259,7 @@ public sealed class LiveOutputActionTests
         var job = NewJob(service, token);
         try
         {
-            string Describe() => $"artifacts: {string.Join(", ", service.Artifacts.Keys)}; created: {string.Join(", ", service.Created)}; the uploader's log:\n{(File.Exists(Path.Combine(job.RunnerTemp, "codalus-live-output", "uploader.log")) ? File.ReadAllText(Path.Combine(job.RunnerTemp, "codalus-live-output", "uploader.log")) : "(none)")}";
+            string Describe() => $"artifacts: {string.Join(", ", service.Artifacts.Keys)}; created: {string.Join(", ", service.Created)}; the uploader's log:\n{ReadOrEmpty(Path.Combine(job.RunnerTemp, "codalus-live-output", "uploader.log"))}";
 
             // The step returns at once; the uploader it started stays, as it does behind the test steps.
             await File.WriteAllTextAsync(job.Console, "passed First.Test\n", Ct);
@@ -301,7 +322,7 @@ public sealed class LiveOutputActionTests
             await File.WriteAllTextAsync(job.Console, "passed First.Test\n", Ct);
             await StepAsync(job, "main.js");
             var status = Path.Combine(job.RunnerTemp, "codalus-live-output", "status.json");
-            await WaitAsync(() => File.Exists(status) && File.ReadAllText(status).Contains("the service is down", StringComparison.Ordinal), () => File.Exists(status) ? File.ReadAllText(status) : "(no status)");
+            await WaitAsync(() => ReadOrEmpty(status).Contains("the service is down", StringComparison.Ordinal), () => ReadOrEmpty(status) is { Length: > 0 } text ? text : "(no status)");
 
             // Found out here, on every run, not the day a runner is lost: a warning on the run's page. The step passes.
             var ended = await StepAsync(job, "post.js");
