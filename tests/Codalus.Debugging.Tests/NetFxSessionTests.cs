@@ -245,6 +245,73 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task An_exception_keeps_its_inner_exceptions_when_its_stack_traces_evaluation_times_out()
+    {
+        // The StackTrace getter's func-eval deadlocked on a static constructor that another, suspended thread was running,
+        // and the aborted evaluation left the exception unreadable: the inner exception was lost (macOS CI, run
+        // 43308888468, DebugDepthTests). A first chance runs no evaluation at all; any other stop reads the inner
+        // exceptions before it.
+        fixture.RequireExe();
+        using var info = ClrModuleInfo.Open(fixture.Exe!);
+        var corelibPath = typeof(object).Assembly.Location;
+        using var corelib = ClrModuleInfo.Open(corelibPath);
+        var module = new FakeModule(fixture.Exe!);
+        var mscorlib = new FakeModule(corelibPath);
+        var process = new FakeProcess();
+        await using var dap = new Harness(process);
+        await dap.RequestAsync("initialize", new InitializeArguments("codalus", "Codalus IDE", "clr"), s_json.InitializeArguments, s_json.Capabilities);
+        await dap.RequestAsync("launch", new NetFxDebugArguments(fixture.Exe, [], fixture.Folder), s_json.NetFxDebugArguments);
+        await dap.NextAsync(DapEvents.Initialized);
+        await dap.RequestAsync("setExceptionBreakpoints", new SetExceptionBreakpointsArguments(["user-unhandled"], [new ExceptionFilterOptions("all", "System.InvalidOperationException")]), s_json.SetExceptionBreakpointsArguments);
+        await dap.RequestAsync("configurationDone", new EmptyArguments(), s_json.EmptyArguments);
+        process.Send(new ClrModuleLoaded(module));
+        process.Send(new ClrModuleLoaded(mscorlib));
+        await process.WaitForContinuesAsync(2, Ct);
+
+        var (total, offset, _) = info.Locations(info.MatchDocument(fixture.Program)!, DebuggeeFixture.Line(fixture.Program, "netfx-sum")).Single();
+        var thread = new FakeThread(7, process);
+        thread.FrameList.Add(new FakeFrame(thread, module, total, offset));
+        process.ThreadList.Add(thread);
+        var exceptionBase = corelib.FindType("System.Exception");
+        var stackTraceGetter = Getter(corelib, exceptionBase, "StackTrace");
+        FakeValue Thrown()
+        {
+            var inner = FakeValue.Object(mscorlib, corelib.FindType("System.ArgumentException")).With(FieldToken(corelib, exceptionBase, "_message"), FakeValue.String("the inner one")).With(FieldToken(corelib, exceptionBase, "_innerException"), FakeValue.Null());
+            return FakeValue.Object(mscorlib, corelib.FindType("System.InvalidOperationException")).With(FieldToken(corelib, exceptionBase, "_message"), FakeValue.String("the outer one")).With(FieldToken(corelib, exceptionBase, "_innerException"), inner);
+        }
+
+        // The evaluation times out, and the thread's exception can't be read again after it (it's still evaluating).
+        process.OnCall = (_, method, _) =>
+        {
+            thread.Exception = null;
+            throw new TimeoutException("The evaluation timed out.");
+        };
+
+        // A first chance in the user's code: no evaluation; the stack trace is the thread's.
+        thread.Exception = Thrown();
+        process.Send(new ClrExceptionThrown(thread, ClrExceptionStage.FirstChance));
+        Assert.Equal("exception", (await dap.NextAsync(DapEvents.Stopped)).GetProperty("reason").GetString());
+        var firstChance = await dap.RequestAsync("exceptionInfo", new ThreadArguments(7), s_json.ThreadArguments, s_json.ExceptionInfoResponse);
+        Assert.DoesNotContain(stackTraceGetter, process.Calls);
+        Assert.Equal(("System.ArgumentException", "the inner one"), (Assert.Single(firstChance.Details!.InnerException!).FullTypeName, firstChance.Details.InnerException![0].Message));
+        Assert.Contains("NetFxDebuggee.Cart.Total", firstChance.Details.StackTrace, StringComparison.Ordinal);
+
+        // Its user first chance doesn't stop again. A later stop of another exception evaluates StackTrace, which times
+        // out: the inner exception was read before it.
+        await dap.RequestAsync("continue", new ThreadArguments(7), s_json.ThreadArguments, s_json.ContinueResponse);
+        var continues = process.Continues;
+        process.Send(new ClrExceptionThrown(thread, ClrExceptionStage.UserFirstChance));
+        await process.WaitForContinuesAsync(continues + 1, Ct);
+        thread.Exception = Thrown();
+        process.Send(new ClrExceptionThrown(thread, ClrExceptionStage.UserFirstChance));
+        Assert.Equal("exception", (await dap.NextAsync(DapEvents.Stopped)).GetProperty("reason").GetString());
+        var later = await dap.RequestAsync("exceptionInfo", new ThreadArguments(7), s_json.ThreadArguments, s_json.ExceptionInfoResponse);
+        Assert.Contains(stackTraceGetter, process.Calls);
+        Assert.Equal(("System.InvalidOperationException", "the outer one"), (later.ExceptionId, later.Description));
+        Assert.Equal("the inner one", Assert.Single(later.Details!.InnerException!).Message);
+    }
+
+    [Fact]
     public async Task Breakpoints_stacks_variables_evaluation_steps_exceptions_and_the_end_through_dap()
     {
         fixture.RequireExe();

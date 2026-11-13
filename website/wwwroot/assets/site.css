@@ -179,6 +179,14 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 }
 /* A tab panel holds its figure (a figure can't be a tab panel, M50). */
 .shot > figure { margin: 0; }
+/* A frame that holds only a lazy picture (the home page's spotlights; the Features tour's frames have a caption, whose
+   height the frame couldn't keep) isn't rendered until it nears the viewport, so its picture isn't fetched with the page.
+   loading="lazy" alone still fetches a picture a screen or two below the fold while the page loads (the home page's
+   first spotlight pictures, 320 KB), and Lighthouse's throttled model counts that against the largest contentful paint:
+   the home page's was 3.1 s and its performance 94. The frame keeps the picture's proportions, so nothing moves when
+   it renders; a tab's hidden panel renders, and fetches, when its tab is chosen. site.js renders a frame three
+   quarters of a screen early, so the picture is there by the time it scrolls into view. */
+.shot > figure:has(> img[loading="lazy"]:only-child) { content-visibility: auto; aspect-ratio: 1280 / 800; }
 .shot img { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; }
 .shot figcaption {
   padding: 18px 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;

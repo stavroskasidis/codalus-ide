@@ -92,6 +92,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
+
+    /// <summary>The adapter's log file alone (not the IDE's Debug log, which <c>log</c> also writes to); null without one.</summary>
+    public TextWriter? Trace { get; init; }
     private ClrTypeSystem? _types;
     private StepState? _step;
     private bool _userStopped;
@@ -736,6 +739,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             target.DescribeThreads = ThreadsOfTimedOutEval;
             target.EvalTimedOut = log.WriteLine;
+            if (Trace is { } trace)
+            {
+                target.Continuing = trace.WriteLine; // the log file only: the log also goes to the IDE's Debug log
+            }
         }
 
         log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
@@ -3242,24 +3249,34 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 exception = SafeValue(Live(Thread(threadId).CurrentException)) ?? throw new DapRequestException("The thread didn't stop on an exception.");
             }
 
-            var details = Details(exception, CurrentStackThread(threadId), depth: 0);
+            // Stopped where it's thrown (a first chance), nothing has unwound: the thread's frames are the exception's stack
+            // trace, so its getter isn't run. A func-eval runs that one thread while the others stay suspended, and the
+            // getter's formatting needs the culture's data: with another thread suspended in GlobalizationMode's static
+            // constructor (a program stopped as it starts, the Hot Reload agent's thread), it never returned, and the
+            // aborted evaluation left nothing else readable (macOS CI, run 43308888468, DebugDepthTests). A rethrown
+            // exception's earlier frames are what this leaves out.
+            var details = Details(exception, CurrentStackThread(threadId), depth: 0, evaluateStackTrace: !_stoppedWhenThrown.Contains(threadId));
             return new ExceptionInfoResponse(details.FullTypeName ?? "System.Exception", details.Message, "always", details);
         }
     }
 
     private IClrThread? CurrentStackThread(int threadId) => Process.Threads().FirstOrDefault(t => t.Id == threadId);
 
-    private ExceptionDetails Details(IClrValue exception, IClrThread? thread, int depth)
+    private ExceptionDetails Details(IClrValue exception, IClrThread? thread, int depth, bool evaluateStackTrace = true)
     {
         var typeName = Types.FullName(exception.Type);
         var message = SafeValue(() => Types.Field(exception, "_message")) is { Kind: ClrValueKind.String } m ? m.Text : null;
+
+        // The inner exceptions before the func-eval below: reading them evaluates nothing, and an evaluation that times
+        // out leaves the values read after it unavailable (run 43308888468 lost the inner exception that way).
+        var inner = depth < 5 && SafeValue(() => Types.Field(exception, "_innerException")) is { Kind: ClrValueKind.Object } innerValue ? Details(innerValue, thread, depth + 1) : null;
         string? stackTrace = null;
         if (thread is not null && depth == 0)
         {
-            // Exception.StackTrace, through its getter (func-eval).
+            // Exception.StackTrace, through its getter (func-eval), unless the exception was just thrown (see ExceptionInfo).
             try
             {
-                if (Types.Chain(exception.Type).Select(c => (c.Module, c.Token, Getter: c.Info.Properties(c.Token).FirstOrDefault(p => p.Name == "StackTrace" && !p.IsStatic)?.GetterToken ?? 0)).FirstOrDefault(c => c.Getter != 0) is { Getter: not 0 } getter)
+                if (evaluateStackTrace && Types.Chain(exception.Type).Select(c => (c.Module, c.Token, Getter: c.Info.Properties(c.Token).FirstOrDefault(p => p.Name == "StackTrace" && !p.IsStatic)?.GetterToken ?? 0)).FirstOrDefault(c => c.Getter != 0) is { Getter: not 0 } getter)
                 {
                     stackTrace = Process.Call(thread, getter.Module, getter.Getter, [], [exception], EvalTimeout).Text;
                 }
@@ -3277,7 +3294,6 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             }
         }
 
-        var inner = depth < 5 && SafeValue(() => Types.Field(exception, "_innerException")) is { Kind: ClrValueKind.Object } innerValue ? Details(innerValue, thread, depth + 1) : null;
         var shortName = typeName.LastIndexOf('.') is var dot and >= 0 ? typeName[(dot + 1)..] : typeName;
         return new ExceptionDetails(message, shortName, typeName, stackTrace, "$exception", inner is null ? null : [inner]);
     }

@@ -98,4 +98,18 @@ public sealed class RuntimeLocatorTests
             Directory.Delete(root, recursive: true);
         }
     }
+
+    [Theory]
+    [InlineData("/x/shared/Microsoft.NETCore.App/2.1.30/libcoreclr.dylib", false)]
+    [InlineData("/x/shared/Microsoft.NETCore.App/3.1.32/libcoreclr.dylib", true)]
+    [InlineData("/x/shared/Microsoft.NETCore.App/11.0.0-rc.2.25502.107/libcoreclr.so", true)]
+    [InlineData("/apps/selfcontained/libcoreclr.dylib", false)]
+    [InlineData(null, false)]
+    public void A_runtime_that_runs_startup_hooks_is_waited_for_until_the_hook_runs(string? runtime, bool runsHooks)
+    {
+        // An x64 .NET Core 3.1 program under Rosetta 2 ran the hook after the 5 s enough for .NET Core 2, was attached to
+        // as it ran, and passed its breakpoint first (macOS CI, run 43344309044).
+        Assert.Equal(runsHooks ? DbgShimDebugger.HookTimeoutWithHooks : DbgShimDebugger.HookTimeout, DbgShimDebugger.HookWait(runtime));
+        Assert.True(DbgShimDebugger.HookTimeoutWithHooks < DbgShimDebugger.RuntimeStartTimeout, "the hook's wait ends before the runtime is reported as not starting");
+    }
 }

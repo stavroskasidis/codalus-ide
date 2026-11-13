@@ -112,6 +112,25 @@ internal sealed class DbgShimDebugger : IClrDebugger
     /// </summary>
     internal static readonly TimeSpan HookTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How long a held start waits for the startup hook in a runtime that runs startup hooks (.NET Core 3.0 and later)
+    /// before it attaches to the program as it runs: only a program that turned startup hooks off gets there. Below the
+    /// runtime's own start limit (<see cref="RuntimeStartTimeout"/>), so it isn't reported as not starting.
+    /// </summary>
+    internal static readonly TimeSpan HookTimeoutWithHooks = TimeSpan.FromSeconds(25);
+
+    /// <summary>
+    /// How long to wait for the startup hook once the runtime at <paramref name="runtimePath"/> has loaded. A runtime
+    /// from .NET Core 3.0 runs the hook, however long it takes to: an x64 .NET Core 3.1 program under Rosetta 2 on a
+    /// busy runner ran its hook after the 5 s that were enough for .NET Core 2, was attached to as it ran, and passed
+    /// its breakpoint first (macOS CI, run 43344309044, DebuggerBundleTests). An unknown version (a self-contained
+    /// program's runtime, without the framework's folder) or .NET Core 2 waits <see cref="HookTimeout"/>.
+    /// </summary>
+    internal static TimeSpan HookWait(string? runtimePath) =>
+        runtimePath is not null && Version.TryParse(VersionOf(runtimePath).Split('-')[0], out var version) && version.Major >= 3
+            ? HookTimeoutWithHooks
+            : HookTimeout;
+
     /// <summary>The startup hook's file, next to this host (and in the debugger's bundle).</summary>
     private const string HookFile = "Codalus.Debugging.StartupHook.dll";
 
@@ -119,11 +138,12 @@ internal sealed class DbgShimDebugger : IClrDebugger
     /// A launch without dbgshim's wait for the runtime (see the class): the program starts with the startup hook, which
     /// reports its process id before <c>Main</c> and waits; the debugger attaches by the runtime's path, and lets the
     /// hook go once the program is stopped for it. The breakpoints set meanwhile bind as the program's modules load. A
-    /// program whose runtime is loaded and hasn't reached the hook after <see cref="HookTimeout"/> is attached to as it
+    /// program whose runtime is loaded and hasn't reached the hook after <see cref="HookWait"/> is attached to as it
     /// runs, and is told so: a runtime without startup hooks (.NET Core 2), one whose program turned them off, or one
-    /// that is slow to get there. The last still comes to the hook, so the hook is let go in every case: an x64 program
-    /// under Rosetta 2 on a busy machine took longer than the wait, and then sat in the hook for the two minutes it
-    /// gives a debugger, with the debugger attached all along (macOS CI, run 43309447208).
+    /// that is slower to get there than the wait. The last still comes to the hook, so the hook is let go in every
+    /// case: an x64 program under Rosetta 2 on a busy machine took longer than the wait (5 s then, for every runtime),
+    /// and then sat in the hook for the two minutes it gives a debugger, with the debugger attached all along (macOS
+    /// CI, run 43309447208).
     /// </summary>
     private CorDebugTarget LaunchHeld(NetFxDebugArguments arguments, Action<string, string> output)
     {
@@ -174,9 +194,9 @@ internal sealed class DbgShimDebugger : IClrDebugger
                     throw new ClrException($"{Path.GetFileName(program)} ended{code} before the debugger could attach to it: the startup hook that holds a program at its start didn't run in it. .NET Core 2.0 and 2.1 run no startup hooks; a program that isn't .NET's doesn't either.");
                 }
 
-                if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program).Count > 0)
+                if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program) is [var loaded, ..] && started.Elapsed >= HookWait(loaded))
                 {
-                    output("console", $"The program hasn't reached its startup hook after {HookTimeout.TotalSeconds:0} seconds (a slow start, or a .NET runtime that runs none: .NET Core 2), so the debugger attaches to it as it runs: breakpoints in its first lines may have been passed.\n");
+                    output("console", $"The program hasn't reached the debugger's startup hook after {started.Elapsed.TotalSeconds:0} seconds (a slow start, a program that turned startup hooks off, or a .NET runtime that runs none: .NET Core 2), so the debugger attaches to it as it runs: breakpoints in its first lines may have been passed.\n");
                     break;
                 }
 

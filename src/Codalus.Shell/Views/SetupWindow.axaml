@@ -11,8 +11,9 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Shell.Panel}">
   <!--
-    The first-run setup (M46, design/shell-themes/Setup.dc.html): the steps on the left, the current step on the right,
-    Skip setup, Back and Next below. Every color is a token, so the window repaints in the theme being chosen.
+    The first-run setup (M46, design/shell-themes/Setup.dc.html): the steps on the left, the current page on the right
+    (the welcome page at a first start, a step, or the summary), Skip setup, Back and Next below. Every color is a token,
+    so the window repaints in the theme being chosen.
   -->
   <Window.Styles>
     <Style Selector="Border.step">
@@ -102,6 +103,15 @@
       <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Shell.Border}" />
     </Style>
+    <!-- The importer the welcome page's "coming from" points at. -->
+    <Style Selector="Border.section.suggested">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Accent}" />
+      <Setter Property="BorderThickness" Value="2" />
+    </Style>
+    <Style Selector="TextBlock.subheading">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,10,0,8" />
+    </Style>
   </Window.Styles>
 
   <Grid ColumnDefinitions="240,*">
@@ -140,12 +150,43 @@
             <Button x:Name="NextButton" Classes="accent" Content="{Binding NextTitle}" Command="{Binding NextCommand}"
                     ToolTip.Tip="{l:T setupWindow.nextAltRight}" AutomationProperties.Name="{Binding NextTitle}" FontWeight="SemiBold" MinWidth="96" />
           </StackPanel>
-          <Button Classes="link" Content="{l:T setupWindow.skipSetup}" Command="{Binding SkipCommand}" ToolTip.Tip="{l:T setupWindow.skipSetupTip}"
+          <Button x:Name="SkipButton" Classes="link" Content="{Binding SkipTitle}" Command="{Binding SkipCommand}" IsVisible="{Binding CanSkip}"
+                  ToolTip.Tip="{l:T setupWindow.skipSetupTip}" AutomationProperties.Name="{Binding SkipTitle}"
                   HorizontalAlignment="Left" VerticalAlignment="Center" Margin="14,0" />
         </DockPanel>
       </Border>
 
       <Panel>
+        <!-- Welcome, at a first start: what the setup covers, and where the user comes from (it preselects, nothing more). -->
+        <ScrollViewer IsVisible="{Binding IsWelcome}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,0,0,16">
+              <Image Width="56" Height="56" Source="avares://codalus/Assets/codalus-128.png" AutomationProperties.Name="{l:T setupWindow.logo}" />
+              <StackPanel VerticalAlignment="Center">
+                <TextBlock Classes="pageTitle" Margin="0,0,0,2" Text="{l:T setupWindow.welcomeToCodalusIde}" />
+                <TextBlock Classes="muted" Text="{l:T setupWindow.welcomeTagline}" TextWrapping="Wrap" />
+              </StackPanel>
+            </StackPanel>
+            <TextBlock Classes="lead" Text="{l:T setupWindow.welcomeLead}" />
+            <TextBlock Text="{l:T setupWindow.imComingFrom}" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Classes="muted small" Text="{l:T setupWindow.comingFromLead}" TextWrapping="Wrap" Margin="0,0,0,10" />
+            <ItemsControl x:Name="OriginList" ItemsSource="{Binding Origins}" AutomationProperties.Name="{l:T setupWindow.imComingFrom}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:SetupChoice">
+                  <ToggleButton Classes="setupCard" HorizontalAlignment="Stretch" Margin="0,0,0,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" />
+                      <controls:Icon Grid.Column="1" Grid.RowSpan="2" Kind="check-circle" IsVisible="{Binding IsSelected}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Row="1" Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                    </Grid>
+                  </ToggleButton>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
         <!-- 1. Appearance. -->
         <ScrollViewer IsVisible="{Binding IsAppearance}" HorizontalScrollBarVisibility="Disabled">
           <StackPanel>
@@ -198,6 +239,40 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+            <!-- The editor's font size, on a sample in the previewed theme's syntax colors; saved with the step. -->
+            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,6,0,8">
+              <TextBlock Text="{l:T setupWindow.editorFontSize}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,4,0" />
+              <Button x:Name="FontSmallerButton" Content="−" MinWidth="32" HorizontalContentAlignment="Center" Command="{Binding DecreaseFontSizeCommand}"
+                      ToolTip.Tip="{l:T setupWindow.smallerFont}" AutomationProperties.Name="{l:T setupWindow.smallerFont}" />
+              <TextBlock x:Name="FontSizeValue" Text="{Binding FontSizeText}" MinWidth="48" TextAlignment="Center" VerticalAlignment="Center"
+                         AutomationProperties.Name="{l:T setupWindow.editorFontSize}" AutomationProperties.LiveSetting="Polite" />
+              <Button x:Name="FontLargerButton" Content="+" MinWidth="32" HorizontalContentAlignment="Center" Command="{Binding IncreaseFontSizeCommand}"
+                      ToolTip.Tip="{l:T setupWindow.largerFont}" AutomationProperties.Name="{l:T setupWindow.largerFont}" />
+            </StackPanel>
+            <Border Classes="section" HorizontalAlignment="Left" MinWidth="420" Padding="12,10" ClipToBounds="True">
+              <ItemsControl x:Name="CodeSample" ItemsSource="{Binding CodeSample}" TextElement.FontFamily="{Binding EditorFontFamily}"
+                            TextElement.FontSize="{Binding FontSize}" AutomationProperties.Name="{l:T setupWindow.fontSample}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ThemePictureCodeLine">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock MinWidth="24" Margin="0,0,14,0" Text="{Binding Number}" TextAlignment="Right" Foreground="{DynamicResource Shell.Editor.LineNumbers}" />
+                      <ItemsControl ItemsSource="{Binding Segments}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:ThemePictureSegment">
+                            <TextBlock Text="{Binding Text}" Foreground="{Binding Brush}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
           </StackPanel>
         </ScrollViewer>
 
@@ -228,18 +303,21 @@
           <StackPanel MaxWidth="720" HorizontalAlignment="Left">
             <TextBlock Classes="pageTitle" Text="{l:T setupWindow.bringYourSettings}" />
             <TextBlock Classes="lead" Text="{l:T setupWindow.importFromAnotherEditor}" />
-            <Border Classes="section">
-              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+            <!-- The importer the welcome page's "coming from" points at is outlined and says so; nothing imports before its button. -->
+            <Border x:Name="VsCodeSection" Classes="section" Classes.suggested="{Binding SuggestsVsCode}">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                 <TextBlock Text="{l:T setupWindow.fromVsCode}" FontWeight="SemiBold" />
                 <TextBlock Grid.Row="1" Classes="muted small" Text="{Binding VsCodeText}" TextWrapping="Wrap" Margin="0,4,12,0" />
-                <Button x:Name="ImportVsCodeButton" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Center" Content="{l:T setupWindow.importFromVsCode}" Command="{Binding ImportVsCodeCommand}" />
+                <TextBlock Grid.Row="2" Classes="small" Text="{l:T setupWindow.suggestedForYou}" IsVisible="{Binding SuggestsVsCode}" TextWrapping="Wrap" Margin="0,4,12,0" />
+                <Button x:Name="ImportVsCodeButton" Grid.Column="1" Grid.RowSpan="3" VerticalAlignment="Center" Content="{l:T setupWindow.importFromVsCode}" Command="{Binding ImportVsCodeCommand}" />
               </Grid>
             </Border>
-            <Border Classes="section">
-              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+            <Border x:Name="VsSettingsSection" Classes="section" Classes.suggested="{Binding SuggestsVsSettings}">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
                 <TextBlock Text="{l:T setupWindow.fromAVssettingsFile}" FontWeight="SemiBold" />
                 <TextBlock Grid.Row="1" Classes="muted small" Text="{l:T setupWindow.fontsColorsEditorOptionsAndShortcuts}" TextWrapping="Wrap" Margin="0,4,12,0" />
-                <Button Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Center" Content="{l:T setupWindow.chooseAVssettingsFile}" Command="{Binding ImportVsSettingsCommand}" />
+                <TextBlock Grid.Row="2" Classes="small" Text="{l:T setupWindow.suggestedForYou}" IsVisible="{Binding SuggestsVsSettings}" TextWrapping="Wrap" Margin="0,4,12,0" />
+                <Button x:Name="ImportVsSettingsButton" Grid.Column="1" Grid.RowSpan="3" VerticalAlignment="Center" Content="{l:T setupWindow.chooseAVssettingsFile}" Command="{Binding ImportVsSettingsCommand}" />
               </Grid>
             </Border>
             <Border Classes="section">
@@ -325,6 +403,180 @@
             </StackPanel>
           </ScrollViewer>
         </DockPanel>
+
+        <!--
+          5. AI (ADR 0096): three paths as cards with the same four facts each, so they compare side by side; No AI is
+          chosen unless the user chooses another. The chosen path's own choices follow below. Nothing here is applied
+          before the summary's button ends the setup.
+        -->
+        <ScrollViewer IsVisible="{Binding IsAi}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel>
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.chooseYourAiExperience}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.aiLead}" />
+            <ItemsControl x:Name="AiPathList" ItemsSource="{Binding AiPaths}" AutomationProperties.Name="{l:T setupWindow.aiExperience}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <!-- 252 px: the three cards fit one row at the window's 1120 px, and wrap in a narrower one. -->
+                <DataTemplate x:DataType="vm:SetupAiPathOption">
+                  <ToggleButton Classes="setupCard" Width="252" Padding="14,12" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                AutomationProperties.Name="{Binding AccessibleName}" AutomationProperties.HelpText="{Binding HelpText}">
+                    <StackPanel Spacing="4">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <!-- The recommended way says so beside its title, and under it when the card is too narrow for both. -->
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="{DynamicResource Shell.FontSize.Heading}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,6,0" />
+                          <TextBlock Classes="small" Text="{Binding RecommendedText}" IsVisible="{Binding IsRecommended}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </WrapPanel>
+                        <controls:Icon Grid.Column="1" Kind="check-circle" IsVisible="{Binding IsSelected}" />
+                      </Grid>
+                      <TextBlock Classes="muted small" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                      <ItemsControl ItemsSource="{Binding Facts}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="vm:SetupSummaryRow">
+                            <StackPanel Margin="0,6,0,0">
+                              <TextBlock Classes="small" Text="{Binding Label}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                              <TextBlock Classes="muted small" Text="{Binding Value}" TextWrapping="Wrap" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </ToggleButton>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- A coding agent: which one, why run it from the IDE, and its two windows. -->
+            <StackPanel x:Name="AiAgentPanel" IsVisible="{Binding IsAiAgent}" MaxWidth="780" HorizontalAlignment="Left">
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.whichAgent}" />
+              <ItemsControl x:Name="AiAgentList" ItemsSource="{Binding AiAgents}" IsEnabled="{Binding !AreAgentsBlocked}" AutomationProperties.Name="{l:T setupWindow.whichAgent}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupChoice">
+                    <ToggleButton Classes="setupCard" Width="144" Margin="0,0,10,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                  AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Classes="muted small" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </ToggleButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{Binding AgentsBlockedReason}" IsVisible="{Binding AreAgentsBlocked}" TextWrapping="Wrap" Margin="0,0,0,8" />
+              <TextBlock Classes="muted small" Text="{l:T setupWindow.agentConnectsAfter}" TextWrapping="Wrap" />
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.whyRunItFromCodalusIde}" Margin="0,14,0,8" />
+              <ItemsControl x:Name="AgentBenefitList" ItemsSource="{Binding AgentBenefits}" AutomationProperties.Name="{l:T setupWindow.whyRunItFromCodalusIde}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="x:String">
+                    <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+                      <controls:Icon Kind="check" VerticalAlignment="Top" Margin="0,2,8,0" />
+                      <TextBlock Grid.Column="1" Text="{Binding}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.twoWindowsForAnAgent}" Margin="0,10,0,8" />
+              <ItemsControl x:Name="AgentWindowList" ItemsSource="{Binding AgentWindows}" AutomationProperties.Name="{l:T setupWindow.twoWindowsForAnAgent}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupSummaryRow">
+                    <Grid ColumnDefinitions="96,*" Margin="0,0,0,6">
+                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
+                      <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+
+            <!-- The built-in assistant: which provider, and the two as-you-type switches, each off unless ticked. -->
+            <StackPanel x:Name="AiAssistantPanel" IsVisible="{Binding IsAiAssistant}" MaxWidth="780" HorizontalAlignment="Left">
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.whichProvider}" />
+              <ItemsControl x:Name="AiProviderList" ItemsSource="{Binding AiProviders}" AutomationProperties.Name="{l:T setupWindow.whichProvider}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupChoice">
+                    <ToggleButton Classes="setupCard" Width="180" Margin="0,0,10,10" IsChecked="{Binding IsSelected, Mode=OneWay}" Command="{Binding SelectCommand}"
+                                  AutomationProperties.Name="{Binding Title}" AutomationProperties.HelpText="{Binding Description}">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Classes="muted small" Text="{Binding Description}" IsVisible="{Binding HasDescription}" TextWrapping="Wrap" />
+                      </StackPanel>
+                    </ToggleButton>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="{l:T setupWindow.noProviderPlugin}" IsVisible="{Binding HasNoProviders}" TextWrapping="Wrap" Margin="0,0,0,8" />
+              <TextBlock Classes="muted small" Text="{l:T setupWindow.providerSetUpAfter}" TextWrapping="Wrap" />
+              <TextBlock Classes="subheading" Text="{l:T setupWindow.suggestionsAsYouType}" Margin="0,16,0,8" />
+              <Border Classes="section">
+                <StackPanel Spacing="4">
+                  <CheckBox x:Name="InlineSuggestionsBox" IsChecked="{Binding AiInlineSuggestions}" AutomationProperties.Name="{l:T setupWindow.inlineSuggestions}" AutomationProperties.HelpText="{l:T setupWindow.inlineSuggestionsDescription}">
+                    <TextBlock Text="{l:T setupWindow.inlineSuggestions}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  </CheckBox>
+                  <TextBlock Classes="muted small" Text="{l:T setupWindow.inlineSuggestionsDescription}" TextWrapping="Wrap" Margin="26,0,0,0" />
+                </StackPanel>
+              </Border>
+              <Border Classes="section">
+                <StackPanel Spacing="4">
+                  <CheckBox x:Name="NextEditBox" IsChecked="{Binding AiNextEditSuggestions}" AutomationProperties.Name="{l:T setupWindow.nextEditSuggestions}" AutomationProperties.HelpText="{l:T setupWindow.nextEditSuggestionsDescription}">
+                    <TextBlock Text="{l:T setupWindow.nextEditSuggestions}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  </CheckBox>
+                  <TextBlock Classes="muted small" Text="{l:T setupWindow.nextEditSuggestionsDescription}" TextWrapping="Wrap" Margin="26,0,0,0" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- The summary: what was chosen, a few keys in the chosen scheme, and what the button does next. -->
+        <ScrollViewer IsVisible="{Binding IsFinish}" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+            <TextBlock Classes="pageTitle" Text="{l:T setupWindow.youreAllSet}" />
+            <TextBlock Classes="lead" Text="{l:T setupWindow.allSetLead}" />
+            <Border Classes="section">
+              <ItemsControl x:Name="SummaryList" ItemsSource="{Binding Summary}" AutomationProperties.Name="{l:T setupWindow.whatYouChose}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SetupSummaryRow">
+                    <Grid ColumnDefinitions="150,*" Margin="0,3">
+                      <TextBlock Classes="muted" Text="{Binding Label}" TextWrapping="Wrap" />
+                      <TextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+            <TextBlock x:Name="AiNextText" Text="{Binding AiNext}" IsVisible="{Binding HasAiNext}" TextWrapping="Wrap" Margin="2,2,0,10" />
+            <StackPanel IsVisible="{Binding HasShortcuts}">
+              <TextBlock Classes="subheading" Text="{Binding ShortcutsTitle}" />
+              <Border Classes="section">
+                <ItemsControl x:Name="ShortcutList" ItemsSource="{Binding Shortcuts}" AutomationProperties.Name="{Binding ShortcutsTitle}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:SetupShortcutRow">
+                      <Grid ColumnDefinitions="150,*" Margin="0,3">
+                        <TextBlock Text="{Binding Keys}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{Binding Title}" TextWrapping="Wrap" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+            </StackPanel>
+            <TextBlock Classes="muted" Text="{l:T setupWindow.changeAnythingLater}" TextWrapping="Wrap" Margin="2,6,0,0" />
+          </StackPanel>
+        </ScrollViewer>
       </Panel>
     </DockPanel>
   </Grid>

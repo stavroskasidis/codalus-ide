@@ -213,6 +213,14 @@ internal sealed class CorDebugTarget : IClrProcess
     /// <summary>Counts the times the process ran: frames are re-read after it has (ICorDebug neuters them).</summary>
     public int Generation { get; private set; }
 
+    /// <summary>
+    /// Told what each continue continues, just before it (the adapter's log, which flushes every line). macOS CI once
+    /// lost the debugger to a segmentation fault in mscordbi's transport thread (<c>DbgTransportSession::TransportWorker</c>)
+    /// while a thread-pool thread was in <c>CordbProcess::ContinueInternal</c>, as the program ended (run 43344309044,
+    /// <c>ClrDebuggerTests</c>): the log's last line says which event that continue was for, next time.
+    /// </summary>
+    public Action<string>? Continuing { get; set; }
+
     public ChannelReader<ClrEvent> Events => _events.Reader;
 
     /// <summary>
@@ -508,6 +516,7 @@ internal sealed class CorDebugTarget : IClrProcess
         try
         {
             Generation++;
+            Continuing?.Invoke("[clr] continue after " + e.GetType().Name.Replace("CorDebugManagedCallbackEventArgs", string.Empty, StringComparison.Ordinal));
             (e.Controller ?? (CorDebugController?)_process)?.Continue(false);
         }
         catch (COMException)
@@ -560,6 +569,7 @@ internal sealed class CorDebugTarget : IClrProcess
     {
         ReleaseHandles();
         Generation++;
+        Continuing?.Invoke("[clr] continue (the session's)");
         Translate(() => Process.Continue(false));
     }
 
@@ -757,6 +767,7 @@ internal sealed class CorDebugTarget : IClrProcess
             _stepper = stepper;
             ReleaseHandles();
             Generation++;
+            Continuing?.Invoke("[clr] continue (a step)");
             Process.Continue(false);
         });
 
@@ -1124,6 +1135,7 @@ internal sealed class CorDebugTarget : IClrProcess
             {
                 Process.SetAllThreadsDebugState(CorDebugThreadState.THREAD_SUSPEND, corThread.Raw);
                 Generation++;
+                Continuing?.Invoke("[clr] continue (a func-eval)");
                 Process.Continue(false);
             });
 
@@ -1212,6 +1224,7 @@ internal sealed class CorDebugTarget : IClrProcess
             try
             {
                 Generation++;
+                Continuing?.Invoke("[clr] continue (after reading the threads)");
                 Translate(() => Process.Continue(false));
             }
             catch (ClrException)

@@ -139,9 +139,10 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
 
     /// <summary>
     /// A program whose runtime is loaded but slow to reach the startup hook: an x64 program under Rosetta 2 on a busy
-    /// machine took longer than the held start waits for the hook (macOS CI, run 43309447208). The debugger attached to it
-    /// as a program that runs no hooks, and never let the hook go when it came: the program waited out the hook's two
-    /// minutes with the debugger attached. Here another startup hook, run first, is what takes that long.
+    /// machine took longer than the held start waits for the hook (macOS CI, run 43309447208, when it waited 5 s for every
+    /// runtime). The debugger attached to it as a program that runs no hooks, and never let the hook go when it came: the
+    /// program waited out the hook's two minutes with the debugger attached. The wait is longer now for a runtime that
+    /// runs hooks, but any wait can run out. Here another startup hook, run first, is what takes longer than it.
     /// </summary>
     [Fact]
     public async Task A_program_that_reaches_the_startup_hook_late_is_let_go_when_it_gets_there()
@@ -152,8 +153,9 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
         Assert.SkipWhen(bundle is null or { IsArchive: true }, $"The Codalus debugger's bundle for {HostPlatform} isn't built (eng/get-codalus-debugger.sh).");
         var debugger = Path.Combine(bundle!.Path, RemoteDebuggers.CodalusExecutable);
 
-        // A startup hook that sleeps, listed before the debugger's own (the held start leaves a list that has its hook).
-        var late = Codalus.Debugging.Host.CoreClr.DbgShimDebugger.HookTimeout + TimeSpan.FromSeconds(3);
+        // A startup hook that sleeps, listed before the debugger's own (the held start leaves a list that has its hook),
+        // past the longest the debugger waits for it: a .NET 11 runtime runs hooks, so it waits HookTimeoutWithHooks.
+        var late = Codalus.Debugging.Host.CoreClr.DbgShimDebugger.HookTimeoutWithHooks + TimeSpan.FromSeconds(3);
         var slow = await SlowStartupHookAsync();
         var program = new Dictionary<string, string>
         {
@@ -195,9 +197,9 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
 
         // The debugger gave up on the hook and attached; the hook came, and the program went on at once: not after the
         // two minutes the hook waits for a debugger that never comes.
-        Assert.Contains("hasn't reached its startup hook", console, StringComparison.Ordinal);
+        Assert.Contains("hasn't reached the debugger's startup hook", console, StringComparison.Ordinal);
         Assert.DoesNotContain("The debugger didn't attach in time", console, StringComparison.Ordinal);
-        Assert.True(firstStop > late - TimeSpan.FromSeconds(1) && firstStop < TimeSpan.FromSeconds(60), $"The first stop came after {firstStop.TotalSeconds:0.0} s. The Debug Console:\n{console}");
+        Assert.True(firstStop > late - TimeSpan.FromSeconds(1) && firstStop < late + TimeSpan.FromSeconds(60), $"The first stop came after {firstStop.TotalSeconds:0.0} s. The Debug Console:\n{console}");
     }
 
     /// <summary>

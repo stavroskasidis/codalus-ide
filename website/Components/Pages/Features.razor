@@ -193,7 +193,8 @@
             <div class="card lift reveal" id="make-it-yours">
                 <h3>Make it yours</h3>
                 <ul>
-                    <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, a check of the .NET SDK and git, and the system integration you want, before the start window</li>
+                    <li>A first-run setup, before the start window: a welcome page that asks where you come from (the classic IDE, VS Code, Rider) and preselects the matching keys and importer, the theme family and mode previewed live, the editor's font size on a sample, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, a check of the .NET SDK and git, the system integration you want, and your AI experience; it ends on a summary with the keys worth knowing</li>
+                    <li>Your AI experience, chosen at the first start: no AI (the default), a coding agent, or the built-in assistant with a provider you pick, compared side by side by who answers, what it does, what leaves your machine and what it needs; nothing turns on or connects before you finish the setup</li>
                     <li>Classic's Blue, Light, Dark and High Contrast, the default, with the classic IDE's rounded cards and editor colors, and four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
@@ -438,7 +439,10 @@
             "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
             "Connect Claude, Codex, Gemini CLI or GitHub Copilot in one dialog: what it needs, how it signs in and exactly what runs, then a connection test before anything is saved."),
         new("setup", "First start", "setup.png",
-            "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
-            "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),
+            "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, the mode, and the editor's font size on a sample of code",
+            "The first start sets it up your way: a theme family and its mode, previewed as you click, the editor's font size, then the keyboard scheme, your settings from elsewhere and a tools check."),
+        new("setup-ai", "Your AI experience", "setup-ai.png",
+            "The first-run setup's AI step: No AI, A coding agent and The built-in assistant as three cards with the same four facts each, a coding agent chosen with Claude, and the reasons to run an agent from Codalus IDE",
+            "Choose your AI at the first start, or none: three ways compared by who answers, what they do, what leaves your machine and what they need. An agent run from the IDE gets its tools: the compiler, builds, tests and the debugger."),
     ];
 }
