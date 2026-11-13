@@ -128,7 +128,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             shell.StopRunning();
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -1353,7 +1353,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         if (shell.Solutions.IsOpen)
         {
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
 
         var folder = Path.Combine(Work, "RemoteBuildAndRun");

@@ -330,9 +330,9 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (Solutions.IsOpen)
+        if (Solutions.IsOpen && !await CloseSolutionAsync().ConfigureAwait(true))
         {
-            await CloseSolutionAsync().ConfigureAwait(true);
+            return; // the save-changes dialog was cancelled: the connection stays
         }
 
         foreach (var terminal in Terminals.Sessions)
