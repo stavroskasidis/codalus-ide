@@ -495,6 +495,8 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
+              <!-- The agent also answers the IDE's AI features (ADR 0097); its suggestions as you type are turned on in Options. -->
+              <TextBlock x:Name="AgentFeaturesNote" Classes="muted small" Text="{l:T setupWindow.agentAnswersFeatures}" TextWrapping="Wrap" Margin="0,4,0,0" />
             </StackPanel>
 
             <!-- The built-in assistant: which provider, and the two as-you-type switches, each off unless ticked. -->

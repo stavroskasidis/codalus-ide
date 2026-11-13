@@ -833,6 +833,14 @@ public sealed class FirstRunSetupTests
         Assert.Contains("Why run it from Codalus IDE", shown);
         Assert.All(model.AgentBenefits, benefit => Assert.Contains(benefit, shown));
         Assert.All(model.AgentWindows, w => Assert.Contains(w.Value, shown));
+
+        // The agent answers the IDE's AI features too (ADR 0097): the card says what they send, and a note says how its
+        // suggestions as you type are turned on, the boxes being the built-in assistant's.
+        Assert.Contains("AI features", model.AiPaths[1].Facts[2].Value, StringComparison.Ordinal);
+        var note = window.FindControl<TextBlock>("AgentFeaturesNote")!;
+        Assert.True(note.IsEffectivelyVisible);
+        Assert.Contains("suggestions as you type", note.Text, StringComparison.Ordinal);
+        Assert.Contains("Tools → Options → AI", note.Text, StringComparison.Ordinal);
         Assert.True(model.AiChanged);
         Assert.Equal(new SetupAiChoice(SetupAiPath.Agent), model.AiChoice);
         Snapshot(f, "first-run-setup-ai-agent");

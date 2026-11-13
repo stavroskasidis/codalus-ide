@@ -466,7 +466,7 @@ public sealed class SetupViewModel : ObservableObject
             [
                 new(who, Localizer.Get("msg.firstRun.aiAgentWho", "Claude, Codex, Gemini CLI, GitHub Copilot or another, on your account.")),
                 new(does, Localizer.Get("msg.firstRun.aiAgentDoes", "Works through a task by itself, and answers the AI actions and suggestions.")),
-                new(leaves, Localizer.Get("msg.firstRun.aiAgentLeaves", "What the agent reads, to its own provider.")),
+                new(leaves, Localizer.Get("msg.firstRun.aiAgentLeaves", "What it reads, and what the AI features send it, to its own provider.")),
                 new(needs, Localizer.Get("msg.firstRun.aiAgentNeeds", "Its CLI or Node.js, and a sign-in.")),
             ], SelectAiPath) { IsRecommended = true },
             new(SetupAiPath.Assistant, Localizer.Get("msg.firstRun.aiAssistant", "The built-in assistant"), Localizer.Get("msg.firstRun.aiAssistantDescription", "Codalus IDE's own AI, with a model you choose."),
