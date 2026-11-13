@@ -1192,6 +1192,40 @@ public sealed partial class CodeEditorController : IDisposable
         _autoClosed = document.CreateAnchor(caret);
     }
 
+    /// <summary>
+    /// Enter between a pair of the language's brackets (<c>{|}</c>) puts the closing one on a line of its own, below an
+    /// indented line for the caret, as VS Code and the classic IDE. Where the opening one goes is the language server's
+    /// on-type formatting of Enter, which follows (C#'s <c>csharp_new_line_before_open_brace</c>).
+    /// </summary>
+    private void IndentBetweenBrackets()
+    {
+        if (_multiCaret.ExtraCarets.Count > 0 || Editor.SelectionLength > 0 || Model.IsReadOnly || Configuration is not { Brackets.Count: > 0 } configuration)
+        {
+            return;
+        }
+
+        var document = Model.Text;
+        var caret = Editor.CaretOffset;
+        var line = document.GetLineByOffset(caret);
+        if (line.PreviousLine is not { } previous || !string.IsNullOrWhiteSpace(document.GetText(line.Offset, caret - line.Offset)))
+        {
+            return;
+        }
+
+        var opening = document.GetText(previous).TrimEnd();
+        var after = document.GetText(caret, line.EndOffset - caret);
+        if (!configuration.Brackets.Any(b => b.Open.Length > 0 && opening.EndsWith(b.Open, StringComparison.Ordinal) && after.StartsWith(b.Close, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        var indentation = opening[..(opening.Length - opening.TrimStart().Length)];
+        var inner = indentation + Editor.Options.IndentationString;
+        var newLine = document.GetText(previous.EndOffset, previous.DelimiterLength);
+        document.Replace(line.Offset, caret - line.Offset, inner + newLine + indentation);
+        Editor.CaretOffset = line.Offset + inner.Length;
+    }
+
     /// <summary>Comments or uncomments the selected lines (or the caret's line) with the language's comment syntax.</summary>
     public void Comment(CommentAction action)
     {
@@ -1299,6 +1333,11 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnTextEntered(object? sender, TextInputEventArgs e)
     {
+        if (e.Text is "\n" or "\r\n" or "\r")
+        {
+            IndentBetweenBrackets();
+        }
+
         if (e.Text is { Length: 1 } entered)
         {
             AutoClose(entered);
