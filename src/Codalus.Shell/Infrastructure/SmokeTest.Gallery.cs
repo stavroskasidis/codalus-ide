@@ -212,6 +212,7 @@ internal sealed partial class SmokeTest
         };
         foreach (var (name, request) in dialogs)
         {
+            _galleryDialog = request;
             var shown = shell.Dialogs.ShowAsync(request);
             await GalleryThemesAsync(async theme =>
             {
@@ -220,6 +221,7 @@ internal sealed partial class SmokeTest
             }).ConfigureAwait(true);
             shell.Dialogs.Cancel();
             await shown.ConfigureAwait(true);
+            _galleryDialog = null;
         }
 
         await GalleryDialogOnMacAsync(checklist).ConfigureAwait(true); // M34h: the buttons in macOS's order

@@ -15,8 +15,11 @@ namespace Codalus.Shell;
 public sealed partial class ShellHost
 {
     private const string SaveButton = "Save";
-    private const string DontSaveButton = "Don't Save";
+    internal const string DontSaveButton = "Don't Save";
     private const string CancelButton = "Cancel";
+
+    /// <summary>The save-changes dialog's title.</summary>
+    internal static string SaveChangesTitle => Localizer.Get("msg.saveChanges.title", "Save changes to the following items?");
 
     /// <summary>The documents a save-changes dialog is open for: a second click on a tab's close asks once.</summary>
     private readonly HashSet<Docking.ShellDocument> _askingToSave = [];
@@ -90,7 +93,7 @@ public sealed partial class ShellHost
 
     /// <summary>The save-changes dialog for <paramref name="rows"/> (<see cref="SaveChangesTree.Rows"/>); Save is the default.</summary>
     internal static DialogRequest SaveChangesRequest(IReadOnlyList<DialogChoice> rows) => new(
-        Localizer.Get("msg.saveChanges.title", "Save changes to the following items?"),
+        SaveChangesTitle,
         rows.Any(r => r.Checkable) ? Localizer.Get("msg.saveChanges.checkedOnesAreSaved", "Save saves the checked files and discards the changes to the others.") : string.Empty,
         [SaveButton, DontSaveButton, CancelButton])
     {
