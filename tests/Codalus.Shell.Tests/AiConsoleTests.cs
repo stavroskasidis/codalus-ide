@@ -118,7 +118,32 @@ public sealed class AiConsoleTests
         }
     }
 
-    private static string[] Starts(string log) => File.Exists(log) ? [.. File.ReadAllLines(log).Where(l => l.StartsWith("args:", StringComparison.Ordinal)).Select(l => l["args:".Length..].Trim())] : [];
+    /// <summary>
+    /// The arguments of each start the stand-in CLI logged, read beside it: on Windows its <c>echo … &gt;&gt; log</c>
+    /// holds the log open for writing, and File.ReadAllLines' own open, which shares only reading, was refused while it
+    /// did (Windows CI, PR #337's run 43372051140, in the wait for a resumed conversation's two starts).
+    /// </summary>
+    private static string[] Starts(string log)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream);
+                return [.. reader.ReadToEnd().Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.StartsWith("args:", StringComparison.Ordinal)).Select(l => l["args:".Length..].Trim())];
+            }
+            catch (FileNotFoundException)
+            {
+                return [];
+            }
+            catch (IOException) when (attempt < 20)
+            {
+                // Being created by the first start: a moment later it is there.
+                Thread.Sleep(50);
+            }
+        }
+    }
 
     private static async Task<AiConsoleTabViewModel> ShownAsync(ShellFixture f, int tabs = 1)
     {
@@ -280,6 +305,32 @@ public sealed class AiConsoleTests
         await ShellFixture.PumpUntil(() => console.Tabs.Count == 0 && console.CanConnect, 20);
         Assert.Contains("No agent with a CLI of its own is connected", console.Notice, StringComparison.Ordinal);
         Assert.Equal(false, f.Shell.Workbench.Context.GetValue("aiConsoleAvailable"));
+    }
+
+    [AvaloniaFact]
+    public async Task Resizing_the_window_resizes_the_console()
+    {
+        await using var f = ShellFixture.Create();
+        await SetUpAsync(f);
+        await f.RunAsync("ai.console.show");
+        var tab = await ShownAsync(f);
+        var control = View(f).Terminal;
+        var session = tab.Session!;
+        string Sizes() => $"control {control.Columns}x{control.Rows} in {control.Bounds.Size}, terminal {session.Terminal.Columns}x{session.Terminal.Rows}";
+        bool Follows() => (session.Terminal.Columns, session.Terminal.Rows) == (control.Columns, control.Rows);
+
+        // The CLI's terminal is as wide and high as the console shows it (what tells the CLI is PseudoTerminalTests').
+        await ShellFixture.PumpUntil(() => control.Columns > 20 && Follows(), 20, Sizes);
+        var (columns, rows) = (control.Columns, control.Rows);
+
+        f.Window.Width = 1600;
+        f.Window.Height = 1100;
+        await ShellFixture.PumpUntil(() => control.Columns > columns && control.Rows > rows && Follows(), 20, Sizes);
+        (columns, rows) = (control.Columns, control.Rows);
+
+        f.Window.Width = 1000;
+        f.Window.Height = 900;
+        await ShellFixture.PumpUntil(() => control.Columns < columns && control.Rows < rows && Follows(), 20, Sizes);
     }
 
     [AvaloniaFact]
