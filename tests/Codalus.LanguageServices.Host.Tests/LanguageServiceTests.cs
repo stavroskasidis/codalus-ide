@@ -400,6 +400,39 @@ public sealed partial class LanguageServiceTests(LanguageFixture fixture) : ICla
     }
 
     [Fact]
+    public async Task Enter_between_an_empty_blocks_braces_moves_the_opening_one_as_the_editorconfig_says()
+    {
+        var path = fixture.File("src", "App", "Braces.cs");
+        var source = "internal static class Braces\n{\n    public static int One() {\n        \n    }\n\n    public static int Two() { return 2;\n        \n    }\n}\n";
+        await File.WriteAllTextAsync(path, source, Ct);
+        await fixture.OpenAsync(path);
+        var options = new FormattingOptions(4, true);
+
+        // The caret on the line between the braces: the opening one goes on a line of its own; nothing else changes.
+        var edits = await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "One() {\n        ", "One() {\n        ".Length), "\n", options, Ct);
+        Assert.Contains("    public static int One()\n    {\n        \n    }\n", Apply(source, edits), StringComparison.Ordinal);
+        Assert.All(edits, e => Assert.True(e.Range.End.Line == 2, $"{e.Range} changes more than the brace's line"));
+
+        // Not an empty block, or not between braces: nothing.
+        Assert.Empty(await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "return 2;\n        ", "return 2;\n        ".Length), "\n", options, Ct));
+        Assert.Empty(await fixture.Client.FormatOnTypeAsync(Uri(path), fixture.At(path, "\n\n    public static int Two", 1), "\n", options, Ct));
+        await fixture.Languages.CloseAsync(path);
+    }
+
+    [Fact]
+    public void Formatting_edits_keep_the_documents_line_endings()
+    {
+        // Roslyn's formatter inserts the OS's line break without end_of_line in the .editorconfig: CRLF on Windows put
+        // into LF files (Windows CI, runs 43452171892 and 43458220239). Not reproducible on Linux, so tested directly.
+        var lf = Microsoft.CodeAnalysis.Text.SourceText.From("a\nb\n");
+        var crlf = Microsoft.CodeAnalysis.Text.SourceText.From("a\r\nb\r\n");
+        Assert.Equal("\n    {\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\r\n    {\r\n", lf));
+        Assert.Equal("\r\n    {\r\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\n    {\n", crlf));
+        Assert.Equal(" ", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings(" ", lf));
+        Assert.Equal("\r\n", Codalus.LanguageServices.Host.Features.FormattingFeature.InDocumentsLineEndings("\r\n", Microsoft.CodeAnalysis.Text.SourceText.From("one line")));
+    }
+
+    [Fact]
     public async Task Workspace_symbols_and_metadata_definitions()
     {
         var symbols = await fixture.Client.WorkspaceSymbolsAsync("Circ", Ct);

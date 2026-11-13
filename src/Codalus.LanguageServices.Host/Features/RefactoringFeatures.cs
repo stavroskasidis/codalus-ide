@@ -97,7 +97,10 @@ internal static class RenameFeature
 /// <summary>Formatting with Roslyn's formatter, which follows the project's <c>.editorconfig</c>.</summary>
 internal static class FormattingFeature
 {
-    /// <summary>C#'s <c>}</c> and <c>;</c>; Visual Basic's Enter and <c>&gt;</c> (M35, <see cref="VisualBasicPrettyListing"/>).</summary>
+    /// <summary>
+    /// C#'s <c>}</c>, <c>;</c> and Enter between an empty block's braces; Visual Basic's Enter and <c>&gt;</c> (M35,
+    /// <see cref="VisualBasicPrettyListing"/>).
+    /// </summary>
     public static DocumentOnTypeFormattingOptions OnTypeOptions => new("}", [";", "\n", ">"]);
 
     public static async Task<Protocol.TextEdit[]> FormatAsync(Document document, TextSpan? span, CancellationToken cancellationToken)
@@ -107,10 +110,36 @@ internal static class FormattingFeature
             ? await Formatter.FormatAsync(document, s, cancellationToken: cancellationToken).ConfigureAwait(false)
             : await Formatter.FormatAsync(document, cancellationToken: cancellationToken).ConfigureAwait(false);
         var changes = await formatted.GetTextChangesAsync(document, cancellationToken).ConfigureAwait(false);
-        return [.. changes.Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), c.NewText ?? string.Empty))];
+        return [.. changes.Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), InDocumentsLineEndings(c.NewText, text)))];
     }
 
-    /// <summary>After <c>}</c>: the block it closes; after <c>;</c>: the statement or member it ends.</summary>
+    /// <summary>
+    /// <paramref name="newText"/> with the document's own line ending: without <c>end_of_line</c> in the
+    /// <c>.editorconfig</c>, Roslyn's formatter inserts the OS's (CRLF on Windows), so a file with LF lines got CRLF
+    /// ones mixed in (Windows CI, runs 43452171892 and 43458220239).
+    /// </summary>
+    internal static string InDocumentsLineEndings(string? newText, SourceText text)
+    {
+        if (string.IsNullOrEmpty(newText) || !newText.Contains('\n', StringComparison.Ordinal))
+        {
+            return newText ?? string.Empty;
+        }
+
+        foreach (var line in text.Lines)
+        {
+            if (line.EndIncludingLineBreak > line.End)
+            {
+                return newText.ReplaceLineEndings(text.ToString(TextSpan.FromBounds(line.End, line.EndIncludingLineBreak)));
+            }
+        }
+
+        return newText; // no line break yet: the formatter's
+    }
+
+    /// <summary>
+    /// After <c>}</c>: the block it closes; after <c>;</c>: the statement or member it ends; after Enter between an empty
+    /// block's braces: where its opening brace goes (<see cref="OpenBraceAsync"/>).
+    /// </summary>
     public static async Task<Protocol.TextEdit[]> OnTypeAsync(Document document, int position, string ch, CancellationToken cancellationToken)
     {
         if (document.Project.Language == LanguageNames.VisualBasic)
@@ -124,6 +153,11 @@ internal static class FormattingFeature
             return [];
         }
 
+        if (ch == "\n")
+        {
+            return await OpenBraceAsync(document, root, position, cancellationToken).ConfigureAwait(false);
+        }
+
         var token = root.FindToken(position - 1);
         var node = (ch, token.Kind()) switch
         {
@@ -134,6 +168,35 @@ internal static class FormattingFeature
         return node is null || node.ContainsDiagnostics && ch == ";"
             ? []
             : await FormatAsync(document, node.FullSpan, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Enter between an empty block's braces, which the editor has split onto lines of their own with the caret on the
+    /// line between: the opening brace goes where the formatter puts it (<c>csharp_new_line_before_open_brace</c>, on a
+    /// line of its own by default), as the classic IDE's brace completion. Only the text before the brace changes: the
+    /// caret's line and the closing brace's are the editor's.
+    /// </summary>
+    private static async Task<Protocol.TextEdit[]> OpenBraceAsync(Document document, SyntaxNode root, int position, CancellationToken cancellationToken)
+    {
+        var close = root.FindToken(position);
+        var open = close.GetPreviousToken();
+        var before = open.GetPreviousToken();
+        if (!close.IsKind(SyntaxKind.CloseBraceToken) || !open.IsKind(SyntaxKind.OpenBraceToken) || open.Parent != close.Parent
+            || open.Parent is InterpolationSyntax || before.IsKind(SyntaxKind.None) || close.SpanStart < position || open.Span.End >= position)
+        {
+            return [];
+        }
+
+        var text = await document.GetTextAsync(cancellationToken).ConfigureAwait(false);
+        if (text.Lines.GetLineFromPosition(open.SpanStart).LineNumber == text.Lines.GetLineFromPosition(position).LineNumber)
+        {
+            return [];
+        }
+
+        var formatted = await Formatter.FormatAsync(document, TextSpan.FromBounds(before.Span.End, open.Span.End), cancellationToken: cancellationToken).ConfigureAwait(false);
+        var changes = await formatted.GetTextChangesAsync(document, cancellationToken).ConfigureAwait(false);
+        return [.. changes.Where(c => c.Span.Start >= before.Span.End && c.Span.End <= open.SpanStart)
+            .Select(c => new Protocol.TextEdit(Positions.ToRange(text, c.Span), InDocumentsLineEndings(c.NewText, text)))];
     }
 }
 

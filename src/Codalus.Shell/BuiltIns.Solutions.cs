@@ -58,7 +58,7 @@ internal static partial class BuiltIns
             return null;
         });
         Add("workbench.openRecent", "Open Recent…", "File", Ui(shell.OpenRecentAsync));
-        Add("workbench.closeSolution", "Close Solution", "File", Ui(shell.CloseSolutionAsync), Open);
+        Add("workbench.closeSolution", "Close Solution", "File", Ui(() => shell.CloseSolutionAsync()), Open);
         Add("solution.trust", "Trust Solution Folder", "Solution", Ui(shell.TrustSolutionAsync), Open + " && !solutionTrusted");
         Add("solution.selectConfiguration", "Select Configuration…", "Solution", Ui(shell.SelectConfigurationAsync), Open);
         Add("solution.restore", "Restore Packages", "Solution", Ui(shell.RestoreSolutionAsync), Open);
