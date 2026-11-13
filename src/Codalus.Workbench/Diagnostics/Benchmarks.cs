@@ -558,7 +558,7 @@ public sealed class BenchmarkService
                 start.ArgumentList.Add(argument);
             }
 
-            start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+            ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
             start.Environment["DOTNET_NOLOGO"] = "1";
             NoLingeringBuildProcesses(start);
             Output?.Invoke(this, "> dotnet " + string.Join(' ', start.ArgumentList));

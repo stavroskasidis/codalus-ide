@@ -91,6 +91,11 @@ public sealed class LocalProcessLauncher : IProcessLauncher
             psi.Environment[key] = value;
         }
 
+        if (launch.ToolTelemetryOptOut)
+        {
+            ToolTelemetry.OptOut(psi.Environment);
+        }
+
         var process = Process.Start(psi) ?? throw new InvalidOperationException($"Failed to start {launch.FileName}.");
         return new LocalHostProcess(process);
     }

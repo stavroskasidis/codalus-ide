@@ -1,3 +1,4 @@
+using Codalus.Platform;
 using Codalus.Projects.Protocol;
 using Codalus.Rpc;
 using Codalus.Workbench.Output;
@@ -32,6 +33,15 @@ public sealed class BuildService
 {
     public const string OutputChannelId = "codalus.build";
 
+    /// <summary>
+    /// The line the build output gets after Avalonia's build task refused the IDE's telemetry opt-out (M59: Avalonia
+    /// Accelerate's Community and Trial tiers require telemetry), saying why and how to build; null for any other line.
+    /// </summary>
+    public static string? ExplainTelemetryRefusal(string line) =>
+        line.Contains("Avalonia", StringComparison.Ordinal) && line.Contains(ToolTelemetry.AvaloniaTierRefusal, StringComparison.Ordinal)
+            ? ToolTelemetry.AvaloniaTierExplanation
+            : null;
+
     private readonly SolutionService _solutions;
     private readonly OutputService _output;
     private readonly Lock _gate = new();
@@ -43,7 +53,14 @@ public sealed class BuildService
     {
         _solutions = solutions;
         _output = output;
-        solutions.BuildOutput += (_, line) => Channel.AppendLine(line);
+        solutions.BuildOutput += (_, line) =>
+        {
+            Channel.AppendLine(line);
+            if (ExplainTelemetryRefusal(line) is { } note)
+            {
+                Channel.AppendLine(note);
+            }
+        };
         solutions.BuildDiagnostic += (_, diagnostic) =>
         {
             lock (_gate)

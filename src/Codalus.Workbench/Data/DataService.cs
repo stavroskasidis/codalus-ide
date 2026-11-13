@@ -25,7 +25,7 @@ public static class DataHostLaunch
         var exe = OperatingSystem.IsWindows() ? "codalus-datahost.exe" : "codalus-datahost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "datahost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "datahost", "codalus-datahost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path, arguments) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path, arguments) : null;
     }
 
     /// <summary>The SQL language server: the same executable with <c>--lsp</c> (ADR 0038).</summary>

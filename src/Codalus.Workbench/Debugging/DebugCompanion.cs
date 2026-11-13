@@ -34,7 +34,7 @@ public sealed class DebugCompanion(Func<ProcessLaunchInfo?> launch) : IAsyncDisp
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "debughost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "debughost", "codalus-debughost.dll"));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 
     public async Task<TypeDisplayResult> TypeDisplayAsync(string typeName, IReadOnlyList<string> modules, CancellationToken cancellationToken) =>

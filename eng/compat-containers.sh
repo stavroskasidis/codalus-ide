@@ -15,6 +15,7 @@
 # .work/compat-containers/dotnet (their own root: the current host needs a newer glibc than Ubuntu 18.04 has), and
 # mounts both read-only. Results go to stdout and artifacts/compat-containers.md; it fails when an expectation fails.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 work="$repo/.work/compat-containers"
@@ -26,7 +27,6 @@ runtimes=(5.0.17 3.1.32 3.0.3 2.2.8 2.1.30 2.0.9)
 aspnetcore=(3.1.32 2.1.30)
 
 mkdir -p "$work" "$(dirname "$results")"
-export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 echo "== runtimes for the containers ($work/dotnet)"
 [ -f "$work/dotnet-install.sh" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
@@ -53,7 +53,7 @@ app() { echo "$out/$1/$1.App/bin/Release/$2/$1.App.dll"; }
 # One container run: image, then a shell script run inside with /dotnet and /fixture mounted.
 run() {
   local image="$1" script="$2"
-  "$engine" run --rm -v "$work/dotnet:/dotnet:ro" -v "$work/samples:/fixture:ro" -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
+  "$engine" run --rm -v "$work/dotnet:/dotnet:ro" -v "$work/samples:/fixture:ro" -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e AVALONIA_TELEMETRY_OPTOUT=1 \
     -e TARGETFRAMEWORKS_CRYPTO=1 "$image" bash -c "$script" 2>&1
 }
 

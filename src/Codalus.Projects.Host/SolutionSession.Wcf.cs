@@ -1,3 +1,4 @@
+using Codalus.Platform.Internal;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -256,7 +257,7 @@ internal sealed partial class SolutionSession
         }
 
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        psi.Environment["DOTNET_SVCUTIL_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(psi.Environment); // the tools' telemetry opt-outs (M59)
         DotnetProcess.NoLingeringBuildProcesses(psi); // it builds the project to reuse its types
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;

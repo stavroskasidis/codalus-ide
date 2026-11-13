@@ -24,7 +24,7 @@ public static class HostLaunchInfo
         var exe = OperatingSystem.IsWindows() ? "codalus-lshost.exe" : "codalus-lshost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", "codalus-lshost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 

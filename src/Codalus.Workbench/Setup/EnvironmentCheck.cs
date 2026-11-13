@@ -612,7 +612,7 @@ public sealed class EnvironmentCheck(PlatformKind platform, Func<string, string?
             start.ArgumentList.Add(argument);
         }
 
-        start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         start.Environment["DOTNET_NOLOGO"] = "1";
 
         // Started on the thread pool (M56): callers on the UI thread (a solution's global.json check) waited for the start.

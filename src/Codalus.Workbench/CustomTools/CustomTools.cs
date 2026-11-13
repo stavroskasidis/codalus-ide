@@ -20,7 +20,7 @@ public static class TextTemplatingHostLaunch
         var exe = OperatingSystem.IsWindows() ? "codalus-t4host.exe" : "codalus-t4host";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "t4host", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "t4host", "codalus-t4host.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 

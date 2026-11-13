@@ -56,10 +56,13 @@ concurrency:
   # it (untag); a stable release always runs to the end.
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+# The tools' telemetry opt-outs (M59, eng/telemetry-optout.sh): .github/actions/setup fails a job without them.
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  AVALONIA_TELEMETRY_OPTOUT: "1"
   TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
 
 jobs:
   # What this run releases: a nightly from develop, a stable release from master, nothing from anywhere else.

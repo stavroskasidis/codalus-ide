@@ -63,5 +63,6 @@
   <ItemGroup>
     <!-- ProcessTree.Kill, compiled in (internal) instead of referencing Codalus.Platform for one class (its remarks). -->
     <Compile Include="..\Codalus.Platform\ProcessTree.cs" Link="Platform\ProcessTree.cs" />
+    <Compile Include="..\Codalus.Platform\ToolTelemetry.cs" Link="Platform\ToolTelemetry.cs" />
   </ItemGroup>
 </Project>

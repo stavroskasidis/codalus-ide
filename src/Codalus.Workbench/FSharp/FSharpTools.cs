@@ -122,7 +122,7 @@ public sealed class FSharpTools(string cacheFolder, string dotnet, ProcessRunner
             environment[BuildHostRuntime.RollForwardToPrerelease] = "1";
         }
 
-        return new ProcessLaunchInfo(dotnet, [dll]) { Environment = environment };
+        return new ProcessLaunchInfo(dotnet, [dll]) { Environment = environment, ToolTelemetryOptOut = true }; // a tool the IDE starts (M59)
     }
 
     /// <summary>The .NET version of the tool's build that <c>dotnet tool install</c> chose (<c>tools/net10.0/any/</c> → 10).</summary>

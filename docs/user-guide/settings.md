@@ -210,4 +210,16 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 | JSON schemas | `www.schemastore.org` | JSON files without a bundled schema, when downloads are allowed | the bundled schemas only |
 | Help for a keyword (F1) | `learn.microsoft.com` | when you press F1 | — |
 
-Codalus IDE itself has no telemetry. The tools it runs connect on their own terms: git talks to your remotes, and the .NET SDK has its own telemetry, which `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off.
+Codalus IDE itself has no telemetry. Some tools it runs have their own, and Codalus turns it off for every host and tool it starts: builds, tests, `dotnet watch`, `dotnet ef`, `dotnet new`, `dotnet tool`, publishing, the previewers and designers, the language and REPL hosts, and the hosts on a remote machine. It sets these variables in their environment:
+
+| Variable | Turns off |
+|---|---|
+| `DOTNET_CLI_TELEMETRY_OPTOUT=1` | the .NET SDK's telemetry (the CLI, and MSBuild through it) |
+| `AVALONIA_TELEMETRY_OPTOUT=1` | Avalonia's build task (`Avalonia.BuildServices`, in every Avalonia 12 package), which otherwise reports each build of an Avalonia project |
+| `TESTINGPLATFORM_TELEMETRY_OPTOUT=1` | Microsoft.Testing.Platform's test programs |
+| `DOTNET_SVCUTIL_TELEMETRY_OPTOUT=1` | `dotnet-svcutil` (Add Service Reference) |
+
+- A value already in the environment Codalus starts with wins: set one to `0` to opt that tool back in.
+- The integrated terminal, the programs you run and debug, external tools, AI agents' commands and external agents get nothing new: what they send is your choice. A program `dotnet watch` starts inherits the variables from it.
+- Avalonia Accelerate's Community and Trial tiers don't allow Avalonia's opt-out: the build says "requires telemetry", and Codalus adds a line after it saying how to build (set `AVALONIA_TELEMETRY_OPTOUT=0`, or use a tier that allows it).
+- Git talks to your remotes and NuGet to your feeds, as the table above says.
