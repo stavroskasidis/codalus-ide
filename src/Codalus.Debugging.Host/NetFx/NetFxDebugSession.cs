@@ -92,6 +92,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
+
+    /// <summary>The adapter's log file alone (not the IDE's Debug log, which <c>log</c> also writes to); null without one.</summary>
+    public TextWriter? Trace { get; init; }
     private ClrTypeSystem? _types;
     private StepState? _step;
     private bool _userStopped;
@@ -736,7 +739,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         {
             target.DescribeThreads = ThreadsOfTimedOutEval;
             target.EvalTimedOut = log.WriteLine;
-            target.Continuing = log.WriteLine;
+            if (Trace is { } trace)
+            {
+                target.Continuing = trace.WriteLine; // the log file only: the log also goes to the IDE's Debug log
+            }
         }
 
         log.WriteLine($"Debugging process {_process.Id.ToString(CultureInfo.InvariantCulture)} ({debugger.Runtime}, CLR {_process.RuntimeVersion}).");
