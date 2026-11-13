@@ -106,7 +106,10 @@ internal sealed class DbgShimDebugger : IClrDebugger
         }
     }
 
-    /// <summary>How long a held start waits for the startup hook before it looks whether the runtime runs without one.</summary>
+    /// <summary>
+    /// How long a held start waits for the startup hook before it attaches to a program whose runtime is loaded. That
+    /// isn't only a runtime that runs no hooks: one that is slow to get to them looks the same (see <see cref="LaunchHeld"/>).
+    /// </summary>
     internal static readonly TimeSpan HookTimeout = TimeSpan.FromSeconds(5);
 
     /// <summary>
@@ -135,7 +138,12 @@ internal sealed class DbgShimDebugger : IClrDebugger
     /// A launch without dbgshim's wait for the runtime (see the class): the program starts with the startup hook, which
     /// reports its process id before <c>Main</c> and waits; the debugger attaches by the runtime's path, and lets the
     /// hook go once the program is stopped for it. The breakpoints set meanwhile bind as the program's modules load. A
-    /// runtime without startup hooks (.NET Core 2) is attached to as it runs, and is told so.
+    /// program whose runtime is loaded and hasn't reached the hook after <see cref="HookWait"/> is attached to as it
+    /// runs, and is told so: a runtime without startup hooks (.NET Core 2), one whose program turned them off, or one
+    /// that is slower to get there than the wait. The last still comes to the hook, so the hook is let go in every
+    /// case: an x64 program under Rosetta 2 on a busy machine took longer than the wait (5 s then, for every runtime),
+    /// and then sat in the hook for the two minutes it gives a debugger, with the debugger attached all along (macOS
+    /// CI, run 43309447208).
     /// </summary>
     private CorDebugTarget LaunchHeld(NetFxDebugArguments arguments, Action<string, string> output)
     {
@@ -188,7 +196,7 @@ internal sealed class DbgShimDebugger : IClrDebugger
 
                 if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program) is [var loaded, ..] && started.Elapsed >= HookWait(loaded))
                 {
-                    output("console", "The program's .NET runtime didn't run the debugger's startup hook (.NET Core 2 runs none; a program can turn them off), so it started before the debugger attached: breakpoints in its first lines may have been passed.\n");
+                    output("console", $"The program hasn't reached the debugger's startup hook after {started.Elapsed.TotalSeconds:0} seconds (a slow start, a program that turned startup hooks off, or a .NET runtime that runs none: .NET Core 2), so the debugger attaches to it as it runs: breakpoints in its first lines may have been passed.\n");
                     break;
                 }
 
@@ -203,12 +211,16 @@ internal sealed class DbgShimDebugger : IClrDebugger
             var (corDebug, runtime) = CorDebugByPath(shim, pid, Path.GetFileName(program), program);
             target = new CorDebugTarget(corDebug, VersionOf(runtime), arguments.JustMyCode) { Launched = launched };
             target.Attach(System.Diagnostics.Process.GetProcessById(pid));
-            if (held)
+            // Once the program is stopped for the debugger (its first event is here, and the session answers events
+            // only after configurationDone), the hook may go: it runs on when the session continues the program. A
+            // program that hadn't reached the hook gets the same word, for when it does: it finds it there and goes
+            // on at once, before Main, with the debugger attached.
+            target.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
+            File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+            if (!held)
             {
-                // Once the program is stopped for the debugger (its first event is here, and the session answers events
-                // only after configurationDone), the hook may go: it runs on when the session continues the program.
-                target.Events.WaitToReadAsync().AsTask().Wait(RuntimeStartTimeout);
-                File.WriteAllText(Path.Combine(wait, "go"), string.Empty);
+                // The hook removes the folder when it takes the word. A program that never runs it leaves that to us.
+                _ = launched.Exited.ContinueWith(_ => RemoveWaitFolder(wait), TaskScheduler.Default);
             }
 
             return target;
@@ -228,14 +240,19 @@ internal sealed class DbgShimDebugger : IClrDebugger
         {
             if (target is null)
             {
-                try
-                {
-                    Directory.Delete(wait, recursive: true);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                }
+                RemoveWaitFolder(wait);
             }
+        }
+    }
+
+    private static void RemoveWaitFolder(string wait)
+    {
+        try
+        {
+            Directory.Delete(wait, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

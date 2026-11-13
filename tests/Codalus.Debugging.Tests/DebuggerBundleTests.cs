@@ -138,6 +138,116 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
     }
 
     /// <summary>
+    /// A program whose runtime is loaded but slow to reach the startup hook: an x64 program under Rosetta 2 on a busy
+    /// machine took longer than the held start waits for the hook (macOS CI, run 43309447208, when it waited 5 s for every
+    /// runtime). The debugger attached to it as a program that runs no hooks, and never let the hook go when it came: the
+    /// program waited out the hook's two minutes with the debugger attached. The wait is longer now for a runtime that
+    /// runs hooks, but any wait can run out. Here another startup hook, run first, is what takes longer than it.
+    /// </summary>
+    [Fact]
+    public async Task A_program_that_reaches_the_startup_hook_late_is_let_go_when_it_gets_there()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The bundles for a machine's own platform are Linux's and macOS's (remote targets).");
+        var bundle = RemoteDebuggers.CodalusBundle(HostPlatform);
+        Assert.True(bundle is not null || !InCi, $"The Codalus debugger's bundle for {HostPlatform} isn't built (eng/get-codalus-debugger.sh).");
+        Assert.SkipWhen(bundle is null or { IsArchive: true }, $"The Codalus debugger's bundle for {HostPlatform} isn't built (eng/get-codalus-debugger.sh).");
+        var debugger = Path.Combine(bundle!.Path, RemoteDebuggers.CodalusExecutable);
+
+        // A startup hook that sleeps, listed before the debugger's own (the held start leaves a list that has its hook),
+        // past the longest the debugger waits for it: a .NET 11 runtime runs hooks, so it waits HookTimeoutWithHooks.
+        var late = Codalus.Debugging.Host.CoreClr.DbgShimDebugger.HookTimeoutWithHooks + TimeSpan.FromSeconds(3);
+        var slow = await SlowStartupHookAsync();
+        var program = new Dictionary<string, string>
+        {
+            ["DOTNET_STARTUP_HOOKS"] = slow + Path.PathSeparator + Path.Combine(bundle.Path, "Codalus.Debugging.StartupHook.dll"),
+            ["SLOW_STARTUP_HOOK_SECONDS"] = late.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        };
+        var environment = new Dictionary<string, string> { ["CODALUS_DEBUG_HELD_START"] = "1" };
+        if (OperatingSystem.IsLinux())
+        {
+            environment["LD_LIBRARY_PATH"] = ":";
+        }
+
+        var output = new System.Text.StringBuilder();
+        await using var debug = new DebugService(() => null)
+        {
+            AdapterSetting = () => DebugService.CodalusAdapter,
+            CoreClrAdapter = () => new DebugAdapterStartInfo(debugger, [CoreClrAdapter.AdapterArgument], bundle.Path, environment) { IsCodalus = true },
+        };
+        debug.Output += (_, o) =>
+        {
+            lock (output)
+            {
+                output.Append(o.Text);
+            }
+        };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        TimeSpan firstStop = default;
+        await SessionAsync(debug, DebuggeeFixture.DotnetHost, debuggee.Program, debuggee.Dll, debuggee.Folder, environment: program, atFirstStop: () =>
+        {
+            firstStop = watch.Elapsed;
+            return Task.CompletedTask;
+        });
+
+        string console;
+        lock (output)
+        {
+            console = output.ToString();
+        }
+
+        // The debugger gave up on the hook and attached; the hook came, and the program went on at once: not after the
+        // two minutes the hook waits for a debugger that never comes.
+        Assert.Contains("hasn't reached the debugger's startup hook", console, StringComparison.Ordinal);
+        Assert.DoesNotContain("The debugger didn't attach in time", console, StringComparison.Ordinal);
+        Assert.True(firstStop > late - TimeSpan.FromSeconds(1) && firstStop < late + TimeSpan.FromSeconds(60), $"The first stop came after {firstStop.TotalSeconds:0.0} s. The Debug Console:\n{console}");
+    }
+
+    /// <summary>
+    /// Builds a startup hook that sleeps for <c>SLOW_STARTUP_HOOK_SECONDS</c> before the hooks after it run, in a temp
+    /// folder the fixture's own removes, and returns its assembly.
+    /// </summary>
+    private async Task<string> SlowStartupHookAsync()
+    {
+        var folder = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(debuggee.Folder))!, "SlowStartupHook");
+        Directory.CreateDirectory(folder);
+        await File.WriteAllTextAsync(Path.Combine(folder, "SlowStartupHook.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <PropertyGroup>
+                <TargetFramework>netstandard2.0</TargetFramework>
+                <ImplicitUsings>disable</ImplicitUsings>
+                <Nullable>disable</Nullable>
+              </PropertyGroup>
+            </Project>
+            """, Ct);
+        await File.WriteAllTextAsync(Path.Combine(folder, "StartupHook.cs"), """
+            using System;
+            using System.Globalization;
+            using System.Threading;
+
+            internal static class StartupHook
+            {
+                public static void Initialize()
+                {
+                    var seconds = double.Parse(Environment.GetEnvironmentVariable("SLOW_STARTUP_HOOK_SECONDS") ?? "0", CultureInfo.InvariantCulture);
+                    Thread.Sleep(TimeSpan.FromSeconds(seconds));
+                }
+            }
+            """, Ct);
+        var start = new System.Diagnostics.ProcessStartInfo(DebuggeeFixture.DotnetHost, ["build", folder, "-nologo", "-v", "quiet"])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var built = process.StandardOutput.ReadToEndAsync(Ct);
+        var errors = process.StandardError.ReadToEndAsync(Ct);
+        await process.WaitForExitAsync(Ct);
+        Assert.True(process.ExitCode == 0, $"The slow startup hook didn't build: {await built}{await errors}");
+        return Path.Combine(folder, "bin", "Debug", "netstandard2.0", "SlowStartupHook.dll");
+    }
+
+    /// <summary>
     /// Each row is a framework of RuntimesDebuggee and the x64 runtime it runs on. .NET Core 3.1 and .NET 5 are what an
     /// Apple silicon Mac runs as x64 for want of an Arm64 runtime; the later ones run as x64 when their dotnet is.
     /// </summary>
@@ -198,7 +308,7 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
     /// a breakpoint with a hit count (the debugger applies it), values and a property read in the program, a step,
     /// another breakpoint, and the program's end with its output (and <paramref name="printed"/>, when given).
     /// </summary>
-    private static async Task<(int Id, bool WasX64)> SessionAsync(DebugService debug, string dotnet, string program, string dll, string folder, string? printed = null, Func<Task>? atFirstStop = null)
+    private static async Task<(int Id, bool WasX64)> SessionAsync(DebugService debug, string dotnet, string program, string dll, string folder, string? printed = null, Func<Task>? atFirstStop = null, IReadOnlyDictionary<string, string>? environment = null)
     {
         var stops = Channel.CreateUnbounded<StopInfo>();
         var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -238,7 +348,7 @@ public sealed class DebuggerBundleTests(DebuggeeFixture debuggee, RuntimesDebugg
         debug.Breakpoints.Set(new BreakpointSpec(program, loop, HitCondition: "3"));
         try
         {
-            await debug.LaunchAsync(new LaunchPlan(dotnet, $"exec \"{dll}\"", folder, new Dictionary<string, string>(), null), Ct);
+            await debug.LaunchAsync(new LaunchPlan(dotnet, $"exec \"{dll}\"", folder, environment ?? new Dictionary<string, string>(), null), Ct);
         }
         catch (InvalidOperationException ex)
         {
