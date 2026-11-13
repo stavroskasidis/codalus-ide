@@ -98,7 +98,7 @@ public static class PluginHostLocator
         var exe = OperatingSystem.IsWindows() ? "codalus-pluginhost.exe" : "codalus-pluginhost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "pluginhost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "pluginhost", "codalus-pluginhost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 
@@ -550,9 +550,9 @@ public sealed class PluginManager : IAsyncDisposable
             var command = Resolve(server.Command);
             var local = Path.Combine(folder, command);
             var arguments = (server.Args ?? []).Select(Resolve).ToArray();
-            ProcessLaunchInfo Launch() => File.Exists(local)
+            ProcessLaunchInfo Launch() => (File.Exists(local)
                 ? ProcessLaunchInfo.FromPath(local, arguments)
-                : new ProcessLaunchInfo(command, arguments);
+                : new ProcessLaunchInfo(command, arguments)) with { ToolTelemetryOptOut = true }; // a tool the IDE starts (M59)
             _workbench.LanguageServers.Register(new Languages.LanguageServiceDescriptor(server.Id, server.Name ?? plugin.DisplayName, [], null, Launch)
             {
                 Languages = server.Languages,

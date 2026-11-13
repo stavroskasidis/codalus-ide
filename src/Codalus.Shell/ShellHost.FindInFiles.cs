@@ -161,65 +161,7 @@ public sealed partial class ShellHost
         }
 
         StatusBar.ShowMessage(Localizer.Format("msg.findInFiles.searchingFiles", "Searching {0} files…", files.Count));
-        var (changes, rows, occurrences) = await Task.Run(async () =>
-        {
-            var changes = new List<TextDocumentEdit>();
-            var rows = new List<FindResultRow>();
-            var occurrences = 0;
-            foreach (var file in files)
-            {
-                string text;
-                try
-                {
-                    text = openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file).ConfigureAwait(false);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    continue;
-                }
-
-                if (text.Contains('\0', StringComparison.Ordinal))
-                {
-                    continue; // binary
-                }
-
-                var edits = new List<TextEdit>();
-                var lines = text.Split('\n');
-                for (var i = 0; i < lines.Length; i++)
-                {
-                    var line = lines[i].TrimEnd('\r');
-                    var count = 0;
-                    var replaced = regex.Replace(line, m =>
-                    {
-                        if (m.Length == 0)
-                        {
-                            return m.Value;
-                        }
-
-                        count++;
-                        return options.Replacement(m, replaceWith);
-                    });
-                    if (count == 0 || replaced == line)
-                    {
-                        continue;
-                    }
-
-                    occurrences += count;
-                    edits.Add(new TextEdit(new LanguageServices.Protocol.Range(new Position(i, 0), new Position(i, line.Length)), replaced));
-                    if (FindResultsPage.MatchLine(file, i + 1, line, regex) is { } before)
-                    {
-                        rows.Add(new FindResultRow(file, i + 1, before.Column, before.Length, replaced.Trim(), false));
-                    }
-                }
-
-                if (edits.Count > 0)
-                {
-                    changes.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(file), null), [.. edits]));
-                }
-            }
-
-            return (changes, rows, occurrences);
-        }).ConfigureAwait(true);
+        var (changes, rows, occurrences, _) = await PlanReplacementsAsync(files, openTexts, regex, options, replaceWith, CancellationToken.None).ConfigureAwait(true);
         StatusBar.ClearMessage();
 
         if (changes.Count > 0)
@@ -241,4 +183,77 @@ public sealed partial class ShellHost
 
         FindResults.ShowReplaced(options, replaceWith, rows, occurrences, changes.Count);
     }
+
+    /// <summary>Replace All's edits: per file, its changed lines (a line's matches replaced at once), and how many there were.</summary>
+    private sealed record ReplacementPlan(List<TextDocumentEdit> Changes, List<FindResultRow> Rows, int Occurrences, Dictionary<string, int> PerFile);
+
+    /// <summary>
+    /// What Replace All changes in <paramref name="files"/> (their open texts as edited), worked out off the UI thread:
+    /// binary files and those that can't be read are left out. Shared by Replace All and the agents' replace_in_files.
+    /// </summary>
+    private static Task<ReplacementPlan> PlanReplacementsAsync(IReadOnlyList<string> files, IReadOnlyDictionary<string, string> openTexts, Regex regex, FindInFilesOptions options, string replaceWith, CancellationToken cancellationToken) =>
+        Task.Run(async () =>
+        {
+            var changes = new List<TextDocumentEdit>();
+            var rows = new List<FindResultRow>();
+            var perFile = new Dictionary<string, int>(SolutionService.PathComparer);
+            var occurrences = 0;
+            foreach (var file in files)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string text;
+                try
+                {
+                    text = openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    continue;
+                }
+
+                if (text.Contains('\0', StringComparison.Ordinal))
+                {
+                    continue; // binary
+                }
+
+                var edits = new List<TextEdit>();
+                var inFile = 0;
+                var lines = text.Split('\n');
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i].TrimEnd('\r');
+                    var count = 0;
+                    var replaced = regex.Replace(line, m =>
+                    {
+                        if (m.Length == 0)
+                        {
+                            return m.Value;
+                        }
+
+                        count++;
+                        return options.Replacement(m, replaceWith);
+                    });
+                    if (count == 0 || replaced == line)
+                    {
+                        continue;
+                    }
+
+                    inFile += count;
+                    edits.Add(new TextEdit(new LanguageServices.Protocol.Range(new Position(i, 0), new Position(i, line.Length)), replaced));
+                    if (FindResultsPage.MatchLine(file, i + 1, line, regex) is { } before)
+                    {
+                        rows.Add(new FindResultRow(file, i + 1, before.Column, before.Length, replaced.Trim(), false));
+                    }
+                }
+
+                if (edits.Count > 0)
+                {
+                    occurrences += inFile;
+                    perFile[file] = inFile;
+                    changes.Add(new TextDocumentEdit(new OptionalVersionedTextDocumentIdentifier(DocumentUris.FromPath(file), null), [.. edits]));
+                }
+            }
+
+            return new ReplacementPlan(changes, rows, occurrences, perFile);
+        }, cancellationToken);
 }

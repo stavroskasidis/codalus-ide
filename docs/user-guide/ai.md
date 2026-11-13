@@ -130,6 +130,12 @@ Tell the agent to skip any of this when you don't want it.
 | Running | `run_project`, `get_run_output`, `stop_run` |
 | Debugging | `debug_start` (a project or one test), breakpoints (`debug_set_breakpoint` with a condition or hit count, `debug_remove_breakpoint`, `debug_list_breakpoints`), `debug_wait_for_stop`, `debug_get_state` (the stack and the exception), `debug_get_variables`, `debug_evaluate`, `debug_step`, `debug_continue` |
 | A web app's browser | `browser_get_page`, `browser_screenshot`, `browser_console`, `browser_evaluate`, `browser_navigate` |
+| Changing code | `rename_symbol` (through the compiler, across files), `get_code_actions` and `apply_code_action` (the light bulb's fixes and refactorings at a line), `format_document`, `replace_in_files` (Replace in Files' engine) |
+| Hot Reload and profiling | `apply_code_changes` (to the program being debugged, or run under Hot Reload), `profile_start` and `profile_stop` (a CPU profile's hot path and top functions), `memory_snapshot` (the largest types and their paths to a root) |
+| Git | `git_status`, `git_diff`, `git_log`, `git_file_history`, `git_blame`, `git_conflicts`; `git_stage`, `git_unstage`, `git_commit`, `git_stash`, `git_checkout`, `git_resolve`. Never a push, pull, fetch, reset, rebase, amend or a forced operation |
+| Packages and EF Core | `list_packages`, `search_packages`, `add_package`, `update_package`, `remove_package` (through the NuGet Package Manager's path, with your feeds and credentials); `list_migrations`, `add_migration`, `apply_migrations`, `script_migrations` (through the Entity Framework window and your `dotnet-ef`) |
+| Services | `list_services` (compose services and Aspire resources, with their state), `service_start`, `service_stop`, `service_restart`, `service_debug`, `service_logs`, `service_traces`, `service_metrics` |
+| The IDE | `list_commands` and `run_command` (a command by its ID, under its own enablement; never exit, sign-ins, plugin installs, settings sync, trust and the like), `get_settings` (never secrets), `ide_screenshot`, `terminal_send` (typing into the integrated terminal) |
 
 A tool that follows code takes a symbol by name (`OrderService.Submit`), or a file, a line and the name on it.
 
@@ -139,7 +145,9 @@ A tool that follows code takes a symbol by name (`OrderService.Submit`), or a fi
 - The browser tools wait for a web app that is starting (up to 90 seconds). A page that doesn't load says why, and an address where nothing listens yet is tried again.
 - `debug_wait_for_stop` also returns when a web app it was waiting for starts to listen: nothing stops a web app before something requests its code. When it times out, it lists the breakpoints that aren't bound.
 
-**What asks first.** Reading never asks. Building, running tests, starting, debugging, stepping, evaluating and driving the browser follow **Agent IDE Actions** (`ai.agent.ideActions`, in your user settings only):
+**Changes through the tools.** A rename, a code action, formatting or a replace changes a file open in an editor as one undo step, left unsaved, and writes a closed one; the answer lists every file it changed. A change that would touch a file outside the workspace, or one excluded from AI, is refused whole. Git, package and migration changes go through the same windows you use, so Git Changes, the Package Manager and the Entity Framework window show them. A package that needs its license accepted, and going back to an earlier migration (unless the agent says so with `allowRevert`), are refused.
+
+**What asks first.** Reading never asks. Building, running tests, starting, debugging, stepping, evaluating, driving the browser, changing code, Git, packages, migrations, services and running IDE commands follow **Agent IDE Actions** (`ai.agent.ideActions`, in your user settings only):
 - `allow` (the default): they run without asking. This applies only in trusted folders, like everything an agent does.
 - `askOncePerSession`: the first one in a chat asks, with **Allow**, **Allow for This Chat**, **Always Allow in This Workspace** and **Reject** (the default). **New Chat** forgets **Allow for This Chat**.
 - `ask`: every one asks, with **Allow**, **Always Allow in This Workspace** and **Reject**.
@@ -156,15 +164,21 @@ Either way the agent can read the page, take screenshots, read the console and r
 
 **Plugins' tools.** Plugins can add tools of their own ([AI tools](plugin-api.md)). Each call asks first and names the plugin.
 
+**Long calls.** A build, a test run, a debug wait or a profile can take minutes. When the agent's MCP client asks for progress, `codalus mcp` reports every 10 seconds that the call is still running, so the client doesn't time it out. Each call's line in the *AI* Output channel says how long it took, never what it returned.
+
 ## Codalus as an MCP server
 
-AI agents that run outside the IDE (in a terminal, or another editor) can use [the IDE's tools](#the-ides-tools). Turn on **MCP Server** (`ai.mcpServer.enabled`) in **Tools > Options > AI**, then configure the agent with this stdio server:
+AI agents that run outside the IDE (in a terminal, or another editor) can use [the IDE's tools](#the-ides-tools). Turn on **MCP Server** (`ai.mcpServer.enabled`) in **Tools > Options > AI**, then add the server to the agent. **AI: Set Up Agents Outside the IDE…** (in the Command Palette) shows each known agent's setup with this install's path filled in, each with a **Copy** button: Claude Code, Codex and Gemini CLI as a command to run, GitHub Copilot CLI's `mcp-config.json`, and the JSON most agents read. A copy offers to turn MCP Server on.
+
+A folder can carry the setup for everyone who opens it, in a committed `.mcp.json`:
 
 ```json
-{ "command": "codalus", "args": ["mcp"] }
+{ "mcpServers": { "codalus": { "command": "codalus", "args": ["mcp"] } } }
 ```
 
-(add `"--user-data-dir", "<dir>"` when you run the IDE with one). The tools reach the running IDE of the same user, and plugins' tools are listed too. The server also tells the agent, in its instructions, to prefer these tools to `grep` and the CLI. Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
+(add `"--user-data-dir", "<dir>"` when you run the IDE with one).
+
+**The first call in a folder asks you**, on top of MCP Server being on: **Allow** (until the window closes), **Always for This Folder** (kept in your state folder, `ai-outside-agents-allowed.json`, never in the repository) or **Don't Allow** (the default). A question nobody answers within two minutes refuses that call, and the next one asks again. Listing the tools never asks. The tools reach the running IDE of the same user, and plugins' tools are listed too. The server also tells the agent, in its instructions, to prefer these tools to `grep` and the CLI. Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
 
 ## External agents (ACP)
 

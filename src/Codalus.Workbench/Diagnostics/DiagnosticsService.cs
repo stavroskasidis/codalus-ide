@@ -21,7 +21,7 @@ public static class DiagnosticsHostLaunch
         var exe = OperatingSystem.IsWindows() ? "codalus-diaghost.exe" : "codalus-diaghost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "diaghost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "diaghost", "codalus-diaghost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 

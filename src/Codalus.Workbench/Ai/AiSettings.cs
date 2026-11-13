@@ -164,7 +164,7 @@ public static class AiSettings
         {
             Title = "MCP Server",
             Category = "AI",
-            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the IDE's tools for code intelligence (symbols, references, callers, the Error List), builds, tests, running and debugging; actions follow Agent IDE Actions. For your user only; off by default.",
+            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the IDE's tools for code intelligence (symbols, references, callers, the Error List), code changes, builds, tests, running, debugging, Git, packages and services; actions follow Agent IDE Actions. The first call in a folder asks you (Allow, Always for This Folder, Don't Allow). AI › Set Up Agents Outside the IDE… shows each agent's setup with a Copy button. For your user only; off by default.",
             Scope = SettingScope.User,
             Order = 23,
         },

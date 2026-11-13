@@ -274,7 +274,11 @@ public sealed class RemoteSession : IAsyncDisposable
         }
 
         // Always the dll there: this machine's apphost is for this OS.
-        return new ProcessLaunchInfo("dotnet", [$"{_installed.Folder}/{folder}/{name}.dll", .. rest.Select(Map.ToRemote)]) { Launcher = Launcher };
+        return new ProcessLaunchInfo("dotnet", [$"{_installed.Folder}/{folder}/{name}.dll", .. rest.Select(Map.ToRemote)])
+        {
+            Launcher = Launcher,
+            ToolTelemetryOptOut = true, // the hosts get the opt-outs there (M59), as here
+        };
     }
 
     /// <summary>

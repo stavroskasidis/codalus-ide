@@ -20,6 +20,7 @@
 # Prerequisites: the .NET SDK (Native AOT toolchain), zip; vswhere on PATH on Windows; mksquashfs on Linux; rpmbuild
 # for the .rpm.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 base="$(tr -d '[:space:]' < "$repo/VERSION")"

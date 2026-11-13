@@ -330,9 +330,9 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (Solutions.IsOpen)
+        if (Solutions.IsOpen && !await CloseSolutionAsync().ConfigureAwait(true))
         {
-            await CloseSolutionAsync().ConfigureAwait(true);
+            return; // the save-changes dialog was cancelled: the connection stays
         }
 
         foreach (var terminal in Terminals.Sessions)
@@ -552,7 +552,7 @@ public sealed partial class ShellHost
     {
         (DebugAdapterStartInfo, ProcessLaunchInfo?) Codalus(string program, IReadOnlyList<string> arguments) =>
             (new DebugAdapterStartInfo(program, [.. arguments, CoreClrAdapter.AdapterArgument], null, null, remote.Display) { Launcher = remote.DebugLauncher, IsCodalus = true },
-             new ProcessLaunchInfo(program, arguments) { Launcher = remote.Launcher });
+             new ProcessLaunchInfo(program, arguments) { Launcher = remote.Launcher, ToolTelemetryOptOut = true }); // the companion host (M59)
         (DebugAdapterStartInfo, ProcessLaunchInfo?) Netcoredbg(string path) =>
             (new DebugAdapterStartInfo(path, ["--interpreter=vscode"], null, null, remote.Display) { Launcher = remote.DebugLauncher }, null);
 

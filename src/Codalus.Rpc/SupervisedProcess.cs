@@ -22,10 +22,19 @@ public sealed record ProcessLaunchInfo(string FileName, IReadOnlyList<string> Ar
     /// </summary>
     public bool CheckRuntime { get; init; } = true;
 
+    /// <summary>
+    /// Whether the process gets the opt-outs of the tools' telemetry (M59, <c>ToolTelemetry</c>) where it starts: a host
+    /// or tool of the IDE's, never the user's program. A variable already in the environment it inherits is kept.
+    /// </summary>
+    public bool ToolTelemetryOptOut { get; init; }
+
     public static ProcessLaunchInfo FromPath(string path, params string[] arguments) =>
         path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
             ? new ProcessLaunchInfo("dotnet", [path, .. arguments])
             : new ProcessLaunchInfo(path, arguments);
+
+    /// <summary>One of the IDE's hosts at <paramref name="path"/> (<see cref="FromPath"/>), with the tools' telemetry opt-outs (M59).</summary>
+    public static ProcessLaunchInfo Host(string path, params string[] arguments) => FromPath(path, arguments) with { ToolTelemetryOptOut = true };
 }
 
 /// <summary>Restart policy of a <see cref="SupervisedProcess"/>.</summary>

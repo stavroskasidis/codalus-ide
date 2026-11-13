@@ -154,7 +154,7 @@ internal static class DotnetProcess
             psi.ArgumentList.Add(arg);
         }
 
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(psi.Environment); // the tools' telemetry opt-outs (M59)
         psi.Environment["DOTNET_NOLOGO"] = "1";
         psi.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
 
