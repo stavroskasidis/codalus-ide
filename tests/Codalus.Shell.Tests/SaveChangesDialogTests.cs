@@ -106,7 +106,8 @@ public sealed class SaveChangesDialogTests
         f.Shell.Layout.CloseDocument(editor);
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
         Assert.Equal("Save changes to the following items?", f.Shell.Dialogs.Title);
-        Assert.Equal(["Save", "Don't Save", "Cancel"], f.Shell.Dialogs.Buttons.Select(b => b.Label));
+        // In the OS's order: on macOS the primary button comes last (macOS CI, run 43484636144).
+        Assert.Equal(DialogViewModel.Order(["Save", "Don't Save", "Cancel"], "Save", f.Shell.Dialogs.PrimaryLast), f.Shell.Dialogs.Buttons.Select(b => b.Label));
         Assert.Equal("Save", f.Shell.Dialogs.Buttons.Single(b => b.IsDefault).Label);
         Assert.Equal(["notes.txt"], f.Shell.Dialogs.Choices.Select(c => c.Label));
         Assert.False(f.Shell.Dialogs.HasCheckableChoices); // one file: Save and Don't Save are the choice

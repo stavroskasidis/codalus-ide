@@ -2909,6 +2909,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
     }
 
@@ -3043,6 +3044,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.SaveAllAsync().ConfigureAwait(true);
         Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -3142,6 +3144,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Check(code.Text.Text == original && resx.Text.Text == originalResx, "undo takes OrderForm.Designer.cs and OrderForm.resx back to the originals");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -3150,6 +3153,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// editor's families, ForeColor's color drop-down (the screenshot, with Font expanded), an invalid Location.X's
     /// dialog both ways, the component selector and FlatAppearance's parts, the form's AcceptButton list, and undo.
     /// </summary>
+    /// <summary>
+    /// Waits until a designer closed with <c>CloseDocument</c> is gone. Its form can still count as unsaved after the
+    /// step's undos, so closing it asks to save, and <see cref="OnDialogOpened"/> answers Don't Save only once the
+    /// dispatcher is free: the next step's open of the same form found the designer still open and used it, and the
+    /// answer then closed it under that step (Windows smoke, runs 43484474099 and 43489637316: winforms.properties).
+    /// </summary>
+    private async Task DesignerClosedAsync(ViewModels.WinFormsDesignerDocument designer) =>
+        await WaitAsync(() => !shell.Layout.Documents.Contains(designer), () => "the designer closes: " + designer.Status, 60).ConfigureAwait(true);
+
     private async Task WinFormsPropertiesStepAsync()
     {
         var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");

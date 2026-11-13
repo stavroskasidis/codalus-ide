@@ -22,6 +22,21 @@ public sealed class IlCallsTests
     }
 
     [Theory]
+    [InlineData(12, 17, true)] // the closing line: its ret at 16 (M61)
+    [InlineData(16, int.MaxValue, true)] // the method's last range
+    [InlineData(0, 16, false)] // the calls and the branch
+    public void Says_whether_a_range_returns(int from, int to, bool returns) =>
+        Assert.Equal(returns, IlCalls.Returns(s_il, from, to));
+
+    [Fact]
+    public void A_ret_byte_inside_an_operand_isnt_a_return()
+    {
+        byte[] il = [0x28, 0x2A, 0x00, 0x00, 0x06, 0x2A]; // call 0x0600002A; ret
+        Assert.False(IlCalls.Returns(il, 0, 5));
+        Assert.True(IlCalls.Returns(il, 0, 6));
+    }
+
+    [Theory]
     [InlineData(0, 12, true)] // the two calls and the nop: one after another
     [InlineData(0, 11, true)]
     [InlineData(12, 15, false)] // a branch

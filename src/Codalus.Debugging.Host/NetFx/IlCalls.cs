@@ -67,6 +67,23 @@ internal static class IlCalls
         return at == to;
     }
 
+    /// <summary>Whether a <c>ret</c> starts in [<paramref name="from"/>, <paramref name="to"/>) (M61: a step from there may leave the method by returning).</summary>
+    public static bool Returns(ReadOnlySpan<byte> il, int from, int to)
+    {
+        var at = 0;
+        while (at < to && Size(il, at) is > 0 and var size)
+        {
+            if (at >= from && il[at] == 0x2A)
+            {
+                return true;
+            }
+
+            at += size;
+        }
+
+        return false;
+    }
+
     /// <summary>The size of the instruction at <paramref name="at"/>; 0 at the end or at a malformed one.</summary>
     private static int Size(ReadOnlySpan<byte> il, int at)
     {
