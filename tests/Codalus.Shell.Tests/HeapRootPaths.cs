@@ -11,8 +11,12 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 internal static class HeapRootPaths
 {
-    /// <summary>Up to <paramref name="maxPaths"/> root paths to the objects of <paramref name="typeName"/> that <paramref name="isTarget"/> picks, one per line.</summary>
-    public static string Describe(string typeName, Func<ClrObject, bool> isTarget, int maxPaths = 3)
+    /// <summary>
+    /// Up to <paramref name="maxPaths"/> root paths to the objects of <paramref name="typeName"/> that <paramref name="isTarget"/>
+    /// picks, one per line. With none, why there may be none: the heap and the threads as the snapshot has them, and every
+    /// thread whose stack runs <paramref name="frame"/> (a method's name), where a test holds its object.
+    /// </summary>
+    public static string Describe(string typeName, Func<ClrObject, bool> isTarget, int maxPaths = 3, string? frame = null)
     {
         if (OperatingSystem.IsMacOS())
         {
@@ -45,7 +49,7 @@ internal static class HeapRootPaths
             }
 
             return lines.Count == 0
-                ? $"no root path to a {typeName} in the snapshot ({clock.Elapsed.TotalSeconds:0.0} s)"
+                ? $"no root path to a {typeName} in the snapshot ({clock.Elapsed.TotalSeconds:0.0} s); {Why(runtime, typeName, isTarget, frame)}"
                 : $"{lines.Count} root path(s) to a {typeName} ({clock.Elapsed.TotalSeconds:0.0} s):\n" + string.Join('\n', lines);
         }
         catch (OperationCanceledException)
@@ -98,6 +102,60 @@ internal static class HeapRootPaths
         {
             return " in a frame that can't be read";
         }
+    }
+
+    /// <summary>
+    /// What the snapshot says when it has no path: whether the object is on the heap at all, whether the heap could be
+    /// walked, and the threads running managed code (cooperative), whose stacks the runtime may not report where the
+    /// snapshot caught them. A frame's object had no path on Windows and Linux CI with nothing more said (runs
+    /// 43368524423 and 43422861486, docs/ci-flakes.md).
+    /// </summary>
+    private static string Why(ClrRuntime runtime, string typeName, Func<ClrObject, bool> isTarget, string? frame)
+    {
+        var heap = runtime.Heap;
+        var parts = new List<string>();
+        try
+        {
+            int all = 0, picked = 0;
+            foreach (var candidate in heap.EnumerateObjects())
+            {
+                if (candidate.Type?.Name == typeName)
+                {
+                    all++;
+                    picked += Picked(isTarget, candidate) ? 1 : 0;
+                }
+            }
+
+            parts.Add($"{all} {typeName} on the heap, {picked} of them picked");
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException)
+        {
+            parts.Add($"the heap's objects can't be read ({ex.GetType().Name}: {ex.Message})");
+        }
+
+        parts.Add(heap.CanWalkHeap ? "the heap can be walked" : "the heap can't be walked (a GC was under way)");
+        var threads = runtime.Threads.Where(t => t.IsAlive).ToArray();
+        parts.Add($"{threads.Length} managed thread(s), {threads.Count(t => t.GCMode == GCMode.Cooperative)} running managed code{(threads.Any(t => t.IsGc) ? ", one of them the GC's" : string.Empty)}");
+        if (frame is not null)
+        {
+            foreach (var thread in threads)
+            {
+                try
+                {
+                    var stack = thread.EnumerateStackTrace().Select(f => f.Method is { } m ? $"{m.Type?.Name}.{m.Name}" : f.FrameName).OfType<string>().Take(16).ToArray();
+                    if (stack.Any(f => f.EndsWith("." + frame, StringComparison.Ordinal)))
+                    {
+                        parts.Add($"thread {thread.ManagedThreadId} ({thread.GCMode}, state 0x{(int)thread.State:x}) has {thread.EnumerateStackRoots().Count()} stack root(s), at {string.Join(" < ", stack)}");
+                    }
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    parts.Add($"thread {thread.ManagedThreadId}'s stack can't be read ({ex.Message})");
+                }
+            }
+        }
+
+        return string.Join("; ", parts);
     }
 
     /// <summary>The object is a target; one whose fields can't be read counts as one (better a path too many than none).</summary>

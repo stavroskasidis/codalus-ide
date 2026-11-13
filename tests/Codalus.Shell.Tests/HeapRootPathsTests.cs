@@ -43,7 +43,7 @@ public class HeapRootPathsTests
         try
         {
             Assert.True(holding.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
-            var paths = HeapRootPaths.Describe(typeof(Held).FullName!, o => o.ReadField<int>("<Mark>k__BackingField") == 11);
+            var paths = HeapRootPaths.Describe(typeof(Held).FullName!, o => o.ReadField<int>("<Mark>k__BackingField") == 11, frame: nameof(HoldOnStack));
             Assert.True(paths.Contains(nameof(HoldOnStack), StringComparison.Ordinal), paths);
             Assert.True(paths.Contains($"({typeof(Held).FullName}.{nameof(Held.Touch)})", StringComparison.Ordinal), paths);
         }
