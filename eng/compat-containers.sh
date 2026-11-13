@@ -29,7 +29,7 @@ mkdir -p "$work" "$(dirname "$results")"
 export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1
 
 echo "== runtimes for the containers ($work/dotnet)"
-[ -f "$work/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
+[ -f "$work/dotnet-install.sh" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
 for version in "${runtimes[@]}"; do
   [ -d "$work/dotnet/shared/Microsoft.NETCore.App/$version" ] || bash "$work/dotnet-install.sh" --runtime dotnet --version "$version" --install-dir "$work/dotnet" --no-path $( [ -x "$work/dotnet/dotnet" ] && echo --skip-non-versioned-files ) > /dev/null
 done

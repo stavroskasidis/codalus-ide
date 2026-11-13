@@ -24,7 +24,7 @@ sdk="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' global.json | head -1)"
 if ! dotnet --version > /dev/null 2>&1; then
   if [ ! -x "$HOME/.dotnet/dotnet" ] || ! "$HOME/.dotnet/dotnet" --version > /dev/null 2>&1; then
     echo "== install .NET SDK $sdk into ~/.dotnet"
-    curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
+    curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
     bash "${TMPDIR:-/tmp}/dotnet-install.sh" --jsonfile global.json --install-dir "$HOME/.dotnet" --no-path
   fi
   export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
@@ -34,7 +34,7 @@ fi
 if ! dotnet --list-runtimes | grep -q '^Microsoft.AspNetCore.App 10\.'; then
   root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
   echo "== install the .NET 10 SDK into $root"
-  curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
+  curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
   bash "${TMPDIR:-/tmp}/dotnet-install.sh" --channel 10.0 --install-dir "$root" --no-path
 fi
 echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"

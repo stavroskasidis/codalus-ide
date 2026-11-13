@@ -41,7 +41,7 @@ trap 'rm -rf "$work"' EXIT
 install() {
   local root="$1"; shift
   if [ "$os" = windows ]; then
-    [ -f "$work/dotnet-install.ps1" ] || curl -fsSL https://dot.net/v1/dotnet-install.ps1 -o "$work/dotnet-install.ps1"
+    [ -f "$work/dotnet-install.ps1" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.ps1 -o "$work/dotnet-install.ps1"
     local args=() kind="" version="" architecture="" skip=""
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -59,7 +59,7 @@ install() {
     # System32 first: dotnet-install.ps1 runs `tar`, and Git Bash's GNU tar (earlier on its PATH) reads C: as a remote host.
     PATH="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32:$PATH" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$work/dotnet-install.ps1")" "${args[@]}"
   else
-    [ -f "$work/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
+    [ -f "$work/dotnet-install.sh" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
     bash "$work/dotnet-install.sh" --install-dir "$root" --no-path "$@"
   fi
 }
@@ -135,7 +135,7 @@ if [ "$os" = linux ] && [ "$arch" = x86_64 ] && [ ! -f "$destination/openssl1.1/
    && ! ls /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /lib/x86_64-linux-gnu/libssl.so.1.1 > /dev/null 2>&1; then
   echo "== OpenSSL 1.1 (Ubuntu 20.04's libssl1.1)"
   deb="libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
-  curl -fsSL -o "$work/$deb" "http://security.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
+  curl -fsSL --retry 3 --retry-all-errors -o "$work/$deb" "http://security.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
   actual="$(sha256sum "$work/$deb" | cut -d' ' -f1)"
   if [ "$actual" != 7cf39d70a639017d1dd7c8d36daa2258063608688e449fddf40ffdd46f992a78 ]; then
     echo "SHA-256 mismatch for $deb: got $actual" >&2

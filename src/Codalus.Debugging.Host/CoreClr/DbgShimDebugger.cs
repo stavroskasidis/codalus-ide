@@ -109,6 +109,25 @@ internal sealed class DbgShimDebugger : IClrDebugger
     /// <summary>How long a held start waits for the startup hook before it looks whether the runtime runs without one.</summary>
     internal static readonly TimeSpan HookTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// How long a held start waits for the startup hook in a runtime that runs startup hooks (.NET Core 3.0 and later)
+    /// before it attaches to the program as it runs: only a program that turned startup hooks off gets there. Below the
+    /// runtime's own start limit (<see cref="RuntimeStartTimeout"/>), so it isn't reported as not starting.
+    /// </summary>
+    internal static readonly TimeSpan HookTimeoutWithHooks = TimeSpan.FromSeconds(25);
+
+    /// <summary>
+    /// How long to wait for the startup hook once the runtime at <paramref name="runtimePath"/> has loaded. A runtime
+    /// from .NET Core 3.0 runs the hook, however long it takes to: an x64 .NET Core 3.1 program under Rosetta 2 on a
+    /// busy runner ran its hook after the 5 s that were enough for .NET Core 2, was attached to as it ran, and passed
+    /// its breakpoint first (macOS CI, run 43344309044, DebuggerBundleTests). An unknown version (a self-contained
+    /// program's runtime, without the framework's folder) or .NET Core 2 waits <see cref="HookTimeout"/>.
+    /// </summary>
+    internal static TimeSpan HookWait(string? runtimePath) =>
+        runtimePath is not null && Version.TryParse(VersionOf(runtimePath).Split('-')[0], out var version) && version.Major >= 3
+            ? HookTimeoutWithHooks
+            : HookTimeout;
+
     /// <summary>The startup hook's file, next to this host (and in the debugger's bundle).</summary>
     private const string HookFile = "Codalus.Debugging.StartupHook.dll";
 
@@ -167,9 +186,9 @@ internal sealed class DbgShimDebugger : IClrDebugger
                     throw new ClrException($"{Path.GetFileName(program)} ended{code} before the debugger could attach to it: the startup hook that holds a program at its start didn't run in it. .NET Core 2.0 and 2.1 run no startup hooks; a program that isn't .NET's doesn't either.");
                 }
 
-                if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program).Count > 0)
+                if (started.Elapsed >= HookTimeout && RuntimeLocator.Find(pid, program) is [var loaded, ..] && started.Elapsed >= HookWait(loaded))
                 {
-                    output("console", "The program's .NET runtime doesn't run startup hooks (.NET Core 2), so it started before the debugger attached: breakpoints in its first lines may have been passed.\n");
+                    output("console", "The program's .NET runtime didn't run the debugger's startup hook (.NET Core 2 runs none; a program can turn them off), so it started before the debugger attached: breakpoints in its first lines may have been passed.\n");
                     break;
                 }
 
