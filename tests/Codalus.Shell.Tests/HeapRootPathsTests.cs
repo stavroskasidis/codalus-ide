@@ -26,7 +26,9 @@ public class HeapRootPathsTests
     /// <summary>
     /// An object that only a waiting thread's frame holds names that frame and where the thread waits, and a delegate on
     /// the way names its method: a disposed shell was held through an Action on some thread's stack, and the path said
-    /// neither which thread nor whose handler (Linux CI, run 43200651803).
+    /// neither which thread nor whose handler (Linux CI, run 43200651803). The thread is named as the holder: right after
+    /// <c>holding.Set()</c> it still runs managed code (the end of Set, the spin before Wait blocks), where a snapshot
+    /// has none of its roots (runs 43368524423 and 43422861486), and such a snapshot is set aside.
     /// </summary>
     [Fact]
     public void A_root_on_a_stack_names_its_frame_and_a_delegate_its_method()
@@ -43,7 +45,7 @@ public class HeapRootPathsTests
         try
         {
             Assert.True(holding.Wait(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
-            var paths = HeapRootPaths.Describe(typeof(Held).FullName!, o => o.ReadField<int>("<Mark>k__BackingField") == 11, frame: nameof(HoldOnStack));
+            var paths = HeapRootPaths.Describe(typeof(Held).FullName!, o => o.ReadField<int>("<Mark>k__BackingField") == 11, holder: thread.ManagedThreadId);
             Assert.True(paths.Contains(nameof(HoldOnStack), StringComparison.Ordinal), paths);
             Assert.True(paths.Contains($"({typeof(Held).FullName}.{nameof(Held.Touch)})", StringComparison.Ordinal), paths);
         }

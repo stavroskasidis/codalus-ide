@@ -47,6 +47,7 @@ internal static partial class BuiltIns
         }
 
         Add("ai.chat.show", "AI Chat", () => Sync(shell.ShowAiChat));
+        Add("ai.mcpServer.setup", "Set Up Agents Outside the IDE…", shell.ShowMcpSetupAsync);
 
         // AI Console (ADR 0095). Its Show is the AI key's command: AI Chat instead while no agent with a CLI is connected.
         Add("ai.console.show", "AI Console", () => Sync(shell.ShowAiConsoleOrChat));

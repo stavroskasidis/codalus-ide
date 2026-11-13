@@ -370,7 +370,8 @@ internal sealed partial class SmokeTest
         Check(failed.Count == 0, $"every command runs from each of its entry points ({failed.Count} failed: {string.Join("; ", failed.Take(15).Select(r => $"{r.Command} [{r.Entry}] {r.Reason}"))})");
     }
 
-    private static string? SkipReason(string id) =>
+    /// <summary>Why the sweep never runs <paramref name="id"/> (it leaves the machine or the app), or null; agents' run_command skips these too.</summary>
+    internal static string? SkipReason(string id) =>
         s_sweepSkips.TryGetValue(id, out var reason) ? reason
         : id.StartsWith("externalTools.run.", StringComparison.Ordinal) ? "runs a user-defined external tool"
         : null;
@@ -556,7 +557,7 @@ internal sealed partial class SmokeTest
                         Screenshot("smoke-test-sweep-scenario-debug.png");
                         Console.Out.WriteLine("  [sweep] the debugger didn't stop: reopening the solution to try again");
                         await StopSweepDebuggingAsync().ConfigureAwait(true);
-                        await shell.CloseSolutionAsync().ConfigureAwait(true);
+                        await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
                         await shell.OpenSolutionAsync(_sweepSolution).ConfigureAwait(true);
                         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the sweep's solution is evaluated again", 240).ConfigureAwait(true);
                         var again = await StartSweepDebuggingAsync().ConfigureAwait(true);
@@ -587,7 +588,7 @@ internal sealed partial class SmokeTest
                     await StopSweepDebuggingAsync().ConfigureAwait(true);
                     if (shell.Solutions.Solution is not null)
                     {
-                        await shell.CloseSolutionAsync().ConfigureAwait(true);
+                        await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
                     }
 
                     return shell.Solutions.Solution is null;

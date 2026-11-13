@@ -84,6 +84,17 @@ public partial class PolishTests
                 Choices = [new DialogChoice("name", "string Name", true), new DialogChoice("age", "int Age", false, "a property")],
                 Reorderable = true,
             }),
+            ("save changes", new DialogRequest("Save changes to the following items?", "Save saves the checked files and discards the changes to the others.", ["Save", "Don't Save", "Cancel"])
+            {
+                Choices =
+                [
+                    new DialogChoice("group:solution", "Contoso.slnx", false) { Icon = FileIcons.Solution, Checkable = false, IsCode = false },
+                    new DialogChoice("group:project", "Contoso.Web", false) { Icon = FileIcons.ForProject("Contoso.Web.csproj", null), Level = 1, Checkable = false, IsCode = false },
+                    new DialogChoice(SaveChangesTree.FileId(0), "HomeController.cs", true, "Controllers") { Icon = FileIcons.ForFile("HomeController.cs"), Level = 2, IsCode = false },
+                    new DialogChoice(SaveChangesTree.FileId(1), "Program.cs", true) { Icon = FileIcons.ForFile("Program.cs"), Level = 2, IsCode = false },
+                ],
+                Icon = "save",
+            }),
         };
         foreach (var (name, request) in dialogs)
         {

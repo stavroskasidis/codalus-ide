@@ -53,7 +53,7 @@ public sealed partial class ShellHost
         var on = Workbench.Settings.GetBoolean(McpServerSetting, false) && Workbench.Settings.GetLayerValue(McpServerSetting, Codalus.Workbench.Settings.SettingScope.User) is { ValueKind: JsonValueKind.True };
         if (on && _mcpBridge is null)
         {
-            _mcpBridge = McpBridge.Listen(McpBridge.PipeName(SingleInstance.PipeName(Paths.State)), (tool, args, ct) => Ui.RunAsync(() => IdeToolAsync(tool, args, null, ct)).Unwrap());
+            _mcpBridge = McpBridge.Listen(McpBridge.PipeName(SingleInstance.PipeName(Paths.State)), (tool, args, ct) => Ui.RunAsync(() => OutsideAgentToolAsync(tool, args, ct)).Unwrap());
         }
         else if (!on && _mcpBridge is not null)
         {
@@ -61,6 +61,169 @@ public sealed partial class ShellHost
             _mcpBridge = null;
         }
     }
+
+    // ------------------------------------------------------------------ agents outside the IDE (M60)
+
+    /// <summary>How long the question to an agent outside the IDE waits for an answer before the call is refused.</summary>
+    internal TimeSpan OutsideAgentQuestionTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// The folders whose IDE tools agents outside the IDE reach without asking ("Always for This Folder"), in the user's
+    /// state, never in the repository, so a cloned repository can't allow itself.
+    /// </summary>
+    internal Codalus.Workbench.Projects.TrustStore OutsideAgentFolders => _outsideAgentFolders ??= new(Path.Combine(Paths.State, "ai-outside-agents-allowed.json"));
+
+    private Codalus.Workbench.Projects.TrustStore? _outsideAgentFolders;
+
+    /// <summary>This window's answers for the folders it has had open (Allow, Don't Allow), until it closes.</summary>
+    private readonly Dictionary<string, bool> _outsideAgentAnswers = new(StringComparer.Ordinal);
+
+    /// <summary>The question being asked, so calls that arrive meanwhile wait for the same answer.</summary>
+    private Task<bool>? _outsideAgentQuestion;
+
+    /// <summary>
+    /// A call from <c>codalus mcp</c>'s general pipe (an agent outside the IDE, ADR 0099): the first call for a folder asks
+    /// once (Allow, Always for This Folder, Don't Allow), on top of <c>ai.mcpServer.enabled</c>; an unanswered question is
+    /// refused after <see cref="OutsideAgentQuestionTimeout"/>. Listing the tools never asks.
+    /// </summary>
+    private async Task<IdeToolResult> OutsideAgentToolAsync(string tool, JsonElement args, CancellationToken cancellationToken)
+    {
+        if (tool != McpBridge.ListToolsCall && !await OutsideAgentAllowedAsync(cancellationToken).ConfigureAwait(true))
+        {
+            Workbench.Output.GetOrCreate(AiService.OutputChannelId, "AI").AppendLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} IDE tool (codalus mcp): {tool} → not allowed in this folder"));
+            return IdeToolResult.Error("The user didn't allow agents outside Codalus IDE to use its tools in this folder. Don't try again; ask the user to allow it in the IDE.");
+        }
+
+        return await IdeToolAsync(tool, args, null, cancellationToken).ConfigureAwait(true);
+    }
+
+    private async Task<bool> OutsideAgentAllowedAsync(CancellationToken cancellationToken)
+    {
+        var folder = Solutions.Solution?.Directory;
+        var key = folder ?? "";
+        if (_outsideAgentAnswers.TryGetValue(key, out var answered))
+        {
+            return answered;
+        }
+
+        if (folder is not null && OutsideAgentFolders.IsTrusted(folder))
+        {
+            return true;
+        }
+
+        _outsideAgentQuestion ??= AskOutsideAgentAsync(folder, key);
+        var question = _outsideAgentQuestion;
+        try
+        {
+            return await question.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (question.IsCompleted && ReferenceEquals(_outsideAgentQuestion, question))
+            {
+                _outsideAgentQuestion = null;
+            }
+        }
+    }
+
+    private async Task<bool> AskOutsideAgentAsync(string? folder, string key)
+    {
+        var allow = Localizer.Get("msg.outsideAgent.allow", "Allow");
+        var always = Localizer.Get("msg.outsideAgent.always", "Always for This Folder");
+        var deny = Localizer.Get("msg.outsideAgent.deny", "Don't Allow");
+        var where = folder ?? Localizer.Get("msg.outsideAgent.noFolder", "this window (no folder is open)");
+        var buttons = folder is null ? new[] { allow, deny } : [allow, always, deny];
+        using var timeout = new CancellationTokenSource(OutsideAgentQuestionTimeout);
+        var choice = await ShowCancellableAsync(new DialogRequest(
+            Localizer.Get("msg.outsideAgent.title", "Allow an agent outside the IDE?"),
+            Localizer.Format("msg.outsideAgent.message", "An AI agent running outside Codalus IDE (codalus mcp) wants to use the IDE's tools in {0}: read its code, the Error List and Git, and, as Agent IDE Actions allow, build, test, run, debug and change it.", where),
+            buttons)
+        {
+            DefaultButton = deny,
+            Icon = "shield",
+        }, timeout.Token).ConfigureAwait(true);
+        if (choice.Button is null)
+        {
+            return false; // unanswered (or closed): this call is refused, and the next one asks again
+        }
+
+        if (choice.Button == always && folder is not null)
+        {
+            OutsideAgentFolders.Trust(folder);
+            return true;
+        }
+
+        _outsideAgentAnswers[key] = choice.Button == allow;
+        return choice.Button == allow;
+    }
+
+    /// <summary>The known agents' setups for <c>codalus mcp</c>, with this install's path (M60).</summary>
+    internal IReadOnlyList<McpSetup> McpSetupsForThisInstall
+    {
+        get
+        {
+            var (path, assembly) = McpExecutable;
+            return McpSetups.For(path, assembly, Options.UserDataDir);
+        }
+    }
+
+    /// <summary>
+    /// Set Up Agents Outside the IDE (<c>ai.mcpServer.setup</c>, from Options › AI › MCP Server's description): each known
+    /// agent's setup, with a Copy button each; a copy turns the MCP server on when it's off, after asking.
+    /// </summary>
+    internal async Task ShowMcpSetupAsync()
+    {
+        var setups = McpSetupsForThisInstall;
+        var details = new List<DetailLine>();
+        foreach (var setup in setups)
+        {
+            details.Add(new DetailLine(Localizer.Format("msg.mcpSetup.where", "{0} — in {1}:", setup.Agent, setup.Where), "header"));
+            details.AddRange(setup.Text.Split('\n').Select(line => new DetailLine(line)));
+            details.Add(new DetailLine(""));
+        }
+
+        var close = Localizer.Get("msg.mcpSetup.close", "Close");
+        var copies = setups.ToDictionary(s => Localizer.Format("msg.mcpSetup.copy", "Copy for {0}", s.Agent), s => s.Text, StringComparer.Ordinal);
+        var on = Workbench.Settings.GetLayerValue(McpServerSetting, Codalus.Workbench.Settings.SettingScope.User) is { ValueKind: JsonValueKind.True };
+        var choice = await Dialogs.ShowAsync(new DialogRequest(
+            Localizer.Get("msg.mcpSetup.title", "Set Up Agents Outside the IDE"),
+            on
+                ? Localizer.Get("msg.mcpSetup.message", "An agent running outside Codalus IDE reaches it through codalus mcp. Add this to the agent; the first call in a folder asks you here.")
+                : Localizer.Get("msg.mcpSetup.messageOff", "An agent running outside Codalus IDE reaches it through codalus mcp. Add this to the agent, and turn on MCP Server (a copy offers to); the first call in a folder asks you here."),
+            [.. copies.Keys, close])
+        {
+            DefaultButton = close,
+            Details = details,
+            Icon = "bot",
+        }).ConfigureAwait(true);
+        if (choice.Button is not { } button || !copies.TryGetValue(button, out var text))
+        {
+            return;
+        }
+
+        if (Window?.Clipboard is { } clipboard)
+        {
+            await SafeClipboard.TrySetTextAsync(clipboard, text).ConfigureAwait(true);
+        }
+
+        LastMcpSetupCopy = text;
+        if (!on)
+        {
+            var turnOn = Localizer.Get("msg.mcpSetup.turnOn", "Turn On");
+            var answer = await Dialogs.ShowAsync(new DialogRequest(
+                Localizer.Get("msg.mcpSetup.offTitle", "Turn on MCP Server?"),
+                Localizer.Get("msg.mcpSetup.offMessage", "Copied. The agent reaches the IDE only while MCP Server (ai.mcpServer.enabled) is on."),
+                [turnOn, Localizer.Get("msg.mcpSetup.notNow", "Not Now")])).ConfigureAwait(true);
+            if (answer.Button == turnOn)
+            {
+                await Workbench.Settings.SetAsync(McpServerSetting, true, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            }
+        }
+    }
+
+    /// <summary>The last setup copied (tests: the clipboard isn't there headless).</summary>
+    internal string? LastMcpSetupCopy { get; private set; }
 
     // ------------------------------------------------------------------ agent mode
 
