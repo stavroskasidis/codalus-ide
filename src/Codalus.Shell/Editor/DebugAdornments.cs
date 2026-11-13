@@ -47,6 +47,83 @@ public sealed class PerfTipRenderer(Func<int?> currentLine, Func<TimeSpan?> elap
     }
 }
 
+/// <summary>One line's inline values (M62): the text drawn after it, and the names whose values changed since the last stop.</summary>
+public sealed record InlineValueLine(int Line, IReadOnlyList<(string Name, string Value, bool Changed)> Values)
+{
+    /// <summary>Each value at most this long before it is cut with an ellipsis.</summary>
+    public const int MaxValueLength = 60;
+
+    public static string Shorten(string value)
+    {
+        var single = value.ReplaceLineEndings(" ");
+        return single.Length > MaxValueLength ? single[..(MaxValueLength - 1)] + "…" : single;
+    }
+}
+
+/// <summary>
+/// Inline values while debugging (M62, ADR 0101): at a stop, each line of the stopped method up to the current statement
+/// gets its values after its end, as <c>name = value</c> in the inline hints' style; a value changed since the last stop
+/// gets the changed-value color. The text is cut to the editor's width. It follows the frame selected in the Call Stack
+/// and clears when the program goes on.
+/// </summary>
+public sealed class InlineValuesRenderer(Func<IReadOnlyList<InlineValueLine>> lines, Func<int?> perfTipLine) : IBackgroundRenderer
+{
+    private static readonly IBrush s_brush = new ImmutableSolidColorBrush(Color.FromArgb(0xB0, 0x80, 0x80, 0x80));
+    private static readonly IBrush s_changed = new ImmutableSolidColorBrush(Color.FromArgb(0xE0, 0xD0, 0x80, 0x30));
+
+    public KnownLayer Layer => KnownLayer.Background;
+
+    /// <summary>A line's text, e.g. "total = 12, n = 3".</summary>
+    public static string Text(InlineValueLine line) => string.Join(", ", line.Values.Select(v => v.Name + " = " + InlineValueLine.Shorten(v.Value)));
+
+    public void Draw(TextView textView, DrawingContext drawingContext)
+    {
+        var all = lines();
+        if (all.Count == 0 || !textView.VisualLinesValid)
+        {
+            return;
+        }
+
+        var typeface = new Typeface(textView.GetValue(TextBlock.FontFamilyProperty), FontStyle.Italic);
+        var size = textView.GetValue(TextBlock.FontSizeProperty) * 0.9;
+        var width = textView.Bounds.Width;
+        foreach (var visual in textView.VisualLines)
+        {
+            var number = visual.FirstDocumentLine.LineNumber;
+            if (all.FirstOrDefault(l => l.Line == number) is not { } line)
+            {
+                continue;
+            }
+
+            var end = visual.GetVisualPosition(visual.VisualLengthWithEndOfLineMarker, VisualYPosition.TextTop) - textView.ScrollOffset;
+            var x = end.X + 24;
+            if (perfTipLine() == number)
+            {
+                x += 160; // after the PerfTip's text
+            }
+
+            foreach (var (value, index) in line.Values.Select((v, i) => (v, i)))
+            {
+                var piece = (index > 0 ? ", " : "") + value.Name + " = " + InlineValueLine.Shorten(value.Value);
+                var formatted = new FormattedText(piece, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size, value.Changed ? s_changed : s_brush);
+                if (x + formatted.Width > width - 8)
+                {
+                    var ellipsis = new FormattedText("…", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size, s_brush);
+                    if (x + ellipsis.Width <= width)
+                    {
+                        drawingContext.DrawText(ellipsis, new Point(x, end.Y + 1));
+                    }
+
+                    break;
+                }
+
+                drawingContext.DrawText(formatted, new Point(x, end.Y + 1));
+                x += formatted.Width;
+            }
+        }
+    }
+}
+
 /// <summary>
 /// The exception helper (ADR 0021): opened at the current statement when the program stops on an exception, with the
 /// type, the message and the inner-exception chain, "Break when this exception type is thrown", View Details

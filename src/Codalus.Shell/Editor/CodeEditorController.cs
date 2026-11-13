@@ -55,6 +55,10 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly BreakpointMargin _breakpointMargin;
     private readonly DebugLineRenderer _debugLines;
     private readonly PerfTipRenderer _perfTip;
+    private readonly InlineValuesRenderer _inlineValues;
+    private IReadOnlyList<InlineValueLine> _inlineValueLines = [];
+    private Dictionary<string, string> _lastInlineValues = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _inlineValuesLoad;
     private readonly Popup? _exceptionPopup;
     private StopInfo? _exceptionShownFor;
     private readonly GitChangeMargin _gitMargin = new();
@@ -155,6 +159,8 @@ public sealed partial class CodeEditorController : IDisposable
         view.BackgroundRenderers.Insert(0, _debugLines);
         _perfTip = new PerfTipRenderer(CurrentDebugLine, () => services.Debugger.CurrentStop?.Elapsed, () => services.Options.PerfTips);
         view.BackgroundRenderers.Add(_perfTip);
+        _inlineValues = new InlineValuesRenderer(() => _inlineValueLines, () => services.Options.PerfTips ? CurrentDebugLine() : null);
+        view.BackgroundRenderers.Add(_inlineValues);
         PinLayer = new PinnedDataTipLayer(editor, services, () => Model.Path, relocate: attach);
         services.Debugger.StateChanged += OnDebuggerChanged;
         services.Debugger.FrameChanged += OnDebuggerChanged;
@@ -2429,8 +2435,133 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         _breakpointMargin.InvalidateVisual();
+        RefreshInlineValues();
         Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
     });
+
+    // ------------------------------------------------------------------ inline values (M62)
+
+    /// <summary>The inline values drawn now, by line (tests).</summary>
+    internal IReadOnlyList<InlineValueLine> InlineValueLines => _inlineValueLines;
+
+    /// <summary>Completes once the values of the latest stop are drawn (tests).</summary>
+    internal Task InlineValuesLoaded { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// At a stop in this document (the frame selected in the Call Stack), asks the language service which variables each
+    /// line of the method reads, up to the current statement, and draws their values: locals and parameters from the
+    /// frame's scopes, fields and auto-properties evaluated, each with a timeout. It never blocks typing or stepping: the
+    /// values arrive after the stop is drawn, and a newer stop cancels them. Off the stop, they clear.
+    /// </summary>
+    private void RefreshInlineValues()
+    {
+        _inlineValuesLoad?.Cancel();
+        _inlineValuesLoad = null;
+        var debugger = _services.Debugger;
+        if (debugger.State is not (DebugState.Stopped or DebugState.Running))
+        {
+            _lastInlineValues = new(StringComparer.Ordinal); // a new session starts with nothing changed
+        }
+
+        if (!_services.Options.InlineValues || CurrentDebugLine() is not { } line || debugger.SelectedFrame is not { } frame || Client is not { } client)
+        {
+            _inlineValueLines = [];
+            InlineValuesLoaded = Task.CompletedTask;
+            return;
+        }
+
+        var load = new CancellationTokenSource();
+        _inlineValuesLoad = load;
+        InlineValuesLoaded = LoadInlineValuesAsync(client, frame, line, load.Token);
+    }
+
+    private async Task LoadInlineValuesAsync(LanguageHostClient client, Codalus.Debugging.StackFrame frame, int line, CancellationToken cancellationToken)
+    {
+        var debugger = _services.Debugger;
+        try
+        {
+            var stopped = new LanguageServices.Protocol.Range(new Position(line - 1, Math.Max(0, frame.Column - 1)), new Position(line - 1, Math.Max(0, frame.Column - 1)));
+            var answer = await client.InlineValuesAsync(DocumentUris.FromPath(Model.Path), new LanguageServices.Protocol.Range(new Position(0, 0), new Position(line, 0)), new InlineValueContext(frame.Id, stopped), cancellationToken).ConfigureAwait(true);
+            if (answer.Length == 0 || cancellationToken.IsCancellationRequested)
+            {
+                _inlineValueLines = [];
+                return;
+            }
+
+            // Locals and parameters: the frame's scopes, as Locals reads them (an expensive scope is left out).
+            var variables = new Dictionary<string, string>(StringComparer.Ordinal);
+            var folded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var scope in await debugger.ScopesAsync(frame).ConfigureAwait(true))
+            {
+                if (scope.Expensive)
+                {
+                    continue;
+                }
+
+                foreach (var variable in await debugger.VariablesAsync(scope.VariablesReference).ConfigureAwait(true))
+                {
+                    variables.TryAdd(variable.Name, variable.Value);
+                    folded.TryAdd(variable.Name, variable.Value);
+                }
+            }
+
+            // Fields and auto-properties: evaluated, each with a timeout, at most 40 of them.
+            var evaluated = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var expression in answer.Select(v => v.Expression).OfType<string>().Distinct(StringComparer.Ordinal).Take(40))
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(1));
+                try
+                {
+                    var result = await debugger.EvaluateInFrameAsync(expression, frame.Id, timeout.Token).ConfigureAwait(true);
+                    evaluated[expression] = result.Result;
+                }
+                catch (Exception ex) when (ex is Codalus.Debugging.DapException or OperationCanceledException or InvalidOperationException or IOException or Codalus.Rpc.JsonRpcConnectionLostException)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+
+            var now = new Dictionary<string, string>(StringComparer.Ordinal);
+            var lines = new List<InlineValueLine>();
+            foreach (var group in answer.GroupBy(v => v.Range.Start.Line).OrderBy(g => g.Key))
+            {
+                var values = new List<(string, string, bool)>();
+                foreach (var value in group)
+                {
+                    var (name, found) = value.Expression is { } expression
+                        ? (expression[(expression.LastIndexOf('.') + 1)..], evaluated.GetValueOrDefault(expression))
+                        : (value.VariableName ?? "", value.CaseSensitiveLookup == false ? folded.GetValueOrDefault(value.VariableName ?? "") : variables.GetValueOrDefault(value.VariableName ?? ""));
+                    if (name.Length == 0 || found is null)
+                    {
+                        continue;
+                    }
+
+                    now[name] = found;
+                    values.Add((name, found, _lastInlineValues.TryGetValue(name, out var before) && before != found));
+                }
+
+                if (values.Count > 0)
+                {
+                    lines.Add(new InlineValueLine(group.Key + 1, values));
+                }
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _inlineValueLines = lines;
+                _lastInlineValues = now;
+                Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (ex is Codalus.Debugging.DapException or InvalidOperationException or IOException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+        {
+            _inlineValueLines = []; // the values are a convenience: a failed read draws none
+        }
+    }
 
     /// <summary>The exception helper, when the program stopped on an exception at a line of this document.</summary>
     public bool IsExceptionHelperOpen => _exceptionPopup?.IsOpen == true;

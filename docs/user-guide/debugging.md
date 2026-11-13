@@ -157,6 +157,16 @@ Locals, Autos, Watch, QuickWatch, Threads, Parallel Stacks, Parallel Watch, Proc
 - **The Debug Location toolbar**: while paused, the standard toolbar shows the process and lets you pick the thread and the stack frame.
 - **Debug Console**: type an expression and press Enter to evaluate it in the selected frame. Up and Down recall earlier ones.
 
+### Inline values
+
+While the program is stopped, each line of the stopped method, from its start to the current statement, shows its values after its end, in gray italics: `total = 12, n = 3`. A value that changed since the last stop is drawn in orange, so a step shows what it did at a glance.
+
+- **What's shown:** the locals and parameters a line reads or writes (from the frame's Locals), the fields it reads, and auto-properties (their generated getter only reads their field). Other properties, calls and other objects' members are left to the [data tip](#data-tips): drawing the values never runs your code. Each field is read with a timeout, and the values arrive after the stop is drawn, so they never hold up a step.
+- **Which frame:** the one selected in the Call Stack; pick another frame and its method's lines show their values. In a loop, a line shows the values of the current iteration. They clear when the program goes on.
+- **Long values** are cut to the editor's width with `…`; hover the variable in the code for its data tip.
+- **Languages:** C# and Visual Basic through the IDE's own language service, and any language whose language server answers LSP's `textDocument/inlineValue`.
+- **Off:** `debug.inlineValues` (Options › Debugging › Inline values), for every language, or for one in its language settings (`"[vb]": { "debug.inlineValues": false }`).
+
 ## Data tips
 
 Hover over a variable or a member access (`app`, `app.Properties`) while the program is stopped:
@@ -296,6 +306,7 @@ If you chose netcoredbg, the first edit you save while debugging offers the Coda
 - `debug.justMyCode` (Just My Code): step through and break in your own code only.
 - `debug.stepOverPropertiesAndOperators`: Step Into steps over property accessors and operators.
 - `debug.perfTips`: the PerfTips at the end of the current line.
+- `debug.inlineValues`: [inline values](#inline-values) after each line of the stopped method (on by default; per language too).
 - `debug.console`: where a debugged console or web app's console is: `internalConsole` (the Debug Console), `integratedTerminal`, or `externalConsole` (a console window; Windows' default).
 - `debug.containerTool`: the container command for attaching in containers (`docker`, `podman`, …); empty (the default) uses the Containers window's engine.
 - `debug.sourceFileMap`: source folders of programs on other machines, as `"/folder/there=C:\\folder\\here"`.
