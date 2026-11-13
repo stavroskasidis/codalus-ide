@@ -193,12 +193,12 @@ public class ControlSetViewsTests
         Assert.Equal("refresh", ButtonIcon.GetKind(refresh));
         Assert.Contains("iconText", refresh.Classes);
 
-        // The toolbar: nine icons in three groups, the container's commands disabled without a selection.
+        // The toolbar: ten icons in four groups, the last the IDE's compose override (M63), the container's commands disabled without a selection.
         var toolbar = view.GetVisualDescendants().OfType<ToolbarPanel>().First();
         var buttons = toolbar.Children.OfType<Button>().Where(b => !b.Classes.Contains("overflow")).ToList();
-        Assert.Equal(["refresh", "play", "stop", "restart", "trash", "globe", "terminal", "debug", "window-remote"], buttons.Select(b => ButtonIcon.GetKind(b)));
-        Assert.Equal(2, toolbar.Children.Count(c => c.Classes.Contains("toolbarSeparator")));
-        Assert.All(buttons.Skip(1), b => Assert.False(b.IsEnabled));
+        Assert.Equal(["refresh", "play", "stop", "restart", "trash", "globe", "terminal", "debug", "window-remote", "file-code"], buttons.Select(b => ButtonIcon.GetKind(b)));
+        Assert.Equal(3, toolbar.Children.Count(c => c.Classes.Contains("toolbarSeparator")));
+        Assert.All(buttons.Skip(1).Take(8), b => Assert.False(b.IsEnabled)); // the override isn't a container's command
         Assert.Empty(ToolbarProblems(view));
     }
 
