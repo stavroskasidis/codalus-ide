@@ -72,7 +72,7 @@ public interface IAcpHost
 /// for <c>ai.mcp.servers</c>; M48, ADR 0079), whether one may start now, and the one session that runs: one agent
 /// process per chat session, stopped on New Chat, when another agent is picked, when the workspace closes, and on exit.
 /// </summary>
-public sealed class AcpAgents : IAsyncDisposable
+public sealed class AcpAgents : IAsyncDisposable, IAiExternalAnswerer
 {
     public const string AgentsSetting = "ai.agents";
 
@@ -81,6 +81,9 @@ public sealed class AcpAgents : IAsyncDisposable
 
     /// <summary>The member of an agent's entry that keeps the user's picks of its choices (M51).</summary>
     public const string ChoicesMember = "choices";
+
+    /// <summary>The member of an agent's entry for suggestions while typing (ADR 0097): <c>{ "model": "&lt;value&gt;" }</c>.</summary>
+    public const string SuggestionsMember = "suggestions";
 
     /// <summary>The label every external agent's chat shows (ADR 0079).</summary>
     public const string Label = "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for.";
@@ -100,6 +103,51 @@ public sealed class AcpAgents : IAsyncDisposable
 
         // AI turned off (by the user, or for this workspace): a running agent stops, and its requests aren't served.
         _ai.Changed += (_, _) => _ = EnforceAsync();
+
+        // AI Chat's agent answers the IDE's features too (ADR 0097).
+        _ai.ExternalAnswerer = this;
+    }
+
+    /// <summary>
+    /// The IDE's side of the chat session's requests, for a session the features start when AI Chat hasn't (ADR 0097); set
+    /// by the shell. Without it the features wait for AI Chat to start the agent.
+    /// </summary>
+    public IAcpHost? Host { get; set; }
+
+    /// <summary>The agent that answers the IDE's features: AI Chat's pick when it is in <c>ai.agents</c> (ADR 0097).</summary>
+    string? IAiExternalAnswerer.Agent => ChatAgent is { } name && Configured.ContainsKey(name) ? name : null;
+
+    /// <summary>
+    /// A feature's prompt through <paramref name="agent"/>'s text session (ADR 0097) under the gate of ADR 0079: AI Chat's
+    /// session is started when needed (signing in only for an action the user asked for, never while typing).
+    /// </summary>
+    async Task<string> IAiExternalAnswerer.AnswerAsync(string agent, AiRoute route, string prompt, CancellationToken cancellationToken)
+    {
+        if (WhyNot() is { } reason)
+        {
+            throw new AiUnavailableException(reason);
+        }
+
+        try
+        {
+            var session = Current is { IsAlive: true } current && current.Name == agent ? current
+                : Host is { } host ? await GetOrStartAsync(agent, host, cancellationToken, signIn: route == AiRoute.Action).ConfigureAwait(false)
+                : throw new AcpException($"{agent} hasn't started yet: open AI Chat once.");
+            var purpose = route == AiRoute.Suggestion ? AcpTextPurpose.Suggestions : AcpTextPurpose.Actions;
+            var text = await session.GetTextSessionAsync(purpose, Configured.GetValueOrDefault(agent)?.SuggestionsModel, cancellationToken).ConfigureAwait(false);
+
+            // The gate again: the folder may have changed, or trust or AI turned off, while it started.
+            if (WhyNot() is { } now)
+            {
+                throw new AiUnavailableException(now);
+            }
+
+            return await text.AskAsync(prompt, cancellationToken).ConfigureAwait(false);
+        }
+        catch (AcpException ex)
+        {
+            throw new AiUnavailableException(ex.Message);
+        }
     }
 
     /// <summary>
@@ -228,6 +276,8 @@ public sealed class AcpAgents : IAsyncDisposable
                 Choices = entry.TryGetProperty(ChoicesMember, out var choices) && choices.ValueKind == JsonValueKind.Object
                     ? choices.EnumerateObject().Where(c => c.Value.ValueKind == JsonValueKind.String).ToDictionary(c => c.Name, c => c.Value.GetString()!, StringComparer.Ordinal)
                     : new Dictionary<string, string>(StringComparer.Ordinal),
+                SuggestionsModel = entry.TryGetProperty(SuggestionsMember, out var suggestions) && suggestions.ValueKind == JsonValueKind.Object
+                    && suggestions.TryGetProperty("model", out var model) && model.ValueKind == JsonValueKind.String && model.GetString() is { Length: > 0 } picked ? picked : null,
             };
         }
 
@@ -357,7 +407,24 @@ public sealed class AcpAgents : IAsyncDisposable
     /// Keeps the user's pick of a choice in the agent's entry (<c>ai.agents.&lt;name&gt;.choices.&lt;id&gt;</c>, the user's settings,
     /// the entry's other members kept), so the next session starts with it (M51). Nothing when the entry is gone.
     /// </summary>
-    public async Task SaveChoiceAsync(string name, string id, string value, CancellationToken cancellationToken)
+    public Task SaveChoiceAsync(string name, string id, string value, CancellationToken cancellationToken) =>
+        SaveMemberAsync(name, ChoicesMember, id, value, cancellationToken);
+
+    /// <summary>
+    /// Keeps the user's pick of the model for suggestions (<c>ai.agents.&lt;name&gt;.suggestions.model</c>; null removes it,
+    /// to guess again) and makes the running session's suggestions use it from their next request (ADR 0097).
+    /// </summary>
+    public async Task SaveSuggestionsModelAsync(string name, string? value, CancellationToken cancellationToken)
+    {
+        await SaveMemberAsync(name, SuggestionsMember, "model", value, cancellationToken).ConfigureAwait(false);
+        if (Current is { } session && session.Name == name)
+        {
+            await session.DropTextSessionsAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Sets <c>ai.agents.&lt;name&gt;.&lt;member&gt;.&lt;id&gt;</c> in the user's settings, the entry's other members kept (null removes it).</summary>
+    private async Task SaveMemberAsync(string name, string member, string id, string? value, CancellationToken cancellationToken)
     {
         if (_settings.GetLayerValue(AgentsSetting, SettingScope.User) is not { ValueKind: JsonValueKind.Object } all
             || !all.TryGetProperty(name, out var entry) || entry.ValueKind != JsonValueKind.Object)
@@ -366,18 +433,32 @@ public sealed class AcpAgents : IAsyncDisposable
         }
 
         var updated = System.Text.Json.Nodes.JsonNode.Parse(entry.GetRawText())!.AsObject();
-        if (updated[ChoicesMember] is not System.Text.Json.Nodes.JsonObject choices)
+        if (updated[member] is not System.Text.Json.Nodes.JsonObject values)
         {
-            choices = [];
-            updated[ChoicesMember] = choices;
+            if (value is null)
+            {
+                return;
+            }
+
+            values = [];
+            updated[member] = values;
         }
 
-        if (choices[id]?.GetValueKind() == JsonValueKind.String && choices[id]!.GetValue<string>() == value)
+        var current = values[id]?.GetValueKind() == JsonValueKind.String ? values[id]!.GetValue<string>() : null;
+        if (current == value)
         {
             return;
         }
 
-        choices[id] = value;
+        if (value is null)
+        {
+            values.Remove(id);
+        }
+        else
+        {
+            values[id] = value;
+        }
+
         using var document = JsonDocument.Parse(updated.ToJsonString());
         await _settings.SetMemberAsync(AgentsSetting, name, document.RootElement.Clone(), SettingScope.User, cancellationToken).ConfigureAwait(false);
     }

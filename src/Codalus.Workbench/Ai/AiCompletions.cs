@@ -13,7 +13,8 @@ public sealed record AiCompletionRequest(string Path, string? LanguageId, string
 
 /// <summary>
 /// Inline completions (M28b, ADR 0062): the text to insert at the caret, from the chosen provider's chat with a
-/// completion prompt, through <see cref="AiService"/>'s boundary (an excluded file sends nothing; secrets are redacted).
+/// completion prompt, or AI Chat's external agent (ADR 0097), through <see cref="AiService"/>'s boundary (an excluded file
+/// sends nothing; secrets are redacted).
 /// Its own switch, <c>ai.completions.enabled</c>, is off by default: completions send code as you type.
 /// </summary>
 public sealed class AiCompletions(AiService ai, SettingsService settings)
@@ -42,11 +43,32 @@ public sealed class AiCompletions(AiService ai, SettingsService settings)
 
     public AiService Ai { get; } = ai;
 
-    /// <summary>Completions may be asked for: AI is ready and completions are turned on.</summary>
-    public bool IsEnabled => Ai.State == AiState.Ready && settings.GetBoolean(EnabledSetting, false);
+    /// <summary>How long typing pauses before a suggestion is asked for, unless the user set it: a provider's.</summary>
+    public const int DefaultDelay = 400;
+
+    /// <summary>The same with AI Chat's external agent (ADR 0097): its turn costs more, so it waits for a longer pause.</summary>
+    public const int DefaultAgentDelay = 1_000;
+
+    /// <summary>Completions may be asked for: AI can answer (a provider, or AI Chat's agent) and completions are turned on.</summary>
+    public bool IsEnabled => Ai.CanAnswer && settings.GetBoolean(EnabledSetting, false);
 
     /// <summary>How long typing pauses before a completion is asked for.</summary>
-    public TimeSpan Delay => TimeSpan.FromMilliseconds(Math.Clamp(settings.GetInt32(DelaySetting, 400), 100, 5_000));
+    public TimeSpan Delay => SuggestionDelay(Ai, settings);
+
+    /// <summary>
+    /// How long typing pauses before a suggestion (a completion or a next edit) is asked for: <c>ai.completions.delayMilliseconds</c>
+    /// when the user set it, else <see cref="DefaultDelay"/>, or <see cref="DefaultAgentDelay"/> with an external agent.
+    /// </summary>
+    public static TimeSpan SuggestionDelay(AiService ai, SettingsService settings)
+    {
+        var set = settings.GetLayerValue(DelaySetting, SettingScope.User) is not null || settings.GetLayerValue(DelaySetting, SettingScope.Workspace) is not null;
+        var milliseconds = set ? settings.GetInt32(DelaySetting, DefaultDelay) : ai.ExternalAgent is not null ? DefaultAgentDelay : DefaultDelay;
+        return TimeSpan.FromMilliseconds(Math.Clamp(milliseconds, 100, 5_000));
+    }
+
+    /// <summary><c>ai.completions.model</c> for a provider; an external agent uses its model for suggestions instead (ADR 0097).</summary>
+    public static string? ModelOverride(AiService ai, SettingsService settings) =>
+        ai.ExternalAgent is null && settings.GetString(ModelSetting) is { Length: > 0 } model ? model : null;
 
     /// <summary>The suggestion at the caret, or null (none, an excluded file, AI off, a failure).</summary>
     public async Task<string?> CompleteAsync(AiCompletionRequest request, CancellationToken cancellationToken)
@@ -77,8 +99,9 @@ public sealed class AiCompletions(AiService ai, SettingsService settings)
                 _ => { },
                 cancellationToken,
                 maxOutputTokens: 256,
-                modelOverride: settings.GetString(ModelSetting) is { Length: > 0 } model ? model : null,
-                quiet: true).ConfigureAwait(false);
+                modelOverride: ModelOverride(Ai, settings),
+                quiet: true,
+                route: AiRoute.Suggestion).ConfigureAwait(false);
             return Clean(reply.Text, prefix, suffix);
         }
         catch (AiUnavailableException)

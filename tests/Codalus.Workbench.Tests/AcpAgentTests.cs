@@ -15,7 +15,7 @@ namespace Codalus.Workbench.Tests;
 /// and a stand-in host: negotiation, the turn's updates, the IDE's checks on what the agent asks for (paths, exclusions,
 /// redaction, the preview, permissions, commands), cancelling, a crash, sign-in, and who may start an agent.
 /// </summary>
-public sealed class AcpAgentTests : IAsyncDisposable
+public sealed partial class AcpAgentTests : IAsyncDisposable
 {
     private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-acp-" + Guid.NewGuid().ToString("N"));
     private readonly string _log;

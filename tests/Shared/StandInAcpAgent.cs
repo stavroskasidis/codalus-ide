@@ -41,6 +41,13 @@ namespace Codalus.Tests;
 /// refuses that value); <c>ACP_FAKE_CHOICES=models</c> answers with the older <c>models</c> beside the modes and serves
 /// <c>session/set_model</c>.
 /// </para>
+/// <para>
+/// Text sessions (ADR 0097): a <c>session/new</c> after the first creates <c>sess_text_N</c>. A prompt there answers
+/// <c>ACP_FAKE_TEXT_REPLY</c> (or "text reply") as one message chunk, after a thought; with <c>ACP_FAKE_TEXT_PROBE=1</c> it first
+/// asks the client to read a file, run a command and allow something, and logs the answers. <c>ACP_FAKE_TEXT_SLOW=1</c> waits for
+/// <c>session/cancel</c> instead. A model chosen in a text session is its own (the chat's stays). <c>ACP_FAKE_FAST_MODEL=1</c> adds a
+/// <c>haiku</c> model to the model choice.
+/// </para>
 /// The prompt's last line picks the script:
 /// <list type="bullet">
 /// <item><c>hello</c>: a thought, two message chunks and a plan.</item>
@@ -64,16 +71,20 @@ public static class StandInAcpAgent
     private static string _effort = "medium";
 
     /// <summary>The config options as they are now: the model in groups, the mode, and the effort.</summary>
-    private static JsonArray ConfigOptions() => new(
+    private static JsonArray FastModels() => Environment.GetEnvironmentVariable("ACP_FAKE_FAST_MODEL") == "1"
+        ? new JsonArray(new JsonObject { ["value"] = "sonnet", ["name"] = "Sonnet" }, new JsonObject { ["value"] = "haiku", ["name"] = "Haiku" })
+        : new JsonArray(new JsonObject { ["value"] = "sonnet", ["name"] = "Sonnet" });
+
+    private static JsonArray ConfigOptions(string? model = null) => new(
         new JsonObject
         {
             ["id"] = "model",
             ["name"] = "Model",
             ["category"] = "model",
             ["type"] = "select",
-            ["currentValue"] = _model,
+            ["currentValue"] = model ?? _model,
             ["options"] = new JsonArray(
-                new JsonObject { ["group"] = "fast", ["name"] = "Fast", ["options"] = new JsonArray(new JsonObject { ["value"] = "sonnet", ["name"] = "Sonnet" }) },
+                new JsonObject { ["group"] = "fast", ["name"] = "Fast", ["options"] = FastModels() },
                 new JsonObject { ["group"] = "large", ["name"] = "Large", ["options"] = new JsonArray(new JsonObject { ["value"] = "opus", ["name"] = "Opus", ["description"] = "The largest" }) }),
         },
         new JsonObject
@@ -166,6 +177,8 @@ public static class StandInAcpAgent
         private long _next = 100;
         private bool _authenticated;
         private string _sessionId = "";
+        private readonly ConcurrentDictionary<string, string> _textModels = new(StringComparer.Ordinal);
+        private int _textSessions;
         private string[] _offered = ["fake-login"];
 
         private static string? Marker => Environment.GetEnvironmentVariable("ACP_FAKE_LOGIN_MARKER") is { Length: > 0 } m ? m : null;
@@ -335,6 +348,21 @@ public static class StandInAcpAgent
                         break;
                     }
 
+                    if (_sessionId.Length > 0)
+                    {
+                        // Another session on this connection (a text session, ADR 0097): no commands, its own model.
+                        var textId = "sess_text_" + Interlocked.Increment(ref _textSessions).ToString(CultureInfo.InvariantCulture);
+                        _textModels[textId] = _model;
+                        var textCreated = new JsonObject { ["sessionId"] = textId };
+                        if (Environment.GetEnvironmentVariable("ACP_FAKE_CHOICES") == "config")
+                        {
+                            textCreated["configOptions"] = ConfigOptions(_model);
+                        }
+
+                        await RespondAsync(id, textCreated).ConfigureAwait(false);
+                        break;
+                    }
+
                     _sessionId = "sess_stand_in";
                     if (Environment.GetEnvironmentVariable("ACP_FAKE_PROBE_CLIENT") == "1")
                     {
@@ -392,6 +420,13 @@ public static class StandInAcpAgent
                         break;
                     }
 
+                    if (parameters["sessionId"]?.GetValue<string>() is { } configSession && _textModels.ContainsKey(configSession))
+                    {
+                        _textModels[configSession] = configValue;
+                        await RespondAsync(id, new JsonObject { ["configOptions"] = ConfigOptions(configValue) }).ConfigureAwait(false);
+                        break;
+                    }
+
                     switch (parameters["configId"]?.GetValue<string>())
                     {
                         case "model":
@@ -423,6 +458,12 @@ public static class StandInAcpAgent
                     }
 
                     _cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    if (parameters["sessionId"]?.GetValue<string>() is { } promptSession && _textModels.ContainsKey(promptSession))
+                    {
+                        await RespondAsync(id, new JsonObject { ["stopReason"] = await TextPromptAsync(promptSession).ConfigureAwait(false) }).ConfigureAwait(false);
+                        break;
+                    }
+
                     var text = parameters["prompt"]?.AsArray().Select(b => b?["text"]?.GetValue<string>() ?? "").LastOrDefault() ?? "";
                     var command = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').Last().Trim();
                     var stop = await PromptAsync(command).ConfigureAwait(false);
@@ -436,6 +477,36 @@ public static class StandInAcpAgent
 
                     break;
             }
+        }
+
+        /// <summary>A text session's prompt (ADR 0097): the probes when asked, a thought, then the reply in one chunk.</summary>
+        private async Task<string> TextPromptAsync(string session)
+        {
+            Task Update(JsonObject update) =>
+                SendAsync(new JsonObject { ["method"] = "session/update", ["params"] = new JsonObject { ["sessionId"] = session, ["update"] = update } });
+
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_PROBE") == "1")
+            {
+                await RequestAsync("fs/read_text_file", new JsonObject { ["sessionId"] = session, ["path"] = Path.Combine(Environment.CurrentDirectory, "probe.txt") }).ConfigureAwait(false);
+                await RequestAsync("terminal/create", new JsonObject { ["sessionId"] = session, ["command"] = "echo", ["args"] = new JsonArray("probe") }).ConfigureAwait(false);
+                await RequestAsync("session/request_permission", new JsonObject
+                {
+                    ["sessionId"] = session,
+                    ["toolCall"] = new JsonObject { ["toolCallId"] = "perm_text", ["title"] = "Edit a file" },
+                    ["options"] = new JsonArray(new JsonObject { ["optionId"] = "allow", ["name"] = "Allow", ["kind"] = "allow_once" }),
+                }).ConfigureAwait(false);
+            }
+
+            if (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_SLOW") == "1")
+            {
+                await _cancelled.Task.ConfigureAwait(false);
+                return "cancelled";
+            }
+
+            await Update(new JsonObject { ["sessionUpdate"] = "agent_thought_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = "Thinking." } }).ConfigureAwait(false);
+            var reply = (Environment.GetEnvironmentVariable("ACP_FAKE_TEXT_REPLY") ?? "text reply").Replace("{model}", _textModels[session], StringComparison.Ordinal);
+            await Update(new JsonObject { ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = reply } }).ConfigureAwait(false);
+            return "end_turn";
         }
 
         private async Task<string> PromptAsync(string command)

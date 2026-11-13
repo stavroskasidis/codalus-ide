@@ -54,6 +54,36 @@ public sealed record AiPreparedContext(IReadOnlyList<AiContextItem> Included, IR
     public static AiPreparedContext None { get; } = new([], [], 0);
 }
 
+/// <summary>Where a feature's request may go (ADR 0097).</summary>
+public enum AiRoute
+{
+    /// <summary>Only the chosen provider (chat, the built-in agent, plugins' requests).</summary>
+    // TODO(issue): plugins' model requests through AI Chat's agent (ADR 0097 keeps them on the provider for now).
+    Provider,
+
+    /// <summary>A suggestion while typing (inline completions, next edit): AI Chat's agent when one is picked.</summary>
+    Suggestion,
+
+    /// <summary>A feature the user asks for (commit message, fix): AI Chat's agent when one is picked.</summary>
+    Action,
+}
+
+/// <summary>
+/// AI Chat's external agent answering the IDE's own AI features (ADR 0097), text in and text out, in a session of its own
+/// with no tools. Set by <c>AcpAgents</c>.
+/// </summary>
+public interface IAiExternalAnswerer
+{
+    /// <summary>The agent AI Chat has picked (configured in the user's settings), or null for the built-in assistant.</summary>
+    string? Agent { get; }
+
+    /// <summary>
+    /// The agent's answer to <paramref name="prompt"/>. Throws <see cref="AiUnavailableException"/> when it may not run here
+    /// (the gate of ADR 0079) or fails.
+    /// </summary>
+    Task<string> AnswerAsync(string agent, AiRoute route, string prompt, CancellationToken cancellationToken);
+}
+
 /// <summary>Why AI can't run now.</summary>
 public enum AiState
 {
@@ -156,6 +186,18 @@ public sealed class AiService
     public string? ModelId => _settings.GetString(ModelSetting) is { Length: > 0 } id ? id : null;
 
     public AiState State => !IsEnabled ? AiState.Off : ProviderId is null ? AiState.NoProvider : AiState.Ready;
+
+    /// <summary>Answers the IDE's features with AI Chat's external agent when one is picked (ADR 0097); set by <c>AcpAgents</c>.</summary>
+    public IAiExternalAnswerer? ExternalAnswerer { get; set; }
+
+    /// <summary>
+    /// The external agent that answers the IDE's features (AI Chat's pick, ADR 0097) while AI is on, or null: then the
+    /// provider does. Whether it may run in this workspace is checked when it is asked.
+    /// </summary>
+    public string? ExternalAgent => IsEnabled ? ExternalAnswerer?.Agent : null;
+
+    /// <summary>A feature can be answered: AI is on with a provider, or with AI Chat's external agent (ADR 0097).</summary>
+    public bool CanAnswer => State == AiState.Ready || ExternalAgent is not null;
 
     public LanguageModelProviderInfo? Provider => ProviderId is { } id ? Models.Provider(id) : null;
 
@@ -269,8 +311,14 @@ public sealed class AiService
         int? maxOutputTokens = null,
         string? modelOverride = null,
         bool quiet = false,
-        IReadOnlyList<ChatToolDto>? tools = null)
+        IReadOnlyList<ChatToolDto>? tools = null,
+        AiRoute route = AiRoute.Provider)
     {
+        if (route != AiRoute.Provider && tools is null && ExternalAgent is { } agent)
+        {
+            return await AnswerWithAgentAsync(agent, feature, route, messages, context, onText, quiet, cancellationToken).ConfigureAwait(false);
+        }
+
         switch (State)
         {
             case AiState.Off:
@@ -283,20 +331,7 @@ public sealed class AiService
         var modelId = modelOverride is { Length: > 0 } ? modelOverride : ModelId ?? await FirstModelAsync(providerId, cancellationToken).ConfigureAwait(false);
         var size = messages.Sum(m => m.Content.Length);
         Log(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {feature}: {providerId}/{modelId}, {messages.Count} messages, {size:N0} characters"));
-        foreach (var item in context.Included)
-        {
-            Log("    sent: " + Describe(item));
-        }
-
-        foreach (var item in context.Excluded)
-        {
-            Log($"    not sent: {Describe(item.Item)} ({item.Reason})");
-        }
-
-        if (context.Redactions > 0)
-        {
-            Log(string.Create(CultureInfo.InvariantCulture, $"    redacted: {context.Redactions} secret(s)"));
-        }
+        LogContext(context);
 
         var text = new StringBuilder();
         var toolCalls = new List<ChatToolCallDto>();
@@ -348,6 +383,77 @@ public sealed class AiService
     }
 
     /// <summary>
+    /// The instruction before a feature's prompt to an external agent (ADR 0097): its session has no tools and refuses
+    /// every request, so the agent is told to answer from the prompt alone.
+    /// </summary>
+    public const string ExternalAgentPreamble =
+        "You are answering a request from Codalus IDE's own AI features, not a chat. Answer with the reply only, as plain text in the format asked for below. Don't use tools, read files or run commands: everything you need is in this message, and the IDE refuses anything else.";
+
+    /// <summary>
+    /// A feature's request through AI Chat's external agent (ADR 0097): the conversation as one prompt (its instructions,
+    /// then the user's messages), logged like a provider's request, the answer whole.
+    /// </summary>
+    private async Task<AiReply> AnswerWithAgentAsync(string agent, string feature, AiRoute route, IReadOnlyList<ChatMessageDto> messages, AiPreparedContext context, Action<string> onText, bool quiet, CancellationToken cancellationToken)
+    {
+        var prompt = new StringBuilder(ExternalAgentPreamble).Append("\n\n");
+        foreach (var message in messages)
+        {
+            prompt.Append(message.Role == "system" ? "Instructions:\n" : "").Append(message.Content).Append("\n\n");
+        }
+
+        var text = prompt.ToString().TrimEnd() + "\n";
+        Log(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} {feature}: external agent {agent} (its own provider), {text.Length:N0} characters"));
+        LogContext(context);
+        if (!quiet)
+        {
+            BeginRequest();
+        }
+
+        try
+        {
+            var reply = await ExternalAnswerer!.AnswerAsync(agent, route, text, cancellationToken).ConfigureAwait(false);
+            Log(string.Create(CultureInfo.InvariantCulture, $"    done: {reply.Length:N0} characters"));
+            onText(reply);
+            return new AiReply(reply, "stop", null, null);
+        }
+        catch (AiUnavailableException ex)
+        {
+            Log("    failed: " + ex.Message);
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            Log("    stopped");
+            throw;
+        }
+        finally
+        {
+            if (!quiet)
+            {
+                EndRequest();
+            }
+        }
+    }
+
+    private void LogContext(AiPreparedContext context)
+    {
+        foreach (var item in context.Included)
+        {
+            Log("    sent: " + Describe(item));
+        }
+
+        foreach (var item in context.Excluded)
+        {
+            Log($"    not sent: {Describe(item.Item)} ({item.Reason})");
+        }
+
+        if (context.Redactions > 0)
+        {
+            Log(string.Create(CultureInfo.InvariantCulture, $"    redacted: {context.Redactions} secret(s)"));
+        }
+    }
+
+    /// <summary>
     /// One question with its context, answered without streaming to the user (a commit message, a fix): the context goes
     /// through the boundary, and the reply comes back whole.
     /// </summary>
@@ -366,7 +472,8 @@ public sealed class AiService
             context,
             _ => { },
             cancellationToken,
-            maxOutputTokens).ConfigureAwait(false);
+            maxOutputTokens,
+            route: AiRoute.Action).ConfigureAwait(false);
         return (reply, context);
     }
 
@@ -412,20 +519,7 @@ public sealed class AiService
     public void LogExternalPrompt(string agent, int characters, AiPreparedContext context)
     {
         Log(string.Create(CultureInfo.InvariantCulture, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss} external agent {agent}: session/prompt, {characters:N0} characters (the agent's own provider)"));
-        foreach (var item in context.Included)
-        {
-            Log("    sent: " + Describe(item));
-        }
-
-        foreach (var item in context.Excluded)
-        {
-            Log($"    not sent: {Describe(item.Item)} ({item.Reason})");
-        }
-
-        if (context.Redactions > 0)
-        {
-            Log(string.Create(CultureInfo.InvariantCulture, $"    redacted: {context.Redactions} secret(s)"));
-        }
+        LogContext(context);
     }
 
     /// <summary>Logs what an external agent asked of the IDE or did: the method and its path or command, never content.</summary>

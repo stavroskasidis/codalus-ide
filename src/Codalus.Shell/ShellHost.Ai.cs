@@ -74,6 +74,18 @@ public sealed partial class ShellHost : IAiChatHost
             return;
         }
 
+        if (Ai.ExternalAgent is { } agent)
+        {
+            var agentLabel = Ai.IsBusy ? Localizer.Get("msg.ai.statusWorking", "AI: working…") : Localizer.Format("msg.ai.statusAgent", "AI: {0}", agent);
+            Workbench.StatusBar.Set(new StatusBarItem(AiStatusItem, "$(sparkle) " + agentLabel, StatusBarAlignment.Right, 60, ContributionSource.Shell.Id)
+            {
+                Tooltip = Localizer.Format("msg.ai.statusAgentTip", "AI assistance uses the external agent {0}, with its own provider and data policy, for AI Chat and the IDE's AI features. Click to open AI Chat.", agent),
+                AccessibleName = agentLabel,
+                Command = "ai.chat.show",
+            });
+            return;
+        }
+
         var label = Ai.State == AiState.NoProvider
             ? Localizer.Get("msg.ai.statusNoProvider", "AI: no provider")
             : Ai.IsBusy ? Localizer.Get("msg.ai.statusWorking", "AI: working…") : Localizer.Format("msg.ai.statusReady", "AI: {0}", Ai.Provider?.Label ?? Ai.ProviderId!);

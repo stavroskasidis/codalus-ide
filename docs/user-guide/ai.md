@@ -17,7 +17,7 @@ The [first-run setup](getting-started.md#the-first-run-setup) asks once, on its 
 
 Or connect a coding agent that brings its own provider (Claude, Codex, Gemini CLI, GitHub Copilot and others) from AI Chat's **Connect** buttons: see [Connecting one](#connecting-one). Its dialog can turn AI assistance on for you, once its test passes.
 
-While AI assistance is on, the status bar shows **AI:** and the provider, or **AI: working…** while a request runs. Click it to open AI Chat.
+While AI assistance is on, the status bar shows **AI:** and the provider (or the external agent AI Chat has picked, which then answers the AI features too: see [The AI features with an external agent](#the-ai-features-with-an-external-agent)), or **AI: working…** while a request runs. Click it to open AI Chat.
 
 ## AI Chat
 
@@ -59,7 +59,7 @@ With **Inline Suggestions** on (`ai.completions.enabled`, in **Tools > Options >
 - `Ctrl+Right` (`Alt+Right` on macOS) accepts its next word.
 - `Esc` dismisses it, and so does moving the caret. Typing what it shows keeps the rest.
 
-It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request.
+It sends the text around the caret (up to 6,000 characters before it and 2,000 after) every time you pause, so it has its own switch, off by default. Files that are never sent (below) get no suggestions. **Inline Suggestions Model** (`ai.completions.model`) picks a faster model for it than the chat's, and **Inline Suggestions Delay** (`ai.completions.delayMilliseconds`, 400, or 1,000 with an external agent unless you set it) how long you pause first. Suggestions never wait on typing: a new keystroke cancels the request. With an external agent picked in AI Chat, the agent suggests: see [The AI features with an external agent](#the-ai-features-with-an-external-agent).
 
 ## Next edit suggestions
 
@@ -265,6 +265,17 @@ What Codalus can't check:
 - Whatever the agent has, it can send to its provider. Keep files out of reach with `.codalusignore` and `ai.exclude` for what goes through the IDE, and with the agent's own settings for what it reads by itself.
 - Its commands run with your permissions once you allow them, like agent mode's.
 
+### The AI features with an external agent
+
+When AI Chat has an external agent picked, that agent also answers the IDE's other AI features: [inline suggestions](#inline-suggestions), [next edit suggestions](#next-edit-suggestions) and every [AI action](#ai-actions). No provider is needed. Pick **Built-in** in AI Chat to go back to your provider for all of them.
+
+- **Actions that open in AI Chat** (Explain, Ask AI, Ask AI Why It Fails, Generate Tests, Summarize with AI) are questions in the agent's chat, with everything above: its steps, the preview, the approvals.
+- **Everything else** (suggestions while typing, the commit message, the pull request's text, Fix with AI) goes to a session of its own on the same agent process, never shown in the chat. It gets the same context a provider would (the same exclusions, redaction and size limits), and nothing else from the IDE: it has no `codalus mcp` tools, and Codalus refuses every file, command and permission request it makes, without asking you (the *AI* Output channel lists each one). As with any external agent, it can still read files by itself and sends what it has to its provider.
+- **Suggestions while typing** keep their own switches, off by default. Each pause in typing is a turn of the agent, which takes longer than a provider's completion and counts against your agent's plan or key, so it waits for a longer pause (1 second unless you set **Inline Suggestions Delay**) and uses a small model: the one you pick with **Suggestions:** in AI Chat's toolbar (shown while suggestions are on and the agent offers models; kept as `ai.agents.<agent>.suggestions.model`), or, on **Automatic**, one Codalus guesses by its name (*haiku*, *mini*, *flash*, *nano*, *lite*), else the chat's model. The *AI* Output channel says which it used. Actions use the chat's model.
+- The agent starts when a feature needs it, if AI Chat hasn't started it. While you type it never signs in; an action you choose asks, as a question in AI Chat does. In a folder where the agent may not run (not trusted, AI off, a remote window), suggestions don't show and an action says why.
+
+Plugins' requests to a language model still need a provider.
+
 Not supported yet: MCP servers over HTTP for agents, the agent's forms (elicitation), resuming an earlier session, and an Options page for External Agents (edit the JSON, or use Manage Agents…). External agents don't run in remote windows (WSL, SSH, containers): the agent and its commands would run on this machine, not where the folder is, so the chat says why and nothing starts.
 
 ## AI Console
@@ -319,7 +330,7 @@ AI assistance has one gate that every request goes through:
 | `ai.chat.maxContextCharacters` | `120000` | The most context sent with a question |
 | `ai.completions.enabled` | `false` | Inline suggestions |
 | `ai.completions.model` | empty | Their model; empty is the chat's |
-| `ai.completions.delayMilliseconds` | `400` | The pause before a suggestion is asked for |
+| `ai.completions.delayMilliseconds` | `400` | The pause before a suggestion is asked for (1,000 with an external agent, unless set) |
 | `ai.nextEdit.enabled` | `false` | Next edit suggestions |
 | `ai.agent.maxSteps` | `25` | The most tool calls agent mode makes for one question |
 | `ai.agent.commandTimeoutSeconds` | `120` | How long an allowed command may run |
@@ -327,8 +338,8 @@ AI assistance has one gate that every request goes through:
 | `ai.chat.density` | `compact` | `compact` folds each answer's steps into a line; `detailed` shows every step |
 | `ai.mcp.servers` | `{}` | MCP servers whose tools agent mode may use (user settings only) |
 | `ai.mcpServer.enabled` | `false` | Let `codalus mcp` reach the IDE's tools (external agents' own pipes don't need it) |
-| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices", "console" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices`, and `console` names the agent's own CLI for AI Console) |
-| `ai.chat.agent` | `""` | Who answers in AI Chat: empty for the built-in assistant, or an agent of `ai.agents` (the picker writes it) |
+| `ai.agents` | `{}` | External ACP agents AI Chat can run: `{ "name": { "command", "args", "env", "secretEnv", "unsetEnv", "choices", "suggestions", "console" } }` (user settings only; **AI: Connect to an Agent…** writes it, AI Chat's pickers write `choices` and `suggestions.model`, and `console` names the agent's own CLI for AI Console) |
+| `ai.chat.agent` | `""` | Who answers in AI Chat, and in the AI features: empty for the built-in assistant (your provider), or an agent of `ai.agents` (the picker writes it) |
 | `ai.console.agent` | `""` | The agent whose CLI a new AI Console starts (AI Console writes it) |
 | `ai.openai.endpoint` | `https://api.openai.com/v1` | The OpenAI-compatible server |
 | `ai.ollama.endpoint` | `http://localhost:11434/v1` | Ollama's address |
