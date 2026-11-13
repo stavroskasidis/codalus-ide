@@ -30,7 +30,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 for version in "${versions[@]}"; do
   if [ ! -d "$destination/shared/Microsoft.NETCore.App/$version" ]; then
-    [ -f "$work/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
+    [ -f "$work/dotnet-install.sh" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
     # The newest goes first and its muxer (dotnet) stays: the older ones add only their runtime.
     skip=()
     [ -x "$destination/dotnet" ] && skip=(--skip-non-versioned-files)
