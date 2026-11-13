@@ -366,7 +366,8 @@ internal sealed partial class SmokeTest
         Check(failed.Count == 0, $"every command runs from each of its entry points ({failed.Count} failed: {string.Join("; ", failed.Take(15).Select(r => $"{r.Command} [{r.Entry}] {r.Reason}"))})");
     }
 
-    private static string? SkipReason(string id) =>
+    /// <summary>Why the sweep never runs <paramref name="id"/> (it leaves the machine or the app), or null; agents' run_command skips these too.</summary>
+    internal static string? SkipReason(string id) =>
         s_sweepSkips.TryGetValue(id, out var reason) ? reason
         : id.StartsWith("externalTools.run.", StringComparison.Ordinal) ? "runs a user-defined external tool"
         : null;
