@@ -16,8 +16,10 @@ name: Pipeline
 # A run stops at its first failed job, which cancels the rest (ADR 0028, 2026-10-20). A release/X.Y.Z → master pull request
 # skips test and smoke when develop's own run passed on its head (gate). A release is cut from develop as release/X.Y.Z and
 # merged into master by pull request, so develop stays open meanwhile (ADR 0028, 2026-10-21; docs/release/releasing.md).
-# A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26); a docs-only
-# pull request skips test and smoke (gate).
+# A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26). A pull
+# request tests what its files need (gate, eng/ci-scope.sh; ADR 0028, 2026-11-13): Linux x64 (test shards and smoke) for
+# most, every OS for the platform paths of eng/ci-platform-paths.txt or the ci:full label, one Linux job of a few test
+# projects for the areas of eng/ci-isolated-paths.txt, and nothing for docs only. develop and master test everything.
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
@@ -31,6 +33,9 @@ on:
   pull_request:
     # A fix a release needs goes into its release/X.Y.Z branch by pull request, and is tested like any other.
     branches: [develop, master, "release/**"]
+    # labeled: adding ci:full starts a run on every OS, replacing the one in progress (gate reads the labels when it
+    # runs). Any other label starts the same run again: the required ci check is the newest run's.
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -117,8 +122,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
 
-  # A pull request that changes only docs/** and *.md files skips test and smoke: pushes of those start no run at all
-  # (paths-ignore), but a pull request runs so that it reports ci.
+  # What a pull request tests, from the files it changes (eng/ci-scope.sh; the maintainer's decision, 2026-11-13, ADR
+  # 0028): every OS (as develop's and master's runs) for a file under a path of eng/ci-platform-paths.txt, with the
+  # ci:full label, or into master (a release, a hotfix); only the Linux x64 test shards and smoke otherwise; one Linux
+  # job of the test projects of the areas in eng/ci-isolated-paths.txt (and the tests that scan every file) when nothing
+  # else changes; and no test or smoke for docs/** and *.md files only: pushes of those start no run at all
+  # (paths-ignore), but a pull request runs so that it reports ci. A push or dispatch tests everything.
   # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run, on a commit that has
   # all of master, skips test and smoke: the release run on master runs them again before anything is published (the
   # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes). A release
@@ -129,21 +138,74 @@ jobs:
       contents: read
       actions: read
     outputs:
-      skip: ${{ steps.docs.outputs.skip || steps.check.outputs.skip }}
+      skip: ${{ steps.scope.outputs.skip || steps.check.outputs.skip }}
+      scope: ${{ steps.scope.outputs.scope }}
+      projects: ${{ steps.scope.outputs.projects }}
+      test-matrix: ${{ steps.scope.outputs.test-matrix }}
+      smoke-matrix: ${{ steps.scope.outputs.smoke-matrix }}
     steps:
-      - id: docs
-        if: github.event_name == 'pull_request'
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: eng
+      - id: scope
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          # A listing that fails tests everything.
-          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')" || exit 0
-          if [[ -n "$files" ]] && ! grep -qvE '^docs/|\.md$' <<< "$files"; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Only docs/** and *.md files change: test and smoke are skipped." >> "$GITHUB_STEP_SUMMARY"
+          # Every OS's test jobs (shards: what a job runs, in order, each a step of its own in test). macOS: about 20 + 23
+          # + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
+          tests='[
+            { "os": "ubuntu-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
+            { "os": "ubuntu-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "ubuntu-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
+            { "os": "windows-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
+            { "os": "windows-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "windows-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
+            { "os": "macos-latest", "shard": "all", "shards": "shell-1 shell-2 others debug-netcoredbg", "timeout": 150 },
+            { "os": "ubuntu-24.04-arm", "shard": "debug-codalus", "shards": "debug-codalus", "timeout": 50 }
+          ]'
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            # A pull request into master (a release, a hotfix) tests everything, as does the ci:full label: the labels as
+            # they are now (a re-run reads them again). A listing that fails tests everything.
+            full=()
+            [[ "$GITHUB_BASE_REF" == master ]] && full=(--full)
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx 'ci:full' && full=(--full)
+            files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')" || files=""
+            result="$(bash eng/ci-scope.sh ${full[@]+"${full[@]}"} <<< "$files")"
+          else
+            result="$(bash eng/ci-scope.sh --full < /dev/null)"
           fi
+          scope="$(sed -n 's/^scope=//p' <<< "$result")"
+          projects="$(sed -n 's/^projects=//p' <<< "$result")"
+          # A matrix is never empty, even for a job gate skips: GitHub refuses an empty one.
+          case "$scope" in
+            full)
+              test="$tests"
+              smoke='["ubuntu-latest", "windows-latest", "macos-latest"]'
+              summary="Every OS: test and smoke on Windows, macOS and Linux." ;;
+            linux)
+              test="$(jq '[.[] | select(.os == "ubuntu-latest")]' <<< "$tests")"
+              smoke='["ubuntu-latest"]'
+              summary="Linux x64 only: no file under eng/ci-platform-paths.txt changes (the ci:full label tests every OS)." ;;
+            isolated)
+              test='[{ "os": "ubuntu-latest", "shard": "projects", "shards": "projects", "timeout": 40 }]'
+              smoke='["ubuntu-latest"]'
+              summary="Only areas of eng/ci-isolated-paths.txt change: $projects and eng/ci-repo-scan.txt on Linux, no smoke." ;;
+            docs)
+              test="$tests"
+              smoke='["ubuntu-latest"]'
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              summary="Only docs/** and *.md files change: test and smoke are skipped." ;;
+            *) echo "::error::eng/ci-scope.sh printed no scope: $result" && exit 1 ;;
+          esac
+          {
+            echo "scope=$scope"
+            echo "projects=$projects"
+            echo "test-matrix=$(jq -c . <<< "$test")"
+            echo "smoke-matrix=$(jq -c . <<< "$smoke")"
+          } >> "$GITHUB_OUTPUT"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
       # A release branch's VERSION is the X.Y.Z of its name (it is what master publishes), and its workflow files are
       # develop's: the release's tag is created by the workflow token, which GitHub lets tag only a commit whose workflow
       # files match the default branch's (M31b), so a workflow change goes into both (docs/release/releasing.md).
@@ -198,17 +260,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # shards: what the job runs, in order, each in a step of its own (below); a shard not listed is skipped.
-        include:
-          - { os: ubuntu-latest, shard: shell-1, shards: shell-1, timeout: 50 }
-          - { os: ubuntu-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: ubuntu-latest, shard: others, shards: others debug-netcoredbg, timeout: 70 }
-          - { os: windows-latest, shard: shell-1, shards: shell-1, timeout: 50 }
-          - { os: windows-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: windows-latest, shard: others, shards: others debug-netcoredbg, timeout: 70 }
-          # About 20 + 23 + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
-          - { os: macos-latest, shard: all, shards: shell-1 shell-2 others debug-netcoredbg, timeout: 150 }
-          - { os: ubuntu-24.04-arm, shard: debug-codalus, shards: debug-codalus, timeout: 50 }
+        # gate's list for this run (every OS, Linux x64's shards or the projects job): shards is what the job runs, in
+        # order, each in a step of its own (below); a shard not listed is skipped.
+        include: ${{ fromJSON(needs.gate.outputs.test-matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
     steps:
@@ -224,8 +278,11 @@ jobs:
           display: true
           downloads: true
           browser: true
-      - run: dotnet restore Codalus.slnx
-      - run: dotnet build Codalus.slnx -c Release --no-restore
+      # The projects shard builds only its projects (eng/ci-test.sh).
+      - if: matrix.shard != 'projects'
+        run: dotnet restore Codalus.slnx
+      - if: matrix.shard != 'projects'
+        run: dotnet build Codalus.slnx -c Release --no-restore
       - name: Save the NuGet cache (develop, one job per OS)
         # The job with the others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
@@ -279,6 +336,16 @@ jobs:
         shell: bash
         timeout-minutes: 40
         run: bash eng/ci-test.sh debug-codalus
+      - name: Test (projects)
+        # A pull request that changes only the areas of eng/ci-isolated-paths.txt: their test projects (gate).
+        if: contains(format(' {0} ', matrix.shards), ' projects ')
+        shell: bash
+        timeout-minutes: 35
+        env:
+          PROJECTS: ${{ needs.gate.outputs.projects }}
+        run: |
+          read -r -a projects <<< "$PROJECTS"
+          bash eng/ci-test.sh projects Release "${projects[@]}"
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded
         if: always() && steps.setup.outputs.downloads-hit != 'true'
@@ -333,20 +400,20 @@ jobs:
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
-  # of its own (it needs the machine to itself), alongside the tests. Not on macOS in a pull request (the maintainer's
-  # decision, 2026-11-04, ADR 0028): its runners are the scarce ones, and develop's run (every nightly) and master's (every
-  # release) smoke-test macOS before anything is published, as packages does the installed app.
+  # of its own (it needs the machine to itself), alongside the tests. On the OSes gate picks (the maintainer's decision,
+  # 2026-11-13, ADR 0028): Linux for a pull request, every OS for one that tests every OS and for develop's run (every
+  # nightly) and master's (every release), none for one that tests only the projects of eng/ci-isolated-paths.txt.
   smoke:
     name: smoke (${{ matrix.os }})
     needs: gate
-    if: needs.gate.outputs.skip != 'true'
+    if: needs.gate.outputs.skip != 'true' && needs.gate.outputs.scope != 'isolated'
     permissions:
       contents: read
       actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "windows-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        os: ${{ fromJSON(needs.gate.outputs.smoke-matrix) }}
     runs-on: ${{ matrix.os }}
     # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40: at 60, a slow runner ran out
     # of time in the middle of a passing smoke test (#111, run 39668401109).

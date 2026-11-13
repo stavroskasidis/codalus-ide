@@ -1,0 +1,10 @@
+# Areas that nothing in src/ uses, each with the test project that covers it (eng/ci-scope.sh, pipeline.yml's gate;
+# ADR 0028, update 2026-11-13). A pull request that changes only files in these areas (and docs/** and *.md files)
+# tests only their projects and the tests that scan every tracked file (eng/ci-repo-scan.txt), in one Linux job
+# without the smoke test. One `prefix project` per line.
+website/ Codalus.Website.Tests
+tests/Codalus.Website.Tests/ Codalus.Website.Tests
+eng/Codalus.Release/ Codalus.Release.Tests
+tests/Codalus.Release.Tests/ Codalus.Release.Tests
+benchmarks/ Codalus.Benchmarks.Harness.Tests
+tests/Codalus.Benchmarks.Harness.Tests/ Codalus.Benchmarks.Harness.Tests
