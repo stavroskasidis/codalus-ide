@@ -236,6 +236,90 @@ public sealed class IdeExecutionServerTests
         }
     }
 
+    /// <summary>
+    /// A session's end is logged with its exit code and its last lines, which otherwise went only to the dashboard: the
+    /// Linux smoke test's api ended as it started, and the IDE's log said nothing of why (PR #338's run 43302285600).
+    /// </summary>
+    [Fact]
+    public async Task A_sessions_end_is_logged_with_its_exit_code_and_its_last_lines()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var sessions = new List<FakeSession>();
+        var log = new List<string>();
+        var server = new IdeExecutionServer((_, _) =>
+        {
+            var session = new FakeSession();
+            lock (sessions)
+            {
+                sessions.Add(session);
+            }
+
+            return Task.FromResult<IIdeRunSession>(session);
+        });
+        server.Log += line =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+        server.Start();
+        try
+        {
+            using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{server.Port}/") };
+            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
+            async Task StartAsync()
+            {
+                using var body = new StringContent("""{"launch_configurations":[{"type":"project","project_path":"/app/Api/Api.csproj","mode":"NoDebug"}]}""", Encoding.UTF8, "application/json");
+                using var created = await http.PutAsync("run_session", body, ct);
+                Assert.Equal(System.Net.HttpStatusCode.Created, created.StatusCode);
+            }
+
+            string? Ended(string id)
+            {
+                lock (log)
+                {
+                    return log.LastOrDefault(l => l.StartsWith($"Run session {id} ended", StringComparison.Ordinal));
+                }
+            }
+
+            // One that printed more than the tail keeps: its last lines, in order.
+            await StartAsync();
+            for (var i = 1; i <= IdeExecutionServer.TailLines + 5; i++)
+            {
+                await server.LogAsync("1", $"line {i}", isError: false);
+            }
+
+            sessions[0].Terminate();
+            var deadline = DateTime.UtcNow + s_timeout;
+            while (Ended("1") is null && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(10, ct);
+            }
+
+            var ended = Ended("1");
+            Assert.NotNull(ended);
+            var lines = ended!.Split('\n');
+            Assert.Equal("Run session 1 ended (exit code 137). Its last output:", lines[0]);
+            Assert.Equal([.. Enumerable.Range(6, IdeExecutionServer.TailLines).Select(i => $"  line {i}")], lines[1..]);
+
+            // One that printed nothing says so.
+            await StartAsync();
+            sessions[1].Terminate();
+            deadline = DateTime.UtcNow + s_timeout;
+            while (Ended("2") is null && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(10, ct);
+            }
+
+            Assert.Equal("Run session 2 ended (exit code 137) without output.", Ended("2"));
+        }
+        finally
+        {
+            await server.DisposeAsync();
+        }
+    }
+
     [Fact]
     public async Task A_notification_sent_before_the_orchestrator_listens_reaches_it_once_it_does()
     {

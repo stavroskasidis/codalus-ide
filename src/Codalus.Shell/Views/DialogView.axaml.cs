@@ -144,6 +144,11 @@ public sealed partial class DialogView : UserControl
             Input.SelectionStart = start;
             Input.SelectionEnd = start + length;
         }
+        else if (_viewModel is { HasAlternatives: true })
+        {
+            // The picked way, so the arrows move to another and Enter installs it.
+            Alternatives.GetVisualDescendants().OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Focus(NavigationMethod.Tab);
+        }
         else
         {
             this.GetVisualDescendants().OfType<Button>().FirstOrDefault(b => b.Classes.Contains("accent"))?.Focus(NavigationMethod.Tab);

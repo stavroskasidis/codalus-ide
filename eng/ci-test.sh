@@ -82,6 +82,28 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
     done
   ) &
   sampler=$!
+elif [[ "${CI:-}" == "true" && "$(uname)" == "Linux" ]]; then
+  # The same on Linux: an ubuntu-latest runner went silent in shell-2 with nothing left of the job (PR #337's run
+  # 43293835263), and Linux had no memory samples at all. The live-output action sends memory.txt off the runner as it
+  # grows (.github/actions/live-output).
+  (
+    set +eo pipefail
+    while :; do
+      {
+        now="$(date -u +%H:%M:%S)"
+        memory="$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } /^SwapTotal:/ { st = $2 } /^SwapFree:/ { sf = $2 }
+          END { printf "free=%d%% available=%dM swap=%dM", a * 100 / t, a / 1024, (st - sf) / 1024 }' /proc/meminfo)"
+        top="$(ps -eo rss=,pid=,ppid=,args= --sort=-rss | head -6)"
+        echo "$now $memory" >> "$results/memory.txt"
+        echo "$top" | cut -c1-200 >> "$results/memory.txt"
+        largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
+        echo "[memory] $now $memory processes=$(ps -e --no-headers | wc -l | tr -d ' ') largest:$largest"
+      } 2>/dev/null || true
+      # A second at a time, as on Windows below: the report ends this loop with kill.
+      for _ in {1..15}; do sleep 1; done
+    done
+  ) &
+  sampler=$!
 elif [[ "${CI:-}" == "true" && "${RUNNER_OS:-}" == "Windows" ]]; then
   # How busy the runner is: three processes stalled for minutes at once in Windows others (a design-time build of one
   # project took 54 s, the language host never reported, the desktop CLR never stopped at its breakpoint; PR #296's run
@@ -208,6 +230,10 @@ report() {
     local oom
     oom="$(sudo -n dmesg 2>/dev/null | grep -i "out of memory\|killed process\|oom-kill" | tail -20)"
     if [[ -n "$oom" ]]; then echo "$oom"; else echo "  none"; fi
+    if [[ -s "$results/memory.txt" ]]; then
+      echo "Least free memory while the tests ran (every 15 seconds: memory.txt in the results):"
+      awk '/ free=/ { v = $2; sub("free=", "", v); sub("%", "", v); print v " " $0 }' "$results/memory.txt" | sort -n | head -3 | cut -d' ' -f2-
+    fi
   elif [[ -s "$results/load.txt" ]]; then
     echo "The busiest moments while the tests ran (most threads waiting for a CPU; every 15 seconds: load.txt in the results):"
     awk '{ v = $4; sub("cpu-queue=", "", v); print v " " $0 }' "$results/load.txt" | sort -nr | head -3 | cut -d' ' -f2-

@@ -166,6 +166,7 @@ internal sealed partial class SmokeTest
             ],
             Reorderable = true,
         };
+        var sdk = new Workbench.Setup.ToolStatus("dotnet", ".NET SDK", true, Workbench.Setup.ToolState.Missing, "Opening, building, running and debugging .NET projects");
         var dialogs = new List<(string Name, DialogRequest Request)>
         {
             ("dialog-preview", new DialogRequest("Preview Changes: Rename", "4 changes in 2 files.", ["Apply", "Cancel"])
@@ -197,6 +198,13 @@ internal sealed partial class SmokeTest
             ("dialog-checklist", checklist),
             ("dialog-input", new DialogRequest("Rename", "The new name of the class and its file:", ["Rename", "Cancel"]) { Input = "Gr", Validate = text => text.Length < 3 ? "The name is too short." : null, Icon = "rename", Context = "Greeter · Greeter.cs" }),
             ("dialog-confirm", new DialogRequest("Remove Worktree", "Remove the worktree and its folder? Its uncommitted changes are lost.", ["Remove", "Cancel"]) { IsDanger = true }),
+            // Ways to pick one of: Install .NET on a Mac whose terminal runs the .pkg's dotnet.
+            ("dialog-alternatives", ShellHost.InstallChoice(sdk, Workbench.Setup.InstallPlans.DotnetOptions(sdk, new Workbench.Setup.DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/you")
+            {
+                ShellDotnet = "/usr/local/bin/dotnet",
+                ShellRoot = Workbench.Setup.InstallPlans.MacPackageRoot,
+                Arm64 = true,
+            }))),
         };
         foreach (var (name, request) in dialogs)
         {
