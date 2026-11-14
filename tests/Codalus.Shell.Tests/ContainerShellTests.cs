@@ -26,7 +26,7 @@ public sealed class ContainerShellTests
     }
 
     /// <summary>The engine for these tests, or a skip (a failure on CI's Linux runner) when none runs Linux containers.</summary>
-    private static async Task<ContainerEngine> RequireEngineAsync()
+    internal static async Task<ContainerEngine> RequireEngineAsync()
     {
         var engine = ContainerEngine.Resolve(Environment.GetEnvironmentVariable("CODALUS_TEST_CONTAINER_TOOL"));
         var (os, error) = await engine.ServerOsAsync(CancellationToken.None);
