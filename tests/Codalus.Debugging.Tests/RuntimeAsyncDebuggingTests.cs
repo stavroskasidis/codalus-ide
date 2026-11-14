@@ -127,6 +127,52 @@ public sealed class RuntimeAsyncDebuggingTests(AsyncDebuggeeFixture fixture) : I
 
     [Theory]
     [MemberData(nameof(Builds))]
+    public async Task Step_over_an_await_that_resumed_elsewhere_before_the_stepping_thread_left_the_method(string build)
+    {
+        // The await's continuation runs on a new thread at once and waits there before the method's next line, so the
+        // stepping thread is back in the caller while the method runs again elsewhere (Linux CI, run 43568784192, where
+        // Task.Yield's continuation did that by chance and the step ended in the caller): the step still ends on the
+        // method's next line, on the thread that resumed it.
+        // Stepped into from its caller first, as there: the state machine's kickoff is then code that isn't the user's,
+        // and the stepper leaving the method ends in the caller.
+        var elsewhere = fixture.Source("Elsewhere.cs");
+        var (adapter, events) = await StartAsync(build, "race", elsewhere, [DebuggeeFixture.Line(elsewhere, "race-call")]);
+        await using var session = adapter;
+        var stop = await events.StoppedAsync();
+        (stop, _) = await StepAsync(adapter, events, stop, adapter.StepInAsync, elsewhere, "race-open");
+        (stop, _) = await StepAsync(adapter, events, stop, adapter.NextAsync, elsewhere, "race-before");
+        (stop, _) = await StepAsync(adapter, events, stop, adapter.NextAsync, elsewhere, "race-await");
+        var stepping = stop.ThreadId;
+        (stop, var top) = await StepAsync(adapter, events, stop, adapter.NextAsync, elsewhere, "race-after");
+        Assert.NotEqual(stepping, stop.ThreadId);
+        Assert.Equal("2", await ValueAsync(adapter, top, "start"));
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Fact]
+    public async Task Step_out_of_a_resumed_method_whose_caller_doesnt_have_its_task_yet_stops_in_the_caller()
+    {
+        // The caller's thread is still inside the method's await when the method resumes elsewhere and stops: its task
+        // names no awaiting call, and no awaiter of it is anywhere yet (a local run of the class under CPU load, where
+        // the Step Out of this class's DoubleAsync ran the program to its end). The caller is found on its thread's
+        // stack, below the method it started: the step ends there once it goes on, with the method's value. State
+        // machines only: runtime async has no task to find the caller by (ADR 0100).
+        var elsewhere = fixture.Source("Elsewhere.cs");
+        var (adapter, events) = await StartAsync(AsyncDebuggeeFixture.StateMachines, "held", elsewhere, [DebuggeeFixture.Line(elsewhere, "held-resumed")]);
+        await using var session = adapter;
+        var stop = await events.StoppedAsync();
+        await adapter.StepOutAsync(stop.ThreadId!.Value, Ct);
+        stop = await events.StoppedAsync(30);
+        Assert.Equal("step", stop.Reason);
+        var top = await TopAsync(adapter, stop);
+        Assert.True(top.Line == DebuggeeFixture.Line(elsewhere, "held-return"), $"Step Out stopped in {top.Name} on line {top.Line}.");
+        Assert.Equal("30", await ValueAsync(adapter, top, "held"));
+        Assert.Equal("30", await ValueAsync(adapter, top, "$ReturnValue"));
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
+    [Theory]
+    [MemberData(nameof(Builds))]
     public async Task Step_into_an_awaited_call_and_step_out_back_to_the_awaiting_caller(string build)
     {
         var (adapter, events) = await StartAsync(build, "steps", Worker, [Line("run-double")]);
