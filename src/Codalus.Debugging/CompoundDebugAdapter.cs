@@ -149,6 +149,13 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
 
         /// <summary>Its program's exit code (independent sessions).</summary>
         public int? ExitCode { get; set; }
+
+        /// <summary>
+        /// Its end has been reported (<see cref="PartChanged"/>), or it ended without a report: an end that finds it ended
+        /// already waits for this, so <see cref="EndPartAsync"/> never returns before the report its program's own end
+        /// raced it to (macOS CI, run 43597436045).
+        /// </summary>
+        public TaskCompletionSource EndReported { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     /// <summary>The adapter the session was launched with.</summary>
@@ -325,6 +332,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
                         part.Ended = true;
                         Unqueue(part);
                     }
+
+                    part.EndReported.TrySetResult();
                 }
 
                 if (!disposed)
@@ -749,25 +758,40 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
         if (Independent)
         {
             bool last;
+            bool already;
             lock (_gate)
             {
-                if (part.Ended)
+                already = part.Ended;
+                if (!already)
                 {
-                    return;
-                }
-
-                part.Ended = true;
-                part.Stopped = false;
-                Unqueue(part);
-                if (_shown == part)
-                {
-                    _shown = null;
+                    part.Ended = true;
+                    part.Stopped = false;
+                    Unqueue(part);
+                    if (_shown == part)
+                    {
+                        _shown = null;
+                    }
                 }
 
                 last = _parts.All(p => p.Ended) && Volatile.Read(ref _reserved) <= 0;
             }
 
-            PartChanged?.Invoke(this, new CompoundPartEvent(part.Name, part.Index, null, Ended: true, part.ExitCode));
+            if (already)
+            {
+                // Another end of it (its program's, or EndPartAsync's) reports it: returns once it has.
+                await part.EndReported.Task.ConfigureAwait(false);
+                return;
+            }
+
+            try
+            {
+                PartChanged?.Invoke(this, new CompoundPartEvent(part.Name, part.Index, null, Ended: true, part.ExitCode));
+            }
+            finally
+            {
+                part.EndReported.TrySetResult();
+            }
+
             if (!last)
             {
                 ShowNext();
@@ -1304,6 +1328,8 @@ public sealed class CompoundDebugAdapter : IDebugAdapter
             {
                 _parts[0].Ended = true; // disposed here, not again with the session
             }
+
+            _parts[0].EndReported.TrySetResult();
 
             await Primary.DisposeAsync().ConfigureAwait(false);
             disposed = watch.Elapsed;
