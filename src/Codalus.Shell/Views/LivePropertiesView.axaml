@@ -54,7 +54,7 @@
             <Grid.ContextMenu>
               <ContextMenu>
                 <!-- M64b: the debugger stops when the property changes in the app. -->
-                <MenuItem Header="{Binding WatchHeader}" Command="{Binding ToggleWatchCommand}" />
+                <MenuItem controls:MenuEntry.Icon="breakpoint" Header="{Binding WatchHeader}" Command="{Binding ToggleWatchCommand}" />
               </ContextMenu>
             </Grid.ContextMenu>
             <DockPanel>
