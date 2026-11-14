@@ -5,6 +5,7 @@ A console app for the debugger tests (ADR 0007): a loop, a method call, a record
 - `--wait-for <file>` waits for a file before running (attach tests).
 - `--depth` runs the M14a fixtures (exceptions, settings, JSON).
 - `--read` reads a line from the console and echoes it (debugging in the terminal, M14c).
+- `--initializer` stops at `[initializer-stop]` while another thread runs `Slow`'s two-second class constructor (`[slow-cctor]`): a func-eval that needs `Slow` waits for it (`ClassConstructorEvalTests`).
 - `--crash` ends with an unhandled exception (Just-In-Time crash dumps, M14c).
 
 `Debugging.slnx` has the Debuggee alone. `Sessions.slnx` (M14c, ADR 0039) adds:

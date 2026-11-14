@@ -21,6 +21,14 @@ internal static class StartupHook
             return;
         }
 
+        // Only in a WPF app. The variables also reach the .NET processes on the app's way (dotnet watch under Hot Reload,
+        // the builds it runs), where WPF isn't there: reading its trace sources there ended the process at its start, and
+        // an agent there would take the IDE's one connection. They're left for the app (M64).
+        if (!IsWpfApp())
+        {
+            return;
+        }
+
         if (!int.TryParse(Environment.GetEnvironmentVariable(PortVariable), NumberStyles.Integer, CultureInfo.InvariantCulture, out var port) || port <= 0)
         {
             return;
@@ -49,4 +57,8 @@ internal static class StartupHook
         };
         thread.Start();
     }
+
+    /// <summary>Whether this process can load WPF: an app built with it (<c>Microsoft.WindowsDesktop.App</c>), not a tool.</summary>
+    internal static bool IsWpfApp() =>
+        Type.GetType("System.Windows.Application, PresentationFramework", throwOnError: false) is not null;
 }
