@@ -59,7 +59,14 @@ internal static partial class BuiltIns
         Add("containers.addDockerSupport", "Add Docker Support", async path => await shell.AddDockerSupportAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted");
         Add("containers.composeUp", "Compose Up", async path => await shell.ComposeUpAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted");
         Add("containers.composeDown", "Compose Down", async path => await shell.ComposeDownAsync(path).ConfigureAwait(false), "solutionOpen");
-        Add("containers.composeDebug", "Debug Compose Service…", async path => await shell.ComposeDebugAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted && !debugActive");
+        Add("containers.composeDebug", "Debug Compose", async path => await shell.ComposeDebugAsync(path).ConfigureAwait(false), "solutionOpen && solutionTrusted && !debugActive");
+
+        // One service of the compose app the IDE runs, the others left running (M63, ADR 0102); the argument is the service's name.
+        Add("containers.composeRestartService", "Restart Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Restart, service).ConfigureAwait(false), "solutionOpen && solutionTrusted");
+        Add("containers.composeStopService", "Stop Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Stop, service).ConfigureAwait(false), "solutionOpen");
+        Add("containers.composeDebugService", "Debug Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Debug, service).ConfigureAwait(false), "solutionOpen && solutionTrusted");
+        Add("containers.composeDetachService", "Detach Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Detach, service).ConfigureAwait(false), "solutionOpen && debugActive");
+        Add("containers.composeShowOverride", "Show the IDE's Compose Override", _ => shell.ShowComposeOverrideAsync(), "solutionOpen");
         commands.Register(new CommandDescriptor("aspire.show", "Aspire Resources", ContributionSource.Shell) { Category = "Aspire" }, async (_, _) =>
         {
             await Infrastructure.Ui.RunAsync(() => { shell.ShowAspire(); return Task.CompletedTask; }).ConfigureAwait(false);
@@ -90,6 +97,7 @@ internal static partial class BuiltIns
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeUp", "3-containers", 2, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDebug", "3-containers", 3, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(SolutionExplorerView.ContextMenuLocation, "containers.composeDown", "3-containers", 4, ComposeFileWhen + " || " + ComposeProjectWhen),
+            Item(SolutionExplorerView.ContextMenuLocation, "containers.composeShowOverride", "3-containers", 5, ComposeFileWhen + " || " + ComposeProjectWhen),
             Item(OtherWindowsMenu, "containers.show", "windows", AlphabeticalOrder("Containers")),
             Item(SolutionExplorerView.ContextMenuLocation, "project.publish", "3-containers", 0, "explorerItemKind == project && !(" + ComposeProjectWhen + ")"),
             Item(OtherWindowsMenu, "aspire.show", "windows", AlphabeticalOrder("Aspire Resources")),
