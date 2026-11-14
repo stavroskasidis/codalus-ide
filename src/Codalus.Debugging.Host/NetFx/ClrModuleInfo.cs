@@ -815,6 +815,58 @@ internal sealed class ClrModuleInfo : IDisposable
         return result;
     }
 
+    /// <summary>The portable PDB's async stepping information (<c>AsyncMethodSteppingInformationBlob</c>).</summary>
+    private static readonly Guid s_asyncSteppingInformation = new("54FD2AC5-E925-401A-9C2A-F94F171072F8");
+
+    /// <summary>
+    /// Where a state machine's <c>MoveNext</c> yields at each of its awaits (M61b): the IL offsets of the PDB's async
+    /// stepping information, in the order the compiler numbered the awaits, so a suspended state machine's state
+    /// (<c>&lt;&gt;1__state</c>, 0 and up) indexes them. Empty without a portable PDB, for a method an edit changed (its
+    /// awaits may be numbered anew) and for one without the information (an iterator).
+    /// </summary>
+    public IReadOnlyList<int> AsyncYieldOffsets(int moveNextToken)
+    {
+        lock (_sequencePoints)
+        {
+            if (Added(moveNextToken) is not null || _editedSymbols.ContainsKey(moveNextToken) || Pdb is not { } pdb
+                || MetadataTokens.GetRowNumber(MethodHandle(moveNextToken)) > pdb.MethodDebugInformation.Count)
+            {
+                return [];
+            }
+
+            try
+            {
+                foreach (var handle in pdb.GetCustomDebugInformation(MethodHandle(moveNextToken)))
+                {
+                    var information = pdb.GetCustomDebugInformation(handle);
+                    if (pdb.GetGuid(information.Kind) != s_asyncSteppingInformation)
+                    {
+                        continue;
+                    }
+
+                    // The catch handler's offset (plus one, 0 for none), then each await's yield and resume offsets and
+                    // the method it resumes in.
+                    var reader = pdb.GetBlobReader(information.Value);
+                    reader.ReadUInt32();
+                    var result = new List<int>();
+                    while (reader.RemainingBytes > 0)
+                    {
+                        result.Add((int)reader.ReadUInt32());
+                        reader.ReadUInt32();
+                        reader.ReadCompressedInteger();
+                    }
+
+                    return result;
+                }
+            }
+            catch (BadImageFormatException)
+            {
+            }
+
+            return [];
+        }
+    }
+
     public bool MethodHasAttribute(int methodToken, string attribute) =>
         Added(methodToken) is null && Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);
 
