@@ -62,7 +62,7 @@
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="MySqlConnector" Version="3.0.0" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0" />
     <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.154.0" />
   </ItemGroup>
   <ItemGroup Label="Installers and self-update (M31, M32; keep in step with the vpk version in eng/package.sh)">
