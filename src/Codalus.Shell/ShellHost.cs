@@ -175,6 +175,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeWebTools();
         InitializeData();
         InitializeContainers();
+        InitializeCompose();
         InitializeAspire();
         InitializeProfiling();
         InitializeXaml();

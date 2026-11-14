@@ -1,0 +1,22 @@
+# Two .NET services and one that isn't (M63): the front calls the back by its service name.
+services:
+  front:
+    build:
+      context: .
+      dockerfile: Front/Dockerfile
+    environment:
+      - BACK_URL=http://back:8080
+    ports:
+      - "127.0.0.1::8080"
+    depends_on:
+      - back
+  back:
+    build:
+      context: .
+      dockerfile: Back/Dockerfile
+    ports:
+      - "127.0.0.1::8080"
+  # Not .NET: it runs as written here (an image of mcr.microsoft.com/dotnet, so the tests pull nothing else).
+  idle:
+    image: mcr.microsoft.com/dotnet/runtime-deps:10.0
+    command: ["sleep", "infinity"]

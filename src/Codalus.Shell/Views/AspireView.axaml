@@ -12,6 +12,7 @@
       <Button Classes="toolbar icon" controls:ButtonIcon.Kind="play" x:Name="Start" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.startTheSelectedResource}" ToolTip.Tip="{l:T aspire.start}" />
       <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" x:Name="Stop" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.stopTheSelectedResource}" ToolTip.Tip="{l:T aspire.stop}" />
       <Button Classes="toolbar icon" controls:ButtonIcon.Kind="restart" x:Name="Restart" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.restartTheSelectedResource}" ToolTip.Tip="{l:T aspire.restart}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="debug" x:Name="Debug" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.debugTheSelectedResource}" ToolTip.Tip="{l:T aspire.debug}" />
       <Button Classes="toolbar icon" controls:ButtonIcon.Kind="globe" x:Name="Browse" IsEnabled="{Binding HasSelection}" AutomationProperties.Name="{l:T aspire.openTheSelectedResourceSEndpoint}" ToolTip.Tip="{l:T aspire.openEndpoint}" />
     </controls:ToolbarPanel>
     <TextBlock DockPanel.Dock="Top" Classes="muted" Margin="12,4" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />

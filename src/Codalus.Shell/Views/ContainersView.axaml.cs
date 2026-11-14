@@ -23,6 +23,7 @@ public sealed partial class ContainersView : UserControl, IPaneView
         Terminal.Click += (_, _) => _ = Vm()?.OpenTerminalAsync();
         Attach.Click += (_, _) => _ = Vm()?.AttachAsync();
         RemoteWindow.Click += (_, _) => _ = Vm()?.OpenRemoteWindowAsync();
+        ComposeOverride.Click += (_, _) => _ = Vm()?.ShowComposeOverrideAsync();
         RemoveImage.Click += (_, _) => _ = Vm()?.RemoveImageAsync();
         PathBox.KeyDown += (_, e) =>
         {
