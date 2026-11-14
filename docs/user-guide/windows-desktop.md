@@ -25,7 +25,7 @@ A project, or an `EnableWindowsTargeting` environment variable you set yourself,
 WPF and Windows Forms apps on modern .NET run on CoreCLR, so they take the same paths as other .NET apps (see [Building and running](build-and-run.md) and [Debugging](debugging.md)):
 - **Start Without Debugging** (`Ctrl+F5`) builds the app and starts it; its window opens on the desktop.
 - **Start** (`F5`) debugs it with breakpoints, stepping, locals and the other debugger windows.
-- **Hot Reload** runs it under `dotnet watch`: C# changes apply when you save (or **Apply Code Changes**, `Alt+F10`). A WPF app started with `Ctrl+F5` or `F5` takes saved XAML changes through [XAML Hot Reload](#xaml-hot-reload-and-failed-bindings-for-wpf-apps).
+- **Hot Reload** runs it under `dotnet watch`: C# changes apply when you save (or **Apply Code Changes**, `Alt+F10`). A WPF app started with `Ctrl+F5` or `F5` takes saved XAML changes through [XAML Hot Reload](#xaml-hot-reload-failed-bindings-and-xaml-breakpoints-for-wpf-apps).
 - **Tests** in `net*-windows` test projects (xUnit, NUnit, MSTest) show in the Test Explorer and run there.
 
 On Linux and macOS, Start, Start Without Debugging and the Performance Profiler say that the app runs only on Windows, and build nothing. The Test Explorer shows these projects' tests from their source and says on the project that they run only on Windows.
@@ -89,11 +89,15 @@ On Windows, run or debug a WPF app (`Ctrl+F5` or `F5`) and open Debug → Window
 
 Running or debugging a WPF app loads a small agent into it (a .NET startup hook). It connects only to this IDE, on this machine, and your app needs no package or code for it. It needs .NET 8 or later. To turn it off, set **Live Visual Tree for Avalonia and WPF apps** off (Settings → Debugging, `debug.liveVisualTree`). While the app is paused in the debugger, the tree can't refresh.
 
-## XAML Hot Reload and failed bindings for WPF apps
+## XAML Hot Reload, failed bindings and XAML breakpoints for WPF apps
 
 On Windows, with a WPF app running from the IDE (`Ctrl+F5` or `F5`) and its agent:
 - **Saving** a `.xaml` file loads it again into each window or user control of its `x:Class` on screen, as [for Avalonia](avalonia.md#xaml-hot-reload): the data context and what XAML doesn't set stay; named fields and the event handlers the XAML names are connected again. An edit the running app can't take (a changed `x:Class`, a handler or type it doesn't have, XAML that doesn't parse) is an Error List error at its line, with **Restart** offered. **XAML Hot Reload** (Settings → Debugging, `debug.xamlHotReload`) turns it off.
 - **A binding that fails** (WPF's binding errors, `BindingExpression path error…`) is an Error List warning (source **Binding**) at the attribute that declares it: the property's binding with that path, on an element of that type and name.
+
+- **XAML breakpoints** (while debugging, `F5`; [as for Avalonia](avalonia.md#xaml-breakpoints)): a breakpoint on an element's start tag in a `.xaml` file stops the app when the element **joins the visual tree** (WPF tells nothing earlier: XAML has set its properties by then; an element that never shows doesn't stop). One on an attribute's line stops when its **binding or dynamic resource** sets the property; a plain value can't be stopped at (its tooltip says so). The stop shows the XAML line. They need a Debug build: WPF's line information comes from its BAML, and the IDE turns on WPF's XAML diagnostics (`ENABLE_XAML_DIAGNOSTICS_SOURCE_INFO`) for the app.
+- **Break When Value Changes** on a property's context menu in the Live Property Explorer, and **Break when a binding fails** (`debug.breakOnFailedBinding`), as for Avalonia.
+- **Styles** in the Live Property Explorer: the element's style (its `Style` or the implicit one of its type) and the styles it's based on, with their setters (those a local value, a template or a trigger overrides marked) and their triggers: a property trigger with the condition that's false now and the element's value, a data trigger by whether its setters are in effect.
 
 These run only on Windows, like the app, and are checked by the Windows test runs.
 

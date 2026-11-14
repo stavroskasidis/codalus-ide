@@ -8,6 +8,7 @@ using Avalonia.Media.Immutable;
 using AvaloniaEdit.Rendering;
 using Codalus.Debugging;
 using Codalus.Workbench.Debugging;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Editor;
 
@@ -139,8 +140,16 @@ internal static class ExceptionHelper
         var message = details?.Message ?? info?.Description ?? stop.Description ?? string.Empty;
         var unhandled = info?.BreakMode is "unhandled" or "userUnhandled";
 
+        // A failed binding (M64b) stops as an exception would: its own title and check box (debug.breakOnFailedBinding).
+        var binding = info?.ExceptionId == ShellHost.BindingFailureExceptionId;
+
         var panel = new StackPanel { Spacing = 6, MaxWidth = 560 };
-        panel.Children.Add(new TextBlock { Text = unhandled ? "Exception User-Unhandled" : "Exception Thrown", FontWeight = FontWeight.Bold, FontSize = 14 });
+        panel.Children.Add(new TextBlock
+        {
+            Text = binding ? Localizer.Get("exceptionHelper.bindingFailed", "Binding Failed") : unhandled ? "Exception User-Unhandled" : "Exception Thrown",
+            FontWeight = FontWeight.Bold,
+            FontSize = 14,
+        });
         panel.Children.Add(new SelectableTextBlock { Text = type, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (message.Length > 0)
         {
@@ -162,10 +171,20 @@ internal static class ExceptionHelper
             }
         }
 
-        var breakWhenThrown = new CheckBox { Content = "Break when this exception type is thrown", IsChecked = settings.Breaks(type) };
-        breakWhenThrown.IsCheckedChanged += (_, _) => services.SetBreakOnException(type, breakWhenThrown.IsChecked == true);
-        AutomationPropertiesName(breakWhenThrown, "Break when this exception type is thrown");
-        panel.Children.Add(breakWhenThrown);
+        if (binding)
+        {
+            var breakWhenFails = new CheckBox { Content = Localizer.Get("exceptionHelper.breakWhenBindingFails", "Break when a binding fails"), IsChecked = services.BreakOnFailedBinding };
+            breakWhenFails.IsCheckedChanged += (_, _) => services.BreakOnFailedBinding = breakWhenFails.IsChecked == true;
+            AutomationPropertiesName(breakWhenFails, Localizer.Get("exceptionHelper.breakWhenBindingFails", "Break when a binding fails"));
+            panel.Children.Add(breakWhenFails);
+        }
+        else
+        {
+            var breakWhenThrown = new CheckBox { Content = "Break when this exception type is thrown", IsChecked = settings.Breaks(type) };
+            breakWhenThrown.IsCheckedChanged += (_, _) => services.SetBreakOnException(type, breakWhenThrown.IsChecked == true);
+            AutomationPropertiesName(breakWhenThrown, "Break when this exception type is thrown");
+            panel.Children.Add(breakWhenThrown);
+        }
 
         var viewDetails = new Button { Content = "View Details" };
         viewDetails.Click += (_, _) =>

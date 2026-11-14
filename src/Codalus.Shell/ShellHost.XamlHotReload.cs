@@ -202,7 +202,7 @@ public sealed partial class ShellHost
                 compiled = properties.GetValueOrDefault("AvaloniaUseCompiledBindingsByDefault")?.Equals("true", StringComparison.OrdinalIgnoreCase) == true;
             }
 
-            var result = await session.ReloadAsync(loader, assembly, uri, compiled, xaml, CancellationToken.None).ConfigureAwait(true);
+            var result = await session.ReloadAsync(loader, assembly, uri, compiled, xaml, CancellationToken.None, path).ConfigureAwait(true);
             return Report(path, result);
         }
         catch (Exception ex) when (ex is PreviewerException or IOException or UnauthorizedAccessException)

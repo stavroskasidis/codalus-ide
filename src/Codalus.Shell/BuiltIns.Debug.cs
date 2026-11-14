@@ -77,6 +77,13 @@ internal static partial class BuiltIns
             Description = "A saved .axaml or .xaml file is loaded again into the running Avalonia app (or WPF app on Windows) that has the live agent: each window or user control of its x:Class on screen changes in place. An edit it can't apply is an Error List row with an offer to restart.",
             Order = 31,
         },
+        SettingDescriptor.Create(ShellHost.BreakOnFailedBindingSetting, "false", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Break when a binding fails",
+            Category = "Debugging",
+            Description = "A binding that fails in the Avalonia app (or WPF app on Windows) being debugged stops it, as a thrown exception does, at the binding's XAML.",
+            Order = 32,
+        },
         SettingDescriptor.Create(ShellHost.JustMyCodeSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
         {
             Title = "Just My Code",

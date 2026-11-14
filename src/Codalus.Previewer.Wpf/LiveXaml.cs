@@ -80,6 +80,9 @@ internal sealed partial class WpfBindings : TraceListener
         }
 
         Tell(send);
+
+        // With debug.breakOnFailedBinding (M64b): the debugger stops here.
+        WpfBreak.OnBindingFailure(failure);
     }
 
     [GeneratedRegex(@"BindingExpression:Path=(?<path>[^;]*);.*?target element is '(?<type>[^']+)' \(Name='(?<name>[^']*)'\); target property is '(?<property>[^']+)'", RegexOptions.CultureInvariant | RegexOptions.Singleline)]

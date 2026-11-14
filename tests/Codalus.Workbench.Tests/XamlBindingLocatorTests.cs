@@ -42,6 +42,19 @@ public sealed class XamlBindingLocatorTests
         Assert.Null(XamlBindingLocator.Find(new LiveBindingFailure("Foreground", "Missing", "m", "TextBlock", string.Empty, []), s_files));
     }
 
+    [Fact]
+    public void A_stop_at_a_failed_binding_finds_the_attribute_on_the_element_the_app_names()
+    {
+        // M64b: the element's own line and column (Avalonia's source information): its attribute, at the path.
+        Assert.Equal(new XamlBindingLocation("/w.axaml", 4, 61), XamlBindingLocator.FindAtElement("/w.axaml", Window, 5, 6, "Text"));
+        Assert.Equal(3, XamlBindingLocator.FindAtElement("/w.axaml", Window, 4, 6, "Text")!.Line);
+
+        // An attribute that isn't a binding is found at its name; one the element doesn't have, not at all.
+        Assert.Equal(new XamlBindingLocation("/w.axaml", 4, 15), XamlBindingLocator.FindAtElement("/w.axaml", Window, 5, 6, "Name"));
+        Assert.Null(XamlBindingLocator.FindAtElement("/w.axaml", Window, 5, 6, "Foreground"));
+        Assert.Null(XamlBindingLocator.FindAtElement("/w.axaml", Window, 40, 1, "Text"));
+    }
+
     [Theory]
     [InlineData("{Binding Count}", "Count", 9)]
     [InlineData("{Binding Path=Items[0].Title, Mode=OneWay}", "Items[0].Title", 14)]

@@ -52,6 +52,8 @@ Run or debug an Avalonia app (`Ctrl+F5` or `F5`) and open Debug → Windows → 
 - Each value shows where it comes from: **Local** (set on the element, in bold), **Style**, **Style trigger**, **Template**, **Inherited**, **Animation** or **Default**.
 - Type a new value and leave the cell to set it in the running app, written as in XAML (`8,4`, `Red`, `#FF336699`, `Center`). It isn't written back to your XAML; change the XAML to keep it.
 
+**Break When Value Changes**, on a property's context menu, stops the debugged app when it changes, and **Styles** says why each style applies or doesn't: see [XAML breakpoints](#xaml-breakpoints) and [Why a style applies](#why-a-style-applies-or-doesnt).
+
 How it works: running or debugging an Avalonia app loads a small agent into it (a .NET startup hook, `DOTNET_STARTUP_HOOKS`). It connects only to this IDE, on this machine. Your app needs no package or code for it. To turn it off, set **Live Visual Tree for Avalonia and WPF apps** off (Settings → Debugging, `debug.liveVisualTree`); XAML Hot Reload and failed bindings, below, go with it. A window without an adorner layer (a custom window without `AdornerDecorator`) shows no highlight, but its tree and properties still work.
 
 ## XAML Hot Reload
@@ -71,7 +73,35 @@ A binding that fails in the running app (a path the data context doesn't have, a
 
 The agent reads Avalonia's log: it works when your app logs with Avalonia's own sinks (`LogToTrace`, as the templates do, `LogToTextWriter`, `LogToDelegate`) at warnings or below, or doesn't log at all. A log sink of your own class hides them. Compiled bindings (`x:DataType`) catch most mistakes at build time; these rows catch the rest.
 
-Not yet: breaking the debugger at a failed binding, XAML breakpoints, binding values drawn after XAML lines while stopped, and the Live Property Explorer explaining why a style applies.
+To stop the debugger at a failed binding instead, as at a thrown exception, turn on **Break when a binding fails** (Settings → Debugging, `debug.breakOnFailedBinding`, off by default): see [XAML breakpoints](#xaml-breakpoints) below.
+
+## XAML breakpoints
+
+While you debug an Avalonia app (`F5`), a breakpoint in an `.axaml` file's margin stops the app at its XAML, as a breakpoint stops C# at its line:
+- **On an element's start tag** (the line where `<Button` begins): it stops when the element is **created**, before XAML sets its properties. An element of a data template's line stops for each item.
+- **On an attribute's line** (an attribute on a line of its own, `Text="{Binding Count}"`, or a property element such as `<ListBox.ItemTemplate>`): it stops when XAML **sets that property** on the element; for a binding or a dynamic resource, at each value it sets afterwards too.
+- **The stop** shows the XAML line as the current statement, with a frame for it on top of the Call Stack and your app's frames under it (Avalonia's, the window's `InitializeComponent`, your code). Its Locals are `element`, the element, and `stop`, what stopped. Continue, step or stop as at any breakpoint.
+- **Break When Value Changes**: right-click a property in the **Live Property Explorer**. The app stops when that property of that element changes, wherever from, at the code that changed it (a red dot marks the property while it's on).
+- **Break when a binding fails** (`debug.breakOnFailedBinding`): the app stops at each new failed binding, at the binding's XAML, with the exception helper saying **Binding Failed** and why; its check box turns the setting off.
+
+What they need, and what they don't do:
+- A **Debug build** on **Avalonia 12** or later: its XAML compiler gives each element its file and line at run time (`AvaloniaXamlCreateSourceInfo`, on in Debug builds). Without it, the breakpoints are hollow and their tooltip says why.
+- The live agent (`debug.liveVisualTree`, on by default) and the Codalus debugger (the default `debug.adapter`).
+- A breakpoint on an event (`Click=`), a directive (`x:Key`) or a design-time attribute can't stop: nothing sets a property there. An object that isn't an Avalonia object (a `Setter`) doesn't stop either.
+- Conditions, hit counts, filters, logpoints and dependencies aren't applied to XAML breakpoints: they stop at every hit.
+- XAML Hot Reload keeps the breakpoints working on the elements it reloads.
+
+## Why a style applies, or doesn't
+
+The **Live Property Explorer**'s **Styles**, under the properties, lists for the selected element its control theme, the theme's styles for it, and each style of its scope that targets its type (its own, its window's, the application's and the files they include):
+- ✓ **Applies**, ◌ **Inactive now** (its type matches, a class or pseudo-class doesn't, as `:pointerover` while the pointer is away), ✗ **Doesn't apply**.
+- For one that doesn't, **the part of its selector that fails and why**: `'.task': it has no class task (its classes: title)`, `'StackPanel >': its parent is a DockPanel`, `'#Save': its name is IncrementButton`.
+- Its **setters**, and for one that applies, those a local value or an animation overrides: `FontSize = 20 (overridden: Local)`.
+- **Go to** its XAML (a Debug build's styles know their line).
+
+Whether a style applies is Avalonia's own answer; the failing part is read from the selector against the element as it is now (`:nth-child()` isn't checked).
+
+Not yet: binding values drawn after XAML lines while stopped.
 
 ## New Avalonia projects
 

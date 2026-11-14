@@ -34,12 +34,15 @@ namespace Codalus.Previewer.Wpf;
 /// <item><c>bindings</c> → the bindings that failed since the last request (M64, <see cref="WpfBindings"/>)</item>
 /// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="WpfReload"/>; the
 /// loader, assembly, URI and compiled arguments are Avalonia's and unused here)</item>
+/// <item><c>xbreaks [base64]</c>, <c>watch id property on|off</c>, <c>styles id</c> → XAML breakpoints, Break When Value
+/// Changes and the style explanation (M64b, <see cref="WpfBreak"/>, <see cref="WpfStyles"/>)</item>
 /// </list>
 /// </summary>
 internal sealed class LiveAgent(Action<string> send)
 {
     private readonly ConditionalWeakTable<DependencyObject, object> _ids = new();
     private readonly Dictionary<int, WeakReference<DependencyObject>> _elements = [];
+    private readonly Dictionary<string, Action> _watches = new(StringComparer.Ordinal);
     private int _next;
     private HighlightAdorner? _adorner;
     private bool _picking;
@@ -52,6 +55,12 @@ internal sealed class LiveAgent(Action<string> send)
         if (command == "ping")
         {
             return "pong";
+        }
+
+        if (command == "xbreaks")
+        {
+            // XAML breakpoints (M64b): the agent's own list, before the app has its Application too.
+            return WpfBreak.Set(Arg(2));
         }
 
         // Application.Current is set once the app's own Application exists (its constructor, on its UI thread);
@@ -68,6 +77,8 @@ internal sealed class LiveAgent(Action<string> send)
             "path" => Path(Element(Arg(2))),
             "bindings" => WpfBindings.Take(),
             "reload" => WpfReload.Reload(application, WpfReload.Decode(Arg(6))),
+            "watch" => Watch(Element(Arg(2)), Arg(3), Arg(4) == "on"),
+            "styles" => WpfStyles.Explain(Element(Arg(2))),
             _ => throw new InvalidOperationException("Unknown command " + command),
         }, DispatcherPriority.Loaded);
     }
@@ -258,6 +269,24 @@ internal sealed class LiveAgent(Action<string> send)
         }
 
         return Convert.ChangeType(text, Nullable.GetUnderlyingType(type) ?? type, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>Break When Value Changes (M64b) on the element's dependency property, or off.</summary>
+    private string Watch(DependencyObject element, string name, bool on)
+    {
+        var key = Text(IdOf(element)) + WpfTree.Field + name;
+        if (_watches.Remove(key, out var stop))
+        {
+            stop();
+        }
+
+        if (on)
+        {
+            var (property, _) = PropertiesOf(element).FirstOrDefault(p => p.Name == name);
+            _watches[key] = WpfBreak.ValueWatch(element, property ?? throw new InvalidOperationException("No property " + name + "."), name);
+        }
+
+        return "ok";
     }
 
     // ------------------------------------------------------------------ highlight, pick, path

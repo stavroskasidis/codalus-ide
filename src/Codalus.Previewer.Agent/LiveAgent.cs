@@ -27,8 +27,13 @@ namespace Codalus.Previewer.Agent;
 /// joined by <c>/</c>), which the IDE resolves to a line of the window's XAML</item>
 /// <item><c>bindings</c> → the bindings that failed since the last request (M64, <see cref="LiveBindings"/>): property,
 /// path, message, element type, element name, its ancestors' classes; <c>event bindings</c> says new ones came</item>
-/// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="LiveReload"/>):
+/// <item><c>reload loader assembly uri compiled base64 [path]</c> → XAML Hot Reload (M64, <see cref="LiveReload"/>):
 /// <c>applied count</c>, <c>failed line column message</c> or <c>none</c></item>
+/// <item><c>xbreaks [base64]</c> → XAML breakpoints (M64b, <see cref="LiveBreak"/>): the IDE's list replaces the last;
+/// id, 1 or 0, why not per breakpoint (without a list: the states again); <c>event xbreaks</c> says they changed,
+/// <c>event xstop …</c> comes just before a stop</item>
+/// <item><c>watch id property on|off</c> → <c>ok</c>: Break When Value Changes on the element's property</item>
+/// <item><c>styles id</c> → why each style applies to the element or doesn't (M64b, <see cref="LiveStyles"/>)</item>
 /// </list>
 /// </summary>
 internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? roots = null)
@@ -45,6 +50,7 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
     private readonly ConditionalWeakTable<object, object> _ids = new();
     private readonly Dictionary<int, WeakReference> _elements = [];
     private readonly HashSet<object> _hooked = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<string, PropertyWatch> _watches = new(StringComparer.Ordinal);
     private int _next;
     private object? _adorner;
     private object? _adornerLayer;
@@ -55,6 +61,12 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
     {
         var command = request[1];
         string Arg(int index) => request.Length > index ? request[index] : string.Empty;
+        if (command == "xbreaks")
+        {
+            // Not on the UI thread: the list is the agent's, and the app may not have started Avalonia yet.
+            return Arg(2).Length > 0 ? LiveBreak.Set(Arg(2)) : LiveBreak.States();
+        }
+
         if (command != "ping")
         {
             EnsureStarted();
@@ -71,7 +83,9 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
             "pick" => OnUiThread(() => Pick(Arg(2) == "on")),
             "path" => OnUiThread(() => Path(Element(Arg(2)))),
             "bindings" => OnUiThread(() => LiveBindings.Take(OpenWindows())),
-            "reload" => OnUiThread(() => LiveReload.Reload(OpenWindows(), Arg(2), Arg(3), Arg(4), Arg(5) == "1", LiveReload.Decode(Arg(6))), ReloadTimeout),
+            "reload" => OnUiThread(() => LiveReload.Reload(OpenWindows(), Arg(2), Arg(3), Arg(4), Arg(5) == "1", LiveReload.Decode(Arg(6)), Arg(7)), ReloadTimeout),
+            "watch" => OnUiThread(() => WatchValue(Element(Arg(2)), Arg(3), Arg(4) == "on")),
+            "styles" => OnUiThread(() => LiveStyles.Explain(Element(Arg(2)))),
             _ => throw new InvalidOperationException("Unknown command " + command),
         };
     }
@@ -137,6 +151,55 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
 
     /// <summary>The app's windows (its desktop lifetime's), or its main view; tests pass their own.</summary>
     private List<object> OpenWindows() => roots is null ? LifetimeWindows() : [.. roots()];
+
+    /// <summary>The app's windows (on its UI thread), for the agent's other parts.</summary>
+    internal static List<object> LifetimeWindowsList() => LifetimeWindows();
+
+    /// <summary>How many windows the app has open (any thread: a count, nothing of the windows is touched).</summary>
+    internal static int LifetimeWindowCount()
+    {
+        var application = AvaloniaType("Avalonia.Application").GetProperty("Current", Static)?.GetValue(null);
+        return application is not null && Property(application, "ApplicationLifetime") is { } lifetime && Property(lifetime, "Windows") is ICollection windows
+            ? windows.Count
+            : 0;
+    }
+
+    /// <summary>Whether this is Avalonia's UI thread, once the app has started Avalonia (before that: no).</summary>
+    internal static bool OnAvaloniaUiThread()
+    {
+        if (AvaloniaType("Avalonia.Application").GetProperty("Current", Static)?.GetValue(null) is null)
+        {
+            return false;
+        }
+
+        var dispatcher = AvaloniaType("Avalonia.Threading.Dispatcher").GetProperty("UIThread", Static)?.GetValue(null);
+        return dispatcher?.GetType().GetMethod("CheckAccess", Type.EmptyTypes)?.Invoke(dispatcher, null) is true;
+    }
+
+    /// <summary>Break When Value Changes (M64b): watches the element's property, or stops watching it.</summary>
+    private string WatchValue(object element, string name, bool on)
+    {
+        var key = IdOf(element).ToString(CultureInfo.InvariantCulture) + Field + name;
+        if (_watches.TryGetValue(key, out var existing))
+        {
+            existing.Stop();
+            _watches.Remove(key);
+        }
+
+        if (on)
+        {
+            if (!PropertiesOf(element).Any(p => p.Name == name))
+            {
+                throw new InvalidOperationException("No property " + name + ".");
+            }
+
+            var watch = LiveBreak.ValueWatch(element, name);
+            LiveBreak.Watch(element, watch);
+            _watches[key] = watch;
+        }
+
+        return "ok";
+    }
 
     private static List<object> LifetimeWindows()
     {
@@ -207,7 +270,7 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
     // ------------------------------------------------------------------ properties
 
     /// <summary>The element's Avalonia properties: its type's, and the attached ones that have a value on it.</summary>
-    private static IEnumerable<(object Property, string Name)> PropertiesOf(object element)
+    internal static IEnumerable<(object Property, string Name)> PropertiesOf(object element)
     {
         var registryType = AvaloniaType("Avalonia.AvaloniaPropertyRegistry");
         var registry = registryType.GetProperty("Instance", Static)!.GetValue(null)!;
@@ -238,7 +301,7 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
         element.GetType().GetMethods(Instance).FirstOrDefault(m => m.Name == "IsSet" && !m.IsGenericMethod && m.GetParameters().Length == 1)
             ?.Invoke(element, [property]) is true;
 
-    private static object? GetValue(object element, object property) =>
+    internal static object? GetValue(object element, object property) =>
         element.GetType().GetMethods(Instance)
             .First(m => m.Name == "GetValue" && !m.IsGenericMethod && Takes(m, "AvaloniaProperty"))
             .Invoke(element, [property]);
@@ -246,7 +309,7 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
     private static MethodInfo? s_getDiagnostic;
 
     /// <summary>Where the value comes from: local, style, style trigger, template, inherited, animation or default.</summary>
-    private static string Source(object element, object property)
+    internal static string Source(object element, object property)
     {
         s_getDiagnostic ??= AvaloniaType("Avalonia.AvaloniaObject").Assembly.GetTypes()
             .Where(t => t.IsAbstract && t.IsSealed && t.Namespace == "Avalonia.Diagnostics")

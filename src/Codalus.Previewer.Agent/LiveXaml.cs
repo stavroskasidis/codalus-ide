@@ -181,6 +181,9 @@ internal static class LiveBindings
         }
 
         Tell(send);
+
+        // With debug.breakOnFailedBinding (M64b): the debugger stops here, at the binding's XAML.
+        LiveBreak.OnBindingFailure(failure);
     }
 
     /// <summary>Says <c>event bindings</c>; a connection that has ended doesn't reach the app's logging.</summary>
@@ -267,6 +270,9 @@ internal static class LiveBindings
     private static string Clean(string text) =>
         (text ?? string.Empty).Replace(LiveAgent.Record, ' ').Replace(LiveAgent.Field, ' ').Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
+    /// <summary>The classes the element sits in, nearest first (for a stop at a failed binding).</summary>
+    internal static IEnumerable<string> AncestorsOf(object element) => Ancestors(element);
+
     /// <summary>The classes the element sits in, nearest first: templated parents, then logical or visual parents.</summary>
     private static IEnumerable<string> Ancestors(object element)
     {
@@ -335,7 +341,7 @@ internal static class LiveReload
     /// <c>applied count</c>, or <c>failed line column message</c> (line and column 0 when unknown); <c>none</c> when the
     /// file has no <c>x:Class</c> (a styles or resource dictionary file, which a restart applies).
     /// </summary>
-    public static string Reload(IEnumerable<object> roots, string loaderPath, string assemblyName, string uri, bool compiledBindings, string xaml)
+    public static string Reload(IEnumerable<object> roots, string loaderPath, string assemblyName, string uri, bool compiledBindings, string xaml, string? path = null)
     {
         var className = s_class.Match(xaml) is { Success: true } match ? match.Groups["name"].Value.Trim() : null;
         if (className is null)
@@ -364,7 +370,7 @@ internal static class LiveReload
         var count = 0;
         foreach (var instance in instances)
         {
-            var failure = Populate(load, instance, local, uri, compiledBindings, xaml);
+            var failure = Populate(load, instance, local, uri, compiledBindings, xaml, path);
             if (failure is not null)
             {
                 return failure;
@@ -428,7 +434,7 @@ internal static class LiveReload
     }
 
     /// <summary>Loads the XAML into one instance; null when it applied, else the failure (the instance put back as it was).</summary>
-    private static string? Populate(MethodInfo load, object instance, Assembly local, string uri, bool compiledBindings, string xaml)
+    private static string? Populate(MethodInfo load, object instance, Assembly local, string uri, bool compiledBindings, string xaml, string? path)
     {
         var restore = new List<Action>();
         try
@@ -463,6 +469,13 @@ internal static class LiveReload
             configuration.GetType().GetProperty("UseCompiledBindingsByDefault")?.SetValue(configuration, compiledBindings);
             configuration.GetType().GetProperty("DesignMode")?.SetValue(configuration, false);
             var document = Activator.CreateInstance(load.GetParameters()[0].ParameterType, [new Uri(uri), instance, xaml])!;
+            if (path is { Length: > 0 } && path != "-" && configuration.GetType().GetProperty("CreateSourceInfo") is { CanWrite: true } sourceInfo)
+            {
+                // The reloaded elements keep their file and lines (Avalonia 12): XAML breakpoints still stop at them (M64b).
+                sourceInfo.SetValue(configuration, true);
+                document.GetType().GetProperty("Document")?.SetValue(document, path);
+            }
+
             load.Invoke(null, [document, configuration]);
 
             // The named fields (Avalonia's name generator's, or the class's own): the new elements.

@@ -64,6 +64,44 @@ public static partial class XamlBindingLocator
         return null;
     }
 
+    /// <summary>
+    /// The attribute of <paramref name="property"/> on the element whose name starts at the 1-based line and column
+    /// (Avalonia's source information for the element, M64b): its binding's path, else the attribute; null when the
+    /// element's start tag has no such attribute.
+    /// </summary>
+    public static XamlBindingLocation? FindAtElement(string path, string text, int line, int column, string property)
+    {
+        var offset = 0;
+        for (var current = 1; current < line && offset >= 0; current++)
+        {
+            offset = text.IndexOf('\n', offset) is var next and >= 0 ? next + 1 : -1;
+        }
+
+        if (offset < 0 || offset + column - 1 > text.Length)
+        {
+            return null;
+        }
+
+        var start = offset + Math.Max(0, column - 1);
+        var end = text.IndexOf('>', start);
+        var tag = text[start..(end < 0 ? text.Length : end)];
+        foreach (Match attribute in AttributeRegex().Matches(tag))
+        {
+            var name = attribute.Groups["name"].Value;
+            if (name[(name.IndexOf(':', StringComparison.Ordinal) + 1)..] != property)
+            {
+                continue;
+            }
+
+            var at = start + (BindingPath(attribute.Groups["value"].Value) is { } binding ? attribute.Groups["value"].Index + binding.Offset : attribute.Index);
+            var lineNumber = text.AsSpan(0, at).Count('\n');
+            var lineStart = at == 0 ? 0 : text.LastIndexOf('\n', at - 1) + 1;
+            return new XamlBindingLocation(path, lineNumber, at - lineStart);
+        }
+
+        return null;
+    }
+
     /// <summary>How near the file's <c>x:Class</c> is to the element: its index among the ancestors, else after them all.</summary>
     private static int Rank(string text, IReadOnlyList<string> ancestors)
     {
