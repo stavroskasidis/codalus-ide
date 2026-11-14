@@ -310,7 +310,7 @@ The Codalus debugger steps through `async` methods as you read them, whether the
 - Libraries built either way await each other: breakpoints and steps work across them.
 
 What runtime async doesn't give the debugger yet (reported to the .NET runtime; until it ships):
-- **Step Out of a runtime-async method that has resumed** (and a step over its closing brace) stops in the method that awaited it only where that method next calls code of yours, and without the returned value; when it calls none, the program runs on as with Continue. The same holds for a state machine awaited by runtime-async code.
+- **Step Out of a runtime-async method that has resumed** (and a step over its closing brace) stops in the method that awaited it only where that method next calls code of yours, and without the returned value; when it calls none, or resumes on another thread, the program runs on as with Continue. The same holds for a state machine awaited by runtime-async code.
 - **The awaiting methods** aren't in the call stack once a method has resumed, for either kind (the classic IDE's async call stack): only what resumed it is.
 - A step over an `await` in a **static** runtime-async method can stop in another call of the same method, on another thread, when that one reaches one of its lines first.
 

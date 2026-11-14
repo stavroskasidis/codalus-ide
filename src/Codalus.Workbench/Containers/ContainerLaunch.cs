@@ -169,7 +169,16 @@ public sealed record ContainerLaunch(
     /// manifest with the container's paths, is written beside it (in the mounted output) for
     /// <see cref="StaticWebAssetsVariable"/>. Null without a manifest (not a web app, or no static web assets).
     /// </summary>
-    internal static (string Manifest, IReadOnlyList<string> Mounts)? ContainerStaticWebAssets(string output, string program, Func<string, string> hostPath)
+    internal static (string Manifest, IReadOnlyList<string> Mounts)? ContainerStaticWebAssets(string output, string program, Func<string, string> hostPath) =>
+        StaticWebAssetMounts(output, program) is { } assets
+            ? (assets.Manifest, [.. assets.Mounts.Select(m => hostPath(m.Source) + ":" + m.Target + ":ro")])
+            : null;
+
+    /// <summary>
+    /// <see cref="ContainerStaticWebAssets"/> with each read-only mount as this machine's folder and the container's
+    /// path (a compose override writes them in the long syntax, M63).
+    /// </summary>
+    internal static (string Manifest, IReadOnlyList<(string Source, string Target)> Mounts)? StaticWebAssetMounts(string output, string program)
     {
         var name = Path.GetFileNameWithoutExtension(program);
         var manifest = Path.Combine(output, name + ".staticwebassets.runtime.json");
@@ -181,7 +190,7 @@ public sealed record ContainerLaunch(
             }
 
             var outputFolder = Path.TrimEndingDirectorySeparator(Path.GetFullPath(output));
-            var mounts = new List<string>();
+            var mounts = new List<(string Source, string Target)>();
             for (var i = 0; i < roots.Count; i++)
             {
                 if (roots[i] is not JsonValue value || value.GetValueKind() != JsonValueKind.String)
@@ -206,7 +215,7 @@ public sealed record ContainerLaunch(
                     target = string.Create(CultureInfo.InvariantCulture, $"{StaticWebAssetsFolder}/{i}/");
                     if (Directory.Exists(folder))
                     {
-                        mounts.Add(hostPath(folder) + ":" + target.TrimEnd('/') + ":ro");
+                        mounts.Add((folder, target.TrimEnd('/')));
                     }
                 }
 

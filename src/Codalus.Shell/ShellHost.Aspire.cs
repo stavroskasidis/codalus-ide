@@ -42,6 +42,9 @@ public sealed partial class ShellHost
 
         public bool OpenDashboard { get; init; }
 
+        /// <summary>The projects the IDE runs for it without the debugger, by project path (the Aspire window's Debug attaches to one).</summary>
+        public System.Collections.Concurrent.ConcurrentDictionary<string, RunningProgram> Programs { get; } = new(StringComparer.OrdinalIgnoreCase);
+
         public async ValueTask DisposeAsync()
         {
             await Lifetime.CancelAsync().ConfigureAwait(false);
@@ -53,7 +56,7 @@ public sealed partial class ShellHost
 
     private void InitializeAspire()
     {
-        AspireWindow = new AspireViewModel(uri => OpenExternalUrl(uri));
+        AspireWindow = new AspireViewModel(uri => OpenExternalUrl(uri), DebugAspireResourceAsync);
         Debugger.Output += (_, output) => OnAspireLine(output.Text, fromDebugger: true);
         Debugger.Ended += (_, _) =>
         {
@@ -320,7 +323,56 @@ public sealed partial class ShellHost
 
         var program = Runs.StartPlan(project, name, plan);
         program.LineReceived += line => _ = run.Server.LogAsync(request.SessionId, line, isError: false);
+        run.Programs[project] = program;
         return new RunningRunSession(program);
+    }
+
+    /// <summary>
+    /// The Aspire window's Debug (M63): a project resource the AppHost runs without the debugger (Ctrl+F5) is debugged
+    /// alone, the debugger attaching to the program the IDE started for it; the other resources run on. Under F5 every
+    /// project resource is a program of the AppHost's session already.
+    /// </summary>
+    public async Task DebugAspireResourceAsync(AspireResource resource)
+    {
+        if (_aspire is not { } run)
+        {
+            return;
+        }
+
+        if (run.Debug)
+        {
+            StatusBar.ShowMessage(Localizer.Format("msg.aspire.alreadyDebugged", "{0} is debugged already: F5 debugs every project of the AppHost.", resource.DisplayName), TimeSpan.FromSeconds(5));
+            return;
+        }
+
+        if (Debugger.IsActive)
+        {
+            StatusBar.ShowMessage(Localizer.Get("msg.debugSessions.aDebugSessionIsAlreadyRunning", "A debug session is already running."), TimeSpan.FromSeconds(4));
+            return;
+        }
+
+        var path = resource.Properties.FirstOrDefault(p => p.Key.Equals("project.path", StringComparison.OrdinalIgnoreCase)).Value;
+        var program = path is { Length: > 0 } && run.Programs.TryGetValue(Path.GetFullPath(path), out var byPath) ? byPath
+            : run.Programs.FirstOrDefault(p => Path.GetFileNameWithoutExtension(p.Key).Equals(resource.Name, StringComparison.OrdinalIgnoreCase)
+                || Path.GetFileNameWithoutExtension(p.Key).Equals(resource.DisplayName, StringComparison.OrdinalIgnoreCase)).Value;
+        if (program is null || program.Exited.IsCompleted)
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.aspire.notAProjectTheIdeRuns", "{0} isn't a project Codalus IDE runs for the AppHost, so it can't be debugged from here.", resource.DisplayName));
+            return;
+        }
+
+        try
+        {
+            DebugLog.Clear();
+            Layout.ShowToolWindow(DebugConsoleViewModel.ToolWindowId, focus: false);
+            Debugger.JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true);
+            Debugger.StepFiltering = Workbench.Settings.GetBoolean(StepFilteringSetting, true);
+            await Debugger.AttachAsync(program.ProcessId, CancellationToken.None, name: resource.DisplayName).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException or DapException or System.ComponentModel.Win32Exception)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.aspire.couldNotDebug", "Could not debug {0}: {1}", resource.DisplayName, ex.Message));
+        }
     }
 
     /// <summary>A run session's program run without the debugger.</summary>

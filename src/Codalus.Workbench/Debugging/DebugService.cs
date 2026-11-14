@@ -237,7 +237,7 @@ public sealed class DebugService : IAsyncDisposable
     /// debugger there (M58b) gets the expression compiler too, asked with this machine's path of the frame's source;
     /// the program's console is the Debug Console (no terminal on that side).
     /// </summary>
-    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken)
+    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken, bool localBuild = false)
     {
         if (!info.IsCodalus)
         {
@@ -248,7 +248,7 @@ public sealed class DebugService : IAsyncDisposable
         var compiler = ExpressionCompiler is { } compile
             ? (Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>)((request, ct) => compile(request with { SourcePath = map.ToLocal(request.SourcePath), ModulePath = null }, ct))
             : null;
-        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map);
+        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map) { LocalBuild = localBuild };
     }
 
     /// <summary>
@@ -643,6 +643,48 @@ public sealed class DebugService : IAsyncDisposable
         return (part.Index, Task.Run(() => JoinAddedAsync(session, part, token, cancellationToken), CancellationToken.None));
     }
 
+    /// <summary>
+    /// Ends the program at <paramref name="index"/> of the running multi-program session alone (M63: a compose service
+    /// stopped, detached or restarted while the others run); the session goes on while another program runs. Nothing
+    /// happens when it ended already.
+    /// </summary>
+    public async Task EndProgramAsync(int index)
+    {
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            throw new InvalidOperationException("No multi-program debug session is running.");
+        }
+
+        await session.EndPartAsync(index, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Restarts one program of the running multi-program session (M63): the program at <paramref name="index"/> ends and
+    /// <paramref name="launch"/> joins in its stead, as <see cref="AddLaunch"/> adds it (a new row of
+    /// <see cref="Processes"/>); the session is held open meanwhile, even when that program was its only one.
+    /// </summary>
+    public async Task<(int Index, Task<bool> Joined)> RestartProgramAsync(int index, DebugLaunch launch, CancellationToken cancellationToken)
+    {
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            throw new InvalidOperationException("No multi-program debug session is running.");
+        }
+
+        session.Reserve(1);
+        try
+        {
+            await session.EndPartAsync(index, _session.Token).ConfigureAwait(false);
+            var added = AddLaunch(launch, cancellationToken);
+            _ = added.Joined.ContinueWith(_ => session.ReleaseAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+            return added;
+        }
+        catch
+        {
+            await session.ReleaseAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     /// <summary>An added program's start (<see cref="AddLaunch"/>): false, with the program ended, when it fails.</summary>
     private async Task<bool> JoinAddedAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken sessionToken, CancellationToken cancellationToken)
     {
@@ -744,7 +786,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
-                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct).ConfigureAwait(false),
+                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct, remote.LocalBuild).ConfigureAwait(false),
                 adapter => remote.Adapter.IsCodalus
                     ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                     : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
@@ -1798,8 +1840,14 @@ public sealed class DebugService : IAsyncDisposable
 
     private bool IsExternalBreakpointFile(string path) => ExternalBreakpointFiles is { } external && external(path);
 
-    /// <summary>The session's Codalus debuggers (M54), which take edits while debugging (M55): a compound session can have several.</summary>
-    public IReadOnlyList<DebugAdapter> CodalusAdapters => _adapter is { } adapter ? [.. adapter.Adapters.OfType<DebugAdapter>().Where(a => a.IsCodalus)] : [];
+    /// <summary>
+    /// The session's Codalus debuggers (M54), which take edits while debugging (M55): a compound session can have several.
+    /// One on another machine counts when its program runs this machine's build (a compose service in fast mode, M63:
+    /// the build output is mounted into the container, so the modules are the ones the language host compiled).
+    /// </summary>
+    public IReadOnlyList<DebugAdapter> CodalusAdapters => _adapter is { } adapter
+        ? [.. adapter.Adapters.Select(a => a is PathMappingDebugAdapter { LocalBuild: true } remote ? remote.Inner : a).OfType<DebugAdapter>().Where(a => a.IsCodalus)]
+        : [];
 
     private async Task ResumeAsync(Func<IDebugAdapter, Task> resume)
     {
