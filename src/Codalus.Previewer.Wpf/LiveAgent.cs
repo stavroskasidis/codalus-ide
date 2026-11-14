@@ -35,8 +35,10 @@ namespace Codalus.Previewer.Wpf;
 /// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="WpfReload"/>; the
 /// loader, assembly, URI and compiled arguments are Avalonia's and unused here)</item>
 /// </list>
+/// The desktop-app tools for agents (M60b, ADR 0099) add <c>controls</c>, <c>picture</c> and <c>input</c>
+/// (<c>LiveAgent.App.cs</c>), and each window's size to <c>windows</c>.
 /// </summary>
-internal sealed class LiveAgent(Action<string> send)
+internal sealed partial class LiveAgent(Action<string> send)
 {
     private readonly ConditionalWeakTable<DependencyObject, object> _ids = new();
     private readonly Dictionary<int, WeakReference<DependencyObject>> _elements = [];
@@ -66,6 +68,9 @@ internal sealed class LiveAgent(Action<string> send)
             "highlight" => Highlight(Arg(2) == "none" ? null : Element(Arg(2))),
             "pick" => Pick(Arg(2) == "on"),
             "path" => Path(Element(Arg(2))),
+            "controls" => Controls(Element(Arg(2))),
+            "picture" => Picture(Element(Arg(2))),
+            "input" => Input(Element(Arg(2)), Arg(3), Arg(4), Arg(5)),
             "bindings" => WpfBindings.Take(),
             "reload" => WpfReload.Reload(application, WpfReload.Decode(Arg(6))),
             _ => throw new InvalidOperationException("Unknown command " + command),
@@ -98,7 +103,10 @@ internal sealed class LiveAgent(Action<string> send)
     // ------------------------------------------------------------------ windows and trees
 
     private string Windows(Application application) =>
-        Join(application.Windows.Cast<Window>().Select(w => new[] { Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w) }));
+        Join(application.Windows.Cast<Window>().Select(w => new[]
+        {
+            Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w), Number(w.ActualWidth), Number(w.ActualHeight),
+        }));
 
     private string Tree(DependencyObject root, bool visual)
     {

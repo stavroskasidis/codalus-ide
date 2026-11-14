@@ -123,6 +123,8 @@ public sealed partial class ShellHost
 
         public Task<IReadOnlyList<DotnetProcess>> ProcessesAsync(CancellationToken cancellationToken) => shell.Profiling.ProcessesAsync(cancellationToken);
 
+        public IReadOnlyList<string> ComposeServices() => [.. shell.ComposeProfileTargets().Select(t => t.Service)];
+
         public Task<ProfilingRun?> StartAsync(ProfilerRequest request) => shell.StartProfilingAsync(request);
 
         public IReadOnlyList<ProfilerSession> Sessions() => ProfilerSessionStore.List(shell.ProfilerSessionsRoot);
@@ -146,8 +148,9 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// Starts collecting: the startup project built and launched held before <c>Main</c> (so its startup is profiled
-    /// too), or a running process. The trace and the counters go to a new session folder; stopping (or the process
-    /// exiting) saves the session and opens its report.
+    /// too), a running process, or (M63b) a compose service fast mode runs, attached through its diagnostic port. The
+    /// trace and the counters go to a new session folder; stopping (or the process exiting) saves the session and opens
+    /// its report.
     /// </summary>
     /// <param name="request">The tools, and whether to launch or which process.</param>
     /// <param name="processName">The name of the process attached to, for the session.</param>
@@ -170,7 +173,19 @@ public sealed partial class ShellHost
         string target;
         string? project = null;
         int processId;
-        if (request.Launch)
+        DiagnosticsTarget? port = null;
+        if (request.ComposeService is { } service)
+        {
+            if (ComposeProfileTarget(service) is not { } socket)
+            {
+                return null; // said why
+            }
+
+            port = DiagnosticsTarget.Socket(socket);
+            processId = 0;
+            target = service;
+        }
+        else if (request.Launch)
         {
             project = launchProject ?? Runs.StartupProject;
             if (project is null || !RequireTrustedSolution("Profiling the startup project"))
@@ -224,6 +239,8 @@ public sealed partial class ShellHost
 
         var startedAt = DateTimeOffset.Now;
         var folder = ProfilerSessionStore.CreateFolder(ProfilerSessionsRoot, target, startedAt);
+        var diagnosticsTarget = port ?? DiagnosticsTarget.Process(processId);
+        var named = request.Launch || port is not null; // its name is known: the project's, or the service's
         TraceRecordingHandle? trace = null;
         CounterMonitor? counters = null;
         var traced = request.Tools.Where(ProfilerTools.Traced.Contains).ToList();
@@ -232,14 +249,14 @@ public sealed partial class ShellHost
         {
             if (traced.Count > 0)
             {
-                trace = await Profiling.StartTraceAsync(processId, Path.Combine(folder, "trace.nettrace"), traced, null, timeout.Token).ConfigureAwait(true);
-                target = request.Launch ? target : trace.ProcessName;
+                trace = await Profiling.StartTraceAsync(diagnosticsTarget, Path.Combine(folder, "trace.nettrace"), traced, null, timeout.Token).ConfigureAwait(true);
+                target = named ? target : trace.ProcessName;
             }
 
             if (request.Has(ProfilerTools.Counters))
             {
-                counters = await Profiling.StartCountersAsync(processId, s_sessionCounters, 1, runtimeEvents: true, timeout.Token).ConfigureAwait(true);
-                target = request.Launch ? target : counters.ProcessName;
+                counters = await Profiling.StartCountersAsync(diagnosticsTarget, s_sessionCounters, 1, runtimeEvents: true, timeout.Token).ConfigureAwait(true);
+                target = named ? target : counters.ProcessName;
             }
 
             if (request.Launch)
@@ -274,7 +291,7 @@ public sealed partial class ShellHost
         ProfilingRun? created = null;
         var run = new ProfilingRun(target, processId, tools, async r =>
         {
-            var session = await FinishProfilingAsync(r, folder, name, project, startedAt, trace, counters, program).ConfigureAwait(true);
+            var session = await FinishProfilingAsync(r, folder, name, project, startedAt, trace, counters, program, port is not null).ConfigureAwait(true);
             if (_profiling == r)
             {
                 _profiling = null;
@@ -284,12 +301,20 @@ public sealed partial class ShellHost
             return session;
         })
         {
-            TakeSnapshot = memory ? () => TakeSnapshotAsync(created!, folder) : null,
-            CreateDump = memory ? () => CreateProfilingDumpAsync(created!, folder) : null,
+            TakeSnapshot = memory ? () => TakeSnapshotAsync(created!, diagnosticsTarget, folder) : null,
+
+            // A dump is written by the debug companion here, of a process of this machine: not of a container's.
+            CreateDump = memory && port is null ? () => CreateProfilingDumpAsync(created!, folder) : null,
+            ComposeService = request.ComposeService,
         };
         created = run;
         _profiling = run;
         Workbench.Context.Set("profilerCollecting", true);
+        if (port is not null)
+        {
+            StatusBar.ShowMessage(Localizer.Format("msg.profiling.attachedToComposeService", "Profiling the compose service {0}, attached while it runs: its start-up isn't in the profile.", target), TimeSpan.FromSeconds(8));
+        }
+
         Workbench.StatusBar.Set(new StatusBarItem(ProfilerStatusItem, $"$(record) Profiling {target}", StatusBarAlignment.Left, 40, ContributionSource.Shell.Id)
         {
             Command = "profiler.stop",
@@ -316,14 +341,14 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Memory Usage: a heap snapshot of the program being profiled, into the session folder.</summary>
-    private async Task<string?> TakeSnapshotAsync(ProfilingRun run, string folder)
+    private async Task<string?> TakeSnapshotAsync(ProfilingRun run, DiagnosticsTarget target, string folder)
     {
         var file = string.Create(CultureInfo.InvariantCulture, $"heap-{run.Snapshots.Count + 1}.nettrace");
         try
         {
             StatusBar.ShowMessage(Localizer.Get("msg.profiling.takingAHeapSnapshot", "Taking a heap snapshot…"), TimeSpan.FromSeconds(5));
             using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            await Profiling.TakeHeapSnapshotAsync(run.ProcessId, Path.Combine(folder, file), timeout.Token).ConfigureAwait(true);
+            await Profiling.TakeHeapSnapshotAsync(target, Path.Combine(folder, file), timeout.Token).ConfigureAwait(true);
             run.Snapshots.Add(file);
             return file;
         }
@@ -377,7 +402,7 @@ public sealed partial class ShellHost
     }
 
     /// <summary>Stops the tools, saves the session, and opens its report; null when nothing could be saved.</summary>
-    private async Task<ProfilerSession?> FinishProfilingAsync(ProfilingRun run, string folder, string name, string? project, DateTimeOffset startedAt, TraceRecordingHandle? trace, CounterMonitor? counters, RunningProgram? program)
+    private async Task<ProfilerSession?> FinishProfilingAsync(ProfilingRun run, string folder, string name, string? project, DateTimeOffset startedAt, TraceRecordingHandle? trace, CounterMonitor? counters, RunningProgram? program, bool service)
     {
         Workbench.StatusBar.Remove(ProfilerStatusItem);
         StatusBar.ShowMessage(Localizer.Format("msg.profiling.stoppingTheProfilingOf", "Stopping the profiling of {0}…", name), TimeSpan.FromSeconds(4));
@@ -431,7 +456,7 @@ public sealed partial class ShellHost
             string.Create(CultureInfo.CurrentCulture, $"{name} {startedAt.LocalDateTime:yyyy-MM-dd HH:mm:ss}"),
             startedAt,
             (DateTimeOffset.Now - startedAt).TotalSeconds,
-            project is null ? ProfilerSession.ProcessTarget : ProfilerSession.LaunchTarget,
+            service ? ProfilerSession.ServiceTarget : project is null ? ProfilerSession.ProcessTarget : ProfilerSession.LaunchTarget,
             project,
             name,
             run.ProcessId,

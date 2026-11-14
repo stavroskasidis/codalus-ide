@@ -50,7 +50,8 @@ public sealed partial class ShellHost
 
     private void UpdateMcpBridge()
     {
-        var on = Workbench.Settings.GetBoolean(McpServerSetting, false) && Workbench.Settings.GetLayerValue(McpServerSetting, Codalus.Workbench.Settings.SettingScope.User) is { ValueKind: JsonValueKind.True };
+        // The headless IDE (codalus mcp --folder) serves its own agent only: the general pipe is the window's.
+        var on = !IsHeadless && Workbench.Settings.GetBoolean(McpServerSetting, false) && Workbench.Settings.GetLayerValue(McpServerSetting, Codalus.Workbench.Settings.SettingScope.User) is { ValueKind: JsonValueKind.True };
         if (on && _mcpBridge is null)
         {
             _mcpBridge = McpBridge.Listen(McpBridge.PipeName(SingleInstance.PipeName(Paths.State)), (tool, args, ct) => Ui.RunAsync(() => OutsideAgentToolAsync(tool, args, ct)).Unwrap());

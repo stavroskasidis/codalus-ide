@@ -205,5 +205,166 @@ public sealed class ComposeShellTests
         }
     }
 
+    /// <summary>
+    /// M63b with the stand-in engine: Compose Up gives each .NET service the diagnostics folder and its diagnostic
+    /// port, the Performance Profiler lists the services, and Profile Compose Service profiles one through its socket.
+    /// The service's program is run here with the variable the override gives it, reaching the folder by a short path
+    /// as its container does by its mount, so the shell's whole path runs without an engine.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Profile_compose_service_reaches_a_service_through_its_diagnostic_port()
+    {
+        Assert.SkipWhen(!OperatingSystem.IsLinux(), "A compose service's diagnostic port is shared with a Linux engine only (Docker Desktop's file sharing carries no sockets).");
+        var (f, folder) = await OpenAsync();
+        await using var fixture = f;
+        var log = Path.Combine(f.UserData, "engine.log");
+        await f.Shell.Workbench.Settings.SetAsync(ContainerEngine.ToolSetting, StandInEngine(f.UserData, log), SettingScope.User, CancellationToken.None);
+        var file = Path.Combine(folder, "compose.yaml");
+        Assert.True(await f.Shell.ComposeUpAsync(file));
+
+        var diagnostics = Path.Combine(folder, ".codalus", "state", "Compose.slnx", ComposeFastMode.DiagnosticsFolderName);
+        var services = ComposeYaml.Parse(await File.ReadAllTextAsync(f.Shell.ComposeOverridePath()!, TestContext.Current.CancellationToken))!["services"]!.AsObject();
+        Assert.Equal("/codalus-diag/back.sock,connect,nosuspend", (string?)services["back"]!["environment"]![ComposeFastMode.DiagnosticPortsVariable]);
+        Assert.Contains(services["back"]!["volumes"]!.AsArray(), v => (string?)v!["source"] == diagnostics && (string?)v["target"] == ComposeFastMode.DiagnosticsMount);
+        Assert.True(Directory.Exists(diagnostics));
+        if (OperatingSystem.IsLinux())
+        {
+            // The service's user in its container passes through it to the socket, and does nothing else there.
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute, File.GetUnixFileMode(diagnostics));
+        }
+
+        Assert.Equal(["front", "back"], f.Shell.ComposeProfileTargets().Select(t => t.Service));
+
+        // The Performance Profiler lists them with the processes.
+        var hub = f.Shell.OpenProfiler();
+        hub.TargetIndex = 1;
+        await hub.RefreshProcessesAsync();
+        Assert.Contains(hub.Processes, p => p.ComposeService == "back" && p.Text == "back (compose service)");
+
+        // The back's program, as its container runs it: the folder at a short path, as /codalus-diag is.
+        var mount = Path.Combine(Path.GetTempPath(), "codalus-mount-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateSymbolicLink(mount, diagnostics);
+        var start = new System.Diagnostics.ProcessStartInfo("dotnet", [Path.Combine(folder, "Back", "bin", "Debug", "net10.0", "Back.dll"), "--urls", "http://127.0.0.1:0"])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.Environment[ComposeFastMode.DiagnosticPortsVariable] = ComposeFastMode.DiagnosticPorts("back", null).Replace(ComposeFastMode.DiagnosticsMount, mount, StringComparison.Ordinal);
+        using var back = System.Diagnostics.Process.Start(start)!;
+        try
+        {
+            var run = await f.Shell.ComposeProfileServiceAsync("back");
+            Assert.True(run is not null, string.Join("\n", f.Shell.Workbench.Notifications.Items.Select(n => n.Message)));
+            Assert.Equal("back", run.ComposeService);
+            Assert.Equal("back", run.Target);
+            Assert.Null(run.CreateDump); // a dump is of a process of this machine
+            await Task.Delay(2500, TestContext.Current.CancellationToken);
+            var session = await run.StopAsync();
+            Assert.NotNull(session);
+            Assert.Equal(Codalus.Workbench.Diagnostics.ProfilerSession.ServiceTarget, session.Target);
+            Assert.Equal("back", session.ProcessName);
+            Assert.True(session.TracePath is { } trace && new FileInfo(trace).Length > 1000, session.TracePath);
+            var counters = Codalus.Workbench.Diagnostics.CounterExport.ReadJson(await File.ReadAllTextAsync(session.CountersPath!, TestContext.Current.CancellationToken))!;
+            Assert.Contains(counters.Counters, c => c.Name == "cpu-usage" && c.Values.Count > 0);
+
+            // An agent's profile_start and memory_snapshot (M60) take the service by its name.
+            async Task<Codalus.Workbench.Ai.Ide.IdeToolResult> CallAsync(string tool, string json) =>
+                await f.Shell.IdeToolAsync(tool, System.Text.Json.JsonElement.Parse(json), "Claude", CancellationToken.None);
+            var started = await CallAsync("profile_start", """{"service":"back"}""");
+            Assert.False(started.IsError, started.Text);
+            Assert.StartsWith("Profiling the compose service back ", started.Text, StringComparison.Ordinal);
+            await Task.Delay(1500, TestContext.Current.CancellationToken);
+            var cpu = await CallAsync("profile_stop", "{}");
+            Assert.False(cpu.IsError, cpu.Text);
+            Assert.StartsWith("CPU profile of back (a compose service): ", cpu.Text, StringComparison.Ordinal);
+            var heap = await CallAsync("memory_snapshot", """{"service":"back"}""");
+            Assert.False(heap.IsError, heap.Text);
+            Assert.StartsWith("Heap of back (a compose service) after a full garbage collection: ", heap.Text, StringComparison.Ordinal);
+            var unknown = await CallAsync("memory_snapshot", """{"service":"idle"}""");
+            Assert.True(unknown.IsError);
+            Assert.Contains("idle isn't a .NET service fast mode runs", unknown.Text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Codalus.Platform.ProcessTree.Kill(back);
+            await back.WaitForExitAsync(CancellationToken.None);
+            Directory.Delete(mount);
+        }
+
+        // Not a .NET service fast mode runs: said so.
+        Assert.Null(await f.Shell.ComposeProfileServiceAsync("idle"));
+        Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("idle isn't a .NET service fast mode runs", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// M63b with a real engine (CI's Linux runner): the back runs in fast mode in its container and is profiled
+    /// through its diagnostic port's socket in the mounted folder, while requests to the front reach it; the session
+    /// has the counters and a CPU trace of the program in the container.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_compose_service_in_its_container_is_profiled_through_its_diagnostic_port()
+    {
+        var engine = await ContainerShellTests.RequireEngineAsync();
+        var (f, folder) = await OpenAsync();
+        await using var fixture = f;
+        var file = Path.Combine(folder, "compose.yaml");
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        string Describe() =>
+            $"notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}\nContainer Tools:\n{Tail(f.Shell.ContainerLog.GetText())}";
+
+        try
+        {
+            Assert.True(await f.Shell.ComposeUpAsync(file), Describe());
+            ContainerSummary? backContainer = null;
+            for (var attempt = 0; attempt < 240 && backContainer is not { IsRunning: true }; attempt++)
+            {
+                if (attempt > 0)
+                {
+                    await Task.Delay(500, TestContext.Current.CancellationToken);
+                }
+
+                backContainer = await engine.ComposeServiceContainerAsync("compose", "back", null, CancellationToken.None);
+            }
+
+            Assert.True(backContainer is { IsRunning: true }, Describe());
+            var run = await f.Shell.ComposeProfileServiceAsync("back");
+            Assert.True(run is not null, Describe() + "\n" + (await engine.RunAsync(["logs", backContainer!.Name], CancellationToken.None)).Output);
+
+            // Work for it: requests to the front, which calls the back.
+            var front = (await engine.ComposeServiceContainerAsync("compose", "front", null, CancellationToken.None))!;
+            var port = await engine.HostPortAsync(front.Name, "8080/tcp", CancellationToken.None);
+            var answered = 0;
+            for (var i = 0; i < 60 && answered < 20; i++)
+            {
+                try
+                {
+                    Assert.StartsWith("front, then back on ", await http.GetStringAsync($"http://127.0.0.1:{port}/", TestContext.Current.CancellationToken), StringComparison.Ordinal);
+                    answered++;
+                }
+                catch (HttpRequestException)
+                {
+                    await Task.Delay(500, TestContext.Current.CancellationToken); // still starting
+                }
+            }
+
+            Assert.True(answered > 0, Describe());
+            await Task.Delay(1500, TestContext.Current.CancellationToken);
+            var session = await run.StopAsync();
+            Assert.True(session is not null, Describe());
+            Assert.Equal(Codalus.Workbench.Diagnostics.ProfilerSession.ServiceTarget, session.Target);
+            var counters = Codalus.Workbench.Diagnostics.CounterExport.ReadJson(await File.ReadAllTextAsync(session.CountersPath!, TestContext.Current.CancellationToken))!;
+            Assert.Contains(counters.Counters, c => c.Name == "cpu-usage" && c.Values.Count > 0);
+            await using var trace = await f.Shell.Profiling.OpenTraceAsync(session.TracePath!, TestContext.Current.CancellationToken);
+            Assert.True(trace.Summary.Samples + trace.Summary.ExternalSamples > 0, $"{trace.Summary.Samples} samples");
+            Assert.True(trace.Summary.Threads.Count > 0);
+        }
+        finally
+        {
+            await f.Shell.ComposeDownAsync(file);
+            await engine.RunAsync(["rmi", ComposeFastMode.ImageName("compose", "front"), ComposeFastMode.ImageName("compose", "back")], CancellationToken.None);
+        }
+    }
+
     private static string Tail(string text) => text.Length <= 4000 ? text : text[^4000..];
 }

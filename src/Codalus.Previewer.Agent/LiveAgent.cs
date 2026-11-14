@@ -30,8 +30,10 @@ namespace Codalus.Previewer.Agent;
 /// <item><c>reload loader assembly uri compiled base64</c> → XAML Hot Reload (M64, <see cref="LiveReload"/>):
 /// <c>applied count</c>, <c>failed line column message</c> or <c>none</c></item>
 /// </list>
+/// The desktop-app tools for agents (M60b, ADR 0099) add <c>controls</c>, <c>picture</c> and <c>input</c>
+/// (<c>LiveAgent.App.cs</c>), and each window's size to <c>windows</c>.
 /// </summary>
-internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? roots = null)
+internal sealed partial class LiveAgent(Action<string> send, Func<IEnumerable<object>>? roots = null)
 {
     public const char Record = '\u001e';
     public const char Field = '\u001f';
@@ -70,6 +72,9 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
             "highlight" => OnUiThread(() => Highlight(Arg(2) == "none" ? null : Element(Arg(2)))),
             "pick" => OnUiThread(() => Pick(Arg(2) == "on")),
             "path" => OnUiThread(() => Path(Element(Arg(2)))),
+            "controls" => OnUiThread(() => Controls(Element(Arg(2)))),
+            "picture" => OnUiThread(() => Picture(Element(Arg(2)))),
+            "input" => OnUiThread(() => Input(Element(Arg(2)), Arg(3), Arg(4), Arg(5))),
             "bindings" => OnUiThread(() => LiveBindings.Take(OpenWindows())),
             "reload" => OnUiThread(() => LiveReload.Reload(OpenWindows(), Arg(2), Arg(3), Arg(4), Arg(5) == "1", LiveReload.Decode(Arg(6))), ReloadTimeout),
             _ => throw new InvalidOperationException("Unknown command " + command),
@@ -169,7 +174,7 @@ internal sealed class LiveAgent(Action<string> send, Func<IEnumerable<object>>? 
             IdOf(w).ToString(CultureInfo.InvariantCulture),
             Property(w, "Title") as string ?? string.Empty,
             w.GetType().FullName ?? TypeName(w),
-        }));
+        }.Concat(SizeOf(w))));
 
     private string Tree(object root, bool visual)
     {

@@ -33,7 +33,7 @@ public sealed partial class ShellHost
         LiveTree = new LiveTreeViewModel(() => Live, GoToXamlAsync);
         LiveProperties = new LivePropertiesViewModel(() => Live);
         LiveTree.SelectionChanged += (_, node) => _ = LiveProperties.ShowAsync(node);
-        Runs.ProgramPlan = AddLiveAgent;
+        Runs.ProgramPlan = (info, plan) => AddOffScreen(AddLiveAgent(info, plan));
     }
 
     /// <summary>Whether a project is an Avalonia app: it references an Avalonia package itself (an app references Avalonia.Desktop).</summary>

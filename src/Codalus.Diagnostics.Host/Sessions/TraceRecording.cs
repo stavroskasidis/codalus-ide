@@ -18,6 +18,7 @@ internal sealed class TraceRecording : IAsyncDisposable
     private readonly TraceStartParams _parameters;
     private readonly Stopwatch _clock = new();
     private EventPipeSession? _session;
+    private PortConnections.Lease? _lease;
     private Task _copy = Task.CompletedTask;
     private IoSampler? _io;
 
@@ -30,14 +31,17 @@ internal sealed class TraceRecording : IAsyncDisposable
 
     public async Task<string> StartAsync(CancellationToken cancellationToken)
     {
-        var name = DiagnosticsPort.NameOf(_parameters.ProcessId);
+        var target = DiagnosticsTarget.Of(_parameters.ProcessId, _parameters.DiagnosticPort);
+        var name = DiagnosticsPort.NameOf(target);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(_parameters.OutputPath))!);
         var file = new FileStream(_parameters.OutputPath, FileMode.Create, FileAccess.Write, FileShare.Read, 1 << 16, useAsync: true);
         try
         {
             var tools = _parameters.Tools is { Count: > 0 } named ? named : [TraceTools.Cpu];
-            _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, DiagnosticsPort.TraceProviders(tools.ToList(), _parameters.Providers), rundown: true, stacks: true, bufferMegabytes: 256, slowStart: false, cancellationToken).ConfigureAwait(false);
-            if (tools.Contains(TraceTools.FileIo))
+            (_session, _lease) = await DiagnosticsPort.StartSessionAsync(target, DiagnosticsPort.TraceProviders(tools.ToList(), _parameters.Providers), rundown: true, stacks: true, bufferMegabytes: 256, slowStart: false, cancellationToken).ConfigureAwait(false);
+
+            // A port's runtime is in a container: its process id there isn't one here, so File I/O has no counters to read.
+            if (tools.Contains(TraceTools.FileIo) && !target.IsPort)
             {
                 _io = new IoSampler(_parameters.ProcessId);
                 _io.Start();
@@ -128,5 +132,9 @@ internal sealed class TraceRecording : IAsyncDisposable
         }
 
         _session?.Dispose();
+        if (_lease is { } lease)
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+        }
     }
 }

@@ -69,6 +69,13 @@ internal static partial class Program
         if (options.Mcp)
         {
             AttachToParentConsole();
+
+            // codalus mcp --folder (M60b): an IDE with no window on that folder, serving the same tools on stdio.
+            if (options.Headless)
+            {
+                return Infrastructure.HeadlessIde.Run(options);
+            }
+
             var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
             var instance = Infrastructure.SingleInstance.PipeName(paths.State);
 
