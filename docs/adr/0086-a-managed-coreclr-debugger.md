@@ -4,7 +4,7 @@
 - **Date:** 2026-10-28
 - **Deciders:** maintainer (D48: accepted as proposed)
 - **Amends, as each phase lands:** [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (Hot Reload while debugging), [ADR 0076](0076-debugging-the-desktop-clr.md) (ClrDebug only on Windows)
-- **Amended by:** [ADR 0090](0090-blazor-web-app-edits-under-the-codalus-debugger.md) (2026-10-30: a Blazor Web App's server is launched, not run under `dotnet watch`, and its pages take WebAssembly edits from the IDE; the program's update handlers run after each edit)
+- **Amended by:** [ADR 0090](0090-blazor-web-app-edits-under-the-codalus-debugger.md) (2026-10-30: a Blazor Web App's server is launched, not run under `dotnet watch`, and its pages take WebAssembly edits from the IDE; the program's update handlers run after each edit); [ADR 0094](0094-the-codalus-debugger-by-default.md) (D49, 2026-11-11: phase 3 doesn't wait for weeks of nightlies; M58a closes the adapter's gaps and adds Edit and Continue for stopped frames, M58b makes it the default with netcoredbg as a fallback)
 
 ## Context
 

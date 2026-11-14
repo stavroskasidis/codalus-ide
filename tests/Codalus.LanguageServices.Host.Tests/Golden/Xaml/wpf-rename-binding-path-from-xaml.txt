@@ -1,0 +1,11 @@
+=== WpfApp/MainWindow.xaml
+@@ 33
+-             <TextBlock Text="{Binding RemainingCount, StringFormat='{}{0} remaining'}" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
++             <TextBlock Text="{Binding OpenCount, StringFormat='{}{0} remaining'}" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" />
+=== WpfApp/ViewModels/MainViewModel.cs
+@@ 19
+-         Items.CollectionChanged += (_, _) => OnPropertyChanged(nameof(RemainingCount));
++         Items.CollectionChanged += (_, _) => OnPropertyChanged(nameof(OpenCount));
+@@ 46
+-     public int RemainingCount => Items.Count(i => !i.IsDone);
++     public int OpenCount => Items.Count(i => !i.IsDone);

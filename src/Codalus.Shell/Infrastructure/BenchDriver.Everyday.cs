@@ -164,12 +164,11 @@ internal sealed partial class BenchDriver
             }
         }
 
-        await Flow("open_tracked", prepare: () =>
+        await Flow("open_tracked", prepare: async () =>
         {
-            shell.CloseAllDocuments(exceptActive: false);
+            await shell.CloseAllDocumentsAsync(exceptActive: false).ConfigureAwait(true);
             shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId, focus: false);
             explorer.CollapseAll();
-            return Task.CompletedTask;
         }, run: async () =>
         {
             foreach (var file in files)
@@ -290,7 +289,7 @@ internal sealed partial class BenchDriver
         await Flow("close_reopen", async () =>
         {
             Step("close_reopen: Close All");
-            shell.CloseAllDocuments(exceptActive: false);
+            await shell.CloseAllDocumentsAsync(exceptActive: false).ConfigureAwait(true);
             await Task.Delay(100).ConfigureAwait(true);
             foreach (var file in files)
             {

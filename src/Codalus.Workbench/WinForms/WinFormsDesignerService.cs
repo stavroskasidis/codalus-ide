@@ -535,14 +535,15 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
             return new ProcessLaunchInfo(dotnet, ["exec", "--runtimeconfig", Path.ChangeExtension(app, ".runtimeconfig.json"), "--depsfile", Path.ChangeExtension(app, ".deps.json"), target.DesignerHost])
             {
                 WorkingDirectory = Path.GetDirectoryName(app),
-                Environment = new Dictionary<string, string> { ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1" },
+                ToolTelemetryOptOut = true, // the tools' telemetry opt-outs (M59)
             };
         }
 
         return new ProcessLaunchInfo(dotnet, [target.DesignerHost])
         {
             WorkingDirectory = Path.GetDirectoryName(target.ProjectAssembly),
-            Environment = new Dictionary<string, string> { ["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1", ["DOTNET_ROLL_FORWARD"] = "Major" },
+            Environment = new Dictionary<string, string> { ["DOTNET_ROLL_FORWARD"] = "Major" },
+            ToolTelemetryOptOut = true,
         };
     }
 

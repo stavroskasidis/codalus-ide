@@ -473,8 +473,12 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     public Task ConfigurationDoneAsync(CancellationToken cancellationToken) =>
         _launch.Connection.RequestAsync("configurationDone", new EmptyArguments(), Json.EmptyArguments, cancellationToken);
 
+    /// <summary>js-debug has hit conditions and logpoints of its own, in JavaScript's terms: the session applies the IDE's.</summary>
+    public bool AppliesBreakpointBehaviors(int threadId) => false;
+
     public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken)
     {
+        breakpoints = [.. breakpoints.Select(b => b.WithoutBehaviors())];
         int[] ids;
         List<Session> children;
         lock (_gate)

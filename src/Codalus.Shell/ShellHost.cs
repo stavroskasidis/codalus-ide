@@ -138,7 +138,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         Plugins.HostRuntimeMissing = ReportHostRuntimeMissing; // one notification, not one per plugin (M49); any thread
         EditorFont = new EditorFont(Workbench.Settings);
         Output = new OutputViewModel(Workbench.Output, EditorFont) { WordWrap = Workbench.Settings.GetBoolean("output.wordWrap") };
-        Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 8));
+        Notifications = new NotificationsViewModel(Workbench.Notifications, () => Workbench.Settings.GetInt32("workbench.notifications.autoHideSeconds", 15));
         PluginList = new PluginsViewModel(
             Plugins,
             (id, off) => _ = SetPluginTurnedOffAsync(id, off),
@@ -175,6 +175,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeWebTools();
         InitializeData();
         InitializeContainers();
+        InitializeCompose();
         InitializeAspire();
         InitializeProfiling();
         InitializeXaml();
@@ -193,6 +194,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeComponentsPage();
         InitializeAi();
         InitializeAgent();
+        InitializeHeadless();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -463,6 +465,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _interactive = true;
+        if (IsHeadless)
+        {
+            // codalus mcp --folder (M60b): the plugins that start with the IDE, and nothing of a window's startup.
+            _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+            return;
+        }
+
         _ = OfferRecoveryAsync();
         StartUpdates();
 
@@ -677,6 +686,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             HttpResponseViewModel.ToolWindowId => HttpResponse,
             ThreadsViewModel.ToolWindowId => ThreadList,
             ModulesViewModel.ToolWindowId => ModuleList,
+            RegistersViewModel.ToolWindowId => RegistersWindow,
+            DisassemblyViewModel.ToolWindowId => DisassemblyWindow,
+            MemoryViewModel.ToolWindowId => MemoryWindow,
             LiveTreeViewModel.ToolWindowId => LiveTree,
             LivePropertiesViewModel.ToolWindowId => LiveProperties,
             ParallelStacksViewModel.ToolWindowId => ParallelStacksWindow,
@@ -694,6 +706,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             QueryResultsViewModel.ToolWindowId => QueryResults,
             ContainersViewModel.ToolWindowId => ContainersWindow,
             AiChatViewModel.ToolWindowId => AiChat,
+            AiConsoleViewModel.ToolWindowId => AiConsole,
             AspireViewModel.ToolWindowId => AspireWindow,
             DiagnosticToolsViewModel.ToolWindowId => DiagnosticTools,
             CountersViewModel.ToolWindowId => CountersWindow,
@@ -1015,8 +1028,6 @@ public sealed partial class ShellHost : IAsyncDisposable
         return Workbench.Settings.SetAsync(args[0].GetString()!, value, SettingScope.User, cancellationToken);
     }
 
-    public void ShowAbout() => Workbench.Notifications.Info(ShellInfo.VersionText.Replace("\n", " · ", StringComparison.Ordinal));
-
     // ------------------------------------------------------------------ status bar and settings
 
     private void UpdateStatusItems()
@@ -1246,6 +1257,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         await DisposeCompanionAsync().ConfigureAwait(false);
         StopListening();
         _mcpBridge?.Dispose();
+        StopOffScreen();
         await McpServers.DisposeAsync().ConfigureAwait(false);
         await ExternalAgents.DisposeAsync().ConfigureAwait(false);
         Askpass?.Dispose();
@@ -1333,6 +1345,9 @@ public sealed partial class ShellHost : IAsyncDisposable
         Views.VariableActions.CopyText = Unless(Views.VariableActions.CopyText);
         Views.VariableActions.AskAi = Unless(Views.VariableActions.AskAi);
         Views.VariableActions.CanAskAi = Unless(Views.VariableActions.CanAskAi);
+        Views.VariableActions.MakeObjectId = Unless(Views.VariableActions.MakeObjectId);
+        Views.VariableActions.CanMakeObjectId = Unless(Views.VariableActions.CanMakeObjectId);
+        Views.VariableActions.DeleteObjectId = Unless(Views.VariableActions.DeleteObjectId);
     }
 
     /// <summary>The callback, or null when it calls this shell.</summary>

@@ -34,6 +34,9 @@ public sealed class WatchedServerSessionTests
 
         public List<WatchedServerChange> Changes { get; } = [];
 
+        /// <summary>Each wait's <c>listeningBefore</c>, in order.</summary>
+        public List<int> ListeningBefore { get; } = [];
+
         public TaskCompletionSource<int?> NextWait()
         {
             lock (_gate)
@@ -60,11 +63,12 @@ public sealed class WatchedServerSessionTests
             }
         }
 
-        public Task<int?> WaitForAppAsync(int? previousPid, CancellationToken cancellationToken)
+        public Task<int?> WaitForAppAsync(int? previousPid, int listeningBefore, CancellationToken cancellationToken)
         {
             Add($"wait {previousPid?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}");
             lock (_gate)
             {
+                ListeningBefore.Add(listeningBefore);
                 return _waits.TryDequeue(out var wait) ? wait.Task.WaitAsync(cancellationToken) : Task.FromResult<int?>(null);
             }
         }
@@ -162,6 +166,40 @@ public sealed class WatchedServerSessionTests
         Assert.Equal(["attach 100", "release", "wait 100", "attach 200"], host.Entries().Where(e => !e.StartsWith("wait -", StringComparison.Ordinal)));
         Assert.Contains(host.Changes, c => c.Kind == WatchedServerChangeKind.Followed && c.ProcessId == 200);
         Assert.DoesNotContain("stop watch", host.Entries());
+    }
+
+    [Fact]
+    public async Task A_server_that_listens_while_the_debugger_still_releases_the_last_one_is_followed()
+    {
+        // Windows CI (run 41939076255): releasing the server took 17 s, the next one logged "Now listening on" meanwhile,
+        // and a follow that counted the lines from its own start waited for one more until it gave up.
+        var (session, hotReload, host, _) = await StartedAsync();
+        using var _ = session;
+        hotReload.OnLine("      Now listening on: http://localhost:5274"); // the first server's
+        var next = host.NextWait();
+        host.OnRelease = () =>
+        {
+            hotReload.OnLine("      Now listening on: http://localhost:5274"); // the next server's, before the detach ends
+            session.OnDebugEnded(requested: false);
+        };
+
+        hotReload.OnLine("dotnet watch : Restart is needed to apply the changes.");
+        await UntilAsync(() => host.ListeningBefore.Count == 2, () => string.Join(", ", host.Entries()));
+        Assert.Equal([0, 1], host.ListeningBefore); // the start's, then the count when the restart was announced
+        next.SetResult(200);
+        await UntilAsync(() => session.State == WatchedServerState.Attached && session.ProcessId == 200, () => string.Join(", ", host.Entries()));
+    }
+
+    [Fact]
+    public async Task Without_an_announced_restart_the_follow_counts_from_the_debuggers_end()
+    {
+        var (session, hotReload, host, _) = await StartedAsync();
+        using var _ = session;
+        hotReload.OnLine("      Now listening on: http://localhost:5274");
+        host.NextWait();
+        session.OnDebugEnded(requested: false);
+        await UntilAsync(() => host.ListeningBefore.Count == 2, () => string.Join(", ", host.Entries()));
+        Assert.Equal(1, host.ListeningBefore[1]);
     }
 
     [Fact]
@@ -321,12 +359,34 @@ public sealed class WatchedServerSessionTests
     {
         var hotReload = new HotReloadSession();
         var app = new WatchedApp(hotReload, new TaskCompletionSource().Task, 10, "App", null) { IsAlive = pid => pid == 300, Children = _ => [], NameOf = _ => null };
-        var wait = WatchedServer.WaitForAppAsync(app, null, TimeSpan.FromSeconds(10), Ct);
+        var wait = WatchedServer.WaitForAppAsync(app, null, 0, TimeSpan.FromSeconds(10), Ct);
         hotReload.OnLine("[codalus-hot-reload-agent] Loaded into process 300: /src/App/bin/Debug/net10.0/App.dll");
         await Task.Delay(400, Ct);
         Assert.False(wait.IsCompleted); // not serving yet
         hotReload.OnLine("      Now listening on: http://localhost:5274");
         Assert.Equal(300, await wait.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+    }
+
+    [Fact]
+    public async Task A_next_server_that_listened_before_the_wait_began_is_found_at_once_and_the_wait_says_what_it_saw()
+    {
+        // No address to probe: only the listening line can say it serves, and it came before the wait (run 41939076255).
+        var hotReload = new HotReloadSession();
+        var seen = new System.Collections.Concurrent.ConcurrentQueue<string>(); // written from the wait's thread
+        var app = new WatchedApp(hotReload, new TaskCompletionSource().Task, 10, "App", null) { IsAlive = pid => pid == 300, Children = _ => [], NameOf = _ => null, Observed = seen.Enqueue };
+        hotReload.OnLine("      Now listening on: http://localhost:5274"); // the first server's
+        var restartAnnounced = hotReload.ListeningCount;
+        hotReload.OnLine("[codalus-hot-reload-agent] Loaded into process 300: /src/App/bin/Debug/net10.0/App.dll");
+        hotReload.OnLine("      Now listening on: http://localhost:5274"); // the next server's
+        Assert.Equal(300, await WatchedServer.WaitForAppAsync(app, 200, restartAnnounced, TimeSpan.FromSeconds(10), Ct).WaitAsync(TimeSpan.FromSeconds(10), Ct));
+
+        // Counted from the wait's own start (the old behavior), it waits for a third line, and says so.
+        var wait = WatchedServer.WaitForAppAsync(app, 200, hotReload.ListeningCount, TimeSpan.FromSeconds(10), Ct);
+        await UntilAsync(() => !seen.IsEmpty, () => "nothing observed");
+        Assert.False(wait.IsCompleted);
+        Assert.Equal("candidate 300 (the agent's 300); \"Now listening on\" 2, waiting for more than 2; previous 200 gone; no address to probe", seen.Last());
+        hotReload.OnLine("dotnet watch : Waiting for a file to change before restarting ...");
+        Assert.Null(await wait.WaitAsync(TimeSpan.FromSeconds(10), Ct));
     }
 
     [Fact]
@@ -344,7 +404,7 @@ public sealed class WatchedServerSessionTests
             NameOf = pid => names.GetValueOrDefault(pid),
         };
         hotReload.OnLine("[codalus-hot-reload-agent] Loaded into process: /src/App/bin/Debug/net10.0/ContosoStore.Server.dll");
-        var wait = WatchedServer.WaitForAppAsync(app, previousPid: 99, TimeSpan.FromSeconds(10), Ct);
+        var wait = WatchedServer.WaitForAppAsync(app, previousPid: 99, hotReload.ListeningCount, TimeSpan.FromSeconds(10), Ct);
         await Task.Delay(400, Ct);
         Assert.False(wait.IsCompleted);
         using var listener = new TcpListener(IPAddress.Loopback, port);
@@ -392,7 +452,7 @@ public sealed class WatchedServerSessionTests
             var hotReload = new HotReloadSession();
             hotReload.OnLine("Now listening on: http://localhost:5000");
             var app = new WatchedApp(hotReload, new TaskCompletionSource().Task, shell.Id, "sleep", null);
-            var found = await WatchedServer.WaitForAppAsync(app, null, TimeSpan.FromSeconds(10), Ct);
+            var found = await WatchedServer.WaitForAppAsync(app, null, 0, TimeSpan.FromSeconds(10), Ct);
             Assert.NotNull(found);
             Assert.Equal("sleep", WatchedServer.ProcessName(found.Value));
         }
@@ -408,11 +468,11 @@ public sealed class WatchedServerSessionTests
         var hotReload = new HotReloadSession();
         var watch = new TaskCompletionSource();
         var app = new WatchedApp(hotReload, watch.Task, 10, "App", null) { Children = _ => [], NameOf = _ => null, IsAlive = _ => false };
-        var wait = WatchedServer.WaitForAppAsync(app, 5, TimeSpan.FromSeconds(30), Ct);
+        var wait = WatchedServer.WaitForAppAsync(app, 5, 0, TimeSpan.FromSeconds(30), Ct);
         hotReload.OnLine("dotnet watch : Waiting for a file to change before restarting ...");
         Assert.Null(await wait.WaitAsync(TimeSpan.FromSeconds(10), Ct));
 
-        var second = WatchedServer.WaitForAppAsync(app with { HotReload = new HotReloadSession() }, 5, TimeSpan.FromSeconds(30), Ct);
+        var second = WatchedServer.WaitForAppAsync(app with { HotReload = new HotReloadSession() }, 5, 0, TimeSpan.FromSeconds(30), Ct);
         watch.SetResult();
         Assert.Null(await second.WaitAsync(TimeSpan.FromSeconds(10), Ct));
     }

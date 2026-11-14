@@ -58,6 +58,9 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
 
             // The eval thread: Sleep above the evaluation's frame, Main (where the program stopped) below it.
             var evalThread = threads.Split("\n  thread ").First(t => t.Contains("[Function Evaluation]", StringComparison.Ordinal));
+
+            // Each thread by its id and name (an unnamed one by its id), which tells the native-only ones apart.
+            Assert.Matches(@"^\d+ \((Thread \d+|[^)]+)\):", evalThread.TrimStart(' ', '\r', '\n').Replace("thread ", "", StringComparison.Ordinal));
             var evaluation = evalThread.IndexOf("[Function Evaluation]", StringComparison.Ordinal);
             Assert.Contains("Sleep", evalThread[..evaluation], StringComparison.Ordinal);
             Assert.Contains("Program", evalThread[evaluation..], StringComparison.Ordinal);
@@ -138,7 +141,7 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         Assert.Equal(Line("loop"), top.Line);
         Assert.Equal("\"from the launch ü\"", (await adapter.EvaluateAsync("Environment.GetEnvironmentVariable(\"CODALUS_CLR_TEST\")", top.Id, "watch", Ct)).Result);
         Assert.Equal(Quoted(folder), (await adapter.EvaluateAsync("Environment.CurrentDirectory", top.Id, "watch", Ct)).Result);
-        Assert.Contains("waiting", events.Output, StringComparison.Ordinal);
+        await events.OutputContainsAsync("waiting");
 
         await adapter.SetBreakpointsAsync(fixture.Program, [], Ct);
         await adapter.ContinueAsync(stopped.ThreadId.Value, Ct);

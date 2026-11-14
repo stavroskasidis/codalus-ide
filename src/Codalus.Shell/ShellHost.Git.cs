@@ -40,7 +40,7 @@ public sealed partial class ShellHost
         Git.IsBuilding = () => Builds.IsBuilding;
         Builds.Finished += (_, _) => Git.OnBuildEnded();
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
-        GitChanges.OpenFile = path => OpenFileAsync(path);
+        GitChanges.OpenFile = OpenChangedFileAsync;
         GitChanges.RunWithArguments = RunOnGitChangeAsync;
         GitChanges.SwitchRepository = SwitchRepositoryAsync;
         GitChanges.ShowAllRepositories = ShowAllRepositoriesAsync;
@@ -255,6 +255,38 @@ public sealed partial class ShellHost
 
         Layout.OpenDocument(document, focus: true);
         return document;
+    }
+
+    /// <summary>
+    /// Opens a file from Git Changes at its first change, as its gutter shows them: against the index, or HEAD for a staged
+    /// row. The file opened at its top, where the change may be off screen. A file with no change to show (untracked, or
+    /// open in a designer) opens as it would anyway.
+    /// </summary>
+    public async Task OpenChangedFileAsync(string path, bool staged)
+    {
+        var baseline = BaselineAsync();
+        if (await OpenFileAsync(path).ConfigureAwait(true) is not { } editor || await baseline.ConfigureAwait(true) is not { } old)
+        {
+            return;
+        }
+
+        var current = editor.Model.Text.CreateSnapshot(); // made a string off the UI thread, with the diff
+        if (await Task.Run(() => LineDiff.FirstChangedLine(old, current.Text)).ConfigureAwait(true) is { } line)
+        {
+            editor.Navigate(new Codalus.LanguageServices.Protocol.Position(Math.Min(line, editor.Model.Text.LineCount) - 1, 0));
+        }
+
+        async Task<string?> BaselineAsync()
+        {
+            try
+            {
+                return await Git.ShowInRepositoryAsync(path, staged ? "HEAD" : ":").ConfigureAwait(false);
+            }
+            catch (GitException)
+            {
+                return null; // the file opens at its top
+            }
+        }
     }
 
     /// <summary>The active file's working-tree diff.</summary>

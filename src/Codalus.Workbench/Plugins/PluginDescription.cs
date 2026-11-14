@@ -379,6 +379,30 @@ public sealed partial class PluginDescription
             events.Add("onLanguageModelProvider:" + provider.Id);
         }
 
+        // Tools for AI agents (proposed, ADR 0092): the plugin activates at a tool's first call.
+        foreach (var tool in m.Contributes?.AiTools ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(tool.Name) || !AiToolNamePattern().IsMatch(tool.Name) || string.IsNullOrWhiteSpace(tool.Description))
+            {
+                warnings.Add($"Ignoring AI tool '{tool.Name}': it needs a name (lower case letters, digits and underscores, starting with a letter) and a description.");
+                continue;
+            }
+
+            if (tool.InputSchema is { } schema && (schema.ValueKind != System.Text.Json.JsonValueKind.Object || !schema.TryGetProperty("type", out var type) || type.GetString() != "object"))
+            {
+                warnings.Add($"Ignoring AI tool '{tool.Name}': its inputSchema must be a JSON schema of type object.");
+                continue;
+            }
+
+            if (m.Entry is null)
+            {
+                warnings.Add($"AI tool '{tool.Name}' needs plugin code (an entry).");
+                continue;
+            }
+
+            events.Add("onAiTool:" + tool.Name);
+        }
+
         ActivationEvents = events;
         State = PluginState.Ready;
     }
@@ -418,11 +442,14 @@ public sealed partial class PluginDescription
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*\\.[a-z0-9][a-z0-9.-]*$")]
     private static partial Regex IdPattern();
 
-    [GeneratedRegex("^(onCommand|onView|onSettingChanged|onHostingProvider|onLanguageModelProvider):[A-Za-z0-9._/-]+$")]
+    [GeneratedRegex("^(onCommand|onView|onSettingChanged|onHostingProvider|onLanguageModelProvider|onAiTool):[A-Za-z0-9._/-]+$")]
     private static partial Regex ActivationEventPattern();
 
     [GeneratedRegex("^[a-z0-9][a-z0-9-]*$")]
     private static partial Regex HostingIdPattern();
+
+    [GeneratedRegex("^[a-z][a-z0-9_]{0,63}$")]
+    private static partial Regex AiToolNamePattern();
 }
 
 /// <summary>Finds plugins in folders: each subfolder (or the folder itself) with a codalus-plugin.json.</summary>

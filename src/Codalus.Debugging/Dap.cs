@@ -17,8 +17,15 @@ public sealed record InitializeArguments(
     bool SupportsVariablePaging = false,
     bool SupportsRunInTerminalRequest = false,
     string Locale = "en-US",
-    bool SupportsStartDebuggingRequest = false)
+    bool SupportsStartDebuggingRequest = false,
+    bool SupportsExpressionCompiler = false)
 {
+    /// <summary>
+    /// The client answers <c>codalus/compileExpression</c> (M58): the Codalus debugger asks it to compile the
+    /// expressions its own evaluator doesn't read.
+    /// </summary>
+    public bool SupportsExpressionCompiler { get; init; } = SupportsExpressionCompiler;
+
     [JsonPropertyName("clientID")]
     public string ClientId { get; init; } = ClientId;
 
@@ -52,7 +59,60 @@ public sealed record Capabilities
 
     public bool SupportTerminateDebuggee { get; init; }
 
+    /// <summary>Set Next Statement: <c>gotoTargets</c> and <c>goto</c>.</summary>
+    public bool SupportsGotoTargetsRequest { get; init; }
+
+    /// <summary>Step Into Specific: <c>stepInTargets</c>, and <c>stepIn</c> with a target.</summary>
+    public bool SupportsStepInTargetsRequest { get; init; }
+
+    /// <summary>
+    /// The Codalus debugger's own (M58, ADR 0094): a breakpoint's <see cref="SourceBreakpoint.Filter"/> and
+    /// <see cref="SourceBreakpoint.DependsOn"/> are applied by the adapter, as its hit condition and log message are,
+    /// so a hit that doesn't break doesn't stop the program for the IDE to decide.
+    /// </summary>
+    public bool SupportsBreakpointFilters { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/freezeThread</c>, and <see cref="DapThread.Frozen"/>.</summary>
+    public bool SupportsFreezingThreads { get; init; }
+
+    /// <summary>The program's memory by address: <c>readMemory</c>, and <see cref="Variable.MemoryReference"/>.</summary>
+    public bool SupportsReadMemoryRequest { get; init; }
+
+    public bool SupportsWriteMemoryRequest { get; init; }
+
+    /// <summary>Machine code as text: <c>disassemble</c>, and <see cref="StackFrame.InstructionPointerReference"/>.</summary>
+    public bool SupportsDisassembleRequest { get; init; }
+
+    /// <summary>A step can be one machine instruction (<see cref="StepInArguments.Granularity"/> <c>instruction</c>).</summary>
+    public bool SupportsSteppingGranularity { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/registers</c>, a frame's registers.</summary>
+    public bool SupportsRegisters { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/loadSymbols</c>, a module's symbols looked up on demand.</summary>
+    public bool SupportsSymbolLoading { get; init; }
+
+    /// <summary>
+    /// The program can be paused for another program's stop and go on with it (M58, several startup projects): the
+    /// Codalus debugger. netcoredbg isn't asked to: on Windows a program it paused at such a moment never went on
+    /// after <c>continue</c> (PR #323's run 43035898820).
+    /// </summary>
+    public bool SupportsBreakWithOtherPrograms { get; init; }
+
+    /// <summary>The Codalus debugger's own (M58): <c>codalus/makeObjectId</c> and <c>codalus/deleteObjectId</c>.</summary>
+    public bool SupportsObjectIds { get; init; }
+
+    /// <summary>
+    /// The Codalus debugger's own (M58): an object whose type has a <c>[DebuggerTypeProxy]</c> lists the proxy's members,
+    /// then its own under <see cref="Variable.RawView"/>; an enumerable gets <see cref="Variable.ResultsView"/>.
+    /// </summary>
+    public bool SupportsTypeProxies { get; init; }
+
     public ExceptionBreakpointsFilter[]? ExceptionBreakpointFilters { get; init; }
+
+    /// <summary>The adapter applies hit conditions, log messages, filters and dependencies itself (<see cref="IDebugAdapter.AppliesBreakpointBehaviors"/>).</summary>
+    [JsonIgnore]
+    public bool AppliesBreakpointBehaviors => SupportsHitConditionalBreakpoints && SupportsLogPoints && SupportsBreakpointFilters;
 }
 
 /// <summary>
@@ -95,7 +155,22 @@ public sealed record NetFxDebugArguments(
     string Name = ".NET Framework",
     string Type = "clr",
     string Request = "launch",
-    string? Console = null);
+    string? Console = null,
+    string[]? ClientViews = null,
+    Codalus.Debugging.Symbols.SymbolOptions? Symbols = null)
+{
+    /// <summary>
+    /// Where the Codalus debugger looks for the PDB of a module that has none next to it (M58): symbol paths, symbol
+    /// servers and their cache. Null: nowhere.
+    /// </summary>
+    public Codalus.Debugging.Symbols.SymbolOptions? Symbols { get; init; } = Symbols;
+
+    /// <summary>
+    /// The types the client shows in a view of its own (<c>System.Collections.Generic.List`1</c>, by their metadata
+    /// names): the Codalus debugger lists their own members, without their <c>[DebuggerTypeProxy]</c>'s view (M58).
+    /// </summary>
+    public string[]? ClientViews { get; init; } = ClientViews;
+}
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
 public sealed record LaunchArguments(
@@ -127,8 +202,37 @@ public sealed record RunInTerminalResponse(int? ProcessId = null, int? ShellProc
 /// </summary>
 public sealed record ApplyChangesArguments(ModuleDelta[] Updates);
 
-/// <summary>Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON).</summary>
-public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta);
+/// <summary>
+/// Roslyn's deltas for one module: metadata, IL and PDB (base64 in JSON). <see cref="ActiveStatements"/> (M58): where
+/// the statements the stopped threads' frames are at are in the edited methods' new versions, so the frames move there.
+/// </summary>
+public sealed record ModuleDelta(Guid ModuleId, byte[] MetadataDelta, byte[] IlDelta, byte[] PdbDelta)
+{
+    public ActiveStatementUpdate[]? ActiveStatements { get; init; }
+}
+
+/// <summary>
+/// The frame at <see cref="IlOffset"/> of a method's version goes on, in the method's new version, at the statement
+/// that starts at <see cref="StartLine"/> and <see cref="StartColumn"/> (1-based, as the symbols count).
+/// </summary>
+public sealed record ActiveStatementUpdate(int MethodToken, int MethodVersion, int IlOffset, int StartLine, int StartColumn);
+
+/// <summary>
+/// <c>codalus/activeStatements</c>'s answer (M58): the statement each frame of the stopped threads is at, in the
+/// modules that have symbols.
+/// </summary>
+public sealed record ActiveStatementsResponse(ActiveStatement[] Statements);
+
+/// <summary>
+/// A frame's statement: its method (the module's MVID, the token, the version the frame runs), the IL offset, and the
+/// statement's span in <see cref="Document"/> (1-based). <see cref="Leaf"/>: the thread's innermost frame;
+/// <see cref="UpToDate"/>: the method's newest version.
+/// </summary>
+public sealed record ActiveStatement(Guid ModuleId, int MethodToken, int MethodVersion, int IlOffset, string Document, int StartLine, int StartColumn, int EndLine, int EndColumn, bool Leaf, bool UpToDate)
+{
+    /// <summary>The frame is in the middle of the statement (after a step out): the statement can't be edited.</summary>
+    public bool PartiallyExecuted { get; init; }
+}
 
 /// <summary><c>codalus/applyChanges</c>'s answer: what happened to each module's delta.</summary>
 public sealed record ApplyChangesResponse(ModuleDeltaResult[] Results);
@@ -179,7 +283,21 @@ public sealed record StartDebuggingArguments(string Request, JsonElement Configu
 
 public sealed record Source(string? Name = null, string? Path = null, int? SourceReference = null);
 
-public sealed record SourceBreakpoint(int Line, int? Column = null, string? Condition = null, string? HitCondition = null, string? LogMessage = null);
+/// <summary>
+/// <see cref="HitCondition"/> is <c>n</c> or <c>== n</c> (the n-th hit), <c>&gt;= n</c> or <c>% n</c> (<see cref="HitConditions"/>);
+/// <see cref="LogMessage"/> makes a logpoint (<c>{expressions}</c>, <c>$FUNCTION</c>, <c>$TID</c>). <see cref="Filter"/>
+/// (<see cref="BreakpointFilter"/>'s text) and <see cref="DependsOn"/> are the Codalus debugger's own
+/// (<see cref="Capabilities.SupportsBreakpointFilters"/>): a breakpoint that depends on another breaks only once that
+/// one was hit in the session.
+/// </summary>
+public sealed record SourceBreakpoint(int Line, int? Column = null, string? Condition = null, string? HitCondition = null, string? LogMessage = null, string? Filter = null, BreakpointDependency? DependsOn = null)
+{
+    /// <summary>The breakpoint as an adapter that doesn't apply those itself gets it: it stops at every hit (with its condition true).</summary>
+    public SourceBreakpoint WithoutBehaviors() => HitCondition is null && LogMessage is null && Filter is null && DependsOn is null ? this : new SourceBreakpoint(Line, Column, Condition);
+}
+
+/// <summary>The breakpoint (by its file and line) another one waits for.</summary>
+public sealed record BreakpointDependency(string Path, int Line);
 
 public sealed record SetBreakpointsArguments(Source Source, SourceBreakpoint[] Breakpoints, bool SourceModified = false);
 
@@ -207,13 +325,83 @@ public sealed record ContinueResponse(bool? AllThreadsContinued = null);
 
 public sealed record DisconnectArguments(bool? TerminateDebuggee = null, bool Restart = false);
 
-public sealed record DapThread(int Id, string Name);
+/// <summary><see cref="Frozen"/> is the Codalus debugger's own (M58): the thread doesn't run when the program does.</summary>
+public sealed record DapThread(int Id, string Name, bool? Frozen = null);
+
+/// <summary><c>codalus/freezeThread</c> (M58): keeps a thread from running when the program runs on, or lets it run again.</summary>
+public sealed record FreezeThreadArguments(int ThreadId, bool Frozen);
+
+/// <summary><c>gotoTargets</c>: where execution of a stopped thread could be moved to on a source line (Set Next Statement).</summary>
+public sealed record GotoTargetsArguments(Source Source, int Line, int? Column = null);
+
+public sealed record GotoTarget(int Id, string Label, int Line, int? Column = null, int? EndLine = null, int? EndColumn = null);
+
+public sealed record GotoTargetsResponse(GotoTarget[] Targets);
+
+public sealed record GotoArguments(int ThreadId, int TargetId);
+
+public sealed record StepInTargetsArguments(int FrameId);
+
+public sealed record StepInTarget(int Id, string Label);
+
+public sealed record StepInTargetsResponse(StepInTarget[] Targets);
+
+/// <summary>
+/// A step's arguments: with <see cref="TargetId"/> (<c>stepIn</c>), into that call of the line (Step Into Specific);
+/// with <see cref="Granularity"/> <c>instruction</c>, one machine instruction instead of a source line.
+/// </summary>
+public sealed record StepInArguments(int ThreadId, int? TargetId = null, string? Granularity = null)
+{
+    public const string Instruction = "instruction";
+}
 
 public sealed record ThreadsResponse(DapThread[] Threads);
 
 public sealed record StackTraceArguments(int ThreadId, int? StartFrame = null, int? Levels = null);
 
-public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null, System.Text.Json.JsonElement? ModuleId = null);
+public sealed record StackFrame(int Id, string Name, Source? Source, int Line, int Column, int? EndLine = null, int? EndColumn = null, string? PresentationHint = null, System.Text.Json.JsonElement? ModuleId = null)
+{
+    /// <summary>Where the frame is in its machine code (an address, <c>0x…</c>): what <c>disassemble</c> starts from.</summary>
+    public string? InstructionPointerReference { get; init; }
+}
+
+/// <summary><c>readMemory</c>: <see cref="Count"/> bytes at <see cref="MemoryReference"/> (an address, <c>0x…</c>) plus <see cref="Offset"/>.</summary>
+public sealed record ReadMemoryArguments(string MemoryReference, int Count, long? Offset = null);
+
+/// <summary>The bytes read, base64 (<see cref="Data"/>), from <see cref="Address"/>; <see cref="UnreadableBytes"/> of those asked for weren't readable.</summary>
+public sealed record ReadMemoryResponse(string Address, int? UnreadableBytes = null, string? Data = null);
+
+public sealed record WriteMemoryArguments(string MemoryReference, string Data, long? Offset = null, bool? AllowPartial = null);
+
+public sealed record WriteMemoryResponse(int? Offset = null, int? BytesWritten = null);
+
+/// <summary>
+/// <c>disassemble</c>: <see cref="InstructionCount"/> instructions from the one at <see cref="MemoryReference"/> plus
+/// <see cref="Offset"/> bytes, moved by <see cref="InstructionOffset"/> instructions (negative: the ones before it).
+/// </summary>
+public sealed record DisassembleArguments(string MemoryReference, int InstructionCount, long? Offset = null, int? InstructionOffset = null, bool? ResolveSymbols = null);
+
+/// <summary>
+/// One instruction: its address, bytes (hex) and text. <see cref="Symbol"/> names the method on its first instruction;
+/// <see cref="Location"/> and <see cref="Line"/> are on the first instruction of each source line.
+/// </summary>
+public sealed record DisassembledInstruction(string Address, string Instruction, string? InstructionBytes = null, string? Symbol = null, Source? Location = null, int? Line = null);
+
+public sealed record DisassembleResponse(DisassembledInstruction[] Instructions);
+
+/// <summary>
+/// <c>codalus/loadSymbols</c> (M58): looks for the symbols of a loaded module (<see cref="ModuleId"/>, a <c>module</c>
+/// event's id) in the symbol paths and on the symbol servers, whatever the module lists say. The answer comes at once;
+/// a <c>module</c> event with the reason <c>changed</c> says what was found.
+/// </summary>
+public sealed record LoadSymbolsArguments(string ModuleId);
+
+/// <summary><c>codalus/registers</c> (M58): the registers of a frame.</summary>
+public sealed record RegistersArguments(int FrameId);
+
+public sealed record RegisterValue(string Name, string Value);
+
+public sealed record RegistersResponse(RegisterValue[] Registers);
 
 public sealed record StackTraceResponse(StackFrame[] StackFrames, int? TotalFrames = null);
 
@@ -240,14 +428,66 @@ public sealed record VariablesPage(int Start, int Count, string? Filter = null);
 /// <see cref="NamedVariables"/> and <see cref="IndexedVariables"/> count the children (M56): netcoredbg counts an
 /// array's elements as named ones, and reports no indexed ones.
 /// </summary>
-public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null, int? NamedVariables = null, int? IndexedVariables = null);
+public sealed record Variable(string Name, string Value, string? Type = null, int VariablesReference = 0, string? EvaluateName = null, int? NamedVariables = null, int? IndexedVariables = null, VariablePresentationHint? PresentationHint = null)
+{
+    /// <summary>A type proxy's view of an object lists the object's own members under this node (the Codalus debugger, M58).</summary>
+    public const string RawView = "Raw View";
+
+    /// <summary>An enumerable's elements, read when the node is expanded (the Codalus debugger, M58).</summary>
+    public const string ResultsView = "Results View";
+
+    /// <summary>Where an object, an array or a string is in the program's memory (an address, <c>0x…</c>), for <c>readMemory</c>.</summary>
+    public string? MemoryReference { get; init; }
+
+    /// <summary>A node the debugger made up (<see cref="RawView"/>, <see cref="ResultsView"/>): not a member of the object.</summary>
+    [JsonIgnore]
+    public bool IsVirtual => PresentationHint?.Kind == VariablePresentationHint.Virtual;
+}
+
+/// <summary>DAP's hint about a variable: <see cref="Kind"/> <c>virtual</c> marks a node that isn't a member (<see cref="Variable.RawView"/>).</summary>
+public sealed record VariablePresentationHint(string? Kind = null, string[]? Attributes = null, string? Visibility = null, bool? Lazy = null)
+{
+    public const string Virtual = "virtual";
+}
+
+/// <summary>
+/// The Codalus debugger's reverse request <c>codalus/compileExpression</c> (M58, ADR 0094): an expression its own
+/// evaluator doesn't read (a lambda, a query, Visual Basic), to compile where the frame is stopped
+/// (<see cref="Line"/> and <see cref="Column"/> of <see cref="SourcePath"/>, 1-based) in the project that built
+/// <see cref="ModulePath"/>.
+/// </summary>
+public sealed record CompileExpressionArguments(string Expression, string SourcePath, int Line, int Column, string? ModulePath = null);
+
+/// <summary>
+/// The answer: <see cref="Assembly"/> with a static method <see cref="MethodName"/> of <see cref="TypeName"/> that
+/// returns the expression's value as an object, to call with <see cref="Parameters"/> (each an expression the
+/// debugger's evaluator reads: <c>this</c>, a variable's name, <c>this.Name</c>) and the frame's type arguments when it
+/// has <see cref="TypeParameters"/>. <see cref="Errors"/> when it didn't compile (the compiler's words).
+/// </summary>
+public sealed record CompileExpressionResponse(byte[]? Assembly = null, string? TypeName = null, string? MethodName = null, string[]? Parameters = null, int TypeParameters = 0, string[]? Errors = null);
+
+/// <summary>
+/// <c>codalus/makeObjectId</c> (M58): keeps the object <see cref="Expression"/> evaluates to in <see cref="FrameId"/>'s
+/// frame reachable as <c>$1</c>, <c>$2</c>… for the rest of the session, also where no variable holds it any more.
+/// </summary>
+public sealed record MakeObjectIdArguments(string Expression, int? FrameId = null);
+
+/// <summary>The object's name (<c>$1</c>).</summary>
+public sealed record ObjectIdResponse(string Name);
+
+/// <summary><c>codalus/deleteObjectId</c>: lets go of an object ID.</summary>
+public sealed record DeleteObjectIdArguments(string Name);
 
 public sealed record VariablesResponse(Variable[] Variables);
 
 /// <summary><see cref="Context"/> is <c>watch</c>, <c>repl</c>, <c>hover</c> or <c>clipboard</c>.</summary>
 public sealed record EvaluateArguments(string Expression, int? FrameId = null, string? Context = null);
 
-public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0, int? NamedVariables = null, int? IndexedVariables = null);
+public sealed record EvaluateResponse(string Result, string? Type = null, int VariablesReference = 0, int? NamedVariables = null, int? IndexedVariables = null)
+{
+    /// <summary>Where the value is in the program's memory, when it's an object (<see cref="Variable.MemoryReference"/>).</summary>
+    public string? MemoryReference { get; init; }
+}
 
 public sealed record SetVariableArguments(int VariablesReference, string Name, string Value);
 
@@ -322,6 +562,7 @@ public static class DapEvents
 [JsonSerializable(typeof(RunInTerminalResponse))]
 [JsonSerializable(typeof(ApplyChangesArguments))]
 [JsonSerializable(typeof(ApplyChangesResponse))]
+[JsonSerializable(typeof(ActiveStatementsResponse))]
 [JsonSerializable(typeof(HotReloadCapabilitiesResponse))]
 [JsonSerializable(typeof(BrowserLaunchArguments))]
 [JsonSerializable(typeof(StartDebuggingArguments))]
@@ -332,6 +573,27 @@ public static class DapEvents
 [JsonSerializable(typeof(SetExceptionBreakpointsArguments))]
 [JsonSerializable(typeof(EmptyArguments))]
 [JsonSerializable(typeof(ThreadArguments))]
+[JsonSerializable(typeof(FreezeThreadArguments))]
+[JsonSerializable(typeof(ReadMemoryArguments))]
+[JsonSerializable(typeof(ReadMemoryResponse))]
+[JsonSerializable(typeof(WriteMemoryArguments))]
+[JsonSerializable(typeof(WriteMemoryResponse))]
+[JsonSerializable(typeof(DisassembleArguments))]
+[JsonSerializable(typeof(DisassembleResponse))]
+[JsonSerializable(typeof(RegistersArguments))]
+[JsonSerializable(typeof(LoadSymbolsArguments))]
+[JsonSerializable(typeof(RegistersResponse))]
+[JsonSerializable(typeof(MakeObjectIdArguments))]
+[JsonSerializable(typeof(CompileExpressionArguments))]
+[JsonSerializable(typeof(CompileExpressionResponse))]
+[JsonSerializable(typeof(ObjectIdResponse))]
+[JsonSerializable(typeof(DeleteObjectIdArguments))]
+[JsonSerializable(typeof(GotoTargetsArguments))]
+[JsonSerializable(typeof(GotoTargetsResponse))]
+[JsonSerializable(typeof(GotoArguments))]
+[JsonSerializable(typeof(StepInTargetsArguments))]
+[JsonSerializable(typeof(StepInTargetsResponse))]
+[JsonSerializable(typeof(StepInArguments))]
 [JsonSerializable(typeof(ContinueResponse))]
 [JsonSerializable(typeof(DisconnectArguments))]
 [JsonSerializable(typeof(ThreadsResponse))]

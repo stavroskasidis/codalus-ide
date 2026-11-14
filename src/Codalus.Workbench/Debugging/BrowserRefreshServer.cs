@@ -324,7 +324,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             return;
         }
 
-        // Bounded and on the thread pool, as IdeExecutionServer's: an HttpListener WebSocket's abort can block on Windows.
+        // Bounded and on the thread pool, as IdeExecutionServer's. The pages close before the listener, so it closes with
+        // no connection of its own still open.
         var teardown = Task.Run(async () =>
         {
             try
@@ -335,11 +336,12 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             {
             }
 
-            CloseListener(_listener);
             foreach (var page in _pages.Values)
             {
                 page.Close();
             }
+
+            CloseListener(_listener);
 
             try
             {
@@ -432,13 +434,22 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             return await RequestAsync(message, Answer.Apply, cancellationToken).ConfigureAwait(false);
         }
 
+        /// <summary>
+        /// Sends on the socket. Neither this nor the read takes a token, and both continue on the thread pool: the page's
+        /// <see cref="Close"/> ends them. On Windows a token given to HttpListener's WebSocket can leave its cancellation
+        /// and the socket's abort waiting for each other (see <c>IdeExecutionServer.SendToAsync</c>); waiting for the
+        /// turn to send still takes the caller's token.
+        /// </summary>
+        private Task SendToSocketAsync(byte[] message) =>
+            socket.SendAsync(new ArraySegment<byte>(message), WebSocketMessageType.Text, endOfMessage: true, CancellationToken.None);
+
         public async Task ReadAsync(CancellationToken cancellationToken)
         {
             var buffer = new byte[16 * 1024];
             var message = new MemoryStream();
             while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
             {
-                var result = await socket.ReceiveAsync(buffer, cancellationToken).ConfigureAwait(false);
+                var result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     break;
@@ -485,7 +496,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             try
             {
                 (kind == Answer.Apply ? _applies : _questions).Enqueue(answer);
-                await socket.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                await SendToSocketAsync(message).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
             }
             catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
             {
@@ -504,7 +515,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
             await _sending.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                await socket.SendAsync(message, WebSocketMessageType.Text, endOfMessage: true, cancellationToken).ConfigureAwait(false);
+                await SendToSocketAsync(message).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
             }
             catch (Exception ex) when (ex is WebSocketException or ObjectDisposedException or InvalidOperationException)
             {

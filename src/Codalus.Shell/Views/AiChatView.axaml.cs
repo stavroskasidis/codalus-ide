@@ -3,7 +3,9 @@ using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.Platform.Storage;
 using Codalus.Shell.Controls;
+using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Ai;
 using Codalus.Workbench.Localization;
@@ -57,8 +59,11 @@ public sealed partial class AiChatView : UserControl, IPaneView
         TurnOn.Click += (_, _) => _ = _vm?.TurnOnAsync();
         TurnOnBar.Click += (_, _) => _ = _vm?.TurnOnAsync();
         Send.Click += (_, _) => OnSendClick();
+        QueueButton.Click += (_, _) => OnSendClick();
+        DensityToggle.Click += (_, _) => _ = _vm?.ToggleDensityAsync();
+        InputBox.AddHandler(DragDrop.DropEvent, OnInputDrop);
+        InputBox.AddHandler(DragDrop.DragOverEvent, OnInputDragOver);
         InputBox.AddHandler(KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
-        InputBox.GotFocus += (_, _) => _vm?.UpdateContextPreview();
         DataContextChanged += (_, _) => Attach(DataContext as AiChatViewModel);
     }
 
@@ -139,6 +144,97 @@ public sealed partial class AiChatView : UserControl, IPaneView
         }
     }
 
+    private void OnRemoveQueuedClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AiQueuedQuestion question })
+        {
+            _vm?.RemoveQueued(question);
+        }
+    }
+
+    private void OnEditQueuedClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AiQueuedQuestion question })
+        {
+            _vm?.EditQueued(question);
+            InputBox.Focus();
+            InputBox.CaretIndex = InputBox.Text?.Length ?? 0;
+        }
+    }
+
+    private void OnRemoveImageClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: AiImageAttachment image })
+        {
+            _vm?.RemoveImage(image);
+        }
+    }
+
+    // ------------------------------------------------------------------ images (ADR 0092)
+
+    /// <summary>The image type of a file by its extension, or null.</summary>
+    internal static string? ImageType(string path) => Path.GetExtension(path).ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        _ => null,
+    };
+
+    private void OnInputDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.TryGetFiles()?.Any(f => f.TryGetLocalPath() is { } p && ImageType(p) is not null) == true ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnInputDrop(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        foreach (var file in e.DataTransfer.TryGetFiles() ?? [])
+        {
+            if (file.TryGetLocalPath() is { } path && ImageType(path) is { } type)
+            {
+                try
+                {
+                    AddImage(new AiImageAttachment(Convert.ToBase64String(await File.ReadAllBytesAsync(path).ConfigureAwait(true)), type, Path.GetFileName(path)));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>Ctrl+V with an image on the clipboard (a screenshot): it goes with the question instead of as text.</summary>
+    private async Task<bool> PasteImageAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard)
+        {
+            return false;
+        }
+
+        // Any image format the platform has, as a bitmap, sent as PNG.
+        using var bitmap = await SafeClipboard.TryAsync(() => Avalonia.Input.Platform.ClipboardExtensions.TryGetBitmapAsync(clipboard)).ConfigureAwait(true);
+        if (bitmap is null)
+        {
+            return false;
+        }
+
+        using var png = new MemoryStream();
+        bitmap.Save(png, Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        AddImage(new AiImageAttachment(Convert.ToBase64String(png.ToArray()), "image/png", Localizer.Format("aiChat.pastedImage", "Pasted image {0}", (_vm?.Images.Count ?? 0) + 1)));
+        return true;
+    }
+
+    private void AddImage(AiImageAttachment image)
+    {
+        if (_vm is { } vm && !vm.AddImage(image))
+        {
+            vm.ShowImageTooBig(image.Name);
+        }
+    }
+
     /// <summary>An external agent's slash command goes into the input, ready for its argument.</summary>
     private void UseCommand(AiCommandSuggestion suggestion)
     {
@@ -167,6 +263,7 @@ public sealed partial class AiChatView : UserControl, IPaneView
             _vm.Cleared -= OnCleared;
             _vm.Turns.CollectionChanged -= OnTurnsChanged;
             _vm.PropertyChanged -= OnViewModelPropertyChanged;
+            _vm.DensityChanged -= OnDensityChanged;
         }
 
         _vm = vm;
@@ -178,10 +275,10 @@ public sealed partial class AiChatView : UserControl, IPaneView
         }
 
         vm.PropertyChanged += OnViewModelPropertyChanged;
+        vm.DensityChanged += OnDensityChanged;
         vm.TurnChanged += OnTurnChanged;
         vm.Cleared += OnCleared;
         vm.Turns.CollectionChanged += OnTurnsChanged;
-        vm.UpdateContextPreview();
         vm.EnsureAgentStarted();
         _follow.Reset();
     }
@@ -273,13 +370,27 @@ public sealed partial class AiChatView : UserControl, IPaneView
             return;
         }
 
+        if (e.Key == Key.V && e.KeyModifiers == (OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control))
+        {
+            // An image on the clipboard is attached; text pastes as usual.
+            e.Handled = true;
+            _ = PasteAsync();
+            return;
+        }
+
         if (e.Key == Key.Enter && e.KeyModifiers == KeyModifiers.None && _vm is { } vm)
         {
+            // While a turn runs, Enter queues the question (ADR 0092).
             e.Handled = true;
-            if (!vm.IsAnswering)
-            {
-                _ = vm.SendAsync();
-            }
+            _ = vm.SendAsync();
+        }
+    }
+
+    private async Task PasteAsync()
+    {
+        if (!await PasteImageAsync().ConfigureAwait(true))
+        {
+            InputBox.Paste();
         }
     }
 
@@ -298,6 +409,15 @@ public sealed partial class AiChatView : UserControl, IPaneView
         if (vm.IsAnswering && InputBox.IsEffectivelyVisible)
         {
             InputBox.Focus();
+        }
+    }
+
+    /// <summary>Compact ⇄ detailed: the turns in view render again (the others when they come into view).</summary>
+    private void OnDensityChanged(object? sender, EventArgs e)
+    {
+        foreach (var view in _realized.Values)
+        {
+            view.Render();
         }
     }
 

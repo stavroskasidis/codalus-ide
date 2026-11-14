@@ -501,4 +501,80 @@ public sealed class GitShellTests
         await f.Shell.Git.ClearStashesAsync(TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(() => vm.HasNoStashes);
     }
+
+    /// <summary>
+    /// Git Changes' double-click with Open File as the default opens a changed file at its first change, which was off
+    /// screen when the file opened at its top: an unstaged row against the index, a staged one against HEAD, the change
+    /// on screen though the lines above it are taller than the editor estimates. A file open already goes there too. On a
+    /// plain folder, so no build host starts.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Opening_a_changed_file_from_git_changes_goes_to_its_first_change()
+    {
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "repository");
+        Directory.CreateDirectory(folder);
+        Git(folder, "init", "-q", "-b", "main");
+        Configure(folder);
+
+        // C#, a member every three lines: their CodeLens rows make lines further down taller than the editor estimates.
+        List<string> lines = ["namespace Contoso.Web;", string.Empty, "public static class Catalog", "{"];
+        for (var i = 1; i <= 60; i++)
+        {
+            lines.AddRange([$"    /// <summary>The price of item {i}.</summary>", $"    public static decimal Price{i}(int quantity) => quantity * {i}.50m;", string.Empty]);
+        }
+
+        lines.Add("}");
+        string Text() => string.Join('\n', lines) + "\n";
+        File.WriteAllText(Path.Combine(folder, "Catalog.cs"), Text());
+        File.WriteAllText(Path.Combine(folder, "Staged.cs"), Text());
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "initial");
+        var far = lines.FindIndex(l => l.Contains("Price50(", StringComparison.Ordinal));
+        var near = lines.FindIndex(l => l.Contains("Price40(", StringComparison.Ordinal));
+        var original = lines[far];
+        lines[far] = original.Replace("50.50m", "49.99m", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(folder, "Catalog.cs"), Text());
+        lines[far] = original;
+        lines[near] = lines[near].Replace("40.50m", "39.99m", StringComparison.Ordinal);
+        File.WriteAllText(Path.Combine(folder, "Staged.cs"), Text());
+        Git(folder, "add", "Staged.cs");
+
+        f.Shell.Trust.Trust(folder);
+        await f.Shell.OpenFolderAsync(folder);
+        var vm = f.Shell.GitChanges;
+        await ShellFixture.PumpUntil(() => vm.Changes.Any(r => r.Name == "Catalog.cs") && vm.Staged.Any(r => r.Name == "Staged.cs"));
+        vm.OpenFileAsDefault = true;
+
+        // The caret on the change, and the change on screen.
+        async Task OpenAsync(GitFileRow row, int line)
+        {
+            await vm.OpenAsync(row);
+            bool Shown()
+            {
+                if (f.Shell.ActiveEditor is not { Controller: { } controller } document || !document.Model.Path.EndsWith(row.Name, StringComparison.Ordinal)
+                    || controller.Editor.TextArea.Caret.Line != line)
+                {
+                    return false;
+                }
+
+                var view = controller.Editor.TextArea.TextView;
+                return view.VisualLinesValid && view.GetVisualLine(line) is { } visual
+                    && visual.VisualTop >= view.VerticalOffset && visual.VisualTop + visual.Height <= view.VerticalOffset + view.Bounds.Height;
+            }
+
+            await ShellFixture.PumpUntil(
+                () => Shown(),
+                describe: () => f.Shell.ActiveEditor?.Controller is { } c
+                    ? $"{f.Shell.ActiveEditor.Model.Path} at line {c.Editor.TextArea.Caret.Line}, lines {c.Editor.TextArea.TextView.VisualLines.FirstOrDefault()?.FirstDocumentLine.LineNumber} to {c.Editor.TextArea.TextView.VisualLines.LastOrDefault()?.LastDocumentLine.LineNumber} shown"
+                    : "no editor");
+        }
+
+        await OpenAsync(vm.Changes.Single(r => r.Name == "Catalog.cs"), far + 1);
+        await OpenAsync(vm.Staged.Single(r => r.Name == "Staged.cs"), near + 1);
+
+        // Open already, with the caret elsewhere: the first change again.
+        f.Shell.ActiveEditor!.Controller!.Editor.CaretOffset = 0;
+        await OpenAsync(vm.Staged.Single(r => r.Name == "Staged.cs"), near + 1);
+    }
 }

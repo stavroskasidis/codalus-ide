@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Codalus.Shell.Editor;
 
@@ -76,6 +77,33 @@ public sealed class NavigationBarFirstFrameTests
         finally
         {
             f.Shell.Layout.ActiveDocumentChanged -= OnActive;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_bar_takes_its_style_the_toolbars_background_and_the_line_under_it()
+    {
+        // Border.navigationBar matches a style key exactly: the bar, a Border's subclass, took none of it (M34a's look:
+        // the toolbar's background, a line under it), and was 3 px shorter than the diff's empty row opposite it.
+        await using var f = ShellFixture.Create();
+        var bar = new NavigationBar { IsVisible = true };
+        var row = new Avalonia.Controls.Border { Child = new Avalonia.Controls.ComboBox { Classes = { "navigationBar" } } };
+        row.Classes.Add("navigationBar");
+        var window = new Avalonia.Controls.Window { Width = 600, Height = 200, Content = new Avalonia.Controls.StackPanel { Children = { bar, row } } };
+        window.Show();
+        try
+        {
+            ShellFixture.Pump();
+            Assert.True(bar.TryFindResource("Shell.Toolbar", bar.ActualThemeVariant, out var toolbar));
+            Assert.Same(toolbar, bar.Background);
+            Assert.Equal(new Avalonia.Thickness(0, 0, 0, 1), bar.BorderThickness);
+            Assert.Equal(new Avalonia.Thickness(2, 1), bar.Padding);
+            Assert.Equal(row.Bounds.Height, bar.Bounds.Height);
+            Assert.Equal(25, bar.Bounds.Height); // the 22 px pickers, the padding and the line
+        }
+        finally
+        {
+            window.Close();
         }
     }
 

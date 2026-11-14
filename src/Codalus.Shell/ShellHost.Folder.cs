@@ -68,9 +68,9 @@ public sealed partial class ShellHost
         _structureReported = false;
         _evaluationReported = false;
         _designTimeReported = false;
-        if (Solutions.IsOpen)
+        if (Solutions.IsOpen && !await CloseSolutionAsync().ConfigureAwait(true))
         {
-            await CloseSolutionAsync().ConfigureAwait(true);
+            return; // the save-changes dialog was cancelled: the open solution stays
         }
 
         try

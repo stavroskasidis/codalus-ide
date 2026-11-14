@@ -117,6 +117,9 @@ public sealed class SessionsTests(SessionsFixture fixture) : IClassFixture<Sessi
     [Fact]
     public async Task One_program_ending_leaves_the_session_to_the_other()
     {
+        // Without pausing the other programs at a stop (M58's debug.breakAllProcesses off; the Codalus debugger pauses
+        // them, BreakAllSessionTests), so Partner runs to its end while Debuggee is stopped.
+        _debug.BreakAllProcesses = () => false;
         var debuggee = fixture.Source("Debuggee", "Program.cs");
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee, DebuggeeFixture.Line(debuggee, "done")));
 

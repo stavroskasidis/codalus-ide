@@ -121,6 +121,18 @@ public static class MobileDevices
         return [.. result.OrderByDescending(d => Version.TryParse(d.OsVersion, out var v) ? v : new Version(0, 0)).ThenBy(d => d.Name, StringComparer.Ordinal)];
     }
 
+    /// <summary>
+    /// The iOS targets of a Mac: the connected iPhones and iPads first, then the simulators. A device whose identifier
+    /// is a listed simulator's is that simulator, and is left out: a booted "iPhone 17" simulator showed a second time as
+    /// a device with the same identifier, both rows were where runs go, and a run resolved to the first, the "device",
+    /// which can't be debugged ("Debugging on an iPhone or iPad isn't available yet", the maintainer's Mac, 2026-11-12).
+    /// </summary>
+    public static IReadOnlyList<MobileDevice> MergeApple(IReadOnlyList<MobileDevice> simulators, IReadOnlyList<MobileDevice> devices)
+    {
+        var simulated = simulators.Select(s => s.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return [.. devices.Where(d => !simulated.Contains(d.Id)), .. simulators];
+    }
+
     /// <summary>Connected iPhones and iPads from <c>xcrun devicectl list devices --json-output</c> (Xcode 15 and later).</summary>
     public static IReadOnlyList<MobileDevice> ParseAppleDevices(string json)
     {
@@ -142,6 +154,12 @@ public static class MobileDevices
                     element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
                 if (Get(hardware, "platform") != "iOS" || Get(hardware, "udid") is not { Length: > 0 } udid)
+                {
+                    continue;
+                }
+
+                // A simulator isn't a connected device, where the tool lists one (its "reality" is "virtual").
+                if (string.Equals(Get(hardware, "reality"), "virtual", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }

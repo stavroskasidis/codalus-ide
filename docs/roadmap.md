@@ -76,6 +76,13 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M55 | A managed CoreCLR debugger, phase 2: Apply Code Changes while debugging | done (M55a and M55b at checkpoint), 2026-10-29 ([m55a](checkpoints/m55a.md), [m55b](checkpoints/m55b.md)): under the Codalus debugger edits apply to the program being debugged through Apply Code Changes, Continue and a save: launched, in the terminal or a console window, tests, attached with `DOTNET_MODIFIABLE_ASSEMBLIES`, libraries loaded later, and a Blazor Web App's server in place; rude edits ask to restart; netcoredbg offers the Codalus debugger once. Roslyn's Edit and Continue service in the language host, publicized (`ExternalAccess.HotReload` is internal). Planned 2026-10-29 (D48's phase 2, [ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) |
 | M56 | 0.11: Large solutions, performance pass round 3, and CodeLens rows from the first frame | built, 2026-10-30 ([m56](checkpoints/m56.md)), validated on Linux, not yet on Windows and macOS: CodeLens rows kept (empty) from a C# file's first frame, estimated from its text; no reaction to a project's evaluation that walks every project (connection discovery, the Solution Explorer's tree, the toolbar, project contexts), no whole-solution Code Search index nor refresh of hidden editors after each pause in typing, no git status after writes under `obj/`; startup without the single-instance wait, the optional tools' checks and editors for hidden tabs, with the login shell taken while the window loads |
 | M57 | 0.11: Document sync off the UI thread, Open Folder listed as you expand, virtualized Git trees | built, 2026-10-31 ([m57](checkpoints/m57.md)), validated on Linux, not yet on Windows and macOS: each JSON-RPC connection writes on its own loop, the editor hands language services a snapshot; the folder view lists each folder when it's expanded, with `node_modules`, `.vs` and `.idea` dimmed; the Git Repository, Commit Details and Compare trees virtualized, nothing read while hidden; a tree item automation peer for the eight trees shown as rows |
+| M58 | The Codalus debugger by default, and its gaps closed | M58a and M58b built, 2026-11-11 ([m58a](checkpoints/m58a.md), [m58b](checkpoints/m58b.md)), each validated on Linux before its pull request, on Windows and macOS by the pull request's CI; since 2026-11-12 CI runs a session under the debugger's 32-bit build for Windows (it debugs) and under its x64 build for Apple silicon (it crashed in dbgshim; with a held start it debugs x64 programs of .NET Core 3.1 to .NET 11, see the change log). M58a, with the adapter still opt-in: hit counts, logpoints, filters and dependent breakpoints applied by the debugger; Set Next Statement, Step Into Specific, returned values, frozen threads; `new`, generic methods, object IDs, type proxies and Results View in its evaluator, and lambdas, LINQ and Visual Basic through expressions the language host compiles; the Disassembly, Registers and Memory windows; symbol paths and servers (off until listed); Edit and Continue (the stopped frames go on in the new code); a stop in one of several startup programs pauses the others; Windows PDBs. M58b: `debug.adapter` defaults to `codalus`, with netcoredbg a fallback for one release; the debugger's self-contained bundle copied to Linux targets over SSH, in containers and in WSL, and its display attributes read there; its x64 build for Apple silicon and 32-bit build for .NET Framework as downloaded components; remote windows get the same bundle. Decided 2026-11-11 (D49, [ADR 0094](adr/0094-the-codalus-debugger-by-default.md)) |
+| M59 | No telemetry from the tools the IDE runs | done ([m59](checkpoints/m59.md), [ADR 0098](adr/0098-no-telemetry-from-the-tools-the-ide-runs.md), D51): `ToolTelemetry` adds the .NET SDK's, Avalonia's build task's, Microsoft.Testing.Platform's and `dotnet-svcutil`'s opt-outs for every host and tool the IDE starts (here and on a remote server), keeping a value the user set; the repository's scripts and CI set them, and a source scan keeps new process starts on the helper |
+| M60 | The IDE's tools for agents, round 2 | done ([m60](checkpoints/m60.md), [m60b](checkpoints/m60b.md), [ADR 0099](adr/0099-the-ides-tools-for-agents-round-2.md), D52): tools for code changes, Hot Reload, profiling, services, packages, migrations, Git and the IDE's commands; progress for long calls, per-folder consent for agents outside the IDE, setups to copy; M60b (2026-11-14): the desktop-app tools (windows with pictures, the control tree, input inside the app; Avalonia, and WPF on Windows; off-screen under Xvfb on Linux) and the headless mode (`codalus mcp --folder`) |
+| M61 | Debugging runtime-async code (.NET 11) | done ([m61](checkpoints/m61.md), [m61b](checkpoints/m61b.md), [ADR 0100](adr/0100-debugging-runtime-async-code.md), D53): the spike (`samples/Debugging/Async.slnx`, state-machine and runtime-async builds) found every step across a suspending `await` running the program on; fixed for both kinds: Step Over an `await`, Step Into a state machine, Step Out of a resumed method with its result. Limits reported upstream: Step Out of a resumed runtime-async method without its value, and no async call stack for runtime async; M61b (2026-11-14, [m61b](checkpoints/m61b.md)): the async call stack for state machines (`[Async]` frames out to `Main`, with their locals) |
+| M62 | Inline values while debugging | done ([m62](checkpoints/m62.md), [ADR 0101](adr/0101-inline-values-while-debugging.md), D54): the language host answers `textDocument/inlineValue` for C# and Visual Basic, and the editor draws each line's values after it at a stop, for the selected frame, changed values highlighted; `debug.inlineValues`, on by default |
+| M63 | Services under the debugger: compose and Aspire | done ([m63](checkpoints/m63.md), [ADR 0102](adr/0102-services-under-the-debugger.md), D55): compose fast mode by default (Debug builds mounted on the `base` stage through the IDE's override in the state folder; reruns and builds restart only changed services); Debug Compose debugs every .NET service in one session; one service restarted, stopped, debugged or detached alone; Apply Code Changes in containers; every Aspire project under the debugger (64 programs), one resource debugged alone. Profiling in containers, Hot Reload without the debugger, Blazor WebAssembly in containers and a smoke step deferred |
+| M64 | XAML depth: Hot Reload, refactorings and XAML debugging | done ([m64](checkpoints/m64.md), [m64b](checkpoints/m64b.md), [ADR 0103](adr/0103-xaml-depth.md), D56): rename across C# and XAML both ways (binding paths, `x:Class`, types, `{x:Static}`, handlers, resource keys); Extract Resource, Extract Style and generate from use; failed bindings from the running app in the Error List at their XAML lines; XAML Hot Reload on save through the live agent (Avalonia; WPF on Windows only); XAML breakpoints (element creation, attribute set), Break When Value Changes, break at a failed binding (`debug.breakOnFailedBinding`) and the Live Property Explorer's style explanation built in M64b ([m64b](checkpoints/m64b.md)); binding values while stopped deferred |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -146,13 +153,13 @@ All seven are settled:
 |---|---|---|
 | 1. Daily driver | M8, M9, M10 | What a C# developer misses most on day one after the MVP: tests, packages, a terminal. |
 | 2. Language platform | M11 | Pluggable languages (LSP bridge, grammars) and editing for the non-C# files every .NET repository has. |
-| 3. Depth | M12, M29, M13, M14, M26, M54, M55 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
-| 4. Platform and release | M30, M31, M32, M33 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
-| 5. Web, data and cloud-native | M15, M16, M27, M17 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
+| 3. Depth | M12, M29, M13, M14, M26, M54, M55, M61, M62 | Bringing the editor, Git, the debugger and the build and project tooling from "MVP" to the classic IDE's class, and the look and feel from VS Code's to the classic IDE's (M29). |
+| 4. Platform and release | M30, M31, M32, M33, M59 | The newest .NET (11, then each new release), automated nightly and stable releases with setup installers, self-update, and proof that .NET Core 2.0 to .NET 10 projects work. |
+| 5. Web, data and cloud-native | M15, M16, M27, M17, M63 | ASP.NET Core, Blazor, Hot Reload, EF Core and databases, containers, Aspire, publishing. |
 | 6. Diagnostics | M18 | Profiling, counters, memory analysis, dumps, benchmarks. |
-| 7. UI frameworks | M19 | Avalonia XAML with a live previewer. |
+| 7. UI frameworks | M19, M64 | Avalonia XAML with a live previewer. |
 | 8. Remote | M21 | SSH, WSL, Dev Containers. |
-| 9. Ecosystem | M22, M23, M28 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
+| 9. Ecosystem | M22, M23, M28, M60 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
 | Windows desktop | M42, M40, M41, M44, M43 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows (D31, 2026-10-16); the other OSes are decided later. |
 | 11. Polish | M34, M39, M37, M38, M45, M46, M47, M50, M51 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
@@ -216,6 +223,12 @@ graph LR
   M12 & M29 --> M47
   M14 & M43 --> M54
   M54 & M15 & M16 --> M55
+  M58 --> M61 & M62
+  M17 & M18 & M55 & M58 --> M63
+  M19 & M40 & M58 --> M64
+  M62 -.-> M64
+  M48 --> M60
+  M19 & M18 -.-> M60
 ```
 
 A dashed edge means "better with", not "blocked by".
@@ -984,6 +997,100 @@ The fast up-to-date check is tested with a matrix of edits (source, project file
 
 **Status.** Built 2026-10-31 ([m57](checkpoints/m57.md)), one pull request. The work left is its checkpoint's deferred list.
 
+### M58 — The Codalus debugger by default
+
+**Why.** The maintainer's request of 2026-11-11: make the Codalus debugger the default and close its gaps. After M54 and M55 it passed the debugger suites on every OS and applied edits, but it was a preview behind `debug.adapter`, handed remote targets and x64 programs on Apple silicon to netcoredbg, and had netcoredbg's gaps: hit counts and logpoints with a stop per hit, no Set Next Statement, no type proxies, no lambdas in expressions, no machine-level windows, no symbol servers, and edits that a running method never saw. D49 ([ADR 0094](adr/0094-the-codalus-debugger-by-default.md)) is the maintainer's answers to the ten questions of that day.
+
+**Scope.** Two pull requests, each opened once when complete.
+
+1. **M58a: the adapter's features**, with the adapter still opt-in.
+   - Breakpoints: hit counts, logpoints, filters and dependent breakpoints are applied by the debugger, so the program doesn't stop for a hit that doesn't count.
+   - Stepping: Set Next Statement, Step Into Specific, the value a step out returned, frozen and thawed threads.
+   - Expressions: `new`, generic methods, `$exception`, `$ReturnValue` and object IDs in the adapter's evaluator; `[DebuggerTypeProxy]`, Results View and Raw View; what the evaluator doesn't read (lambdas, LINQ, the rest of C#, Visual Basic) compiled by the language host against the stopped frame and run in the program.
+   - The Disassembly, Registers and Memory windows over JIT-compiled managed code (Iced on x64, a decoder of our own on arm64), with steps of one instruction.
+   - Symbols: Options › Debugging › Symbols (paths, servers, a cache, include and exclude lists), Load Symbols in the Modules window. Nothing is asked of a server until one is listed.
+   - Edit and Continue: an edit made while stopped moves the stopped frames into the new code.
+   - Several startup projects: a stop in one program pauses the others (`debug.breakAllProcesses`).
+   - Windows PDBs, through a managed reader.
+2. **M58b: remote targets and the default.**
+   - A self-contained, trimmed adapter bundle per platform: copied to SSH, container and WSL targets with consent and carried by `codalus-server`; for `osx-x64` (x64 programs on Apple silicon) and `win-x86` (32-bit .NET Framework processes) an on-demand component.
+   - The adapter on a remote target reads the modules there: `[DebuggerDisplay]`, icons and grouping in remote sessions.
+   - `debug.adapter` defaults to `codalus`; `netcoredbg` stays one release as a fallback.
+   - The user guide's limits rewritten as the Codalus debugger's own.
+
+**Left as documented limits (D49).** Data breakpoints, mixed-mode (native) debugging, dumps from another operating system, Windows remote targets, start-up breakpoints in packaged WinUI apps, F# expressions, and the Mono adapter's gaps.
+
+**Status.** M58a built 2026-11-11 ([m58a](checkpoints/m58a.md)), one pull request, validated on Linux. M58b built 2026-11-11 ([m58b](checkpoints/m58b.md)), one pull request after M58a's, validated on Linux; what it left is in the deferred table. A later release removes netcoredbg (ADR 0094).
+
+### M61 — Debugging runtime-async code (.NET 11)
+
+**Why.** The maintainer's request of 2026-11-13. .NET 11 can run `async` methods compiled for runtime async, which have no compiler-made state machine: the runtime suspends and resumes them itself. The Codalus debugger was built for state machines (`MoveNext`, hoisted locals, the PDB's async stepping information), in:
+- async stepping;
+- async frames;
+- the value Step Out returns;
+- the call stack at an exception stop.
+
+Whether each of these still works on runtime-async code hasn't been tested. Neither the code nor the user guide mentions it.
+
+**Depends on.** M58 (the Codalus debugger by default), M30 (.NET 11). M18b's .NET Async view is checked too.
+
+**Decisions.** [D50](#decision-register): this milestone comes third. Settled at plan time (skill `grill-me`), after the spike: what the runtime's debugging interfaces give for runtime-async methods, and what needs the runtime's own changes. Those are reported upstream and recorded as limits until they ship.
+
+**Scope.**
+1. **A spike on all three OSes.** A runtime-async fixture in `samples/` (`net11.0`, runtime async on in the project, the framework's libraries as they ship) runs through the debugger suites' scenarios. Its findings go in an ADR. Each gap is fixed below or recorded as a limit.
+2. **Stepping:**
+   - Step Over an `await` stops on the method's next line once it resumes, on whichever thread it resumes.
+   - Step Into an awaited call, and Step Out back to the awaiting caller with the value it returned (`$ReturnValue`, Locals' first row).
+3. **After an `await`:**
+   - breakpoints and Run to Cursor stop there;
+   - Set Next Statement and Edit and Continue are allowed or refused as the runtime allows, and a refusal says why.
+4. **Values and the stack:**
+   - Locals, parameters and `this` of a method that has resumed;
+   - the call stack shows the user's frames, with the runtime's resumption frames folded into external code under Just My Code;
+   - an exception stop's stack starts at the frame that threw.
+5. **Mixed code:** state-machine code awaiting runtime-async code and the reverse, as libraries built either way meet.
+6. **Other windows:** Parallel Stacks, the Threads window and the profiler's .NET Async view and call trees (M18b) are checked on runtime-async code, fixed where cheap, and given a `TODO(issue)` otherwise.
+7. **The user guide's** debugging page says what works and what is a limit.
+
+**Tests.** The runtime-async fixture in the debugger suites on every OS (the `debug-codalus` shard), each scenario also run on a state-machine build of the same code. A smoke step.
+
+**Exit criteria.** On Windows, Linux x64 and arm64, and macOS, runtime-async code behaves as state-machine code does for stepping, Step Out with its returned value, breakpoints after an `await`, and exception stops. Any difference is a documented limit linked to its runtime issue.
+
+### M62 — Inline values while debugging
+
+**Why.** The maintainer's request of 2026-11-13. At a stop, a method's values are in Locals, Autos and data tips, one hover at a time. Drawing each line's values after it in the editor shows the method's state at a glance.
+
+**Depends on.** M58 (the Codalus debugger and its evaluator), M12 (inline hints in the editor), M14 (PerfTips' placement).
+
+**Decisions.** [D50](#decision-register): after M61, in any order with M63 and M64. Settled at plan time (skill `grill-me`):
+- On or off by default (`debug.inlineValues`)?
+- Which values are read? Recommended: locals, parameters and fields; an auto-property through its backing field, with no call; other properties on a click.
+- How many lines above the stop?
+- Do the values follow the frame selected in the Call Stack?
+
+**Scope.**
+- **The language host** answers LSP 3.17's `textDocument/inlineValue` for C# and Visual Basic. For each line of the stopped method up to the stop, it returns the variables and member accesses the line reads or writes, found with Roslyn's syntax and semantic model, as variable lookups and evaluatable expressions. F# gets them through FsAutoComplete if it answers.
+- **The shell** asks for the stopped frame's range:
+  - It takes values from the variables already read for Locals where it can.
+  - It evaluates the rest with the debugger, each with a timeout and without side effects.
+  - It draws them after each line's end as `name = value` in the editor's inline-hint style. A value changed since the last step gets the changed-value color, and the text is cut to the editor's width.
+- **At the stop:**
+  - Hovering a value shows its data tip, which expands.
+  - Values follow the selected frame, if decided, and clear on Continue.
+  - In a loop, the value is the one at the stop.
+- **Switches:** one for all languages, one per language.
+- **The budget:** values never block typing or stepping. They arrive after the stop's first frame is drawn.
+- **Other languages:** LSP servers that answer `textDocument/inlineValue` through the M11 bridge get the same drawing.
+- **M64** uses the same drawing for binding values in XAML.
+
+**Tests.**
+- The language host's answers on fixtures: locals, parameters, fields, properties, lambdas, pattern variables, tuples, `out` variables.
+- The drawing, in headless shell tests against the scripted debugger.
+- A benchmark: a stop's time to first frame is unchanged within noise.
+- A smoke step.
+
+**Exit criteria.** On Windows, Linux and macOS, a stop under the Codalus debugger shows each line's values after it, updated on each step, with stepping's latency budget unchanged.
+
 ---
 
 ## Phase 4: Platform and release
@@ -1064,7 +1171,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Scope.**
 - **Branches** (D21):
-  - `develop` is the default branch. Day-to-day commits land there directly. Every push runs the CI on Windows, macOS and Linux (`pipeline.yml`).
+  - `develop` is the default branch. Day-to-day commits land there directly. Every pull request runs CI (`pipeline.yml`); since 2026-11-14 a push to `develop` starts no run, and the nightly tests its head on Windows, macOS and Linux.
   - `master` only receives merges from `develop` (each one is a stable release) and hotfixes. After a hotfix release, the workflow merges `master` back into `develop`. (Since 2026-10-21 a release reaches `master` through a `release/X.Y.Z` branch cut from `develop`: [ADR 0028](adr/0028-release-cycle-and-installers.md), [docs/release/releasing.md](release/releasing.md).)
   - `CLAUDE.md`, `CONTRIBUTING.md` and the go-public checklist change from committing to `master` to committing to `develop`. The `validate` scratch branch stays.
 - **Versioning** (D21):
@@ -1076,7 +1183,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
 - **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
-  - **Nightlies**: every push to `develop` whose run passes is published as a nightly (`pipeline.yml`, since 2026-10-14; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13). There is no schedule.
+  - **Nightlies**: once a night (`pipeline.yml`'s schedule, 00:17 UTC, since 2026-11-14), `develop`'s head is published as a nightly when its run passes and it has none yet. From 2026-10-14 to 2026-11-13 every push to `develop` whose run passed was one; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13. A push to `develop` starts no run: its pull request ran CI.
     - It builds the installers on three OSes and smoke-tests the installed packages.
     - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
     - Only the last 14 nightlies are kept.
@@ -1084,7 +1191,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
     - It runs the same build and smoke test.
     - It publishes a GitHub release `v0.2.0` with release notes, the update feed (M32), the apt and dnf repositories, and the winget manifests.
   - **Release notes** are generated from the commits since the previous stable tag. They are grouped by milestone (commit subjects name the milestone) and link to the checkpoint summaries. If `CHANGELOG.md` has a hand-written section, it goes first.
-  - **While the repository was private** (D20, until 2026-10-11) the workflows ran on manual dispatch only; since it went public every push to `develop` or `master` runs them.
+  - **While the repository was private** (D20, until 2026-10-11) the workflows ran on manual dispatch only; since it went public every push to `master` runs them, and every push to `develop` did until 2026-11-14 (now the nightly's schedule).
 - **Installers** (D17, D18):
   - **Windows:**
     - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `codalus` command on the `PATH`
@@ -1260,6 +1367,49 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 **Exit criteria.**
 - The support table is filled in from test results on three OSes.
 - Every "no" in it has a reason, and either a `TODO(issue)` or a documented gap.
+
+### M59 — No telemetry from the tools the IDE runs
+
+**Why.** The maintainer's request of 2026-11-13. Codalus sends no telemetry and turns none on in what it ships ([Out of scope](#out-of-scope)), but some tools it starts send their own unless an environment variable stops them:
+- **Avalonia's build task.** Every Avalonia 12 package brings `Avalonia.BuildServices` (11.3.2). Its `AvaloniaStats` target runs before `CoreCompile` in every build that isn't a design-time build. Its collector posts to `av-build-tel-api-v1.avaloniaui.net`, by the package's README:
+  - a machine identifier it keeps, and the machine name, hashed;
+  - the project's name, hashed;
+  - the output type, target framework, runtime identifier and Avalonia version;
+  - the development environment, the operating system and any CI it detects.
+
+  Its only opt-out is the environment variable `AVALONIA_TELEMETRY_OPTOUT=1`: no MSBuild property turns it off. Codalus sets that variable nowhere:
+  - not for the build host, where users' Avalonia projects build;
+  - not for `dotnet watch`, `dotnet test` or `dotnet ef`;
+  - not for its own builds in `pipeline.yml`, `.github/actions/setup`, `eng/validate.sh` and the smoke test.
+- **The .NET SDK.** Each call site sets `DOTNET_CLI_TELEMETRY_OPTOUT=1` itself: templates, the previewer, web development, Check Environment, benchmarks, the Windows Forms designer, the REPL host's NuGet restore and remote test environments. The build host's start (`BuildHostRuntime` sets only `DOTNET_NOLOGO`) and the pipeline don't set it.
+- **Other tools.** Microsoft.Testing.Platform's `TESTINGPLATFORM_TELEMETRY_OPTOUT` is set only in `eng/validate.sh`; `dotnet-svcutil`'s is set where it runs. Any other tool the IDE starts may have a switch of its own.
+
+**Depends on.** Nothing.
+
+**Decisions.** [D50](#decision-register): this milestone comes first. Settled at plan time (skill `grill-me`) and recorded as new entries:
+- Does a value already in the user's environment win? Recommended: yes, so a user who opted in stays opted in.
+- Do the integrated terminal's shells get the variables? Recommended: no, the terminal is the user's own.
+- What happens to a project on an Avalonia Accelerate tier that refuses the opt-out? The task says its Community and Trial tiers require telemetry. Find out how it reports that and say so in the build output.
+
+**Scope.**
+- **One helper** in `Codalus.Platform` adds the opt-outs to a process's environment:
+  - the variables: `DOTNET_CLI_TELEMETRY_OPTOUT`, `AVALONIA_TELEMETRY_OPTOUT`, `TESTINGPLATFORM_TELEMETRY_OPTOUT`, `DOTNET_SVCUTIL_TELEMETRY_OPTOUT`, and any the sweep finds;
+  - the hosts: build, language, debug, diagnostics, previewer, designer, REPL, T4, and the remote server, which passes them on to what it starts;
+  - the tools: `dotnet watch`, `test`, `ef`, `new`, `tool` and `publish`.
+
+  It replaces today's separate call sites. The programs the user runs and debugs get nothing new: their telemetry is the user's choice.
+- **A sweep of every tool Codalus starts** (`eng/`, `src/`) for telemetry of its own, each one found added to the helper or recorded with why it can't be.
+- **The repository's own builds:** the variables in `.github/actions/setup` for every job, and in `eng/validate.sh`, `eng/smoke-test.sh`, `eng/wsl-test.sh` and the benchmark scripts. `CONTRIBUTING.md` says to set them for a build outside the scripts.
+- **A source-scan test,** like `ProcessTreeTests`: every place that starts a `dotnet` process or a host goes through the helper.
+- **The user guide** names the variables the IDE sets, and says the terminal is left alone. The Security track's network-call list gains the line.
+
+**Tests.**
+- The helper keeps a value the user already set.
+- The build host's and `dotnet watch`'s environments carry the variables.
+- The source scan.
+- A CI step fails a job that runs without them.
+
+**Exit criteria.** On Windows, Linux and macOS, every process the IDE starts to build, test, watch, migrate or preview an Avalonia fixture runs with both opt-outs, CI's jobs run with them, and the scan test keeps new process starts on the helper.
 
 ---
 
@@ -1471,6 +1621,60 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **CI note.** Container tests run on Linux runners only, because GitHub's macOS runners have no Docker and Windows runners don't run Linux containers. Other OSes are covered by manual checkpoint testing.
 
+### M63 — Services under the debugger: compose and Aspire
+
+**Why.** The maintainer's request of 2026-11-13. Today:
+- Debug Compose Service debugs the one service the user picks.
+- An Aspire debug session holds up to seven projects.
+- Hot Reload and profiling don't reach into containers (remote profiling is M21a's deferred work).
+- A compose service runs from its image, so a code change needs an image build.
+
+A solution of services needs every .NET service debugged at once, each one restarted, attached to or profiled alone while the others run, and code changes reaching them without an image build.
+
+**Depends on.**
+- Containers and Aspire: M17a (compose, fast mode) and M17b (the Aspire window, the IDE execution protocol).
+- The debugger: M58b (its bundle copied into containers), M55 (Apply Code Changes), M14c (several programs in one session).
+- M18 (`codalus-diaghost`) and M16 (Blazor WebAssembly debugging).
+
+**Decisions.** [D50](#decision-register): after M61, in any order with M62 and M64. Settled at plan time (skill `grill-me`):
+- Where does the IDE's compose override live (`.codalus/state/<solution>/`), and how is it shown?
+- Is fast mode the default for compose?
+- How does profiling reach a container: a collector copied in, as the debugger's bundle is, or the diagnostics port's socket shared through a mount?
+- Does Aspire's seven-project limit go?
+
+**Scope.**
+1. **Compose in fast mode:**
+   - Each .NET service is found by its build context and Dockerfile, a `.dcproj`'s `DockerServiceName`, or its project.
+   - It runs the IDE's Debug build, mounted into its Dockerfile's `base` stage through an override file the IDE writes. A code change rebuilds the project and restarts the service, with no image build.
+   - Rerun restarts only the services whose build changed.
+   - Services that aren't .NET run as the compose file says.
+2. **Debug every service:**
+   - Debug Compose starts all services and attaches the Codalus debugger to each .NET one, held at its start so start-up breakpoints hit. Each is a program of the one session (M14c).
+   - Restart, Stop, Debug and Detach work on one service while the others run.
+   - Paths in the container map back to the solution's files.
+3. **Hot Reload in containers:** Apply Code Changes reaches every debugged service, through the debugger in its container (M55). A service run without the debugger gets it through the same agent or `dotnet watch` in the container, decided at the spike.
+4. **Profiling in containers:**
+   - CPU, allocations, counters and memory snapshots of a service in its container, from its start or attached;
+   - through `codalus-diaghost` reaching the container's diagnostics port;
+   - this closes M21a's deferred remote profiling for containers.
+5. **Aspire:** every project resource runs under the debugger (the limit reviewed). The Aspire window restarts, debugs, Hot Reloads or profiles each resource alone.
+6. **Blazor WebAssembly:** components debug in the browser (M16) when their server runs in a container or under Aspire.
+7. **Engines:** Docker and Podman alike, through the user's CLI and its current context.
+
+**Tests.** The container tests run on Linux runners (M17's CI note), with `mcr.microsoft.com/dotnet` images only, and remove what they create:
+- a two-service compose fixture debugged whole, with a breakpoint in each, one service restarted while the other stays stopped, and an edit applied to one;
+- Rerun restarting only the changed service;
+- a profile of a service;
+- an Aspire fixture with three projects debugged and one profiled;
+- a smoke step.
+
+Windows and macOS get the tests that need no engine.
+
+**Exit criteria.** On Linux with Docker and with Podman, and on Windows and macOS with Docker Desktop (checked by hand, since their runners have no engine):
+- every .NET service of a compose file or an AppHost runs under the debugger at once;
+- each one is restarted, Hot Reloaded or profiled alone;
+- a code change reaches a compose service without an image build.
+
 ---
 
 ## Phase 6: Diagnostics
@@ -1583,6 +1787,54 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 **Budgets to propose.**
 - Edit → preview updated: p95 ≤ 300 ms after the first render.
 - Build → first preview frame: ≤ 3 s.
+
+### M64 — XAML depth: Hot Reload, refactorings and XAML debugging
+
+**Why.** The maintainer's request of 2026-11-13. The XAML engine (M19a, M40a) edits, completes and checks Avalonia and WPF XAML, and the live tools (M19b, M40b) show a running app's tree. But:
+- a XAML change still needs a restart;
+- a rename from XAML stops at `x:Name`;
+- a binding that fails at run time is silent in the IDE.
+
+**Depends on.**
+- XAML: M19 and M40 (the engine in the C# host, the previewers, the live agent).
+- Debugging: M58 (the Codalus debugger), M62 (inline values, for binding values after XAML lines).
+- M12 (the refactoring UI).
+
+**Decisions.** [D50](#decision-register): after M61, in any order with M62 and M63. Settled at plan time (skill `grill-me`):
+- How does XAML Hot Reload replace live content? Proposed: Avalonia's runtime XAML loader in the live agent, loading again each live instance of the edited `x:Class`; WPF's `XamlReader`, as the WPF previewer uses it.
+- What does it keep (the data context, named fields, event handlers, state), and what does it refuse, asking for a restart as rude edits do?
+- Does it apply on save or as you type?
+- MAUI and WinUI stay out: they have no open runtime loader (M20's and M44's gaps).
+
+**Scope.**
+1. **XAML Hot Reload for Avalonia and WPF.** A saved `.axaml` or `.xaml` file reaches the running app under Run or Debug through the live agent: each live window, user control, style or resource dictionary from that file is updated in place. A change that can't be applied is an Error List row saying why, with an offer to restart. This replaces the parity matrix's candidate.
+2. **Rename across C# and XAML, both ways, through the rename preview:**
+   - Renaming a C# property, command, type or resource updates compiled binding paths (under `x:DataType`), `{x:Static}`, `x:Class`, type references and resource keys.
+   - Renaming a binding path, a resource key or an element type in XAML renames the C# symbol and its other uses.
+3. **Extract Resource and Extract Style:**
+   - Extract Resource moves an attribute's value to a resource, in the file, the nearest dictionary or `App.axaml`/`App.xaml`, with a key, and offers to replace every equal value.
+   - Extract Style moves an element's attributes into a style: a class selector in Avalonia, a keyed or implicit `Style` in WPF.
+4. **Generate from use:**
+   - An unknown binding path on the `x:DataType` (or `d:DataContext`) offers to add the property to the view model.
+   - An unknown command binding offers the command: an `ICommand` property, or a `[RelayCommand]` method when CommunityToolkit.Mvvm is referenced.
+   - A missing converter resource offers a converter class and its resource.
+5. **XAML debugging:**
+   - Failed bindings in the running app (Avalonia's binding log, WPF's `PresentationTraceSources`) are Error List rows at their XAML line. A setting stops the debugger at one, as at a thrown exception.
+   - XAML breakpoints: on an element (it stops when the element is created), on an attribute (when XAML sets the property), and Break When Value Changes on a property in the Live Property Explorer.
+   - While stopped, each binding's current value is drawn after its XAML line, with M62's drawing.
+   - The Live Property Explorer says why a style applies to the selected control or doesn't: its selector or trigger, and which part failed.
+
+**Tests.**
+- The C# host's refactorings on golden files, Avalonia and WPF.
+- Hot Reload on the Avalonia fixture in headless shell tests, and on the WPF fixture by Windows CI.
+- Binding failures and XAML breakpoints against the fixtures in the debugger suites.
+- Smoke steps for XAML Hot Reload and a failed binding.
+
+**Exit criteria.** On Windows, Linux and macOS (WPF on Windows only):
+- a saved XAML change appears in the running app without a restart;
+- a rename crosses C# and XAML both ways;
+- Extract Resource, Extract Style and generate-from-use work;
+- a failed binding is listed at its line, and XAML breakpoints stop.
 
 MAUI (M20) moved to [phase 10](#phase-10-mobile) on 2026-10-10 (D6).
 
@@ -1749,6 +2001,87 @@ Copilot's integration is proprietary, and so is IntelliCode (see the [traps](#kn
 **Exit criteria.** On Windows, Linux and macOS, an ACP agent configured in user settings answers in AI Chat, its reads, writes, permissions and commands pass the IDE's checks, and Stop cancels it.
 
 **Status.** Done (at checkpoint, [m48](checkpoints/m48.md), ADR 0079), 2026-10-18, validated on Linux; the Windows and macOS runs are open (CI). Elicitation isn't advertised (a form dialog wasn't cheap enough to do well here); HTTP MCP servers in `session/new`, terminal sign-in, `session/load` and agents in remote windows are `TODO(issue)`. Terminal sign-in was built in 0.6 (#79, D43, [ADR 0083](adr/0083-connecting-external-agents-from-templates.md)), with Connect to *agent* from templates.
+
+### M60 — The IDE's tools for agents, round 2
+
+**Why.** The maintainer's request of 2026-11-13, building on [ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md). Through `codalus mcp`, agents already get:
+- code intelligence;
+- builds, tests and runs;
+- the debugger;
+- a web app's browser.
+
+They still fall back on the CLI or plain text edits for the rest of the IDE: refactoring, Hot Reload, profiling, containers and Aspire, Git, NuGet and migrations. They can't see or drive a desktop app they build. An agent outside the IDE reaches it only while a window is open and `ai.mcpServer.enabled` is on.
+
+**Depends on.**
+- Agents: ADR 0063 and M28c (agent mode's checks), ADR 0079 and M48 (external agents' pipes), ADR 0092 (`IdeTools`, `ShellHost.IdeToolAsync`, `ai.agent.ideActions`), ADR 0095 (AI Console's agents).
+- The live agent in Avalonia and WPF apps: M19b and M40b.
+- The features the tools wrap: M17 (containers and Aspire), M18 (profiling), M27a (EF Core), M9 (NuGet), M13 (Git), M55 (Apply Code Changes).
+
+**Decisions.** [D50](#decision-register): this milestone comes second. Settled at plan time (skill `grill-me`) and recorded as new entries:
+- How do edits made by tools (rename, code actions, format, replace) get approved? Through the preview, as agent mode's file changes do, or as actions under `ai.agent.ideActions`?
+- Which new tools are Read and which are Action?
+- Does driving a desktop app need an approval of its own?
+- Which Git operations are offered? Recommended: commit, but never push or a forced operation.
+- The consent question for outside agents.
+- Whether the headless mode (item 10) is built, and its trust gate.
+
+**Scope.** Every new tool joins `IdeTools.BuiltIn` and passes the dispatcher's checks: paths confined to the workspace, excluded files left out, answers redacted and cut to size, and a line in the AI Output channel for each call.
+1. **Code changes:**
+   - `rename_symbol`;
+   - `get_code_actions` and `apply_code_action` (fixes and refactorings at a place);
+   - `format_document`;
+   - `replace_in_files`, on Find and Replace in Files' engine.
+
+   Each change is one undo step, approved as decided.
+2. **Hot Reload and profiling:**
+   - `apply_code_changes` to the program being debugged or run under Hot Reload;
+   - `profile_start` and `profile_stop`, which return a CPU summary (hot paths, top functions);
+   - `memory_snapshot`, which returns the largest types and their root paths.
+3. **Services:**
+   - compose services and Aspire resources, listed with their state;
+   - start, stop, restart or debug one;
+   - their logs, and an Aspire resource's traces and metrics where the resource service has them.
+4. **Data and packages:**
+   - EF Core migrations listed, added, applied and scripted, through M27a's flow and the user's `dotnet-ef`;
+   - packages searched, added, updated and removed, through M9's one path, with its feeds and credentials.
+5. **Git:**
+   - status, diff, log, a file's history and blame;
+   - stage, commit, stash, check out a branch;
+   - conflicts and their resolution.
+6. **The desktop app being built:** an Avalonia app, or a WPF app on Windows, under Run or Debug, reached through the live agent (M19b, M40b):
+   - its windows, with a picture of each;
+   - the control tree, with each control's type, name, text, state and bounds;
+   - input sent to a control (click, text, keys, scroll) inside the app, never moving the user's pointer or taking their focus.
+
+   A program the agent starts itself can run off-screen: under Xvfb on Linux where it is installed, and by a method chosen at the spike elsewhere.
+7. **The IDE itself:**
+   - run a command by its ID, under the command's own enablement, with a list of commands agents never get (exit, settings sync, plugin installs, sign-ins and the like);
+   - read settings;
+   - a picture of an IDE window;
+   - type into the integrated terminal (an action).
+8. **Long calls:** builds, tests, debug waits and profiles send MCP progress notifications every 10 seconds when the client sends a progress token. Each call's waits and their durations go in the AI Output channel, never its content.
+9. **Outside agents:**
+   - An agent connecting through `codalus mcp` to a window asks once per folder: Allow, Don't allow, or Always for this folder. This is on top of `ai.mcpServer.enabled`. A question unanswered for two minutes is refused.
+   - Options → AI → MCP Server shows each known agent's setup (its command line and its JSON, with this install's path filled in), each with a Copy button.
+   - The user guide gives a committed `.mcp.json` example.
+10. **A headless IDE for unattended agents**, if the plan keeps it: `codalus mcp --folder <path>` starts an IDE with no window over a trusted folder. It has the same tools and checks, takes actions only when `ai.agent.ideActions` is `allow` (nobody is there to ask), and ends with the agent's pipe.
+
+**Tests.**
+- Each tool against the existing stand-ins: the scripted debugger, the fake hosts, `tests/Shared`'s Git and NuGet fixtures, recorded `dotnet-ef` output, the container engine stand-in.
+- Exclusions and redaction on every new answer.
+- The desktop-app tools on the Avalonia fixture in the headless shell tests, and on the WPF fixture by Windows CI.
+- Progress notifications with a slow fake build.
+- The consent question's three answers and its timeout.
+- A smoke step that drives the fixture app through `codalus mcp`.
+
+**Exit criteria.** On Windows, Linux and macOS, an external agent connected through `codalus mcp` can do each of these, with every call passing the IDE's checks and showing in the IDE's windows:
+- rename a symbol and apply a fix;
+- apply a change through Hot Reload;
+- profile a run;
+- restart a compose service;
+- add a package;
+- commit;
+- click a button in the Avalonia fixture and read the result.
 
 ---
 
@@ -2664,6 +2997,7 @@ The terminal (M10), merge editor (M13), profiler views (M18) and previewer (M19)
   - an offline path
   - a record in `THIRD-PARTY-NOTICES.md`
 - **Network calls** are listed in the documentation and each can be turned off: NuGet, symbol servers, SchemaStore, update checks and hosting integrations.
+- **Telemetry of the tools the IDE runs:** the SDK's, Avalonia's build task's, Microsoft.Testing.Platform's and `dotnet-svcutil`'s opt-outs set for each host and tool the IDE starts, through one helper (`ToolTelemetry`), and in CI ([M59](#m59--no-telemetry-from-the-tools-the-ide-runs), done; [ADR 0098](adr/0098-no-telemetry-from-the-tools-the-ide-runs.md)). The user guide's network list names them.
 - **Plugins:** signature checks and declared permissions (M22).
 - **Remote:** a threat model (M21).
 - **Releases and updates** (M31, M32):
@@ -2753,7 +3087,7 @@ The "Codalus" column uses these terms:
 | Feature search (Ctrl+Q), command palette | M1 |
 | Tools > Options with search | M1 |
 | Themes (light, dark, high contrast) | M1; theme contributions M22; four theme families, each light, dark and high contrast, M45; Classic's editor colors and shapes matched to the classic IDE's (0.6, D47, D46: 4 px cards, tabs and controls on 6 px of window) |
-| First launch: choose the color theme and development settings | M46 (the first-run setup: theme, keyboard scheme, settings import, tools check); no account sign-in |
+| First launch: choose the color theme and development settings | M46 (the first-run setup: theme, keyboard scheme, settings import, tools check) and [ADR 0096](adr/0096-the-first-run-setup-asks-about-ai.md) (a welcome page that asks where you come from, the editor's font size, the AI experience, a summary); no account sign-in |
 | Fonts and Colors per element | M23 |
 | Customize menus, toolbars and context menus | M23 |
 | Import and Export Settings, settings sync | M23 |
@@ -2983,8 +3317,8 @@ The "Codalus" column uses these terms:
 | Scaffolding (controllers, Razor Pages, Identity, Blazor CRUD) | M15c (ADR 0041): the user's `dotnet-aspnet-codegenerator`, SDK item templates for empty items |
 | Hot Reload with browser refresh | M15 |
 | Razor and Blazor editing, debugging and hot reload | M16 |
-| Docker files, compose, container debugging, Containers window | M17a (done: fast mode, Docker and Podman; HTTPS in containers and Windows containers are gaps) |
-| .NET Aspire orchestration and dashboard | M17b (done: run and debug through the IDE execution protocol, the resource tree, the dashboard) |
+| Docker files, compose, container debugging, Containers window | M17a (done: fast mode, Docker and Podman; HTTPS in containers and Windows containers are gaps); every .NET service of a compose file under the debugger, Hot Reload and the profiler, run from the IDE's build: M63 (planned) |
+| .NET Aspire orchestration and dashboard | M17b (done: run and debug through the IDE execution protocol, the resource tree, the dashboard); every project resource debugged, Hot Reloaded and profiled alone: M63 (planned) |
 | Azure tooling (publish, Functions, Connected Services to Azure, Cloud Explorer) | Candidate (plugins) |
 | Dev Tunnels | Trap |
 | Kubernetes | Candidate |
@@ -3007,7 +3341,7 @@ The "Codalus" column uses these terms:
 | WinForms, WPF, UWP and WinUI designers | WPF previewer done in M40b (Windows only, D31); WinForms designer done in M41 (Windows only), building while a form is open and the Toolbox's drag, double-click and Enter as in the classic IDE in 0.6, and its context menus, Lock Controls and Properties window (parts, type editors, Select Resource, collapsible categories; #67, #68) in 0.6; a WPF design surface deferred; UWP and WinUI designers stay non-goals |
 | XAML editing, previewer, Live Visual Tree and Live Property Explorer (Avalonia) | M19 |
 | WPF XAML editing, previewer, Live Visual Tree and Live Property Explorer | M40 (the previewer and live tools Windows only) |
-| XAML Hot Reload (Avalonia) | Candidate |
+| XAML Hot Reload (Avalonia, and WPF) | M64 (planned) |
 | .NET MAUI XAML, Hot Reload, Live Preview, Android and iOS deployment | M20 (M20a done: XAML editing, devices, deployment and runs). The previewer and XAML Hot Reload are gaps. |
 | Accessibility Checker for UI apps | Candidate |
 
@@ -3031,7 +3365,7 @@ The "Codalus" column uses these terms:
 
 | Classic IDE feature | Codalus |
 |---|---|
-| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7): chat with any provider (M28a); inline and next edit suggestions (M28b); agent mode, an MCP client and an MCP server (M28c); external agents over ACP (M48), connected from templates with their sign-in tested first (0.6, #79, D43) |
+| GitHub Copilot: completions, next-edit suggestions, chat, agent mode, MCP | M28, with an open design (D7): chat with any provider (M28a); inline and next edit suggestions (M28b); agent mode, an MCP client and an MCP server (M28c); external agents over ACP (M48), connected from templates with their sign-in tested first (0.6, #79, D43); the IDE's tools for agents, round 2 (refactoring, Hot Reload, profiling, services, Git, packages, the desktop app being built): M60, M60b |
 | Live Share | Trap; an open alternative is a candidate |
 
 ### Extensibility
@@ -3118,6 +3452,8 @@ Items deferred with a `TODO(issue)` to a milestone that has since closed without
 | `Button.link` trimming with an ellipsis, for a long Project URL in a narrow package details pane (`PackageManagerView.axaml`, `ShellStyles.axaml`) | [D39](design/controls.md#nugets-verified-owner-06), the gaps its pictures show | none |
 | The startup and large-solution costs M56's surveys found and didn't take: the Welcome plugin's host at every start, saved tool windows' content and hidden overlays made before the first frame, the macOS menu built in full; Show All Files, Class View's search, the NuGet window and the Test Explorer redone per project; Code Search's `workspace/symbol` per query for C# and its whole-snapshot updates | [M56](checkpoints/m56.md#deferred) | none |
 | What M57 left: a non-I/O write failure that doesn't restart its host; `didOpen` from the snapshot's chunks without one string; Code Search's snapshots made strings on the UI thread; a folder name search without the 20,000-entry limit; `bin` and `obj` listed again after builds outside the IDE; history pages without `git log --skip`; a row's level and place on Windows and macOS, and macOS's state in folder names | [M57](checkpoints/m57.md#deferred) | none |
+| What M58a left: library sources in the debugger from embedded sources and Source Link (symbols found on a server show lines, not yet the files); `[DebuggerDisplay]` read by the adapter for every value (M58b's remote metadata); Edit and Continue for a calling frame whose next statement isn't straight after its call (it runs on in its old version until it reaches a statement Roslyn mapped); line changes of unedited methods below an edit; Edit and Continue for modules with Windows PDBs; a loose Windows PDB in a symbol path (only a symbol store's layout is taken); the Memory window's data-type views; registers beyond the general ones (vector, floating point); a Windows test of the session's new features on the desktop CLR (the .NET Framework adapter offers them, tested only through CoreCLR) | [m58a](checkpoints/m58a.md) | none |
+| What M58b left: a session under the debugger's x64 and 32-bit builds on a user's machine, downloaded from a release (CI debugs a program under each, built from source); Hot Reload, Edit and Continue and the symbol settings in remote sessions; a bundle for macOS targets (they keep netcoredbg); a remote window on a real other machine under the Codalus debugger (tested with the server on this machine); removing netcoredbg, its scripts, its remote copies and its workarounds, one release after the default (the size gate's values for the packages with the two bundles are in `benchmarks/accepted.json` since 2026-11-12, from a dry run on CI) | [m58b](checkpoints/m58b.md) | none |
 
 ## Unscheduled candidates
 
@@ -3139,7 +3475,6 @@ These are the classic IDE or Rider features, or common requests, that aren't sch
 | Notebooks | `.ipynb` and Polyglot Notebooks through .NET Interactive (MIT). |
 | Unity, Godot and other game-engine C# | Mono soft-debugger reuse from M20. Community plugins. |
 | Uno Platform tooling | Community plugin. Uno is Apache-2.0. |
-| Runtime XAML hot reload (Avalonia) | After M19. |
 | Kernel-level profiling | ETW and `perf_events` with native stacks. After M18. |
 | WebAssembly-sandboxed plugins | Enforced capabilities. After M22. |
 | Library Manager and npm deep integration | After M16. |
@@ -3208,7 +3543,15 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D45 | The Git diff document (#86), drawn in [`DiffDocument.dc.html`](design/controls/DiffDocument.dc.html) with 16 questions in [controls.md](design/controls.md#the-git-diff-document-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended |
 | D46 | Rounded corners for the Classic family (#84), drawn in [`RoundedCorners.dc.html`](design/controls/RoundedCorners.dc.html) with 18 questions in [controls.md](design/controls.md#rounded-corners-06) | 0.6 | as drawn | decided 2026-10-22: approved as drawn, every question as recommended; supersedes D33's 2 px Classic radius |
 | D47 | Classic's editor colors (#83): after the document view's 0.85 opacity (Dock's reveal fade) is fixed, should Classic match the classic IDE's measured palette? | 0.6 | match the classic IDE | decided 2026-10-22: match it (control keywords, comments, strings, gray line numbers with the current line's number, bracket colors off by default in Classic, the current line and CodeLens; Light and Blue from the classic IDE's Light scheme) |
-| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Phase 1 built as [M54](#m54--a-managed-coreclr-debugger-phase-1), 2026-10-29; phase 2 built as [M55](#m55--a-managed-coreclr-debugger-phase-2-apply-code-changes-while-debugging), 2026-10-29; phase 3 not scheduled |
+| D48 | Replace netcoredbg with a managed CoreCLR adapter of our own (ADR 0076's, through dbgshim), for Hot Reload while debugging and netcoredbg's gaps? | before the work is scheduled | Yes, in phases: the adapter behind `debug.adapter` with netcoredbg the default, then Apply Code Changes while debugging, then the default and netcoredbg's removal once parity suites pass on every OS ([ADR 0086](adr/0086-a-managed-coreclr-debugger.md)) | decided 2026-10-28: accepted as recommended, after three spikes (Linux x64 and arm64, macOS arm64 and x64, Windows x64; the launch through a launcher process). Phase 1 built as [M54](#m54--a-managed-coreclr-debugger-phase-1), 2026-10-29; phase 2 built as [M55](#m55--a-managed-coreclr-debugger-phase-2-apply-code-changes-while-debugging), 2026-10-29; phase 3 as [M58](#m58--the-codalus-debugger-by-default), which D49 changes |
+| D49 | Make the Codalus debugger the default now, and which of its gaps to close first? | before M58 | The default now, with netcoredbg an opt-in fallback for one release; the gaps closed on the managed side | decided 2026-11-11, the maintainer's answers to ten questions ([ADR 0094](adr/0094-the-codalus-debugger-by-default.md)): `debug.adapter` defaults to `codalus` and netcoredbg stays one release; Memory, Registers and Disassembly of managed code, with data breakpoints and mixed-mode debugging left as limits; a self-contained, trimmed adapter bundle for remote targets, and for x64 programs on Apple silicon as an on-demand component; our evaluator first, then expressions compiled by Roslyn and loaded into the program, Visual Basic's too; a stop pauses the other startup programs; 32-bit .NET Framework processes and Windows PDBs; remote sessions read metadata on the target; Edit and Continue remaps active frames; symbol servers off by default with the classic IDE's list; two pull requests, CI only at the end. Built as [M58](#m58--the-codalus-debugger-by-default): M58a 2026-11-11 |
+| D50 | Which features from the maintainer's list of 2026-11-13 to schedule, and in what order? | before M59 | Inline values, services under the debugger, runtime-async debugging, XAML depth, more tools for agents, and no telemetry from the tools the IDE runs | decided 2026-11-13 by the maintainer: all six, as M59 (telemetry), M60 (the IDE's tools for agents, round 2), M61 (runtime-async debugging), M62 (inline values), M63 (compose and Aspire services under the debugger) and M64 (XAML depth); built in the order M59, M60, M61, then M62–M64 in any order. Each milestone's open questions are settled at its plan (skill `grill-me`) and recorded as new entries |
+| D51 | M59's open questions: does a value in the user's environment win, does the terminal get the variables, and what happens on an Avalonia Accelerate tier that refuses the opt-out? | M59 | The user's value wins; the terminal is left alone; say so in the build output | decided 2026-11-13 at M59's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask): the user's value wins; the terminal, the user's programs, tasks, external tools, agent mode's commands and external agents get nothing new; on Avalonia Accelerate's Community and Trial tiers the build output adds how to build ([ADR 0098](adr/0098-no-telemetry-from-the-tools-the-ide-runs.md)) |
+| D52 | M60's open questions: how tools' edits are approved, Read or Action, the desktop app's approval, which Git operations, consent for agents outside the IDE, the headless mode | M60 | As actions; Read changes nothing and runs no workspace code; no separate approval (`desktop_app_input` is an Action under `ai.agent.ideActions`, `desktop_app_windows` and `desktop_app_controls` are Read); commit but never push; once per folder; the headless mode built in M60b: trusted folders only (any other exits with code 2), actions only under `allow`, plugin tools refused, dialogs cancelled, no per-folder question, and it ends with its standard input | decided 2026-11-13 at M60's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask); confirmed 2026-11-14 by the maintainer, who also asked for the desktop app and the headless mode in 0.13, built in M60b ([ADR 0099](adr/0099-the-ides-tools-for-agents-round-2.md)) |
+| D53 | How does the Codalus debugger support runtime-async code, and what is left to the runtime? | after M61's spike | Fix in the debugger what it can, with one mechanism for both kinds, and record the rest as limits reported upstream | decided 2026-11-13 after M61's spike, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask); on 2026-11-14 the maintainer asked for the async call stack for state machines before 0.13, built in M61b. Limits now: runtime async has no async call stack (upstream); a state machine's chain ends at `WhenAll`, `WhenAny` and `ContinueWith` (`TODO(issue)`) ([ADR 0100](adr/0100-debugging-runtime-async-code.md)) |
+| D54 | M62's open questions: on by default, which values, how many lines, and following the selected frame? | M62 | On; locals, parameters and fields, auto-properties through their field, other properties on a click; the method up to the stop; yes | decided 2026-11-13 at M62's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask): on by default with a per-language override; locals, parameters, fields and auto-properties, nothing that runs other code; the method's lines up to the stop, at most 100; the values follow the frame selected in the Call Stack ([ADR 0101](adr/0101-inline-values-while-debugging.md)) |
+| D55 | M63's open questions: where the compose override lives, fast mode by default, how profiling reaches a container, Aspire's seven-project limit | M63 | `.codalus/state/<solution>/`, shown read-only; yes; the diagnostics port's socket through a mount; it goes | decided 2026-11-13 at M63's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask) ([ADR 0102](adr/0102-services-under-the-debugger.md)); confirmed by the maintainer on 2026-11-14, who pulled profiling in containers into 0.13: built in M63b through the shared diagnostics socket (the runtime connects to the IDE's listener, `connect,nosuspend`; attached, not from a service's start; Docker Desktop can't share the socket) |
+| D56 | M64's open questions: how XAML Hot Reload replaces live content, what it keeps and refuses, on save or as you type, MAUI and WinUI | M64 | The live agent's runtime loader into each live instance of the `x:Class` (WPF: System.Xaml); keep the data context and state, refuse what can't apply with a restart; on save; MAUI and WinUI out | decided 2026-11-13 at M64's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask) ([ADR 0103](adr/0103-xaml-depth.md)); confirmed by the maintainer on 2026-11-14, who also pulled XAML breakpoints, a setting to break at a failed binding and the Live Property Explorer's style explanation into 0.13 (M64b); binding values while stopped stay deferred; built in M64b (2026-11-14): the live agent breaks into the debugger, and the stop is shown at the XAML line |
 
 ## Change log
 
@@ -3328,7 +3671,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Going public:** the repository went public on 2026-10-11 (D29), which switched the releases on (D20).
   - **Built:** M18b (2026-10-12), M19a (2026-10-12), M19b (2026-10-13), M21a (2026-10-12), M21b (2026-10-13), M22a–M22d (2026-10-13), M23a–M23c (2026-10-13), M31b (2026-10-13), M34e (2026-10-13), M37 and M38 (added and built 2026-10-13), and M39, the rename to Codalus IDE (2026-10-13, ADR 0056). Each has its checkpoint in `docs/checkpoints/`, except M39.
   - **Releases:** 0.1.0 (2026-10-13), 0.2.0 (2026-10-14, the first under the new name) and the hotfix 0.2.1 (2026-10-14); `VERSION` is 0.3.0 on `develop`.
-  - **Workflows:** `nightly.yml` was folded into `release.yml` (2026-10-13); on 2026-10-14 `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` became the one `pipeline.yml` (CI, then the branch's release, atomic) with the older-.NET matrix in `compat.yml`, and `linux-repos.yml` became `pages.yml`. Every push to `develop` that passes is a nightly; there is no schedule (D20 superseded).
+  - **Workflows:** `nightly.yml` was folded into `release.yml` (2026-10-13); on 2026-10-14 `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` became the one `pipeline.yml` (CI, then the branch's release, atomic) with the older-.NET matrix in `compat.yml`, and `linux-repos.yml` became `pages.yml`. Every push to `develop` that passed was a nightly, with no schedule (D20 superseded), until 2026-11-14: since then a schedule publishes one a night, and a push to `develop` starts no run.
   - **Review:** the status table uses one form ("done (… at checkpoint)"); a [Deferred work](#deferred-work) table collects the `TODO(issue)` items whose milestone closed without them.
 - 2026-10-15: M28a (AI assistance, part one) at its checkpoint ([m28a](checkpoints/m28a.md), ADR 0062). M28 is split in three: M28a the provider API, the data boundary and chat; M28b inline completions, next-edit suggestions and the AI actions on existing surfaces; M28c agent mode and MCP, with its own ADR on the agent's safety model. Built: `LanguageModels` as a proposed plugin API with streamed replies and tool calls; the built-in `codalus.openai` (OpenAI-compatible endpoints and Ollama) and `codalus.anthropic` plugins, activated only when chosen, with keys in the OS credential store; `AiService`, the one gate every request goes through (off by default, a workspace's settings can only turn it off, `.gitignore`, `.codalusignore`, `ai.exclude` and secret file names exclude files, secrets in text are redacted, every request logged without its content); AI Chat with the context chips, streamed Markdown answers and Apply through the refactoring preview; the `ai.chat` smoke step. Validated on Linux; Windows and the Mac remain to be checked.
 - 2026-10-15: M28b at its checkpoint ([m28b](checkpoints/m28b.md)): inline suggestions (ghost text at the caret, every line of it; Tab, Ctrl+Right, Esc; `ai.completions.enabled`) and next edit suggestions (`ai.nextEdit.enabled`), each off by default and through the same boundary; AI actions on existing surfaces, each on request: commit messages, pull request descriptions, Ask AI in the exception helper, Ask AI Why It Fails in the Test Explorer, Fix with AI and Generate Tests with AI in the editor, Summarize with AI on a CPU report. Validated on Linux.
@@ -3457,3 +3800,25 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-11-01: the Markdown preview renders GitHub's tables (ADR 0016's amendment), from the maintainer's report that a table rendered as one paragraph, with task lists, strikethrough, setext headings, quotes of several lines, hard line breaks, autolinks and images as links; every view that renders Markdown gets them.
 - 2026-11-02: default tool window locations ([ADR 0091](adr/0091-default-tool-window-locations.md)), from the maintainer's review of every window's default place and decisions of that day: pages open among the documents (the Plugins page, now with the Plugin Gallery as its Browse tab and Uninstall on the Installed tab's rows; Components; Aspire; Benchmarks), the HTTP Response beside its file, and Notifications, Worktrees, the Task Runner Explorer and .NET Counters on the right; saved layouts (version 2) keep everything else and open the moved windows in their new places.
 - 2026-11-02: the HTTP Response fits beside its file ([ADR 0091](adr/0091-default-tool-window-locations.md#the-http-response-beside-its-file-narrow-2026-11-02-the-maintainers-review-of-the-first-ci-pictures)), from the maintainer's review of the first CI pictures: narrower than 720 px its history goes under the response, and a narrow response puts its version, time and size under the status chip instead of under the toolbar; the website's Aspire and HTTP pictures show the new places.
+- 2026-11-04: the IDE's tools for agents and a compact AI Chat ([ADR 0092](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md)), from the maintainer's report that AI Chat was verbose, that agents didn't use the IDE and that the context chips helped little, and the grilling of that day: one catalog of IDE tools for every agent (code intelligence from Roslyn and Code Search's index, builds, tests, running, the debugger and a browser for the web app), approved by `ai.agent.ideActions` (ask once per chat by default), plugins' AI tools (proposed), compact chat by default (`ai.chat.density`), @-mentions instead of chips, queued questions, pasted images for agents that take them, each answer's changed files with Diff and Revert, and redacted tool titles. Validated on Linux; Windows and macOS not yet.
+- 2026-11-05: an agent debugging a web app, and actions allowed by default ([ADR 0092's amendment](adr/0092-the-ides-tools-for-agents-and-a-compact-ai-chat.md#amendment-2026-11-05-an-agent-debugging-a-web-app-and-actions-allowed-by-default)), from the maintainer's report on debugging a Blazor Web App's WebAssembly counter through an agent, and the decisions of that day. `ai.agent.ideActions` defaults to `allow` (trusted folders only), and asking adds Always Allow in This Workspace, kept in the user's state. `debug_start`, `run_project` and the browser tools wait for the launch and for a web app to listen, and say the state they left: the address, and which breakpoints are bound. Under the debugger the browser tools drive the debugged page, its browser opened with a DevTools port in a profile of its own, so its breakpoints stop. `codalus mcp` tells agents to check their own changes. Validated on Linux; Windows and macOS not yet.
+- 2026-11-10: hosting sessions that end say why, and sign-ins don't churn tokens ([ADR 0093](adr/0093-hosting-sessions-that-end-say-why.md)), from the maintainer's report that the GitHub sign-in kept expiring: a 401 signs out only when GitHub also refuses the token at `/user`, the notification and the Git output give the host's reason and the session's age, and **Sign In** keeps a stored token GitHub still accepts instead of making another (GitHub revokes the oldest beyond ten per user and app). GitLab and Azure DevOps opt in later (`TODO(issue)`). Validated on Linux; Windows and macOS not yet.
+- 2026-11-11: M58a built ([m58a](checkpoints/m58a.md)), the Codalus debugger's gaps closed with the adapter still opt-in, from the maintainer's request to make it the default and the ten decisions of that day (D49, [ADR 0094](adr/0094-the-codalus-debugger-by-default.md)). The debugger applies hit counts, logpoints, filters and dependent breakpoints itself; Set Next Statement, Step Into Specific, returned values and frozen threads; `new`, generic methods, object IDs, `[DebuggerTypeProxy]` and Results View in its evaluator, and lambdas, LINQ and Visual Basic through expressions the C# language host compiles against the stopped frame and the program runs; the Disassembly, Registers and Memory windows (Iced on x64, an arm64 decoder of our own); Options › Debugging › Symbols with symbol paths and servers, off until one is listed; Edit and Continue, where an edit made while stopped moves the stopped frames into the new code (ADR 0040's and 0086's amendment); a stop in one of several startup programs pauses the others (ADR 0039's amendment); Windows PDBs through Mono.Cecil's managed reader (ADR 0076's amendment). 32-bit .NET Framework processes move to M58b, with the adapter bundle they need.
+- 2026-11-11: M58b built ([m58b](checkpoints/m58b.md)): the Codalus debugger is the default (`debug.adapter` is `codalus`; `netcoredbg` is the fallback for one release), from the maintainer's request of that day. Linux targets over SSH, in containers and in WSL get its self-contained bundle (in the packages beside `codalus-server`, copied with consent) and read display attributes there; x64 programs on Apple silicon and 32-bit .NET Framework programs get builds downloaded as components; remote windows get the same bundle. CI's second debugger shard runs the parity classes under netcoredbg now. Not validated on real hardware: the two downloaded builds.
+- 2026-11-11: AI Console, an agent's own CLI in the terminal ([ADR 0095](adr/0095-ai-console-an-agents-own-cli-in-the-terminal.md)), from the maintainer's request for a console like the agents' own beside the Output and the Terminal, and the grilling of that day: a tool window in the bottom group that runs a connected agent's CLI from the PATH under the external agents' gate, with a label that says Codalus doesn't preview its edits, the IDE's tools on a pipe per console where the CLI takes an MCP server for one run (Claude, Codex, GitHub Copilot, goose), tabs kept per workspace that come back with their conversations, Add Selection and Add File that type references, never content, and the AI key, Connect and the menus leading to it. The IDE's tools and resuming for pi and OpenCode, find in a console and remote windows are deferred (`TODO(issue)`). Validated on Linux; Windows and macOS not yet.
+- 2026-11-12: CI runs a session under each of the debugger's two downloaded builds (`DebuggerBundleTests`, `NetFxDebuggerTests`), from the maintainer's choice of that day, after M58b left both without one. `win-x86` debugs a 32-bit .NET Framework program on the Windows runner. `osx-x64` crashed on the macOS runner for every x64 runtime, inside dbgshim's search for the runtime; as x64 under Rosetta 2 the debugger now starts programs held in the startup hook and finds the runtime's library itself ([ADR 0094's amendment](adr/0094-the-codalus-debugger-by-default.md)), and with that all six x64 sessions pass there (run 43219397954). The Linux and macOS shards also run a session under their own platform's bundle, and the old-.NET matrix debugs under both debuggers.
+- 2026-11-12: the sizes the next stable run's gate would refuse, measured by a manual dry run of the pipeline with benchmarks (run 43271886735), from the maintainer's choice of that day: `shell_mb` and `shell_zip_mb` with the debugger's two Linux bundles (about 38 and 32 MB over 0.12.0), and `markuphost_mb`, 0.12 MB over. They are entries in `benchmarks/accepted.json`. The first dry run reported nothing: a test in its own test job failed (a font lookup, in the ledger with a diagnostic) and stopped it, and it ran beside a pull request's run, which lengthened the macOS queue a nightly then fell out of: a manual run goes when nothing else is running.
+- 2026-11-12, and again 2026-11-13: programs of .NET Core 2.0 and 2.1 on Apple silicon. Those runtimes run no startup hooks, which is how the Codalus debugger's x64 build holds a program at its start, and the old-.NET matrix's programs of the two ended before it attached when run through that start. On the 12th they went to netcoredbg's x64 build (the maintainer's choice of that day); on the 13th the matrix ran on macOS (`compat.yml`, run 43337656697) and netcoredbg's x64 build ended with a segmentation fault on every x64 program, while the Codalus debugger's debugged .NET Core 2.2 to .NET 5. So the two are the x64 build's again, which attaches once the program runs and says so before the start ([ADR 0094's amendment](adr/0094-the-codalus-debugger-by-default.md)): a limit of the platform. The matrix's debug rows use the x64 bundle on Apple silicon and say which debugger ran.
+- 2026-11-12: the first-run setup asks about AI, welcomes and sums up ([ADR 0096](adr/0096-the-first-run-setup-asks-about-ai.md)), from the maintainer's request to improve the first-time experience and the grilling of that day. It reverses M46's "AI isn't asked about": the setup gains a fifth step, AI, with three ways as cards that carry the same four facts (who answers, what it does, what leaves this machine, what it needs): no AI, which is preselected, a coding agent (the one-click templates, More agents…, why to run one from the IDE and not from a terminal, and its two windows) and the built-in assistant (the declared providers and the two as-you-type switches, unticked). The step writes nothing: only the summary's button applies it, in the main window, where Connect or the provider's key and model prompts open before the start window (`ShellHost.ApplySetupAiAsync`); Skip setup, Esc and closing apply nothing. Also: a welcome page at a first start whose "I'm coming from" (the classic IDE, VS Code, Rider or ReSharper, somewhere else) preselects the keyboard scheme and marks an importer, the editor's font size on a sample on Appearance, and a summary page with four keys of the chosen scheme. People who upgrade aren't asked (What's New, and Help → Set Up Codalus IDE). Deferred, `TODO(issue)`: a sample project and What's New with tips in the start window, a getting-started checklist, a zoom for the whole UI, an agent and a provider chosen together, an importer for Rider's settings. Validated on Linux (`FirstRunSetupTests`, the smoke step `shell.setup` under Xvfb); Windows and macOS not yet.
+- 2026-11-13: the IDE's AI features through an external agent ([ADR 0097](adr/0097-the-ides-ai-features-through-an-external-agent.md)), from the maintainer's request that every AI feature, suggestions while typing included, work under the external agents, and the grilling of 2026-11-12: the agent picked in AI Chat answers inline completions, next edit, the commit message, the pull request's text and Fix with AI in text sessions of their own on its connection (no tools, every request refused, context through `AiService`'s boundary), and the actions that open in AI Chat as questions in its chat; no provider needed. Suggestions keep their switches, wait 1 s, and use a small model (picked with Suggestions: in AI Chat, or guessed by its name). Plugins' model requests through an agent, the Options editor for the pick and closing text sessions with ACP's `session/close` are deferred (`TODO(issue)`). Validated on Linux; Windows and macOS not yet.
+- 2026-11-13: M59–M64 planned, from the maintainer's list of that day (D50): no telemetry from the tools the IDE runs (M59, first; Avalonia's build task and the .NET SDK's opt-outs are missing from the build host and CI), the IDE's tools for agents, round 2 (M60, second), debugging runtime-async code on .NET 11 (M61, third), then inline values (M62), compose and Aspire services under the debugger (M63) and XAML depth (M64) in any order. The parity matrix's XAML Hot Reload candidate moves to M64, and the candidates table's "Runtime XAML hot reload" row is removed.
+- 2026-11-13: M59 built ([m59](checkpoints/m59.md), [ADR 0098](adr/0098-no-telemetry-from-the-tools-the-ide-runs.md)): one helper, `ToolTelemetry`, sets the tools' telemetry opt-outs for every host and tool the IDE starts, the repository's scripts and CI set them, and a source scan keeps it so. D51 records the plan's three answers.
+- 2026-11-13: M60 built ([m60](checkpoints/m60.md), [ADR 0099](adr/0099-the-ides-tools-for-agents-round-2.md)): round 2 of the IDE's tools for agents, per-folder consent, progress and setups to copy; the desktop-app tools and the headless mode deferred. D52 records the plan's answers.
+- 2026-11-14: M60b built ([m60b](checkpoints/m60b.md), ADR 0099's "What M60b built"): the desktop app driven through the live agent, and `codalus mcp --folder`. D52 updated.
+- 2026-11-13: M61 built ([m61](checkpoints/m61.md), [ADR 0100](adr/0100-debugging-runtime-async-code.md)): stepping across `await` in state-machine and runtime-async code under the Codalus debugger; runtime async's limits recorded. D53 records the decision after the spike.
+- 2026-11-14: M61b built ([m61b](checkpoints/m61b.md), ADR 0100's "What M61b built"): the async call stack for state machines; two races in M61's async stepping fixed on the way (docs/ci-flakes.md). D53 updated.
+- 2026-11-13: M62 built ([m62](checkpoints/m62.md), [ADR 0101](adr/0101-inline-values-while-debugging.md)): inline values while debugging, from the language host's `textDocument/inlineValue`. D54 records the plan's four answers.
+- 2026-11-13: M63 built ([m63](checkpoints/m63.md), [ADR 0102](adr/0102-services-under-the-debugger.md)): compose fast mode, every compose service and Aspire project under the debugger, one restarted or debugged alone; profiling in containers deferred. D55 records the plan's answers.
+- 2026-11-14: M63b built ([m63b](checkpoints/m63b.md)): compose services profiled in their containers through a diagnostics socket in a mounted folder (D55, the maintainer's decision of that day); M21a's deferred remote profiling closed for compose services in fast mode on a Linux engine.
+- 2026-11-13: M64 built ([m64](checkpoints/m64.md), [ADR 0103](adr/0103-xaml-depth.md)): XAML Hot Reload, rename across C# and XAML, Extract Resource and Style, generate from use, failed bindings in the Error List; XAML breakpoints deferred. D56 records the plan's answers.
+- 2026-11-14: M64b built ([m64b](checkpoints/m64b.md), [ADR 0103](adr/0103-xaml-depth.md#what-m64b-built-2026-11-14)): XAML breakpoints through the live agent (`Debugger.Break()` from the agent, shown at the XAML line by `DebugService.StopExplainer`), Break When Value Changes, break at a failed binding, the style explanation (Avalonia; WPF on Windows); fixed the live agent loading into the Codalus debugger's launcher under F5. Binding values while stopped stay deferred.

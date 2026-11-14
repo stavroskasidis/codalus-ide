@@ -87,7 +87,7 @@ public class AnalysisTests
         }
 
         await f.Shell.OpenFileAsync(paths[1]);
-        f.Shell.CloseDocumentsToTheRight();
+        await f.Shell.CloseDocumentsToTheRightAsync();
         ShellFixture.Pump();
         Assert.Equal(["file1.txt", "file2.txt"], f.Shell.Layout.Documents.OfType<ShellDocument>().Select(d => d.Title).Where(t => t!.StartsWith("file", StringComparison.Ordinal)));
     }

@@ -49,16 +49,43 @@ public sealed class NotificationViewModel
     public bool HasActions => Actions.Count > 0;
 
     public ICommand DismissCommand { get; }
+
+    /// <summary>The pointer is over the toast: it doesn't hide while it is, nor for a moment after (set by its card).</summary>
+    public bool IsHovered
+    {
+        get => _isHovered;
+        set
+        {
+            if (_isHovered && !value)
+            {
+                HoverEnded = DateTime.UtcNow;
+            }
+
+            _isHovered = value;
+        }
+    }
+
+    private bool _isHovered;
+
+    /// <summary>When the pointer last left the toast.</summary>
+    public DateTime HoverEnded { get; private set; }
+
+    /// <summary>The user clicked in the toast or gave it the focus: it stays until dismissed (set by its card).</summary>
+    public bool IsPinned { get; set; }
 }
 
 /// <summary>
 /// Notifications as toasts (bottom right) and in the Notifications tool window. Informational toasts hide
-/// themselves after <c>workbench.notifications.autoHideSeconds</c> but stay in the center until dismissed;
-/// warnings and errors stay until dismissed or hidden with Escape.
+/// themselves after <c>workbench.notifications.autoHideSeconds</c> but stay in the center until dismissed; not while
+/// the pointer is over one, and not at all once the user clicked in it or gave it the focus. Warnings, errors and
+/// toasts with buttons (they ask for a choice) stay until dismissed or hidden with Escape.
 /// </summary>
 public sealed class NotificationsViewModel : ObservableObject, IDisposable
 {
     private const int MaxToasts = 3;
+
+    /// <summary>How long a toast stays after the pointer leaves it, when its time is up.</summary>
+    internal static readonly TimeSpan HoverLinger = TimeSpan.FromSeconds(3);
     private readonly NotificationService _service;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Notification, byte> _leftToasts = new();
     private readonly Func<int> _autoHideSeconds;
@@ -131,15 +158,9 @@ public sealed class NotificationsViewModel : ObservableObject, IDisposable
                 Toasts.RemoveAt(0);
             }
 
-            if (notification.Severity == NotificationSeverity.Info && _autoHideSeconds() is > 0 and var seconds)
+            if (notification.Severity == NotificationSeverity.Info && !vm.HasActions && _autoHideSeconds() is > 0 and var seconds)
             {
-                IDisposable? timer = null;
-                timer = Avalonia.Threading.DispatcherTimer.RunOnce(() =>
-                {
-                    _hideTimers.Remove(timer!);
-                    HideToast(vm);
-                }, TimeSpan.FromSeconds(seconds));
-                _hideTimers.Add(timer);
+                HideLater(vm, TimeSpan.FromSeconds(seconds));
             }
         }
 
@@ -155,6 +176,42 @@ public sealed class NotificationsViewModel : ObservableObject, IDisposable
         }
 
         _hideTimers.Clear();
+    }
+
+    /// <summary>Hides a toast once its time is up, unless the pointer is over it (then a moment after it leaves) or it's pinned.</summary>
+    private void HideLater(NotificationViewModel vm, TimeSpan after)
+    {
+        IDisposable? timer = null;
+        timer = Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+        {
+            _hideTimers.Remove(timer!);
+            if (ToastExpiry(vm, DateTime.UtcNow) is { } remaining)
+            {
+                HideLater(vm, remaining);
+            }
+            else if (!vm.IsPinned)
+            {
+                HideToast(vm);
+            }
+        }, after);
+        _hideTimers.Add(timer);
+    }
+
+    /// <summary>How much longer a toast whose time is up stays for the pointer over it, or that left it just now; null: none.</summary>
+    internal static TimeSpan? ToastExpiry(NotificationViewModel vm, DateTime now)
+    {
+        if (vm.IsPinned)
+        {
+            return null;
+        }
+
+        if (vm.IsHovered)
+        {
+            return HoverLinger;
+        }
+
+        var left = vm.HoverEnded + HoverLinger - now;
+        return left > TimeSpan.Zero ? left : null;
     }
 
     private void HideToast(NotificationViewModel vm)

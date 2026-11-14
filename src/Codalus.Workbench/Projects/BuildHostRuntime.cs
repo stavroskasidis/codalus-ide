@@ -101,6 +101,7 @@ public static class BuildHostRuntime
             CreateNoWindow = true,
         };
         start.Environment["DOTNET_NOLOGO"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         start.Environment.Remove(RollForward);
         start.Environment.Remove(RollForwardToPrerelease);
         try

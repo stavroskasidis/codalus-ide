@@ -39,6 +39,11 @@ if (args is ["--depth"])
     return Depth.Run(); // [depth-call]
 }
 
+if (args is ["--features"])
+{
+    return Features.Run(); // [features-call]
+}
+
 if (args is ["--datatip"])
 {
     return DataTip.Run(); // [datatip-call]
@@ -48,6 +53,11 @@ if (args is ["--read"])
 {
     // A real console (debugging in the terminal, M14c): read a line and echo it.
     Console.WriteLine("echo: " + Console.ReadLine()); // [read]
+}
+
+if (args is ["--initializer"])
+{
+    return Initializer.Run(); // [initializer-call]
 }
 
 if (args is ["--crash"])

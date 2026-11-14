@@ -1,5 +1,9 @@
 # Troubleshooting, logs and crash reports
 
+## Which version you have
+
+**Help → About Codalus IDE**, the Help menu's last entry (on macOS also the first entry of the **Codalus IDE** menu), opens a window with the version and what Codalus IDE runs on: the .NET runtime, the operating system and its architecture. **Copy Info** puts them on the clipboard, for a bug report or a question; the links open the website, the source code, the license and the third-party notices. **OK**, `Enter` or `Esc` closes it. From a terminal, `codalus --version` prints the same.
+
 ## Output channels
 
 View → Output (`Ctrl+Shift+U`) has a channel per component:
@@ -27,6 +31,7 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | Symptom | What to check |
 |---|---|
 | "No .NET SDK was found" | Install the .NET SDK. If the solution has a `global.json`, install the SDK version it asks for. |
+| Check Environment shows a .NET SDK that `dotnet --list-sdks` in a terminal doesn't | Codalus IDE uses the SDK it finds, even in a folder your terminal doesn't have on its `PATH` (an earlier Install .NET put it in `~/.dotnet`, while the terminal's `dotnet` is in `/usr/local/share/dotnet`). Check Environment shows the folder it uses. Install it again where the terminal's `dotnet` is: Install .NET recommends that way (Microsoft's `.pkg` on macOS, your distribution's package on Linux). Or put the other folder first on your `PATH` in your shell's profile. |
 | "Codalus IDE needs the .NET … runtime, which isn't installed" | The helper processes (build host, language service, plugin host and the others) run on .NET 11 or newer: choose **Install .NET 11.0** in the notification, or Help → Check Environment. SDKs of older versions alone can't start them, and neither can an earlier release candidate. On Windows on Arm, the x64 build needs the x64 .NET (`C:\Program Files\dotnet\x64`): the Arm64 .NET doesn't count, and Install .NET installs the x64 one. If you're sure the runtime is installed and the check is wrong, set `CODALUS_SKIP_RUNTIME_CHECK=1` and report it. |
 | A helper process stops at start, with an error that quotes what it wrote | It exited while starting (a missing file, a bad setting, a runtime the check didn't catch): the error has its exit code and the first lines it wrote to standard error (for a helper that crashes later, the exception it reports, from its `Unhandled exception.` line), and its Output channel has all of them. It isn't started again, because it would stop the same way: fix the cause, then reopen the solution or restart Codalus IDE. |
 | Projects stay in "Restricted mode" | The folder isn't trusted. Click the status bar item to trust it. |
@@ -34,7 +39,8 @@ Help → Show Logs opens the Codalus IDE channel. Crash reports are saved in the
 | Restore fails with "a package source couldn't be reached (NU1301)", and the Error List fills with errors | A feed in the solution's `NuGet.Config` didn't answer, often a company feed when its VPN is off. Projects that need its packages can't compile, so every file that uses them shows errors. Connect, then run **Restore Packages** (command palette, category Solution). |
 | No IntelliSense in a project | Its design-time build failed (Output → Build Host). It is often a missing restore or SDK. Codalus restores once by itself when the packages can't be read ([Restore](solutions.md#restore)); if the project is built again elsewhere with another SDK, open the solution again or use Project → Restore Packages. |
 | An error shows in the Error List right after opening a solution, then goes away by itself | To open fast after a pull, a project changed only in a project it references is first checked against what it looked like in the last session. Where that change altered something it uses (a constant, an inherited member), its first results can be wrong; Codalus IDE checks those projects again from source at once, and Output → Language Services says so ("checked again from source"). Nothing of the first check is kept. |
-| "The debugger (netcoredbg) was not found" | A source build: run `eng/get-netcoredbg.sh`. Packages include it. |
+| "The debugger (netcoredbg) was not found" | You chose netcoredbg (`debug.adapter`) in a source build: run `eng/get-netcoredbg.sh`. Packages include it. |
+| Something doesn't work under the debugger that worked before | Set `debug.adapter` to `netcoredbg` (Options › Debugging), the debugger of earlier versions, kept for one release as a fallback, and report what didn't work: start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set to a folder and attach the session's log. |
 | Git features missing | Install git and make sure it is on the `PATH` (or set `CODALUS_GIT`). |
 | On macOS, git or restore fails with "Failed to connect to … port 443" or "Couldn't connect to server", though the same command works in Terminal | macOS's local network privacy may be blocking Codalus IDE: turn it on in System Settings → Privacy & Security → Local Network. Servers on your company network or a VPN count as local. Codalus IDE also takes the proxy and certificate variables your login shell exports (`HTTPS_PROXY`, `NO_PROXY`, `SSL_CERT_FILE`, …); a proxy set only in `~/.zshrc` reaches it after a restart. |
 | Push or pull fails with an authentication error | Configure a git credential helper or SSH keys. Codalus IDE doesn't prompt for passwords. |

@@ -51,6 +51,20 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: The tools' telemetry opt-outs
+      # M59: the workflow's env sets them for every job (the .NET SDK's, Avalonia's build task's, which posts from every
+      # build of the Avalonia projects here, Microsoft.Testing.Platform's and dotnet-svcutil's; the list of
+      # eng/telemetry-optout.sh and ToolTelemetry.Variables). A job that runs without one fails here, before it builds.
+      shell: bash
+      run: |
+        missing=""
+        for name in DOTNET_CLI_TELEMETRY_OPTOUT AVALONIA_TELEMETRY_OPTOUT TESTINGPLATFORM_TELEMETRY_OPTOUT DOTNET_SVCUTIL_TELEMETRY_OPTOUT; do
+          if [ "${!name:-}" != 1 ]; then missing="$missing $name"; fi
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::The workflow's env doesn't set the tools' telemetry opt-outs:$missing (M59: set each to \"1\" in its top-level env)"
+          exit 1
+        fi
     - name: Room on a small Linux runner's disk
       # Some ubuntu-latest jobs get a runner with a 72 GB disk (a "Hosted Compute Agent" on AWS, /dev/mapper/cow-root)
       # instead of 145 GB: after restore and build 67 GB were used, so others filled it in its first minute (PR #268,
@@ -67,19 +81,17 @@ runs:
         echo "${free} GB free on a small runner: removing toolchains the repository doesn't use."
         sudo rm -rf /usr/local/.ghcup /opt/ghc /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/julia* /opt/az /usr/share/miniconda || true
         df -h /
-    # The SDK of global.json, spelled out: setup-dotnet reads global.json's "latestFeature" as the channel's newest
-    # release, which .NET 11 doesn't have before GA (M30b). Keep it in step with global.json and samples/Net11/global.json
-    # (docs/release/dotnet-upgrade.md). TODO(issue): back to global-json-file on the .NET 11 GA SDK.
+    # The SDK of global.json (its "latestFeature": the channel's newest release); the extra SDK is the previous
+    # version's, for the fixtures still on it (docs/release/dotnet-upgrade.md).
     - if: inputs.extra-sdks != 'true'
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 11.0.100-rc.3.26522.148
+        global-json-file: global.json
     - if: inputs.extra-sdks == 'true'
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: |
-          10.0.x
-          11.0.100-rc.3.26522.148
+        global-json-file: global.json
+        dotnet-version: 10.0.x
     - if: inputs.nuget-cache == 'true'
       id: restore-nuget
       uses: actions/cache/restore@v6
@@ -126,13 +138,21 @@ runs:
     - name: A Chromium browser (Linux arm64)
       # Ubuntu 24.04's AppArmor denies unprivileged user namespaces to programs without a profile (Chrome's package brings
       # one), so this build would abort with "No usable sandbox!" and js-debug time out connecting to it: allow them on
-      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests
+      # this throwaway runner rather than run the browser without its sandbox. The debug-codalus shard's Blazor tests (Linux arm64's)
       # waited out their limits without one (run 40804553432).
       if: inputs.browser == 'true' && runner.os == 'Linux' && runner.arch == 'ARM64'
       shell: bash
       run: |
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-        npx -y playwright@1.56.1 install --with-deps chromium
+        npx -y playwright@1.56.1 install chromium
+        # The libraries Chromium loads are on the runner's image; what its packages add here is fonts, from
+        # ports.ubuntu.com. That name didn't resolve for 13 minutes in two runs in a row (43034040499, 43040050023) and
+        # the step failed before any test. So the packages get 5 minutes and their failure is a warning; a missing
+        # library still fails the step, at chromium --version below.
+        timeout -k 10 300 npx -y playwright@1.56.1 install-deps chromium || {
+          echo "::warning::Chromium's packages (fonts) weren't installed: apt-get failed or took over 5 minutes"
+          sudo pkill -x apt-get || true
+        }
         chrome="$(find "$HOME/.cache/ms-playwright" -path '*/chrome-linux*/chrome' -type f | head -n 1)"
         [ -x "$chrome" ] || { echo "::error::Playwright's Chromium wasn't found"; exit 1; }
         sudo ln -sf "$chrome" /usr/local/bin/chromium

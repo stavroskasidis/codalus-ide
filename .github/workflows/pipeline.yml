@@ -2,8 +2,10 @@ name: Pipeline
 
 # The one pipeline for develop, master and pull requests (M31, ADR 0028, D20/D21). Every run builds, tests and
 # smoke-tests on Windows, macOS and Linux (CI), and a branch's run releases what passed:
-# - develop: a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub prerelease with the commits since the
-#   previous nightly as its notes. The newest 14 are kept.
+# - develop: once a night (schedule, 00:17 UTC) a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub
+#   prerelease with the commits since the previous nightly as its notes, unless develop's head has one already (nothing
+#   changed). The newest 14 are kept. A push to develop starts no run: its pull request ran CI, and the nightly tests
+#   everything on every OS (the maintainer's decisions, 2026-11-14, ADR 0028).
 # - master: a stable release, v<VERSION> (every merge of a release/X.Y.Z branch, and every hotfix; the run fails if that
 #   tag exists already), the latest release, with notes from the commits since the previous stable release. Afterwards the
 #   site with the apt and dnf repositories is deployed, the AUR package and the plugin SDK's NuGet packages pushed, and
@@ -14,15 +16,19 @@ name: Pipeline
 # benchmarks and the apt, dnf and zypper repositories built and installed from with the site exported (site,
 # pages.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
 # A run stops at its first failed job, which cancels the rest (ADR 0028, 2026-10-20). A release/X.Y.Z → master pull request
-# skips test and smoke when develop's own run passed on its head (gate). A release is cut from develop as release/X.Y.Z and
+# skips test and smoke when develop's own run (a nightly) passed on its head (gate). A release is cut from develop as release/X.Y.Z and
 # merged into master by pull request, so develop stays open meanwhile (ADR 0028, 2026-10-21; docs/release/releasing.md).
-# A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26); a docs-only
-# pull request skips test and smoke (gate).
+# A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26). A pull
+# request tests what its files need (gate, eng/ci-scope.sh; ADR 0028, 2026-11-13): Linux x64 (test shards and smoke) for
+# most, every OS for the platform paths of eng/ci-platform-paths.txt or the ci:full label, one Linux job of a few test
+# projects for the areas of eng/ci-isolated-paths.txt, and nothing for docs only. develop's nightly and master test
+# everything.
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
+  # master only: a push to develop is tested by its pull request, and on every OS by the nightly.
   push:
-    branches: [develop, master]
+    branches: [master]
     paths-ignore:
       - "docs/**"
       - "**/*.md"
@@ -31,6 +37,13 @@ on:
   pull_request:
     # A fix a release needs goes into its release/X.Y.Z branch by pull request, and is tested like any other.
     branches: [develop, master, "release/**"]
+    # labeled: adding ci:full starts a run on every OS, replacing the one in progress (gate reads the labels when it
+    # runs). Any other label starts the same run again: the required ci check is the newest run's.
+    types: [opened, synchronize, reopened, labeled]
+  # The nightly: GitHub runs a schedule on the default branch, develop, at its head. 00:17 UTC is 02:17 in Athens in
+  # winter, 03:17 in summer; a scheduled run can start late, and never during an outage.
+  schedule:
+    - cron: "17 0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -47,23 +60,28 @@ permissions:
 
 concurrency:
   group: pipeline-${{ github.ref }}
-  # A newer push to develop (or a pull request) replaces the run in progress, and an unpublished nightly's tag goes with
-  # it (untag); a stable release always runs to the end.
+  # A newer run on develop (a dispatch) or a pull request replaces the run in progress, and an unpublished nightly's tag
+  # goes with it (untag); a stable release always runs to the end.
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
+# The tools' telemetry opt-outs (M59, eng/telemetry-optout.sh): .github/actions/setup fails a job without them.
 env:
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  AVALONIA_TELEMETRY_OPTOUT: "1"
   TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  # What this run releases: a nightly from develop, a stable release from master, nothing from anywhere else.
+  # What this run releases: a nightly from develop's schedule (or a dispatch on develop), a stable release from master,
+  # nothing from anywhere else.
   plan:
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release's tag
     outputs:
-      kind: ${{ steps.kind.outputs.kind }}
+      kind: ${{ steps.unchanged.outputs.skip != 'true' && steps.kind.outputs.kind || '' }}
+      unchanged: ${{ steps.unchanged.outputs.skip }}
       version: ${{ steps.plan.outputs.version }}
       previous: ${{ steps.plan.outputs.previous }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -72,21 +90,30 @@ jobs:
         shell: bash
         run: |
           kind=""
-          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            case "$GITHUB_REF" in
-              refs/heads/master) kind=stable ;;
-              refs/heads/develop) kind=nightly ;;
-            esac
-          fi
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/heads/master | workflow_dispatch:refs/heads/master) kind=stable ;;
+            schedule:refs/heads/develop | workflow_dispatch:refs/heads/develop) kind=nightly ;;
+          esac
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
       - if: steps.kind.outputs.kind != ''
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - if: steps.kind.outputs.kind != ''
+      # A night with no change to develop makes no nightly: its head has one already. The run then does nothing (gate):
+      # the nightly's run tested that commit.
+      - id: unchanged
+        if: github.event_name == 'schedule' && steps.kind.outputs.kind == 'nightly'
+        shell: bash
+        run: |
+          tag="$(git tag --points-at HEAD --list 'v*-nightly.*' | head -n 1)"
+          if [[ -n "$tag" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No nightly tonight: develop's head ${GITHUB_SHA::7} is $tag already." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         uses: ./.github/actions/setup
       - id: plan
-        if: steps.kind.outputs.kind != ''
+        if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         shell: bash
         env:
           KIND: ${{ steps.kind.outputs.kind }}
@@ -117,33 +144,92 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
 
-  # A pull request that changes only docs/** and *.md files skips test and smoke: pushes of those start no run at all
-  # (paths-ignore), but a pull request runs so that it reports ci.
-  # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run, on a commit that has
-  # all of master, skips test and smoke: the release run on master runs them again before anything is published (the
-  # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes). A release
-  # branch cut from a develop commit whose run passed qualifies; once a fix is merged into it, its head is new and is tested.
+  # What a pull request tests, from the files it changes (eng/ci-scope.sh; the maintainer's decision, 2026-11-13, ADR
+  # 0028): every OS (as develop's nightly and master's runs) for a file under a path of eng/ci-platform-paths.txt, with the
+  # ci:full label, or into master (a release, a hotfix); only the Linux x64 test shards and smoke otherwise; one Linux
+  # job of the test projects of the areas in eng/ci-isolated-paths.txt (and the tests that scan every file) when nothing
+  # else changes; and no test or smoke for docs/** and *.md files only: pushes of those start no run at all
+  # (paths-ignore), but a pull request runs so that it reports ci. A push, the nightly or a dispatch tests everything.
+  # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run (the nightly or a
+  # dispatch), on a commit that has all of master, skips test and smoke: the release run on master runs them again before
+  # anything is published (the maintainer's decision, 2026-10-20: the same tree tested twice held up every release by
+  # about 50 minutes). A release branch cut from a develop commit whose nightly passed qualifies (cut it from the newest
+  # nightly's commit to skip them); once a fix is merged into it, its head is new and is tested.
   gate:
+    needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
     outputs:
-      skip: ${{ steps.docs.outputs.skip || steps.check.outputs.skip }}
+      skip: ${{ needs.plan.outputs.unchanged || steps.scope.outputs.skip || steps.check.outputs.skip }}
+      scope: ${{ steps.scope.outputs.scope }}
+      projects: ${{ steps.scope.outputs.projects }}
+      test-matrix: ${{ steps.scope.outputs.test-matrix }}
+      smoke-matrix: ${{ steps.scope.outputs.smoke-matrix }}
     steps:
-      - id: docs
-        if: github.event_name == 'pull_request'
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: eng
+      - id: scope
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          # A listing that fails tests everything.
-          files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')" || exit 0
-          if [[ -n "$files" ]] && ! grep -qvE '^docs/|\.md$' <<< "$files"; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Only docs/** and *.md files change: test and smoke are skipped." >> "$GITHUB_STEP_SUMMARY"
+          # Every OS's test jobs (shards: what a job runs, in order, each a step of its own in test). macOS: about 20 + 23
+          # + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
+          tests='[
+            { "os": "ubuntu-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
+            { "os": "ubuntu-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "ubuntu-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
+            { "os": "windows-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
+            { "os": "windows-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "windows-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
+            { "os": "macos-latest", "shard": "all", "shards": "shell-1 shell-2 others debug-netcoredbg", "timeout": 150 },
+            { "os": "ubuntu-24.04-arm", "shard": "debug-codalus", "shards": "debug-codalus", "timeout": 50 }
+          ]'
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            # A pull request into master (a release, a hotfix) tests everything, as does the ci:full label: the labels as
+            # they are now (a re-run reads them again). A listing that fails tests everything.
+            full=()
+            [[ "$GITHUB_BASE_REF" == master ]] && full=(--full)
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name' | grep -qx 'ci:full' && full=(--full)
+            files="$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')" || files=""
+            result="$(bash eng/ci-scope.sh ${full[@]+"${full[@]}"} <<< "$files")"
+          else
+            result="$(bash eng/ci-scope.sh --full < /dev/null)"
           fi
+          scope="$(sed -n 's/^scope=//p' <<< "$result")"
+          projects="$(sed -n 's/^projects=//p' <<< "$result")"
+          # A matrix is never empty, even for a job gate skips: GitHub refuses an empty one.
+          case "$scope" in
+            full)
+              test="$tests"
+              smoke='["ubuntu-latest", "windows-latest", "macos-latest"]'
+              summary="Every OS: test and smoke on Windows, macOS and Linux." ;;
+            linux)
+              test="$(jq '[.[] | select(.os == "ubuntu-latest")]' <<< "$tests")"
+              smoke='["ubuntu-latest"]'
+              summary="Linux x64 only: no file under eng/ci-platform-paths.txt changes (the ci:full label tests every OS)." ;;
+            isolated)
+              test='[{ "os": "ubuntu-latest", "shard": "projects", "shards": "projects", "timeout": 40 }]'
+              smoke='["ubuntu-latest"]'
+              summary="Only areas of eng/ci-isolated-paths.txt change: $projects and eng/ci-repo-scan.txt on Linux, no smoke." ;;
+            docs)
+              test="$tests"
+              smoke='["ubuntu-latest"]'
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              summary="Only docs/** and *.md files change: test and smoke are skipped." ;;
+            *) echo "::error::eng/ci-scope.sh printed no scope: $result" && exit 1 ;;
+          esac
+          {
+            echo "scope=$scope"
+            echo "projects=$projects"
+            echo "test-matrix=$(jq -c . <<< "$test")"
+            echo "smoke-matrix=$(jq -c . <<< "$smoke")"
+          } >> "$GITHUB_OUTPUT"
+          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
       # A release branch's VERSION is the X.Y.Z of its name (it is what master publishes), and its workflow files are
       # develop's: the release's tag is created by the workflow token, which GitHub lets tag only a commit whose workflow
       # files match the default branch's (M31b), so a workflow change goes into both (docs/release/releasing.md).
@@ -170,7 +256,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          passed="$(gh run list -R "$GITHUB_REPOSITORY" --workflow pipeline.yml --branch develop --event push --commit "$HEAD_SHA" --status success --json databaseId --jq length)"
+          passed="$(gh run list -R "$GITHUB_REPOSITORY" --workflow pipeline.yml --branch develop --commit "$HEAD_SHA" --status success --json databaseId --jq length)"
           behind="$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$HEAD_SHA" --jq .behind_by)"
           if [[ "$passed" -gt 0 && "$behind" == 0 ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -178,10 +264,11 @@ jobs:
           fi
 
   # The tests in shards (eng/ci-test.sh) on separate runners at the same time: the Shell tests in two halves (they take 15
-  # to 25 minutes on their own) and every other project with, after it, debug-codalus, the debugger classes under Codalus
-  # IDE's own CoreCLR adapter (M54, ADR 0086). With the smoke test on a runner of its own, a run takes as long as its
-  # longest job, not the sum of them (it took 55 minutes on Windows). Linux arm64 runs debug-codalus alone (the M54 plan:
-  # the other shards' coverage there is the packages' smoke test).
+  # to 25 minutes on their own) and every other project with, after it, debug-netcoredbg, the debugger classes again
+  # under netcoredbg, the fallback (M58, ADR 0094: the shards run them under the default, Codalus IDE's own CoreCLR
+  # adapter). With the smoke test on a runner of its own, a run takes as long as its longest job, not the sum of them
+  # (it took 55 minutes on Windows). Linux arm64 runs those classes alone, under the Codalus debugger (debug-codalus,
+  # the M54 plan: the other shards' coverage there is the packages' smoke test).
   # macOS runs every shard one after another in one job (the maintainer's decision, 2026-11-04, ADR 0028): GitHub runs
   # five macOS jobs at a time, which one run's four shards and smoke took, so a few pull requests queued their macOS jobs
   # for hours. One job takes about 75 minutes, the longest of a run. A job GitHub can't place for want of macOS arm64
@@ -197,17 +284,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # shards: what the job runs, in order, each in a step of its own (below); a shard not listed is skipped.
-        include:
-          - { os: ubuntu-latest, shard: shell-1, shards: shell-1, timeout: 50 }
-          - { os: ubuntu-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: ubuntu-latest, shard: others, shards: others debug-codalus, timeout: 70 }
-          - { os: windows-latest, shard: shell-1, shards: shell-1, timeout: 50 }
-          - { os: windows-latest, shard: shell-2, shards: shell-2, timeout: 50 }
-          - { os: windows-latest, shard: others, shards: others debug-codalus, timeout: 70 }
-          # About 20 + 23 + 16 + 6 minutes of tests after the build (run 41722113539); each step keeps its own limit.
-          - { os: macos-latest, shard: all, shards: shell-1 shell-2 others debug-codalus, timeout: 150 }
-          - { os: ubuntu-24.04-arm, shard: debug-codalus, shards: debug-codalus, timeout: 50 }
+        # gate's list for this run (every OS, Linux x64's shards or the projects job): shards is what the job runs, in
+        # order, each in a step of its own (below); a shard not listed is skipped.
+        include: ${{ fromJSON(needs.gate.outputs.test-matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.timeout }}
     steps:
@@ -223,11 +302,14 @@ jobs:
           display: true
           downloads: true
           browser: true
-      - run: dotnet restore Codalus.slnx
-      - run: dotnet build Codalus.slnx -c Release --no-restore
-      - name: Save the NuGet cache (develop, one job per OS)
+      # The projects shard builds only its projects (eng/ci-test.sh).
+      - if: matrix.shard != 'projects'
+        run: dotnet restore Codalus.slnx
+      - if: matrix.shard != 'projects'
+        run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: Save the NuGet cache (develop's nightly, one job per OS)
         # The job with the others shard restores every project, as the rest do. Pull requests only restore what develop saved.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.nuget/packages
@@ -235,12 +317,21 @@ jobs:
       - name: Stack traces for a hang (dotnet-stack)
         # The test watchdog prints a hanging test's stacks with it (tests/Shared/TestWatchdog.cs, eng/ci-test.sh).
         run: dotnet tool install -g dotnet-stack || true
+      # A runner that goes silent in a test step keeps neither its log nor its artifacts, and nothing names the test
+      # (docs/ci-flakes.md: macOS's Shell shards, and ubuntu-latest's shell-2 in run 43293835263). So while the shards
+      # below run, their console and their memory, load and disk samples go off the runner about once a minute, as an
+      # artifact of this name with a number, each upload replacing the one before; the job's end removes it. What is
+      # left of a lost runner is its last upload (eng/ci-failures.sh prints it). The name has the attempt: a re-run's
+      # uploads don't meet a lost attempt's.
+      - uses: ./.github/actions/live-output
+        with:
+          name: live-${{ matrix.os }}-${{ matrix.shard }}-${{ github.run_attempt }}
       # One step per shard of matrix.shards, in the order macOS runs them all. A shard runs only when the ones before it
       # passed: the first failure stops the run (the last step), so the rest wouldn't finish anyway.
       # A hang is reported and ended by 15 minutes (eng/ci-test.sh): a step's limit is the last resort, leaving the job time
       # for the steps below. macOS shell-2 (15 minutes in run 40663222511) stops at 40: its runner was lost 45 to 46 minutes
       # into this step three times, and a lost runner keeps neither its log nor its artifacts (runs 40255384457,
-      # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS debug-codalus
+      # 40453091722 and 40675641432, docs/ci-flakes.md), so the next hang fails here with both. macOS's debug shard
       # (7 to 13 minutes) too: its runner was lost 44.5 minutes into this step (run 41115971500). Both stop at 30: the
       # runners went silent 35 to 45 minutes into the step, before a stop at 40 could act (runs 40862137560 and
       # 41129614137), and shell-2 takes about 20.
@@ -259,11 +350,26 @@ jobs:
         shell: bash
         timeout-minutes: ${{ matrix.os == 'macos-latest' && 60 || 40 }}
         run: bash eng/ci-test.sh others
+      - name: Test (debug-netcoredbg)
+        if: contains(format(' {0} ', matrix.shards), ' debug-netcoredbg ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        run: bash eng/ci-test.sh debug-netcoredbg
       - name: Test (debug-codalus)
         if: contains(format(' {0} ', matrix.shards), ' debug-codalus ')
         shell: bash
-        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        timeout-minutes: 40
         run: bash eng/ci-test.sh debug-codalus
+      - name: Test (projects)
+        # A pull request that changes only the areas of eng/ci-isolated-paths.txt: their test projects (gate).
+        if: contains(format(' {0} ', matrix.shards), ' projects ')
+        shell: bash
+        timeout-minutes: 35
+        env:
+          PROJECTS: ${{ needs.gate.outputs.projects }}
+        run: |
+          read -r -a projects <<< "$PROJECTS"
+          bash eng/ci-test.sh projects Release "${projects[@]}"
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded
         if: always() && steps.setup.outputs.downloads-hit != 'true'
@@ -318,20 +424,20 @@ jobs:
 
   # The published Native AOT app, windowed, through every MVP milestone (eng/smoke-test.sh): catches what the in-process
   # headless tests cannot (trimming, the published hosts/ and plugins/ layout, the real windowing platform). On a runner
-  # of its own (it needs the machine to itself), alongside the tests. Not on macOS in a pull request (the maintainer's
-  # decision, 2026-11-04, ADR 0028): its runners are the scarce ones, and develop's run (every nightly) and master's (every
-  # release) smoke-test macOS before anything is published, as packages does the installed app.
+  # of its own (it needs the machine to itself), alongside the tests. On the OSes gate picks (the maintainer's decision,
+  # 2026-11-13, ADR 0028): Linux for a pull request, every OS for one that tests every OS and for develop's run (every
+  # nightly) and master's (every release), none for one that tests only the projects of eng/ci-isolated-paths.txt.
   smoke:
     name: smoke (${{ matrix.os }})
     needs: gate
-    if: needs.gate.outputs.skip != 'true'
+    if: needs.gate.outputs.skip != 'true' && needs.gate.outputs.scope != 'isolated'
     permissions:
       contents: read
       actions: write # stopping the run at its first failure
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ github.event_name == 'pull_request' && fromJSON('["ubuntu-latest", "windows-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        os: ${{ fromJSON(needs.gate.outputs.smoke-matrix) }}
     runs-on: ${{ matrix.os }}
     # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40: at 60, a slow runner ran out
     # of time in the middle of a passing smoke test (#111, run 39668401109).
@@ -465,6 +571,20 @@ jobs:
       - name: Release notes
         shell: bash
         run: dotnet run --project eng/Codalus.Release -- notes "${{ needs.plan.outputs.kind }}" "${{ needs.plan.outputs.version }}" --repo "$GITHUB_REPOSITORY" > release-notes.md
+      - name: Signing keychain (macOS)
+        # D19: the Developer ID certificates and the notary key in a throwaway keychain; without
+        # CODALUS_CODESIGN_IDENTITY the packages stay unsigned (docs/release/releasing.md#macos-signing).
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          CODALUS_INSTALLER_IDENTITY: ${{ secrets.CODALUS_INSTALLER_IDENTITY }}
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER: ${{ secrets.APPLE_NOTARY_ISSUER }}
+        run: bash eng/macos-signing.sh setup
       - name: Package
         shell: bash
         env:
@@ -472,13 +592,18 @@ jobs:
           CODALUS_RELEASE_NOTES: ${{ github.workspace }}/release-notes.md
           # The update feed's signature (M32): installed builds refuse a feed without it.
           CODALUS_FEED_KEY: ${{ secrets.FEED_SIGNING_KEY }}
-          # Code signing (D19) waits behind this secret.
+          # macOS code signing (D19): the keychain step above exports CODALUS_KEYCHAIN and CODALUS_NOTARY_PROFILE.
           CODALUS_CODESIGN_IDENTITY: ${{ secrets.CODALUS_CODESIGN_IDENTITY }}
+          CODALUS_INSTALLER_IDENTITY: ${{ secrets.CODALUS_INSTALLER_IDENTITY }}
           # The .rpm's signature: the dnf repository serves the release's own file with gpgcheck on (eng/linux-repos.sh).
           CODALUS_PACKAGES_KEY: ${{ secrets.PACKAGES_GPG_PRIVATE_KEY }}
         run: |
           if [[ "$RUNNER_OS" == "Windows" ]]; then export PATH="$PATH:/c/Program Files (x86)/Microsoft Visual Studio/Installer"; fi
           bash eng/package.sh "${{ needs.plan.outputs.version }}" "${{ needs.plan.outputs.kind }}"
+      - name: Delete the signing keychain (macOS)
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: bash eng/macos-signing.sh cleanup
       - name: Stack traces for a smoke test failure (dotnet-stack)
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true

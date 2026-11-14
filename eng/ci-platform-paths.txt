@@ -1,0 +1,33 @@
+# A pull request that changes a file under one of these paths runs on every OS: the Windows, macOS and Linux arm64
+# test jobs and the Windows and macOS smoke tests, as develop's and master's runs do (eng/ci-scope.sh, pipeline.yml's
+# gate; ADR 0028, update 2026-11-13). Any other pull request tests on Linux x64 only; the ci:full label runs every OS
+# for it too, and the nightly tests every OS before anything is published.
+# One path prefix per line (a folder ends with /); a line starting with ! leaves out what it starts, wherever it is.
+# The core of what differs between the OSes: processes, pseudo-terminals, paths, the credential store, the debugger,
+# MSBuild, the windowing platform, the installed app. Platform-sensitive code elsewhere is validated on each OS
+# before merging (CLAUDE.md, Platform validation), or with the label.
+
+# Processes, pseudo-terminals, credentials, the hosts' runtime
+src/Codalus.Platform/
+src/Codalus.Terminal/
+src/Codalus.Rpc/
+# The debugger: the adapters, the debug host, the startup hook and the workbench's sessions
+src/Codalus.Debugging
+src/Codalus.Workbench/Debugging/
+# MSBuild and the build host
+src/Codalus.Projects.Host/
+# Rendering, single instance, installation and updates
+src/Codalus.Shell/Program.cs
+src/Codalus.Shell/Infrastructure/Rendering.cs
+src/Codalus.Shell/Infrastructure/SingleInstance.cs
+src/Codalus.Shell/Infrastructure/Installation.cs
+src/Codalus.Shell/Infrastructure/MacUpdateLocator.cs
+src/Codalus.Shell/Infrastructure/Updates.cs
+# The build, its SDK and packages, the scripts and the workflows (but the release tool, eng/ci-isolated-paths.txt)
+global.json
+Directory.Build.props
+Directory.Packages.props
+NuGet.config
+eng/
+!eng/Codalus.Release/
+.github/

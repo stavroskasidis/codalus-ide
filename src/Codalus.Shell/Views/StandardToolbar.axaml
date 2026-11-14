@@ -47,6 +47,12 @@
           <TextBlock Text="{Binding DeviceLabel}" VerticalAlignment="Center" MaxWidth="220" TextTrimming="CharacterEllipsis" />
         </StackPanel>
       </Button>
+      <!-- A Start building or starting its program: shown from the click, in the Start buttons' place, with Stop beside it. -->
+      <StackPanel x:Name="LaunchProgress" Orientation="Horizontal" Spacing="6" Margin="6,0" VerticalAlignment="Center" IsVisible="{Binding IsLaunching}"
+                  ToolTip.Tip="{Binding LaunchStatus}" AutomationProperties.Name="{Binding LaunchStatus}" AutomationProperties.LiveSetting="Polite">
+        <ProgressBar IsIndeterminate="True" Width="56" Height="4" MinHeight="4" MinWidth="56" VerticalAlignment="Center" />
+        <TextBlock Text="{Binding LaunchStatus}" VerticalAlignment="Center" MaxWidth="260" TextTrimming="CharacterEllipsis" />
+      </StackPanel>
       <Button x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
               Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.startDebugging}" AutomationProperties.Name="{l:T standardToolbar.startDebugging}">
         <StackPanel Orientation="Horizontal" Spacing="4">

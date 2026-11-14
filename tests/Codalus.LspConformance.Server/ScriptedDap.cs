@@ -160,7 +160,7 @@ internal static class ScriptedDap
                         // to the starts file.
                         var program = StartProgram(StartsFile(launch!.Value) + ".programs");
                         await FailAsync(output, requestSeq, command, Option(launch.Value, "startTimesOut") == "true" ? "Command execution timed out." : "Failed command 'configurationDone' : 0x80004005");
-                        _ = AfterTimeoutAsync(output, program, Option(launch.Value, "runtimeAfter"), launch.Value.GetRawText());
+                        _ = AfterTimeoutAsync(output, program, Option(launch.Value, "runtimeAfter"), launch.Value.GetRawText(), Option(launch.Value, "announceRuntime") == "true");
                         continue;
                     }
                 case "configurationDone" when Threads(launch) is not null:
@@ -343,7 +343,11 @@ internal static class ScriptedDap
     /// that fails). With <c>+request</c> after the milliseconds, netcoredbg on macOS: it reports the runtime only once
     /// a request arrives after it started (its CreateProcess callback waits for the stdin its main thread holds).
     /// </summary>
-    private static async Task AfterTimeoutAsync(Stream output, int program, string? runtimeAfter, string launch)
+    /// <param name="announce">
+    /// An output event ("scripted adapter: the runtime starts") goes out just before the runtime's events, so a test can
+    /// hold the client's event handling there while the program runs on and exits (<c>announceRuntime</c>).
+    /// </param>
+    private static async Task AfterTimeoutAsync(Stream output, int program, string? runtimeAfter, string launch, bool announce = false)
     {
         if (runtimeAfter == "never")
         {
@@ -366,6 +370,11 @@ internal static class ScriptedDap
             {
                 await Task.Delay(20);
             }
+        }
+
+        if (announce)
+        {
+            await EventAsync(output, "output", new JsonObject { ["category"] = "console", ["output"] = "scripted adapter: the runtime starts\n" });
         }
 
         await EventAsync(output, "thread", new JsonObject { ["reason"] = "started", ["threadId"] = 1 });

@@ -560,6 +560,8 @@ public static class CommandIcons
         ["debug.stepOver"] = new("step-over", Navigate),
         ["debug.stepOut"] = new("step-out", Navigate),
         ["debug.runToCursor"] = new("caret"),
+        ["debug.setNextStatement"] = new("go-to", Navigate),
+        ["debug.stepIntoSpecific"] = new("step-into", Navigate),
         ["debug.toggleBreakpoint"] = new("breakpoint", Stop),
         ["debug.toggleBreakpointEnabled"] = new("breakpoint-outline", Stop),
         ["debug.deleteAllBreakpoints"] = new("cancel"),

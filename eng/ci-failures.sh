@@ -6,6 +6,9 @@
 # A failure is a failed test (from the job's annotations, which eng/ci-test.sh writes, or its log), a smoke test step
 # that failed, the tests HangDump found still running, a step's timeout, or a runner that was lost. Jobs that only show
 # as cancelled because another job stopped the run are left out.
+# A runner that went silent leaves no log: its job ends with a step that never finished. For one run, what the job's
+# live output last sent off the runner is printed with it (.github/actions/live-output: the tests that had just ended,
+# the last memory, load and disk samples, and how to get the whole upload).
 # Needs gh (authenticated for a private repository). Logs are kept in ${XDG_CACHE_HOME:-~/.cache}/codalus-ci.
 set -euo pipefail
 repo="${CODALUS_CI_REPO:-stavroskasidis/codalus-ide}"
@@ -32,6 +35,39 @@ api() {
 # (the test runner's colors), unless allowed; an older gh doesn't know the option.
 log_options=()
 gh api --help 2>&1 | grep -q -- --allow-escape-sequences && log_options=(--allow-escape-sequences)
+
+# What a test job's live output last uploaded, for a job whose runner went silent: "live\t<what>" lines. The artifact is
+# live-<os>-<shard>-<attempt>-<n>, from the job's name "test (<os>, <shard>)".
+live_output() {
+  local run="$1" attempt="$2" name="$3" prefix artifact id folder file sample shard
+  [[ "$name" =~ ^test\ \(([^,]+),\ ([^\)]+)\)$ ]] || return 0
+  prefix="live-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-$attempt-"
+  artifact="$(api "repos/$repo/actions/runs/$run/artifacts?per_page=100" --jq ".artifacts[] | select(.expired | not) | select(.name | startswith(\"$prefix\")) | \"\(.id)\t\(.name)\"" 2> /dev/null | sort -t$'\t' -k2,2 | tail -1)"
+  if [[ -z "$artifact" ]]; then
+    printf 'live\tno upload named %s<n> is left on the run\n' "$prefix"
+    return 0
+  fi
+
+  id="${artifact%%$'\t'*}"
+  folder="$cache/live-$id"
+  if [[ ! -d "$folder" ]]; then
+    mkdir -p "$folder"
+    api "repos/$repo/actions/artifacts/$id/zip" > "$folder.zip" 2> /dev/null && unzip -q -o "$folder.zip" -d "$folder" 2> /dev/null || true
+    rm -f "$folder.zip"
+  fi
+
+  printf 'live\tthe last upload: %s (gh run download %s -R %s -n %s)\n' "${artifact#*$'\t'}" "$run" "$repo" "${artifact#*$'\t'}"
+  for file in "$folder"/*/console.txt; do
+    [[ -f "$file" ]] || continue
+    shard="$(basename "$(dirname "$file")")"
+    # The tests that had just ended (the one running then comes after them in the class), and the watchdog's word.
+    awk '{ gsub(/\033\[[0-9;]*m/, ""); print }' "$file" | grep -E '^(passed|failed|skipped) [A-Za-z_]|^\[[0-9:]+\] [A-Za-z_]|still running' | tail -4 |
+      while IFS= read -r line; do printf 'live\t%s console: %s\n' "$shard" "${line:0:200}"; done
+    for sample in "$folder/$shard"/memory.txt "$folder/$shard"/load.txt "$folder/$shard"/disk.txt; do
+      [[ -s "$sample" ]] && printf 'live\t%s %s: %s\n' "$shard" "$(basename "$sample" .txt)" "$(grep -E '^[0-9]{2}:[0-9]{2}:[0-9]{2} |^\[disk\]' "$sample" | tail -1 | cut -c1-200)"
+    done
+  done
+}
 
 # One line per failure of a job: "<kind>\t<what>".
 job_failures() {
@@ -60,10 +96,19 @@ run_failures() {
   local run="$1" attempts attempt
   attempts="$(api "repos/$repo/actions/runs/$run" --jq '.run_attempt')"
   for ((attempt = 1; attempt <= attempts; attempt++)); do
+    # A job whose runner went silent is over (failed, or cancelled at its limit) with a step that never finished.
     api "repos/$repo/actions/runs/$run/attempts/$attempt/jobs?per_page=100" \
-      --jq '.jobs[] | select(.name != "ci") | select(.conclusion == "failure" or ([.steps[]? | select(.conclusion == "failure")] | length > 0)) | "\(.id)\t\(.name)"' |
-      while IFS=$'\t' read -r job name; do
-        job_failures "$job" | while IFS=$'\t' read -r kind what; do
+      --jq '.jobs[] | select(.name != "ci") | ([.steps[]? | select(.status == "in_progress") | .name] | first // "") as $silent
+        | select(.conclusion == "failure" or ([.steps[]? | select(.conclusion == "failure")] | length > 0) or (.status == "completed" and $silent != ""))
+        | "\(.id)\t\(.name)\t\($silent)"' |
+      while IFS=$'\t' read -r job name silent; do
+        {
+          job_failures "$job"
+          if [[ -n "$silent" ]]; then
+            printf 'runner\tThe runner went silent: "%s" never finished\n' "$silent"
+            [[ -n "${live:-}" ]] && live_output "$run" "$attempt" "$name"
+          fi
+        } | while IFS=$'\t' read -r kind what; do
           printf '%s\t%s\t%s\t%s\t%s\n' "$run" "$attempt" "$name" "$kind" "$what"
         done
       done
@@ -88,6 +133,7 @@ case "${1:-}" in
     ;;
   "" | -h | --help) usage ;;
   *)
+    live=1 # one run: with what a silent runner's job last sent off it
     run_failures "$1" | awk -F'\t' '{ job = "attempt " $2 ": " $3; if (job != last) print job; last = job; printf "  %-7s %s\n", $4, $5 }'
     ;;
 esac

@@ -85,6 +85,10 @@ internal sealed partial class SmokeTest
         ["packages.signIn"] = "signs in to a package feed (a real device-code sign-in)",
         ["containers.composeUp"] = "builds images and pulls more than mcr.microsoft.com/dotnet",
         ["containers.composeDebug"] = "builds images and pulls more than mcr.microsoft.com/dotnet",
+        ["containers.composeRestartService"] = "restarts a service of the user's compose app, which can build its image and pull more than mcr.microsoft.com/dotnet",
+        ["containers.composeStopService"] = "stops a service of the user's compose app through the user's engine",
+        ["containers.composeDebugService"] = "recreates a service of the user's compose app, which can build its image and pull more than mcr.microsoft.com/dotnet",
+        ["containers.composeDetachService"] = "recreates a service of the user's compose app, which can build its image and pull more than mcr.microsoft.com/dotnet",
         ["remote.reopenInContainer"] = "builds or pulls a dev container's image from any registry",
         ["remote.open"] = "installs codalus-server on another machine (the remote.session step covers --remote local)",
         ["debug.justInTime"] = "registers the Just-In-Time debugger (tests never register it for real)",
@@ -193,6 +197,8 @@ internal sealed partial class SmokeTest
         ("hotReloadRunning", "needs a program running with Hot Reload (the web.hotReload step covers it)"),
         ("testsRunning", "needs a test run in progress"),
         ("debugCanDetach", "needs an attached debug session"),
+        ("debugCanSetNextStatement", "needs a program stopped under the Codalus debugger (the debug.codalus step covers it)"),
+        ("debugCanStepIntoSpecific", "needs a program stopped under the Codalus debugger (the debug.codalus step covers it)"),
         ("mobileStartup", "needs a .NET MAUI startup project (the maui.* steps cover it)"),
         ("gitRepositories", "needs several Git repositories in one solution"),
         ("!gitRepository", "needs a solution outside a Git repository"),
@@ -364,7 +370,8 @@ internal sealed partial class SmokeTest
         Check(failed.Count == 0, $"every command runs from each of its entry points ({failed.Count} failed: {string.Join("; ", failed.Take(15).Select(r => $"{r.Command} [{r.Entry}] {r.Reason}"))})");
     }
 
-    private static string? SkipReason(string id) =>
+    /// <summary>Why the sweep never runs <paramref name="id"/> (it leaves the machine or the app), or null; agents' run_command skips these too.</summary>
+    internal static string? SkipReason(string id) =>
         s_sweepSkips.TryGetValue(id, out var reason) ? reason
         : id.StartsWith("externalTools.run.", StringComparison.Ordinal) ? "runs a user-defined external tool"
         : null;
@@ -550,7 +557,7 @@ internal sealed partial class SmokeTest
                         Screenshot("smoke-test-sweep-scenario-debug.png");
                         Console.Out.WriteLine("  [sweep] the debugger didn't stop: reopening the solution to try again");
                         await StopSweepDebuggingAsync().ConfigureAwait(true);
-                        await shell.CloseSolutionAsync().ConfigureAwait(true);
+                        await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
                         await shell.OpenSolutionAsync(_sweepSolution).ConfigureAwait(true);
                         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the sweep's solution is evaluated again", 240).ConfigureAwait(true);
                         var again = await StartSweepDebuggingAsync().ConfigureAwait(true);
@@ -581,7 +588,7 @@ internal sealed partial class SmokeTest
                     await StopSweepDebuggingAsync().ConfigureAwait(true);
                     if (shell.Solutions.Solution is not null)
                     {
-                        await shell.CloseSolutionAsync().ConfigureAwait(true);
+                        await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
                     }
 
                     return shell.Solutions.Solution is null;

@@ -550,14 +550,17 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
         Refresh();
     }
 
-    /// <summary>Opens a file (set by the shell), for <see cref="OpenFileAsDefault"/>.</summary>
-    public Func<string, Task>? OpenFile { get; set; }
+    /// <summary>
+    /// Opens a file at its first change (set by the shell), for <see cref="OpenFileAsDefault"/>: the path, and whether the
+    /// row is staged (its changes are then against HEAD, else against the index).
+    /// </summary>
+    public Func<string, bool, Task>? OpenFile { get; set; }
 
     /// <summary>The default action of a file: its changes, or the file itself with <see cref="OpenFileAsDefault"/>.</summary>
     public Task OpenAsync(GitFileRow row) =>
-        OpenFileAsDefault && !row.IsDeleted && OpenFile is { } open ? open(row.Status.Path) : OpenDiffAsync(row);
+        OpenFileAsDefault && !row.IsDeleted && OpenFile is { } open ? open(row.Status.Path, row.Staged) : OpenDiffAsync(row);
 
-    public Task OpenFileAsync(GitFileRow row) => OpenFile is { } open && !row.IsDeleted ? open(row.Status.Path) : Task.CompletedTask;
+    public Task OpenFileAsync(GitFileRow row) => OpenFile is { } open && !row.IsDeleted ? open(row.Status.Path, row.Staged) : Task.CompletedTask;
 
     public Task StageAsync(GitChangeNode node) => StageAsync(node.Rows);
 
@@ -1494,6 +1497,18 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     public GitService StashRepository(GitStash stash) => stash.Repository is { } root ? _git.ServiceAt(root) ?? _git : _git;
 
     /// <summary>Amend the last commit: fills in its message (and restores the draft when unchecked).</summary>
+    /// <summary>
+    /// AI is writing the commit message: the message box says so with a bar, and its ✦ button waits. The status bar alone
+    /// didn't show it, and an agent can take a while (ADR 0097).
+    /// </summary>
+    public bool IsWritingMessage
+    {
+        get => _isWritingMessage;
+        set => SetField(ref _isWritingMessage, value);
+    }
+
+    private bool _isWritingMessage;
+
     public bool Amend
     {
         get => _amend;

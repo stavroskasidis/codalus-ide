@@ -109,7 +109,12 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
             await fixture.Debug.ContinueAsync();
             await run.WaitAsync(TimeSpan.FromMinutes(2), Timeout());
             Assert.Equal(TestOutcome.Failed, fixture.Node(project, project, "CalculatorTests", "Adds").AggregateOutcome());
-            await fixture.WaitUntilAsync(() => !fixture.Debug.IsActive, Timeout());
+
+            // The run's result came, and the session stayed on until the timeout: Codalus IDE's adapter reported neither
+            // the test host's exit nor its end (Linux CI, PR #307's run 41963895934, XunitV2Tests). Whether the test host
+            // still runs, and where the adapter and it wait, say which of them stopped. TODO(issue)
+            await fixture.WaitUntilAsync(() => !fixture.Debug.IsActive, Timeout(), describe: () =>
+                $"the debug session to end after the run: {fixture.Debug.Describe()}; the test host {TestHost(fixture.Debug.ProcessId)}");
         }
         finally
         {
@@ -126,6 +131,29 @@ public sealed class DotNetTestRunControlTests(DotNetTestFixture fixture)
 
             fixture.Debug.AdapterSetting = adapter;
             await fixture.Languages.CloseAsync(calculator);
+        }
+    }
+
+    /// <summary>Whether the debugged test host still runs (failure messages).</summary>
+    private static string TestHost(int? processId)
+    {
+        if (processId is not { } id)
+        {
+            return "not reported";
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            return process.HasExited ? $"{id} has exited" : $"{id} still runs";
+        }
+        catch (ArgumentException)
+        {
+            return $"{id} is gone";
+        }
+        catch (InvalidOperationException)
+        {
+            return $"{id} is gone";
         }
     }
 

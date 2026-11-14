@@ -42,6 +42,14 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# The tools' telemetry opt-outs (M59, eng/telemetry-optout.sh): .github/actions/setup fails a job without them.
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  AVALONIA_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
+
 jobs:
   # On its own push trigger: whether the push also starts pipeline.yml, which then deploys the site with its release.
   # (Called from pipeline.yml, github.event_name is the pipeline's, so the workflow's own name tells the two apart.)

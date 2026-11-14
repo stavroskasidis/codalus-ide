@@ -5,6 +5,7 @@ using System.Text.Json;
 using Codalus.Debugging;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Debugging;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
@@ -217,6 +218,7 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 {
     private bool _isFlagged = isFlagged;
     private bool _isCurrent = isCurrent;
+    private bool _isFrozen = thread.Frozen == true;
 
     public DapThread Thread { get; } = thread;
 
@@ -244,6 +246,22 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
 
     public string Marker => IsCurrent ? "▶" : string.Empty;
 
+    /// <summary>Frozen (M58): it doesn't run when the program runs on, until thawed.</summary>
+    public bool IsFrozen
+    {
+        get => _isFrozen;
+        set
+        {
+            if (SetField(ref _isFrozen, value))
+            {
+                OnPropertyChanged(nameof(FrozenText));
+                OnPropertyChanged(nameof(AccessibleName));
+            }
+        }
+    }
+
+    public string FrozenText => IsFrozen ? Localizer.Get("threads.frozen", "Frozen") : string.Empty;
+
     public bool IsFlagged
     {
         get => _isFlagged;
@@ -256,7 +274,7 @@ public sealed class ThreadRow(DapThread thread, string location, bool isCurrent,
         }
     }
 
-    public string AccessibleName => $"Thread {IdText} {Name}, {Location}{(IsCurrent ? ", current" : string.Empty)}{(IsFlagged ? ", flagged" : string.Empty)}";
+    public string AccessibleName => $"Thread {IdText} {Name}, {Location}{(IsCurrent ? ", current" : string.Empty)}{(IsFlagged ? ", flagged" : string.Empty)}{(IsFrozen ? ", frozen" : string.Empty)}";
 }
 
 /// <summary>
@@ -272,6 +290,7 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
     private readonly ShownRefresh _refresh;
     private bool _flaggedOnly;
     private int _generation;
+    private string? _freezeProblem;
 
     public ThreadsViewModel(DebugService debugger)
     {
@@ -370,6 +389,26 @@ public sealed class ThreadsViewModel : ObservableObject, IShownAware
 
     /// <summary>Makes the thread the active one (Call Stack, Locals and Watch follow).</summary>
     public Task ActivateAsync(ThreadRow row) => _debugger.SelectThreadAsync(row.Id);
+
+    /// <summary>Whether the session's debugger freezes threads (the Codalus debugger, M58).</summary>
+    public bool CanFreeze => _debugger.CanFreezeThreads;
+
+    /// <summary>Why the last Freeze or Thaw couldn't be done; null when it could.</summary>
+    public string? FreezeProblem
+    {
+        get => _freezeProblem;
+        private set => SetField(ref _freezeProblem, value);
+    }
+
+    /// <summary>Freezes the thread (it doesn't run when the program runs on) or thaws it.</summary>
+    public async Task FreezeAsync(ThreadRow row, bool frozen)
+    {
+        FreezeProblem = await _debugger.FreezeThreadAsync(row.Id, frozen).ConfigureAwait(true);
+        if (FreezeProblem is null)
+        {
+            row.IsFrozen = frozen;
+        }
+    }
 }
 
 /// <summary>A row of the Modules window.</summary>
@@ -388,6 +427,9 @@ public sealed record ModuleRow(DebugModule Module)
     public string Order => (Module.Order + 1).ToString(CultureInfo.InvariantCulture);
 
     public string AccessibleName => $"{Name}, {SymbolStatus}";
+
+    /// <summary>Load Symbols applies: the module is a file whose symbols aren't loaded.</summary>
+    public bool CanLoadSymbols => Module.Path is { Length: > 0 } && Module.SymbolStatus?.StartsWith("Symbols loaded", StringComparison.Ordinal) != true;
 }
 
 /// <summary>
@@ -402,6 +444,7 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
     private readonly ShownRefresh _refresh;
     private string _filter = string.Empty;
     private bool _queued;
+    private string? _symbolsProblem;
 
     public ModulesViewModel(DebugService debugger)
     {
@@ -415,6 +458,19 @@ public sealed class ModulesViewModel : ObservableObject, IShownAware
     void IShownAware.SetViewShown(object view, bool shown) => _refresh.SetShown(view, shown);
 
     public bool IsEmpty => Rows.Count == 0;
+
+    /// <summary>Whether the session's debugger looks symbols up on demand (the Codalus debugger, M58).</summary>
+    public bool CanLoadSymbols => _debugger.CanLoadSymbols;
+
+    /// <summary>Why the last Load Symbols couldn't be asked; null when it could (the module's status then says what was found).</summary>
+    public string? SymbolsProblem
+    {
+        get => _symbolsProblem;
+        private set => SetField(ref _symbolsProblem, value);
+    }
+
+    /// <summary>Load Symbols: looks for the module's PDB in the symbol paths and on the symbol servers.</summary>
+    public async Task LoadSymbolsAsync(ModuleRow row) => SymbolsProblem = await _debugger.LoadSymbolsAsync(row.Module.Id).ConfigureAwait(true);
 
     public string Filter
     {

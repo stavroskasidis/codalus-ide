@@ -151,7 +151,9 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             var (deviceCode, _) = await TryRunAsync("xcrun", ["devicectl", "list", "devices", "--quiet", "--json-output", file], cancellationToken).ConfigureAwait(false);
             if (deviceCode == 0 && File.Exists(file))
             {
-                result.InsertRange(0, MobileDevices.ParseAppleDevices(await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false)));
+                var simulators = result.ToList();
+                result.Clear();
+                result.AddRange(MobileDevices.MergeApple(simulators, MobileDevices.ParseAppleDevices(await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false))));
             }
         }
         catch (IOException)

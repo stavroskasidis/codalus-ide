@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Codalus.Platform;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
+using Codalus.Workbench.Ai;
+using Codalus.Workbench.Ai.Acp;
+using Codalus.Workbench.Settings;
 
 namespace Codalus.Shell;
 
@@ -33,11 +36,13 @@ public enum SetupDecision
 
 /// <summary>
 /// The first-run setup (M46): the first time the IDE starts for a user data folder, a window of its own before the start
-/// window offers the appearance (the theme families, ADR 0077), the keyboard scheme, settings from elsewhere (VS Code,
-/// a <c>.vssettings</c> file, an export, settings sync) and M37's tools check. <see cref="SetupCompletedSetting"/>
+/// window welcomes the user and offers the appearance (the theme families, ADR 0077, and the editor's font size), the
+/// keyboard scheme, settings from elsewhere (VS Code, a <c>.vssettings</c> file, an export, settings sync), M37's tools
+/// check and the AI experience (ADR 0096), and ends on a summary. <see cref="SetupCompletedSetting"/>
 /// records that it ran. It doesn't show for automation, a command line that opens something, a synced profile, or a
 /// folder used before it existed (<see cref="SetupDecision"/>). Help → Set Up Codalus IDE (and the Welcome plugin's Get
-/// Started command) run it again. AI stays off and isn't asked about (ADR 0062).
+/// Started command) run it again. AI stays off unless the user chooses an agent or a provider on the AI step and ends
+/// the setup with the summary's button: only then <see cref="ApplySetupAiAsync"/> runs, in the main window.
 /// </summary>
 public sealed partial class ShellHost
 {
@@ -159,9 +164,21 @@ public sealed partial class ShellHost
         // Closed with its close button, Escape or with the IDE: as Skip setup (it ran; the current step isn't saved).
         await model.FinishAsync(done: false).ConfigureAwait(true);
         Workbench.Log.AppendLine($"[setup] The first-run setup {(model.WasDone ? "is done" : "was skipped")}.");
-        if (!firstStart || Window is not Window { IsVisible: true })
+        if (Window is not Window { IsVisible: true } || IsClosing)
         {
-            return; // run again from Help, or the IDE is closing
+            return; // the IDE is closing
+        }
+
+        // The AI step's choice, only after the summary's button (ADR 0096): Connect, or the provider's key and model, in
+        // the main window, where the Terminal a sign-in or an install needs is. The start window waits for it.
+        if (model.WasDone && model.AiChanged)
+        {
+            await ApplySetupAiAsync(model.AiChoice).ConfigureAwait(true);
+        }
+
+        if (!firstStart || IsClosing)
+        {
+            return; // run again from Help
         }
 
         ContinueStartup();
@@ -169,5 +186,77 @@ public sealed partial class ShellHost
         {
             _ = CheckEnvironmentAsync(offer: true, requiredOnly: true);
         }
+    }
+
+    /// <summary>
+    /// Applies what the setup's AI step held when the setup was done (ADR 0096), as the user would from Tools → AI:
+    /// <list type="bullet">
+    /// <item>No AI, with AI on: <c>ai.enabled</c> goes off in the user's settings. Connected agents, the provider and the
+    /// other switches stay, so turning it on again brings them back.</item>
+    /// <item>A coding agent: Connect opens for its template (More agents… for the list, or when none was chosen); Connect
+    /// asks for its own consent and writes the agent and <c>ai.enabled</c> only after a passing test (ADR 0083). An agent
+    /// that is connected already only turns AI on and answers in AI Chat.</item>
+    /// <item>The built-in assistant: AI on, the built-in assistant answering in AI Chat, the two as-you-type switches as
+    /// ticked, then the provider (asked for when none was chosen) with its key and model, as Choose AI Provider… does.</item>
+    /// </list>
+    /// </summary>
+    internal async Task ApplySetupAiAsync(SetupAiChoice choice)
+    {
+        var settings = Workbench.Settings;
+        var chosen = (choice.Agent ?? choice.Provider) is { } what ? $" ({what})" : string.Empty;
+        Workbench.Log.AppendLine($"[setup] AI: {choice.Path}{chosen}.");
+        switch (choice.Path)
+        {
+            case SetupAiPath.None:
+                if (UserSetting(AiService.EnabledSetting))
+                {
+                    await settings.SetAsync(AiService.EnabledSetting, false, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                break;
+
+            case SetupAiPath.Agent:
+                if (choice.Agent is { } connected && ExternalAgents.Configured.ContainsKey(connected))
+                {
+                    await TurnOnAiAsync().ConfigureAwait(true);
+                    await settings.SetAsync(AcpAgents.ChatAgentSetting, connected, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+                else
+                {
+                    await ConnectExternalAgentAsync(choice.Agent is null or SetupAiChoice.More ? null : choice.Agent).ConfigureAwait(true);
+                }
+
+                break;
+
+            case SetupAiPath.Assistant:
+                await TurnOnAiAsync().ConfigureAwait(true);
+                if (settings.GetString(AcpAgents.ChatAgentSetting, string.Empty).Length > 0)
+                {
+                    await settings.SetAsync(AcpAgents.ChatAgentSetting, string.Empty, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (UserSetting(AiCompletions.EnabledSetting) != choice.InlineSuggestions)
+                {
+                    await settings.SetAsync(AiCompletions.EnabledSetting, choice.InlineSuggestions, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (UserSetting(AiNextEdit.EnabledSetting) != choice.NextEdit)
+                {
+                    await settings.SetAsync(AiNextEdit.EnabledSetting, choice.NextEdit, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+                }
+
+                if (choice.Provider is { } provider && LanguageModels.Provider(provider) is not null)
+                {
+                    await UseAiProviderAsync(provider).ConfigureAwait(true);
+                }
+                else
+                {
+                    await ChooseAiProviderAsync().ConfigureAwait(true);
+                }
+
+                break;
+        }
+
+        bool UserSetting(string key) => settings.GetLayerValue(key, SettingScope.User) is { ValueKind: JsonValueKind.True };
     }
 }

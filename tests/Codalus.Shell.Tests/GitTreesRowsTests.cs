@@ -547,6 +547,55 @@ public sealed class GitTreesRowsTests
         }
     }
 
+    /// <summary>
+    /// The refs are read again (git changed the repository: a commit, a fetch, the watcher) while the document's first
+    /// read still waits for its pull requests. That newer read doesn't ask for them, and the first one's are dropped with
+    /// it, so nothing ever read them: Pull Requests stayed at "Loading…" until Refresh. On Windows CI a test that
+    /// commits and merges just before it opens the document waited 30 s for that node (runs 43087646182 and
+    /// 43130624207).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Git_repository_reloaded_during_its_first_read_still_reads_the_pull_requests()
+    {
+        var temp = Directory.CreateTempSubdirectory("codalus-repository-").FullName;
+        var folder = CreateManyRefs(Path.Combine(temp, "Refs"), tags: 2, branches: 2);
+        try
+        {
+            using var git = new Codalus.Workbench.Git.GitService(watch: false);
+            Assert.True(await git.OpenAsync(folder, TestContext.Current.CancellationToken));
+            await git.RefreshAsync(TestContext.Current.CancellationToken);
+            var asked = 0;
+            var first = new TaskCompletionSource<GitRepositoryPullRequests>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var vm = new GitRepositoryViewModel(new GitRepositoryActions
+            {
+                Repositories = () => [git],
+
+                // The first read's pull requests don't come before it is replaced; the next ones come at once.
+                PullRequests = (_, token) => ++asked == 1
+                    ? first.Task.WaitAsync(token)
+                    : Task.FromResult(new GitRepositoryPullRequests([], "This repository isn't on a hosting service.")),
+                CreateHistory = (service, query, title, _) => new GitHistoryViewModel(service, query, title, (_, _) => Task.CompletedTask),
+                Run = (_, _, _) => Task.CompletedTask,
+            });
+
+            var opening = vm.LoadAsync();
+            await ShellFixture.PumpUntil(() => asked == 1);
+            await vm.LoadAsync(pullRequests: false);
+            await opening;
+            await ShellFixture.PumpUntil(() => !vm.IsReading);
+
+            static IEnumerable<GitRepositoryNode> All(IEnumerable<GitRepositoryNode> nodes) => nodes.SelectMany(n => All(n.Children).Prepend(n));
+            var texts = All(vm.Roots).Select(n => n.Text).ToList();
+            Assert.Equal(2, asked);
+            Assert.DoesNotContain(texts, t => t.StartsWith("Loading", StringComparison.Ordinal));
+            Assert.Contains("This repository isn't on a hosting service.", texts);
+        }
+        finally
+        {
+            DeleteFolder(temp);
+        }
+    }
+
     [AvaloniaFact]
     public async Task A_commit_of_ten_thousand_files_shows_rows_selects_its_first_file_and_keeps_them_across_tabs()
     {

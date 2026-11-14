@@ -12,14 +12,42 @@ internal readonly record struct ClrSequencePoint(int Offset, int StartLine, int 
     public bool IsHidden => StartLine == SequencePoint.HiddenLine;
 }
 
+/// <summary>How a method is async (M61, ADR 0100), for stepping over an <c>await</c>.</summary>
+internal enum ClrAsyncKind
+{
+    /// <summary>Not async (or an iterator).</summary>
+    None,
+
+    /// <summary>A compiler-made async state machine's <c>MoveNext</c>: the state machine is the call's identity, and its state says whether it suspended.</summary>
+    StateMachine,
+
+    /// <summary>Compiled for runtime async (.NET 11): no state machine; the runtime suspends and resumes the method.</summary>
+    Runtime,
+}
+
 /// <summary>A type named by a module's metadata: its assembly (null: the same module) and its full name (<c>Ns.Outer+Inner</c>).</summary>
 internal readonly record struct ClrTypeName(string? Assembly, string FullName, int Token);
 
-internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName);
+internal sealed record ClrFieldInfo(int Token, string Name, bool IsStatic, bool IsLiteral, object? Constant, string TypeName, bool IsPublic = false);
 
-internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName);
+/// <summary><see cref="IsPublic"/>: its getter is public (a type proxy's view lists its public members, M58).</summary>
+internal sealed record ClrPropertyInfo(string Name, int GetterToken, int SetterToken, bool IsStatic, int IndexParameters, string TypeName, bool IsPublic = false);
 
 internal sealed record ClrMethodInfo(int Token, string Name, bool IsStatic, bool IsVirtual, IReadOnlyList<string> ParameterTypes, IReadOnlyList<string> ParameterNames, int GenericParameters, string ReturnType, bool IsSpecialName);
+
+/// <summary>A called method, as a call instruction names it: its type as C# shows it, and its name as metadata spells it.</summary>
+internal sealed record ClrCallTarget(string TypeName, string Name, bool ReturnsVoid)
+{
+    /// <summary>As a list of calls shows it: <c>Ns.Type.Method</c>, a constructor as <c>new Ns.Type</c>, an accessor as <c>Ns.Type.Name.get</c>.</summary>
+    public string Display => Name switch
+    {
+        ".ctor" => "new " + TypeName,
+        ".cctor" => TypeName + " (static constructor)",
+        _ when Name.StartsWith("get_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".get",
+        _ when Name.StartsWith("set_", StringComparison.Ordinal) => TypeName + "." + Name[4..] + ".set",
+        _ => TypeName + "." + Name,
+    };
+}
 
 /// <summary>
 /// A module's metadata and portable PDB, read from its file with System.Reflection.Metadata (M43b): type, method,
@@ -46,11 +74,12 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>A method's version for the symbol lookups: its newest (new calls run it, breakpoints bind in it).</summary>
     public const int LatestVersion = int.MaxValue;
 
-    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus)
+    private ClrModuleInfo(string path, PEReader pe, MetadataReaderProvider? pdbProvider, string? pdbPath, string symbolStatus, WindowsPdbSymbols? windowsPdb = null)
     {
         Path = path;
         _pe = pe;
         _pdbProvider = pdbProvider;
+        _windowsPdb = windowsPdb;
         Metadata = pe.GetMetadataReader();
         Pdb = pdbProvider?.GetMetadataReader();
         PdbPath = pdbPath;
@@ -72,7 +101,10 @@ internal sealed class ClrModuleInfo : IDisposable
 
     public string? PdbPath { get; }
 
-    public bool HasSymbols => Pdb is not null;
+    /// <summary>The module's Windows PDB (M58), when that is the format its symbols are in; edits aren't applied to such a module's symbols.</summary>
+    private readonly WindowsPdbSymbols? _windowsPdb;
+
+    public bool HasSymbols => Pdb is not null || _windowsPdb is not null;
 
     /// <summary>DAP's <c>symbolStatus</c>: "Symbols loaded.", or why not.</summary>
     public string SymbolStatus { get; }
@@ -80,8 +112,13 @@ internal sealed class ClrModuleInfo : IDisposable
     /// <summary>Whether the assembly was compiled with optimizations (its <c>DebuggableAttribute</c> doesn't turn the JIT optimizer off).</summary>
     public bool IsOptimized { get; }
 
-    /// <summary>Reads <paramref name="path"/>'s metadata and its portable PDB (next to it, where its debug directory says, or embedded).</summary>
-    public static ClrModuleInfo Open(string path)
+    /// <summary>
+    /// Reads <paramref name="path"/>'s metadata and its portable PDB: next to it, where its debug directory says, or
+    /// embedded; or the one at <paramref name="symbolPath"/> (M58: found in a symbol path or on a symbol server, with
+    /// <paramref name="symbolStatus"/> saying where). A Windows PDB (next to the module, where it was built, or at
+    /// <paramref name="symbolPath"/>) is read through <see cref="WindowsPdbSymbols"/>.
+    /// </summary>
+    public static ClrModuleInfo Open(string path, string? symbolPath = null, string? symbolStatus = null)
     {
         var stream = File.OpenRead(path);
         PEReader pe;
@@ -101,19 +138,44 @@ internal sealed class ClrModuleInfo : IDisposable
         }
 
         MetadataReaderProvider? provider = null;
+        WindowsPdbSymbols? windowsPdb = null;
         string? pdbPath = null;
         string status;
         try
         {
-            if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            if (symbolPath is not null && WindowsPdbSymbols.IsWindowsPdb(symbolPath))
             {
+                windowsPdb = WindowsPdbSymbols.Open(path, symbolPath);
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (symbolPath is not null)
+            {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(symbolPath));
+                _ = provider.GetMetadataReader(); // a file that isn't a portable PDB says so here
+                pdbPath = symbolPath;
+                status = symbolStatus ?? "Symbols loaded.";
+            }
+            else if (pe.TryOpenAssociatedPortablePdb(path, p => File.Exists(p) ? File.OpenRead(p) : null, out provider, out pdbPath))
+            {
+                status = "Symbols loaded.";
+            }
+            else if (BuiltPortablePdb(pe) is var (built, builtPath))
+            {
+                // Not next to the module, but still where the build wrote it (a program copied without its PDB).
+                provider = built;
+                pdbPath = builtPath;
+                status = "Symbols loaded.";
+            }
+            else if (WindowsPdb(pe, path) is { } windows)
+            {
+                windowsPdb = WindowsPdbSymbols.Open(path, windows);
+                pdbPath = windows;
                 status = "Symbols loaded.";
             }
             else
             {
-                status = WindowsPdb(pe, path) is { } windows
-                    ? $"{System.IO.Path.GetFileName(windows)} is a Windows PDB, which this debugger doesn't read: build with portable PDBs (DebugType portable)."
-                    : "No symbols: there's no PDB.";
+                status = "No symbols: there's no PDB.";
             }
         }
         catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -124,13 +186,48 @@ internal sealed class ClrModuleInfo : IDisposable
             pdbPath = null;
         }
 
-        return new ClrModuleInfo(path, pe, provider, pdbPath, status);
+        return new ClrModuleInfo(path, pe, provider, pdbPath, status, windowsPdb);
+    }
+
+    /// <summary>
+    /// The portable PDB at the path the debug directory names (where the build wrote it), when it's there and is this
+    /// build's: the runtime's own lookup reads only the one next to the module. It was taken for a Windows PDB before,
+    /// which left a program copied without its PDB without symbols on the machine that built it.
+    /// </summary>
+    private static (MetadataReaderProvider Provider, string Path)? BuiltPortablePdb(PEReader pe)
+    {
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && e.IsPortableCodeView))
+        {
+            var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
+            if (!System.IO.Path.IsPathRooted(codeView.Path) || !File.Exists(codeView.Path))
+            {
+                continue;
+            }
+
+            MetadataReaderProvider? provider = null;
+            try
+            {
+                provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(codeView.Path));
+                var id = new BlobContentId(provider.GetMetadataReader().DebugMetadataHeader!.Id);
+                if (id.Guid == codeView.Guid)
+                {
+                    return (provider, codeView.Path);
+                }
+            }
+            catch (Exception ex) when (ex is BadImageFormatException or IOException or UnauthorizedAccessException or InvalidOperationException or NullReferenceException)
+            {
+            }
+
+            provider?.Dispose();
+        }
+
+        return null;
     }
 
     /// <summary>A Windows PDB the debug directory names (next to the module or where it was built), if it's there.</summary>
     private static string? WindowsPdb(PEReader pe, string path)
     {
-        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView))
+        foreach (var entry in pe.ReadDebugDirectory().Where(e => e.Type == DebugDirectoryEntryType.CodeView && !e.IsPortableCodeView))
         {
             var codeView = pe.ReadCodeViewDebugDirectoryData(entry);
             var nextTo = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path) ?? string.Empty, System.IO.Path.GetFileName(codeView.Path.Replace('\\', System.IO.Path.DirectorySeparatorChar)));
@@ -149,6 +246,7 @@ internal sealed class ClrModuleInfo : IDisposable
     public void Dispose()
     {
         _pdbProvider?.Dispose();
+        _windowsPdb?.Dispose();
         foreach (var provider in _deltaProviders)
         {
             provider.Dispose();
@@ -422,6 +520,21 @@ internal sealed class ClrModuleInfo : IDisposable
         }
     }
 
+    /// <summary>The interfaces a type definition says it implements (the compiler lists the inherited ones too), by their full names.</summary>
+    public IReadOnlyList<string> Interfaces(int typeToken)
+    {
+        var result = new List<string>();
+        foreach (var handle in Metadata.GetTypeDefinition(TypeHandle(typeToken)).GetInterfaceImplementations())
+        {
+            if (NameOf(Metadata.GetInterfaceImplementation(handle).Interface) is { } name)
+            {
+                result.Add(name.FullName);
+            }
+        }
+
+        return result;
+    }
+
     public IReadOnlyList<ClrFieldInfo> Fields(int typeToken)
     {
         var result = new List<ClrFieldInfo>();
@@ -445,7 +558,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type));
+            result.Add(new ClrFieldInfo(MetadataTokens.GetToken(handle), Metadata.GetString(field.Name), (attributes & FieldAttributes.Static) != 0, (attributes & FieldAttributes.Literal) != 0, constant, type,
+                (attributes & FieldAttributes.FieldAccessMask) == FieldAttributes.Public));
         }
 
         return result;
@@ -476,7 +590,8 @@ internal sealed class ClrModuleInfo : IDisposable
                 type = "?";
             }
 
-            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type));
+            var isPublic = !accessors.Getter.IsNil && (Metadata.GetMethodDefinition(accessors.Getter).Attributes & MethodAttributes.MemberAccessMask) == MethodAttributes.Public;
+            result.Add(new ClrPropertyInfo(Metadata.GetString(property.Name), getter, setter, isStatic, indexParameters, type, isPublic));
         }
 
         return result;
@@ -546,6 +661,71 @@ internal sealed class ClrModuleInfo : IDisposable
         return TypeDisplayName(MetadataTokens.GetToken(method.GetDeclaringType())) + "." + Metadata.GetString(method.Name);
     }
 
+    /// <summary>
+    /// The method a call instruction's token names (M58): a definition here, a reference to another module's, or a
+    /// generic method's instantiation. Its type's display name (<c>Ns.Type</c>) and its own, as metadata spells them
+    /// (<c>get_Count</c>, <c>.ctor</c>); null for a token that isn't a method's (a <c>calli</c> signature) or is an
+    /// edit's.
+    /// </summary>
+    public ClrCallTarget? CallTarget(int token)
+    {
+        try
+        {
+            var handle = MetadataTokens.EntityHandle(token);
+            switch (handle.Kind)
+            {
+                case HandleKind.MethodDefinition:
+                    if (Added(token) is { } added)
+                    {
+                        return new ClrCallTarget(TypeDisplayName(added.TypeToken), String(added.Method.Name), false);
+                    }
+
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.MethodDefinitions.Count)
+                    {
+                        return null;
+                    }
+
+                    var definition = Metadata.GetMethodDefinition((MethodDefinitionHandle)handle);
+                    return new ClrCallTarget(TypeDisplayName(MetadataTokens.GetToken(definition.GetDeclaringType())), Metadata.GetString(definition.Name), ReturnsVoid(definition.Signature));
+                case HandleKind.MemberReference:
+                    if (MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MemberRef))
+                    {
+                        return null;
+                    }
+
+                    var reference = Metadata.GetMemberReference((MemberReferenceHandle)handle);
+                    var parent = reference.Parent.Kind == HandleKind.MethodDefinition
+                        ? TypeDisplayName(MetadataTokens.GetToken(Metadata.GetMethodDefinition((MethodDefinitionHandle)reference.Parent).GetDeclaringType()))
+                        : NameOf(reference.Parent) is { } type ? DisplayName(type.FullName) : "?";
+                    return new ClrCallTarget(parent, Metadata.GetString(reference.Name), ReturnsVoid(reference.Signature));
+                case HandleKind.MethodSpecification:
+                    return MetadataTokens.GetRowNumber(handle) > Metadata.GetTableRowCount(TableIndex.MethodSpec)
+                        ? null
+                        : CallTarget(MetadataTokens.GetToken(Metadata.GetMethodSpecification((MethodSpecificationHandle)handle).Method));
+                default:
+                    return null;
+            }
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or ArgumentException or InvalidCastException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Whether a method signature's return type is <c>void</c>.</summary>
+    private bool ReturnsVoid(BlobHandle signature)
+    {
+        var blob = Metadata.GetBlobReader(signature);
+        var header = blob.ReadSignatureHeader();
+        if (header.IsGeneric)
+        {
+            blob.ReadCompressedInteger();
+        }
+
+        blob.ReadCompressedInteger(); // the parameter count
+        return blob.RemainingBytes > 0 && blob.ReadSignatureTypeCode() == SignatureTypeCode.Void;
+    }
+
     /// <summary>A method an edit added (M55), with its type: the module's own tables don't have it.</summary>
     private (MethodDefinition Method, int TypeToken)? Added(int methodToken)
     {
@@ -578,6 +758,114 @@ internal sealed class ClrModuleInfo : IDisposable
     }
 
     // ------------------------------------------------------------------ attributes
+
+    /// <summary><c>MethodImplAttributes.Async</c> (.NET 11): a method compiled for runtime async, which the runtime suspends and resumes itself.</summary>
+    private const MethodImplAttributes RuntimeAsync = (MethodImplAttributes)0x2000;
+
+    /// <summary>
+    /// Whether a method is async code (M61, ADR 0100): compiled for runtime async (the method itself, with
+    /// <c>MethodImplAttributes.Async</c>), or the <c>MoveNext</c> of a compiler-made async state machine (a type
+    /// implementing <c>IAsyncStateMachine</c>); <see cref="ClrAsyncKind.None"/> otherwise (an iterator's too).
+    /// </summary>
+    public ClrAsyncKind AsyncKind(int methodToken)
+    {
+        if (Added(methodToken) is { } added)
+        {
+            return (added.Method.ImplAttributes & RuntimeAsync) != 0 ? ClrAsyncKind.Runtime : ClrAsyncKind.None;
+        }
+
+        var method = Metadata.GetMethodDefinition(MethodHandle(methodToken));
+        if ((method.ImplAttributes & RuntimeAsync) != 0)
+        {
+            return ClrAsyncKind.Runtime;
+        }
+
+        return Metadata.StringComparer.Equals(method.Name, "MoveNext")
+            && Metadata.GetTypeDefinition(method.GetDeclaringType()).GetInterfaceImplementations()
+                .Any(i => NameOf(Metadata.GetInterfaceImplementation(i).Interface)?.FullName == "System.Runtime.CompilerServices.IAsyncStateMachine")
+            ? ClrAsyncKind.StateMachine
+            : ClrAsyncKind.None;
+    }
+
+    /// <summary>
+    /// The compiler code of an async method built as a state machine, by its kickoff (M61): the kickoff itself and the
+    /// state machine's methods but <c>MoveNext</c> (its constructor). The state machines are the kickoff's type's
+    /// nested types named after it (<c>&lt;Name&gt;d__N</c>) that implement <c>IAsyncStateMachine</c>.
+    /// </summary>
+    public IReadOnlyList<int> AsyncKickoffCode(int kickoffToken)
+    {
+        if (Added(kickoffToken) is not null)
+        {
+            return [kickoffToken];
+        }
+
+        var kickoff = Metadata.GetMethodDefinition(MethodHandle(kickoffToken));
+        var prefix = "<" + Metadata.GetString(kickoff.Name) + ">";
+        var result = new List<int> { kickoffToken };
+        foreach (var nested in Metadata.GetTypeDefinition(kickoff.GetDeclaringType()).GetNestedTypes())
+        {
+            var type = Metadata.GetTypeDefinition(nested);
+            if (Metadata.GetString(type.Name).StartsWith(prefix, StringComparison.Ordinal)
+                && type.GetInterfaceImplementations().Any(i => NameOf(Metadata.GetInterfaceImplementation(i).Interface)?.FullName == "System.Runtime.CompilerServices.IAsyncStateMachine"))
+            {
+                result.AddRange(type.GetMethods().Where(m => !Metadata.StringComparer.Equals(Metadata.GetMethodDefinition(m).Name, "MoveNext")).Select(m => MetadataTokens.GetToken(m)));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>The portable PDB's async stepping information (<c>AsyncMethodSteppingInformationBlob</c>).</summary>
+    private static readonly Guid s_asyncSteppingInformation = new("54FD2AC5-E925-401A-9C2A-F94F171072F8");
+
+    /// <summary>
+    /// Where a state machine's <c>MoveNext</c> yields at each of its awaits (M61b): the IL offsets of the PDB's async
+    /// stepping information, in the order the compiler numbered the awaits, so a suspended state machine's state
+    /// (<c>&lt;&gt;1__state</c>, 0 and up) indexes them. Empty without a portable PDB, for a method an edit changed (its
+    /// awaits may be numbered anew) and for one without the information (an iterator).
+    /// </summary>
+    public IReadOnlyList<int> AsyncYieldOffsets(int moveNextToken)
+    {
+        lock (_sequencePoints)
+        {
+            if (Added(moveNextToken) is not null || _editedSymbols.ContainsKey(moveNextToken) || Pdb is not { } pdb
+                || MetadataTokens.GetRowNumber(MethodHandle(moveNextToken)) > pdb.MethodDebugInformation.Count)
+            {
+                return [];
+            }
+
+            try
+            {
+                foreach (var handle in pdb.GetCustomDebugInformation(MethodHandle(moveNextToken)))
+                {
+                    var information = pdb.GetCustomDebugInformation(handle);
+                    if (pdb.GetGuid(information.Kind) != s_asyncSteppingInformation)
+                    {
+                        continue;
+                    }
+
+                    // The catch handler's offset (plus one, 0 for none), then each await's yield and resume offsets and
+                    // the method it resumes in.
+                    var reader = pdb.GetBlobReader(information.Value);
+                    reader.ReadUInt32();
+                    var result = new List<int>();
+                    while (reader.RemainingBytes > 0)
+                    {
+                        result.Add((int)reader.ReadUInt32());
+                        reader.ReadUInt32();
+                        reader.ReadCompressedInteger();
+                    }
+
+                    return result;
+                }
+            }
+            catch (BadImageFormatException)
+            {
+            }
+
+            return [];
+        }
+    }
 
     public bool MethodHasAttribute(int methodToken, string attribute) =>
         Added(methodToken) is null && Metadata.GetMethodDefinition(MethodHandle(methodToken)).GetCustomAttributes().Any(h => AttributeTypeName(Metadata.GetCustomAttribute(h)) == attribute);
@@ -652,6 +940,10 @@ internal sealed class ClrModuleInfo : IDisposable
             {
             }
         }
+        else if (_windowsPdb is { } windows)
+        {
+            result.AddRange(windows.SequencePoints(methodToken));
+        }
 
         lock (_sequencePoints)
         {
@@ -701,18 +993,44 @@ internal sealed class ClrModuleInfo : IDisposable
         return (start, next < 0 ? int.MaxValue : next);
     }
 
-    /// <summary>Whether this module's PDB has <paramref name="path"/> (the same path, or the only document with its file name).</summary>
-    public string? MatchDocument(string path)
+    /// <summary>
+    /// Whether this module's PDB has <paramref name="path"/>: the same path, or the only document with its file name
+    /// whose folder is the path's too (<see cref="MatchDocument(IEnumerable{string}, string)"/>).
+    /// </summary>
+    public string? MatchDocument(string path) => MatchDocument(Documents.Keys, path);
+
+    /// <summary>
+    /// The document of <paramref name="documents"/> that is <paramref name="path"/>: the same path, else the only one
+    /// with its file name, for a PDB built under other paths (a deterministic build's <c>/_/</c>, a copied build), as long
+    /// as its folder has the path's folder's name, or is a path map's root. A file name alone matched another project's
+    /// file: in an Aspire session the Frontend's debugger bound the Api's breakpoint on <c>Program.cs</c>'s line 13 at
+    /// its own <c>Program.cs</c>'s line 13, <c>app.Run()</c>, and the Frontend never started (Linux CI, run 43371744474).
+    /// </summary>
+    internal static string? MatchDocument(IEnumerable<string> documents, string path)
     {
-        var documents = Documents.Keys;
         if (documents.FirstOrDefault(d => SamePath(d, path)) is { } exact)
         {
             return exact;
         }
 
-        var name = System.IO.Path.GetFileName(path);
+        var name = System.IO.Path.GetFileName(path.Replace('\\', '/'));
         var byName = documents.Where(d => s_paths.Equals(System.IO.Path.GetFileName(d.Replace('\\', '/')), name)).Take(2).ToList();
-        return byName.Count == 1 ? byName[0] : null;
+        return byName is [var only] && SameFolderName(only, path) ? only : null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="document"/>'s folder has <paramref name="path"/>'s folder's name, or is a root the
+    /// document's path was mapped to (<c>/_/</c>, <c>/_1/</c>: <c>PathMap</c>, deterministic builds), which says nothing.
+    /// </summary>
+    private static bool SameFolderName(string document, string path)
+    {
+        var documentFolder = FolderName(document);
+        return documentFolder is null || IsMappedRoot(documentFolder) || s_paths.Equals(documentFolder, FolderName(path));
+
+        static string? FolderName(string file) =>
+            System.IO.Path.GetDirectoryName(file.Replace('\\', '/')) is { Length: > 0 } folder ? System.IO.Path.GetFileName(folder.TrimEnd('/')) is { Length: > 0 } last ? last : null : null;
+
+        static bool IsMappedRoot(string folder) => folder[0] == '_' && folder.AsSpan(1).IndexOfAnyExceptInRange('0', '9') < 0;
     }
 
     /// <summary>Where a breakpoint on <paramref name="line"/> of <paramref name="document"/> binds: each method's first offset on the line, or on the next line with code in a method that spans it.</summary>
@@ -770,6 +1088,19 @@ internal sealed class ClrModuleInfo : IDisposable
             tokens.AddRange(_editedSymbols.Keys.Except(tokens).ToList());
         }
 
+        foreach (var token in _windowsPdb?.Methods() ?? [])
+        {
+            foreach (var document in SequencePoints(token).Select(p => p.Document).Where(d => d.Length > 0).Distinct(s_paths))
+            {
+                if (!result.TryGetValue(document, out var list))
+                {
+                    result[document] = list = [];
+                }
+
+                list.Add(token);
+            }
+        }
+
         foreach (var token in tokens)
         {
             if (Symbols(token, LatestVersion) is not var (pdb, row))
@@ -818,7 +1149,7 @@ internal sealed class ClrModuleInfo : IDisposable
     {
         if (Symbols(methodToken, version) is not var (pdb, row))
         {
-            return [];
+            return _windowsPdb?.Locals(methodToken, ilOffset) ?? [];
         }
 
         var result = new List<(int, string)>();

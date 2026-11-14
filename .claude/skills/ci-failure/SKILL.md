@@ -21,8 +21,14 @@ bash eng/ci-failures.sh --recent 100      # the failures of the last 100 runs, m
 A run stops at its first failure and cancels the rest (ADR 0028), so the red job is the one whose error says "failed:
 the run's other jobs are cancelled"; the others show as cancelled. The failed tests are also annotations on the run's
 page and in the job's summary (`eng/ci-test.sh`). Smoke steps say `FAILED` in the log and in `smoke-test.md` (the
-`smoke-test-<OS>` artifact); a test shard's results, dumps, MSBuild failure files and (macOS) memory samples are in
+`smoke-test-<OS>` artifact); a test shard's results, dumps, MSBuild failure files and memory samples are in
 the `test-results-<os>-<shard>` artifact.
+
+A runner that went silent leaves neither: its job ends (failed, or cancelled at its limit) with a test step that never
+finished and no log. What it leaves is its **live output**, the `live-<os>-<shard>-<attempt>-<n>` artifact
+(`.github/actions/live-output`): each shard's `console.txt` (every test as it ended, the watchdog's stacks) and its
+memory, load and disk samples, as of the last minute the runner still answered. `eng/ci-failures.sh <run id>` prints
+its end with the job; the test that was running is the one after the last that ended. A healthy job removes its own.
 
 ## 2. Whose failure is it
 
@@ -53,6 +59,7 @@ test to pass, and what else could run in between on a slow or loaded runner. The
 - A process tree ended with .NET's own walk, which blocks for minutes on macOS (`ProcessTree.Kill` instead).
 - A cancellation and an answer racing: the answer that lands first wins unless the code checks the cancellation again.
 - A file polled while the IDE writes it: on Windows the read throws (a sharing violation) instead of returning old text.
+- A cancellation token given to a Windows `HttpListener` WebSocket's read or send: cancelling it and the socket's abort wait for each other (abort the socket instead).
 
 Reproduce it when you can: run the test in a loop, under CPU load, or force the interleaving (start the second load
 before awaiting the first, delay the process, fire the event early). A fix is proven by a test that fails without it.

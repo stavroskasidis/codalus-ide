@@ -79,6 +79,35 @@ public sealed partial class ShellHost
                 IsInstalled = () => Directory.Exists(Path.Combine(Paths.Cache, "icon-themes")),
             },
         };
+
+        // The Codalus debugger's other builds (M58b, ADR 0094), each where it is of use.
+        if (OperatingSystem.IsMacOS() && System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            components.Add(new()
+            {
+                Id = "codalus-debugger-osx-x64", Name = "Codalus debugger for x64 programs", Version = ShellInfo.Version, License = "MIT",
+                Description = "On Apple silicon, debugs the programs that run as x64 under Rosetta 2 (.NET 5 and earlier). Downloaded from this version's release the first time one is debugged.",
+                Folders = () => [DebuggerBundles.RelativeFolder(Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon)],
+                IsInstalled = () => DebuggerBundles.Installed(Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon) is not null,
+                Install = DebuggerBundles.Available.Any(c => c.Platform == Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon)
+                    ? (progress, ct) => DebuggerBundles.EnsureAsync(Codalus.Workbench.Debugging.DebuggerComponents.X64OnAppleSilicon, progress, ct)
+                    : null,
+            });
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            components.Add(new()
+            {
+                Id = "codalus-debugger-win-x86", Name = "Codalus debugger for 32-bit .NET Framework programs", Version = ShellInfo.Version, License = "MIT",
+                Description = "On Windows, debugs .NET Framework programs built for x86 or with Prefer32Bit. Downloaded from this version's release the first time one is debugged.",
+                Folders = () => [DebuggerBundles.RelativeFolder(Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows)],
+                IsInstalled = () => DebuggerBundles.Installed(Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows) is not null,
+                Install = DebuggerBundles.Available.Any(c => c.Platform == Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows)
+                    ? (progress, ct) => DebuggerBundles.EnsureAsync(Codalus.Workbench.Debugging.DebuggerComponents.X86OnWindows, progress, ct)
+                    : null,
+            });
+        }
         if (WebServers.IsAvailable)
         {
             components.Insert(1, new Component

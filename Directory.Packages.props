@@ -6,8 +6,8 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
-    <AvaloniaVersion>12.1.5</AvaloniaVersion>
-    <RoslynVersion>5.12.0-1.26522.148</RoslynVersion>
+    <AvaloniaVersion>12.1.6</AvaloniaVersion>
+    <RoslynVersion>5.12.0-1.26529.118</RoslynVersion>
     <!-- Coverlet is bundled with the .NET test plugin (ADR 0011), not referenced: see its project file. -->
     <CoverletVersion>10.1.0</CoverletVersion>
     <!-- The last collector for test hosts before .NET 8 (netstandard2.0), bundled next to the current one (M33, ADR 0030). -->
@@ -17,16 +17,21 @@
     <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <!-- The shell's headless mode (codalus mcp with a folder, M60b) runs on Avalonia's headless platform, as the UI tests do. -->
+    <PackageVersion Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
     <!-- Tests only: the previewer's hand-written codec is checked against Avalonia's own transport (M19a). -->
     <PackageVersion Include="Avalonia.Remote.Protocol" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.AvaloniaEdit" Version="12.0.0" />
     <PackageVersion Include="AvaloniaEdit.TextMate" Version="12.0.0" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
-    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
-    <PackageVersion Include="Dock.Avalonia" Version="12.1.0.13" />
-    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.0.13" />
-    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.0.13" />
+    <!-- Above AvaloniaEdit.TextMate's 2.0.3, whose model tokenized one editor's lines from two threads unsynchronized
+         (its worker and the UI thread's view port): lines got wrong tokens (PR #328's run 43168967815; docs/ci-flakes.md). -->
+    <PackageVersion Include="TextMateSharp" Version="2.0.5" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.5" />
+    <PackageVersion Include="Dock.Avalonia" Version="12.1.5" />
+    <PackageVersion Include="Dock.Model.Mvvm" Version="12.1.5" />
+    <PackageVersion Include="Dock.Avalonia.Themes.Fluent" Version="12.1.5" />
   </ItemGroup>
   <ItemGroup Label="Language services and build host">
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="$(RoslynVersion)" />
@@ -50,15 +55,15 @@
     <PackageVersion Include="NuGet.Protocol" Version="6.11.2" />
   </ItemGroup>
   <ItemGroup Label="Data host (M27b, ADR 0037 and 0038)">
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.2" />
     <!-- Excluded (ExcludeAssets="all" in the host): its native SNI is under proprietary terms; the host uses managed SNI. -->
-    <PackageVersion Include="Microsoft.Data.SqlClient.SNI.runtime" Version="7.1.0" />
+    <PackageVersion Include="Microsoft.Data.SqlClient.SNI.runtime" Version="7.1.2" />
     <!-- Pinned above SqlClient's 9.0.18 (GHSA-846f-f764-76mx, GHSA-2fmv-rv2c-59x7). -->
-    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0-rc.3.26522.148" />
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
-    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.140.0" />
+    <PackageVersion Include="Microsoft.SqlServer.TransactSql.ScriptDom" Version="180.154.0" />
   </ItemGroup>
   <ItemGroup Label="Installers and self-update (M31, M32; keep in step with the vpk version in eng/package.sh)">
     <PackageVersion Include="Velopack" Version="1.2.161" />
@@ -66,11 +71,15 @@
   <ItemGroup Label="Debug companion host (M14b, ADR 0032)">
     <PackageVersion Include="Microsoft.Diagnostics.Runtime" Version="4.2.751201" />
     <PackageVersion Include="ClrDebug" Version="0.4.2" />
+    <!-- The x64 instruction decoder of the Codalus debugger's Disassembly window (M58, ADR 0094; MIT, managed). -->
+    <PackageVersion Include="Iced" Version="1.22.0" />
+    <PackageVersion Include="Mono.Cecil" Version="0.11.6" />
     <!-- CoreCLR's debugger shim, one package per platform (M54, ADR 0086): CoreCLR's debugger adapter starts and attaches through it. -->
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.win-x64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.linux-x64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.linux-arm64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.DbgShim.osx-arm64" Version="10.0.750501" />
+    <PackageVersion Include="Microsoft.Diagnostics.DbgShim.osx-x64" Version="10.0.750501" />
     <PackageVersion Include="Microsoft.Diagnostics.NETCore.Client" Version="0.2.750501" />
   </ItemGroup>
   <ItemGroup Label="Diagnostics host (M18, ADR 0044)">
@@ -84,19 +93,19 @@
   <ItemGroup Label="Benchmarks">
     <PackageVersion Include="Vortice.Direct3D11" Version="3.8.3" />
     <PackageVersion Include="Vortice.DXGI" Version="3.8.3" />
-    <PackageVersion Include="System.Drawing.Common" Version="11.0.0-rc.3.26522.148" />
+    <PackageVersion Include="System.Drawing.Common" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup Label="Website (website/, the Blazor app GitHub Pages serves an export of; not shipped)">
-    <PackageVersion Include="Markdig" Version="1.5.1" />
+    <PackageVersion Include="Markdig" Version="1.6.0" />
   </ItemGroup>
   <ItemGroup Label="Testing (the .NET test plugin, ADR 0010 and 0011)">
-    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.11.0" />
+    <PackageVersion Include="Microsoft.TestPlatform.TranslationLayer" Version="18.12.0" />
   </ItemGroup>
   <ItemGroup Label="Tests">
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
     <!-- CI's hang dumps: they name the tests still running when a test process hangs. 2.1.0 or later: before it the
          extension turned itself off under dotnet test (the SDK starts the test app with server mode, testfx#6968), so
          a hang printed nothing. It brings Microsoft.Testing.Platform 2.5.2 over xunit's 2.0.2. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.2" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.HangDump" Version="2.5.3" />
   </ItemGroup>
 </Project>

@@ -42,7 +42,7 @@
                 <p class="eyebrow">Make it yours</p>
                 <h2 class="heading" id="themes">Classic, and four theme families.</h2>
             </div>
-            <p class="muted small">Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu and search in the title bar, the Solution Explorer on the right, and a status bar colored by state.</p>
+            <p class="muted small">Classic, the default, in Blue, Light, Dark and High Contrast, and Harbor, Graphite, Daylight and Ember, each in Light, Dark and High contrast, following your system or not. A classic layout in each: the menu, search and solution name in the title bar (the solution and the active document also name the window in the taskbar), the Solution Explorer on the right, and a status bar colored by state.</p>
         </div>
         <div class="grid grid-wide">
             @foreach (var (family, variant, line) in s_families)
@@ -75,7 +75,8 @@
                     <li>Semantic highlighting, and IntelliSense like a classic IDE's: a completion list with an icon per kind, filters (Alt+C classes, Alt+M methods…, Alt+J target type matches), commit characters (Con then . gives Console.), the expected type preselected, and a description beside the selection; parameter info above the line with overloads and the active parameter in bold; Quick Info with fixes for the errors under the pointer. Signatures in your editor's colors, generics as you use them</li>
                     <li>Live diagnostics and an Error List, grouped by project, file, severity or code, with background analysis of open documents, the current project or the solution; filtering and grouping 100,000 diagnostics doesn't make you wait</li>
                     <li>Rename, code fixes and refactorings, all with previews</li>
-                    <li>Snippets, Code Cleanup, format on save and local history</li>
+                    <li>Brackets that close themselves, Enter between braces that opens an indented line with the C# brace where your .editorconfig puts it, snippets, Code Cleanup, format on save and local history</li>
+                    <li>Closing tabs, the solution or the IDE with unsaved files asks once, in a dialog that lists them under their solution and project, with a check box for each file to save</li>
                     <li>Pasted code brings its usings along; editor settings per language, and an EditorConfig settings page</li>
                     <li>CodeLens with references, Git history and test status, its rows in place from the moment a C# file opens, so the code doesn't jump</li>
                 </ul>
@@ -110,6 +111,7 @@
                     <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
                     <li>A start window with your recent solutions, pinned and searchable, that shows at once: an entry on a network share that doesn't answer never holds it up</li>
                     <li>Check Environment: a missing .NET SDK or git offered to install, and the .NET runtime Codalus itself needs: one notification that installs it and starts the helper processes again</li>
+                    <li>Install .NET where your terminal's <code>dotnet</code> is: Microsoft's .pkg on macOS, your distribution's package or the snap on Linux, winget on Windows, or <code>dotnet-install</code> into your home folder, picked for your machine, with each way's command shown</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="build-run-and-test">
@@ -120,6 +122,7 @@
                     <li>A fast up-to-date check, binary logs and build timings</li>
                     <li>Batch Build, build events, and custom tools for ResX and T4, with a resource editor for .resx files</li>
                     <li>Run with Ctrl+F5, and multiple startup projects</li>
+                    <li>Stop from the click: while F5 or Ctrl+F5 builds, the toolbar says so with a running bar, and Stop cancels the build</li>
                     <li>A Test Explorer for xUnit, NUnit, MSTest and TUnit that keeps up with runs of tens of thousands of tests, with output streamed as they run and a details pane that shows any length of it</li>
                     <li>Code coverage with Coverlet</li>
                 </ul>
@@ -132,12 +135,19 @@
                     <li>Text, JSON, XML and HTML visualizers, and [DebuggerDisplay]</li>
                     <li>Data tips like a classic IDE's: the header over the hovered expression, each expanded level a tip of its own, members grouped with their icons, List, Dictionary, HashSet, Queue and Stack as their elements, View drop-downs for visualizers, values edited in place and red when they changed, any row pinned, and Ctrl to see through them</li>
                     <li>Pinned data tips that expand like the data tip, PerfTips and Run to Click</li>
+                    <li>Async code stepped like the rest: Step Over an <code>await</code> stops on the next line once it resumes, on any thread, for state machines and .NET 11's runtime async alike</li>
+                    <li>The async call stack: below a resumed method's frames, the methods awaiting it, at their <code>await</code> lines and with their variables</li>
+                    <li>Inline values: each line's variables drawn after it at a stop, the ones a step changed highlighted</li>
                     <li>Locals, Autos, Watch and QuickWatch with the data tip's rows: Name, Value and Type in aligned columns at every depth, expansion kept across steps, values edited in place</li>
                     <li>Long arrays in ranges of 1,000, each read as you expand it, and debugger windows behind other tabs that wait until you show them</li>
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
-                    <li>A .NET debugger of Codalus IDE's own, as a preview beside netcoredbg: Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included), exit codes on macOS, casts and C#'s operators in expressions</li>
+                    <li>A .NET debugger of Codalus IDE's own, the Codalus debugger, on .NET and .NET Framework (netcoredbg stays one release as a fallback, a setting away): Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
+                    <li>Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs; hit counts and logpoints without a stop per hit; lambdas, LINQ and the rest of C# in Watch and conditions, and Visual Basic in Visual Basic code; [DebuggerTypeProxy] and Results View</li>
+                    <li>Disassembly, Registers and Memory windows for managed code on x64 and arm64; symbol paths and symbol servers (off until you turn one on); Windows PDBs</li>
+                    <li>Several startup projects in one debug session, where a stop in one program pauses the others</li>
+                    <li>The same debugger on Linux machines over SSH, in containers and in WSL, copied there when you agree</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="git-and-hosting">
@@ -145,7 +155,8 @@
                 <ul>
                     <li>Per-file, per-change and per-line staging, from Git Changes or the diff, and blame</li>
                     <li>Git Changes with thousands of changed files: only the rows on screen are built, and a refresh keeps your selection, scroll position and collapsed folders</li>
-                    <li>Diffs and the merge editor in the editor's colors</li>
+                    <li>Open a changed file from Git Changes at its first change</li>
+                    <li>Diffs and the merge editor in the editor's colors; diffs open at their first change, with Quick Info and CodeLens on the working tree</li>
                     <li>A branch drop-down in Git Changes: search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
                     <li>Update a branch from its remote without checking it out</li>
                     <li>Manage Branches, the classic IDE's Git Repository window: every branch in folders, the remotes, tags, open pull requests and submodules in a tree, and the selected branch's history with its incoming and outgoing commits; thousands of branches and tags, or a commit of 10,000 files, open without a pause</li>
@@ -154,7 +165,7 @@
                     <li>A folder's menu in Git Changes, as in the classic IDE: stage, discard, stash, ignore, history, reveal, terminal, copy path</li>
                     <li>A history graph in the classic IDE's columns, filtered by message, author or commit ID, with incoming and outgoing commits, each commit's details in a tab of its own (its diff, Revert, Reset, Explain with AI), and any two commits, or a commit and its parent, compared file by file</li>
                     <li>Interactive rebase</li>
-                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions scrolling with it</li>
+                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions lined up with it row by row</li>
                     <li>Stash, tags, remotes, worktrees and Git LFS</li>
                     <li>Pull requests, with review comments in the editor</li>
                     <li>GitHub, Azure DevOps and GitLab, and their own servers: Azure DevOps Server found from the remote, signed in to with your Windows account</li>
@@ -168,7 +179,7 @@
                     <li>.http files, the HTTP Response window beside them (the status as a chip, the body pretty or raw, the headers, a history of requests) and an Endpoints Explorer</li>
                     <li>HTML, CSS, JavaScript and TypeScript language servers</li>
                     <li>ESLint, Prettier, npm scripts and the Task Runner Explorer</li>
-                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server under dotnet watch with netcoredbg attached, or launched under the Codalus debugger, which sends the page its edits)</li>
+                    <li>Hot Reload through dotnet watch, and while debugging Blazor WebAssembly components, standalone or in a Blazor Web App (its server launched under the Codalus debugger, which sends the page its edits)</li>
                     <li>Scaffolding, OpenAPI and gRPC service references, the dev certificate and user secrets</li>
                 </ul>
             </div>
@@ -178,15 +189,18 @@
                     <li>EF Core migrations, model views and reverse engineering</li>
                     <li>A Database Explorer for SQL Server, PostgreSQL, MySQL and SQLite</li>
                     <li>A query editor with plans and history, a SQL language service and .sqlproj builds</li>
-                    <li>Run and debug in containers with docker or podman; Add Docker Support; Compose up, down and debug</li>
-                    <li>Aspire AppHosts and their resources, on a page among the documents</li>
+                    <li>Run and debug in containers with docker or podman; Add Docker Support; Compose up and down</li>
+                    <li>Every .NET service of a compose app on your Debug build and under the debugger in one session, without an image build; restart, stop, debug or detach one service while the others run, and apply code changes in its container</li>
+                    <li>Profile a compose service in its container on Linux: CPU, counters, allocations and memory snapshots, through its diagnostic port</li>
+                    <li>Aspire AppHosts and their resources, on a page among the documents, with every project under the debugger, or one alone</li>
                     <li>Publish profiles, including container images</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="make-it-yours">
                 <h3>Make it yours</h3>
                 <ul>
-                    <li>A first-run setup: the theme family and mode, previewed live, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, a check of the .NET SDK and git, and the system integration you want, before the start window</li>
+                    <li>A first-run setup, before the start window: a welcome page that asks where you come from (the classic IDE, VS Code, Rider) and preselects the matching keys and importer, the theme family and mode previewed live, the editor's font size on a sample, the keyboard scheme, your settings from VS Code, a .vssettings file or settings sync, a check of the .NET SDK and git, the system integration you want, and your AI experience; it ends on a summary with the keys worth knowing</li>
+                    <li>Your AI experience, chosen at the first start: no AI (the default), a coding agent, or the built-in assistant with a provider you pick, compared side by side by who answers, what it does, what leaves your machine and what it needs; nothing turns on or connects before you finish the setup</li>
                     <li>Classic's Blue, Light, Dark and High Contrast, the default, with the classic IDE's rounded cards and editor colors, and four theme families, Harbor, Graphite, Daylight and Ember, each Light, Dark and High contrast, chosen from pictures in Options</li>
                     <li>Fonts and Colors over any theme, for code, the editor and the window</li>
                     <li>Default, VS Code, ReSharper and Emacs keyboard schemes</li>
@@ -201,13 +215,19 @@
                 <ul>
                     <li>Off until you turn it on, with no telemetry; nothing is sent until you choose a provider</li>
                     <li>OpenAI-compatible servers, Ollama on your machine, Anthropic, or a provider plugin; your key in the OS credential store</li>
-                    <li>AI Chat with the context you choose as chips: the selection, files, errors, build output and the solution's projects, shown with each question</li>
-                    <li>Answers in rendered Markdown, with code blocks in your editor's colors: copy them, insert them at the cursor, or apply them over the selection or the file after a preview</li>
-                    <li>Inline suggestions and next edit suggestions, each with its own switch</li>
+                    <li>AI Chat that stays out of the way: each answer's steps fold into one line (or show in full, one click away), thinking is a short line, and questions you type while an answer runs wait in a queue</li>
+                    <li>Context by @@-mention: <code>@@selection</code>, <code>@@errors</code>, <code>@@build</code>, any file of the workspace, and pasted screenshots for agents that take images, shown with each question</li>
+                    <li>Answers in rendered Markdown, with code blocks in your editor's colors that wrap to the pane and fold when long</li>
+                    <li>Inline suggestions and next edit suggestions, each with its own switch, and a suggestion on demand at the caret (Alt+\) with dots while it thinks</li>
                     <li>Commit messages, pull request descriptions, Ask AI on an exception, a value at a stop or a failing test, Fix with AI and Explain with AI in quick actions and the Error List, tests for the selection, and profile summaries</li>
-                    <li>Agent mode, one switch: it reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it</li>
-                    <li>MCP: your MCP servers' tools in agent mode, and <code>codalus mcp</code> for agents outside the IDE</li>
-                    <li>External agents in AI Chat over the Agent Client Protocol (Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode, goose, your own CLIs): Codalus serves their file, terminal and permission requests with its own checks, gives each one the IDE's tools, and offers the agent's own model, mode and effort choices</li>
+                    <li>The assistant is always an agent: it reads, searches, builds, tests and edits, each step shown in the chat, every change in a preview and every command after you allow it; without a trusted folder or a model that takes tools, it answers without them and says so</li>
+                    <li>The IDE's tools for every agent: find symbols, references, implementations and callers through the compiler instead of grep, build, run and read tests, start the program, debug it with breakpoints, variables and steps, and drive a web app's page (under the debugger, the very page being debugged, so its breakpoints stop); every step waits for the app and says where it stands, agents check their own changes, and actions run in trusted folders or ask, as you choose</li>
+                    <li>More of the IDE for agents: rename and the light bulb's fixes through the compiler, formatting and Replace in Files, Hot Reload, CPU profiles and memory snapshots, Git without pushes, NuGet packages and EF Core migrations, compose services and Aspire resources, and the IDE's own commands, each change one undo step and shown in the IDE's windows</li>
+                    <li>The desktop app you're building, for agents: an Avalonia app (or a WPF app on Windows) run or debugged from the IDE, its windows with a picture of each, its controls with their text, state and bounds, and clicks, text, keys and scrolls sent inside the app without moving your pointer or taking your focus; off-screen under Xvfb on Linux</li>
+                    <li>Under each answer, the files it changed, each with a diff against before and Revert</li>
+                    <li>MCP: your MCP servers' tools in agent mode, <code>codalus mcp</code> with the IDE's tools for agents outside the IDE (asked once per folder, with progress for long calls and each agent's setup to copy), <code>codalus mcp --folder</code> for an agent that runs unattended (an IDE without a window on a trusted folder, its actions only when you allow them), and plugins that add tools of their own</li>
+                    <li>External agents in AI Chat over the Agent Client Protocol (Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode, goose, your own CLIs): Codalus serves their file, terminal and permission requests with its own checks, gives each one the IDE's tools, and offers the agent's own model, mode and effort choices. The agent picked in AI Chat answers inline suggestions, next edits and every AI action too, with no provider needed, in a session of its own that gets no tools</li>
+                    <li>AI Console: the agent's own CLI (Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode, goose) in a console at the bottom, beside the Output and the Terminal, with the IDE's tools connected where the CLI takes them, tabs that come back with their conversations, and Add Selection to send it a reference instead of the text</li>
                     <li>Connect to Claude, Codex, Gemini CLI or GitHub Copilot from AI Chat in one dialog: it finds or installs Node.js with your own package manager, signs the agent in (Claude subscription through Claude Code's own login, or an API key kept in the OS credential store), tests the connection in an empty folder, and only then saves it; Disconnect undoes it</li>
                     <li>Files .gitignore or a .codalusignore excludes, and secrets, are never sent; a request log of what was</li>
                 </ul>
@@ -221,7 +241,7 @@
                     <li>Debug on Android devices and emulators, iOS simulators and Mac Catalyst with our own Mono debugger: breakpoints, stepping, locals, watch and exceptions</li>
                     <li>MAUI XAML: completion, compiled binding paths from x:DataType, live errors, hover and Go to Definition</li>
                     <li>The MAUI workloads, the Android SDK and a JDK installed when you agree, and listed in Check Environment</li>
-                    <li>The Windows target runs and debugs as a desktop app (netcoredbg, Hot Reload with dotnet watch), packaged or unpackaged</li>
+                    <li>The Windows target runs and debugs as a desktop app (Hot Reload with dotnet watch), packaged or unpackaged</li>
                 </ul>
             </div>
             <div class="card lift reveal" id="wpf-windows-forms-and-winui-3">
@@ -231,9 +251,10 @@
                     <li>Run, debug, test and Hot Reload them on Windows; elsewhere the IDE says they're Windows only</li>
                     <li>WPF XAML: completion of controls, dependency and attached properties, markup extensions, styles, triggers and resources through App.xaml and merged dictionaries</li>
                     <li>Binding paths from d:DataContext, checked as warnings; the markup compiler's errors in their XAML files</li>
-                    <li>Go to Definition, hover, x:Name rename into the code-behind, and formatting</li>
+                    <li>Go to Definition, hover, rename across C# and XAML both ways (binding paths, types, event handlers, resource keys), Extract Resource, Extract Style and generate-from-use code actions, and formatting</li>
                     <li>On Windows, the XAML Previewer draws WPF XAML on your app's own WPF as you type: design-time data from d:DesignInstance, the design size, zoom and scale, and a click selects the element's tag</li>
                     <li>On Windows, the Live Visual Tree and Live Property Explorer for running WPF apps: logical and visual trees, dependency property values with their sources, values set live, highlight, pick and Go to XAML</li>
+                    <li>On Windows, XAML Hot Reload for running WPF apps when you save, failed bindings in the Error List at their XAML lines, and XAML breakpoints, Break When Value Changes and the style explanation</li>
                     <li>On Windows, the Windows Forms designer on your app's own Windows Forms: select, move, resize, nudge, copy and paste controls, the Toolbox with an icon for every control and your own controls, the Properties window and its Events view</li>
                     <li>The Properties window as the classic IDE's: categories that collapse, Font, Location, Size and Padding opened into their parts (each written as one assignment), color, alignment, multi-line text, shortcut key and date drop-downs, the font editor, the String Collection Editor and Select Resource, choices for AcceptButton and Cursor, Reset, and a component list</li>
                     <li>Drag, click or double-click from the Toolbox (or press Enter on an item) to add controls, into the selected container as in the classic IDE</li>
@@ -255,7 +276,7 @@
                     <li>Old-style (non-SDK-style) projects too: packages.config restored, a Dependencies node of their references, hint paths and packages, built with the .NET SDK's MSBuild</li>
                     <li>C# 7.3 in the editor, as the compiler uses it, and binding redirects generated for executables</li>
                     <li>Convert to SDK-Style: an old-style project rewritten as an SDK-style one, packages.config as package references and AssemblyInfo.cs as properties, after a preview of every change</li>
-                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, and Attach to Process; elsewhere the IDE says it's Windows only</li>
+                    <li>Run and debug .NET Framework apps on Windows with our own .NET Framework debugger, on the debugging API that comes with the .NET Framework: breakpoints with conditions, stepping with Just My Code, call stack, threads, locals and watch with C# expressions and method calls, exceptions, Attach to Process, and portable and Windows PDBs; elsewhere the IDE says it's Windows only</li>
                     <li>xUnit, NUnit and MSTest tests on .NET Framework in the Test Explorer on Windows, old-style test projects included: discover, run and debug</li>
                     <li>Projects that need the classic IDE's own targets (ASP.NET web applications) open with IntelliSense and say why they don't build</li>
                     <li>New .NET Framework console apps and class libraries, and the installed .NET Framework in Check Environment</li>
@@ -301,7 +322,7 @@
                 <ul>
                     <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
                     <li>Profiling: counters, CPU traces and flame graphs, memory snapshots and diffs, allocations, .NET Async, threads, exceptions, file I/O and BenchmarkDotNet</li>
-                    <li>Avalonia XAML editing, a live previewer and the Live Visual Tree</li>
+                    <li>Avalonia XAML editing, a live previewer and the Live Visual Tree; XAML Hot Reload into the running app when you save, failed bindings in the Error List at their lines, rename across C# and XAML both ways, Extract Resource, Extract Style and generate-from-use code actions; XAML breakpoints at an element's creation or an attribute's set, Break When Value Changes, a break at a failed binding, and why each style applies or doesn't</li>
                     <li>An integrated terminal and C# Interactive</li>
                     <li>About forty languages highlighted; JSON and YAML schemas</li>
                     <li>Markdown beside its live preview in the same tab, collapsible, scrolling together, with GitHub's tables and task lists</li>
@@ -317,7 +338,7 @@
             </div>
         </div>
         <div class="rule-note">
-            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, Hot Reload while debugging server-side code under netcoredbg (the Codalus debugger, a preview, has it), and translations of the interface.</p>
+            <p><strong>Not there yet:</strong> Dev Containers' features and Compose-based Dev Containers, data breakpoints and mixed-mode (native) debugging, and translations of the interface.</p>
             <a class="link-arrow" href="@Site.Blob("docs/roadmap.md")">See the roadmap <Icon Name="arrow" Size="16" /></a>
         </div>
     </section>
@@ -414,17 +435,23 @@
         new("xaml", "Avalonia XAML", "xaml-preview.png",
             "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
             "Edit Avalonia XAML with completion and bindings, and watch the previewer follow every change."),
+        new("ai-console", "AI Console", "ai-console.png",
+            "AI Console at the bottom of the window, beside the Output and the Terminal: the agent's own CLI with its label, the IDE's tools connected, and a reference to Greeter.cs typed into its prompt",
+            "Run your agent's own CLI in a console beside the Output and the Terminal, with the IDE's tools connected, and point it at code with a reference instead of the text."),
         new("ai-chat", "AI Chat", "ai-chat.png",
-            "AI Chat beside the editor: a question about the selected method, the files sent with it as chips, and the answer with a code block to copy, insert or apply",
-            "Ask about your code with the context you choose as chips, and get answers with code blocks in your editor's colors, ready to copy, insert or apply after a preview. Off until you choose a provider."),
+            "AI Chat beside the editor: a question about the selected method that mentions @selection, the file sent with it, and the answer with its code block",
+            "Ask about your code and @-mention what goes with it; answers come with code blocks in your editor's colors that wrap to the pane. Off until you choose a provider."),
         new("ai-agent", "Agent mode", "ai-chat-agent.png",
-            "AI Chat in agent mode: the file it read shown as a step, its explanation, and the edit it proposes as a code block to apply",
-            "Agent mode reads, searches, builds, edits and runs commands, each step shown in the chat, every change in a preview and every command after you allow it."),
+            "AI Chat's agent: its step folded into one line, Read 1 file, and its explanation with the code it suggests",
+            "Agent mode finds code through the compiler, builds, tests, debugs and edits, its steps folded into one line, every change in a preview and every command after you allow it."),
         new("agent-connect", "Connect an agent", "agent-connect.png",
             "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
             "Connect Claude, Codex, Gemini CLI or GitHub Copilot in one dialog: what it needs, how it signs in and exactly what runs, then a connection test before anything is saved."),
         new("setup", "First start", "setup.png",
-            "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, and the mode",
-            "The first start sets it up your way: a theme family and its mode, previewed as you click, then the keyboard scheme, your settings from elsewhere and a tools check."),
+            "The first-run setup's appearance step: Classic, chosen, then Harbor, Graphite, Daylight and Ember as cards, each with a miniature of the IDE in that theme, the mode, and the editor's font size on a sample of code",
+            "The first start sets it up your way: a theme family and its mode, previewed as you click, the editor's font size, then the keyboard scheme, your settings from elsewhere and a tools check."),
+        new("setup-ai", "Your AI experience", "setup-ai.png",
+            "The first-run setup's AI step: No AI, A coding agent and The built-in assistant as three cards with the same four facts each, a coding agent chosen with Claude, the reasons to run an agent from Codalus IDE, and a note that the agent also answers the IDE's AI actions and suggestions as you type",
+            "Choose your AI at the first start, or none: three ways compared by who answers, what they do, what leaves your machine and what they need. An agent run from the IDE gets its tools: the compiler, builds, tests and the debugger, and answers the IDE's AI features too."),
     ];
 }

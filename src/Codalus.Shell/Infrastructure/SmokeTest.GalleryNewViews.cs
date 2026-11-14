@@ -11,7 +11,7 @@ namespace Codalus.Shell.Infrastructure;
 /// <summary>
 /// M34g: the views M40–M47 added, in the gallery, in their states: Code Search's floating window (empty, nothing found,
 /// Feature Search, results with the preview), the WCF Test Client (empty, a missing address, a WSDL file's form, then in
-/// <c>wcf.testClient</c> a response and a fault), the first-run setup's four steps, Options' color theme cards and the
+/// <c>wcf.testClient</c> a response and a fault), the first-run setup's pages (its five steps, the AI step's agent and assistant choices, and the summary), Options' color theme cards and the
 /// Service References document's WCF page; on Windows, the Windows Forms designer with the Toolbox and the Properties
 /// window (<c>winforms.designer</c>) and the WPF previewer (<c>wpf.preview</c>). M43's (<c>netfx.projects</c>): Solution
 /// Explorer with a project that can't build, Convert to SDK-Style's preview, the Error List's reason, and on Windows the
@@ -61,7 +61,8 @@ internal sealed partial class SmokeTest
         // New Project's pages (0.6.0, ADR 0082): the templates, no match, a pack to install, a reserved name, Blazor's options.
         await GalleryNewProjectAsync(solutionOpen: false).ConfigureAwait(true);
 
-        // The first-run setup (M46), opened as from Help, each step; the settings it may touch are put back.
+        // The first-run setup (M46, ADR 0096), opened as from Help: each step, the AI step with a coding agent and with the
+        // built-in assistant chosen (then put back, so nothing connects), and the summary; the settings it may touch are put back.
         var settings = shell.Workbench.Settings;
         var before = s_setupKeys.ToDictionary(k => k, k => settings.GetLayerValue(k, SettingScope.User));
         try
@@ -70,11 +71,28 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => shell.IsSetupOpen, "the setup opens for the gallery").ConfigureAwait(true);
             var model = shell.SetupModel!;
             var setup = shell.SetupWindowView!;
-            foreach (var step in new[] { "appearance", "keyboard", "settings", "tools" })
+            var ai = SetupAiChoice.None;
+            foreach (var step in new[] { "appearance", "keyboard", "settings", "tools", "ai", "ai-agent", "ai-assistant", "summary" })
             {
-                if (step == "tools")
+                switch (step)
                 {
-                    await SoftWaitAsync(() => model.Tools.Count > 0, 90).ConfigureAwait(true);
+                    case "tools":
+                        await SoftWaitAsync(() => model.Tools.Count > 0, 90).ConfigureAwait(true);
+                        break;
+                    case "ai":
+                        ai = model.AiChoice;
+                        break;
+                    case "ai-agent":
+                        model.AiPaths.Single(p => p.Path == SetupAiPath.Agent).SelectCommand.Execute(null);
+                        break;
+                    case "ai-assistant":
+                        model.AiPaths.Single(p => p.Path == SetupAiPath.Assistant).SelectCommand.Execute(null);
+                        break;
+                    case "summary":
+                        // As it was, so the summary is the one a setup that changed nothing about AI ends on.
+                        model.AiPaths.Single(p => p.Path == ai.Path).SelectCommand.Execute(null);
+                        await model.NextAsync().ConfigureAwait(true);
+                        break;
                 }
 
                 await GalleryThemesAsync(async theme =>
@@ -83,7 +101,7 @@ internal sealed partial class SmokeTest
                     await RenderedAsync(setup).ConfigureAwait(true);
                     GalleryShot("setup-" + step, "empty", theme, null, setup);
                 }).ConfigureAwait(true);
-                if (step != "tools")
+                if (step is "appearance" or "keyboard" or "settings" or "tools")
                 {
                     await model.NextAsync().ConfigureAwait(true);
                 }

@@ -7,6 +7,12 @@
 
 Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs natively on Windows, macOS and Linux: a rich semantic editor, a real project system, and integrated build, debugging and Git.
 
+What sets it apart:
+
+- **The classic IDE's look and feel, on macOS and Linux too**: its layout, themes and keyboard scheme ([the first-run setup](docs/user-guide/getting-started.md#the-first-run-setup)).
+- **Remote development** over SSH, in WSL and in Dev Containers, with the build, language services and debugger on the far side ([remote](docs/user-guide/remote.md)).
+- **An MCP server for coding agents**: `codalus mcp` gives agents outside the IDE its compiler, tests and debugger ([AI](docs/user-guide/ai.md#codalus-as-an-mcp-server)).
+
 **Website: [codalus.dev](https://codalus.dev/)**: [download](https://codalus.dev/download/), [features](https://codalus.dev/features/) and the [user guide](https://codalus.dev/docs/).
 
 > **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [download page](https://codalus.dev/download/) and the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): stable releases come from `master`, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
@@ -54,7 +60,7 @@ Codalus IDE is an open-source (MIT), cross-platform IDE for .NET that runs nativ
 - **.NET versions**: Codalus runs on .NET 11; .NET 11 projects with C# 15, every target framework from .NET Core 2.0 to .NET 10, and older SDKs pinned in `global.json`.
 - **Other languages**: highlighting for about forty languages from TextMate grammars; MSBuild editing with evaluated values on hover; JSON and YAML with schemas; `.editorconfig`; a Markdown preview; and any LSP language server through a plugin, without code.
 - **Extensible**: a versioned, out-of-process plugin API, 1.0 since 0.2.0 ([docs/plugins.md](docs/plugins.md)), a Plugin Gallery of NuGet packages, and `dotnet new codalus-plugin`.
-- **Yours**: a first-run setup (theme, keyboard scheme, your settings from elsewhere, a tools check), Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
+- **Yours**: a first-run setup (where you come from, theme and font size, keyboard scheme, your settings from elsewhere, a tools check, and your AI experience, off unless you choose it), Fonts and Colors, profiles, settings sync through a folder or a Git repository, customizable menus and toolbars, a start window, Help → Check Environment, and self-update on the stable or nightly channel.
 - **Private**: no telemetry. Crash reports are local and opt-in.
 
 ## Documentation
@@ -99,7 +105,7 @@ The UI shell (`codalus`, Native AOT) is kept light and responsive. Heavy service
 
 ## Building
 
-You need the .NET SDK pinned in `global.json` (11.0, its second release candidate until GA), the .NET 10 runtime for the fixtures that target `net10.0`, and git. For the debugger, run `eng/get-netcoredbg.sh` once.
+You need the .NET SDK pinned in `global.json` (11.0), the .NET 10 runtime for the fixtures that target `net10.0`, and git. The debugger builds with the solution; for netcoredbg, the fallback debugger, run `eng/get-netcoredbg.sh` once, and for debugging on remote machines from a source build, `eng/get-codalus-debugger.sh`.
 
 ```bash
 dotnet build Codalus.slnx

@@ -56,11 +56,52 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private string Program => Path.Combine(_folder, "src", "Hello", "Program.cs");
 
-    /// <summary>Appended to the screenshots' names: <c>-codalus</c> while a step runs again under the Codalus debugger (M54).</summary>
+    /// <summary>Appended to the screenshots' names: <c>-netcoredbg</c> while a step runs again under netcoredbg, the fallback (M58).</summary>
     private string _screenshotSuffix = string.Empty;
+
+    /// <summary>The dialog the gallery shows for its picture, which <see cref="OnDialogOpened"/> leaves alone.</summary>
+    private DialogRequest? _galleryDialog;
+
+    /// <summary>The step running now, as the report names it; null between steps.</summary>
+    private string? _runningStep;
+
+    /// <summary>Whether the run got to its end (its report and its own exit), so an exit isn't an interruption.</summary>
+    private bool _finished;
+
+    /// <summary>
+    /// Answers the save-changes dialog (closing a tab, Close All, the solution, the IDE with unsaved files) with Don't
+    /// Save, and says so: steps open the next sample's solution with files earlier steps edited still open, and the
+    /// dialog waited for an answer until each such step's limit (PR #351's run 43457479791: web.http and blazor.razor,
+    /// 12 minutes each). Don't Save leaves the files on the disk as they were, as closing a solution did before the dialog
+    /// (the unsaved ones stayed open, unasked); a step that wants the dialog itself can still look at it first, as this
+    /// answers it only once the dispatcher is free.
+    /// </summary>
+    private void OnDialogOpened(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+    {
+        if (shell.Dialogs is not { IsOpen: true, Request: { } request } dialogs || request.Title != ShellHost.SaveChangesTitle || ReferenceEquals(request, _galleryDialog)
+            || dialogs.Buttons.FirstOrDefault(b => b.Label == ShellHost.DontSaveButton) is not { } dontSave)
+        {
+            return;
+        }
+
+        var files = request.Choices?.Where(c => c.Id.StartsWith("file:", StringComparison.Ordinal)).Select(c => c.Label) ?? [];
+        Console.Out.WriteLine($"  [smoke] {request.Title} {string.Join(", ", files)}: Don't Save");
+        dontSave.Command.Execute(null);
+    }, DispatcherPriority.Background);
 
     public async Task RunAsync()
     {
+        if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+        {
+            lifetime.Exit += (_, e) =>
+            {
+                if (Interrupted() is { } code)
+                {
+                    e.ApplicationExitCode = code;
+                }
+            };
+        }
+
         DispatcherTimer.RunOnce(() =>
         {
             Report("watchdog", "-", $"The smoke test did not finish within {s_watchdog.TotalMinutes} minutes.", "failed", 0, null);
@@ -68,6 +109,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Environment.Exit(2);
         }, s_watchdog);
 
+        shell.Dialogs.Opened += OnDialogOpened;
         var exitCode = 1;
         try
         {
@@ -79,6 +121,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Report("driver", "-", "Smoke test driver", "failed", 0, ex.ToString());
         }
 
+        _finished = true;
         try
         {
             await shell.SaveAllAsync().ConfigureAwait(true);
@@ -110,7 +153,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             shell.StopRunning();
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -251,7 +294,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }, "plugins.host").ConfigureAwait(true);
 
         // M46: the first-run setup, as at a first start, to the start window (the website's screenshot of its appearance step).
-        await StepAsync("shell.setup", "M46", "The first-run setup: a theme family previewed live, a keyboard scheme, VS Code's settings imported and the tools checked; Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
+        await StepAsync("shell.setup", "M46", "The first-run setup: the welcome page's origin preselects the keys, a theme family previewed live, VS Code's settings imported, the tools checked, the AI step's three ways compared and left as they were; the summary's Done opens the start window with them applied", SetupStepAsync).ConfigureAwait(true);
 
         // M38: the start window, with the recent list the run has so far (the website's screenshot).
         await StepAsync("shell.startWindow", "M38", "The start window lists recent solutions and closes on Continue without code", async () =>
@@ -423,6 +466,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Toolbar is { HasSolution: true, Configuration: not null, Platform: not null }, "the toolbar shows the solution configuration", 60).ConfigureAwait(true);
             await WaitAsync(() => shell.Toolbar.StartupProject is { Name: "Hello" }, "the toolbar shows the startup project", 60).ConfigureAwait(true);
             Check(shell.Toolbar.SolutionName == "BuildAndRun", "the title bar shows the solution's name");
+            Check(window.Title == (ShellHost.TitleName(shell.Layout.ActiveDocument) is { } active ? $"BuildAndRun - {active} - Codalus IDE" : "BuildAndRun - Codalus IDE"),
+                "the window's title, which the taskbar shows, names the solution and the active document");
             Check(shell.StatusBar is { HasSolution: true, IsEmptyState: false }, "the status bar is in its solution color");
             Check(shell.Workbench.Commands.Find("workbench.action.featureSearch") is not null, "the search box's command is registered");
             var before = shell.Theme.Setting;
@@ -584,17 +629,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M5: debugging (netcoredbg).
         await StepAsync("debug.session", "M5", "F5 stops at a breakpoint; locals, evaluation and continue to exit", DebugSessionStepAsync, "build.solution").ConfigureAwait(true);
 
-        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", DebugDepthStepAsync, "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.depth", "M14", "Run to Cursor, PerfTips, inline values, QuickWatch, the Threads, Modules and Exception Settings windows", DebugDepthStepAsync, "debug.session").ConfigureAwait(true);
 
         await StepAsync("debug.companion", "M14", "Parallel Stacks, the grid visualizer, a pinned data tip, and a dump written and opened by the debug companion", DebugCompanionStepAsync, "debug.session").ConfigureAwait(true);
 
         await StepAsync("debug.dataTip", "0.6.0", "The data tip: the header over a variable hovered while stopped, its elements in a child tip, and the same rows in Locals", DebugDataTipStepAsync, "debug.session").ConfigureAwait(true);
 
-        // M54 (ADR 0086): the same steps under the Codalus debugger (debug.adapter), whose screenshots end in -codalus.
-        await StepAsync("debug.session.codalus", "M54", "Under the Codalus debugger: F5 stops at a breakpoint; locals, evaluation and continue to exit", () => UnderCodalusDebuggerAsync(DebugSessionStepAsync), "debug.session").ConfigureAwait(true);
-        await StepAsync("debug.depth.codalus", "M54", "Under the Codalus debugger: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", () => UnderCodalusDebuggerAsync(DebugDepthStepAsync), "debug.session.codalus").ConfigureAwait(true);
-        await StepAsync("debug.companion.codalus", "M54", "Under the Codalus debugger: Parallel Stacks, the grid visualizer, a pinned data tip, and a dump", () => UnderCodalusDebuggerAsync(DebugCompanionStepAsync), "debug.session.codalus").ConfigureAwait(true);
-        await StepAsync("debug.dataTip.codalus", "M54", "Under the Codalus debugger: the data tip, its elements in a child tip, and the same rows in Locals", () => UnderCodalusDebuggerAsync(DebugDataTipStepAsync), "debug.session.codalus").ConfigureAwait(true);
+        // M58 (ADR 0094): the steps above ran under the Codalus debugger, the default; the same steps under netcoredbg, the
+        // fallback (debug.adapter), whose screenshots end in -netcoredbg.
+        await StepAsync("debug.session.netcoredbg", "M58", "Under netcoredbg, the fallback: F5 stops at a breakpoint; locals, evaluation and continue to exit", () => UnderNetcoredbgAsync(DebugSessionStepAsync), "debug.session").ConfigureAwait(true);
+        await StepAsync("debug.depth.netcoredbg", "M58", "Under netcoredbg, the fallback: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows", () => UnderNetcoredbgAsync(DebugDepthStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.companion.netcoredbg", "M58", "Under netcoredbg, the fallback: Parallel Stacks, the grid visualizer, a pinned data tip, and a dump", () => UnderNetcoredbgAsync(DebugCompanionStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.dataTip.netcoredbg", "M58", "Under netcoredbg, the fallback: the data tip, its elements in a child tip, and the same rows in Locals", () => UnderNetcoredbgAsync(DebugDataTipStepAsync), "debug.session.netcoredbg").ConfigureAwait(true);
 
         // M6: Git.
         await StepAsync("git.changes", "M6", "Git status, diff, stage, commit, blame and branches", async () =>
@@ -607,6 +653,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => window.GetVisualDescendants().OfType<DiffView>().Any(), "the diff view renders").ConfigureAwait(true);
             var diffView = window.GetVisualDescendants().OfType<DiffView>().First();
             await WaitAsync(() => diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.Old) && diffView.IsColored(Codalus.Workbench.Git.DiffPaneSide.New), "both sides of the diff are in the editor's colors (#86)").ConfigureAwait(true);
+            await WaitAsync(() => diffView.ViewModel.Insights is not null, "the diff's working-tree side is the file's document, for Quick Info and CodeLens").ConfigureAwait(true);
             Screenshot("smoke-test-git-diff.png");
 
             await shell.Git.StageAsync([Greeter, Program]).ConfigureAwait(true);
@@ -700,11 +747,17 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         await StepAsync("git.hosting", "M13b", "GitHub on a mock server: device sign-in, pull requests, checkout, review comments, checks, # completion, askpass and worktrees", HostingStepAsync, "git.changes").ConfigureAwait(true);
 
-        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code applied after the preview", AiChatStepAsync).ConfigureAwait(true);
+        await StepAsync("ai.chat", "M28a", "AI Chat with an OpenAI-compatible mock server: off until turned on, a question about the selection streamed, its code shown as a wrapped block without actions, and a step of the agent it always is", AiChatStepAsync).ConfigureAwait(true);
 
         // #79, D43: Connect to Claude… from AI Chat's off state, with stand-in node and npx: the requirements, the exact
         // commands and the consent shown; Cancel writes nothing. No network, no agent.
         await StepAsync("ai.connect", "D43", "AI Chat's off state offers the one-click agents; Connect to Claude shows its requirements, sign-in and exact commands, and Cancel writes nothing", AiConnectStepAsync).ConfigureAwait(true);
+
+        // ADR 0095: AI Console, with a stand-in for the agent's CLI on the shell's agent search path. No network, no agent.
+        await StepAsync("ai.console", "ADR 0095", "AI Console runs a connected agent's own CLI in the bottom group: its label, the IDE's tools on a pipe of its own, a reference typed into its prompt, and Close ending it", AiConsoleStepAsync, "projects.open").ConfigureAwait(true);
+
+        // M60b: this app as an agent starts it, headless (codalus mcp --folder) on the trusted solution: no window, no agent.
+        await StepAsync("ai.headless", "M60b", "codalus mcp --folder: this app with no window on the trusted solution lists the IDE's tools, answers a read, runs an action under allow, refuses an untrusted folder, and ends when its input closes", HeadlessMcpStepAsync, "projects.open").ConfigureAwait(true);
 
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
@@ -1044,27 +1097,29 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M14c: debugger sessions (ADR 0039), on samples/Debugging's Sessions.slnx.
         await StepAsync("debug.compound", "M14c", "Two startup projects from the Startup Projects page debug in one session: each stops at its breakpoint, and the Processes window lists both", DebugCompoundStepAsync, "debug.session").ConfigureAwait(true);
-        // Not on macOS, where debugged programs use the Debug Console (netcoredbg can't attach to a held program there).
-        if (!OperatingSystem.IsMacOS())
-        {
-            await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
-        }
+        // On macOS too: the Codalus debugger's launcher starts the program in the terminal there (M54b).
+        await StepAsync("debug.terminal", "M14c", "A console app debugged in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", DebugTerminalStepAsync, "debug.compound").ConfigureAwait(true);
         await StepAsync("debug.roslyn", "M14c", "F5 on a source generator's DebugRoslynComponent profile runs the compiler on its target and stops in the generator", DebugRoslynStepAsync, "debug.compound").ConfigureAwait(true);
         if (await RemoteStandInAsync().ConfigureAwait(true) is { } remote)
         {
-            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with netcoredbg copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
+            await StepAsync("debug.remote", "M14c", $"Attach to a program on another machine ({remote.Display}, a local stand-in) with the debugger copied there", () => DebugRemoteStepAsync(remote), "debug.compound").ConfigureAwait(true);
         }
         else
         {
             Report("debug.remote", "M14c", "Attach to a program on another machine", "skipped", 0, $"No stand-in: on Windows a WSL distribution with the .NET {Environment.Version.Major} runtime; elsewhere sh.");
         }
 
-        // M54 (ADR 0086): under the Codalus debugger too, the integrated terminal on macOS as well (its launcher starts the
-        // program there); remote targets keep netcoredbg.
-        await StepAsync("debug.compound.codalus", "M54", "Under the Codalus debugger: two startup projects in one session, each stopping at its breakpoint", () => UnderCodalusDebuggerAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
-        await StepAsync("debug.terminal.codalus", "M54", "Under the Codalus debugger: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderCodalusDebuggerAsync(DebugTerminalStepAsync), "debug.compound.codalus").ConfigureAwait(true);
-        await StepAsync("debug.roslyn.codalus", "M54", "Under the Codalus debugger: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderCodalusDebuggerAsync(DebugRoslynStepAsync), "debug.compound.codalus").ConfigureAwait(true);
-        await StepAsync("debug.applyChanges.codalus", "M55", "Under the Codalus debugger: an edit made while stopped applies on Continue, and one made while running with Apply Code Changes", () => UnderCodalusDebuggerAsync(DebugApplyChangesStepAsync), "debug.compound.codalus").ConfigureAwait(true);
+        // M58b (ADR 0094): again under netcoredbg, the fallback, for as long as it ships. Not the terminal on macOS:
+        // netcoredbg can't attach to a program held at its start there.
+        await StepAsync("debug.compound.netcoredbg", "M58", "Under netcoredbg, the fallback: two startup projects in one session, each stopping at its breakpoint", () => UnderNetcoredbgAsync(DebugCompoundStepAsync), "debug.compound").ConfigureAwait(true);
+        if (!OperatingSystem.IsMacOS())
+        {
+            await StepAsync("debug.terminal.netcoredbg", "M58", "Under netcoredbg, the fallback: a console app in the integrated terminal reads input, stops at a breakpoint, and runs on after Detach All", () => UnderNetcoredbgAsync(DebugTerminalStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        }
+        await StepAsync("debug.roslyn.netcoredbg", "M58", "Under netcoredbg, the fallback: a source generator's DebugRoslynComponent profile stops in the generator", () => UnderNetcoredbgAsync(DebugRoslynStepAsync), "debug.compound.netcoredbg").ConfigureAwait(true);
+        await StepAsync("debug.applyChanges", "M55", "An edit made while stopped applies on Continue, and one made while running with Apply Code Changes", DebugApplyChangesStepAsync, "debug.compound").ConfigureAwait(true);
+        // M58 (ADR 0094): the Codalus debugger's own features, in the shipped app.
+        await StepAsync("debug.codalus", "M58", "The Codalus debugger's own: a hit count, Set Next Statement, a lambda in an expression, the Disassembly, Registers and Memory windows, and an edit that moves the stopped frame into its new code", DebugCodalusStepAsync, "debug.session").ConfigureAwait(true);
         // M26a: folder mode (ADR 0033), on a copy of samples/ProjectSystem/FolderOnly.
         await StepAsync("projects.folder", "M26", "Open Folder: the folder view, Load All Projects, a task and a launch configuration", async () =>
         {
@@ -1289,18 +1344,20 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 : ("skipped", "No Chrome, Edge or Chromium is installed.");
             Report("blazor.wasmDebug", "M16", wasmTitle, outcome, 0, reason);
             Report("blazor.compoundDebug", "M16", compoundTitle, outcome, 0, reason);
-            Report("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, outcome, 0, reason);
+            Report("blazor.compoundHotReload.netcoredbg", "0.6", compoundHotReloadTitle, outcome, 0, reason);
         }
         else
         {
             await StepAsync("blazor.wasmDebug", "M16", wasmTitle, WasmDebugStepAsync).ConfigureAwait(true);
             await StepAsync("blazor.compoundDebug", "M16", compoundTitle, CompoundDebugStepAsync).ConfigureAwait(true);
-            await StepAsync("blazor.compoundHotReload", "0.6", compoundHotReloadTitle, CompoundHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
+            // The server under the Codalus debugger, the default (the page's debugger is the browser's either way). Its Hot
+            // Reload doesn't use dotnet watch: the debugger launches the server, and the IDE sends the page its edits (ADR 0090).
+            await StepAsync("blazor.browserHotReload", "ADR 0090", "F5 on a Blazor Web App (SDK 10) launches the server without dotnet watch, a WebAssembly edit applies to the server and runs in the browser, and a rude edit asks to restart", BrowserHotReloadStepAsync, "blazor.compoundDebug").ConfigureAwait(true);
 
-            // M54: the server under the Codalus debugger (the page's debugger is the browser's either way). Its Hot Reload
-            // doesn't use dotnet watch: the debugger launches the server, and the IDE sends the page its edits (ADR 0090).
-            await StepAsync("blazor.compoundDebug.codalus", "M54", "Under the Codalus debugger: " + compoundTitle, () => UnderCodalusDebuggerAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
-            await StepAsync("blazor.compoundHotReload.codalus", "ADR 0090", "Under the Codalus debugger: F5 on a Blazor Web App (SDK 10) launches the server without dotnet watch, a WebAssembly edit applies to the server and runs in the browser, and a rude edit asks to restart", () => UnderCodalusDebuggerAsync(BrowserHotReloadStepAsync), "blazor.compoundDebug.codalus").ConfigureAwait(true);
+            // Under netcoredbg, the fallback: the same session, and Hot Reload through dotnet watch with the debugger attached
+            // to the server it runs (0.6).
+            await StepAsync("blazor.compoundDebug.netcoredbg", "M58", "Under netcoredbg, the fallback: " + compoundTitle, () => UnderNetcoredbgAsync(CompoundDebugStepAsync), "blazor.compoundDebug").ConfigureAwait(true);
+            await StepAsync("blazor.compoundHotReload.netcoredbg", "0.6", "Under netcoredbg, the fallback: " + compoundHotReloadTitle, () => UnderNetcoredbgAsync(CompoundHotReloadStepAsync), "blazor.compoundDebug.netcoredbg").ConfigureAwait(true);
         }
 
         // M21: a remote window on the local stand-in server (the shipped remote/server); it disconnects at its end.
@@ -1324,7 +1381,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous run has stopped", 60).ConfigureAwait(true);
         if (shell.Solutions.IsOpen)
         {
-            await shell.CloseSolutionAsync().ConfigureAwait(true);
+            await shell.CloseSolutionAsync(askToSave: false).ConfigureAwait(true);
         }
 
         var folder = Path.Combine(Work, "RemoteBuildAndRun");
@@ -1508,7 +1565,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(shell.DebugLog.GetText().Contains("> args[1]\n\"two words\"", StringComparison.Ordinal), "the Debug Console evaluates args[1] to \"two words\":\n" + Tail(shell.DebugLog.GetText(), 1000));
 
         shell.Debugger.Breakpoints.Clear();
-        shell.Run("debug.continue");
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
         Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
     }
@@ -1533,6 +1590,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == cwdLine, $"Run to Cursor stops at line {cwdLine}", 60).ConfigureAwait(true);
         Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
+
+        // Inline values (M62): the lines above the stop show their variables' values, args among them.
+        await WaitAsync(() => shell.ActiveEditor?.Controller?.InlineValueLines.Any(l => l.Line == argsLine && l.Values.Any(v => v.Name == "args")) == true,
+            "inline values show args after its line").ConfigureAwait(true);
 
         // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
         shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
@@ -1729,7 +1790,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var offset = editor.Model.Text.Text.IndexOf("        return text;", StringComparison.Ordinal);
         editor.Model.Text.Replace(offset, "        return text;".Length, "        return text + \" from the smoke test\";");
         shell.Debugger.Breakpoints.Clear();
-        shell.Run("debug.continue");
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 from the smoke test", StringComparison.Ordinal), "Continue applied the edit: the first call prints it", 60).ConfigureAwait(true);
 
         offset = editor.Model.Text.Text.IndexOf(" from the smoke test", StringComparison.Ordinal);
@@ -1739,6 +1800,101 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Any(i => i.Id == "codalus.hotReload" && i.Text.Contains("applied at", StringComparison.Ordinal)), "the status bar says the edits applied").ConfigureAwait(true);
         Screenshot("smoke-test-debug-apply-changes.png");
 
+        shell.Run("debug.stop");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
+    }
+
+    /// <summary>
+    /// M58 (ADR 0094), on samples/Debugging: the debugger applies a hit count itself, Set Next Statement moves the
+    /// thread, an expression with a lambda is compiled and run in the program, the Disassembly, Registers and Memory
+    /// windows show the stopped frame's machine state; then, on HotReload.slnx, an edit applied while stopped in the
+    /// method it changes moves the frame into the new code (Edit and Continue).
+    /// </summary>
+    private async Task DebugCodalusStepAsync()
+    {
+        await WaitAsync(() => shell.Runs.Running.Count == 0 && !shell.Debugger.IsActive, "the previous programs have stopped", 60).ConfigureAwait(true);
+        if (!Directory.Exists(Sessions))
+        {
+            Copy(Path.Combine(samples, "Debugging"), Sessions);
+        }
+
+        // Debuggee's --features mode, as a launch profile for this step only.
+        var launchSettings = SessionSource("Debuggee", Path.Combine("Properties", "launchSettings.json"));
+        Directory.CreateDirectory(Path.GetDirectoryName(launchSettings)!);
+        File.WriteAllText(launchSettings, """{ "profiles": { "Features": { "commandName": "Project", "commandLineArgs": "--features" } } }""");
+        try
+        {
+            await shell.OpenSolutionAsync(Path.Combine(Sessions, "Debugging.slnx")).ConfigureAwait(true);
+            await WaitAsync(() => shell.Solutions.Projects.Count == 1 && shell.Solutions.Progress is { Completed: true }, "the Debugging solution is open", 300).ConfigureAwait(true);
+            var features = SessionSource("Debuggee", "Features.cs");
+            var loop = MarkerLine(features, "features-loop");
+            var measure = MarkerLine(features, "features-measure");
+            shell.Debugger.Breakpoints.Clear();
+            shell.Debugger.Breakpoints.Set(new BreakpointSpec(features, loop, HitCondition: "== 4"));
+            shell.Run("debug.start");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == loop, "the debugger stops at the loop's breakpoint", 300).ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(VariablesViewModel.LocalsWindowId, focus: false);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "i", Value: "3" }), "the hit count stopped the fourth pass (i is 3): the debugger counted, with no stop before").ConfigureAwait(true);
+
+            // Set Next Statement: on to the line after the loop, the rest of the loop not run; then a step over it.
+            shell.Debugger.Breakpoints.Clear();
+            await WaitAsync(() => Equals(shell.Workbench.Context.GetValue("debugCanSetNextStatement"), true), "Set Next Statement is offered").ConfigureAwait(true);
+            Check(await shell.SetNextStatementAsync(features, measure - 1).ConfigureAwait(true), "Set Next Statement moves the thread: " + shell.StatusBar.Message);
+            await WaitAsync(() => shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure - 1, "the current line is the one chosen").ConfigureAwait(true);
+            await WaitAsync(() => shell.Locals.Roots.Any(r => r is { Name: "count", Value: "3" }), "the loop's later passes didn't run (count is 3)").ConfigureAwait(true);
+            await RunWhenEnabledAsync("debug.stepOver").ConfigureAwait(true);
+            await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
+
+            // A lambda: the C# language host compiles it, and the program runs it.
+            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
+
+            // The machine's side of the stopped frame.
+            Check(shell.Debugger.CanReadMemory && shell.Debugger.CanDisassemble && shell.Debugger.CanShowRegisters, "the debugger reads memory, registers and machine code");
+            shell.Layout.ShowToolWindow(MemoryViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<MemoryView>().Any(), "the Memory window renders").ConfigureAwait(true);
+            shell.MemoryWindow.AddressText = "text";
+            await shell.MemoryWindow.GoAsync().ConfigureAwait(true);
+            Check(shell.MemoryWindow.Message is null && shell.MemoryWindow.Rows.Count > 0, "the Memory window shows the bytes of an object: " + shell.MemoryWindow.Message);
+            shell.Layout.ShowToolWindow(RegistersViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<RegistersView>().Any() && shell.RegistersWindow.Rows.Any(r => r.Name is "rip" or "pc"), "the Registers window lists the instruction pointer").ConfigureAwait(true);
+            shell.Layout.ShowToolWindow(DisassemblyViewModel.ToolWindowId);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<DisassemblyView>().Any() && shell.DisassemblyWindow.CurrentIndex >= 0, "the Disassembly window marks the frame's instruction").ConfigureAwait(true);
+            Check(shell.DisassemblyWindow.Rows.Any(r => r.Heading == $"Features.cs:{measure}"), "the instructions are under their source lines");
+            Screenshot("smoke-test-debug-disassembly.png");
+
+            shell.Run("debug.stop");
+            await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
+        }
+        finally
+        {
+            File.Delete(launchSettings);
+        }
+
+        // Edit and Continue: stopped in Greeter.Message, an edit to it is applied, and a step goes on in the new code.
+        await shell.OpenSolutionAsync(Path.Combine(Sessions, "HotReload.slnx")).ConfigureAwait(true);
+        await WaitAsync(() => shell.Solutions.Projects.Count == 3 && shell.Solutions.Progress is { Completed: true }, "the HotReload solution is open", 300).ConfigureAwait(true);
+        shell.Runs.SetStartupProject(SessionSource("HotReload", "HotReload.csproj"));
+        var program = SessionSource("HotReload", "Program.cs");
+        var message = MarkerLine(program, "message");
+        shell.Debugger.Breakpoints.Clear();
+        shell.Debugger.Breakpoints.Toggle(program, message);
+        shell.Run("debug.start");
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message, "the debugger stops in Greeter.Message", 300).ConfigureAwait(true);
+        await WaitAsync(() => shell.DebugEdits.IsActive, "the session takes edits", 60).ConfigureAwait(true);
+        var editor = await shell.OpenFileAsync(program, preview: false, null).ConfigureAwait(true) ?? throw new SmokeFailure("Program.cs did not open.");
+        await WaitAsync(() => editor.Controller is not null, "the editor is ready").ConfigureAwait(true);
+        const string Old = "        return text;";
+        const string New = "        var more = \" moved\";\n        return text + more;";
+        var offset = editor.Model.Text.Text.IndexOf(Old, StringComparison.Ordinal);
+        Check(offset >= 0, "Program.cs has Greeter.Message's return");
+        editor.Model.Text.Replace(offset, Old.Length, New);
+        shell.Debugger.Breakpoints.Clear();
+        await RunWhenEnabledAsync("debug.stepOver").ConfigureAwait(true);
+        await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.SelectedFrame?.Line == message + 1, "the step applied the edit and stopped on the line it added, in the new code", 120).ConfigureAwait(true);
+        await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
+        await WaitAsync(() => shell.DebugLog.GetText().Contains("hello 0 moved", StringComparison.Ordinal), "the frame that was stopped ran the new code: its call prints it", 60).ConfigureAwait(true);
         shell.Run("debug.stop");
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the session ends", 60).ConfigureAwait(true);
         editor.Model.Text.Replace(0, editor.Model.Text.TextLength, File.ReadAllText(program));
@@ -1836,6 +1992,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         finally
         {
             await shell.Workbench.Settings.SetAsync(ShellHost.DebugConsoleSetting, "internalConsole", SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+
+            // The profile is this step's: the steps run again under netcoredbg (M58b), and debug.compound's Debuggee,
+            // started with --read there, waited for a line on netcoredbg's pipe that nobody writes, and never reached its
+            // breakpoint (the Codalus debugger's Debug Console ends the input, so the order before M58b hid it).
+            File.Delete(Path.Combine(properties, "launchSettings.json"));
         }
     }
 
@@ -1926,7 +2087,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var attaching = shell.AttachToRemoteAsync(target, null, remote!.Id);
             while (!attaching.IsCompleted)
             {
-                // The first attach on a target asks to copy netcoredbg there.
+                // The first attach on a target asks to copy the debugger there (the Codalus debugger's bundle, M58b).
                 if (shell.Dialogs.IsOpen && shell.Dialogs.Title == "Copy the Debugger")
                 {
                     shell.Dialogs.Accept();
@@ -2755,6 +2916,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Check(code.Text.Text == original, "undo takes the designer file back to the original");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
         shell.Layout.CloseToolWindow(ViewModels.ToolboxViewModel.ToolWindowId);
     }
 
@@ -2889,6 +3051,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await shell.SaveAllAsync().ConfigureAwait(true);
         Check(await File.ReadAllTextAsync(designer.DesignerPath).ConfigureAwait(true) == original, "undo and save take OrderForm.Designer.cs back to the original");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -2988,6 +3151,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Check(code.Text.Text == original && resx.Text.Text == originalResx, "undo takes OrderForm.Designer.cs and OrderForm.resx back to the originals");
         shell.Layout.CloseDocument(designer);
+        await DesignerClosedAsync(designer).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -2996,6 +3160,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// editor's families, ForeColor's color drop-down (the screenshot, with Font expanded), an invalid Location.X's
     /// dialog both ways, the component selector and FlatAppearance's parts, the form's AcceptButton list, and undo.
     /// </summary>
+    /// <summary>
+    /// Waits until a designer closed with <c>CloseDocument</c> is gone. Its form can still count as unsaved after the
+    /// step's undos, so closing it asks to save, and <see cref="OnDialogOpened"/> answers Don't Save only once the
+    /// dispatcher is free: the next step's open of the same form found the designer still open and used it, and the
+    /// answer then closed it under that step (Windows smoke, runs 43484474099 and 43489637316: winforms.properties).
+    /// </summary>
+    private async Task DesignerClosedAsync(ViewModels.WinFormsDesignerDocument designer) =>
+        await WaitAsync(() => !shell.Layout.Documents.Contains(designer), () => "the designer closes: " + designer.Status, 60).ConfigureAwait(true);
+
     private async Task WinFormsPropertiesStepAsync()
     {
         var form = Path.Combine(Work, "WindowsDesktop", "WinFormsApp", "OrderForm.cs");
@@ -4110,6 +4283,76 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
     }
 
+    /// <summary>
+    /// The ai.console step (ADR 0095): AI on and Claude connected in the user's settings, with a stand-in <c>claude</c> on
+    /// the shell's agent search path (it says it is ready and echoes each line; nothing reaches an agent or the network).
+    /// The console opens in the bottom group and starts it with a conversation id and the IDE's tools; Add File types a
+    /// reference into its prompt; Close ends it and its pipe. The settings are put back.
+    /// </summary>
+    private async Task AiConsoleStepAsync()
+    {
+        var settings = shell.Workbench.Settings;
+        var bin = Path.Combine(Work, "console-stand-ins");
+        Directory.CreateDirectory(bin);
+        var cli = Path.Combine(bin, OperatingSystem.IsWindows() ? "claude.cmd" : "claude");
+        File.WriteAllText(cli, OperatingSystem.IsWindows()
+            ? "@echo off\r\necho Claude stand-in ready (%1)\r\n:loop\r\nset \"line=\"\r\nset /p line=\r\nif \"%line%\"==\"exit\" exit /b 0\r\necho got: %line%\r\ngoto loop\r\n"
+            : "#!/bin/sh\necho \"Claude stand-in ready ($1)\"\nwhile IFS= read -r line; do [ \"$line\" = \"exit\" ] && exit 0; echo \"got: $line\"; done\n");
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(cli, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        var console = shell.AiConsole;
+        string Screen() => console.Selected?.Session is { } session ? session.Terminal.ScreenText() : string.Empty;
+        try
+        {
+            shell.AgentSearchPath = bin;
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            using (var agents = JsonDocument.Parse("""{ "claude": { "command": "npx", "args": ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"], "template": "claude@0.94.0" } }"""))
+            {
+                await settings.SetAsync(Workbench.Ai.Acp.AcpAgents.AgentsSetting, agents.RootElement.Clone(), SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            await WaitAsync(() => shell.AiConsoleAgents.Count == 1, "Claude is an agent AI Console can start").ConfigureAwait(true);
+            Check(shell.Workbench.ToolWindows.All.Single(w => w.Id == AiConsoleViewModel.ToolWindowId).Location == Workbench.ToolWindows.ToolWindowLocation.Bottom, "AI Console's place is the bottom group");
+            // AI Chat (the ai.connect step's) closed first, so the console has the window's width for its picture.
+            shell.Layout.CloseToolWindow(AiChatViewModel.ToolWindowId);
+            await shell.Workbench.Commands.ExecuteAsync("ai.console.show", [], CancellationToken.None).ConfigureAwait(true);
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiConsoleView>().Any(v => v.IsEffectivelyVisible), "AI Console opens").ConfigureAwait(true);
+            await WaitAsync(() => Screen().Contains("Claude stand-in ready (--session-id)", StringComparison.Ordinal), $"the agent's CLI starts with a conversation id ({console.Notice})", 60).ConfigureAwait(true);
+            var tab = console.Selected!;
+            Check(tab.Title == "Claude" && Guid.TryParse(tab.SessionId, out _), "the console is Claude's, with its own conversation");
+            Check(tab.IdeTools && shell.OpenAgentMcpPipes == 1, "the CLI got the IDE's tools on a pipe of its own");
+            var view = window.GetVisualDescendants().OfType<AiConsoleView>().First(v => v.IsEffectivelyVisible);
+            Check(view.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Name == "ConsoleLabel" && t.IsEffectivelyVisible && t.Text == AiConsoleViewModel.Label), "the console's label shows");
+
+            // A reference to a file goes into the prompt, and Enter sends it: the path, never the text.
+            await shell.AddFileToAiConsoleAsync(Path.Combine(_folder, "src", "Greetings", "Greeter.cs")).ConfigureAwait(true);
+            await WaitAsync(() => Screen().Contains("@src/Greetings/Greeter.cs", StringComparison.Ordinal), "Add File types a reference into the prompt").ConfigureAwait(true);
+            await RenderedAsync().ConfigureAwait(true);
+            Screenshot("ai-console.png");
+            tab.Session!.Write("\r");
+            await WaitAsync(() => Screen().Contains("got: @src/Greetings/Greeter.cs", StringComparison.Ordinal), "the CLI reads the reference").ConfigureAwait(true);
+
+            shell.KillAiConsole(tab);
+            await WaitAsync(() => console.Tabs.Count == 0 && shell.OpenAgentMcpPipes == 0, "Close ends the CLI and its pipe").ConfigureAwait(true);
+        }
+        finally
+        {
+            foreach (var open in console.Tabs.ToList())
+            {
+                shell.KillAiConsole(open);
+            }
+
+            shell.AgentSearchPath = null;
+            await settings.SetAsync(Workbench.Ai.Acp.AcpAgents.AgentsSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.Cli.AgentClis.ConsoleAgentSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await settings.SetAsync(Workbench.Ai.AiService.EnabledSetting, (JsonElement?)null, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            shell.Layout.CloseToolWindow(AiConsoleViewModel.ToolWindowId);
+        }
+    }
+
     private async Task AiChatStepAsync()
     {
         const string Reply = "This adds two numbers. A shorter version:\n\n```csharp\nstatic int Add(int a, int b) => a + b;\n```\n\nThe expression body returns the same value.";
@@ -4144,43 +4387,32 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
             shell.ShowAiChat();
             await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatView>().Any(), "AI Chat opens").ConfigureAwait(true);
-            shell.AiChat.Input = "What does this do? Can it be shorter?";
+            // Only what the question @-mentions goes with it (ADR 0092).
+            shell.AiChat.Input = "What does this do? Can it be shorter? @selection";
             await shell.AiChat.SendAsync().ConfigureAwait(true);
             var turns = shell.AiChat.Chat.Turns;
             var turn = turns.Count > 0 ? turns[^1] : throw new SmokeFailure("The question wasn't asked.");
             await WaitAsync(() => !turn.IsStreaming, "the answer streams in", 60).ConfigureAwait(true);
             Check(turn.Error is null && turn.Answer == Reply, $"the answer arrived ({turn.Error ?? turn.Answer})");
             Check(AiChatViewModel.ContextSummary(turn).Contains("Calculator.cs", StringComparison.Ordinal), "the selection went with the question");
-            await WaitAsync(() => window.GetVisualDescendants().OfType<Button>().Any(b => Avalonia.Automation.AutomationProperties.GetName(b) == "Apply the code after a preview"), "the code block offers Apply").ConfigureAwait(true);
+            // The code block (ADR 0092): the code alone, wrapped, with its language in the corner and no actions.
+            await WaitAsync(() => window.GetVisualDescendants().OfType<AiCodeBlockView>().Any(b => b.HeaderText == "C#" && b.WrapsLines), "the answer's code shows as a wrapped C# block").ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.ai"), "the status bar shows AI is on");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("ai-chat.png");
-
-            var applying = shell.AiChat.ApplyAsync(turn, Workbench.Ai.AiCodeBlocks.Parse(turn.Answer)[0]);
-            await WaitAsync(() => shell.Dialogs.IsOpen && shell.Dialogs.HasDetails, "the preview shows the change").ConfigureAwait(true);
-            shell.Dialogs.Accept();
-            await applying.ConfigureAwait(true);
-            Check(editor.Model.Text.Text.Contains("    static int Add(int a, int b) => a + b;\n}", StringComparison.Ordinal), "Apply replaced the selection");
             Check(!shell.Workbench.Output.GetOrCreate(Workbench.Ai.AiService.OutputChannelId).GetText().Contains("return a + b", StringComparison.Ordinal), "the request log has no content");
 
-            // Agent mode in the trusted solution (projects.open): a step that read a file, as the step template shows it.
+            // In the trusted solution (projects.open) the assistant uses its tools (it is always an agent, ADR 0092): a step that read a file.
             if (shell.Solutions.Solution is { Trusted: true } && File.Exists(Greeter))
             {
-                shell.AiChat.IsAgent = true;
                 shell.AiChat.Input = AgentQuestion;
-                try
-                {
-                    await shell.AiChat.SendAsync().ConfigureAwait(true);
-                }
-                finally
-                {
-                    shell.AiChat.IsAgent = false;
-                }
+                await shell.AiChat.SendAsync().ConfigureAwait(true);
 
                 var agentTurn = shell.AiChat.Chat.Turns[^1];
                 await WaitAsync(() => !agentTurn.IsStreaming, "the agent's answer streams in", 60).ConfigureAwait(true);
                 Check(agentTurn.IsAgent && agentTurn.Error is null && agentTurn.Steps is [{ Tool: "read_file", Outcome: not null, IsError: false }], $"the agent read Greeter.cs ({agentTurn.Error ?? string.Join(", ", agentTurn.Steps)})");
-                await WaitAsync(() => window.GetVisualDescendants().OfType<AiStepView>().Any(s => s.DataContext is AiStepItem { Title: "read_file", Status: AiStepStatus.Completed }), "AI Chat shows the agent's step").ConfigureAwait(true);
+                // Compact (the default, ADR 0092): the agent's steps fold into one line.
+                await WaitAsync(() => window.GetVisualDescendants().OfType<AiChatTurnView>().Any(v => v.Turn == agentTurn && v.StepsSummary == "Read 1 file" && !v.StepsShown), "AI Chat folds the agent's step into one line").ConfigureAwait(true);
                 await RenderedAsync().ConfigureAwait(true);
                 Screenshot("ai-chat-agent.png");
             }
@@ -4344,6 +4576,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         Console.Out.WriteLine($"[{_clock.Elapsed:mm\\:ss}] {milestone} {id}: {title}");
         Console.Out.Flush();
+        _runningStep = id;
         var start = Stopwatch.GetTimestamp();
         Task? running = null;
         try
@@ -4405,8 +4638,31 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         }
         finally
         {
+            _runningStep = null;
             WriteReport();
         }
+    }
+
+    /// <summary>
+    /// The app is ending before the run did (its window closed by hand, a shutdown the run didn't ask for): a failed
+    /// step, "interrupted", naming the step that was running, goes in the report, and the exit code (returned) is 3. Before,
+    /// the app exited with 0 and a report of the steps that had run, all passed (a local macOS run, 2026-11-12: its window
+    /// closed during testing.run, it reported 54 steps passed). Null once the run has ended.
+    /// </summary>
+    internal int? Interrupted()
+    {
+        if (_finished)
+        {
+            return null;
+        }
+
+        _finished = true;
+        Report("interrupted", "-", "The app ended before the smoke test did", "failed", 0,
+            _runningStep is { } step ? $"It ended during '{step}'; the steps after it didn't run." : "It ended between steps; the steps after them didn't run.");
+        WriteReport();
+        Console.Out.WriteLine("SMOKE TEST FAILED");
+        Console.Out.Flush();
+        return 3;
     }
 
     /// <summary>
@@ -4482,6 +4738,22 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     }
 
     private static Task WaitAsync(Func<bool> condition, string what, int seconds = 30) => WaitAsync(condition, () => what, seconds);
+
+    /// <summary>
+    /// Runs <paramref name="commandId"/> once its enablement allows it. The context keys follow the debugger's state on
+    /// the UI thread (<c>Ui.Post</c>), after the state the steps wait for, and a command run before them is refused with
+    /// only a status bar message: Step Over was, and the wait after it timed out with nothing sent to the debugger
+    /// (Linux smoke, debug.codalus, run 43415338526). The command sweep waits for the same keys (#145's Linux run).
+    /// </summary>
+    private async Task RunWhenEnabledAsync(string commandId, int seconds = 10)
+    {
+        var context = shell.Workbench.Context;
+        await WaitAsync(
+            () => shell.Workbench.Commands.IsEnabled(commandId),
+            () => $"“{commandId}” to be enabled (debugger {shell.Debugger.State}; context debugStopped={context.GetValue("debugStopped")}, debugRunning={context.GetValue("debugRunning")}, debugActive={context.GetValue("debugActive")})",
+            seconds).ConfigureAwait(true);
+        shell.Run(commandId);
+    }
 
     /// <summary>As above, with <paramref name="what"/> read when the wait times out (a log's tail at that moment).</summary>
     private static async Task WaitAsync(Func<bool> condition, Func<string> what, int seconds = 30)
@@ -4696,30 +4968,30 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     // ------------------------------------------------------------------ report
 
     /// <summary>
-    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
-    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// A debug step again under netcoredbg, the fallback debugger (<c>debug.adapter</c> <c>netcoredbg</c>; M58, ADR
+    /// 0094: the first pass runs under the default, the Codalus debugger, and its screenshots are the website's). The
+    /// second pass's screenshots are named <c>-netcoredbg</c>.
     /// </summary>
-    /// <summary>
-    /// A debug step again under the Codalus debugger (M54, ADR 0086: <c>debug.adapter</c> <c>codalus</c>), its screenshots
-    /// named <c>-codalus</c> (the first pass's are the website's); the Debug Console has to say which debugger it was.
-    /// </summary>
-    private async Task UnderCodalusDebuggerAsync(Func<Task> step)
+    private async Task UnderNetcoredbgAsync(Func<Task> step)
     {
-        await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
-        _screenshotSuffix = "-codalus";
+        await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        _screenshotSuffix = "-netcoredbg";
         try
         {
+            Check(!shell.Debugger.UsesCodalusAdapter, "the setting chooses netcoredbg");
             await step().ConfigureAwait(true);
-            var text = shell.DebugLog.GetText();
-            Check(text.Contains("Debugging with the Codalus debugger (preview).", StringComparison.Ordinal), "the Debug Console says the Codalus debugger debugged it:\n" + Tail(text, 1500));
         }
         finally
         {
             _screenshotSuffix = string.Empty;
-            await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.NetcoredbgAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, Workbench.Debugging.DebugService.CodalusAdapter, SettingScope.User, CancellationToken.None).ConfigureAwait(true);
         }
     }
 
+    /// <summary>
+    /// Saves the window (or another of the shell's) as <paramref name="name"/> in the logs. The toasts are hidden first
+    /// (see <see cref="HideToasts"/>) unless <paramref name="keepToasts"/>: a failed step's picture keeps them.
+    /// </summary>
     private void Screenshot(string name, Avalonia.Controls.TopLevel? of = null, bool keepToasts = false)
     {
         if (_screenshotSuffix.Length > 0)

@@ -70,6 +70,20 @@
     select(Math.max(0, initial), false);
   }
 
+  // A frame that holds only a lazy picture isn't rendered until it reaches the viewport (site.css), so its picture
+  // isn't fetched with the page. Left at that, a picture would start loading only as it scrolls into view: render the frame, which fetches
+  // the picture, once it comes within three quarters of a screen. A hidden tab panel's frame counts once its tab is chosen.
+  if ("IntersectionObserver" in window) {
+    const near = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.style.contentVisibility = "visible";
+        near.unobserve(entry.target);
+      }
+    }, { rootMargin: "0px 0px 75% 0px" });
+    for (const picture of document.querySelectorAll('.shot > figure > img[loading="lazy"]:only-child')) near.observe(picture.parentElement);
+  }
+
   // A hash in nested tabs (download/#zypper): the panels it's in are shown now, which moved it, so back to it. A tab's
   // own heading (download/#linux) stays put, under the tabs.
   const anchored = hash && document.getElementById(hash);

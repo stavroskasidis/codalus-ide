@@ -3,7 +3,7 @@
 - **Status:** accepted (M43b, 2026-10-17; the maintainer's standing go-ahead for the milestones, D31)
 - **Date:** 2026-10-17
 - **Deciders:** maintainer
-- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28; phase 1 built in M54, 2026-10-29: ClrDebug on every OS, the session over a second target through dbgshim, and what CoreCLR's parity suites found added to the shared session)
+- **Amended by:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (accepted 2026-10-28; phase 1 built in M54, 2026-10-29: ClrDebug on every OS, the session over a second target through dbgshim, and what CoreCLR's parity suites found added to the shared session); [ADR 0094](0094-the-codalus-debugger-by-default.md) (M58a, 2026-11-11: Windows PDBs are read, by Mono.Cecil's managed reader, and the session's new features (breakpoint behaviors, Set Next Statement, type proxies, compiled expressions, the machine-level windows) are offered by the .NET Framework adapter too, since the session is shared, though only the CoreCLR adapter's tests cover them: `TODO(issue)`, a Windows test of them on the desktop CLR; 32-bit processes come with M58b's `win-x86` adapter bundle)
 - **Amends:** [ADR 0007](0007-debugging.md) (netcoredbg as the one .NET debugger), [ADR 0032](0032-debug-companion-host.md) (the debug companion's modes), [ADR 0075](0075-net-framework-projects-and-builds.md) (F5 offered Start Without Debugging)
 
 ## Context

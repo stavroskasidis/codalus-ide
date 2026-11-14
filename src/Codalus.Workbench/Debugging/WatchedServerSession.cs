@@ -64,8 +64,11 @@ public sealed record WatchedServerChange(WatchedServerChangeKind Kind, int? Proc
 /// <summary>What a <see cref="WatchedServerSession"/> needs from the IDE.</summary>
 public interface IWatchedServerHost
 {
-    /// <summary>The next app <c>dotnet watch</c> starts (not <paramref name="previousPid"/>), once it serves; null when it doesn't (<see cref="WatchedServer.WaitForAppAsync"/>).</summary>
-    Task<int?> WaitForAppAsync(int? previousPid, CancellationToken cancellationToken);
+    /// <summary>
+    /// The next app <c>dotnet watch</c> starts (not <paramref name="previousPid"/>), once it serves: a "Now listening on"
+    /// beyond the first <paramref name="listeningBefore"/> counts as its; null when it doesn't serve (<see cref="WatchedServer.WaitForAppAsync"/>).
+    /// </summary>
+    Task<int?> WaitForAppAsync(int? previousPid, int listeningBefore, CancellationToken cancellationToken);
 
     /// <summary>Attaches the debugger to the server and opens its page in the same session; false when it couldn't.</summary>
     Task<bool> AttachAsync(int processId, CancellationToken cancellationToken);
@@ -115,6 +118,7 @@ public sealed class WatchedServerSession : IDisposable
     private int _processId;
     private int _appEnded;
     private int _stopping;
+    private int _listeningBefore;
 
     public WatchedServerSession(HotReloadSession hotReload, Task watchExited, IWatchedServerHost host, TimeSpan followTimeout)
     {
@@ -153,7 +157,7 @@ public sealed class WatchedServerSession : IDisposable
         int? pid;
         try
         {
-            pid = await _host.WaitForAppAsync(null, linked.Token).WaitAsync(timeout, linked.Token).ConfigureAwait(false);
+            pid = await _host.WaitForAppAsync(null, 0, linked.Token).WaitAsync(timeout, linked.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {
@@ -199,8 +203,14 @@ public sealed class WatchedServerSession : IDisposable
             return;
         }
 
-        if (Transition(WatchedServerState.Releasing, WatchedServerState.Following) || Transition(WatchedServerState.Attached, WatchedServerState.Following))
+        var listening = _hotReload.ListeningCount;
+        if (Transition(WatchedServerState.Releasing, WatchedServerState.Following))
         {
+            _ = FollowAsync(); // from the count the restart's announcement saw
+        }
+        else if (Transition(WatchedServerState.Attached, WatchedServerState.Following))
+        {
+            Volatile.Write(ref _listeningBefore, listening); // no announcement: from now
             _ = FollowAsync();
         }
         else if (State == WatchedServerState.Stopping)
@@ -226,6 +236,9 @@ public sealed class WatchedServerSession : IDisposable
 
     private void OnRestartAnnounced()
     {
+        // The next server's "Now listening on" counts from here: it can come while the release still runs (17 s on
+        // Windows CI, run 41939076255), before the follow begins to wait.
+        Volatile.Write(ref _listeningBefore, _hotReload.ListeningCount);
         if (!Transition(WatchedServerState.Attached, WatchedServerState.Releasing))
         {
             return;
@@ -299,7 +312,7 @@ public sealed class WatchedServerSession : IDisposable
         int? next;
         try
         {
-            next = await _host.WaitForAppAsync(previous, _cancel.Token).WaitAsync(_followTimeout, _cancel.Token).ConfigureAwait(false);
+            next = await _host.WaitForAppAsync(previous, Volatile.Read(ref _listeningBefore), _cancel.Token).WaitAsync(_followTimeout, _cancel.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is TimeoutException or OperationCanceledException)
         {

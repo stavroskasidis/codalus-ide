@@ -39,7 +39,7 @@
 - Hold `Shift` to select text while a program uses the mouse.
 
 **Keys**
-- Most keys go to the shell while a terminal has focus. A short list stays with the IDE: the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), build, debug and run, focus movement and the terminal's own commands.
+- Most keys go to the shell while a terminal has focus. A short list stays with the IDE: the search box (`Ctrl+Q`) and the command palette (`Ctrl+Shift+P`), build, debug and run, focus movement, the terminal's own commands and the AI key (`Ctrl+Alt+I`, so it works from AI Console too).
 - Change that list with `terminal.commandsToSkipShell`.
 
 **Appearance**
@@ -51,7 +51,7 @@
 - The terminal exposes its visible text to screen readers (UI Automation on Windows, the accessibility API on macOS and AT-SPI on Linux).
 
 **Running programs in the terminal**
-- Set `run.console` to `integratedTerminal` to run console apps there with **Start Without Debugging** (`Ctrl+F5`), so they can read input.
+- Set `run.console` to `integratedTerminal` to run console apps there with **Start Without Debugging** (`Ctrl+F5`), so they can read input. With Hot Reload (Start with Hot Reload, or **Hot Reload on Start Without Debugging**), `dotnet watch` runs in the terminal and the app reads input there too; the status bar follows Hot Reload as usual ([Hot Reload](web.md#hot-reload)).
 - The default, `outputWindow`, shows their output in the Output window. `externalConsole` opens a separate console window.
 
 ## C# Interactive

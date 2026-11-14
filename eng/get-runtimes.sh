@@ -41,7 +41,7 @@ trap 'rm -rf "$work"' EXIT
 install() {
   local root="$1"; shift
   if [ "$os" = windows ]; then
-    [ -f "$work/dotnet-install.ps1" ] || curl -fsSL https://dot.net/v1/dotnet-install.ps1 -o "$work/dotnet-install.ps1"
+    [ -f "$work/dotnet-install.ps1" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.ps1 -o "$work/dotnet-install.ps1"
     local args=() kind="" version="" architecture="" skip=""
     while [ $# -gt 0 ]; do
       case "$1" in
@@ -59,7 +59,7 @@ install() {
     # System32 first: dotnet-install.ps1 runs `tar`, and Git Bash's GNU tar (earlier on its PATH) reads C: as a remote host.
     PATH="$(cygpath -u "${SYSTEMROOT:-C:\\Windows}")/System32:$PATH" powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$work/dotnet-install.ps1")" "${args[@]}"
   else
-    [ -f "$work/dotnet-install.sh" ] || curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
+    [ -f "$work/dotnet-install.sh" ] || curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "$work/dotnet-install.sh"
     bash "$work/dotnet-install.sh" --install-dir "$root" --no-path "$@"
   fi
 }
@@ -135,7 +135,7 @@ if [ "$os" = linux ] && [ "$arch" = x86_64 ] && [ ! -f "$destination/openssl1.1/
    && ! ls /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /lib/x86_64-linux-gnu/libssl.so.1.1 > /dev/null 2>&1; then
   echo "== OpenSSL 1.1 (Ubuntu 20.04's libssl1.1)"
   deb="libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb"
-  curl -fsSL -o "$work/$deb" "http://security.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
+  curl -fsSL --retry 3 --retry-all-errors -o "$work/$deb" "http://security.ubuntu.com/ubuntu/pool/main/o/openssl/$deb"
   actual="$(sha256sum "$work/$deb" | cut -d' ' -f1)"
   if [ "$actual" != 7cf39d70a639017d1dd7c8d36daa2258063608688e449fddf40ffdd46f992a78 ]; then
     echo "SHA-256 mismatch for $deb: got $actual" >&2
@@ -146,6 +146,41 @@ if [ "$os" = linux ] && [ "$arch" = x86_64 ] && [ ! -f "$destination/openssl1.1/
   cp "$work/libssl/usr/lib/x86_64-linux-gnu/libssl.so.1.1" "$work/libssl/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1" "$destination/openssl1.1/"
 fi
 
+exe=dotnet; [ "$os" = windows ] && exe=dotnet.exe
+
+# The .NET Core 2.x SDKs unpack their package archive into <destination>/sdk/NuGetFallbackFolder on their first run, for
+# most of a minute, and every restore in this root reads that folder as a fallback source: one that looked at a package
+# between its first file and its nuspec failed with NU5037 ("The package is missing the required nuspec file"), in the
+# matrix's first run after an install, twice (2026-11-12, docs/ci-flakes.md). So each of them runs once here, one after
+# the other, before the stamp says the root is ready. One that can't run on this machine (its tests skip) says so.
+for version in ${installed_sdks[@]+"${installed_sdks[@]}"}; do
+  [ -f "$destination/sdk/$version/nuGetPackagesArchive.lzma" ] || continue
+  [ -f "$destination/sdk/NuGetFallbackFolder/$version.dotnetSentinel" ] && continue
+  echo "== .NET SDK $version: its first run (the fallback packages)"
+  first="$work/first-run-$version"
+  mkdir -p "$first"
+  printf '{ "sdk": { "version": "%s" } }\n' "$version" > "$first/global.json"
+  (
+    cd "$first"
+    unset DOTNET_SKIP_FIRST_TIME_EXPERIENCE
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1
+    if [ "$os" = linux ]; then
+      # What these runtimes need on a current distribution, as the suite and Codalus give it to them (ADR 0030).
+      if [ -d "$destination/openssl1.1" ]; then
+        export LD_LIBRARY_PATH="$destination/openssl1.1${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+      fi
+      icu="$(ls /usr/lib/*/libicuuc.so.[0-9]* /usr/lib64/libicuuc.so.[0-9]* /usr/lib/libicuuc.so.[0-9]* 2> /dev/null | sed -n 's/.*libicuuc\.so\.\([0-9][0-9]*\).*/\1/p' | sort -n | tail -1)"
+      if [ -n "$icu" ] && [ -z "${CLR_ICU_VERSION_OVERRIDE:-}" ]; then
+        export CLR_ICU_VERSION_OVERRIDE="$icu"
+      fi
+    fi
+    "$destination/$exe" help > "$first/output.txt" 2>&1
+  ) 2> /dev/null || true
+  if [ ! -f "$destination/sdk/NuGetFallbackFolder/$version.dotnetSentinel" ]; then
+    echo "   it didn't unpack them here: $(grep -m1 . "$first/output.txt" 2> /dev/null || echo "no output")"
+  fi
+done
+
 # A stamp the tests check, so a half-installed root fails clearly instead of in the middle of a test.
 {
   echo "sdk=$sdk"
@@ -154,7 +189,6 @@ fi
   echo "sdks=${installed_sdks[*]:-}"
 } > "$destination/.codalus-compat"
 echo "== $destination"
-exe=dotnet; [ "$os" = windows ] && exe=dotnet.exe
 "$destination/$exe" --list-sdks
 "$destination/$exe" --list-runtimes
 if [ -x "$destination/x64/dotnet" ]; then

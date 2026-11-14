@@ -69,7 +69,11 @@ public sealed record HelloResult(
     string ServerFolder);
 
 /// <param name="FileName">A path, a program on the PATH, or <c>dotnet</c> (the server's own resolution).</param>
-public sealed record SpawnParams(uint Channel, string FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory = null, IReadOnlyDictionary<string, string>? Environment = null);
+/// <param name="ToolTelemetryOptOut">
+/// One of the IDE's hosts or tools (M59): the server adds the tools' telemetry opt-outs its own environment doesn't
+/// already set.
+/// </param>
+public sealed record SpawnParams(uint Channel, string FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory = null, IReadOnlyDictionary<string, string>? Environment = null, bool ToolTelemetryOptOut = false);
 
 public sealed record SpawnResult(int ProcessId);
 

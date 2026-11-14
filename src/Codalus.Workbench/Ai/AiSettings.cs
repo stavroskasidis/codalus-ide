@@ -51,14 +51,14 @@ public static class AiSettings
         {
             Title = "Inline Suggestions",
             Category = "AI",
-            Description = "Suggest code as you type, shown in gray at the caret: Tab accepts, Ctrl+Right accepts a word, Esc dismisses. It sends the text around the caret to the provider as you type, so it has its own switch, off by default.",
+            Description = "Suggest code as you type, shown in gray at the caret: Tab accepts, Ctrl+Right accepts a word, Esc dismisses. It sends the text around the caret to the provider (or the external agent picked in AI Chat) as you type, so it has its own switch, off by default.",
             Order = 10,
         },
         SettingDescriptor.Create(AiCompletions.ModelSetting, "\"\"", SettingType.String, source) with
         {
             Title = "Inline Suggestions Model",
             Category = "AI",
-            Description = "The provider's model for inline suggestions, when it should be a faster one than the chat's. Empty: the chat's model.",
+            Description = "The provider's model for inline suggestions, when it should be a faster one than the chat's. Empty: the chat's model. An external agent uses the model picked with Suggestions: in AI Chat instead.",
             Scope = SettingScope.User,
             Order = 11,
         },
@@ -66,7 +66,7 @@ public static class AiSettings
         {
             Title = "Inline Suggestions Delay",
             Category = "AI",
-            Description = "How long typing pauses, in milliseconds, before a suggestion is asked for.",
+            Description = "How long typing pauses, in milliseconds, before a suggestion is asked for. Unset: 400, or 1000 with an external agent.",
             Minimum = 100,
             Maximum = 5000,
             Scope = SettingScope.User,
@@ -99,6 +99,35 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 21,
         },
+        SettingDescriptor.Create(Ide.IdeTools.ActionsSetting, "\"allow\"", SettingType.String, source) with
+        {
+            Title = "Agent IDE Actions",
+            Category = "AI",
+            Description = "How an agent's IDE actions are approved: building, running tests, running or debugging the program, and driving the web app's browser (AI Chat's agents and codalus mcp). Reading code and the IDE's state never asks; edits always go through the preview and shell commands always ask. Read from your user settings only.",
+            Enum = ["allow", "askOncePerSession", "ask"],
+            EnumDescriptions =
+            [
+                "Run actions without asking (trusted folders only).",
+                "Ask at the first action of a chat, with Allow for This Chat and Always Allow in This Workspace; then run the rest of that chat's actions.",
+                "Ask before every action, with Always Allow in This Workspace.",
+            ],
+            Scope = SettingScope.User,
+            Order = 22,
+        },
+        SettingDescriptor.Create(AiChat.DensitySetting, "\"compact\"", SettingType.String, source) with
+        {
+            Title = "AI Chat Density",
+            Category = "AI",
+            Description = "How AI Chat shows an agent's work: compact folds each answer's steps into one summary line and its thinking into a short line (each opens on a click); detailed shows every step.",
+            Enum = ["compact", "detailed"],
+            EnumDescriptions =
+            [
+                "One summary line per answer for its steps, and a short line for its thinking.",
+                "Every step, with its details, and the thinking.",
+            ],
+            Scope = SettingScope.User,
+            Order = 26,
+        },
         SettingDescriptor.Create(Mcp.McpServers.ServersSetting, "{}", SettingType.Object, source) with
         {
             Title = "MCP Servers",
@@ -111,7 +140,7 @@ public static class AiSettings
         {
             Title = "External Agents",
             Category = "AI",
-            Description = "External coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI. AI: Connect to an Agent… sets one up, tests it and writes its entry here; by hand: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { }, \"secretEnv\": [\"NAME\"] } }, where secretEnv names variables whose values Connect keeps in the OS credential store, never in this file. They use their own provider and data policy; Codalus checks what they ask the IDE for. They run only while AI assistance is on, in trusted folders. Read from your user settings only.",
+            Description = "External coding agents AI Chat can run over the Agent Client Protocol (ACP), each your own CLI. AI: Connect to an Agent… sets one up, tests it and writes its entry here; by hand: { \"name\": { \"command\": \"…\", \"args\": [\"…\"], \"env\": { }, \"secretEnv\": [\"NAME\"], \"console\": \"…\" } }, where secretEnv names variables whose values Connect keeps in the OS credential store, never in this file, and console names the agent's own CLI for AI Console. They use their own provider and data policy; Codalus checks what they ask the IDE for. They run only while AI assistance is on, in trusted folders. Read from your user settings only.",
             Scope = SettingScope.User,
             Order = 24,
         },
@@ -123,11 +152,19 @@ public static class AiSettings
             Scope = SettingScope.User,
             Order = 25,
         },
+        SettingDescriptor.Create(Cli.AgentClis.ConsoleAgentSetting, "\"\"", SettingType.String, source) with
+        {
+            Title = "AI Console Agent",
+            Category = "AI",
+            Description = "The agent whose own CLI a new AI Console starts: the name of an agent of External Agents (ai.agents). AI Console writes it, so the next console starts the agent you chose last.",
+            Scope = SettingScope.User,
+            Order = 27,
+        },
         SettingDescriptor.Create("ai.mcpServer.enabled", "false", SettingType.Boolean, source) with
         {
             Title = "MCP Server",
             Category = "AI",
-            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the solution, the open files, the Error List and the build output; a build asks you first. For your user only; off by default.",
+            Description = "Let AI agents that run outside the IDE reach it through `codalus mcp` (an MCP server over stdio): the IDE's tools for code intelligence (symbols, references, callers, the Error List), code changes, builds, tests, running, debugging, Git, packages and services; actions follow Agent IDE Actions. The first call in a folder asks you (Allow, Always for This Folder, Don't Allow). AI › Set Up Agents Outside the IDE… shows each agent's setup with a Copy button. For your user only; off by default.",
             Scope = SettingScope.User,
             Order = 23,
         },

@@ -28,7 +28,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 - Command-line options: `codalus --help` (`src/Codalus.Shell/Program.cs`).
 - Every `CODALUS_*` environment variable is in `docs/environment-variables.md`; a new one gets a row there in the same change.
-- Debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
+- The netcoredbg debugger tests need netcoredbg (`eng/get-netcoredbg.sh`); the Codalus debugger's bundle tests need its bundles (`eng/get-codalus-debugger.sh`, with `osx-x64` and `eng/get-dotnet-x64.sh` on Apple silicon, `win-x86` on Windows); `samples/Net11` tests need the .NET 11 SDK; old-.NET tests need `eng/get-runtimes.sh`. These skip locally without their prerequisite and fail without it in CI. The same holds for browser and container tests.
 - NativeAOT publish on Windows needs `vswhere.exe` on `PATH`.
 
 ## Where things are
@@ -54,7 +54,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 - Git, docker/podman, `dotnet ef`, netcoredbg and similar are the user's CLIs, one process per operation, parsing machine-readable output.
 - Never run managed code in a forked child (the terminal uses `openpty` + `posix_spawn`, not `forkpty`).
 - End a process tree with `ProcessTree.Kill` (`Codalus.Platform`), never `Process.Kill(entireProcessTree: true)`: on macOS .NET's walk reads every process's task information and blocks for minutes while ReportCrash holds a crashed one (`ProcessTreeTests` checks `src/`).
-- `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals).
+- `AiService` is the only code that may send workspace content to a model. AI is off by default. The one exception is external agents over ACP (ADR 0079): they call their own provider, so they're off by default, configured in user settings only (`ai.agents`), run only in trusted workspaces, are labeled in AI Chat, and everything the IDE gives them passes the same checks (exclusions, redaction, the preview, approvals). AI Console (ADR 0095) starts such an agent's own CLI in the terminal under the same gate and a label of its own: the CLI edits and runs by itself, and only the IDE's tools it gets pass the IDE's checks. The agent picked in AI Chat also answers the IDE's AI features (ADR 0097) in text-only sessions on its connection, under the same gate, with context prepared by `AiService`.
 - Secrets go only to the OS credential store through `SecretStorage`.
 - The plugin API is a public contract (ADR 0003, 0058): `PublicAPI.txt` is checked by `PublicApiTests`; deprecate with `[Obsolete(DiagnosticId = "CODALUS0001")]`, never remove in a minor version; note changes in `docs/plugins.md`.
 - New dependencies: central package management (`Directory.Packages.props`), license recorded in `THIRD-PARTY-NOTICES.md`. No proprietary native binaries.
@@ -83,7 +83,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 ## CI and releases
 
-- `pipeline.yml` is the one pipeline: CI on every pull request, nightlies from `develop`, stable releases from `master`. `pages.yml` deploys the site and apt/dnf repositories; `compat.yml` is the manual old-.NET matrix.
+- `pipeline.yml` is the one pipeline: CI on every pull request, nightlies from `develop`, stable releases from `master`. A pull request tests what its files need (`eng/ci-scope.sh`): Linux x64 for most, every OS for the paths in `eng/ci-platform-paths.txt`, the `ci:full` label or a PR into `master`, a few projects for the areas in `eng/ci-isolated-paths.txt`. `develop`'s nightly (a schedule; a push to `develop` starts no run) and `master` test everything. `pages.yml` deploys the site and apt/dnf repositories; `compat.yml` is the manual old-.NET matrix.
 - A release is atomic: tests, smoke, packages, update and (stable) benchmarks and site gate the release's commit; any failure publishes nothing and removes the tag.
 - Benchmark numbers that decide something (a gate's verdict, `accepted.json` and its evidence, `budgets.json`) come from CI, both versions on the same runner in alternating rounds: never from a local machine, yours or a remote session's (`benchmarks/README.md`).
 - `VERSION` holds the next version; rules in `eng/Codalus.Release`. Packaging is `eng/package.sh` (Velopack); self-update is ADR 0029.
@@ -101,7 +101,7 @@ Before merging changes to platform-sensitive code (processes, paths, hosts, debu
 ## Git workflow
 
 - **All changes reach `develop`, `master` and an open `release/X.Y.Z` through pull requests.** Never push directly to any of them (a release branch's one push is its creation), and never force-push them.
-  - Features and fixes: a branch (or worktree) off `develop`, PR into `develop`. Push only complete units: the change with its tests, user guide and website updates, validated locally (and on WSL/the Mac when platform-sensitive). Every merge to `develop` becomes a nightly.
+  - Features and fixes: a branch (or worktree) off `develop`, PR into `develop`. Push only complete units: the change with its tests, user guide and website updates, validated locally (and on WSL/the Mac when platform-sensitive). `develop`'s head becomes a nightly once a night (the schedule in `pipeline.yml`), when its run passes.
   - Releases: once a milestone's checkpoint is validated and `develop` is green, cut `release/X.Y.Z` from `develop`'s head and PR it into `master`; never PR `develop` itself into `master`, so `develop` stays open. Right after the cut, a PR moves `develop`'s `VERSION` to the next minor version. A fix the release needs is a PR into `release/X.Y.Z`; a change to `.github/workflows` goes into both `develop` and the open release branch (the release's tag needs them equal). The pipeline publishes `v<VERSION>` from `master` and merges `master` back into `develop`. Steps: `docs/release/releasing.md`.
   - Hotfixes: a branch off `master` with `VERSION` bumped to the patch version, PR into `master`; the pipeline merges it back into `develop` (and an open release branch takes it by PR).
 - Wait for the PR's CI to pass and read every job's result before merging. The `protect` ruleset requires one check, `ci`, which sums up gate, test and smoke (a docs-only PR reports it too, with test and smoke skipped). A run stops at its first failed job: that job's error names it, and the rest show as cancelled. A `release/X.Y.Z` → `master` PR skips test and smoke when develop's own run passed on its head and it has all of `master` (ADR 0028); the release run tests it again. To try something on CI without a PR, use `eng/push-snapshot.sh` (the `validate` branch).

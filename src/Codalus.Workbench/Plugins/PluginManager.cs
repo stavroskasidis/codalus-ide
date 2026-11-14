@@ -98,7 +98,7 @@ public static class PluginHostLocator
         var exe = OperatingSystem.IsWindows() ? "codalus-pluginhost.exe" : "codalus-pluginhost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "pluginhost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "pluginhost", "codalus-pluginhost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 
@@ -210,6 +210,14 @@ public sealed class PluginManager : IAsyncDisposable
     public IReadOnlyList<(PluginDescription Plugin, ManifestLanguageModelProvider Provider)> LanguageModelProviderDeclarations =>
         [.. Plugins.Where(p => p.IsUsable && !p.IsDeclarative)
             .SelectMany(p => (p.Manifest!.Contributes?.LanguageModelProviders ?? []).Where(m => p.ActivationEvents.Contains("onLanguageModelProvider:" + m.Id)).Select(m => (p, m)))];
+
+    /// <summary>Receives plugins' AI tools as they register them (ADR 0092).</summary>
+    public IAiToolSink? AiToolSink { get; set; }
+
+    /// <summary>The AI tools the usable plugins declare (<c>contributes.aiTools</c>), with their plugin.</summary>
+    public IReadOnlyList<(PluginDescription Plugin, ManifestAiTool Tool)> AiToolDeclarations =>
+        [.. Plugins.Where(p => p.IsUsable && !p.IsDeclarative)
+            .SelectMany(p => (p.Manifest!.Contributes?.AiTools ?? []).Where(t => p.ActivationEvents.Contains("onAiTool:" + t.Name)).Select(t => (p, t)))];
 
     /// <summary>Where plugins' secrets go (the OS credential store); without it, secret requests fail.</summary>
     public Secrets.SecretStorage? Secrets { get; set; }
@@ -542,9 +550,9 @@ public sealed class PluginManager : IAsyncDisposable
             var command = Resolve(server.Command);
             var local = Path.Combine(folder, command);
             var arguments = (server.Args ?? []).Select(Resolve).ToArray();
-            ProcessLaunchInfo Launch() => File.Exists(local)
+            ProcessLaunchInfo Launch() => (File.Exists(local)
                 ? ProcessLaunchInfo.FromPath(local, arguments)
-                : new ProcessLaunchInfo(command, arguments);
+                : new ProcessLaunchInfo(command, arguments)) with { ToolTelemetryOptOut = true }; // a tool the IDE starts (M59)
             _workbench.LanguageServers.Register(new Languages.LanguageServiceDescriptor(server.Id, server.Name ?? plugin.DisplayName, [], null, Launch)
             {
                 Languages = server.Languages,
@@ -1234,6 +1242,7 @@ public sealed class PluginManager : IAsyncDisposable
 
         // Language model providers registered by this host's plugins (unregistered when the host crashes).
         private readonly ConcurrentDictionary<string, byte> _modelProviders = new(StringComparer.Ordinal);
+        private readonly ConcurrentDictionary<string, byte> _aiTools = new(StringComparer.Ordinal);
 
         public HostConnection(PluginManager manager, string group, ProcessLaunchInfo launch)
         {
@@ -1418,6 +1427,12 @@ public sealed class PluginManager : IAsyncDisposable
             {
                 _modelProviders.TryRemove(provider, out _);
                 _manager.LanguageModelSink?.ProviderUnregistered(provider);
+            }
+
+            foreach (var tool in _aiTools.Keys)
+            {
+                _aiTools.TryRemove(tool, out _);
+                _manager.AiToolSink?.ToolUnregistered(tool);
             }
 
             foreach (var visualizer in _visualizers.Keys)
@@ -1674,6 +1689,18 @@ public sealed class PluginManager : IAsyncDisposable
                 _manager.LanguageModelSink?.ProviderUnregistered(p.ProviderId);
             });
             connection.OnNotification(LanguageModelMethods.ChatPart, json.ChatPartParams, p => _manager.LanguageModelSink?.ChatPart(p));
+
+            // Tools for AI agents (proposed, ADR 0092).
+            connection.OnNotification(AiToolMethods.RegisterTool, json.AiToolParams, p =>
+            {
+                _aiTools[p.Name] = 0;
+                _manager.AiToolSink?.ToolRegistered(p.PluginId, p.Name, new HostingConnection(this));
+            });
+            connection.OnNotification(AiToolMethods.UnregisterTool, json.AiToolParams, p =>
+            {
+                _aiTools.TryRemove(p.Name, out _);
+                _manager.AiToolSink?.ToolUnregistered(p.Name);
+            });
             connection.OnRequest(HostingMethods.SecretsGet, json.SecretParams, json.SecretResult, async (p, ct) =>
                 new SecretResult(await Secrets.GetAsync(SecretOwner(p.PluginId), p.Key, ct).ConfigureAwait(false)));
             connection.OnRequest(HostingMethods.SecretsStore, json.SecretParams, json.EmptyResult, async (p, ct) =>

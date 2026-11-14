@@ -293,6 +293,54 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_page_fetches_one_screenshot_as_it_loads_and_the_rest_when_they_near_the_viewport()
+    {
+        // Lighthouse's throttled model counts every picture fetched before the headline's paint against the largest
+        // contentful paint: with the two spotlights' first pictures fetched at load (loading="lazy" alone fetches a
+        // picture a screen or two below the fold), the home page's was 3.1 s and its performance 94, under the 95 that
+        // eng/lighthouse.sh needs. So only the main screenshot is fetched with the page; every other one is lazy, inside
+        // the frame (.shot > figure, the picture its only child) that site.css doesn't render until it nears the viewport,
+        // which site.js does early.
+        var html = await Get(Options(), "");
+        var pictures = Regex.Matches(html, "<img src=\"assets/screenshots/(?<file>[^\"]+)\"(?<rest>[^>]*)>").ToList();
+        Assert.True(pictures.Count > 10, $"{pictures.Count} screenshots on the home page");
+        Assert.Equal(["editor-dark.png"], pictures.Where(p => !p.Groups["rest"].Value.Contains("loading=\"lazy\"", StringComparison.Ordinal)).Select(p => p.Groups["file"].Value));
+        var framed = Regex.Count(html, "<div class=\"shot[^\"]*\"[^>]*>\\s*<figure><img src=\"assets/screenshots/[^\"]+\"[^>]*loading=\"lazy\"[^>]*></figure>");
+        Assert.Equal(pictures.Count - 1, framed);
+
+        var css = await File.ReadAllTextAsync(Path.Combine(s_repoRoot, "website", "wwwroot", "assets", "site.css"), TestContext.Current.CancellationToken);
+        Assert.Matches(@"\.shot > figure:has\(> img\[loading=""lazy""\]:only-child\) \{[^}]*content-visibility: auto;[^}]*aspect-ratio: 1280 / 800;", css);
+        var script = await File.ReadAllTextAsync(Path.Combine(s_repoRoot, "website", "wwwroot", "assets", "site.js"), TestContext.Current.CancellationToken);
+        Assert.Contains("'.shot > figure > img[loading=\"lazy\"]:only-child'", script, StringComparison.Ordinal);
+        Assert.Contains("contentVisibility = \"visible\"", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_home_page_shows_the_ai_features_with_their_pictures_and_guide_sections()
+    {
+        var html = await Get(Options(), "");
+
+        // A spotlight of its own under the app models', AI Console first.
+        var tabs = Regex.Matches(html, "role=\"tab\" id=\"aitab-(?<key>[a-z]+)\" aria-controls=\"ai-\\k<key>\"").Select(m => m.Groups["key"].Value).ToList();
+        Assert.Equal(["console", "agent", "chat", "connect"], tabs);
+        Assert.InRange(html.IndexOf("id=\"ai\"", StringComparison.Ordinal), html.IndexOf("id=\"app-models\"", StringComparison.Ordinal), html.IndexOf("id=\"everything\"", StringComparison.Ordinal));
+        var guide = await Get(Options(), "docs/ai/");
+        foreach (var key in tabs)
+        {
+            var panel = Regex.Match(html, $"<div class=\"shot model\" role=\"tabpanel\" id=\"ai-{key}\"[^>]*>\\s*<figure><img src=\"(?<file>assets/screenshots/[^\"]+)\"(?<rest>.*?)href=\"docs/ai/#(?<anchor>[a-z-]+)\"", RegexOptions.Singleline);
+            Assert.True(panel.Success, $"no panel with a picture and a guide link for {key}");
+            Assert.True(File.Exists(Path.Combine(s_repoRoot, "website", "wwwroot", panel.Groups["file"].Value)), $"{key}'s {panel.Groups["file"].Value} doesn't exist");
+            Assert.Contains("loading=\"lazy\"", panel.Groups["rest"].Value, StringComparison.Ordinal);
+
+            // The section of the guide each one links to exists.
+            Assert.Contains($"id=\"{panel.Groups["anchor"].Value}\"", guide, StringComparison.Ordinal);
+        }
+
+        // Only the first shows as the page loads.
+        Assert.Single(Regex.Matches(html, "role=\"tabpanel\" id=\"ai-[a-z]+\" aria-labelledby=\"aitab-[a-z]+\">"));
+    }
+
+    [Fact]
     public void Every_screenshot_on_the_site_is_a_picture_the_smoke_test_saves()
     {
         // website/screenshots.txt: <picture on the site> <runner> <the smoke test's picture> (eng/update-screenshots.sh).
@@ -368,8 +416,8 @@ public sealed class WebsiteTests : IDisposable
         var guide = Path.Combine(repo, "docs", "user-guide");
         Directory.CreateDirectory(guide);
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
-        File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n");
-        // The guide's pages and headings the Home page's app models link to.
+        File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n\n### The first-run setup\n");
+        // The guide's pages and headings the Home page's hero, app models and AI features link to.
         foreach (var (page, body) in new[]
         {
             ("editing.md", "# Editing and navigating code\n"),
@@ -380,6 +428,8 @@ public sealed class WebsiteTests : IDisposable
             ("containers.md", "# Containers, Aspire and publishing\n\n## .NET Aspire\n"),
             ("wcf.md", "# WCF\n"),
             ("net-framework.md", "# .NET Framework\n"),
+            ("remote.md", "# Remote development\n"),
+            ("ai.md", "# AI assistance\n\n## AI Chat\n\n## The IDE's tools\n\n## Codalus as an MCP server\n\n### Connecting one\n\n## AI Console\n"),
         })
         {
             File.WriteAllText(Path.Combine(guide, page), body);

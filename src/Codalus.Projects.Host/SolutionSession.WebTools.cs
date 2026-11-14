@@ -1,3 +1,4 @@
+using Codalus.Platform.Internal;
 using System.Diagnostics;
 using System.Text;
 using Codalus.Projects.Host.Packages;
@@ -227,7 +228,7 @@ internal sealed partial class SolutionSession
     {
         var psi = DotnetProcess.StartInfo(_dotnet, directory, args);
         psi.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
-        psi.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(psi.Environment); // the tools' telemetry opt-outs (M59)
         DotnetProcess.NoLingeringBuildProcesses(psi); // the generator builds the project
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;

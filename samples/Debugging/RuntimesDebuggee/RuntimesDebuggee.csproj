@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- One console app built for several .NET versions, for the debugger on other runtimes than the one the tests run
+       on: the x64 runtimes of an Apple silicon Mac, under Rosetta 2 (DebuggerBundleTests; M58b, ADR 0094). C# 7.3, so
+       every one of them compiles it with its own defaults. The frameworks out of support are here on purpose. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>netcoreapp3.1;net5.0;net6.0;net8.0;net10.0;net11.0</TargetFrameworks>
+    <LangVersion>7.3</LangVersion>
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <NuGetAudit>false</NuGetAudit>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+</Project>

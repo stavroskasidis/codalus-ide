@@ -13,6 +13,7 @@ Some shortcuts belong to the operating system or the desktop, which takes them b
 | Complete Word | Ctrl+Alt+Space | Ctrl+Alt+Space | ⌃. |
 | Completion list filters (while the list is open) | Alt+C, Alt+I, Alt+E… | Alt+C, Alt+I, Alt+E… | ⌥C, ⌥I, ⌥E… |
 | Apply Top Fix (Quick Info's Fix) | Alt+. | Alt+. | ⌥. |
+| Trigger Inline Suggestion (AI, at the caret) | Alt+\ | Alt+\ | ⌥\ |
 
 - **The completion list's filters** take Alt and a letter only while the list is open, so the menus' Alt keys and, on macOS, ⌥ characters work as usual otherwise ([the letters](editing.md#intellisense)). With the Emacs scheme, Alt+F, Alt+V and Alt+X stay Emacs's. Alt+J is the target type matches filter.
 

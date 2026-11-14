@@ -210,4 +210,12 @@ public static class LineDiff
 
         return result;
     }
+
+    /// <summary>
+    /// The first line (1-based) of <paramref name="newText"/> that differs from <paramref name="oldText"/>: an added or
+    /// changed line, or the line under removed ones (one past the last line when the end was removed). Null when their lines
+    /// are the same. Git Changes opens a file there.
+    /// </summary>
+    public static int? FirstChangedLine(string oldText, string newText) =>
+        Changes(Lines(oldText), Lines(newText)) is [var first, ..] ? first.Line : null;
 }

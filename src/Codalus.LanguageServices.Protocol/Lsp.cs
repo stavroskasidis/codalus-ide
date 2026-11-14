@@ -93,6 +93,9 @@ public sealed record ServerCapabilities
 
     public bool InlayHintProvider { get; init; }
 
+    /// <summary>LSP 3.17's <c>textDocument/inlineValue</c> (M62).</summary>
+    public bool InlineValueProvider { get; init; }
+
     public CodeLensOptions? CodeLensProvider { get; init; }
 
     public bool SelectionRangeProvider { get; init; }
@@ -639,6 +642,35 @@ public sealed record InlayHint(Position Position, string Label)
 
     /// <summary>Always <see cref="MarkupContent"/> here (LSP also allows a string).</summary>
     public MarkupContent? Tooltip { get; init; }
+}
+
+// ------------------------------------------------------------------ inline values (LSP 3.17, M62)
+
+/// <summary>The stopped frame of <c>textDocument/inlineValue</c>: its id and where it stopped.</summary>
+public sealed record InlineValueContext(int FrameId, Range StoppedLocation);
+
+public sealed record InlineValueParams(TextDocumentIdentifier TextDocument, Range Range, InlineValueContext Context);
+
+/// <summary>
+/// One of LSP's three inline values in one record: <c>InlineValueText</c> (<see cref="Text"/>),
+/// <c>InlineValueVariableLookup</c> (<see cref="CaseSensitiveLookup"/> set, with <see cref="VariableName"/>) or
+/// <c>InlineValueEvaluatableExpression</c> (<see cref="Expression"/>).
+/// </summary>
+public sealed record InlineValue(Range Range)
+{
+    public string? Text { get; init; }
+
+    public string? VariableName { get; init; }
+
+    public bool? CaseSensitiveLookup { get; init; }
+
+    public string? Expression { get; init; }
+
+    /// <summary>A variable the frame's scopes hold (a local or a parameter), by name.</summary>
+    public static InlineValue Lookup(Range range, string name, bool caseSensitive = true) => new(range) { VariableName = name, CaseSensitiveLookup = caseSensitive };
+
+    /// <summary>An expression the debugger evaluates (a field, an auto-property's backing field).</summary>
+    public static InlineValue Evaluate(Range range, string expression) => new(range) { Expression = expression };
 }
 
 /// <summary>LSP's <c>Command</c>: <see cref="CommandId"/> is its <c>command</c> property.</summary>

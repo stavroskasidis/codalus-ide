@@ -114,6 +114,9 @@ The plugin API, version 1.2.0: every public type and member of `Codalus.Plugins.
 
 ## Codalus.Plugins.Proposed
 
+- [`AiTool`](#aitool)
+- [`AiToolException`](#aitoolexception)
+- [`AiToolResult`](#aitoolresult)
 - [`ChatFinishReason`](#chatfinishreason)
 - [`ChatMessage`](#chatmessage)
 - [`ChatRequest`](#chatrequest)
@@ -122,6 +125,7 @@ The plugin API, version 1.2.0: every public type and member of `Codalus.Plugins.
 - [`ChatRole`](#chatrole)
 - [`ChatTool`](#chattool)
 - [`ChatToolCall`](#chattoolcall)
+- [`IAiTools`](#iaitools)
 - [`ILanguageModels`](#ilanguagemodels)
 - [`IProposedApi`](#iproposedapi)
 - [`IProposedApiProvider`](#iproposedapiprovider)
@@ -1637,6 +1641,41 @@ The open solution. `WorkspaceSolution.SdkPath` is the .NET SDK folder MSBuild us
 | `string? SdkPath { get; init; }` | The .NET SDK folder MSBuild uses. |
 | `bool Trusted { get; init; }` | Whether the user trusts its folder (only then are projects evaluated). |
 
+### `AiTool`
+
+`abstract class Codalus.Plugins.Proposed.AiTool`
+
+A tool for AI agents. Calls come on any thread and are cancelled when the agent's turn is stopped. The arguments follow the manifest's input schema, but come from a model: check them.
+
+| Member | Description |
+|---|---|
+| `string Name { get; }` | The name in the manifest, e.g. `lint_sql`. |
+| `Task<AiToolResult> InvokeAsync(JsonElement arguments, CancellationToken cancellationToken)` | Runs the tool. Throw `AiToolException` for a failure the agent should read. |
+
+### `AiToolException`
+
+`sealed class Codalus.Plugins.Proposed.AiToolException` : Exception
+
+A tool's failure, which the agent reads as the call's error.
+
+| Member | Description |
+|---|---|
+| `AiToolException()` | A failure without a message. |
+| `AiToolException(string message)` | A failure the agent reads as `message`. |
+| `AiToolException(string message, Exception innerException)` | A failure the agent reads as `message`, caused by `innerException`. |
+
+### `AiToolResult`
+
+`record Codalus.Plugins.Proposed.AiToolResult`
+
+What a tool answers: text for the model, and whether it failed.
+
+| Member | Description |
+|---|---|
+| `AiToolResult(string Text, bool IsError = false)` | What a tool answers: text for the model, and whether it failed. |
+| `bool IsError { get; init; }` | Whether the call failed (the text says why). |
+| `string Text { get; init; }` | The answer; the IDE redacts secrets in it. |
+
 ### `ChatFinishReason`
 
 `enum Codalus.Plugins.Proposed.ChatFinishReason`
@@ -1745,6 +1784,16 @@ A call of a tool.
 | `string Id { get; init; }` | The provider's id of the call, sent back in `ChatMessage.ToolCallId`. |
 | `string Name { get; init; }` | The tool. |
 
+### `IAiTools`
+
+`interface Codalus.Plugins.Proposed.IAiTools`
+
+Tools for AI agents (proposed, ADR 0092): a plugin gives AI Chat's agents (the built-in one and external agents) and agents that reach the IDE through `codalus mcp` a tool of its own, beside the IDE's. A tool is declared in the manifest (`contributes.aiTools`: its name, description and input schema), so agents see it before the plugin runs, and registered when its plugin activates (`onAiTool:<name>`, implicit), at its first call. The user allows every call first, and what the tool returns is redacted before an agent sees it.
+
+| Member | Description |
+|---|---|
+| `IDisposable RegisterTool(AiTool tool)` | Registers the tool whose `AiTool.Name` the manifest declares. Dispose to unregister. |
+
 ### `ILanguageModels`
 
 `interface Codalus.Plugins.Proposed.ILanguageModels`
@@ -1763,6 +1812,7 @@ Proposed APIs (ADR 0003): not yet covered by the versioning policy and free to c
 
 | Member | Description |
 |---|---|
+| `IAiTools AiTools { get; }` | Tools for AI agents (ADR 0092). |
 | `ILanguageModels LanguageModels { get; }` | Language model providers for AI assistance (M28a, ADR 0062). |
 
 ### `IProposedApiProvider`

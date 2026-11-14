@@ -16,6 +16,12 @@ public sealed record DebugAdapterStartInfo(
     /// <summary>Starts the adapter through a remote server (M21, ADR 0050) instead of here; null: this machine.</summary>
     public Codalus.Rpc.IProcessLauncher? Launcher { get; init; }
 
+    /// <summary>
+    /// The adapter is the Codalus debugger (<c>codalus-debughost --clr-dap</c>), where the arguments don't show it: on
+    /// another machine its command is inside a shell's (M58b, ADR 0094).
+    /// </summary>
+    public bool IsCodalus { get; init; }
+
     /// <summary>A folder for netcoredbg's DAP logs (<c>--engineLogging</c>), to diagnose a session.</summary>
     public const string LogVariable = "CODALUS_NETCOREDBG_LOG";
 

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Text.Json;
+using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Codalus.LanguageServices.Protocol;
@@ -48,6 +50,84 @@ public sealed class AiSurfacesTests
     }
 
     private static IReadOnlyList<string?> Headers(IEnumerable<Control> items) => [.. items.OfType<MenuItem>().Select(i => i.Header as string)];
+
+    private static void Git(string directory, params string[] arguments)
+    {
+        var start = new ProcessStartInfo("git") { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        foreach (var argument in arguments)
+        {
+            start.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(start)!;
+        var error = process.StandardError.ReadToEndAsync();
+        process.StandardOutput.ReadToEnd();
+        process.WaitForExit();
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+    }
+
+    /// <summary>
+    /// Write the Commit Message with AI describes what Commit will commit: with nothing staged, all the changes, new files
+    /// included, as Commit All commits them (it said "Stage the changes first" in the status bar, which looked like nothing
+    /// happened). While it writes, Git Changes says so with a bar under the message and its ✦ button waits (ADR 0097).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task With_nothing_staged_the_commit_message_describes_all_changes_and_Git_Changes_shows_it_being_written()
+    {
+        using var release = new ManualResetEventSlim();
+        await using var server = MockModelServers.OpenAI(request =>
+        {
+            if (request.Body.Contains("You write git commit messages", StringComparison.Ordinal))
+            {
+                release.Wait(TimeSpan.FromSeconds(60)); // held until the test has seen it being written
+                return "Add a greeting and a helper";
+            }
+
+            return "It's explained.";
+        });
+        var (f, _) = await SetUpAsync(server);
+        await using var _ = f;
+        var folder = f.CopySample("BuildAndRun");
+        Git(folder, "init", "-q", "-b", "main");
+        Git(folder, "config", "user.name", "Ada Tester");
+        Git(folder, "config", "user.email", "ada@example.com");
+        Git(folder, "config", "commit.gpgsign", "false");
+        Git(folder, "config", "core.autocrlf", "false");
+        File.WriteAllText(System.IO.Path.Combine(folder, ".gitignore"), "bin/\nobj/\n");
+        Git(folder, "add", ".");
+        Git(folder, "commit", "-q", "-m", "initial");
+        f.Shell.Trust.Trust(System.IO.Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(System.IO.Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Git.Status is { Branch: "main" });
+
+        // An edit and a new file, nothing staged: Commit All would commit both.
+        var greeter = System.IO.Path.Combine(folder, "src", "Greetings", "Greeter.cs");
+        File.WriteAllText(greeter, "// a greeting\n" + File.ReadAllText(greeter));
+        File.WriteAllText(System.IO.Path.Combine(folder, "src", "Greetings", "Helper.cs"), "class Helper { }\n");
+        await f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => f.Shell.GitChanges.Changes.Count >= 2 && !f.Shell.GitChanges.HasStaged);
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any(v => v.IsEffectivelyVisible));
+        var view = f.Window.GetVisualDescendants().OfType<GitChangesView>().First(v => v.IsEffectivelyVisible);
+        var sparkle = view.GetVisualDescendants().OfType<Button>().Single(b => b.Tag as string == "ai.generateCommitMessage");
+        Assert.True(sparkle.IsEffectivelyEnabled);
+
+        var writing = f.Shell.GenerateCommitMessageAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.GitChanges.IsWritingMessage && view.FindControl<Grid>("WritingMessage")!.IsEffectivelyVisible);
+        Assert.False(sparkle.IsEffectivelyEnabled); // one at a time
+        release.Set();
+        await writing;
+
+        Assert.Equal("Add a greeting and a helper", f.Shell.GitChanges.Message);
+        Assert.False(f.Shell.GitChanges.IsWritingMessage);
+        ShellFixture.Pump();
+        Assert.False(view.FindControl<Grid>("WritingMessage")!.IsEffectivelyVisible);
+        Assert.True(sparkle.IsEffectivelyEnabled);
+        var question = LastQuestion(server);
+        Assert.Contains("nothing is staged", question, StringComparison.Ordinal);
+        Assert.Contains("+// a greeting", question, StringComparison.Ordinal);
+        Assert.Contains("+class Helper { }", question, StringComparison.Ordinal);
+    }
 
     [AvaloniaFact]
     public async Task The_Error_Lists_menu_offers_Fix_and_Explain_with_AI_while_AI_is_on()

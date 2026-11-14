@@ -10,12 +10,13 @@
 - **Stack profiles**: a trace holds up to four, each viewed like the CPU's. A sample has a weight: 1 for a CPU sample or an exception, the KB an allocation tick stands for, the microseconds a contention waited; totals and widths are sums of weights. Allocations and exceptions add their type as a leaf frame (module `[type]`, `[exception]`), contention a `Lock contention` frame.
 - **Samples**: EventPipe's sample profiler sees every managed thread once a millisecond; a sample's "total" is having a function (or line) on its stack, "self" running in it. Percentages are of the filter's samples (`total`).
 - **Cancellation**: `$/cancelRequest` cancels a session start, a stop, or the opening of a trace.
+- **Targets** (protocol 2, M63b, [ADR 0102](adr/0102-services-under-the-debugger.md#what-m63b-built-2026-11-14)): a session runs on a process of this machine by its `processId`, or, with `diagnosticPort`, on the runtime that connects to that Unix socket (`processId` is then 0 and ignored). That is how a compose service in its container is reached: its runtime is started with `DOTNET_DiagnosticPorts=<path in the container>,connect,nosuspend` naming a socket in a folder mounted from this machine, and the host listens at `diagnosticPort`, the same socket's path here (Microsoft.Diagnostics.NETCore.Client's `DiagnosticsClientConnector.FromDiagnosticPort` in listen mode). The runtime connects while nothing listens again and again without waiting (`nosuspend`), so a start accepts it within half a second; a start that no runtime connects to within 30 s fails with `NotAvailable`, saying why (the service doesn't run in fast mode, or its engine's file sharing doesn't carry Unix sockets: Docker Desktop). The host opens its socket to every user (0666: a service's user is the image's, `$APP_UID`, not this one) and binds a path longer than a socket takes (100 bytes) through a link to its folder in the temp folder. One listener serves every session on a socket at once (each command takes the runtime's next connection) and closes with the last of them, so the next start accepts the runtime that runs then (a restarted service is a new runtime). The name a session reports is the socket's (the service's); File I/O has no counters for such a target (its process isn't one of this machine's), and `diag/resume` takes a process only.
 
 ## Lifecycle
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `initialize` | `{processId, protocolVersion}` | `{name, version, protocolVersion}` | The first request after every (re)start. `processId` (the shell) is left out of process lists. |
+| `initialize` | `{processId, protocolVersion}` | `{name, version, protocolVersion}` | The first request after every (re)start. `processId` (the shell) is left out of process lists. The protocol is `2` since M63b (targets by `diagnosticPort`). |
 | `shutdown` (request), `exit` (notification) | | | |
 
 ## Processes
@@ -29,7 +30,7 @@
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `diag/counters/start` | `{session, processId, providers: [{name, kind (eventCounters \| meter), counters?}], intervalSeconds, runtimeEvents}` | `{processName}` | EventCounters of each EventSource (`EventCounterIntervalSec`); meters through `System.Diagnostics.Metrics` (`counters` names instruments); with `runtimeEvents`, the runtime's GC and first-chance exception events. |
+| `diag/counters/start` | `{session, processId, providers: [{name, kind (eventCounters \| meter), counters?}], intervalSeconds, runtimeEvents, diagnosticPort?}` | `{processName}` | EventCounters of each EventSource (`EventCounterIntervalSec`); meters through `System.Diagnostics.Metrics` (`counters` names instruments); with `runtimeEvents`, the runtime's GC and first-chance exception events. |
 | `diag/counters/stop` | `{session}` | `{}` | |
 | `diag/counters/update` | notification (host → shell) | `{session, at, values: [{provider, name, displayName, unit?, value, kind (gauge \| rate \| percentile), tags?}]}` | Four times a second at most. `at`: seconds since the session started. A histogram gives one value per percentile, named `<instrument> P50` and so on. |
 | `diag/runtimeEvents` | notification (host → shell) | `{session, events: [{at, kind (gc \| exception), text, generation?, durationMilliseconds?, type?}]}` | A GC when it ends, with its generation, reason and duration; an exception with its type and message. |
@@ -39,7 +40,7 @@
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `diag/trace/start` | `{session, processId, outputPath, tools?, providers?: [{name, keywords, level, arguments?}]}` | `{processName}` | The `tools` (`cpu` (the default), `allocations`, `async`, `threads`, `exceptions`, `fileio`, `activities`) with the runtime's loader, JIT, ReadyToRun and IL-to-native-map events, plus any extra EventSource or EventPipe `providers`, in one session streamed to `outputPath` (`.nettrace`). With `fileio`, the process's I/O counters go next to it (`name.io.json`). |
+| `diag/trace/start` | `{session, processId, outputPath, tools?, providers?: [{name, keywords, level, arguments?}], diagnosticPort?}` | `{processName}` | The `tools` (`cpu` (the default), `allocations`, `async`, `threads`, `exceptions`, `fileio`, `activities`) with the runtime's loader, JIT, ReadyToRun and IL-to-native-map events, plus any extra EventSource or EventPipe `providers`, in one session streamed to `outputPath` (`.nettrace`). With `fileio`, the process's I/O counters go next to it (`name.io.json`). |
 | `diag/trace/stop` | `{session}` | `{path, bytes, durationSeconds}` | Stops the session (the runtime writes rundown) and waits for the file. |
 | `diag/trace/open` | `{path}` | `{trace, path, processName?, processId?, durationMilliseconds, samples, externalSamples, functions, threads: [{id, name, samples}], profiles: [{kind, unit, total, events}], events, tasks, requests, commands, spans, threadPoolEvents, fileIo}` | Reads the file in one pass (a `.etlx` conversion in the temp folder); source lines are resolved in the background. `profiles` lists the stack profiles with samples; the counts say what the other views have. |
 | `diag/trace/close` | `{trace}` | `{}` | |
@@ -75,7 +76,7 @@
 
 | Method | Params | Result | Notes |
 |---|---|---|---|
-| `diag/heap/snapshot` | `{processId, outputPath}` | `{path, bytes}` | A GC heap snapshot (an induced full GC that reports the heap, as dotnet-gcdump takes one), kept as a `.nettrace`. |
+| `diag/heap/snapshot` | `{processId, outputPath, diagnosticPort?}` | `{path, bytes}` | A GC heap snapshot (an induced full GC that reports the heap, as dotnet-gcdump takes one), kept as a `.nettrace`. |
 | `diag/heap/open` | `{path}` | `{snapshot, path, objects, bytes, types, roots}` | |
 | `diag/heap/close` | `{snapshot}` | `{}` | |
 | `diag/heap/types` | `{snapshot, baseline?, search?, offset, count}` | `{objects, bytes, types: [{id, name, count, bytes, countDelta?, bytesDelta?}], more}` | By bytes; with a `baseline` (another open snapshot), the changes by name, the most growth first (gone types have `id` -1). |
@@ -86,7 +87,7 @@
 | Code | Meaning |
 |---|---|
 | -33300 | No process with that id, or it exited. |
-| -33301 | The process has no diagnostics port, or refused the session (not .NET, .NET Core before 3.0, the port disabled). |
+| -33301 | The process has no diagnostics port, or refused the session (not .NET, .NET Core before 3.0, the port disabled); for a `diagnosticPort`, no runtime connected to it in time, or its folder isn't there. |
 | -33302 | No such session. |
 | -33303 | The trace or snapshot isn't open (the shell opens it again and retries). |
 | -33304 | The trace couldn't be read or recorded; the message says why. |

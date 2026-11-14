@@ -40,7 +40,7 @@ Writing plugins is covered in [plugins.md](../plugins.md), with the [API referen
 |---|---|---|
 | General | `Ctrl+Q` | Feature Search: commands, settings and Options pages |
 | | `Ctrl+Shift+P` | Command palette |
-| | `Ctrl+Alt+I` | AI Chat |
+| | `Ctrl+Alt+I` | AI Console (AI Chat until an agent with its own CLI is connected) |
 | | `Ctrl+,` | Code Search (go to all) |
 | | `Alt+F6`, `Alt+Shift+F6` | Move focus between panes |
 | | `Ctrl+Alt+L`, `Ctrl+;` | Solution Explorer, search it |

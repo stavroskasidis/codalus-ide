@@ -191,7 +191,7 @@ public sealed class PreviewerSession : IAsyncDisposable
             }
         }
 
-        start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         var agentToken = Guid.NewGuid().ToString("N");
         ApplyAgentEnvironment(start.Environment, launch, agentPort, agentToken);
 

@@ -25,4 +25,20 @@ internal static class UiStallMonitorAssertions
         Assert.True(report.Probes > 0, $"{flow}: the stall monitor saw no probe answered");
         Assert.True(report.LongestMilliseconds <= budgetMilliseconds, $"{flow}: the UI thread didn't answer input for {report.Describe()}; the budget is {budgetMilliseconds:0} ms");
     }
+
+    /// <summary>
+    /// Holds the UI thread, as a job that blocks it does, until a probe of the monitor has waited
+    /// <paramref name="milliseconds"/> for it. A sleep of that length measures less whenever the monitor's thread posts
+    /// its probe late into it, which a busy runner allows (Windows CI, run 43178619011: 154 ms of a 300 ms sleep, with
+    /// eleven threads waiting for a processor six seconds before).
+    /// </summary>
+    public static void HoldUntilAProbeWaited(this UiStallMonitor monitor, double milliseconds)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!(monitor.WaitingSince is var since and not 0 && System.Diagnostics.Stopwatch.GetElapsedTime(since).TotalMilliseconds >= milliseconds))
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"The stall monitor posted no probe that waited {milliseconds:0} ms in 30 s of a held UI thread: {monitor.Report().Describe()}");
+            Thread.Sleep(1);
+        }
+    }
 }

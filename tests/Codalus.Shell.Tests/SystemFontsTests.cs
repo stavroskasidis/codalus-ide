@@ -17,6 +17,23 @@ public sealed class SystemFontsTests
         Assert.IsType<ShellSystemFonts>(FontManager.Current.SystemFonts);
 
     [AvaloniaFact]
+    public void A_family_the_platform_has_no_font_for_is_said_so_for_a_window_that_cant_lay_out_its_text()
+    {
+        // What a shell window's failed first layout prints (ShellFixture, Linux CI, run 43245449152): the collection's
+        // reason for its last failed lookup, and the default family's state.
+        using var fonts = ShellSystemFonts.Create();
+        Assert.Null(fonts.LastFailure);
+        var found = fonts.TryGetGlyphTypeface("No Such Family 3f9c", FontStyle.Normal, FontWeight.Normal, FontStretch.Normal, out _);
+        Assert.SkipWhen(found, "The platform matches a font for a family it doesn't have.");
+
+        Assert.Contains("the platform matched no font for 'No Such Family 3f9c'", fonts.LastFailure, StringComparison.Ordinal);
+        var state = ShellFixture.FontState((GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2)));
+        Assert.Contains($"The default family is '{FontManager.Current.DefaultFontFamily.Name}'", state, StringComparison.Ordinal);
+        Assert.Contains("Asked again, its regular face is found", state, StringComparison.Ordinal);
+        Assert.DoesNotContain("Skia matches nothing", state, StringComparison.Ordinal);
+    }
+
+    [AvaloniaFact]
     public void A_bold_italic_the_collection_has_no_face_for_yet_is_bold_and_slanted()
     {
         using var fonts = ShellSystemFonts.Create();

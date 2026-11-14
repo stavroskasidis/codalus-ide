@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- M61 (ADR 0100): AsyncLib's file compiled for runtime async, called by the state-machine program. -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Features>$(Features);runtime-async=on</Features>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\AsyncLib\*.cs" />
+  </ItemGroup>
+</Project>

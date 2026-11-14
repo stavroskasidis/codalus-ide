@@ -428,6 +428,144 @@ public sealed class CompoundDebugAdapterTests
         Assert.Equal(M + 1, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent)[1].ThreadId);
     }
 
+    private static async Task<(CompoundDebugAdapter Compound, FakeAdapter Api, FakeAdapter Worker, List<DapEvent> Events)> ProgramsAsync(bool breakAll, FakeAdapter? worker = null)
+    {
+        var api = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        worker ??= new FakeAdapter([new DapThread(1, "Main Thread")]);
+        var compound = new CompoundDebugAdapter(api, "Api", independent: true) { BreakAllOnStop = breakAll };
+        var events = new List<DapEvent>();
+        compound.EventReceived += e =>
+        {
+            lock (events)
+            {
+                events.Add(e);
+            }
+
+            return Task.CompletedTask;
+        };
+        await compound.AddAsync(worker, "Worker", _ => Task.CompletedTask, Ct);
+        return (compound, api, worker, events);
+    }
+
+    private static int Count(FakeAdapter adapter, string request)
+    {
+        lock (adapter.Requests)
+        {
+            return adapter.Requests.Count(r => r == request);
+        }
+    }
+
+    [Fact]
+    public async Task A_stop_in_one_program_pauses_the_others_and_they_go_on_with_it()
+    {
+        // M58: as the classic IDE's "Break all processes when one process breaks".
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true);
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Requested(worker, "pause 0"));
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("pause", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+
+        // Only the breakpoint shows; the paused program's threads can be read meanwhile.
+        Assert.Equal([M], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
+        await compound.StackTraceAsync(M + 1, 20, Ct);
+        Assert.True(Requested(worker, "stackTrace 1"));
+
+        // A step: the other program runs during it, and pauses again at its end.
+        await compound.NextAsync(M, Ct);
+        Assert.True(Requested(api, "next 1"));
+        Assert.Equal(1, Count(worker, "continue 1"));
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("step", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Count(worker, "pause 0") == 2);
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("pause", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+
+        // Continue: both go on, and the pause never showed as a stop of its own.
+        await compound.ContinueAsync(M, Ct);
+        Assert.True(Requested(api, "continue 1"));
+        Assert.Equal(2, Count(worker, "continue 1"));
+        await Task.Delay(100, Ct);
+        Assert.Equal(["breakpoint", "step"], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.Reason));
+    }
+
+    [Fact]
+    public async Task A_program_that_pauses_after_the_stopped_one_went_on_goes_on_too()
+    {
+        var gate = new TaskCompletionSource();
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true, new FakeAdapter([new DapThread(1, "Main Thread")]) { PauseGate = gate.Task });
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await compound.ContinueAsync(M, Ct); // before the other program paused
+        gate.SetResult();
+        await WaitAsync(() => Requested(worker, "pause 0"));
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("pause", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Requested(worker, "continue 1"));
+        Assert.Single(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent));
+    }
+
+    [Fact]
+    public async Task A_step_in_a_program_paused_for_another_lets_the_stopped_one_go_on_and_shows_the_steps_end()
+    {
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true);
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Requested(worker, "pause 0"));
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("pause", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+
+        // The user selects the paused program's thread and steps there.
+        await compound.NextAsync(M + 1, Ct);
+        Assert.True(Requested(worker, "next 1"));
+        Assert.True(Requested(api, "continue 1"));
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("step", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        Assert.Equal([M, M + 1], Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Select(s => s.ThreadId));
+        await WaitAsync(() => Requested(api, "pause 0"));
+    }
+
+    [Fact]
+    public async Task Two_programs_at_breakpoints_show_one_after_the_other()
+    {
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true, new FakeAdapter([new DapThread(1, "Main Thread")]) { PauseError = new DapException("pause", "The program is stopped.") });
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        Assert.Single(Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent));
+
+        // Continue from the first: the second's own stop shows (it isn't continued), and the first pauses for it.
+        await compound.ContinueAsync(M, Ct);
+        await WaitAsync(() => Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Length == 2);
+        Assert.Equal(M + 1, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent)[1].ThreadId);
+        Assert.False(Requested(worker, "continue 1"));
+        await WaitAsync(() => Requested(api, "pause 0"));
+    }
+
+    [Fact]
+    public async Task A_program_whose_debugger_cant_pause_for_another_keeps_running()
+    {
+        // netcoredbg: on Windows a program it paused for another's stop never went on (PR #323's run 43035898820).
+        var (compound, api, worker, events) = await ProgramsAsync(breakAll: true, new FakeAdapter([new DapThread(1, "Main Thread")]) { Capabilities = new() });
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await compound.ContinueAsync(M, Ct);
+        await Task.Delay(100, Ct);
+        Assert.False(Requested(worker, "pause 0"));
+        Assert.False(Requested(worker, "continue 1"));
+
+        // Its own stop still pauses the program that can.
+        await worker.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await WaitAsync(() => Requested(api, "pause 0"));
+        Assert.Equal(2, Events(events, DapEvents.Stopped, DapJsonContext.Default.StoppedEvent).Length);
+    }
+
+    [Fact]
+    public async Task With_the_setting_off_a_stop_leaves_the_other_programs_running()
+    {
+        var (compound, api, worker, _) = await ProgramsAsync(breakAll: false);
+        await using var session = compound;
+        await api.RaiseAsync(DapEvents.Stopped, new StoppedEvent("breakpoint", ThreadId: 1), DapJsonContext.Default.StoppedEvent);
+        await compound.NextAsync(M, Ct);
+        await Task.Delay(100, Ct);
+        Assert.False(Requested(worker, "pause 0"));
+        Assert.False(Requested(worker, "continue 1"));
+    }
+
     private static bool Requested(FakeAdapter adapter, string request)
     {
         lock (adapter.Requests)
@@ -648,6 +786,89 @@ public sealed class CompoundDebugAdapterTests
         Assert.Equal([1], stop.HitBreakpointIds!);
     }
 
+    [Fact]
+    public async Task Ending_one_program_alone_returns_after_its_end_is_reported_even_when_its_own_end_came_first()
+    {
+        // The program's own end (its adapter's Closed, on the thread pool) and EndPartAsync race to end it; the first one
+        // reports it. EndPartAsync returned as soon as it saw the program ended, before that report (macOS CI, run
+        // 43597436045: the test below found no "ended" event right after EndPartAsync).
+        var adapters = new[] { new FakeAdapter([new DapThread(1, "Main Thread")]), new FakeAdapter([new DapThread(1, "Main Thread")]) { AfterClose = TimeSpan.FromMilliseconds(200) } };
+        var compound = new CompoundDebugAdapter(adapters[0], "Service 0", independent: true);
+        await compound.AddAsync(adapters[1], "Service 1", _ => Task.CompletedTask, Ct);
+        var reported = 0;
+        compound.PartChanged += (_, e) =>
+        {
+            if (e.Ended)
+            {
+                Thread.Sleep(400); // the report takes longer than the disconnect
+                Volatile.Write(ref reported, 1);
+            }
+        };
+
+        await compound.EndPartAsync(1, Ct);
+        Assert.Equal(1, Volatile.Read(ref reported));
+        Assert.False(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
+    public async Task A_session_holds_every_service_of_an_app_and_ends_one_alone_while_the_others_run()
+    {
+        // M63 (ADR 0102): every .NET service of a compose app, or every project of an AppHost, in one session (eight
+        // programs at most before); one of them ends alone (a service stopped, detached or restarted), its adapter
+        // disconnected and disposed, and the others go on.
+        Assert.True(M >= 64);
+        var adapters = Enumerable.Range(0, 20).Select(_ => new FakeAdapter([new DapThread(1, "Main Thread")])).ToList();
+        var compound = new CompoundDebugAdapter(adapters[0], "Service 0", independent: true);
+        var parts = new List<CompoundPartEvent>();
+        compound.PartChanged += (_, e) =>
+        {
+            lock (parts)
+            {
+                parts.Add(e);
+            }
+        };
+        for (var i = 1; i < adapters.Count; i++)
+        {
+            await compound.AddAsync(adapters[i], $"Service {i}", _ => Task.CompletedTask, Ct);
+        }
+
+        Assert.Equal(20, (await compound.ThreadsAsync(Ct)).Length);
+        await compound.ContinueAsync(M + 19, Ct);
+        Assert.Contains("continue 1", adapters[19].Requests);
+        Assert.DoesNotContain("continue 1", adapters[3].Requests);
+
+        await compound.EndPartAsync(19, Ct);
+        Assert.Contains("disconnect True", adapters[19].Requests);
+        Assert.True(adapters[19].Disposed);
+        Assert.Contains(parts, p => p is { Name: "Service 19", Index: 19, Ended: true });
+        Assert.DoesNotContain(adapters.Take(19), a => a.Requests.Contains("disconnect True"));
+        Assert.False(compound.Closed.IsCompleted);
+        Assert.Equal(19, (await compound.ThreadsAsync(Ct)).Length);
+        await compound.EndPartAsync(19, Ct); // ended already: nothing more
+
+        // A restart holds the session open while the program is the only one left, and its new start joins.
+        for (var i = 1; i < 19; i++)
+        {
+            await compound.EndPartAsync(i, Ct);
+        }
+
+        compound.Reserve(1);
+        await compound.EndPartAsync(0, Ct);
+        Assert.False(compound.Closed.IsCompleted);
+        var again = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        await compound.AddAsync(again, "Service 0", _ => Task.CompletedTask, Ct);
+        await compound.ReleaseAsync();
+        Assert.False(compound.Closed.IsCompleted);
+        Assert.Equal([new DapThread(M + 20, "Service 0: Main Thread")], await compound.ThreadsAsync(Ct)); // a place of its own: the ended ones keep theirs
+
+        await again.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.True(compound.Closed.IsCompleted);
+
+        // A session of programs that end with each other ends no one of them alone.
+        var server = new CompoundDebugAdapter(new FakeAdapter([new DapThread(1, "Main Thread")]), "Server");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => server.EndPartAsync(0, Ct));
+    }
+
     /// <summary>An adapter that records its requests: thread 1, frame 7, scope reference 9.</summary>
     internal sealed class FakeAdapter(DapThread[] threads) : IDebugAdapter
     {
@@ -681,7 +902,7 @@ public sealed class CompoundDebugAdapterTests
 
         public Task DisconnectGate { get; init; } = Task.CompletedTask;
 
-        public Capabilities Capabilities { get; } = new();
+        public Capabilities Capabilities { get; init; } = new() { SupportsBreakWithOtherPrograms = true };
 
         public Task Initialized => Task.CompletedTask;
 
@@ -791,7 +1012,14 @@ public sealed class CompoundDebugAdapterTests
             await Record($"disconnect {terminateDebuggee}");
             await DisconnectGate.WaitAsync(cancellationToken);
             _closed.TrySetResult();
+            if (AfterClose > TimeSpan.Zero)
+            {
+                await Task.Delay(AfterClose, cancellationToken); // its end through Closed starts first
+            }
         }
+
+        /// <summary>How long a disconnect takes after its program's end (Closed) is out.</summary>
+        public TimeSpan AfterClose { get; init; }
 
         public ValueTask DisposeAsync()
         {

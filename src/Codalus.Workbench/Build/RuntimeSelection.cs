@@ -97,6 +97,12 @@ public static class RuntimeSelection
         return newest;
     }
 
+    /// <summary>
+    /// The first .NET Core whose host runs <c>DOTNET_STARTUP_HOOKS</c>: 2.2. The old-.NET matrix's programs are held in
+    /// the hook from there on and run to their end on 2.0 and 2.1 (<c>CODALUS_DEBUG_HELD_START=1</c>, 2026-11-12).
+    /// </summary>
+    internal static readonly Version FirstWithStartupHooks = new(2, 2);
+
     public static LaunchPlan Apply(LaunchPlan plan, RunInfo info, string? dotnetRoot, Machine machine)
     {
         var isProjectCommand = info.RunCommand is { } command && string.Equals(command, plan.FileName, StringComparison.Ordinal);
@@ -117,7 +123,7 @@ public static class RuntimeSelection
             notes.Add($"{name}={value}: .NET Core {version?.ToString(2)} doesn't look for this distribution's ICU {value} by itself. Set {name} or {Invariant} in the launch profile to choose otherwise.");
         }
 
-        plan = plan with { Environment = environment, Notes = notes };
+        plan = plan with { Environment = environment, Notes = notes, StartsWithoutStartupHooks = version is not null && version < FirstWithStartupHooks };
         if (DotnetFrameworks.RunsAsX64(info.TargetFramework, machine.Architecture, machine.Os))
         {
             var x64 = X64Root(dotnetRoot, machine) ?? throw new InvalidOperationException(MissingX64Runtime(info, machine.Os));

@@ -394,10 +394,10 @@ internal static partial class BuiltIns
                 shell.Layout.SetPinned(document, !document.IsPinned);
             }
         }), "activeDocumentKind");
-        Add("workbench.closeUnpinnedDocuments", "Close All But Pinned", "Window", Ui(shell.CloseUnpinnedDocuments), "activeDocumentKind");
-        Add("workbench.closeAllDocuments", "Close All Documents", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: false)), "activeDocumentKind");
-        Add("workbench.closeOtherDocuments", "Close All But This", "Window", Ui(() => shell.CloseAllDocuments(exceptActive: true)), "activeDocumentKind");
-        Add("workbench.closeDocumentsToTheRight", "Close All to the Right", "Window", Ui(shell.CloseDocumentsToTheRight), "activeDocumentKind");
+        Add("workbench.closeUnpinnedDocuments", "Close All But Pinned", "Window", Ui(shell.CloseUnpinnedDocumentsAsync), "activeDocumentKind");
+        Add("workbench.closeAllDocuments", "Close All Documents", "Window", Ui(() => shell.CloseAllDocumentsAsync(exceptActive: false)), "activeDocumentKind");
+        Add("workbench.closeOtherDocuments", "Close All But This", "Window", Ui(() => shell.CloseAllDocumentsAsync(exceptActive: true)), "activeDocumentKind");
+        Add("workbench.closeDocumentsToTheRight", "Close All to the Right", "Window", Ui(shell.CloseDocumentsToTheRightAsync), "activeDocumentKind");
         Add("workbench.compareFiles", "Compare Files…", "File", Ui(() => shell.CompareFilesAsync(withActive: false)));
         Add("workbench.compareActiveWith", "Compare Active File With…", "File", Ui(() => shell.CompareFilesAsync(withActive: true)), Editor);
         Add("analysis.syntaxVisualizer", "Syntax Visualizer", "View", Ui(shell.ShowSyntaxVisualizer));

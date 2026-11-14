@@ -1,3 +1,4 @@
+using Codalus.Platform;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
@@ -46,6 +47,7 @@ public static class IconThemeCompiler
                 // the login shell's PATH and DOTNET_ROOT, which come in while the window shows (M56).
                 await ProcessEnvironment.WhenReadyAsync(cancellationToken).ConfigureAwait(false);
                 var start = new ProcessStartInfo(host.FileName) { UseShellExecute = false, RedirectStandardError = true, RedirectStandardOutput = true };
+                ToolTelemetry.OptOut(start.Environment); // the plugin host, as a host (M59)
                 foreach (var argument in host.Arguments.Concat(["--compile-icons", partial, list]))
                 {
                     start.ArgumentList.Add(argument);

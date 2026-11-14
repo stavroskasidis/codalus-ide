@@ -8,9 +8,10 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// The first-run setup's window (M46). Keys: Tab moves through the step; the arrow keys move between the cards and modes
-/// of a group (and choose); Space or Enter presses the focused one; Alt+Right is Next (Done on the last step), Alt+Left
-/// Back; Escape skips the setup. File and folder pickers open over this window.
+/// The first-run setup's window (M46). Keys: Tab moves through the page; the arrow keys move between the cards and modes
+/// of a group (and choose); Space or Enter presses the focused one; Alt+Right is Next (Get Started on the welcome page,
+/// the summary's button on the summary), Alt+Left Back; Escape skips the setup. File and folder pickers open over this
+/// window.
 /// </summary>
 public sealed partial class SetupWindow : Window
 {
@@ -18,6 +19,9 @@ public sealed partial class SetupWindow : Window
     {
         InitializeComponent();
         Opened += (_, _) => FocusStep();
+
+        // The font sample follows the theme this window is drawn in (the one being previewed, or the system's).
+        ActualThemeVariantChanged += (_, _) => Model?.ShowSampleIn(ActualThemeVariant);
 
         // Before the scroll viewers, which take the arrow keys to scroll.
         AddHandler(KeyDownEvent, OnPreviewKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -27,9 +31,10 @@ public sealed partial class SetupWindow : Window
             {
                 model.PickFile = PickFileAsync;
                 model.PickFolder = PickFolderAsync;
+                model.ShowSampleIn(ActualThemeVariant);
                 model.PropertyChanged += (_, e) =>
                 {
-                    if (e.PropertyName == nameof(SetupViewModel.Current))
+                    if (e.PropertyName is nameof(SetupViewModel.Current) or nameof(SetupViewModel.Page))
                     {
                         Avalonia.Threading.Dispatcher.UIThread.Post(FocusStep, Avalonia.Threading.DispatcherPriority.Loaded);
                     }
@@ -75,7 +80,7 @@ public sealed partial class SetupWindow : Window
             return false;
         }
 
-        foreach (var list in new[] { FamilyList, ModeList, SchemeList })
+        foreach (var list in new[] { OriginList, FamilyList, ModeList, SchemeList, AiPathList, AiAgentList, AiProviderList })
         {
             var buttons = list.GetVisualDescendants().OfType<ToggleButton>().ToList();
             var index = buttons.IndexOf(focused);
@@ -93,14 +98,20 @@ public sealed partial class SetupWindow : Window
         return false;
     }
 
-    /// <summary>A step's first control: the chosen family, the chosen scheme, the first import, the Next button.</summary>
+    /// <summary>
+    /// A page's first control: the chosen family, the chosen scheme, the suggested (else the first) import, the chosen AI
+    /// path; the Next button on the welcome page, Tools and the summary.
+    /// </summary>
     private void FocusStep()
     {
-        Control? target = Model?.Current switch
+        Control? target = Model switch
         {
-            SetupStep.Appearance => Chosen(FamilyList),
-            SetupStep.Keyboard => Chosen(SchemeList),
-            SetupStep.Settings => ImportVsCodeButton.IsEnabled ? ImportVsCodeButton : null,
+            null or { Page: not SetupPage.Steps } => null,
+            { Current: SetupStep.Appearance } => Chosen(FamilyList),
+            { Current: SetupStep.Keyboard } => Chosen(SchemeList),
+            { Current: SetupStep.Settings, SuggestsVsSettings: true } => ImportVsSettingsButton,
+            { Current: SetupStep.Settings } => ImportVsCodeButton.IsEnabled ? ImportVsCodeButton : null,
+            { Current: SetupStep.Ai } => Chosen(AiPathList),
             _ => null,
         };
         (target ?? NextButton).Focus();

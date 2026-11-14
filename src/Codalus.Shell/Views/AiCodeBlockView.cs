@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -12,28 +13,45 @@ using Codalus.Workbench.Localization;
 namespace Codalus.Shell.Views;
 
 /// <summary>
-/// A code block of an answer in AI Chat (M34h, docs/design/controls/AiChat.dc.html): a card whose header row names the
-/// language (and the file, when the block names one) and offers Copy, Insert at Cursor and Apply…, over the code in a
-/// read-only <see cref="CodeViewer"/> in the editor's colors, as high as the code.
+/// A code block of an answer in AI Chat (M34h; redesigned for ADR 0092): the code on the editor's background, in its
+/// colors, with no header bar and no actions (the agent changes files itself, through the preview). Its language, and the
+/// file it names, sit small in its top-right corner, beside a Wrap toggle that shows on hover and focus. Lines wrap to the
+/// pane unless the toggle turns it off; a block of more than
+/// <see cref="FoldedLines"/> lines shows that many, with "Show all N lines". The text stays selectable.
 /// </summary>
 internal sealed class AiCodeBlockView : Border
 {
+    /// <summary>How many lines a long block shows until "Show all" opens it.</summary>
+    public const int FoldedLines = 20;
+
+    private const double CornerRow = 32;
     private readonly CodeViewer _viewer;
-    private readonly TextBlock _language = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontWeight = FontWeight.SemiBold };
-    private readonly Button[] _buttons;
+    private readonly TextBlock _language = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 220 };
+    private readonly ToggleButton _wrap = new() { IsChecked = true };
+    private readonly Button _fold = new() { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(16, 0, 0, 8) };
     private string? _text;
     private (string Code, string? Language)? _colored;
     private int _version;
+    private int _lines;
+    private bool _expanded;
     private bool _released;
 
-    public AiCodeBlockView(IEditorServices services, EditorFont font, Action copy, Action insert, Action apply)
+    public AiCodeBlockView(IEditorServices services, EditorFont font)
     {
         Classes.Add("codeBlock");
         _language.Classes.Add("muted");
         _language.Classes.Add("small");
         _viewer = new CodeViewer(services, font) { EditorColors = true, FitsContent = true };
         _viewer.Editor.FontSize = Math.Max(9, font.Size - 1);
+        _viewer.Editor.Padding = new Thickness(4, CornerRow, 12, 8);
+
+        // The block's own surface, not the editor's (a step off the panel in every theme), and a mark beside each
+        // wrapped line's continuation, so a source line reads as one (the text engine has no hanging indent).
+        _viewer.Editor.Bind(AvaloniaEdit.TextEditor.BackgroundProperty, _viewer.GetResourceObservable("Shell.CodeBlock.Background"));
+        _viewer.Editor.TextArea.LeftMargins.Insert(0, new WrapMarks(_viewer));
         AutomationProperties.SetName(_viewer.Editor, Localizer.Get("msg.ai.codeReadOnly", "Code (read-only)"));
+        // TODO(issue): a hanging indent for wrapped lines; Avalonia's text layout ignores AvaloniaEdit's WordWrapIndentation.
+        Wrap(true);
 
         // Tab leaves the code for the next control, as in the rest of the chat (the editor keeps Tab for itself).
         _viewer.Editor.TextArea.AddHandler(KeyDownEvent, (_, e) =>
@@ -44,17 +62,98 @@ internal sealed class AiCodeBlockView : Border
             }
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
 
-        var copyButton = HeaderButton("copy", null, Localizer.Get("msg.ai.copy", "Copy"), Localizer.Get("msg.ai.copyTheCode", "Copy the code"), copy);
-        var insertButton = HeaderButton("insert", null, Localizer.Get("msg.ai.insert", "Insert at Cursor"), Localizer.Get("msg.ai.insertTheCodeAtTheCursor", "Insert the code at the cursor"), insert);
-        var applyButton = HeaderButton("document-check", Localizer.Get("msg.ai.apply", "Apply…"), Localizer.Get("msg.ai.applyTheCodeAfterAPreview", "Apply the code after a preview"), Localizer.Get("msg.ai.applyTheCodeAfterAPreview", "Apply the code after a preview"), apply);
-        _buttons = [copyButton, insertButton, applyButton];
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        actions.Children.AddRange(_buttons);
-        DockPanel.SetDock(actions, Avalonia.Controls.Dock.Right);
-        var header = new Border { Child = new DockPanel { Children = { actions, _language } } };
-        header.Classes.Add("codeBlockHeader");
-        DockPanel.SetDock(header, Avalonia.Controls.Dock.Top);
-        Child = new DockPanel { Children = { header, _viewer } };
+        _wrap.Classes.Add("toolbar");
+        _wrap.Classes.Add("icon");
+        _wrap.Classes.Add("wrapToggle");
+        ButtonIcon.SetKind(_wrap, "word-wrap");
+        var wrapName = Localizer.Get("msg.ai.wrapLines", "Wrap long lines");
+        ToolTip.SetTip(_wrap, wrapName);
+        AutomationProperties.SetName(_wrap, wrapName);
+        _wrap.IsCheckedChanged += (_, _) => Wrap(_wrap.IsChecked == true);
+
+        _fold.Classes.Add("link");
+        _fold.Classes.Add("small");
+        _fold.IsVisible = false;
+        _fold.Click += (_, _) =>
+        {
+            _expanded = !_expanded;
+            UpdateFold();
+        };
+
+        // The corner: the language (and file), then the Wrap toggle, over the code's top padding.
+        var corner = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 5, 6, 0),
+            Children = { _language, _wrap },
+        };
+        var code = new Panel { Children = { _viewer, corner } };
+        DockPanel.SetDock(_fold, Avalonia.Controls.Dock.Bottom);
+        Child = new DockPanel { Children = { _fold, code } };
+    }
+
+    /// <summary>Whether long lines wrap (the toggle; on by default).</summary>
+    public bool WrapsLines => _viewer.Editor.WordWrap;
+
+    /// <summary>Whether a long block shows only its first <see cref="FoldedLines"/> lines (tests).</summary>
+    public bool IsFolded => _fold.IsVisible && !_expanded;
+
+    /// <summary>The fold link's text, or null without one (tests).</summary>
+    public string? FoldText => _fold.IsVisible ? _fold.Content as string : null;
+
+    /// <summary>The Wrap toggle (tests).</summary>
+    internal ToggleButton WrapToggle => _wrap;
+
+    /// <summary>The fold link (tests).</summary>
+    internal Button FoldButton => _fold;
+
+    private void Wrap(bool wrap)
+    {
+        _viewer.Editor.WordWrap = wrap;
+        _viewer.Editor.HorizontalScrollBarVisibility = wrap ? Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
+        UpdateFold();
+    }
+
+    /// <summary>A long block shows its first lines (about <see cref="FoldedLines"/> of them, wrapped lines counting) until it's opened.</summary>
+    private void UpdateFold()
+    {
+        var foldable = _lines > FoldedLines;
+        _fold.IsVisible = foldable;
+        _fold.Content = _expanded
+            ? Localizer.Get("msg.ai.showFewerLines", "Show fewer lines")
+            : Localizer.Format("msg.ai.showAllLines", "Show all {0} lines", _lines);
+        AutomationProperties.SetName(_fold, (string)_fold.Content);
+        var lineHeight = _viewer.Editor.TextArea.TextView.DefaultLineHeight is > 0 and var measured ? measured : _viewer.Editor.FontSize * 1.35;
+        var folded = foldable && !_expanded;
+        _viewer.MaxHeight = folded ? CornerRow + (lineHeight * FoldedLines) + 8 : double.PositiveInfinity;
+        _viewer.ClipToBounds = true;
+
+        // A folded block fades out over its last lines, so the cut reads as "more below", whatever the theme's colors.
+        _viewer.OpacityMask = folded
+            ? new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
+                GradientStops = { new GradientStop(Colors.Black, 0), new GradientStop(Colors.Black, 0.88), new GradientStop(Colors.Transparent, 1) },
+            }
+            : null;
+    }
+
+    private static int LineCount(string code)
+    {
+        var lines = 1;
+        foreach (var c in code.AsSpan().TrimEnd('\n'))
+        {
+            if (c == '\n')
+            {
+                lines++;
+            }
+        }
+
+        return lines;
     }
 
     /// <summary>The viewer (tests).</summary>
@@ -71,7 +170,7 @@ internal sealed class AiCodeBlockView : Border
 
     /// <summary>
     /// Shows <paramref name="code"/> in <paramref name="language"/> (the fence's name: <c>csharp</c>, <c>cs</c>, <c>json</c>…)
-    /// with the file it names, if any; its buttons wait while the answer is still being written. While the block itself
+    /// with the file it names, if any. While the block itself
     /// is still written (<paramref name="streaming"/> and not <paramref name="closed"/>), it is plain text that grows at
     /// its end; it is colored once it is complete, after the layout (tokenizing a long block on every render of a
     /// streaming answer would hold up the UI thread).
@@ -82,9 +181,10 @@ internal sealed class AiCodeBlockView : Border
         var label = LanguageLabel(language);
         _language.Text = path is { Length: > 0 } ? $"{label} · {Path.GetFileName(path)}" : label;
         ToolTip.SetTip(_language, path is { Length: > 0 } ? $"{label} · {path}" : label);
-        foreach (var button in _buttons)
+        if (LineCount(code) is var lines && lines != _lines)
         {
-            button.IsEnabled = !streaming;
+            _lines = lines;
+            UpdateFold();
         }
 
         var complete = !streaming || closed;
@@ -182,15 +282,54 @@ internal sealed class AiCodeBlockView : Border
         _ => fence,
     };
 
-    private static Button HeaderButton(string icon, string? text, string tooltip, string name, Action click)
+    /// <summary>
+    /// A thin mark in a narrow margin beside each wrapped line's continuation (ADR 0092): a source line's screen lines read
+    /// as one, and the next source line as a new one, without a hanging indent (the text engine has none).
+    /// </summary>
+    private sealed class WrapMarks(CodeViewer viewer) : AvaloniaEdit.Editing.AbstractMargin
     {
-        var button = new Button { Content = text };
-        button.Classes.Add("toolbar");
-        button.Classes.Add(text is null ? "icon" : "iconText");
-        ButtonIcon.SetKind(button, icon);
-        ToolTip.SetTip(button, tooltip);
-        AutomationProperties.SetName(button, name);
-        button.Click += (_, _) => click();
-        return button;
+        protected override void OnTextViewChanged(AvaloniaEdit.Rendering.TextView? oldTextView, AvaloniaEdit.Rendering.TextView? newTextView)
+        {
+            if (oldTextView is not null)
+            {
+                oldTextView.VisualLinesChanged -= OnVisualLinesChanged;
+            }
+
+            base.OnTextViewChanged(oldTextView, newTextView);
+            if (newTextView is not null)
+            {
+                newTextView.VisualLinesChanged += OnVisualLinesChanged;
+            }
+        }
+
+        private void OnVisualLinesChanged(object? sender, EventArgs e) => InvalidateVisual();
+
+        protected override Size MeasureOverride(Size availableSize) => new(12, 0);
+
+        public override void Render(DrawingContext context)
+        {
+            if (!viewer.Editor.WordWrap || TextView is not { VisualLinesValid: true } view)
+            {
+                return;
+            }
+
+            var brush = this.TryFindResource("Shell.Editor.LineNumbers", ActualThemeVariant, out var value) && value is IBrush found ? found : Brushes.Gray;
+            foreach (var line in view.VisualLines)
+            {
+                if (line.TextLines.Count < 2)
+                {
+                    continue;
+                }
+
+                // Only within the margin: a folded block's hidden lines draw nothing below its fold.
+                var first = line.TextLines[0].Height;
+                var top = line.VisualTop - view.VerticalOffset + first + 2;
+                var bottom = Math.Min(line.VisualTop - view.VerticalOffset + line.Height - 2, Bounds.Height);
+                if (bottom > top)
+                {
+                    context.FillRectangle(brush, new Rect(4, top, 2, bottom - top), 1);
+                }
+            }
+        }
     }
 }

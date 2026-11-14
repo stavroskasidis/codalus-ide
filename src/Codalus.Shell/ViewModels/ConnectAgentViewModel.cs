@@ -490,7 +490,7 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
             {
                 ({ } p, true) => text + " " + Localizer.Format("msg.acp.connect.consentProviderSuggestions", "This also turns the built-in assistant back on with {0}, and inline suggestions.", p),
                 ({ } p, false) => text + " " + Localizer.Format("msg.acp.connect.consentProvider", "This also turns the built-in assistant back on with {0}.", p),
-                (null, true) => text + " " + Localizer.Get("msg.acp.connect.consentSuggestions", "This also turns inline suggestions back on, once a provider is chosen."),
+                (null, true) => text + " " + Localizer.Get("msg.acp.connect.consentSuggestions", "This also turns inline suggestions back on, answered by the agent you pick in AI Chat."),
                 _ => text + " " + Localizer.Get("msg.acp.connect.consentNothingElse", "The built-in assistant still needs a provider before it sends anything."),
             };
         }

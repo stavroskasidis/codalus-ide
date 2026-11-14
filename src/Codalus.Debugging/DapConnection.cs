@@ -88,6 +88,22 @@ public sealed class DapConnection : IAsyncDisposable
     /// </summary>
     internal void Post(DapEvent e) => _events.Writer.TryWrite(e);
 
+    /// <summary>
+    /// Completes once every event read from the adapter so far has been handled (at once when the events have ended).
+    /// Answers are given to their requests as they are read, and events one by one behind them, so an answer can be
+    /// here while the events the adapter wrote before it still wait.
+    /// </summary>
+    internal Task EventsHandledAsync()
+    {
+        var handled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_events.Writer.TryWrite(handled))
+        {
+            handled.TrySetResult();
+        }
+
+        return Task.WhenAny(handled.Task, _events.Reader.Completion);
+    }
+
     public void Start()
     {
         _readLoop = Task.Run(ReadLoopAsync);
@@ -390,6 +406,9 @@ public sealed class DapConnection : IAsyncDisposable
                         break;
                     case DapReverseRequest r when ReverseRequestReceived is { } handler:
                         await handler(r).ConfigureAwait(false);
+                        break;
+                    case TaskCompletionSource handled:
+                        handled.TrySetResult();
                         break;
                 }
             }

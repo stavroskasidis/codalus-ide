@@ -80,9 +80,29 @@ public sealed class SolutionTreeTests
         }
 
         var solution = new SolutionInfo(P("ws"), SolutionFormats.Folder, [], [.. projects], [new("Debug", "Any CPU")], new("Debug", "Any CPU"), true);
-        var time = Stopwatch.StartNew();
         var root = SolutionTree.FolderView(solution, FolderListing.FromTree(P("ws"), entries, truncated: false));
-        time.Stop();
+
+        // One pass: the 450 projects cost what one project costs (17 ms each on a quiet machine), where looking for each
+        // node's project among all of them, 9 million comparisons, costs a hundred times that (1.8 s there). The two are
+        // timed here, the best of five each, not against a fixed limit: the one second this test allowed was 1,053 ms
+        // for a first, single build on a macOS runner where the whole test took ten times its usual time (develop's
+        // nightly, run 43113076593).
+        TimeSpan Best(SolutionInfo of)
+        {
+            var best = TimeSpan.MaxValue;
+            for (var i = 0; i < 5; i++)
+            {
+                var time = Stopwatch.StartNew();
+                SolutionTree.FolderView(of, FolderListing.FromTree(P("ws"), entries, truncated: false));
+                time.Stop();
+                best = time.Elapsed < best ? time.Elapsed : best;
+            }
+
+            return best;
+        }
+
+        var withOne = Best(solution with { Projects = [projects[0]] });
+        var withAll = Best(solution);
 
         // Every node has the project it had (a sample, checked the old way): of the projects whose folder holds it, the one
         // with the longest path.
@@ -112,7 +132,9 @@ public sealed class SolutionTreeTests
         Assert.Equal(P("ws", "src", "g007", "OneWithALongName007.csproj"), nodes.Single(n => n.Path == P("ws", "src", "g007", "a", "Inner")).ProjectPath);
         Assert.Equal(P("ws", "src", "g007", "a", "Inner", "I.csproj"), nodes.Single(n => n.Path == P("ws", "src", "g007", "a", "Inner", "I.csproj")).ProjectPath);
         Assert.Null(nodes.Single(n => n.Path == P("ws", "docs", "Page19999.md")).ProjectPath);
-        Assert.True(time.Elapsed < TimeSpan.FromSeconds(1), $"the folder view of 20,000 entries and 450 projects took {time.ElapsedMilliseconds} ms");
+        Assert.True(
+            withAll < (withOne * 4) + TimeSpan.FromMilliseconds(50),
+            $"the folder view of 20,000 entries took {withAll.TotalMilliseconds:0} ms with 450 projects and {withOne.TotalMilliseconds:0} ms with one");
     }
 
     private static DirectoryEntry Dir(params string[] segments) => new(P(segments), true);

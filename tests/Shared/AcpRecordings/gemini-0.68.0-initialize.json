@@ -1,0 +1,54 @@
+{
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-11",
+  "protocolVersion": 1,
+  "authMethods": [
+    {
+      "id": "oauth-personal",
+      "name": "Log in with Google",
+      "description": "Log in with your Google account"
+    },
+    {
+      "id": "gemini-api-key",
+      "name": "Gemini API key",
+      "description": "Use an API key with Gemini Developer API",
+      "_meta": {
+        "api-key": {
+          "provider": "google"
+        }
+      }
+    },
+    {
+      "id": "vertex-ai",
+      "name": "Vertex AI",
+      "description": "Use an API key with Vertex AI GenAI API"
+    },
+    {
+      "id": "gateway",
+      "name": "AI API Gateway",
+      "description": "Use a custom AI API Gateway",
+      "_meta": {
+        "gateway": {
+          "protocol": "google",
+          "restartRequired": "false"
+        }
+      }
+    }
+  ],
+  "agentInfo": {
+    "name": "gemini-cli",
+    "title": "Gemini CLI",
+    "version": "0.68.0"
+  },
+  "agentCapabilities": {
+    "loadSession": true,
+    "promptCapabilities": {
+      "image": true,
+      "audio": true,
+      "embeddedContext": true
+    },
+    "mcpCapabilities": {
+      "http": true,
+      "sse": true
+    }
+  }
+}

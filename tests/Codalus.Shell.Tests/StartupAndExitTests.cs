@@ -113,7 +113,7 @@ public sealed class StartupAndExitTests
         }
 
         await OpenAllAsync();
-        f.Shell.CloseAllDocuments(exceptActive: false);
+        await f.Shell.CloseAllDocumentsAsync(exceptActive: false);
         Assert.Equal(1, changes);
         Assert.Empty(f.Shell.Layout.Documents);
         Assert.Null(f.Shell.Layout.ActiveDocument);
@@ -159,7 +159,7 @@ public sealed class StartupAndExitTests
         var changes = 0;
         f.Shell.Layout.ActiveDocumentChanged += (_, _) => changes++;
 
-        f.Shell.CloseAllDocuments(exceptActive: true);
+        await f.Shell.CloseAllDocumentsAsync(exceptActive: true);
 
         Assert.Equal(0, changes);
         Assert.Same(kept, f.Shell.Layout.ActiveDocument);

@@ -1,0 +1,12 @@
+=== AvaloniaApp/App.axaml
+@@ 9
+-       <x:Double x:Key="CardSpacing">8</x:Double>
++       <x:Double x:Key="Gap">8</x:Double>
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 19
+-     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="{StaticResource CardSpacing}">
++     <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="{StaticResource Gap}">
+=== AvaloniaApp/Views/MainWindow.axaml.cs
+@@ 11
+-         _ = this.FindResource("CardSpacing");
++         _ = this.FindResource("Gap");

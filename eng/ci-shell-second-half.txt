@@ -8,6 +8,16 @@
 # than on Linux. Memory (macOS's memory.txt, the runner has 7 GB) was not what set them apart: shell-1 kept 29% of it
 # free at its lowest (the Blazor WebAssembly tests' browser), shell-2 43% (34% with these classes), and the Blazor
 # classes stay in shell-1.
+# Rebalanced after Windows' shell-1 reached its step's 40 minutes on a slow runner (run 43177882900, docs/ci-flakes.md),
+# from the tests' times on each OS in develop's run 43146591436 (shell-1 against shell-2: Windows 2257 s to 1365, the
+# step 37.6 minutes; Linux 1842 to 1120; macOS 2036 to 1257), to 1904 to 1718, 1690 to 1272 and 1919 to 1374. Ten classes
+# that take far longer on Windows than on macOS moved here (354 s on Windows, 152 on Linux, 117 on macOS:
+# AspireShellTests, which macOS skips, EslintPrettierTests, FirstRunSetupTests, GitChangesMenuTests,
+# GitRepositoryShellTests, GitTreesRowsTests, HostingShellTests, HotReloadConsoleTests, RazorColorTests and
+# WpfPreviewerShellTests), because macOS stops shell-2 at 30 minutes (pipeline.yml), not at shell-1's 60: it took 18
+# there and gains about 2. The shards aren't even on Linux and macOS for that reason: what Windows needs next is
+# again a class that is slow there and quick on macOS.
+AspireShellTests
 CaretEditsTests
 CompoundDebugTests
 CoverageTests
@@ -18,11 +28,18 @@ EditingDepthTests
 EditorTests
 EntityFrameworkShellTests
 EnvironmentShellTests
+EslintPrettierTests
 FSharpInteractiveTests
 FSharpShellTests
 FSharpTestingTests
+FirstRunSetupTests
+GitChangesMenuTests
 GitDepthShellTests
+GitRepositoryShellTests
 GitShellTests
+GitTreesRowsTests
+HostingShellTests
+HotReloadConsoleTests
 InstallationTests
 IntelliSensePopupTests
 KeyboardSchemeTests
@@ -35,10 +52,11 @@ NetFrameworkShellTests
 NpmShellTests
 PackageManagerTests
 PolishTests
-ProfilerToolsShellTests
 ProfileTests
+ProfilerToolsShellTests
 ProjectManagementTests
 PublishShellTests
+RazorColorTests
 RazorHtmlTests
 RemoteShellTests
 RenderingTests
@@ -50,8 +68,9 @@ TextFilesTests
 UxPassTests
 VsSettingsImportTests
 WebTests
-WindowsDesktopShellTests
 WinFormsDesignerMenuShellTests
 WinFormsPropertiesShellTests
 WinUIShellTests
+WindowsDesktopShellTests
+WpfPreviewerShellTests
 XamlShellTests

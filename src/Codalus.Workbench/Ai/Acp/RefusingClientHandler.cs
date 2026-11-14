@@ -3,11 +3,11 @@ using Codalus.Rpc;
 namespace Codalus.Workbench.Ai.Acp;
 
 /// <summary>
-/// The client side of the connection test (ADR 0083): the agent runs in an empty folder with no workspace, so every file,
-/// terminal and permission request it sends is refused, and each is a line of the AI Output channel (the method only).
-/// Its updates are ignored: no prompt is ever sent.
+/// A client side that refuses everything: the connection test's (ADR 0083: the agent runs in an empty folder with no
+/// workspace, and no prompt is ever sent), and a session the window doesn't know (ADR 0097). Every file, terminal and
+/// permission request is refused, and each is a line of the AI Output channel (the method only); updates are ignored.
 /// </summary>
-public sealed class RefusingClientHandler(Action<string> log) : IAcpClientHandler
+public sealed class RefusingClientHandler(Action<string> log, string why = "connection test", string message = "Codalus IDE is only testing the connection, so it refuses what the agent asks for.") : IAcpClientHandler
 {
     private int _refused;
 
@@ -17,8 +17,8 @@ public sealed class RefusingClientHandler(Action<string> log) : IAcpClientHandle
     private JsonRpcHandlerException Refuse(string method)
     {
         Interlocked.Increment(ref _refused);
-        log(method + " → refused (connection test)");
-        return new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, "Codalus IDE is only testing the connection, so it refuses what the agent asks for.");
+        log($"{method} → refused ({why})");
+        return new JsonRpcHandlerException(JsonRpcConnection.InvalidParams, message);
     }
 
     public Task OnUpdateAsync(AcpSessionNotification notification) => Task.CompletedTask;

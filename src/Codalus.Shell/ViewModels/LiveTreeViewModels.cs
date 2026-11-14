@@ -276,12 +276,38 @@ public sealed class LiveTreeViewModel : ObservableObject
 }
 
 /// <summary>A property in the Live Property Explorer; <see cref="Value"/> is editable unless it's read-only.</summary>
-public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow, string, Task> commit) : ObservableObject
+public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow, string, Task> commit, Func<LivePropertyRow, Task>? toggleWatch = null, bool watched = false) : ObservableObject
 {
     private string _value = property.Value;
     private string _error = string.Empty;
+    private bool _isWatched = watched;
 
     public string Name { get; } = property.Name;
+
+    /// <summary>Break When Value Changes is on for this property (M64b): the debugger stops when it changes.</summary>
+    public bool IsWatched
+    {
+        get => _isWatched;
+        set
+        {
+            if (SetField(ref _isWatched, value))
+            {
+                OnPropertyChanged(nameof(WatchHeader));
+            }
+        }
+    }
+
+    /// <summary>The context menu's item for Break When Value Changes (checked when on).</summary>
+    public string WatchHeader => (IsWatched ? "✓ " : string.Empty) + Localizer.Get("liveProperties.breakWhenValueChanges", "Break When Value Changes");
+
+    /// <summary>Break When Value Changes on or off (M64b).</summary>
+    public RelayCommand ToggleWatchCommand => new(() =>
+    {
+        if (toggleWatch is not null)
+        {
+            _ = toggleWatch(this);
+        }
+    });
 
     public string Type { get; } = property.Type;
 
@@ -331,21 +357,88 @@ public sealed class LivePropertyRow(LiveProperty property, Func<LivePropertyRow,
 /// <summary>
 /// Debug → Windows → Live Property Explorer (M19b, ADR 0052; M40b, ADR 0072): the selected element's Avalonia or WPF
 /// dependency properties, their values and where they come from (local, style, template, inherited, default); editing
-/// a value sets it as a local value in the running app (not in the XAML).
+/// a value sets it as a local value in the running app (not in the XAML). A property's context menu has Break When
+/// Value Changes (M64b), and Styles lists why each style of the element's scope applies to it or doesn't.
 /// </summary>
 public sealed class LivePropertiesViewModel : ObservableObject
 {
     public const string ToolWindowId = "debug.livePropertyExplorer";
 
     private readonly Func<LiveSession?> _session;
+    private readonly HashSet<string> _watched = new(StringComparer.Ordinal);
+    private LiveSession? _watchedIn;
     private LiveNodeViewModel? _element;
     private string _filter = string.Empty;
     private List<LiveProperty> _all = [];
     private int _generation;
+    private string _stylesMessage = string.Empty;
 
     public LivePropertiesViewModel(Func<LiveSession?> session) => _session = session;
 
     public ObservableCollection<LivePropertyRow> Rows { get; } = [];
+
+    /// <summary>The element's styles and why each applies or doesn't (M64b).</summary>
+    public ObservableCollection<LiveStyleRow> Styles { get; } = [];
+
+    /// <summary>Opens a style's XAML at its line (the shell's).</summary>
+    public Func<string, int, Task>? OpenStyle { get; set; }
+
+    /// <summary>Why no style is listed (none in scope, or the agent couldn't say).</summary>
+    public string StylesMessage
+    {
+        get => _stylesMessage;
+        private set
+        {
+            if (SetField(ref _stylesMessage, value))
+            {
+                OnPropertyChanged(nameof(HasStylesMessage));
+            }
+        }
+    }
+
+    public bool HasStylesMessage => StylesMessage.Length > 0;
+
+    /// <summary>Whether Break When Value Changes is on for the element's property in the current run.</summary>
+    public bool IsWatched(int element, string property) => ReferenceEquals(_watchedIn, _session()) && _watched.Contains(WatchKey(element, property));
+
+    private static string WatchKey(int element, string property) => element.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\u001f" + property;
+
+    /// <summary>Break When Value Changes on the row's property, or off (M64b): the agent watches it in the app.</summary>
+    public async Task ToggleWatchAsync(LivePropertyRow row)
+    {
+        if (_element is not { } element || _session() is not { IsConnected: true } session)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(_watchedIn, session))
+        {
+            _watched.Clear();
+            _watchedIn = session;
+        }
+
+        var key = WatchKey(element.Id, row.Name);
+        var on = !_watched.Contains(key);
+        try
+        {
+            await session.WatchAsync(element.Id, row.Name, on, CancellationToken.None).ConfigureAwait(true);
+            if (on)
+            {
+                _watched.Add(key);
+            }
+            else
+            {
+                _watched.Remove(key);
+            }
+
+            row.IsWatched = on;
+            row.Error = string.Empty;
+        }
+        catch (PreviewerException ex)
+        {
+            row.Error = ex.Message;
+        }
+    }
 
     public string Title => _element is null ? Localizer.Get("msg.liveTree.selectElement", "Select an element in the Live Visual Tree.") : _element.Label;
 
@@ -363,6 +456,11 @@ public sealed class LivePropertiesViewModel : ObservableObject
 
     public async Task ShowAsync(LiveNodeViewModel? element)
     {
+        if (element?.Id != _element?.Id)
+        {
+            Styles.Clear(); // another element's styles never show as this one's while its own come
+        }
+
         _element = element;
         OnPropertyChanged(nameof(Title));
         var generation = ++_generation;
@@ -370,6 +468,8 @@ public sealed class LivePropertiesViewModel : ObservableObject
         {
             _all = [];
             Fill();
+            Styles.Clear();
+            StylesMessage = string.Empty;
             return;
         }
 
@@ -387,6 +487,37 @@ public sealed class LivePropertiesViewModel : ObservableObject
             _all = [];
             Fill();
         }
+
+        await ShowStylesAsync(session, element, generation).ConfigureAwait(true);
+    }
+
+    /// <summary>The element's styles and why each applies or doesn't (M64b).</summary>
+    private async Task ShowStylesAsync(LiveSession session, LiveNodeViewModel element, int generation)
+    {
+        try
+        {
+            var styles = await session.StylesAsync(element.Id, CancellationToken.None).ConfigureAwait(true);
+            if (generation != _generation)
+            {
+                return;
+            }
+
+            Styles.Clear();
+            foreach (var style in styles)
+            {
+                Styles.Add(new LiveStyleRow(style, OpenStyle));
+            }
+
+            StylesMessage = styles.Count == 0 ? Localizer.Get("liveProperties.noStyles", "No style in the element's scope targets its type.") : string.Empty;
+        }
+        catch (PreviewerException ex)
+        {
+            if (generation == _generation)
+            {
+                Styles.Clear();
+                StylesMessage = ex.Message;
+            }
+        }
     }
 
     private void Fill()
@@ -394,7 +525,7 @@ public sealed class LivePropertiesViewModel : ObservableObject
         Rows.Clear();
         foreach (var property in _all.Where(p => Filter.Length == 0 || p.Name.Contains(Filter, StringComparison.OrdinalIgnoreCase)))
         {
-            Rows.Add(new LivePropertyRow(property, CommitAsync));
+            Rows.Add(new LivePropertyRow(property, CommitAsync, ToggleWatchAsync, _element is { } element && IsWatched(element.Id, property.Name)));
         }
     }
 
@@ -416,4 +547,60 @@ public sealed class LivePropertiesViewModel : ObservableObject
             row.Error = ex.Message;
         }
     }
+}
+
+/// <summary>
+/// A style in the Live Property Explorer's Styles (M64b): its selector (or WPF trigger), whether it applies to the
+/// element, the part that fails when it doesn't, its setters, and Go to its XAML when the app knows where it is.
+/// </summary>
+public sealed class LiveStyleRow(LiveStyle style, Func<string, int, Task>? open)
+{
+    public string Selector { get; } = style.Selector;
+
+    public LiveStyleState State { get; } = style.State;
+
+    /// <summary>A mark for the state: applies, inactive now, doesn't apply.</summary>
+    public string Glyph => State switch
+    {
+        LiveStyleState.Applies => "✓",
+        LiveStyleState.Inactive => "◌",
+        _ => "✗",
+    };
+
+    public string StateText => State switch
+    {
+        LiveStyleState.Applies => Localizer.Get("liveProperties.styleApplies", "Applies"),
+        LiveStyleState.Inactive => Localizer.Get("liveProperties.styleInactive", "Inactive now"),
+        _ => Localizer.Get("liveProperties.styleDoesntApply", "Doesn't apply"),
+    };
+
+    /// <summary>The part of the selector that fails, and why (empty when it applies).</summary>
+    public string Reason { get; } = style.Reason;
+
+    public bool HasReason => Reason.Length > 0;
+
+    /// <summary>Its setters, one per line (a higher priority's override noted).</summary>
+    public string Setters { get; } = string.Join("\n", style.Setters);
+
+    public bool HasSetters => Setters.Length > 0;
+
+    /// <summary>The kind: a style, a control theme, a theme's nested style; WPF's style, based-on style, trigger.</summary>
+    public string Kind { get; } = style.Kind;
+
+    public string Location { get; } = style.File.Length > 0 ? $"{Path.GetFileName(style.File)}:{style.Line.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : string.Empty;
+
+    public bool HasLocation => Location.Length > 0 && open is not null;
+
+    public string AccessibleName => $"{Selector}: {StateText}. {Reason}";
+
+    public RelayCommand GoToCommand => new(() =>
+    {
+        if (open is not null && Style.File.Length > 0)
+        {
+            _ = open(Style.File, Style.Line);
+        }
+    });
+
+    /// <summary>The style's source, for tests.</summary>
+    public LiveStyle Style { get; } = style;
 }

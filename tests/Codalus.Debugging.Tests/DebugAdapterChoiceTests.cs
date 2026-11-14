@@ -5,10 +5,12 @@ using Codalus.Workbench.Debugging;
 namespace Codalus.Debugging.Tests;
 
 /// <summary>
-/// M54 (ADR 0086): which adapter debugs a .NET program. <c>debug.adapter</c> <c>codalus</c> sends launches and attaches
-/// to Codalus IDE's own (<c>codalus-debughost --clr-dap</c>), and the Debug Console's first line says so; programs it
-/// doesn't debug yet (x64 ones on Apple silicon) go to netcoredbg, and the line says why; left alone, nothing changes. Not in the debug-codalus shard (eng/ci-debug-codalus.txt): its CODALUS_DEBUG_ADAPTER would
-/// override the setting these tests choose.
+/// Which adapter debugs a .NET program (M54, ADR 0086; the default since M58, ADR 0094). Left alone, and with
+/// <c>debug.adapter</c> <c>codalus</c>, launches and attaches go to Codalus IDE's own (<c>codalus-debughost --clr-dap</c>),
+/// and the Debug Console's first line says so; programs it doesn't debug yet (x64 ones on Apple silicon) go to
+/// netcoredbg, and the line says why; <c>netcoredbg</c> chooses the fallback, and nothing is said. Not in the
+/// debug-netcoredbg shard (eng/ci-debug-parity.txt): its CODALUS_DEBUG_ADAPTER would override the setting these
+/// tests choose.
 /// </summary>
 public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>, IAsyncLifetime
 {
@@ -69,7 +71,7 @@ public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFi
         var stop = await _stops.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct);
         Assert.Equal("breakpoint", stop.Reason);
         Assert.Equal("5", (await _debug.EvaluateAsync("numbers.Count", "watch", Ct)).Result);
-        Assert.StartsWith("Debugging with the Codalus debugger (preview).", Output, StringComparison.Ordinal);
+        Assert.StartsWith("Debugging with the Codalus debugger.", Output, StringComparison.Ordinal);
         await _debug.StopAsync();
     }
 
@@ -88,16 +90,37 @@ public sealed class DebugAdapterChoiceTests(DebuggeeFixture debuggee) : IClassFi
         _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
         await _debug.LaunchAsync([new DebugLaunch("Debuggee", Plan()) { Console = DebugConsoleKind.Terminal }], Ct);
         await _stops.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct);
-        Assert.Contains("Debugging with the Codalus debugger (preview).", Output, StringComparison.Ordinal);
+        Assert.Contains("Debugging with the Codalus debugger.", Output, StringComparison.Ordinal);
         Assert.Contains("The integrated terminal isn't available here", Output, StringComparison.Ordinal);
         Assert.Equal(DebugProcess.Launched, Assert.Single(_debug.Processes).Kind);
         await _debug.StopAsync();
     }
 
-    [Fact]
-    public async Task Left_alone_netcoredbg_debugs_and_nothing_is_said()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("Codalus")]
+    [InlineData("something-else")]
+    public async Task Left_alone_the_codalus_debugger_debugs(string? setting)
     {
-        _setting = null;
+        // The default (M58, ADR 0094): only "netcoredbg" chooses the fallback.
+        _setting = setting;
+        Assert.True(_debug.UsesCodalusAdapter);
+        _debug.Breakpoints.Set(new BreakpointSpec(debuggee.Program, DebuggeeFixture.Line(debuggee.Program, "loop")));
+        await _debug.LaunchAsync(Plan(), Ct);
+        await _stops.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        Assert.StartsWith("Debugging with the Codalus debugger.", Output, StringComparison.Ordinal);
+        await _debug.StopAsync();
+    }
+
+    [Theory]
+    [InlineData("netcoredbg")]
+    [InlineData(" NetCoreDbg ")]
+    public async Task The_setting_chooses_netcoredbg_the_fallback_and_nothing_is_said(string setting)
+    {
+        // No netcoredbg here: the launch says it is missing, which shows where it went.
+        _setting = setting;
+        Assert.False(_debug.UsesCodalusAdapter);
         var error = await Assert.ThrowsAnyAsync<Exception>(() => _debug.LaunchAsync(Plan(), Ct));
         Assert.Contains("netcoredbg", error.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("Debugging with", Output, StringComparison.Ordinal);

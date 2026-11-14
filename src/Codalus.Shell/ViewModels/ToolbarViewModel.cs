@@ -12,8 +12,9 @@ public sealed record StartupProjectChoice(string Name, string Path)
 
 /// <summary>
 /// The standard toolbar under the menu (M29): navigation, open and save, undo and redo, the solution configuration and
-/// platform, the startup project and Start; while debugging, the debug commands. The shell keeps it up to date
-/// (<see cref="SetSolution"/>, <see cref="SetStartup"/>, <see cref="SetDebugState"/>); choices made here go back through
+/// platform, the startup project and Start; while a Start builds, its progress and Stop; while debugging, the debug
+/// commands. The shell keeps it up to date (<see cref="SetSolution"/>, <see cref="SetStartup"/>, <see cref="SetLaunching"/>,
+/// <see cref="SetDebugState"/>); choices made here go back through
 /// the callbacks.
 /// </summary>
 public sealed class ToolbarViewModel : ObservableObject
@@ -40,6 +41,7 @@ public sealed class ToolbarViewModel : ObservableObject
     private bool _isDebugging;
     private bool _isStopped;
     private bool _isRunning;
+    private string? _launchStatus;
     private IReadOnlyList<(string Configuration, string Platform)> _pairs = [];
 
     private DebugLocationViewModel? _debugLocation;
@@ -196,9 +198,22 @@ public sealed class ToolbarViewModel : ObservableObject
         private set => SetField(ref _isRunning, value);
     }
 
-    public bool CanStop => _isDebugging || _isRunning;
+    /// <summary>
+    /// A Start (F5, Ctrl+F5) is building or starting its program: from the click, Stop shows (and cancels it), and the
+    /// toolbar says what it's doing instead of the Start buttons.
+    /// </summary>
+    public bool IsLaunching => _launchStatus is not null;
 
-    public bool CanStart => _hasSolution && !_isDebugging;
+    /// <summary>What a Start is doing ("Building App…", "Starting App…"), or null.</summary>
+    public string? LaunchStatus
+    {
+        get => _launchStatus;
+        private set => SetField(ref _launchStatus, value);
+    }
+
+    public bool CanStop => _isDebugging || _isRunning || IsLaunching;
+
+    public bool CanStart => _hasSolution && !_isDebugging && !IsLaunching;
 
     /// <summary>The solution's configurations ("Debug", "Release") and platforms, and the active pair; null: none open.</summary>
     public void SetSolution(IReadOnlyList<(string Configuration, string Platform)>? pairs, (string Configuration, string Platform)? active, string? name = null)
@@ -257,6 +272,20 @@ public sealed class ToolbarViewModel : ObservableObject
 
     public void SetDevice(string? label) => DeviceLabel = label;
 
+    /// <summary>A Start's progress, from the click until its program runs or its debug session starts; null when it's over.</summary>
+    public void SetLaunching(string? status)
+    {
+        var was = IsLaunching;
+        LaunchStatus = status;
+        if (was != IsLaunching)
+        {
+            OnPropertyChanged(nameof(IsLaunching));
+            OnPropertyChanged(nameof(CanStop));
+            OnPropertyChanged(nameof(CanStart));
+            OnPropertyChanged(nameof(CanHotReload));
+        }
+    }
+
     public void SetDebugState(bool debugging, bool stopped, bool running)
     {
         IsDebugging = debugging;
@@ -290,7 +319,7 @@ public sealed class ToolbarViewModel : ObservableObject
     public ICommand HotReloadSettingsCommand => _command("run.hotReloadSettings");
 
     /// <summary>The startup project supports Hot Reload (.NET 6 or later), or a program runs with it.</summary>
-    public bool CanHotReload => (_hasSolution && _hotReloadSupported && !_isDebugging) || _hotReloadRunning;
+    public bool CanHotReload => (_hasSolution && _hotReloadSupported && !_isDebugging && !IsLaunching) || _hotReloadRunning;
 
     /// <summary>A program runs under Hot Reload: the button applies code changes.</summary>
     public bool IsHotReloadRunning => _hotReloadRunning;

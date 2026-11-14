@@ -521,6 +521,63 @@ public sealed class ContainerEngine(IReadOnlyList<string> tool)
     public static List<string> ComposeArguments(string file, string project, params IReadOnlyList<string> command) =>
         ["compose", "-f", file, "-p", project, .. command];
 
+    /// <summary>
+    /// The compose app of <paramref name="files"/> as compose runs it (M63): <c>compose config --format json</c> (the
+    /// files merged, variables filled in); where that doesn't answer (podman-compose has no JSON), the files read by
+    /// <see cref="ComposeModel.ReadFiles"/>. Throws when neither can be read.
+    /// </summary>
+    public async Task<ComposeModel> ComposeModelAsync(IReadOnlyList<string> files, string project, CancellationToken cancellationToken)
+    {
+        List<string> arguments = ["compose"];
+        foreach (var file in files)
+        {
+            arguments.AddRange(["-f", file]);
+        }
+
+        arguments.AddRange(["-p", project, "config", "--format", "json"]);
+        var folder = Path.GetDirectoryName(Path.GetFullPath(files[0]))!;
+        try
+        {
+            var result = await RunAsync(arguments, cancellationToken, workingDirectory: folder).ConfigureAwait(false);
+            if (result.Succeeded && ComposeModel.FromJson(result.Output, folder) is { } model)
+            {
+                return model;
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // No engine: the files say it as well.
+        }
+
+        try
+        {
+            return ComposeModel.ReadFiles(files);
+        }
+        catch (Exception ex) when (ex is FormatException or IOException or UnauthorizedAccessException)
+        {
+            throw new InvalidOperationException($"{Path.GetFileName(files[0])} couldn't be read: {ex.Message}", ex);
+        }
+    }
+
+    /// <summary>
+    /// The container of a compose service (M63): its <c>container_name</c>, else the one compose labels as the
+    /// project's service (Docker Compose and podman-compose both do), else the one named as compose names them
+    /// (<c>project-service-1</c>, podman-compose's <c>project_service_1</c>). Null when none exists.
+    /// </summary>
+    public async Task<ContainerSummary?> ComposeServiceContainerAsync(string project, string service, string? containerName, CancellationToken cancellationToken)
+    {
+        var all = await ContainersAsync(cancellationToken).ConfigureAwait(false);
+        if (containerName is { Length: > 0 })
+        {
+            return all.FirstOrDefault(c => c.Name == containerName);
+        }
+
+        var result = await RunAsync(["ps", "-a", "--no-trunc", "--format", ContainerFormat, "--filter", "label=com.docker.compose.project=" + project, "--filter", "label=com.docker.compose.service=" + service], cancellationToken).ConfigureAwait(false);
+        var labelled = result.Succeeded ? ParseContainers(result.Output) : [];
+        return labelled.FirstOrDefault(c => c.IsRunning) ?? (labelled.Count > 0 ? labelled[0] : null)
+            ?? all.FirstOrDefault(c => c.Name == $"{project}-{service}-1" || c.Name == $"{project}_{service}_1");
+    }
+
     /// <summary>A compose project's name from its folder, as compose itself derives it (lower case, letters, digits, - and _).</summary>
     public static string ComposeProjectName(string composeFile)
     {

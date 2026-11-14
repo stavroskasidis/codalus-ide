@@ -7,6 +7,20 @@ public sealed class DiffModelTests
 {
     private static IReadOnlyList<DiffRow> Rows(string[] oldLines, string[] newLines) => DiffRows.Align(LineDiff.Diff(oldLines, newLines));
 
+    /// <summary>Git Changes opens a file at its first change: an edited, added or removed line, or none.</summary>
+    [Fact]
+    public void The_first_changed_line_is_an_edit_an_addition_or_the_line_under_a_removal()
+    {
+        const string Old = "a\nb\nc\nd\n";
+        Assert.Equal(3, LineDiff.FirstChangedLine(Old, "a\nb\nC\nd\n"));
+        Assert.Equal(2, LineDiff.FirstChangedLine(Old, "a\nx\nb\nc\nd\n"));
+        Assert.Equal(2, LineDiff.FirstChangedLine(Old, "a\nc\nd\n"));
+        Assert.Equal(4, LineDiff.FirstChangedLine(Old, "a\nb\nc\n"));
+        Assert.Equal(1, LineDiff.FirstChangedLine(string.Empty, "new\n"));
+        Assert.Null(LineDiff.FirstChangedLine(Old, Old));
+        Assert.Null(LineDiff.FirstChangedLine(Old, Old.Replace("\n", "\r\n", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void Panes_line_up_side_by_side_with_filler_and_inline_shows_each_changes_removed_lines_first()
     {

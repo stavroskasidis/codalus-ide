@@ -214,11 +214,42 @@ public sealed class EntityFrameworkIntegrationTests : IAsyncLifetime
         var closed = DateTime.UtcNow;
         while (ef.Any(IsRunning))
         {
-            Assert.True(DateTime.UtcNow - closed < TimeSpan.FromMilliseconds(300), "dotnet ef outlived the build host.");
+            // Which of the host's new children is left, and how: a zombie the host's end left unreaped (state Z) or a
+            // child the host doesn't end (Linux, a full validation run under load; it passed alone 5 of 5). TODO(issue)
+            Assert.True(DateTime.UtcNow - closed < TimeSpan.FromMilliseconds(300), $"dotnet ef outlived the build host: {string.Join("; ", ef.Where(IsRunning).Select(Describe))}");
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
 
         await Record.ExceptionAsync(() => running);
+    }
+
+    /// <summary>A process for a failure's message: its id, and on Linux its state, parent and command line.</summary>
+    private static string Describe(int id)
+    {
+        if (OperatingSystem.IsLinux())
+        {
+            try
+            {
+                var stat = File.ReadAllText($"/proc/{id}/stat");
+                var fields = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
+                var command = File.ReadAllText($"/proc/{id}/cmdline").Replace('\0', ' ').Trim();
+                return $"{id} in state {fields[0]}, parent {fields[1]}: {(command.Length == 0 ? "no command line" : command)}";
+            }
+            catch (IOException)
+            {
+                return $"{id} (gone)";
+            }
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(id);
+            return $"{id} {process.ProcessName}";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            return $"{id} (gone)";
+        }
     }
 
     private static bool IsRunning(int id)

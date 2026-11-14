@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="AsyncDebuggee/AsyncDebuggee.csproj" />
+  <Project Path="AsyncDebuggee.RuntimeAsync/AsyncDebuggee.RuntimeAsync.csproj" />
+  <Project Path="AsyncLib/AsyncLib.csproj" />
+  <Project Path="AsyncLib.RuntimeAsync/AsyncLib.RuntimeAsync.csproj" />
+</Solution>

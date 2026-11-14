@@ -69,6 +69,13 @@ internal static partial class Program
         if (options.Mcp)
         {
             AttachToParentConsole();
+
+            // codalus mcp --folder (M60b): an IDE with no window on that folder, serving the same tools on stdio.
+            if (options.Headless)
+            {
+                return Infrastructure.HeadlessIde.Run(options);
+            }
+
             var paths = Codalus.Platform.AppPaths.Resolve(Codalus.Platform.PlatformInfo.Current, Environment.GetEnvironmentVariable, options.UserDataDir);
             var instance = Infrastructure.SingleInstance.PipeName(paths.State);
 
@@ -79,7 +86,12 @@ internal static partial class Program
             var notListening = options.AgentSession is { Length: > 0 } ? "The AI Chat session of Codalus IDE that started this agent has ended." : null;
             var input = new StreamReader(Console.OpenStandardInput(), new System.Text.UTF8Encoding(false));
             var output = new StreamWriter(Console.OpenStandardOutput(), new System.Text.UTF8Encoding(false)) { AutoFlush = true };
-            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(input, output, (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallAsync(pipe, tool, arguments, notListening, ct));
+            // The tools are the running IDE's (its plugins' too, ADR 0092); the built-in list when it doesn't answer.
+            var server = new Codalus.Workbench.Ai.Mcp.McpStdioServer(
+                input,
+                output,
+                ct => Codalus.Workbench.Ai.Mcp.McpBridge.ListToolsAsync(pipe, notListening, ct),
+                (tool, arguments, ct) => Codalus.Workbench.Ai.Mcp.McpBridge.CallToolAsync(pipe, tool, arguments, notListening, ct));
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }

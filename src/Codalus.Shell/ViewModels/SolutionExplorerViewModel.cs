@@ -2275,11 +2275,19 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
     }
 
-    /// <summary>Enter or double-click: files open, containers expand or collapse, project references jump to the project.</summary>
+    /// <summary>
+    /// Enter or double-click: files open, an SDK-style project opens its project file (as in the classic IDE; a
+    /// non-SDK-style one, or one that isn't loaded, expands or collapses), other containers expand or collapse, project
+    /// references jump to the project.
+    /// </summary>
     public async Task ActivateAsync(ExplorerRowViewModel row)
     {
         switch (row.Node)
         {
+            case { Kind: ExplorerNodeKind.Project, Path: { } project } when _shell.Solutions.Projects.TryGetValue(project, out var info)
+                && info is { State: ProjectStates.Loaded, IsNonSdkStyle: false } && File.Exists(project):
+                await _shell.OpenFileAsync(project).ConfigureAwait(true);
+                break;
             case { Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem, Path: { } path }:
                 await _shell.OpenFileAsync(path).ConfigureAwait(true);
                 break;

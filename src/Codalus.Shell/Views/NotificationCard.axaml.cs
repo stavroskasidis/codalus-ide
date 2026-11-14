@@ -1,5 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Codalus.Shell.ViewModels;
 
 namespace Codalus.Shell.Views;
 
@@ -12,7 +15,16 @@ public sealed partial class NotificationCard : UserControl
     {
         InitializeComponent();
         UpdateCardStyle();
+
+        // A toast doesn't hide under the pointer, nor at all once the user clicked in it (selecting its text, say) or tabbed
+        // into it; the buttons handle their own presses, so the press is heard in the tunnel.
+        PointerEntered += (_, _) => Toast?.IsHovered = true;
+        PointerExited += (_, _) => Toast?.IsHovered = false;
+        AddHandler(PointerPressedEvent, (_, _) => Toast?.IsPinned = true, RoutingStrategies.Tunnel, handledEventsToo: true);
+        AddHandler(GotFocusEvent, (_, _) => Toast?.IsPinned = true, RoutingStrategies.Bubble, handledEventsToo: true);
     }
+
+    private NotificationViewModel? Toast => Floating ? DataContext as NotificationViewModel : null;
 
     /// <summary>Toasts float over the layout with a shadow; entries in the Notifications window are flat.</summary>
     public bool Floating

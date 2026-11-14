@@ -185,7 +185,20 @@ public sealed class CompanionTests(DebuggeeFixture debuggee) : IClassFixture<Deb
         var folder = Path.Combine(Path.GetTempPath(), "codalus-createdump-" + Guid.NewGuid().ToString("N")[..8]);
         Directory.CreateDirectory(folder);
         var standIn = Path.Combine(folder, OperatingSystem.IsWindows() ? "createdump.exe" : "createdump");
-        File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "PING.EXE") : "/bin/sleep", standIn);
+        if (OperatingSystem.IsLinux())
+        {
+            // A script, which the kernel names after its file (createdump), as it does a copied binary. A copy of
+            // /bin/sleep exited at once on ubuntu-26.04: its coreutils (Rust's, a multi-call binary) choose the
+            // utility by the name they run as, so "createdump 120" is no utility (develop's run 42917624764, PR #321's
+            // run 42964724644; docs/ci-flakes.md).
+            File.WriteAllText(standIn, "#!/bin/sh\nsleep \"$1\"\n");
+            File.SetUnixFileMode(standIn, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        else
+        {
+            File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "PING.EXE") : "/bin/sleep", standIn);
+        }
+
         string[] standInArguments = OperatingSystem.IsWindows() ? ["-n", "120", "127.0.0.1"] : ["120"];
         var wait = Path.Combine(Path.GetTempPath(), "codalus-dump-wait-" + Guid.NewGuid().ToString("N"));
         var dump = Path.Combine(folder, "program.dmp");

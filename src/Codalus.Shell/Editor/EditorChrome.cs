@@ -78,6 +78,12 @@ public sealed class NavigationBar : Border
         public void Navigate(Position position) => controller.Navigate(position);
     }
 
+    /// <summary>
+    /// Styled as a <see cref="Border"/>: <c>Border.navigationBar</c> (the toolbar's background, the line under it) matches
+    /// a control's style key exactly, so without this the bar took none of it.
+    /// </summary>
+    protected override Type StyleKeyOverride => typeof(Border);
+
     public NavigationBar()
     {
         // A flat bar of two pickers (M34a): Border.navigationBar and ComboBox.navigationBar in ShellStyles.axaml.

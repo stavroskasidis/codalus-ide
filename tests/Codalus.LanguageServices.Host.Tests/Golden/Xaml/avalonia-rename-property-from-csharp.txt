@@ -1,0 +1,12 @@
+=== AvaloniaApp/ViewModels/DesignData.cs
+@@ 6
+-     public static MainWindowViewModel Main { get; } = new() { Greeting = "Hello from design-time data" };
++     public static MainWindowViewModel Main { get; } = new() { Welcome = "Hello from design-time data" };
+=== AvaloniaApp/ViewModels/MainWindowViewModel.cs
+@@ 20
+-     public string Greeting
++     public string Welcome
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 17
+-     <TextBlock x:Name="GreetingText" DockPanel.Dock="Top" Classes="title" Text="{Binding Greeting}" />
++     <TextBlock x:Name="GreetingText" DockPanel.Dock="Top" Classes="title" Text="{Binding Welcome}" />

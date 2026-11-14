@@ -260,7 +260,13 @@ public sealed class AcpContentBlock
 
     public AcpEmbeddedResource? Resource { get; init; }
 
+    /// <summary>An image's bytes, base64 (<c>type: image</c>).</summary>
+    public string? Data { get; init; }
+
     public static AcpContentBlock FromText(string text) => new() { Type = "text", Text = text };
+
+    /// <summary>An image block (ADR 0092): only for an agent whose <c>promptCapabilities.image</c> is true.</summary>
+    public static AcpContentBlock FromImage(AiImageAttachment image) => new() { Type = "image", Data = image.Data, MimeType = image.MimeType };
 }
 
 public sealed class AcpEmbeddedResource

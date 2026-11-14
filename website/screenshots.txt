@@ -6,6 +6,7 @@
 agent-connect.png         Linux     agent-connect.png
 ai-chat-agent.png         Linux     ai-chat-agent.png
 ai-chat.png               Linux     ai-chat.png
+ai-console.png            Linux     ai-console.png
 aspire.png                Linux     smoke-test-aspire.png
 blazor.png                Linux     smoke-test-blazor-compound-debug.png
 code-search.png           Linux     smoke-test-code-search.png
@@ -21,6 +22,7 @@ netfx.png                 Windows   netfx-debugging.png
 new-project.png           Linux     new-project.png
 profiler.png              Linux     smoke-test-profiler.png
 references.png            Linux     smoke-test-references.png
+setup-ai.png              Linux     setup-ai.png
 setup.png                 Linux     setup-appearance.png
 theme-classic.png         Linux     smoke-test-theme-light.png
 theme-daylight.png        Linux     smoke-test-theme-daylight.light.png

@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Setup;
 
@@ -26,7 +27,10 @@ public sealed class EnvironmentShellTests
         Assert.Equal(ToolState.Found, page.Rows.Single(r => r.Tool.Id == "git").Tool.State);
         Assert.False(page.Rows.Single(r => r.Tool.Id == "dotnet").CanFix);
 
-        // A missing SDK (stand-in): the plan is shown, and declining runs nothing.
+        // A missing SDK (stand-in), on a machine without dotnet in the terminal: the plan that fits is shown, and
+        // declining runs nothing.
+        var platform = f.Shell.Workbench.Platform;
+        f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(platform, platform == Codalus.Platform.PlatformKind.Windows ? @"C:\Users\u" : "/home/u") { HasWinget = true };
         var missing = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
         var runs = new List<string>();
         Task<(int, string)> Runner(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken token)
@@ -38,7 +42,7 @@ public sealed class EnvironmentShellTests
         InstallPlan? shown = null;
         await Within(f, f.Shell.InstallToolAsync(missing, plan => { shown = plan; return Task.FromResult(false); }, Runner), 120, "the declined install");
         Assert.NotNull(shown);
-        Assert.Contains(shown!.Command.Split(' ')[0], s_installers);
+        Assert.Contains(s_installers, i => shown!.Command.Contains(i, StringComparison.Ordinal)); // Microsoft's .pkg on macOS
         Assert.Empty(runs);
 
         // Agreed: a plan that runs here goes through the runner, then the check runs again. The "install" points this
@@ -61,6 +65,118 @@ public sealed class EnvironmentShellTests
                 }
             }
         }
+    }
+
+    [AvaloniaFact]
+    public async Task Install_dotnet_offers_each_way_with_the_one_that_fits_picked_and_runs_the_one_picked()
+    {
+        // The maintainer's Mac: the terminal's dotnet is Microsoft's .pkg's. Its .pkg fits; dotnet-install into ~/.dotnet
+        // says the terminal won't see it.
+        await using var f = ShellFixture.Create();
+        f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/u")
+        {
+            ShellDotnet = "/usr/local/bin/dotnet",
+            ShellRoot = "/usr/local/share/dotnet",
+            Arm64 = true,
+        };
+        var missing = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
+        Assert.Equal("pkg", f.Shell.PlanFor(missing)?.Option); // Check Environment's row: the one that fits
+        var runs = new List<string>();
+        Task<(int, string)> Runner(string program, IReadOnlyList<string> arguments, string? directory, CancellationToken token)
+        {
+            runs.Add(program + " " + string.Join(' ', arguments));
+            return Task.FromResult((0, "installed\n"));
+        }
+
+        var saved = s_dotnetVariables.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+        try
+        {
+            var dialog = f.Shell.Dialogs;
+            var cancelled = f.Shell.InstallToolAsync(missing, run: Runner);
+            await ShellFixture.PumpUntil(() => dialog.IsOpen);
+            Assert.Equal(["pkg", "dotnet-install", "page"], dialog.Alternatives.Select(a => a.Id));
+            Assert.Equal([true, false, false], dialog.Alternatives.Select(a => a.IsSelected));
+            Assert.EndsWith("(recommended)", dialog.Alternatives[0].Label, StringComparison.Ordinal);
+            Assert.Contains("sudo installer -pkg", dialog.Alternatives[0].Command, StringComparison.Ordinal);
+            Assert.Null(dialog.Alternatives[0].Note);
+            Assert.Contains("won't see this SDK", dialog.Alternatives[1].Note, StringComparison.Ordinal);
+            dialog.Cancel();
+            await Within(f, cancelled, 60, "the cancelled choice");
+            Assert.Empty(runs);
+
+            // Another way picked: one at a time, and that one runs.
+            var picked = f.Shell.InstallToolAsync(missing, run: Runner);
+            await ShellFixture.PumpUntil(() => dialog.IsOpen);
+            dialog.Alternatives[1].IsSelected = true;
+            Assert.Equal([false, true, false], dialog.Alternatives.Select(a => a.IsSelected));
+            dialog.Accept();
+            await Within(f, picked, 180, "the picked install and the check after it");
+            Assert.Equal("bash -c curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel " + InstallPlans.HostChannel + " --install-dir \"/Users/u/.dotnet\"", Assert.Single(runs));
+        }
+        finally
+        {
+            foreach (var (name, value) in saved)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task The_ways_to_install_are_radio_buttons_with_their_commands_wrapped_in_the_dialog()
+    {
+        var sdk = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
+        var plans = InstallPlans.DotnetOptions(sdk, new DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/u") { ShellDotnet = "/usr/local/bin/dotnet", ShellRoot = "/usr/local/share/dotnet", Arm64 = true });
+        var dialog = new DialogViewModel();
+        var shown = dialog.ShowAsync(ShellHost.InstallChoice(sdk, plans));
+        var view = new Codalus.Shell.Views.DialogView { DataContext = dialog, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+        var window = new Avalonia.Controls.Window { Width = 1280, Height = 800, Content = new Avalonia.Controls.Panel { Children = { view } } };
+        window.Show();
+        ShellFixture.Pump();
+        ShellFixture.Pump();
+
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is { Length: > 0 } snapshots)
+        {
+            Directory.CreateDirectory(snapshots);
+            using var shot = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
+            shot!.Save(Path.Combine(snapshots, "install-dotnet-choice.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        var radios = view.GetVisualDescendants().OfType<Avalonia.Controls.RadioButton>().ToList();
+        Assert.Equal([true, false, false], radios.Select(r => r.IsChecked == true));
+        var frame = view.GetVisualDescendants().OfType<Avalonia.Controls.Border>().First(b => b.Name == "Frame");
+        var commands = view.GetVisualDescendants().OfType<Avalonia.Controls.SelectableTextBlock>().ToList();
+        Assert.Equal(3, commands.Count);
+        Assert.All(commands, c => Assert.True(c.Bounds.Width < frame.Bounds.Width, $"a command is {c.Bounds.Width} px wide in a {frame.Bounds.Width} px dialog"));
+        Assert.True(frame.Bounds.Height < 800, $"the dialog is {frame.Bounds.Height} px high");
+
+        // Another picked in the view: one at a time, and that one is the result.
+        radios[1].IsChecked = true;
+        ShellFixture.Pump();
+        Assert.Equal([false, true, false], dialog.Alternatives.Select(a => a.IsSelected));
+        dialog.Accept();
+        await ShellFixture.PumpUntil(() => shown.IsCompleted); // its end resumes on the UI thread: not waited on there
+        Assert.Equal(["dotnet-install"], (await shown).Checked);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_dotnet_install_in_the_terminal_is_awaited_and_its_exit_code_decides()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return; // cmd's pause hides the command's exit code: the check after it tells (and the .pkg is macOS')
+        }
+
+        await using var f = ShellFixture.Create();
+        f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/u") { ShellDotnet = "/usr/local/bin/dotnet", ShellRoot = "/usr/local/share/dotnet" };
+        var missing = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
+
+        // The .pkg's way, with a command that fails at once in place of curl and sudo: the terminal ends, and its code is the install's.
+        var failed = f.Shell.InstallToolAsync(missing, choose: plans => Task.FromResult<InstallPlan?>(plans.Single(p => p.Option == "pkg") with { Command = "exit 3" }));
+        await Within(f, failed, 60, "the terminal's install");
+        Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("failed (exit code 3)", StringComparison.Ordinal));
+        Assert.Contains("exit code 3", f.Shell.Workbench.Output.Channels.Single(c => c.Id == "codalus.setup").GetText(), StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -26,6 +26,9 @@ public sealed partial class ShellHost
     /// <summary>Step over properties and operators (M14b).</summary>
     public const string StepFilteringSetting = "debug.stepOverPropertiesAndOperators";
 
+    /// <summary>With several startup projects, a stop in one program pauses the others (M58); on by default.</summary>
+    public const string BreakAllProcessesSetting = "debug.breakAllProcesses";
+
     /// <summary>The adapter that debugs .NET programs: netcoredbg, or Codalus IDE's own, a preview (M54, ADR 0086).</summary>
     public const string DebugAdapterSetting = "debug.adapter";
 
@@ -56,11 +59,14 @@ public sealed partial class ShellHost
         Debugger = new DebugService(DebugAdapterLocator.Resolve)
         {
             JustMyCode = Workbench.Settings.GetBoolean(JustMyCodeSetting, true),
-            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter),
+            AdapterSetting = () => Workbench.Settings.GetString(DebugAdapterSetting, DebugService.CodalusAdapter),
         };
         // [DebuggerDisplay] and [DebuggerBrowsable] from the companion host (M14b); netcoredbg doesn't apply them.
+        // A remote session's modules are read where they are, by the companion in the debugger's bundle there (M58b).
         Debugger.Displays = new DebuggerDisplays(async (type, modules, cancellationToken) =>
-            await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+            (_remoteCompanion is { } remote ? await RemoteTypeDisplayAsync(remote, type, modules, cancellationToken).ConfigureAwait(false) : null)
+            ?? await Companion.TypeDisplayAsync(type, modules, cancellationToken).ConfigureAwait(false));
+        Debugger.Ended += (_, _) => UseRemoteCompanion(null);
         // The solution's own code (D44): a module named as one of its projects, or built under one's folder.
         Debugger.IsUserModule = path => path is not null && Solutions.Projects.Values.Any(p =>
             string.Equals(p.Name, Path.GetFileNameWithoutExtension(path), StringComparison.OrdinalIgnoreCase)
@@ -81,6 +87,9 @@ public sealed partial class ShellHost
         VariableActions.VisualizeWithPlugin = VisualizeWithPluginAsync;
         VariableActions.AskAi = AskAiAboutValueAsync;
         VariableActions.CanAskAi = () => Ai.IsEnabled;
+        VariableActions.MakeObjectId = expression => MakeObjectIdAsync(expression);
+        VariableActions.CanMakeObjectId = () => Debugger.CanMakeObjectIds;
+        VariableActions.DeleteObjectId = DeleteObjectIdAsync;
         VariableActions.CopyText = async text =>
         {
             if (Window?.Clipboard is { } clipboard)
@@ -222,6 +231,21 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (BeginLaunch(argument) is not { } launch)
+        {
+            return;
+        }
+
+        using (launch)
+        {
+            await StartDebuggingAsync(argument, launch).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>F5 from the start: the build, then the debug session; Stop meanwhile cancels it (<paramref name="launch"/>).</summary>
+    private async Task StartDebuggingAsync(string? argument, Launch launch)
+    {
+        _debugLaunchUrl = null;
         if (argument is null && await StartFolderLaunchAsync(debug: true).ConfigureAwait(true))
         {
             return; // a folder's launch configuration (ADR 0033)
@@ -266,9 +290,9 @@ public sealed partial class ShellHost
             return; // a packaged WinUI 3 app (M44): started by Windows, then netcoredbg attaches
         }
 
-        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true))
+        if (!await BuildBeforeRunAsync(project).ConfigureAwait(true) || launch.IsCanceled)
         {
-            if (Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
+            if (!launch.IsCanceled && Builds.LastBuild is { Result: { Canceled: false, Errors: > 0 } })
             {
                 StatusBar.ShowMessage(Localizer.Get("msg.debug.theBuildFailedSoDebuggingDid", "The build failed, so debugging did not start."), TimeSpan.FromSeconds(6));
             }
@@ -304,6 +328,7 @@ public sealed partial class ShellHost
             }
 
             var plan = await Runs.LaunchPlanAsync(info, profile, CancellationToken.None).ConfigureAwait(true);
+            _debugLaunchUrl = WebAppUrl(plan); // a web app is expected to listen there (the agent's tools wait for it)
             DebugLog.Clear();
             if (error is not null)
             {
@@ -356,16 +381,21 @@ public sealed partial class ShellHost
             }
 
             var name = Path.GetFileNameWithoutExtension(project);
-            var launch = plan.Wsl is not null
+            var debugLaunch = plan.Wsl is not null
                 ? await WslLaunchAsync(name, plan).ConfigureAwait(true)
                 : new DebugLaunch(name, plan) { Console = profile?.CommandName == LaunchProfile.RoslynComponent ? DebugConsoleKind.Internal : ConsoleFor(info) };
-            if (launch is null)
+            if (debugLaunch is null)
+            {
+                return;
+            }
+
+            if (launch.IsCanceled)
             {
                 return;
             }
 
             _pendingBrowserUrl = plan.BrowserUrl;
-            await Debugger.LaunchAsync([launch], CancellationToken.None).ConfigureAwait(true);
+            await Debugger.LaunchAsync([debugLaunch], CancellationToken.None).ConfigureAwait(true);
             OpenBrowserLater();
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException or IOException)
@@ -566,6 +596,7 @@ public sealed partial class ShellHost
         }
 
         Workbench.Context.Set("debugCanDetach", Debugger.CanDetach);
+        UpdateDebuggerAbilities();
         if (state == DebugState.Idle)
         {
             Workbench.StatusBar.Remove(DebugStatusItem);
@@ -625,6 +656,8 @@ public sealed partial class ShellHost
             DebugLog.AppendLine($"Exception thrown: '{type}': {message}");
             StatusBar.ShowMessage(Localizer.Format("msg.debug.exceptionThrown", "Exception thrown: {0}: {1}", type, message), TimeSpan.FromSeconds(10));
         }
+
+        ShowXamlStop(stop);
 
         // Through the file system that holds it: a remote window's sources are the server's (M21).
         if (Debugger.SelectedFrame is { Source.Path: { } path } frame && await SourceExistsAsync(path).ConfigureAwait(true))

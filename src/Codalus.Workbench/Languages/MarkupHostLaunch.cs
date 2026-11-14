@@ -22,6 +22,6 @@ public static class MarkupHostLaunch
         var exe = OperatingSystem.IsWindows() ? "codalus-markuphost.exe" : "codalus-markuphost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "markuphost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "markuphost", "codalus-markuphost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }

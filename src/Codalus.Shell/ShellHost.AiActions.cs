@@ -22,9 +22,14 @@ public sealed partial class ShellHost
 
     void Editor.IEditorServices.AskAiAboutException(string description) => _ = ExplainExceptionWithAiAsync(description);
 
-    /// <summary>Tells the user AI is off or has no provider; true when it can be used.</summary>
+    /// <summary>Tells the user AI is off or has no provider; true when it can be used (a provider, or AI Chat's agent, ADR 0097).</summary>
     private async Task<bool> EnsureAiAsync()
     {
+        if (Ai.ExternalAgent is not null)
+        {
+            return true; // whether it may run here is checked when it is asked, and a refusal says why
+        }
+
         switch (Ai.State)
         {
             case AiState.Off:
@@ -48,18 +53,21 @@ public sealed partial class ShellHost
     /// <summary>Writes the commit message for the staged changes into Git Changes' box.</summary>
     public async Task GenerateCommitMessageAsync()
     {
-        if (!await EnsureAiAsync().ConfigureAwait(true) || Git.Root is null)
+        if (GitChanges.IsWritingMessage || !await EnsureAiAsync().ConfigureAwait(true) || Git.Root is null)
         {
             return;
         }
 
+        GitChanges.IsWritingMessage = true;
         try
         {
-            // With all repositories shown (ADR 0085), every one's staged changes, each filtered against its own repository.
+            // What Commit will commit: the staged changes when there are some, otherwise everything Commit All takes (new
+            // files too). With all repositories shown (ADR 0085), every one's, each filtered against its own repository.
+            var staged = GitChanges.HasStaged;
             var diffs = new List<(string Diff, string Root)>();
             foreach (var git in GitChanges.Services.Where(s => s.Root is not null))
             {
-                var (_, diff, _) = await git.RunAsync(git.Root!, ["diff", "--cached", "--no-ext-diff", "-M"], CancellationToken.None, readOnly: true).ConfigureAwait(true);
+                var diff = await AiActions.CommitDiffAsync(git, git.Root!, staged, CancellationToken.None).ConfigureAwait(true);
                 if (diff.Trim().Length > 0)
                 {
                     diffs.Add((diff, git.Root!));
@@ -68,17 +76,31 @@ public sealed partial class ShellHost
 
             if (diffs.Count == 0)
             {
-                ShowMessage(Localizer.Get("msg.ai.stageChangesFirst", "Stage the changes to commit first: the message describes the staged changes."));
+                Workbench.Notifications.Info(Localizer.Get("msg.ai.nothingToDescribe", "There are no changes to commit, so there's nothing for a commit message to describe."));
                 return;
             }
 
             var subjects = (await Git.LogAsync(new GitLogQuery(), 0, 10).ConfigureAwait(true)).Select(c => c.Subject).ToList();
-            ShowMessage(Localizer.Get("msg.ai.writingCommitMessage", "Writing the commit message…"));
-            GitChanges.Message = await AiActions.CommitMessageAsync(Ai, diffs, subjects, CancellationToken.None).ConfigureAwait(true);
+            ShowMessage(staged
+                ? Localizer.Get("msg.ai.writingCommitMessage", "Writing the commit message…")
+                : Localizer.Get("msg.ai.writingCommitMessageAll", "Nothing is staged: writing the commit message for all the changes, as Commit All commits them…"));
+            var message = await AiActions.CommitMessageAsync(Ai, diffs, subjects, CancellationToken.None, staged).ConfigureAwait(true);
+            if (message.Length == 0)
+            {
+                // A blank answer leaves the box as it was and says so: an empty box looked like nothing had happened.
+                Workbench.Notifications.Warning(Localizer.Get("msg.ai.noCommitMessage", "The AI answered with no commit message. Try again."));
+                return;
+            }
+
+            GitChanges.Message = message;
         }
         catch (Exception ex) when (ex is AiUnavailableException or GitException)
         {
             ReportAiFailure(ex);
+        }
+        finally
+        {
+            GitChanges.IsWritingMessage = false;
         }
     }
 

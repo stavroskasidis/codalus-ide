@@ -73,6 +73,23 @@ public sealed partial class GitService
         return ParseLog(output);
     }
 
+    /// <summary>
+    /// The ids of the commits <paramref name="range"/> names (<c>origin/main..main</c>: what main has and origin/main
+    /// doesn't, its outgoing commits). One <c>rev-list</c>: no messages, no decoration.
+    /// </summary>
+    public async Task<IReadOnlySet<string>> CommitIdsAsync(string range, CancellationToken cancellationToken = default)
+    {
+        if (Status?.Head is null)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        var (code, output, _) = await RunAsync(Root!, ["rev-list", "--end-of-options", range], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+        return code == 0
+            ? new HashSet<string>(output.Split((char[])['\n', '\r'], StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
+    }
+
     internal static IReadOnlyList<GitCommit> ParseLog(string output)
     {
         var commits = new List<GitCommit>();

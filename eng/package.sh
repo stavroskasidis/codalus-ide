@@ -20,6 +20,7 @@
 # Prerequisites: the .NET SDK (Native AOT toolchain), zip; vswhere on PATH on Windows; mksquashfs on Linux; rpmbuild
 # for the .rpm.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "$0")/.." && pwd)"
 base="$(tr -d '[:space:]' < "$repo/VERSION")"
@@ -57,8 +58,10 @@ if [ "$(uname -s)" = Darwin ] && [ -z "${SDKROOT:-}" ] && command -v xcrun > /de
 fi
 echo "== Publishing the shell ($rid, $version, channel $channel)"
 dotnet publish "$repo/src/Codalus.Shell" -c Release -r "$rid" -o "$app" -p:Version="$version" -p:DebugType=none -p:DebugSymbols=false
-# Symbols stay out of packages (they are large); CI keeps them as a separate artifact.
+# Symbols stay out of packages (they are large); CI keeps them as a separate artifact. On macOS, Native AOT writes the
+# shell's as codalus.dSYM, a folder.
 find "$app" -name '*.pdb' -delete
+find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
 
 echo "== Debugger (netcoredbg)"
 if "$repo/eng/get-netcoredbg.sh" "$stage/netcoredbg"; then
@@ -69,6 +72,21 @@ fi
 # The x64 debugger, for the programs of .NET 5 and earlier that run as x64 under Rosetta 2 (M33, ADR 0030).
 if [ "$rid" = osx-arm64 ] && [ -d "$app/debugger" ] && "$repo/eng/get-netcoredbg.sh" --x64 "$stage/netcoredbg-x64"; then
   cp -R "$stage/netcoredbg-x64" "$app/debugger/x64"
+fi
+
+# The Codalus debugger's other build, offered as a component (M58b, ADR 0094): for x64 programs on Apple silicon in
+# the macOS package, for 32-bit .NET Framework programs in the Windows one. It is a release asset next to the packages;
+# the package only names it, with its SHA-256 (debughost/debugger-components.json). A release's builds only: the asset
+# is downloaded from the release of the app's own version, which a dev or update-test build doesn't have.
+component=""
+case "$rid" in
+  osx-arm64) component=osx-x64 ;;
+  win-x64) component=win-x86 ;;
+esac
+rm -f "$out"/codalus-debugger-*.tar.gz
+if [ -n "$component" ] && { [ "$kind" = stable ] || [ "$kind" = nightly ]; }; then
+  echo "== The Codalus debugger's $component bundle (a component)"
+  bash "$repo/eng/package-debugger-component.sh" "$component" "$version" "$app" "$out" "$stage/debugger-$component"
 fi
 
 cp "$repo/LICENSE" "$repo/THIRD-PARTY-NOTICES.md" "$repo/README.md" "$app/"
@@ -128,6 +146,16 @@ case "$rid" in
     ;;
   osx-*)
     echo "== macOS: .pkg and .app (Velopack)"
+    # Velopack puts the app in Contents/MacOS, where codesign takes a folder with a dot in its name for a nested bundle
+    # and refuses to sign the app ("bundle format unrecognized"). Coverlet's Windows-only assemblies (runtimes/win/lib/
+    # net8.0) are never loaded on macOS; anything else dotted is a layout to fix where it's made.
+    find "$app/plugins" -path '*/coverage/*/runtimes/win' -type d -prune -exec rm -rf {} +
+    dotted="$(cd "$app" && find . -mindepth 1 -type d -name '*.*')"
+    if [ -n "$dotted" ]; then
+      echo "These folders have a dot in their names, which macOS signing takes for bundles:" >&2
+      echo "$dotted" >&2
+      exit 1
+    fi
     iconset="$stage/codalus.iconset"
     mkdir -p "$iconset"
     for size in 16 32 128 256 512; do
@@ -138,11 +166,24 @@ case "$rid" in
     # Bundle versions are numeric on macOS: the nightly part stays in the app's own version (`codalus --version`).
     sed -e "s/{{BUNDLE_VERSION}}/${version%%-*}/g" "$repo/eng/packaging/macos/Info.plist" > "$stage/Info.plist"
     sign_args=()
+    keychain_args=()
     if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
-      # D19: unsigned until the repository goes public; the signing step waits behind this variable. vpk signs and
-      # notarizes the app; the installer is signed and notarized below, once its postinstall is ours.
-      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY")
-      [ -n "${CODALUS_NOTARY_PROFILE:-}" ] && sign_args+=(--notaryProfile "$CODALUS_NOTARY_PROFILE")
+      # D19: a Developer ID signs and Apple notarizes the app; the installer is signed and notarized below, once its
+      # postinstall is ours. vpk signs the bundle deeply, so one entitlements file covers the shell, the hosts and
+      # netcoredbg (Codalus.entitlements): vpk's default, from the .NET notarization guide (the hosts' runtime JITs
+      # and is the user's .NET install, signed by Microsoft; plugins and packages bring native libraries signed by
+      # anyone), plus com.apple.security.cs.debugger, since netcoredbg and the debug host read their debuggee's memory.
+      # The plist has no comments: the kernel parses it too.
+      sign_args=(--signAppIdentity "$CODALUS_CODESIGN_IDENTITY" --signEntitlements "$repo/eng/packaging/macos/Codalus.entitlements")
+      if [ -n "${CODALUS_KEYCHAIN:-}" ]; then
+        sign_args+=(--keychain "$CODALUS_KEYCHAIN")
+        keychain_args=(--keychain "$CODALUS_KEYCHAIN")
+      fi
+      if [ -n "${CODALUS_NOTARY_PROFILE:-}" ]; then
+        sign_args+=(--notaryProfile "$CODALUS_NOTARY_PROFILE")
+      else
+        echo "CODALUS_NOTARY_PROFILE isn't set: the app and the installer are signed but not notarized, and Gatekeeper refuses them." >&2
+      fi
     fi
     "$vpk" pack "${vpk_args[@]}" --packDir "$app" --mainExe codalus --icon "$stage/codalus.icns" --plist "$stage/Info.plist" \
       ${sign_args[@]+"${sign_args[@]}"} # macOS bash 3.2 calls an empty array unbound under set -u
@@ -150,11 +191,16 @@ case "$rid" in
     bash "$repo/eng/packaging/macos/user-owned-pkg.sh" "$feed/$packid-$channel-Setup.pkg" "$out/$name.pkg" "Codalus IDE.app"
     rm "$feed/$packid-$channel-Setup.pkg"
     if [ -n "${CODALUS_CODESIGN_IDENTITY:-}" ]; then
-      productsign --sign "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}" "$out/$name.pkg" "$stage/signed.pkg"
+      # A .pkg takes a Developer ID Installer certificate: the app's Developer ID Application one can't sign it.
+      productsign --sign "${CODALUS_INSTALLER_IDENTITY:-$CODALUS_CODESIGN_IDENTITY}" ${keychain_args[@]+"${keychain_args[@]}"} \
+        "$out/$name.pkg" "$stage/signed.pkg"
       mv "$stage/signed.pkg" "$out/$name.pkg"
       if [ -n "${CODALUS_NOTARY_PROFILE:-}" ]; then
-        xcrun notarytool submit "$out/$name.pkg" --keychain-profile "$CODALUS_NOTARY_PROFILE" --wait
+        xcrun notarytool submit "$out/$name.pkg" --keychain-profile "$CODALUS_NOTARY_PROFILE" \
+          ${keychain_args[@]+"${keychain_args[@]}"} --wait
         xcrun stapler staple "$out/$name.pkg"
+        # What a downloaded copy meets: Gatekeeper's verdict on the installer and on the app the portable zip holds.
+        spctl --assess --type install -vv "$out/$name.pkg"
       fi
     fi
     mv "$feed/$packid-$channel-Portable.zip" "$out/$name.app.zip"
@@ -240,7 +286,7 @@ else
 fi
 
 echo "== Checksums"
-(cd "$out" && for file in "$name".* "$name"-* velopack/*; do
+(cd "$out" && for file in "$name".* "$name"-* codalus-debugger-"$version"-*.tar.gz velopack/*; do
   [ -f "$file" ] && printf '%s  %s\n' "$(sha256 "$file")" "$(basename "$file")"
 done) > "$out/SHA256SUMS-$rid.txt"
 

@@ -122,10 +122,15 @@ public sealed partial class ShellHost : IHostingActions
             }
         });
         Hosting.DeviceCodeReceived += (_, code) => Ui.Post(() => Accounts.Row(code.ProviderId)?.ShowCode(code.UserCode, code.VerificationUriComplete ?? code.VerificationUri));
-        Hosting.SignInRequired += (_, providerId) => Ui.Post(() =>
+        Hosting.SignInRequired += (_, ended) => Ui.Post(() =>
         {
+            var providerId = ended.ProviderId;
             var label = Hosting.Provider(providerId)?.Label ?? providerId;
-            var notification = Workbench.Notifications.Warning(Localizer.Format("msg.hosting.yourSessionExpiredOrWasRevoked", "Your {0} session expired or was revoked. Sign in again to see pull requests and checks.", label), "Sign In");
+            var reason = ended.Reason.Trim();
+            reason = reason.EndsWith(" Sign in again.", StringComparison.Ordinal) ? reason[..^" Sign in again.".Length] : reason;
+            reason = reason.EndsWith('.') ? reason : reason + ".";
+            GitLog.AppendLine($"[hosting] {label} signed you out: {reason}");
+            var notification = Workbench.Notifications.Warning(Localizer.Format("msg.hosting.yourSessionEnded", "Your {0} session expired or was revoked: {1} Sign in again to see pull requests and checks.", label, reason), "Sign In");
             _ = notification.Result.ContinueWith(t =>
             {
                 if (t.Result == "Sign In")

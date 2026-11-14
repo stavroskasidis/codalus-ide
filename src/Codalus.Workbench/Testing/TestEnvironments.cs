@@ -259,10 +259,12 @@ public sealed class EnvironmentTestRunner(TestEnvironment environment, string so
     }
 
     /// <summary><c>~/.profile</c>, then <c>~/.dotnet</c> first when it's there (a user's own install is the newer one).</summary>
-    private const string Prelude = """
+    /// The tools' telemetry opt-outs follow (M59), keeping a value the machine already has.
+    private static readonly string Prelude = $"""
         [ -f "$HOME/.profile" ] && . "$HOME/.profile" >/dev/null 2>&1 </dev/null
         if [ -x "$HOME/.dotnet/dotnet" ]; then PATH="$HOME/.dotnet:$PATH"; export PATH; fi
-        export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+        export DOTNET_NOLOGO=1
+        {ToolTelemetry.PosixShellExports()}
         """;
 
     private async Task<RemoteTarget> TargetAsync(CancellationToken cancellationToken)

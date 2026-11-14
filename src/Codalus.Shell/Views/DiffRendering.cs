@@ -47,59 +47,49 @@ internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int,
                 continue;
             }
 
+            // A CodeLens row (DiffLensGenerator) ends the line before its line: drawn as the line it goes with.
             var kind = lines[index].Kind;
             var top = line.VisualTop - textView.VerticalOffset;
-            var rect = new Rect(0, top, width, line.Height);
-            switch (kind)
+            var height = OwnHeight(line);
+            var rect = new Rect(0, top, width, height);
+            if (line.Height > height && index + 1 < lines.Count)
             {
-                case '-' or '+':
-                    drawingContext.DrawRectangle(kind == '-' ? removedLine : addedLine, null, rect);
-                    foreach (var (start, length) in words(index))
-                    {
-                        var documentLine = line.FirstDocumentLine;
-                        if (start >= documentLine.Length)
-                        {
-                            continue;
-                        }
+                Fill(lines[index + 1].Kind, new Rect(0, top + height, width, line.Height - height), line.VisualTop + height);
+            }
 
-                        var segment = new TextSegment { StartOffset = documentLine.Offset + start, Length = Math.Min(length, documentLine.Length - start) };
-                        foreach (var box in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
-                        {
-                            var word = new Rect(Math.Floor(box.X) + 0.5, Math.Floor(box.Y) + 0.5, Math.Max(1, Math.Round(box.Width) - 1), Math.Max(1, Math.Round(box.Height) - 1));
-                            drawingContext.DrawRectangle(kind == '-' ? removedWord : addedWord, kind == '-' ? removedBorder : addedBorder, word);
-                        }
+            Fill(kind, rect, line.VisualTop);
+            if (kind is '-' or '+')
+            {
+                foreach (var (start, length) in words(index))
+                {
+                    var documentLine = line.FirstDocumentLine;
+                    if (start >= documentLine.Length)
+                    {
+                        continue;
                     }
 
-                    break;
-                case 'z':
-                    // A folded run (Summary): a thin line above and below its note.
-                    if (Brush("Shell.Border") is { } border)
+                    var segment = new TextSegment { StartOffset = documentLine.Offset + start, Length = Math.Min(length, documentLine.Length - start) };
+                    foreach (var box in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
                     {
-                        var pen = new Pen(border, 1, new DashStyle([3, 3], 0));
-                        drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Top) + 0.5), new Point(width, Math.Floor(rect.Top) + 0.5));
-                        drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Bottom) - 0.5), new Point(width, Math.Floor(rect.Bottom) - 0.5));
+                        var word = new Rect(Math.Floor(box.X) + 0.5, Math.Floor(box.Y) + 0.5, Math.Max(1, Math.Round(box.Width) - 1), Math.Max(1, Math.Round(box.Height) - 1));
+                        drawingContext.DrawRectangle(kind == '-' ? removedWord : addedWord, kind == '-' ? removedBorder : addedBorder, word);
                     }
+                }
+            }
 
-                    break;
-                case 'f' when hatch is not null:
-                    // Diagonal stripes, anchored to the document so a run of filler lines draws one pattern.
-                    using (drawingContext.PushClip(rect))
-                    {
-                        var phase = line.VisualTop % HatchSpacing;
-                        for (var x = -line.Height - phase; x < width; x += HatchSpacing)
-                        {
-                            drawingContext.DrawLine(hatch, new Point(x, rect.Bottom), new Point(x + line.Height, rect.Top));
-                        }
-                    }
-
-                    break;
+            if (kind == 'z' && Brush("Shell.Border") is { } border)
+            {
+                // A folded run (Summary): a thin line above and below its note.
+                var pen = new Pen(border, 1, new DashStyle([3, 3], 0));
+                drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Top) + 0.5), new Point(width, Math.Floor(rect.Top) + 0.5));
+                drawingContext.DrawLine(pen, new Point(0, Math.Floor(rect.Bottom) - 0.5), new Point(width, Math.Floor(rect.Bottom) - 0.5));
             }
 
             if (outlinePen is not null && outline!.Contains(lines[index].Row) && kind is '-' or '+')
             {
                 // The lines a staging button acts on: an outline round them (left and right edges, top and bottom at the run's ends).
                 var top0 = Math.Floor(line.VisualTop - textView.VerticalOffset) + 0.5;
-                var bottom = top0 + Math.Round(line.Height) - 1;
+                var bottom = top0 + Math.Round(height) - 1;
                 var above = index > 0 && outline.Contains(lines[index - 1].Row) && lines[index - 1].Kind is '-' or '+';
                 var below = index + 1 < lines.Count && outline.Contains(lines[index + 1].Row) && lines[index + 1].Kind is '-' or '+';
                 drawingContext.DrawLine(outlinePen, new Point(0.5, top0), new Point(0.5, bottom + 1));
@@ -115,9 +105,36 @@ internal sealed class DiffRenderer(Control owner, Func<DiffPane> pane, Func<int,
                 }
             }
         }
+
+        // A removed or added line's fill, or a filler line's diagonal stripes, anchored to the document so a run of
+        // filler lines draws one pattern.
+        void Fill(char kind, Rect rect, double visualTop)
+        {
+            if (kind is '-' or '+')
+            {
+                drawingContext.DrawRectangle(kind == '-' ? removedLine : addedLine, null, rect);
+            }
+            else if (kind == 'f' && hatch is not null)
+            {
+                using (drawingContext.PushClip(rect))
+                {
+                    var phase = visualTop % HatchSpacing;
+                    for (var x = -rect.Height - phase; x < width; x += HatchSpacing)
+                    {
+                        drawingContext.DrawLine(hatch, new Point(x, rect.Bottom), new Point(x + rect.Height, rect.Top));
+                    }
+                }
+            }
+        }
     }
 
     private IBrush? Brush(string key) => owner.TryFindResource(key, owner.ActualThemeVariant, out var value) && value is IBrush brush ? brush : null;
+
+    /// <summary>
+    /// The height of a visual line's own text: its first text line when a CodeLens row of the next line follows it
+    /// (<see cref="DiffLensGenerator"/>), else all of it.
+    /// </summary>
+    public static double OwnHeight(VisualLine line) => line.TextLines.Count > 1 ? line.TextLines[0].Height : line.Height;
 }
 
 /// <summary>A "+" or "−" beside added and removed lines, so a diff doesn't rely on color alone.</summary>
@@ -251,7 +268,12 @@ internal sealed class DiffLineNumberMargin(Func<DiffPane> pane, Func<DiffChange?
             var top = line.VisualTop - view.VerticalOffset;
             if (change is { } c && c.Contains(paneLine.Row) && paneLine.Kind is not 'z')
             {
-                context.DrawRectangle(accent, null, new Rect(0, top, BarWidth, line.Height));
+                context.DrawRectangle(accent, null, new Rect(0, top, BarWidth, DiffRenderer.OwnHeight(line)));
+            }
+
+            if (line.Height > DiffRenderer.OwnHeight(line) && change is { } next && index + 1 < lines.Count && next.Contains(lines[index + 1].Row) && lines[index + 1].Kind is not 'z')
+            {
+                context.DrawRectangle(accent, null, new Rect(0, top + DiffRenderer.OwnHeight(line), BarWidth, line.Height - DiffRenderer.OwnHeight(line))); // the next line's CodeLens row
             }
 
             var bold = index + 1 == caretLine;
@@ -446,6 +468,158 @@ internal sealed class FoldLineColorizer(Control owner, Func<DiffPane> pane) : Do
                 element.TextRunProperties.SetForegroundBrush(brush);
                 element.TextRunProperties.SetTypeface(new Typeface(element.TextRunProperties.Typeface.FontFamily, FontStyle.Italic));
             });
+        }
+    }
+}
+
+/// <summary>
+/// A CodeLens row of a diff pane: the indentation that lines it up with its line's code, its titles (empty while its
+/// lenses wait for their counts, or on the other side's blank row), and what a click on it runs.
+/// </summary>
+internal sealed record DiffLensRow(string Indent, string Text, Action? Click)
+{
+    /// <summary>The other side's row opposite a lens: as tall, empty, not a link.</summary>
+    public static DiffLensRow Blank { get; } = new(string.Empty, string.Empty, null);
+}
+
+/// <summary>
+/// A diff pane's CodeLens rows (the maintainer's report: CodeLens didn't show in a diff), as the editor shows them
+/// (<see cref="Editor.EditorInsights"/>): a line's row goes after the end of the line before (a line break, its
+/// indentation, the titles smaller and muted in the UI's font), so the line itself keeps its height; the first line's
+/// titles go at its end. Side by side, the other side gets a blank row at the same place, as tall, so the sides stay
+/// row by row aligned. <paramref name="rowAbove"/> gives the row above a 0-based pane line, or null.
+/// </summary>
+internal sealed class DiffLensGenerator(TextView view, Func<int, DiffLensRow?> rowAbove) : VisualLineElementGenerator
+{
+    public override int GetFirstInterestedOffset(int startOffset)
+    {
+        var line = CurrentContext.VisualLine.LastDocumentLine;
+        return startOffset <= line.EndOffset && (AtEnd(line) is not null || Below(line) is not null) ? line.EndOffset : -1;
+    }
+
+    public override VisualLineElement? ConstructElement(int offset)
+    {
+        var line = CurrentContext.Document.GetLineByOffset(offset);
+        if (offset != line.EndOffset)
+        {
+            return null;
+        }
+
+        var atEnd = AtEnd(line);
+        var below = Below(line);
+        return atEnd is null && below is null ? null : new DiffLensRowElement(view, atEnd, below, Brush);
+    }
+
+    /// <summary>The first line's own titles (it has no line before it to show them after), or null.</summary>
+    private DiffLensRow? AtEnd(DocumentLine line) => line.LineNumber == 1 && rowAbove(0) is { Text.Length: > 0 } row ? row : null;
+
+    /// <summary>The next line's row, after this one's end, or null.</summary>
+    private DiffLensRow? Below(DocumentLine line) => line.NextLine is not null ? rowAbove(line.LineNumber) : null;
+
+    private IBrush Brush(string key) => view.TryFindResource(key, view.ActualThemeVariant, out var value) && value is IBrush brush ? brush : Brushes.Gray;
+}
+
+/// <summary>
+/// The end of a diff pane's line: the first line's own CodeLens titles, and the next line's row after a line break. Not
+/// part of the text and no caret stops. The row is a zero-width space in the code's font, then the indentation and the
+/// titles (a space when there are none) in the smaller UI font: a blank row and a row of titles are exactly as tall.
+/// </summary>
+internal sealed class DiffLensRowElement : VisualLineElement
+{
+    private const string ZeroWidthSpace = "​";
+    private readonly TextView _view;
+    private readonly DiffLensRow? _atEnd;
+    private readonly DiffLensRow? _below;
+    private readonly Func<string, IBrush> _brush;
+    private readonly string _end;
+    private readonly string _indent;
+    private readonly string _titles;
+
+    public DiffLensRowElement(TextView view, DiffLensRow? atEnd, DiffLensRow? below, Func<string, IBrush> brush)
+        : base(Length(atEnd, below), 0)
+    {
+        _view = view;
+        _atEnd = atEnd;
+        _below = below;
+        _brush = brush;
+        _end = atEnd is null ? string.Empty : "    " + atEnd.Text;
+        _indent = below is null ? string.Empty : ZeroWidthSpace + below.Indent;
+        _titles = below is null ? string.Empty : below.Text.Length > 0 ? below.Text : " ";
+    }
+
+    private static int Length(DiffLensRow? atEnd, DiffLensRow? below) =>
+        (atEnd is null ? 0 : 4 + atEnd.Text.Length) + (below is null ? 0 : 1 + 1 + below.Indent.Length + Math.Max(1, below.Text.Length));
+
+    public override Avalonia.Media.TextFormatting.TextRun CreateTextRun(int startVisualColumn, ITextRunConstructionContext context)
+    {
+        var at = startVisualColumn - VisualColumn;
+        var lens = _brush("Shell.Editor.CodeLens.Foreground");
+        if (at < _end.Length)
+        {
+            return Run(_end[at..], lens, small: true, ui: false);
+        }
+
+        at -= _end.Length;
+        if (at == 0)
+        {
+            return new Avalonia.Media.TextFormatting.TextEndOfLine(1);
+        }
+
+        at--;
+        return at < _indent.Length
+            ? Run(_indent[at..], lens, small: false, ui: false)
+            : Run(_titles[(at - _indent.Length)..], lens, small: true, ui: true);
+    }
+
+    private Avalonia.Media.TextFormatting.TextCharacters Run(string text, IBrush foreground, bool small, bool ui)
+    {
+        var properties = new VisualLineElementTextRunProperties(TextRunProperties);
+        properties.SetForegroundBrush(foreground);
+        if (ui)
+        {
+            properties.SetTypeface(new Typeface(FontFamily.Default));
+        }
+
+        if (small)
+        {
+            properties.SetFontRenderingEmSize(TextRunProperties.FontRenderingEmSize * 0.9);
+        }
+
+        return new Avalonia.Media.TextFormatting.TextCharacters(text, properties);
+    }
+
+    public override int GetNextCaretPosition(int visualColumn, LogicalDirection direction, CaretPositioningMode mode) => -1;
+
+    public override bool IsWhitespace(int visualColumn) => false;
+
+    /// <summary>The click of the pointer's row: the first line's own titles, or the row below.</summary>
+    private Action? ClickAt(Avalonia.Input.PointerEventArgs e)
+    {
+        var y = e.GetPosition(_view).Y + _view.ScrollOffset.Y;
+        if (_view.GetVisualLineFromVisualTop(y) is not { } visualLine)
+        {
+            return null;
+        }
+
+        var below = visualLine.TextLines.IndexOf(visualLine.GetTextLineByVisualYPosition(y)) > 0;
+        return below ? _below?.Click : _atEnd?.Click;
+    }
+
+    protected override void OnQueryCursor(Avalonia.Input.PointerEventArgs e)
+    {
+        if (ClickAt(e) is not null && e.Source is Avalonia.Input.InputElement element)
+        {
+            element.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            e.Handled = true;
+        }
+    }
+
+    protected override void OnPointerPressed(Avalonia.Input.PointerPressedEventArgs e)
+    {
+        if (e.GetCurrentPoint(null).Properties.IsLeftButtonPressed && ClickAt(e) is { } click)
+        {
+            click();
+            e.Handled = true;
         }
     }
 }

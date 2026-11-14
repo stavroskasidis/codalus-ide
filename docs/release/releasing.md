@@ -13,8 +13,7 @@ and it is never force-pushed.
 
 - The milestone's checkpoint is validated (`docs/checkpoints/`), and `CHANGELOG.md` has the release's section,
   `## X.Y.Z`: the release notes come from it.
-- `develop`'s head is green: its own push run passed, or it differs from the newest commit whose run passed only in
-  `docs/` and Markdown files (those pushes start no run).
+- `develop`'s head is green: its own run passed (the nightly, or a dispatch). A push to `develop` starts no run.
 - `VERSION` on `develop` is `X.Y.Z`, the version to release.
 
 ## 1. Cut the release branch
@@ -25,13 +24,13 @@ From `develop`'s head:
 git fetch origin develop master
 sha="$(git rev-parse origin/develop)"
 version="$(git show "$sha:VERSION" | tr -d '[:space:]')"
-gh run list --workflow pipeline.yml --branch develop --event push --commit "$sha" --json conclusion --jq '.[0].conclusion // "no run"'
+gh run list --workflow pipeline.yml --branch develop --commit "$sha" --json conclusion --jq '.[0].conclusion // "no run"'
 ```
 
-- `success`: cut it.
-- `no run`: the head is a docs-only merge. Find the newest commit whose run passed
-  (`gh run list --workflow pipeline.yml --branch develop --event push --status success --limit 1 --json headSha`) and
-  check that `git diff --name-only <that sha> "$sha" | grep -vE '^docs/|\.md$'` prints nothing; then cut the head.
+- `success`: cut it (the night's nightly, or a dispatch, passed on it).
+- `no run`: nothing has tested the head since it was merged. Wait for the nightly, or start one now
+  (`gh workflow run pipeline.yml --ref develop -f dry_run=true`, which tests everything and publishes nothing), and look again.
+  Or cut the newest nightly's commit instead (`git rev-list -n 1 <its tag>`) when what came after it can wait.
 - anything else: `develop` is red; fix it first.
 
 `git merge-base --is-ancestor "$sha" origin/master` must fail (master doesn't have it yet). Then:
@@ -84,6 +83,15 @@ release needs goes into `develop` too. The release pull request's `gate` job fai
 A release that fails only a benchmark gate the maintainer accepts gets its `benchmarks/accepted.json` entry the same
 way, through the release branch. The evidence is a same-runner A/B on CI (both versions on one runner, alternating
 rounds; `benchmarks/README.md`), never numbers from a developer's machine.
+
+**The debugger's downloaded builds.** The macOS and Windows packages name two more release assets,
+`codalus-debugger-<version>-osx-x64.tar.gz` and `codalus-debugger-<version>-win-x86.tar.gz`, with their SHA-256 in
+`debughost/debugger-components.json` (`eng/package-debugger-component.sh`, M58b, ADR 0094): Codalus IDE downloads them
+from the release the first time an x64 program on Apple silicon, or a 32-bit .NET Framework program, is debugged. They
+are published with the other assets; a release without them leaves that version unable to debug those programs with
+the Codalus debugger. The first release with them (0.13.0) also carries the debugger's two Linux bundles for remote
+targets (`remote/<rid>/debugger.tar.gz`, about 15 MB each), which the binary-size gate sees as growth of the shell's
+folder: that is the accepted value's case above.
 
 ## 5. Merge the release
 
@@ -153,3 +161,45 @@ one-time setup, the maintainer's:
 Without `NUGET_USER` the job packs the packages and pushes nothing, with a notice. When the push fails (the policy
 inactive, nuget.org down), the release is already out and only `finish` waits: fix the cause and use **Re-run failed
 jobs**. Reserve the `Codalus.*` prefix too ([nuget-prefix-reservation.md](nuget-prefix-reservation.md)).
+
+## macOS signing
+
+With the secrets below, every release signs the macOS app and `.pkg` with the maintainer's Developer ID and has Apple
+notarize them, so Gatekeeper opens them without a warning (D19,
+[ADR 0028](../adr/0028-release-cycle-and-installers.md)'s 2026-11-12 update). The package job's keychain step
+(`eng/macos-signing.sh`) puts the certificates and the notary key in a throwaway keychain, `eng/package.sh` signs and
+notarizes, and the keychain is deleted after the Package step. Without `CODALUS_CODESIGN_IDENTITY` the packages are
+unsigned; with it but not the others, the job fails.
+
+| Secret | What |
+|---|---|
+| `CODALUS_CODESIGN_IDENTITY` | The app's identity, as `security find-identity -v` lists it: `Developer ID Application: <name> (<team ID>)`. Set it last: it turns signing on. |
+| `CODALUS_INSTALLER_IDENTITY` | The `.pkg`'s identity: `Developer ID Installer: <name> (<team ID>)`. |
+| `MACOS_CERTIFICATE_P12` | Base64 of a `.p12` with both certificates and their private keys. |
+| `MACOS_CERTIFICATE_PASSWORD` | The `.p12`'s password. |
+| `APPLE_NOTARY_KEY` | An App Store Connect API key's `.p8`, its whole text. |
+| `APPLE_NOTARY_KEY_ID` | That key's ID. |
+| `APPLE_NOTARY_ISSUER` | The issuer ID shown above the keys. |
+
+The one-time setup, the maintainer's (only the Apple Developer account's Account Holder can make Developer ID
+certificates):
+
+1. Create a **Developer ID Application** and a **Developer ID Installer** certificate, G2 Sub-CA (Xcode → Settings →
+   Accounts → Manage Certificates, or Certificates on developer.apple.com with a request from Keychain Access).
+2. In Keychain Access → login → My Certificates, select both (each with its private key) → Export 2 items → a `.p12`
+   with a strong password.
+3. In App Store Connect → Users and Access → Integrations → App Store Connect API → Team Keys, generate a key with the
+   Developer role and download its `.p8` (once only); note its key ID and the issuer ID.
+4. Set the secrets (Settings → Secrets and variables → Actions, or `gh secret set NAME -R stavroskasidis/codalus-ide`,
+   which reads a value from standard input: `base64 -i codalus-signing.p12 | gh secret set MACOS_CERTIFICATE_P12 …`).
+   Keep the `.p12`, its password and the `.p8` in a password manager: secrets can't be read back.
+
+To sign on a Mac by hand, store the key as a notary profile, then package:
+
+```bash
+xcrun notarytool store-credentials codalus-notary --key AuthKey_<key ID>.p8 --key-id <key ID> --issuer <issuer ID>
+CODALUS_CODESIGN_IDENTITY="Developer ID Application: <name> (<team ID>)" CODALUS_INSTALLER_IDENTITY="Developer ID Installer: <name> (<team ID>)" CODALUS_NOTARY_PROFILE=codalus-notary bash eng/package.sh
+```
+
+`spctl --assess -vv "/Applications/Codalus IDE.app"` (and `--type install` on the `.pkg`) should then say
+`source=Notarized Developer ID`. The certificates last five years; the pipeline fails once one has expired.

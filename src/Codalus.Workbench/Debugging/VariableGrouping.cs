@@ -27,6 +27,12 @@ public enum MemberKind
 
     /// <summary>A range of a long array's elements, <c>[1000..1999]</c> (M56): they're read when it's expanded.</summary>
     Range,
+
+    /// <summary>
+    /// A node the debugger made (M58, the Codalus debugger): Raw View under a type proxy's view, with the object's own
+    /// members, or Results View, which enumerates the object when it's expanded.
+    /// </summary>
+    AdapterView,
 }
 
 /// <summary>
@@ -99,16 +105,25 @@ public static class VariableGrouping
     /// <param name="isUserModule">Whether a module (a path) is one of the solution's projects' outputs.</param>
     public static IReadOnlyList<DebugMember> Group(IReadOnlyList<Variable> variables, IReadOnlyList<TypeMember>? members, Func<string?, bool> isUserModule)
     {
-        if (members is null)
+        // A type proxy's view (the Codalus debugger, M58): the proxy's members in its order (a collection's elements),
+        // not the type's own, which are under its Raw View.
+        if (members is null || variables.Any(v => v.IsVirtual && v.Name == Variable.RawView))
         {
-            return [.. variables.Select(v => new DebugMember(v, IsStaticNode(v) ? MemberKind.StaticGroup : Guess(v.Name)))];
+            return [.. variables.Select(v => new DebugMember(v, v.IsVirtual ? MemberKind.AdapterView : IsStaticNode(v) ? MemberKind.StaticGroup : Guess(v.Name)))];
         }
 
         var inline = new List<DebugMember>();
         var hidden = new List<DebugMember>();
+        var views = new List<DebugMember>();
         DebugMember? statics = null;
         foreach (var variable in variables)
         {
+            if (variable.IsVirtual)
+            {
+                views.Add(new DebugMember(variable, MemberKind.AdapterView)); // Results View: last
+                continue;
+            }
+
             if (IsStaticNode(variable))
             {
                 statics = new DebugMember(variable, MemberKind.StaticGroup);
@@ -145,6 +160,7 @@ public static class VariableGrouping
             result.Add(statics);
         }
 
+        result.AddRange(views);
         return result;
     }
 

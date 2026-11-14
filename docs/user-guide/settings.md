@@ -2,10 +2,10 @@
 
 ## The window
 
-- **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize. In a narrow window the solution's name shortens (hover it for the whole name), the search box shrinks to its magnifier, and then the menu wraps onto a second row with the search box at its end; the minimize, maximize and close buttons keep their place at the top right, with room to drag the window beside them.
+- **Title bar**: the menu, the search box and the open solution's name. On Windows they're in the window's title bar; drag its empty part to move the window, double-click it to maximize. In a narrow window the solution's name shortens (hover it for the whole name), the search box shrinks to its magnifier, and then the menu wraps onto a second row with the search box at its end; the minimize, maximize and close buttons keep their place at the top right, with room to drag the window beside them. The window's own title, which the taskbar, Alt+Tab and the window list show, is the solution's name, then the active document's, then "Codalus IDE" ("Shop - Program.cs - Codalus IDE"), so windows with different solutions open tell apart; either part is left out while nothing is open there, down to "Codalus IDE" alone.
 - **Search** (`Ctrl+Q`): Feature Search, in the Code Search window: commands, settings and Options pages. Its other tab, Code Search (`Ctrl+T`), finds files, types, members and text ([Code Search](editing.md#code-search)).
-- **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). While debugging it shows Continue, Break All, Stop, Restart and the step commands. It stays on one row: in a narrow window its groups fold from the right into **…** buttons, each listing the commands its group couldn't show.
-- **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications.
+- **Toolbar**: back and forward, open, save and save all, undo and redo, the solution configuration and platform, the startup project, and Start (`F5`) and Start Without Debugging (`Ctrl+F5`). From a Start's click until its program runs, it shows what it's doing ("Building Hello…") and Stop, which cancels it. While debugging it shows Continue, Break All, Stop, Restart and the step commands. It stays on one row: in a narrow window its groups fold from the right into **…** buttons, each listing the commands its group couldn't show.
+- **Status bar**: purple without a solution, blue with one, orange while debugging. The right side shows the caret's line and column, indentation, line endings, encoding, language, Git branch and notifications. Notifications show as toasts at the bottom right: an informational one hides after 15 seconds (the setting **Auto-Hide Informational Toasts**), but not while the pointer is over it, and not at all once you click in it; warnings, errors and toasts with buttons stay until you dismiss them or press `Escape`. All of them stay in the Notifications window (the bell at the right of the status bar).
 - **Layout**: the Solution Explorer is on the right, the Error List and Output at the bottom. Window → Reset Layout brings this layout back.
   - Drag a tab to move a tool window to another group, a window's edge, a floating window or among the documents, where it gets a document tab. Dropped beside another group or at a window's edge, it keeps the width (or height) it had, or takes a quarter of the window, and never less than 200 pixels. A tool window you open goes back where you last closed it, or opens as a tab in the group for its usual place (most at the bottom, with the Output), wherever you moved that group.
 
@@ -36,7 +36,7 @@ Settings you may want first:
 | Setting | What it does |
 |---|---|
 | Text Editor → Font Family, Font Size, Word Wrap, Minimap, Rulers, Render Whitespace | The editor's look. |
-| Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`. |
+| Text Editor → Format on Type | Formats statements and blocks as you type `;` and `}`, and in C# puts an empty block's opening brace where `.editorconfig` says when you press Enter between its braces. |
 | Text Editor → Completion: Commit on Space | On (the default): Space inserts the completion list's selected item, as `(`, `.` and `;` do. Off: Space just types a space ([IntelliSense](editing.md#intellisense)). |
 | Language Services → Analysis Scope | `openDocuments` (default), `currentProject` or `solution` (also runs analyzers on closed files). Also in the Error List's toolbar. |
 | Projects → Restore on Open | Restore packages when a trusted solution opens. |
@@ -164,7 +164,7 @@ Translations come from the community; [Translating](../translating.md) explains 
 
 ## Components
 
-Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
+Some tools are downloaded the first time a feature needs them: Node.js, the web language servers, the F# language service (FsAutoComplete and Fantomas), the browser debugger, the Codalus debugger's other builds (for x64 programs on Apple silicon, and for 32-bit .NET Framework programs on Windows), netcoredbg for remote machines, and converted icon themes. **Tools → Components…** lists them with their version, size and licence. **Download Now** gets one ahead of time, and **Remove** frees its space; it comes back when a feature needs it.
 
 **Offline layout**: on a machine with internet access, **Export Offline Layout…** copies the downloaded components to a folder. On a machine without it, **Import Offline Layout…** copies them in, so no feature tries to download anything. The .NET SDK has its own offline installer, and the layout doesn't include it.
 
@@ -210,4 +210,16 @@ Tools → Open Keyboard Shortcuts lists every command with its shortcut.
 | JSON schemas | `www.schemastore.org` | JSON files without a bundled schema, when downloads are allowed | the bundled schemas only |
 | Help for a keyword (F1) | `learn.microsoft.com` | when you press F1 | — |
 
-Codalus IDE itself has no telemetry. The tools it runs connect on their own terms: git talks to your remotes, and the .NET SDK has its own telemetry, which `DOTNET_CLI_TELEMETRY_OPTOUT=1` turns off.
+Codalus IDE itself has no telemetry. Some tools it runs have their own, and Codalus turns it off for every host and tool it starts: builds, tests, `dotnet watch`, `dotnet ef`, `dotnet new`, `dotnet tool`, publishing, the previewers and designers, the language and REPL hosts, and the hosts on a remote machine. It sets these variables in their environment:
+
+| Variable | Turns off |
+|---|---|
+| `DOTNET_CLI_TELEMETRY_OPTOUT=1` | the .NET SDK's telemetry (the CLI, and MSBuild through it) |
+| `AVALONIA_TELEMETRY_OPTOUT=1` | Avalonia's build task (`Avalonia.BuildServices`, in every Avalonia 12 package), which otherwise reports each build of an Avalonia project |
+| `TESTINGPLATFORM_TELEMETRY_OPTOUT=1` | Microsoft.Testing.Platform's test programs |
+| `DOTNET_SVCUTIL_TELEMETRY_OPTOUT=1` | `dotnet-svcutil` (Add Service Reference) |
+
+- A value already in the environment Codalus starts with wins: set one to `0` to opt that tool back in.
+- The integrated terminal, the programs you run and debug, external tools, AI agents' commands and external agents get nothing new: what they send is your choice. A program `dotnet watch` starts inherits the variables from it.
+- Avalonia Accelerate's Community and Trial tiers don't allow Avalonia's opt-out: the build says "requires telemetry", and Codalus adds a line after it saying how to build (set `AVALONIA_TELEMETRY_OPTOUT=0`, or use a tier that allows it).
+- Git talks to your remotes and NuGet to your feeds, as the table above says.

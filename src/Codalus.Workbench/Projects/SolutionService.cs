@@ -183,7 +183,7 @@ public sealed class SolutionService : IAsyncDisposable
                 Log?.Invoke(this, "[info] The solution's SDK is newer than .NET " + BuildHostRuntime.HostMajor + ": the build host rolls forward (" + string.Join(", ", environment.Select(e => e.Key + "=" + e.Value)) + ").");
             }
 
-            var launch = ProcessLaunchInfo.FromPath(hostPath, "--solution-dir", directory) with { Environment = environment };
+            var launch = ProcessLaunchInfo.Host(hostPath, "--solution-dir", directory) with { Environment = environment };
             if (Placement is { } place)
             {
                 launch = place(launch) ?? throw new InvalidOperationException("The build host can't run on the remote machine.");

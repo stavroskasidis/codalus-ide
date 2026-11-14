@@ -1,3 +1,5 @@
+using Codalus.LanguageServices.Protocol;
+
 namespace Codalus.Shell.Editor;
 
 /// <summary>
@@ -52,4 +54,16 @@ public sealed class DiffServices
     /// <c>text</c>, or null: the file isn't open, its text is another, or its language service has none.
     /// </summary>
     public Func<string, string, CancellationToken, Task<int[]?>> SemanticTokensAsync { get; init; } = (_, _, _) => Task.FromResult<int[]?>(null);
+
+    /// <summary>
+    /// Holds a file's document while a working-tree diff shows it (its language service then knows the file, open in an
+    /// editor or not), or null when it can't be read; <see cref="ReleaseDocument"/> lets go of it.
+    /// </summary>
+    public Func<string, Task<CodeDocument?>> AcquireDocumentAsync { get; init; } = _ => Task.FromResult<CodeDocument?>(null);
+
+    /// <summary>Lets go of a document <see cref="AcquireDocumentAsync"/> held: forgotten when nothing else shows or holds it.</summary>
+    public Action<CodeDocument> ReleaseDocument { get; init; } = _ => { };
+
+    /// <summary>Runs a CodeLens command (Find All References…) at a position of a file: opened there in the editor, then the command.</summary>
+    public Func<string, Position, string, Task> RunLensAsync { get; init; } = (_, _, _) => Task.CompletedTask;
 }

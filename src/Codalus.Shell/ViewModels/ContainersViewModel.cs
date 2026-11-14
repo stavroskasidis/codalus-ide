@@ -50,7 +50,8 @@ public sealed class ContainersViewModel(
     Func<ContainerSummary, Task> terminal,
     Action<Uri> browse,
     Func<string, string, Task> openFile,
-    Func<ContainerSummary, Task>? openRemoteWindow = null) : ObservableObject
+    Func<ContainerSummary, Task>? openRemoteWindow = null,
+    Func<Task>? showComposeOverride = null) : ObservableObject
 {
     public const string ToolWindowId = "containers";
 
@@ -423,4 +424,7 @@ public sealed class ContainersViewModel(
 
     /// <summary>A remote window in the selected container (M21b): its files, builds, terminals and debugging there.</summary>
     public Task OpenRemoteWindowAsync() => _selected is { } row && openRemoteWindow is not null ? openRemoteWindow(row.Container) : Task.CompletedTask;
+
+    /// <summary>"Show the IDE's override": the compose override fast mode writes (M63, D55), read-only.</summary>
+    public Task ShowComposeOverrideAsync() => showComposeOverride?.Invoke() ?? Task.CompletedTask;
 }

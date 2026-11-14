@@ -1,0 +1,12 @@
+=== AvaloniaApp/ViewModels/MainWindowViewModel.cs
+@@ 2
++ using CommunityToolkit.Mvvm.Input;
+@@ 6
+- public sealed class MainWindowViewModel : ViewModelBase
++ public sealed partial class MainWindowViewModel : ViewModelBase
+@@ 41
++ 
++     [RelayCommand]
++     private void Reset()
++     {
++     }

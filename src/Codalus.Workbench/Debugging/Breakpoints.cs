@@ -367,6 +367,12 @@ public sealed class BreakpointStore
         FunctionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// What binds a file's breakpoints outside the debug adapter (M64b: XAML's, the live agent) said about them; the
+    /// session's end clears them as it does the adapter's.
+    /// </summary>
+    public void SetExternalStates(string path, IReadOnlyList<(int Line, BreakpointState State)> states) => SetStates(path, states);
+
     internal void SetStates(string path, IReadOnlyList<(int Line, BreakpointState State)> states)
     {
         lock (_gate)
@@ -403,28 +409,7 @@ public sealed class BreakpointStore
     }
 
     /// <summary>Whether a breakpoint with <paramref name="hitCondition"/> breaks on its <paramref name="hits"/>-th hit.</summary>
-    public static bool HitConditionMet(string hitCondition, int hits)
-    {
-        var text = hitCondition.Trim();
-        static int Number(string s) => int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : 1;
-        if (text.StartsWith(">=", StringComparison.Ordinal))
-        {
-            return hits >= Number(text[2..]);
-        }
-
-        if (text.StartsWith('%'))
-        {
-            var n = Number(text[1..]);
-            return n > 0 && hits % n == 0;
-        }
-
-        if (text.StartsWith("==", StringComparison.Ordinal))
-        {
-            return hits == Number(text[2..]);
-        }
-
-        return hits == Number(text.TrimStart('='));
-    }
+    public static bool HitConditionMet(string hitCondition, int hits) => Codalus.Debugging.HitConditions.Met(hitCondition, hits);
 
     private sealed class LocationComparer : IEqualityComparer<(string Path, int Line)>
     {

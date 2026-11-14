@@ -1,0 +1,21 @@
+name: Live output
+description: >-
+  Keeps a job's test output off the runner while the job runs: a background process uploads the tests' console and the
+  memory, load and disk samples (eng/ci-test.sh's files) as a small artifact about once a minute, each upload replacing
+  the one before, and the job's end removes it. A runner that goes silent keeps neither its log nor its artifacts
+  (docs/ci-flakes.md): its last upload is what is left to read. No dependencies: Node's own modules, and the artifact
+  service the runner's token is for (ADR 0028).
+inputs:
+  name:
+    description: The artifact's name, one per job of a run (a number is added for each upload)
+    required: true
+  path:
+    description: The folder with a folder of results per shard (console.txt, memory.txt, load.txt, disk.txt)
+    default: artifacts/test-results
+  interval:
+    description: Seconds between uploads
+    default: "60"
+runs:
+  using: node24
+  main: main.js
+  post: post.js

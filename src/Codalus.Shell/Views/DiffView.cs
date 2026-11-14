@@ -11,6 +11,7 @@ using AvaloniaEdit.Rendering;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Controls;
 using Codalus.Shell.Editor;
+using Codalus.Shell.Editor.IntelliSense;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Git;
@@ -61,6 +62,7 @@ internal sealed class DiffPaneView : DockPanel
         types.Classes.Add("navigationBar");
         members.Classes.Add("navigationBar");
         Grid.SetColumn(members, 1);
+        // Styled as the bar opposite (Border.navigationBar), so it's as tall and the sides' code lines up.
         _navigationPlaceholder = new Border { Child = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), Children = { types, members } } };
         _navigationPlaceholder.Classes.Add("navigationBar");
         AutomationProperties.SetName(_navigationPlaceholder, Localizer.Get("diff.noNavigation", "Navigation bar (the other side is the open document)"));
@@ -182,20 +184,60 @@ internal sealed class DiffPaneView : DockPanel
 
 /// <summary>
 /// The open document's symbols for a diff side whose text is the document's (D45 question 8): the caret is the side's,
-/// mapped from its pane line to the file line, and choosing a symbol moves the side's caret to its line.
+/// mapped from its pane line to the file line, and choosing a symbol moves the side's caret to its line. The symbols are
+/// its editor's, or (no editor shows the file) those the diff asked its language service for.
 /// </summary>
-internal sealed class DiffNavigationSource(CodeEditorController controller, TextEditor editor, Func<DiffPane> pane, Action<int> showLine) : INavigationSource
+internal sealed class DiffNavigationSource(
+    Func<IReadOnlyList<DocumentSymbol>> symbols,
+    Func<bool> typesExpected,
+    Func<Position, IReadOnlyList<DocumentSymbol>> symbolPath,
+    Action<EventHandler?, bool> subscribe,
+    TextEditor editor,
+    Func<DiffPane> pane,
+    Action<int> showLine) : INavigationSource
 {
     private EventHandler? _caretChanged;
 
-    public IReadOnlyList<DocumentSymbol> Symbols => controller.Insights.Symbols;
+    /// <summary>The symbols of the file's editor.</summary>
+    public static DiffNavigationSource Of(CodeEditorController controller, TextEditor editor, Func<DiffPane> pane, Action<int> showLine) =>
+        new(() => controller.Insights.Symbols, () => controller.Insights.TypesExpected, controller.Insights.SymbolPath,
+            (handler, add) =>
+            {
+                if (add)
+                {
+                    controller.Insights.SymbolsChanged += handler;
+                }
+                else
+                {
+                    controller.Insights.SymbolsChanged -= handler;
+                }
+            },
+            editor, pane, showLine);
 
-    public bool TypesExpected => controller.Insights.TypesExpected;
+    /// <summary>The symbols the diff asked the language service for (no editor shows the file).</summary>
+    public static DiffNavigationSource Of(DiffInsights insights, TextEditor editor, Func<DiffPane> pane, Action<int> showLine) =>
+        new(() => insights.Symbols, () => false, insights.SymbolPath,
+            (handler, add) =>
+            {
+                if (add)
+                {
+                    insights.SymbolsChanged += handler;
+                }
+                else
+                {
+                    insights.SymbolsChanged -= handler;
+                }
+            },
+            editor, pane, showLine);
+
+    public IReadOnlyList<DocumentSymbol> Symbols => symbols();
+
+    public bool TypesExpected => typesExpected();
 
     public event EventHandler? SymbolsChanged
     {
-        add => controller.Insights.SymbolsChanged += value;
-        remove => controller.Insights.SymbolsChanged -= value;
+        add => subscribe(value, true);
+        remove => subscribe(value, false);
     }
 
     public event EventHandler? CaretChanged
@@ -226,7 +268,7 @@ internal sealed class DiffNavigationSource(CodeEditorController controller, Text
     {
         var caret = editor.TextArea.Caret;
         var (old, line) = pane().SourceOf(caret.Line - 1);
-        return old || line <= 0 ? [] : controller.Insights.SymbolPath(new Position(line - 1, caret.Column - 1));
+        return old || line <= 0 ? [] : symbolPath(new Position(line - 1, caret.Column - 1));
     }
 
     public void Navigate(Position position) => showLine(position.Line + 1);
@@ -238,8 +280,10 @@ internal sealed class DiffNavigationSource(CodeEditorController controller, Text
 /// or Inline, kept in <c>git.diff.layout</c>; Refresh; Open the file); then the two sides with today's splitter between
 /// them (drag to resize, double-click for half and half; its place kept while the document is open), or one inline
 /// pane. Each side is colored like the editor, numbers its own file's lines and has its own status bar.
-/// TODO(issue): CodeLens and diagnostics on the working-tree side, and editing inside the diff (they need the filler
-/// rows as view zones of a live editor).
+/// The working-tree side is the file's document (held by the diff when no editor has it open): Quick Info on its lines
+/// and on the other side's unchanged lines, and its CodeLens rows, a blank row as tall opposite them.
+/// TODO(issue): diagnostics on the working-tree side, and editing inside the diff (they need the filler rows as view
+/// zones of a live editor).
 /// TODO(issue): Ignore Trim Whitespace (it would make staging inexact), and the classic IDE's project drop-down.
 /// </summary>
 public sealed class DiffView : UserControl, IPaneView
@@ -291,6 +335,14 @@ public sealed class DiffView : UserControl, IPaneView
     private DiffPaneView _active;
     private bool _syncing;
     private bool _firstChangeShown;
+    private int? _firstChangeToScroll;
+    private DiffInsights? _insights;
+    private readonly Avalonia.Controls.Primitives.Popup _hover = new() { IsLightDismissEnabled = false };
+    private readonly Avalonia.Threading.DispatcherTimer _hoverTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
+    private DiffPaneView? _hoverPane;
+    private Point _hoverPoint;
+    private (int Line, int Start, int End)? _hoverWord;
+    private int _hoverVersion;
 
     public DiffView(DiffViewModel viewModel, EditorFont font)
     {
@@ -399,7 +451,13 @@ public sealed class DiffView : UserControl, IPaneView
         };
         _empty.Bind(Border.BackgroundProperty, _empty.GetResourceObservable("Shell.Editor.Background"));
         AutomationProperties.SetLiveSetting(_emptyMessage, AutomationLiveSetting.Polite);
-        var body = new Panel { Children = { _sideBySide, _inline, _empty } };
+        var body = new Panel { Children = { _sideBySide, _inline, _empty, _hover } };
+        _hoverTimer.Tick += (_, _) =>
+        {
+            _hoverTimer.Stop();
+            _ = ShowQuickInfoAsync();
+        };
+        LayoutUpdated += (_, _) => ScrollToFirstChange();
         var root = new DockPanel();
         DockPanel.SetDock(_toolbar, Avalonia.Controls.Dock.Top);
         DockPanel.SetDock(_progress, Avalonia.Controls.Dock.Top);
@@ -444,7 +502,13 @@ public sealed class DiffView : UserControl, IPaneView
         editor.TextArea.LeftMargins.Add(new DiffSignMargin(pane));
         AutomationProperties.SetName(editor, name);
 
+        DiffPaneView? owner = null;
+        editor.TextArea.TextView.ElementGenerators.Add(new DiffLensGenerator(editor.TextArea.TextView, index => owner is null ? null : LensAbove(owner, index)));
         var view = new DiffPaneView(side, editor, numbers, zoom);
+        owner = view;
+        editor.TextArea.TextView.PointerMoved += (_, e) => OnHoverMoved(view, e.GetPosition(editor.TextArea.TextView));
+        editor.TextArea.TextView.PointerExited += (_, _) => _hoverTimer.Stop();
+        editor.TextArea.TextView.ScrollOffsetChanged += (_, _) => OnPaneScrolled(view);
         editor.TextArea.Caret.PositionChanged += (_, _) => OnCaretMoved(view);
         editor.TextArea.SelectionChanged += (_, _) => UpdatePosition(view);
         editor.TextArea.GotFocus += (_, _) =>
@@ -505,6 +569,7 @@ public sealed class DiffView : UserControl, IPaneView
         _viewModel.Changed += OnChanged;
         _viewModel.ColorsChanged += OnColorsChanged;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.InsightsChanged += OnInsightsChanged;
         _font.PropertyChanged += OnFontChanged;
         ActualThemeVariantChanged += OnThemeVariantChanged;
         if (_viewModel.Services is { } services)
@@ -512,6 +577,7 @@ public sealed class DiffView : UserControl, IPaneView
             services.Editor.ThemeChanged += OnThemeChanged;
         }
 
+        AttachInsights();
         Rebuild();
         ApplyTheme();
         Avalonia.Threading.Dispatcher.UIThread.Post(RestoreState, Avalonia.Threading.DispatcherPriority.Loaded);
@@ -523,6 +589,9 @@ public sealed class DiffView : UserControl, IPaneView
         _viewModel.Changed -= OnChanged;
         _viewModel.ColorsChanged -= OnColorsChanged;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.InsightsChanged -= OnInsightsChanged;
+        DetachInsights();
+        CloseQuickInfo();
         _font.PropertyChanged -= OnFontChanged;
         ActualThemeVariantChanged -= OnThemeVariantChanged;
         if (_viewModel.Services is { } services)
@@ -796,6 +865,36 @@ public sealed class DiffView : UserControl, IPaneView
             if (vm.NextChange(-1, 1) is { } first)
             {
                 ShowRow(first);
+                _firstChangeToScroll = first;
+                ScrollToFirstChange();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Scrolls the first change into view once the panes are laid out (Git Changes' double-click opened the diff at the
+    /// top of the file: the view is made, and its lines set, before it's in the window, where scrolling does nothing).
+    /// </summary>
+    private void ScrollToFirstChange()
+    {
+        if (_firstChangeToScroll is not { } row)
+        {
+            return;
+        }
+
+        var panes = _viewModel.SideBySide ? new[] { _left, _right } : [_inline];
+        if (panes.Any(p => p.Editor.TextArea.TextView is not { Bounds.Height: > 0, VisualLinesValid: true } view || view.Document is null))
+        {
+            return; // laid out later: LayoutUpdated tries again
+        }
+
+        _firstChangeToScroll = null;
+        foreach (var pane in panes)
+        {
+            var line = LineOf(pane, row);
+            if (line >= 0)
+            {
+                pane.Editor.ScrollToLine(line + 1);
             }
         }
     }
@@ -803,6 +902,11 @@ public sealed class DiffView : UserControl, IPaneView
     /// <summary>Saves the panes' carets and scroll positions in the view model (a tab switch rebuilds the view).</summary>
     private void SaveState()
     {
+        if (_firstChangeToScroll is not null)
+        {
+            return; // detached before it was laid out: the next view shows the first change
+        }
+
         foreach (var pane in new[] { _left, _right, _inline })
         {
             var caret = pane.Editor.TextArea.Caret;
@@ -897,12 +1001,17 @@ public sealed class DiffView : UserControl, IPaneView
     {
         var openOld = _viewModel.OpenSideIsOld;
         var controller = openOld is { } isOld ? _viewModel.Services?.OpenEditor(isOld ? _viewModel.OldPath : _viewModel.Path) : null;
+        var insights = openOld == false ? _viewModel.Insights : null;
+        DiffNavigationSource? Source(DiffPaneView pane, Func<DiffPane> lines) =>
+            controller is not null ? DiffNavigationSource.Of(controller, pane.Editor, lines, line => ShowSourceLine(pane, line))
+            : insights is not null ? DiffNavigationSource.Of(insights, pane.Editor, lines, line => ShowSourceLine(pane, line))
+            : null;
         var wide = _left.Bounds.Width is 0 or >= NavigationMinWidth && _right.Bounds.Width is 0 or >= NavigationMinWidth;
         var shown = openOld is not null && wide;
-        _left.SetNavigation(shown, shown && openOld == true && controller is not null ? new DiffNavigationSource(controller, _left.Editor, () => _leftPane, line => ShowSourceLine(_left, line)) : null);
-        _right.SetNavigation(shown, shown && openOld == false && controller is not null ? new DiffNavigationSource(controller, _right.Editor, () => _rightPane, line => ShowSourceLine(_right, line)) : null);
+        _left.SetNavigation(shown, shown && openOld == true ? Source(_left, () => _leftPane) : null);
+        _right.SetNavigation(shown, shown && openOld == false ? Source(_right, () => _rightPane) : null);
         var inlineShown = openOld == false && _inline.Bounds.Width is 0 or >= NavigationMinWidth;
-        _inline.SetNavigation(inlineShown, inlineShown && controller is not null ? new DiffNavigationSource(controller, _inline.Editor, () => _inlinePane, line => ShowSourceLine(_inline, line)) : null);
+        _inline.SetNavigation(inlineShown, inlineShown ? Source(_inline, () => _inlinePane) : null);
     }
 
     private (double Left, double Right, double Inline) _widths;
@@ -1160,6 +1269,250 @@ public sealed class DiffView : UserControl, IPaneView
         index = index < 0 ? Array.IndexOf(s_zooms, 1.0) : Math.Clamp(index + (e.Delta.Y > 0 ? 1 : -1), 0, s_zooms.Length - 1);
         _viewModel.Zoom = s_zooms[index];
         e.Handled = true;
+    }
+
+    // ------------------------------------------------------------------ the working-tree side's insights: CodeLens and Quick Info
+
+    private void OnInsightsChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        DetachInsights();
+        AttachInsights();
+        Redraw();
+        UpdateNavigation();
+    });
+
+    private void AttachInsights()
+    {
+        if (_viewModel.Insights is { } insights && _insights != insights)
+        {
+            DetachInsights();
+            _insights = insights;
+            insights.LensesChanged += OnLensesChanged;
+        }
+    }
+
+    private void DetachInsights()
+    {
+        if (_insights is { } insights)
+        {
+            insights.LensesChanged -= OnLensesChanged;
+            _insights = null;
+        }
+    }
+
+    private void OnLensesChanged(object? sender, EventArgs e) => Ui.Post(() =>
+    {
+        // Both sides together: a row and the blank row opposite it come and go at once, so the lines stay aligned.
+        foreach (var pane in new[] { _left, _right, _inline })
+        {
+            pane.Editor.TextArea.TextView.Redraw();
+        }
+    });
+
+    /// <summary>
+    /// The CodeLens row above a 0-based pane line: the working-tree file's lenses above its line, on its side and in
+    /// the inline view; side by side, a blank row opposite, as tall. Null for none (or while the working tree's side
+    /// isn't the document's text).
+    /// </summary>
+    private DiffLensRow? LensAbove(DiffPaneView view, int index)
+    {
+        if (_viewModel.Insights is not { ShowsLenses: true } insights || _viewModel.OpenSideIsOld != false || _viewModel.Services is not { } services)
+        {
+            return null;
+        }
+
+        var (old, line) = (view == _inline ? _inlinePane : _rightPane).SourceOf(index);
+        if (old || line <= 0 || insights.LensRow(line) is not { } text)
+        {
+            return null;
+        }
+
+        if (view == _left)
+        {
+            return DiffLensRow.Blank;
+        }
+
+        var path = _viewModel.Path;
+        return new DiffLensRow(
+            IndentOf((uint)(line - 1) < (uint)_viewModel.NewLines.Count ? _viewModel.NewLines[line - 1] : string.Empty, view.Editor.Options.IndentationSize),
+            text,
+            text.Length > 0 ? () => _ = insights.RunLensAsync(line, (position, command) => services.RunLensAsync(path, position, command)) : null);
+    }
+
+    /// <summary>A line's indentation, tabs as the columns they take, so its CodeLens row starts where its code does.</summary>
+    private static string IndentOf(string text, int tabSize)
+    {
+        var indent = new System.Text.StringBuilder();
+        var tab = Math.Max(1, tabSize);
+        foreach (var c in text)
+        {
+            if (c == ' ')
+            {
+                indent.Append(' ');
+            }
+            else if (c == '\t')
+            {
+                indent.Append(' ', tab - (indent.Length % tab));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return indent.ToString();
+    }
+
+    /// <summary>A pane scrolled: Quick Info goes, and the lenses of the working-tree lines in view get their counts first.</summary>
+    private void OnPaneScrolled(DiffPaneView view)
+    {
+        if (_hover.IsOpen)
+        {
+            CloseQuickInfo();
+        }
+
+        if (_insights is null || view == _left || view.Editor.TextArea.TextView is not { VisualLinesValid: true } textView || textView.VisualLines.Count == 0)
+        {
+            return;
+        }
+
+        var lines = PaneLinesOf(view);
+        int first = int.MaxValue, last = 0;
+        foreach (var visual in textView.VisualLines)
+        {
+            if (lines.SourceOf(visual.FirstDocumentLine.LineNumber - 1) is (false, > 0 and var line))
+            {
+                first = Math.Min(first, line);
+                last = Math.Max(last, line);
+            }
+        }
+
+        if (last > 0)
+        {
+            _insights.Show(first, last);
+        }
+    }
+
+    /// <summary>The working-tree line and character Quick Info is asked about at a pane's point, and the word there; null for none.</summary>
+    private (Position Position, int Line, int Start, int End)? QuickInfoTarget(DiffPaneView view, Point point)
+    {
+        var textView = view.Editor.TextArea.TextView;
+        if (textView.GetPosition(point + textView.ScrollOffset) is not { } position || position.IsAtEndOfLine)
+        {
+            return null;
+        }
+
+        var lines = PaneLinesOf(view).Lines;
+        var index = position.Line - 1;
+        if ((uint)index >= (uint)lines.Count)
+        {
+            return null;
+        }
+
+        // An unchanged line is the same text on both sides: the old side's is asked about as the working tree's.
+        var paneLine = lines[index];
+        var line = paneLine.Kind == ' ' || (paneLine.Kind == '+' && view != _left) ? paneLine.NewLine : 0;
+        var text = view.Editor.Document.GetText(view.Editor.Document.GetLineByNumber(position.Line));
+        var column = position.Column - 1;
+        if (line <= 0 || (uint)column >= (uint)text.Length || !IsWordChar(text[column]))
+        {
+            return null;
+        }
+
+        var start = column;
+        var end = column;
+        while (start > 0 && IsWordChar(text[start - 1]))
+        {
+            start--;
+        }
+
+        while (end < text.Length && IsWordChar(text[end]))
+        {
+            end++;
+        }
+
+        return (new Position(line - 1, column), position.Line, start, end);
+
+        static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+    }
+
+    private void OnHoverMoved(DiffPaneView view, Point point)
+    {
+        if (_hover.IsOpen)
+        {
+            // Open: kept while the pointer is near where it opened or on the word it describes.
+            var near = _hoverPane == view && Math.Abs(point.X - _hoverPoint.X) + Math.Abs(point.Y - _hoverPoint.Y) < 8;
+            var sameWord = _hoverPane == view && _hoverWord is { } word && QuickInfoTarget(view, point) is { } target && (target.Line, target.Start, target.End) == word;
+            if (near || sameWord)
+            {
+                return;
+            }
+
+            CloseQuickInfo();
+        }
+
+        _hoverPane = view;
+        _hoverPoint = point;
+        _hoverTimer.Stop();
+        if (_viewModel.Insights is not null)
+        {
+            _hoverTimer.Start();
+        }
+    }
+
+    /// <summary>Quick Info where the pointer rests, as the editor's: the symbol's description, or the service's Markdown.</summary>
+    private async Task ShowQuickInfoAsync()
+    {
+        if (_hoverPane is not { } view || _viewModel.Insights is not { } insights || _viewModel.OpenSideIsOld != false
+            || _viewModel.Services is not { } services || QuickInfoTarget(view, _hoverPoint) is not { } target)
+        {
+            return;
+        }
+
+        var version = ++_hoverVersion;
+        var point = _hoverPoint;
+        var hover = await insights.HoverAsync(target.Position, CancellationToken.None).ConfigureAwait(true);
+        if (version != _hoverVersion || _hoverPane != view || _hoverPoint != point || TopLevel.GetTopLevel(this) is null || !view.IsEffectivelyVisible)
+        {
+            return;
+        }
+
+        var described = hover?.Description is { } description && (description.Signature.Length > 0 || description.Sections.Length > 0);
+        if (!described && hover?.Contents.Value is not { Length: > 0 })
+        {
+            return;
+        }
+
+        var markdown = !described && hover?.Contents.Value is { Length: > 0 } text ? MarkdownRenderer.Render(text, services.Editor.OpenLink) : null;
+        var content = new QuickInfoView(described ? hover!.Description : null, markdown, [], services.Editor.Theme, new QuickInfoActions { OpenLink = services.Editor.OpenLink });
+        LastQuickInfo = content;
+        var border = new Border { Classes = { "editorHover", "intelliSense" }, MaxWidth = 640, Child = content };
+        border.PointerExited += (_, e) =>
+        {
+            // Leaving Quick Info for anywhere but the text closes it (the text's own moves decide there).
+            if (view.Editor.TextArea.TextView is { } textView && !new Rect(textView.Bounds.Size).Contains(e.GetPosition(textView)))
+            {
+                CloseQuickInfo();
+            }
+        };
+        _hoverWord = (target.Line, target.Start, target.End);
+        _hover.Child = border;
+        _hover.WindowManagerAddShadowHint = true;
+        _hover.PlacementTarget = view.Editor.TextArea.TextView;
+        _hover.Placement = PlacementMode.AnchorAndGravity;
+        _hover.PlacementAnchor = Avalonia.Controls.Primitives.PopupPositioning.PopupAnchor.TopLeft;
+        _hover.PlacementGravity = Avalonia.Controls.Primitives.PopupPositioning.PopupGravity.BottomRight;
+        _hover.PlacementConstraintAdjustment = Avalonia.Controls.Primitives.PopupPositioning.PopupPositionerConstraintAdjustment.All;
+        _hover.PlacementRect = new Rect(point.X, point.Y + 4, 1, 1);
+        _hover.IsOpen = true;
+    }
+
+    private void CloseQuickInfo()
+    {
+        _hoverTimer.Stop();
+        _hoverVersion++; // an answer on its way shows nothing
+        _hoverWord = null;
+        _hover.IsOpen = false;
     }
 
     // ------------------------------------------------------------------ scrolling, carets and changes
@@ -1470,6 +1823,37 @@ public sealed class DiffView : UserControl, IPaneView
 
     // ------------------------------------------------------------------ tests and the smoke test
 
+    /// <summary>Whether Quick Info is showing, and the last one shown (tests, the smoke test).</summary>
+    public bool IsQuickInfoOpen => _hover.IsOpen;
+
+    internal QuickInfoView? LastQuickInfo { get; private set; }
+
+    /// <summary>Asks for Quick Info at a 1-based line and 0-based character of a side, as a pointer resting there does (tests).</summary>
+    internal Task ShowQuickInfoAtAsync(DiffPaneSide side, int line, int character)
+    {
+        var view = PaneOf(side);
+        var textView = view.Editor.TextArea.TextView;
+        textView.EnsureVisualLines();
+        var point = textView.GetVisualPosition(new AvaloniaEdit.TextViewPosition(line, character + 1), VisualYPosition.LineMiddle) - textView.ScrollOffset;
+        _hoverPane = view;
+        _hoverPoint = new Point(point.X + 1, point.Y);
+        return ShowQuickInfoAsync();
+    }
+
+    /// <summary>The CodeLens row drawn above a 1-based pane line of a side: its text ("" for a blank row), or null (tests).</summary>
+    internal string? LensRowAbove(DiffPaneSide side, int line) => LensAbove(PaneOf(side), line - 1)?.Text;
+
+    /// <summary>Clicks the CodeLens row above a 1-based pane line of a side (tests).</summary>
+    internal void ClickLensRow(DiffPaneSide side, int line) => LensAbove(PaneOf(side), line - 1)?.Click?.Invoke();
+
+    /// <summary>The 1-based pane lines a side shows now (tests).</summary>
+    public (int First, int Last) VisibleLines(DiffPaneSide side)
+    {
+        var view = PaneOf(side).Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        return view.VisualLines.Count == 0 ? (0, 0) : (view.VisualLines[0].FirstDocumentLine.LineNumber, view.VisualLines[^1].LastDocumentLine.LineNumber);
+    }
+
     public string LeftText => _left.Editor.Text;
 
     public string RightText => _right.Editor.Text;
@@ -1538,6 +1922,10 @@ public sealed class DiffView : UserControl, IPaneView
 
     /// <summary>The splitter (tests).</summary>
     internal GridSplitter Splitter => _splitter;
+
+    /// <summary>The heights of a side's header, navigation row, and of what the row shows: the bar, or the empty row (tests).</summary>
+    internal (double Header, double Row, double Bar, double Placeholder) RowHeights(DiffPaneSide side) =>
+        (PaneOf(side).Header.Bounds.Height, PaneOf(side).NavigationRow.Bounds.Height, PaneOf(side).NavigationBar.Bounds.Height, PaneOf(side).NavigationRow.Children[0].Bounds.Height);
 
     /// <summary>A side's navigation bar (tests).</summary>
     public NavigationBar NavigationBarOf(DiffPaneSide side) => PaneOf(side).NavigationBar;

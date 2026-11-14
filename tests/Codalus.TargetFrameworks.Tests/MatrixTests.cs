@@ -133,12 +133,66 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         }
     }
 
+    /// <summary>
+    /// The Codalus debugger the solution built, started by the matrix's dotnet. The shell's tests point
+    /// <c>CODALUS_DEBUGHOST</c> at the same file; this class starts no shell, and without it every framework said the
+    /// debugger wasn't found once it became the default (M58b: the matrix isn't part of a pull request's run).
+    /// </summary>
+    private static DebugAdapterStartInfo? CodalusDebugger()
+    {
+        var folder = Path.Combine(Codalus.Shell.Tests.ShellFixture.RepoRoot, "src", "Codalus.Debugging.Host", "bin", Codalus.Shell.Tests.ShellFixture.Configuration, Codalus.Tests.RepoBuild.TargetFramework);
+        var host = Path.Combine(folder, "codalus-debughost.dll");
+        return File.Exists(host) ? new DebugAdapterStartInfo(CompatRoot.Dotnet, [host, CoreClrAdapter.AdapterArgument], folder) : null;
+    }
+
+    /// <summary>
+    /// The Codalus debugger's x64 bundle on an Apple silicon Mac, built into the checkout (<c>eng/get-codalus-debugger.sh
+    /// osx-x64</c>; a download in an installed IDE), or null: the frameworks without an Arm64 runtime (.NET 5 and
+    /// earlier) run as x64 there, and without it they'd all be netcoredbg's, under the default too. With the matrix
+    /// required (<c>CODALUS_DOTNET_COMPAT</c>, CI's run) it must be there.
+    /// </summary>
+    private static DebugAdapterStartInfo? X64CodalusDebugger()
+    {
+        if (!OperatingSystem.IsMacOS() || System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture != System.Runtime.InteropServices.Architecture.Arm64)
+        {
+            return null;
+        }
+
+        // The checkout's bundle or the variable's: the cache folder (a download's) is one that never exists.
+        using var components = new DebuggerComponents(Path.Combine(Path.GetTempPath(), "codalus-matrix-no-debugger-components"));
+        var debugger = components.Installed(DebuggerComponents.X64OnAppleSilicon);
+        Assert.True(debugger is not null || !CompatRoot.Required, "The Codalus debugger's osx-x64 bundle isn't built (eng/get-codalus-debugger.sh osx-x64).");
+        return debugger is null ? null : new DebugAdapterStartInfo(debugger, [CoreClrAdapter.AdapterArgument], Path.GetDirectoryName(debugger)) { IsCodalus = true };
+    }
+
+    /// <summary>
+    /// Under the default, the Codalus debugger (M58, ADR 0094): .NET Core 2.0 to .NET 10 through the runtime's own
+    /// mscordbi. On Apple silicon the x64 frameworks go to its x64 bundle, which holds a program at its start in the
+    /// startup hook: .NET Core 2.0 and 2.1 run none, so this short program ends before it attaches, and both the Debug
+    /// Console and the launch say so.
+    /// </summary>
     [Theory]
     [MemberData(nameof(Matrix.Ids), MemberType = typeof(Matrix))]
-    public async Task Each_framework_debugs_to_a_breakpoint(string id)
+    public Task Each_framework_debugs_to_a_breakpoint(string id) => DebugsToABreakpointAsync(id, netcoredbg: false);
+
+    /// <summary>Under netcoredbg, the fallback, for as long as it ships.</summary>
+    [Theory]
+    [MemberData(nameof(Matrix.Ids), MemberType = typeof(Matrix))]
+    public Task Each_framework_debugs_to_a_breakpoint_under_netcoredbg(string id) => DebugsToABreakpointAsync(id, netcoredbg: true);
+
+    private async Task DebugsToABreakpointAsync(string id, bool netcoredbg)
     {
         matrix.RequireBuild();
-        Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && !CompatRoot.Required, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) is { Length: > 0 }, "CODALUS_DEBUG_ADAPTER overrides the debugger these tests choose.");
+        if (netcoredbg)
+        {
+            Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && !CompatRoot.Required, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        }
+        else
+        {
+            Assert.True(CodalusDebugger() is not null, "The Codalus debugger (codalus-debughost) isn't built: build the solution.");
+        }
+
         var framework = Matrix.Get(id);
         var project = matrix.Project(framework.App);
         var program = Path.Combine(Path.GetDirectoryName(project)!, "Program.cs");
@@ -146,7 +200,12 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         using var runs = new RunService(matrix.Solutions, matrix.Output, _ => { }) { DotnetRoot = CompatRoot.Path };
         var (plan, _, _) = await runs.LaunchPlanAsync(project, Timeout());
 
-        await using var debug = new DebugService(DebugAdapterLocator.Resolve);
+        await using var debug = new DebugService(DebugAdapterLocator.Resolve)
+        {
+            AdapterSetting = () => netcoredbg ? DebugService.NetcoredbgAdapter : DebugService.CodalusAdapter,
+            CoreClrAdapter = CodalusDebugger,
+            X64CoreClrAdapter = !netcoredbg && X64CodalusDebugger() is { } x64 ? _ => Task.FromResult<DebugAdapterStartInfo?>(x64) : null,
+        };
         var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
         var output = new System.Text.StringBuilder();
@@ -166,6 +225,18 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         }
         catch (InvalidOperationException ex)
         {
+            if (!netcoredbg && plan.RunsAsX64 && plan.StartsWithoutStartupHooks && debug.X64CoreClrAdapter is not null)
+            {
+                // Apple silicon, .NET Core 2.0 and 2.1: not held at its start, and over before the debugger attached.
+                Assert.Contains("before the debugger could attach", ex.Message, StringComparison.Ordinal);
+                lock (output)
+                {
+                    Assert.Contains(".NET Core 2.0 and 2.1 run no startup hooks", output.ToString(), StringComparison.Ordinal);
+                }
+
+                return;
+            }
+
             lock (output)
             {
                 Assert.Fail($"{framework.Tfm}: {ex.Message}\n> {plan.FileName} {plan.Arguments}\n{string.Join('\n', plan.Environment.Select(e => e.Key + "=" + e.Value))}\n{output}");
@@ -191,6 +262,14 @@ public sealed class MatrixTests(MatrixFixture matrix) : IClassFixture<MatrixFixt
         lock (output)
         {
             Assert.Contains($"runtime={framework.RuntimePrefix}", output.ToString(), StringComparison.Ordinal);
+
+            // Which debugger it was: the Codalus debugger under the default, but for an x64 program on Apple silicon
+            // with no x64 bundle built (a local run), which the console explains.
+            if (!netcoredbg)
+            {
+                var expected = plan.RunsAsX64 && debug.X64CoreClrAdapter is null ? "Debugging with netcoredbg: it runs as x64 on Apple silicon" : "Debugging with the Codalus debugger.";
+                Assert.Contains(expected, output.ToString(), StringComparison.Ordinal);
+            }
         }
     }
 

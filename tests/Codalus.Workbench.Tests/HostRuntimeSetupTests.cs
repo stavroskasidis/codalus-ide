@@ -136,7 +136,8 @@ public sealed class HostRuntimeSetupTests : IDisposable
         Assert.Equal(("11.0", Rc2), (row.WantedChannel, row.WantedVersion));
         Assert.Equal($"{FrameworkResolver.Describe(Versions("10.0.12", runtime))} in /x", N(row.Found!));
         Assert.Contains($"need Microsoft.NETCore.App {Rc2} (rollForward Major), which isn't installed in /x", N(row.Detail!), StringComparison.Ordinal);
-        var plan = InstallPlans.For(row, PlatformKind.MacOS, "/Users/u", false, null)!;
+        // The terminal's dotnet in ~/.dotnet: the no-password install there fits (with no dotnet, Microsoft's .pkg would).
+        var plan = InstallPlans.DotnetOptions(row, new DotnetInstallFacts(PlatformKind.MacOS, "/Users/u") { ShellDotnet = "/Users/u/.dotnet/dotnet", ShellRoot = "/Users/u/.dotnet" })[0];
         Assert.Equal(("dotnet-runtime", InstallKind.Run, "/Users/u/.dotnet"), (plan.ToolId, plan.Kind, plan.AddsToPath));
         Assert.Contains("dotnet-install.sh | bash -s -- --channel 11.0 --install-dir \"/Users/u/.dotnet\"", plan.Command, StringComparison.Ordinal);
         Assert.Contains("with the runtime Codalus IDE needs", plan.Summary, StringComparison.Ordinal);

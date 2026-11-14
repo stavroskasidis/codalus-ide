@@ -255,7 +255,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#611E1E1E" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#E1EEF9" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F2F2F5" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#F2F2F5" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
@@ -504,7 +504,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#8C000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#1E3A5C" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1F1F1" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#2A2A2C" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#2A2A2C" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
@@ -699,7 +699,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#731F2D54" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#DCE6F6" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#1E1E1E" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EEF0F6" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#EEF0F6" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
@@ -994,7 +994,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B3000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#000000" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">6</CornerRadius>
@@ -1267,7 +1267,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1B2645" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#E1E9FA" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#0E1735" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EEF1F9" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#EEF1F9" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -1540,7 +1540,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#99050810" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#21345F" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1F4FB" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#1C2436" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#1C2436" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -1833,7 +1833,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#000000" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -2111,7 +2111,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1F2226" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#DBE8E8" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#062E2A" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#EDEEEF" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#EDEEEF" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -2389,7 +2389,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#9908080A" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#1F3332" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#E8F4F2" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#1F2629" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#1F2629" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -2687,7 +2687,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#000000" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">3</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">5</CornerRadius>
@@ -2960,7 +2960,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B1F1F24" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#EDE8F8" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#2A1660" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F5F5F6" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#F5F5F6" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
@@ -3233,7 +3233,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#990B0B0E" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#332A4E" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F1EBFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#262330" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#262330" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
@@ -3526,7 +3526,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#000000" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
@@ -3799,7 +3799,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#6B2A211B" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#F3E6DC" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#4A2508" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#F2F0ED" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#F2F0ED" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
@@ -4072,7 +4072,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#99060605" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#30251A" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#F7E7D6" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#201C17" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#201C17" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>
@@ -4365,7 +4365,7 @@
       <SolidColorBrush x:Key="Shell.Dialog.Scrim" Color="#B8000000" />
       <SolidColorBrush x:Key="Shell.Chat.User" Color="#000000" />
       <SolidColorBrush x:Key="Shell.Chat.User.Foreground" Color="#FFFFFF" />
-      <SolidColorBrush x:Key="Shell.CodeBlock.Header" Color="#000000" />
+      <SolidColorBrush x:Key="Shell.CodeBlock.Background" Color="#000000" />
       <CornerRadius x:Key="Shell.Control.CornerRadius">6</CornerRadius>
       <CornerRadius x:Key="Shell.Check.CornerRadius">4</CornerRadius>
       <CornerRadius x:Key="Shell.Focus.CornerRadius">8</CornerRadius>

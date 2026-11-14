@@ -265,6 +265,7 @@ public sealed class PluginInstaller(string pluginsDirectory, PlatformKind platfo
     public static async Task<PackageSignature> VerifyWithSdkAsync(string package, CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         foreach (var argument in new[] { "nuget", "verify", "--all", package, "-v", "n" })
         {
             start.ArgumentList.Add(argument);

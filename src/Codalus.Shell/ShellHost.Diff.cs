@@ -26,7 +26,53 @@ public sealed partial class ShellHost
         ShowDialogAsync = request => Dialogs.ShowAsync(request),
         ShowMessage = message => Workbench.Notifications.Warning(message),
         DiscardAllAsync = (path, unsavedEditsLost) => DiscardAsync(path, unsavedEditsLost),
+        AcquireDocumentAsync = AcquireDiffDocumentAsync,
+        ReleaseDocument = ReleaseModel,
+        RunLensAsync = RunDiffLensAsync,
     };
+
+    /// <summary>A working-tree diff holds its file's document (its language service then knows the file), or null when it can't be read.</summary>
+    private async Task<CodeDocument?> AcquireDiffDocumentAsync(string path)
+    {
+        try
+        {
+            return await AcquireModelAsync(path).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A diff's CodeLens click: the file opens at the lens's position, and its command runs there (as in the editor).</summary>
+    private async Task RunDiffLensAsync(string path, Position position, string commandId)
+    {
+        if (await OpenFileAsync(path, at: position).ConfigureAwait(true) is not null)
+        {
+            Run(commandId);
+        }
+    }
+
+    /// <summary>A diff document closed: it lets go of the document it held for its language service.</summary>
+    private static void OnDiffClosed(Docking.ShellDocument document)
+    {
+        if (document is DiffDocument diff)
+        {
+            diff.ViewModel.Close();
+        }
+    }
+
+    /// <summary>The language service of a file (or of every file: null) started or knows more: the diffs' insights ask again.</summary>
+    private void RefreshDiffInsights(CodeDocument? model = null)
+    {
+        foreach (var diff in Layout.Documents.OfType<DiffDocument>())
+        {
+            if (model is null || diff.ViewModel.Insights?.Model == model)
+            {
+                diff.ViewModel.RefreshInsights();
+            }
+        }
+    }
 
     /// <summary>The diff documents of a file's working tree (they show its open buffer).</summary>
     private IEnumerable<DiffDocument> WorkingTreeDiffsOf(string path) =>

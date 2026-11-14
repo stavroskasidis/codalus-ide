@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds and tests this checkout the way CI does, on Linux or macOS (eng/wsl-test.sh runs it under WSL; on the Mac it
 # runs in a clone, see CLAUDE.md). Installs the SDK pinned by global.json into ~/.dotnet when no matching one is on
-# the PATH (the .NET 11 release candidate since M30b), and the .NET 10 SDK next to it for the fixtures that still
+# the PATH (the .NET 11 SDK since M30b), and the .NET 10 SDK next to it for the fixtures that still
 # target net10.0, and fetches netcoredbg so the debugger tests run instead of skipping.
 #
 # Usage: eng/validate.sh [--smoke] [dotnet test arguments...]
@@ -9,6 +9,7 @@
 #            zlib1g-dev; needs a display or xvfb-run, and on macOS a logged-in desktop session)
 # Results of the smoke test land in artifacts/smoke-test.
 set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo"
@@ -16,7 +17,6 @@ cd "$repo"
 smoke=no
 if [ "${1:-}" = --smoke ]; then smoke=yes; shift; fi
 
-export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 TESTINGPLATFORM_TELEMETRY_OPTOUT=1
 
 sdk="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' global.json | head -1)"
 # `dotnet --version` here applies global.json (its version, roll-forward and prerelease rules) and fails without a
@@ -24,7 +24,7 @@ sdk="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' global.json | head -1)"
 if ! dotnet --version > /dev/null 2>&1; then
   if [ ! -x "$HOME/.dotnet/dotnet" ] || ! "$HOME/.dotnet/dotnet" --version > /dev/null 2>&1; then
     echo "== install .NET SDK $sdk into ~/.dotnet"
-    curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
+    curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
     bash "${TMPDIR:-/tmp}/dotnet-install.sh" --jsonfile global.json --install-dir "$HOME/.dotnet" --no-path
   fi
   export PATH="$HOME/.dotnet:$PATH" DOTNET_ROOT="$HOME/.dotnet"
@@ -34,7 +34,7 @@ fi
 if ! dotnet --list-runtimes | grep -q '^Microsoft.AspNetCore.App 10\.'; then
   root="$(dirname "$(readlink -f "$(command -v dotnet)")")"
   echo "== install the .NET 10 SDK into $root"
-  curl -fsSL https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
+  curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh -o "${TMPDIR:-/tmp}/dotnet-install.sh"
   bash "${TMPDIR:-/tmp}/dotnet-install.sh" --channel 10.0 --install-dir "$root" --no-path
 fi
 echo "== $(uname -sm), .NET SDK $(dotnet --version), $(git --version)"
@@ -44,6 +44,14 @@ bash eng/get-netcoredbg.sh
 export CODALUS_NETCOREDBG="$repo/.work/netcoredbg"
 # The x64 debugger on Apple silicon, for .NET 5 and earlier under Rosetta 2 (M33; does nothing elsewhere).
 bash eng/get-netcoredbg.sh --x64
+# The Codalus debugger's bundle for this machine's remote stand-ins (M58b): RemoteCodalusTests copy it to them. On
+# Apple silicon also its osx-x64 bundle and the x64 .NET runtime, for a program under Rosetta 2 (DebuggerBundleTests).
+echo "== codalus-debugger"
+bash eng/get-codalus-debugger.sh
+if [ "$(uname -sm)" = "Darwin arm64" ]; then
+  bash eng/get-codalus-debugger.sh osx-x64
+  bash eng/get-dotnet-x64.sh
+fi
 
 # The target framework matrix (M33, ADR 0030): .NET Core 2.0 to .NET 10 and older SDKs, pinned, in .work/dotnet-compat.
 # The first run downloads about 1.5 GB; Codalus.TargetFrameworks.Tests runs against it.

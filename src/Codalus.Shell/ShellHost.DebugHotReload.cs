@@ -37,6 +37,9 @@ public sealed partial class ShellHost
     private void InitializeDebugHotReload()
     {
         DebugEdits = new DebugHotReload(Debugger, () => Languages.RunningClient(CSharpLanguageId));
+        Debugger.ExpressionCompiler = CompileDebuggerExpressionAsync;
+        Debugger.Symbols = SymbolOptions;
+        Debugger.BreakAllProcesses = () => Workbench.Settings.GetBoolean(BreakAllProcessesSetting, true);
         DebugEdits.ActiveChanged += (_, _) => Ui.Post(() =>
         {
             if (!DebugEdits.IsActive)
@@ -76,11 +79,17 @@ public sealed partial class ShellHost
     /// Applies the edits to the program being debugged and says how it went: in the status bar, the Error List, and for a
     /// rude edit a question. False when the user chose to restart (the program doesn't go on).
     /// </summary>
-    private async Task<bool> ApplyDebugEditsAsync()
+    private async Task<bool> ApplyDebugEditsAsync() => (await ApplyDebugEditsAsync(ask: true, CancellationToken.None).ConfigureAwait(true)).Go;
+
+    /// <summary>
+    /// Applies the edits and says how it went, as <see cref="ApplyDebugEditsAsync()"/> does; a rude edit asks only when
+    /// <paramref name="ask"/> is true (an agent's apply_code_changes reads the outcome instead, M60).
+    /// </summary>
+    private async Task<(bool Go, HotReloadOutcome Outcome)> ApplyDebugEditsAsync(bool ask, CancellationToken cancellationToken)
     {
         _debugEditsStatus = Localizer.Get("status.debugHotReload.applying", "Hot Reload: applying…");
         UpdateHotReloadStatus();
-        var outcome = await DebugEdits.ApplyAsync(CancellationToken.None).ConfigureAwait(true);
+        var outcome = await DebugEdits.ApplyAsync(cancellationToken).ConfigureAwait(true);
         var time = DateTime.Now.ToString("T", CultureInfo.CurrentCulture);
         switch (outcome.Kind)
         {
@@ -109,13 +118,18 @@ public sealed partial class ShellHost
                 var first = outcome.Diagnostics is [var rude, ..] ? rude.Message : string.Empty;
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}",
                     string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}"))));
+                if (!ask)
+                {
+                    break;
+                }
+
                 var choice = await Workbench.Notifications.Warning(
                     Localizer.Format("msg.debugHotReload.rude", "An edit can't be applied while the program runs: {0} Restart to run it, or go on with the code it started with.", first),
                     restart, keepGoing).Result.ConfigureAwait(true);
                 if (choice == restart)
                 {
                     _ = RestartDebuggingAsync();
-                    return false;
+                    return (false, outcome);
                 }
 
                 break;
@@ -129,7 +143,7 @@ public sealed partial class ShellHost
         }
 
         UpdateHotReloadStatus();
-        return true;
+        return (true, outcome);
     }
 
     /// <summary>A save while the program runs applies the edits (with <c>debug.hotReload</c> on).</summary>
@@ -144,7 +158,8 @@ public sealed partial class ShellHost
         var extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension is ".fs" or ".fsx" or ".fsi" or ".xaml" or ".axaml")
         {
-            if (!_debugEditsLanguageSaid)
+            // XAML reaches an app with the live agent through XAML Hot Reload (M64).
+            if (!_debugEditsLanguageSaid && !XamlHotReloadTakes(path))
             {
                 _debugEditsLanguageSaid = true;
                 DebugLog.AppendLine(Localizer.Get("msg.debugHotReload.language", "Hot Reload while debugging applies C#, Visual Basic and Razor edits; F# and XAML edits run after a restart."));
@@ -161,14 +176,14 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// A C#, Visual Basic or Razor edit saved while netcoredbg debugs a .NET program: once, an offer to debug with the
-    /// Codalus debugger (a preview), which would apply it. Use It sets <c>debug.adapter</c> (the next start takes it).
+    /// Codalus debugger (the default since M58; netcoredbg was chosen in the settings), which would apply it. Use It sets <c>debug.adapter</c> (the next start takes it).
     /// </summary>
     private void OfferCodalusDebugger(string path)
     {
         if (_debugEditsOffered || !Debugger.IsActive || Debugger.UsesCodalusAdapter || Debugger.CodalusAdapters.Count > 0
             || Path.GetExtension(path).ToLowerInvariant() is not (".cs" or ".vb" or ".razor" or ".cshtml")
             || !Workbench.Settings.GetBoolean(DebugEditsOfferSetting, true)
-            || Workbench.Settings.GetString(DebugAdapterSetting, DebugService.NetcoredbgAdapter) != DebugService.NetcoredbgAdapter)
+            || Workbench.Settings.GetString(DebugAdapterSetting, DebugService.CodalusAdapter) != DebugService.NetcoredbgAdapter)
         {
             return;
         }
@@ -177,7 +192,7 @@ public sealed partial class ShellHost
         var use = Localizer.Get("action.debugHotReload.useCodalus", "Use It");
         var never = Localizer.Get("action.debugHotReload.dontShowAgain", "Don't Show Again");
         _ = Workbench.Notifications.Info(
-            Localizer.Get("msg.debugHotReload.offer", "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger (a preview) applies them as you save, continue or press Alt+F10. Debug with it from the next start?"),
+            Localizer.Get("msg.debugHotReload.offer", "This edit doesn't reach the program: netcoredbg can't apply edits while it debugs. The Codalus debugger, the default, applies them as you save, continue or press Alt+F10. Debug with it from the next start?"),
             use, never).Result.ContinueWith(t =>
         {
             if (t.Result == use)

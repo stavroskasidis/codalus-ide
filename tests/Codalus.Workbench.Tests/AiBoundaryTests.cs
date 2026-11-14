@@ -138,6 +138,35 @@ public sealed class AiBoundaryTests : IDisposable
     }
 
     [Fact]
+    public void Personal_access_tokens_and_authorization_values_are_redacted()
+    {
+        // Made-up tokens of the shapes Azure DevOps issues (52 characters of lowercase base32; 84 with AZDO), the name an
+        // agent's PowerShell gives one, and the header it builds.
+        const string oldPat = "abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst";
+        var newPat = new string('A', 40) + new string('7', 36) + "AZDO" + "wxyz";
+        var text = string.Join('\n',
+            "$pat = \"not-a-known-shape-but-named\"",
+            "AZURE_DEVOPS_PAT='another-named-one'",
+            "$headers = @{ Authorization = \"Basic dXNlcjpwYXNzd29yZDEyMzQ=\" }",
+            "curl -H \"Authorization: Bearer abc.def123.ghi456xyz\"",
+            "token: " + oldPat,
+            newPat);
+
+        var redacted = SecretRedactor.Redact(text).Text;
+
+        foreach (var secret in new[] { "not-a-known-shape-but-named", "another-named-one", "dXNlcjpwYXNzd29yZDEyMzQ", "abc.def123.ghi456xyz", oldPat, newPat })
+        {
+            Assert.DoesNotContain(secret, redacted, StringComparison.Ordinal);
+        }
+
+        // Prose and code that only look close stay.
+        foreach (var kept in new[] { "Basic authentication is off", "Bearer tokens expire", "var compat = \"x\";", "var path = \"y\";", "thisisaverylongidentifierwithoutanydigitsatallnotokenhere" })
+        {
+            Assert.Equal(kept, SecretRedactor.Redact(kept).Text);
+        }
+    }
+
+    [Fact]
     public async Task Prepare_drops_excluded_files_redacts_cuts_and_respects_restricted_mode()
     {
         var ct = TestContext.Current.CancellationToken;

@@ -1,0 +1,70 @@
+<Window xmlns:l="using:Codalus.Shell.Infrastructure"
+        xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Codalus.Shell.ViewModels"
+        x:Class="Codalus.Shell.Views.AboutWindow"
+        x:DataType="vm:AboutViewModel"
+        Title="{Binding Title}"
+        Icon="avares://codalus/Assets/codalus.ico"
+        Width="520" SizeToContent="Height" CanResize="False" CanMinimize="False" CanMaximize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Shell.Panel}">
+  <!--
+    Help → About Codalus IDE: a modal window over the main one, as in the classic IDE. The logo beside the product's
+    name and version; what it runs on, selectable; the links; the copyright and license. Copy Info and OK below, in the
+    OS's order. Enter and Escape close it.
+  -->
+  <Window.Styles>
+    <Style Selector="Border.details">
+      <Setter Property="BorderBrush" Value="{DynamicResource Shell.Input.Border}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="{DynamicResource Shell.Control.CornerRadius}" />
+      <Setter Property="Background" Value="{DynamicResource Shell.Editor.Background}" />
+      <Setter Property="Padding" Value="10,8" />
+    </Style>
+    <Style Selector="Border.details TextBlock, Border.details SelectableTextBlock">
+      <Setter Property="FontSize" Value="{DynamicResource Shell.FontSize.Small}" />
+    </Style>
+  </Window.Styles>
+
+  <DockPanel>
+    <Border DockPanel.Dock="Bottom" Classes="dialogFooter">
+      <StackPanel x:Name="FooterButtons" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="OkButton" Classes="dialog accent" Content="{l:T about.ok}" Command="{Binding CloseCommand}" IsDefault="True" />
+        <Button x:Name="CopyButton" Classes="dialog" Content="{l:T about.copyInfo}" Command="{Binding CopyCommand}"
+                ToolTip.Tip="{l:T about.copyInfoTip}" />
+      </StackPanel>
+    </Border>
+
+    <Grid ColumnDefinitions="Auto,*" Margin="24,22,24,18">
+      <Image x:Name="Logo" Width="64" Height="64" VerticalAlignment="Top" Margin="0,2,20,0"
+             Source="avares://codalus/Assets/codalus-128.png" AutomationProperties.Name="{l:T about.logo}" />
+      <StackPanel Grid.Column="1" Spacing="4">
+        <TextBlock x:Name="ProductText" Classes="heading" Text="{Binding ProductName}" />
+        <TextBlock x:Name="VersionText" Classes="muted" Text="{Binding Version}" />
+
+        <Border Classes="details" Margin="0,12,0,0">
+          <ItemsControl x:Name="DetailList" ItemsSource="{Binding Details}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:AboutDetail">
+                <Grid ColumnDefinitions="120,*" Margin="0,1">
+                  <TextBlock Classes="muted" Text="{Binding Label}" />
+                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </Border>
+
+        <WrapPanel Margin="0,10,0,0">
+          <Button x:Name="WebsiteLink" Classes="link" Content="{l:T about.website}" Command="{Binding OpenWebsiteCommand}" Margin="0,0,16,4" />
+          <Button x:Name="SourceLink" Classes="link" Content="{l:T about.sourceCode}" Command="{Binding OpenRepositoryCommand}" Margin="0,0,16,4" />
+          <Button x:Name="LicenseLink" Classes="link" Content="{l:T about.license}" Command="{Binding OpenLicenseCommand}" Margin="0,0,16,4" />
+          <Button x:Name="NoticesLink" Classes="link" Content="{l:T about.thirdPartyNotices}" Command="{Binding OpenNoticesCommand}" Margin="0,0,0,4" />
+        </WrapPanel>
+
+        <TextBlock Classes="muted small" Text="{l:T about.copyright}" TextWrapping="Wrap" Margin="0,6,0,0" />
+      </StackPanel>
+    </Grid>
+  </DockPanel>
+</Window>

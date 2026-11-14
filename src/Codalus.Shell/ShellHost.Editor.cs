@@ -252,8 +252,10 @@ public sealed partial class ShellHost : IEditorServices
         Editor.CodeColors.Configure(Languages.LanguageIdOf, TextMate.GrammarFor, id => id is null || id == Theme.ActiveTheme ? EditorTheme : Editor.EditorTheme.For(id));
         ThemeChanged += (_, _) => Editor.CodeColors.NotifyChanged();
         Layout.DocumentClosed += (_, document) => OnDocumentClosed(document);
+        Layout.DocumentClosed += (_, document) => OnDiffClosed(document);
         Layout.ActiveDocumentChanged += (_, _) => OnActiveEditorChanged();
         Layout.ActiveDocumentChanged += (_, _) => RememberActiveDocument();
+        Layout.ActiveDocumentChanged += (_, _) => TrackTitleDocument();
         Switcher.Chosen += (_, document) => Layout.OpenDocument(document, focus: true);
         _ = ConfigureLanguagesAsync();
     }
@@ -376,7 +378,19 @@ public sealed partial class ShellHost : IEditorServices
                     return null;
                 }
 
-                view = CreateView(model, primary: true);
+                // Another open of this file made its tab while this one read it (the debugger's stop opening the stopped
+                // frame's file while a click or a call opened it too): that tab, not a second one. Each made its own,
+                // and the one behind the other was never shown, so its editor never came (Windows CI, PR #345's smoke
+                // test, run 43397211609: debug.applyChanges waited for an editor that wasn't there).
+                if (Editors.FirstOrDefault(e => SolutionPaths.Comparer.Equals(e.Model.Path, path) && e.Owner is not null) is { } opened)
+                {
+                    view = opened;
+                }
+                else
+                {
+                    view = CreateView(model, primary: true);
+                }
+
                 Layout.OpenDocument(view, preview, focus: !preview, activate);
             }
             finally
@@ -712,6 +726,7 @@ public sealed partial class ShellHost : IEditorServices
         model.Saved += (_, _) => Ui.Post(() => RunCustomToolOnSave(model.Path));
         model.Saved += (_, _) => Ui.Post(() => OnSavedForPreview(model.Path));
         model.Saved += (_, _) => Ui.Post(() => OnSavedForDebugEdits(model.Path));
+        model.Saved += (_, _) => Ui.Post(() => OnSavedForXamlHotReload(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         TrackForDiffs(model);
         if (model.LanguageId is { } languageId && !model.IsLarge)
@@ -765,6 +780,7 @@ public sealed partial class ShellHost : IEditorServices
                 editor.Controller?.RefreshAll();
             }
 
+            RefreshDiffInsights(model);
             if (languageId == RazorLanguageId)
             {
                 // HTML and CSS in Razor files come from the HTML server (ADR 0027).
@@ -819,6 +835,8 @@ public sealed partial class ShellHost : IEditorServices
         {
             editor.Controller?.RefreshAll();
         }
+
+        RefreshDiffInsights();
     }
 
     private WorkspaceStatusParams? _languageStatus;
@@ -1160,27 +1178,6 @@ public sealed partial class ShellHost : IEditorServices
 
     // ------------------------------------------------------------------ saving and closing
 
-    private async Task ConfirmCloseAsync(Docking.ShellDocument document)
-    {
-        var name = document is CodeEditorDocument editor ? editor.Model.Name : document.Title;
-        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.saveChangesToBeforeClosing", "Save changes to {0} before closing?", name), "Save", "Don't Save").Result.ConfigureAwait(false);
-        await Ui.RunAsync(async () =>
-        {
-            if (choice == "Save")
-            {
-                if ((document is CodeEditorDocument code && await SaveAsync(code.Model).ConfigureAwait(true))
-                    || (document is Views.ISavableDocument savable && await SaveDocumentAsync(document, savable).ConfigureAwait(true)))
-                {
-                    document.CloseConfirmed();
-                }
-            }
-            else if (choice == "Don't Save")
-            {
-                document.CloseConfirmed();
-            }
-        }).ConfigureAwait(false);
-    }
-
     public async Task SaveActiveDocumentAsync()
     {
         if (ActiveEditor is { } editor)
@@ -1249,58 +1246,6 @@ public sealed partial class ShellHost : IEditorServices
             Layout.CloseDocument(document);
         }
     }
-
-    /// <summary>Close All (or Close All But This): together, so no tab becomes active on the way (M56).</summary>
-    public void CloseAllDocuments(bool exceptActive)
-    {
-        var active = Layout.ActiveDocument;
-        Layout.CloseDocuments([.. Layout.Documents.Where(d => !exceptActive || d != active)]);
-    }
-
-    /// <summary>Closes every document that isn't pinned (M34d), together.</summary>
-    public void CloseUnpinnedDocuments() => Layout.CloseDocuments([.. Layout.Documents.Where(d => !d.IsPinned)]);
-
-    public bool HasUnsavedDocuments => _models.Values.Any(m => m.IsModified);
-
-    /// <summary>Asks before quitting with unsaved changes; true when the window may close.</summary>
-    public async Task<bool> ConfirmQuitAsync()
-    {
-        var unsaved = _models.Values.Where(m => m.IsModified).ToList();
-        if (unsaved.Count == 0)
-        {
-            DeleteAllBackups();
-            return true;
-        }
-
-        var names = string.Join(", ", unsaved.Select(m => m.Name));
-        var choice = await Workbench.Notifications.Warning(Localizer.Format("msg.editor.youHaveUnsavedChangesIn", "You have unsaved changes in {0}.", names), "Save All and Exit", "Exit Without Saving").Result.ConfigureAwait(true);
-        if (choice == "Save All and Exit")
-        {
-            foreach (var model in unsaved)
-            {
-                await SaveAsync(model).ConfigureAwait(true);
-            }
-
-            if (unsaved.All(m => !m.IsModified))
-            {
-                DeleteAllBackups();
-                return true;
-            }
-
-            return false;
-        }
-
-        if (choice == "Exit Without Saving")
-        {
-            DeleteAllBackups();
-            return true;
-        }
-
-        return false;
-    }
-
-    /// <summary>Closing a solution closes its documents together (unsaved ones stay open, as the user has to decide).</summary>
-    private void CloseSolutionDocuments() => Layout.CloseDocuments([.. Editors.Where(e => !e.Model.IsModified)]);
 
     // ------------------------------------------------------------------ split views
 

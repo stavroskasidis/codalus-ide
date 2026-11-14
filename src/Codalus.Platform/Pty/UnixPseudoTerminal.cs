@@ -9,6 +9,8 @@ namespace Codalus.Platform.Pty;
 /// directory, default signal dispositions and an empty signal mask. No managed code runs between fork and exec, which
 /// <c>forkpty</c> from .NET can't promise (the child would JIT and bind P/Invoke stubs in a copy of a multi-threaded
 /// runtime, and can deadlock).
+/// On macOS that open doesn't make the pty the controlling terminal (the session starts after it), so the program is
+/// started through <c>/bin/sh</c>, which opens the pty again and then becomes the program: see <see cref="StartThroughShell"/>.
 /// </summary>
 [UnsupportedOSPlatform("windows")]
 internal sealed partial class UnixPseudoTerminal : PseudoTerminal
@@ -126,10 +128,16 @@ internal sealed partial class UnixPseudoTerminal : PseudoTerminal
                 Check(posix_spawn_file_actions_addchdir_np(actions, Utf8(info.WorkingDirectory)), "posix_spawn_file_actions_addchdir_np");
             }
 
-            var argv = Array([file, .. info.Arguments]);
+            IReadOnlyList<string> arguments = [file, .. info.Arguments];
+            if (OperatingSystem.IsMacOS())
+            {
+                arguments = StartThroughShell(Marshal.PtrToStringUTF8(name)!, arguments);
+            }
+
+            var argv = Array(arguments);
             var envp = Array([.. info.Environment.Select(e => $"{e.Key}={e.Value}")]);
             int pid;
-            Check(posix_spawn(&pid, Utf8(file), actions, attributes, argv, envp), "posix_spawn");
+            Check(posix_spawn(&pid, Utf8(arguments[0]), actions, attributes, argv, envp), "posix_spawn");
 
             // The slave stays open here until the child is reaped: on macOS, output still unread when the last slave
             // descriptor closes is discarded, so a program that writes and exits at once would lose its output.
@@ -159,6 +167,28 @@ internal sealed partial class UnixPseudoTerminal : PseudoTerminal
             }
         }
     }
+
+    /// <summary>The shell that makes the pty the controlling terminal on macOS.</summary>
+    internal const string Shell = "/bin/sh";
+
+    /// <summary>
+    /// The command line that starts <paramref name="program"/> (its path, then its arguments) with the pty
+    /// <paramref name="terminal"/> as its controlling terminal on macOS. There <c>posix_spawn</c> runs the file actions
+    /// before it starts the new session (glibc and musl start the session first), so the file actions' open is by a
+    /// process that leads no session and the pty stays nobody's controlling terminal. Without one the kernel has no
+    /// foreground process group to signal: a resize changes the size and tells nobody (SIGWINCH), Ctrl+C interrupts
+    /// nothing (SIGINT), and <c>/dev/tty</c> can't be opened. bash hides it, since it opens its terminal by name when it
+    /// starts; a program started by itself, as AI Console starts an agent's CLI, kept drawing at the size it started
+    /// with (and zsh takes no terminal either). So <c>/bin/sh</c> is what is spawned: it leads the new session, opens
+    /// the pty by name (the first terminal a session leader opens without O_NOCTTY becomes the session's), and then
+    /// <c>exec</c>s the program, which is the same process. The program and its arguments are the shell's own
+    /// arguments, never parsed as shell text.
+    /// </summary>
+    internal static IReadOnlyList<string> StartThroughShell(string terminal, IReadOnlyList<string> program) =>
+
+        // `true`, not `:`: a redirection that fails on a special built-in ends a POSIX shell, and the program should
+        // start even then.
+        [Shell, "-c", "true <>\"$0\"; exec \"$@\"", terminal, .. program];
 
     /// <summary>The posix_spawn family returns an error number instead of setting errno.</summary>
     private static void Check(int result, string function)

@@ -110,6 +110,21 @@ public sealed record ManifestContributions
 
     /// <summary>Language model providers (proposed, M28a, ADR 0062): activated only when the user picks one.</summary>
     public ManifestLanguageModelProvider[]? LanguageModelProviders { get; init; }
+
+    /// <summary>
+    /// Tools for AI agents (proposed, ADR 0092): offered to AI Chat's agents and <c>codalus mcp</c> beside the IDE's own,
+    /// each call after the user allows it; the plugin activates at the first call (<c>onAiTool:&lt;name&gt;</c>).
+    /// </summary>
+    public ManifestAiTool[]? AiTools { get; init; }
+}
+
+/// <summary>
+/// A tool for AI agents: its <see cref="Name"/> (snake_case, activation event <c>onAiTool:&lt;name&gt;</c>), what it does for
+/// the model, and its input as a JSON schema (an object; an empty object schema when left out).
+/// </summary>
+public sealed record ManifestAiTool(string Name, string Description)
+{
+    public System.Text.Json.JsonElement? InputSchema { get; init; }
 }
 
 /// <summary>
@@ -431,6 +446,9 @@ public sealed record ManifestSetting(string Type)
 [JsonSerializable(typeof(HostingPublishParams))]
 [JsonSerializable(typeof(PublishedRepositoryDto))]
 [JsonSerializable(typeof(LanguageModelProviderParams))]
+[JsonSerializable(typeof(AiToolParams))]
+[JsonSerializable(typeof(AiToolInvokeParams))]
+[JsonSerializable(typeof(AiToolResultDto))]
 [JsonSerializable(typeof(LanguageModelProviderIdParams))]
 [JsonSerializable(typeof(LanguageModelsResult))]
 [JsonSerializable(typeof(LanguageModelStatusDto))]

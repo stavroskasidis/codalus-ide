@@ -107,6 +107,14 @@ public interface ILanguageModelSink
     void ChatPart(ChatPartParams part);
 }
 
+/// <summary>Receives plugins' AI tools as they register them (the workbench's <c>PluginAiTools</c>, ADR 0092).</summary>
+public interface IAiToolSink
+{
+    void ToolRegistered(string pluginId, string name, IHostingConnection connection);
+
+    void ToolUnregistered(string name);
+}
+
 /// <summary>Requests to a test controller's plugin.</summary>
 public interface ITestControllerConnection
 {

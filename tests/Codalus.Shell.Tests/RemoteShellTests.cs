@@ -100,36 +100,42 @@ public sealed class RemoteShellTests
         var completion = await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
         Assert.Contains(completion.Items, i => i.Label == "WriteLine");
 
-        // Budget (M21): completion ≤ local + RTT + 20 ms at a simulated 50 and 150 ms (asserted off CI).
-        // Each median comes with its samples: one slow sample or all of them tells a busy machine from a slower path
-        // (a local full run over the budget by 5 ms at 150 ms, 2026-10-31; docs/ci-flakes.md).
-        async Task<(double Median, string Samples)> CompletionMilliseconds()
+        // Budget (M21): completion ≤ local + RTT + 20 ms at a simulated 50 and 150 ms (asserted off CI). The three are
+        // measured in alternating rounds (no latency, 50 ms, 150 ms, five times), as the benchmarks do, so load that
+        // comes and goes during a full run falls on all three alike: measured one after the other, the baseline's five
+        // samples and each RTT's fell on different moments (full local runs over the budget, 2026-10-31 and 2026-11-11,
+        // where the baseline was 77 ms against 19 to 38 ms alone; docs/ci-flakes.md). Each median comes with its samples.
+        int[] rtts = [0, 50, 150];
+        var times = rtts.ToDictionary(rtt => rtt, _ => new List<double>());
+        for (var round = 0; round < 5; round++)
         {
-            var times = new List<double>();
-            for (var i = 0; i < 5; i++)
+            foreach (var rtt in rtts)
             {
+                remote.Connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
                 var watch = Stopwatch.StartNew();
                 await client.CompletionAsync(editor.Model.Uri, position, null, ShellFixture.RequestTimeout(60));
-                times.Add(watch.Elapsed.TotalMilliseconds);
-            }
-
-            return (times.Order().ElementAt(times.Count / 2), string.Join(", ", times.Select(t => t.ToString("F0", CultureInfo.InvariantCulture))));
-        }
-
-        var (baseline, baselineSamples) = await CompletionMilliseconds();
-        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms [{baselineSamples}]"));
-        foreach (var rtt in (int[])[50, 150])
-        {
-            remote.Connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
-            var (slower, samples) = await CompletionMilliseconds();
-            report.Append(CultureInfo.InvariantCulture, $"; {slower:F0} ms at {rtt} ms RTT [{samples}]");
-            if (Environment.GetEnvironmentVariable("CI") != "true")
-            {
-                Assert.True(slower <= baseline + rtt + 20, $"Completion took {slower:F0} ms at {rtt} ms RTT: over the budget of {baseline + rtt + 20:F0} ms ({report}).");
+                times[rtt].Add(watch.Elapsed.TotalMilliseconds);
             }
         }
 
         remote.Connection.SimulatedLatency = TimeSpan.Zero;
+        double Median(int rtt) => times[rtt].Order().ElementAt(times[rtt].Count / 2);
+        string Samples(int rtt) => string.Join(", ", times[rtt].Select(t => t.ToString("F0", CultureInfo.InvariantCulture)));
+        var baseline = Median(0);
+        var report = new StringBuilder(string.Create(CultureInfo.InvariantCulture, $"completion through the server: {baseline:F0} ms [{Samples(0)}]"));
+        foreach (var rtt in rtts.Skip(1))
+        {
+            report.Append(CultureInfo.InvariantCulture, $"; {Median(rtt):F0} ms at {rtt} ms RTT [{Samples(rtt)}]");
+        }
+
+        if (Environment.GetEnvironmentVariable("CI") != "true")
+        {
+            foreach (var rtt in rtts.Skip(1))
+            {
+                Assert.True(Median(rtt) <= baseline + rtt + 20, $"Completion took {Median(rtt):F0} ms at {rtt} ms RTT: over the budget of {baseline + rtt + 20:F0} ms ({report}).");
+            }
+        }
+
         TestContext.Current.SendDiagnosticMessage(report.ToString());
 
         // An edit saved through the server reaches the file there.
@@ -199,11 +205,34 @@ public sealed class RemoteShellTests
         Assert.False(FileSystems.IsRemote(program));
     }
 
+    /// <summary>Under the default: the Codalus debugger, started on the server's side as the server starts a host (M58b).</summary>
     [AvaloniaFact]
-    public async Task Debugging_in_a_remote_window_runs_netcoredbg_through_the_server_and_stops_at_a_breakpoint()
+    public async Task Debugging_in_a_remote_window_runs_the_debugger_through_the_server_and_stops_at_a_breakpoint()
+    {
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.NetcoredbgAdapter, "CODALUS_DEBUG_ADAPTER chooses netcoredbg over the setting.");
+        var log = await DebugInARemoteWindowAsync(netcoredbg: false);
+        Assert.Contains("Debugging with the Codalus debugger.", log, StringComparison.Ordinal);
+    }
+
+    /// <summary>The fallback, for as long as it ships (ADR 0094).</summary>
+    [AvaloniaFact]
+    public async Task Debugging_in_a_remote_window_under_netcoredbg_runs_it_through_the_server_and_stops_at_a_breakpoint()
     {
         Assert.SkipWhen(DebugAdapterLocator.Resolve() is null && Environment.GetEnvironmentVariable("CI") != "true", "netcoredbg is not installed (eng/get-netcoredbg.sh).");
+        Assert.SkipWhen(Environment.GetEnvironmentVariable(DebugService.AdapterVariable) == DebugService.CodalusAdapter, "CODALUS_DEBUG_ADAPTER chooses the Codalus debugger over the setting.");
+        var log = await DebugInARemoteWindowAsync(netcoredbg: true);
+        Assert.DoesNotContain("Debugging with the Codalus debugger.", log, StringComparison.Ordinal);
+    }
+
+    /// <summary>F5 in a remote window (the local stand-in) to a breakpoint and on to the program's end; the Debug Console's text.</summary>
+    private static async Task<string> DebugInARemoteWindowAsync(bool netcoredbg)
+    {
         await using var f = ShellFixture.Create();
+        if (netcoredbg)
+        {
+            await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugAdapterSetting, DebugService.NetcoredbgAdapter, Workbench.Settings.SettingScope.User, CancellationToken.None);
+        }
+
         var folder = Resolved(f.CopySample("BuildAndRun"));
         var remote = await ConnectAsync(f);
         var local = remote.Map.ToLocal(folder);
@@ -234,6 +263,7 @@ public sealed class RemoteShellTests
         await f.RunAsync("debug.continue");
         await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 120);
         Assert.Contains("exited with code", f.Shell.DebugLog.GetText(), StringComparison.Ordinal);
+        return f.Shell.DebugLog.GetText();
     }
 
     /// <summary>

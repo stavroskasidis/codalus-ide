@@ -69,7 +69,7 @@ fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-curl -sSfL -o "$work/$asset" "https://github.com/Samsung/netcoredbg/releases/download/$version/$asset"
+curl -sSfL --retry 3 --retry-all-errors -o "$work/$asset" "https://github.com/Samsung/netcoredbg/releases/download/$version/$asset"
 actual="$( (sha256sum "$work/$asset" 2>/dev/null || shasum -a 256 "$work/$asset") | cut -d' ' -f1)"
 if [ "$actual" != "$sha" ]; then
   echo "SHA-256 mismatch for $asset: expected $sha, got $actual" >&2

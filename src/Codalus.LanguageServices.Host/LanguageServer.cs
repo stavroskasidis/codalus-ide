@@ -21,6 +21,7 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly CodeActionsFeature _codeActions;
     private readonly CodeCleanupFeature _cleanup;
     private readonly HotReloadFeature _hotReload;
+    private readonly ExpressionCompilerFeature _expressions;
     private readonly DiagnosticsService _diagnostics;
     private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
@@ -36,6 +37,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
         _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
+        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution);
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
@@ -80,6 +82,7 @@ internal sealed class LanguageServer : IAsyncDisposable
                     CallHierarchyProvider = true,
                     TypeHierarchyProvider = true,
                     InlayHintProvider = true,
+                    InlineValueProvider = true,
                     CodeLensProvider = new CodeLensOptions(ResolveProvider: true),
                     SelectionRangeProvider = true,
                 },
@@ -191,15 +194,15 @@ internal sealed class LanguageServer : IAsyncDisposable
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,
-            xaml: (xaml, offset, _, ct) => Xaml.XamlNavigation.PrepareRenameAsync(xaml, offset, ct));
+            xaml: (xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
         OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
             (document, offset, p, ct) => RenameFeature.RenameAsync(document, offset, p.NewName, _workspace.Version, ct), null,
-            xaml: (xaml, offset, p, ct) => Xaml.XamlNavigation.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
+            xaml: (xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
         OnDocument(Methods.CodeAction, json.CodeActionParams, json.CodeActionArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
             return await _codeActions.ActionsAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
-        }, []);
+        }, [], async (xaml, p, ct) => await Xaml.XamlCodeActions.ActionsAsync(xaml, p.Range, _workspace.Version, ct).ConfigureAwait(false));
         _connection.OnRequest(Methods.CodeActionResolve, json.CodeAction, json.CodeAction, (action, ct) => _codeActions.ResolveAsync(action, _workspace.Version, ct));
         _connection.OnRequest(Methods.CodeActionOptions, json.CodeActionOptionsParams, json.CodeActionOptions, (p, _) => Task.FromResult(_codeActions.Options(p.Action)!));
         OnDocument(Methods.Formatting, json.DocumentFormattingParams, json.TextEditArray, p => p.TextDocument,
@@ -260,6 +263,11 @@ internal sealed class LanguageServer : IAsyncDisposable
         }, []);
         OnPosition(Methods.SymbolInfo, json.TextDocumentPositionParams, json.SymbolDetails, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => HierarchyFeature.InfoAsync(document, offset, ct), null);
+        OnDocument(Methods.InlineValue, json.InlineValueParams, json.InlineValueArray, p => p.TextDocument, async (document, p, ct) =>
+        {
+            var text = await document.GetTextAsync(ct).ConfigureAwait(false);
+            return await InlineValuesFeature.ValuesAsync(document, Positions.ToSpan(text, p.Range), Positions.ToSpan(text, p.Context.StoppedLocation), ct).ConfigureAwait(false);
+        }, [], semantics: Semantics.Analysis);
         OnDocument(Methods.InlayHint, json.InlayHintParams, json.InlayHintArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
@@ -304,6 +312,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.HotReloadCommit, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Commit(p)));
         _connection.OnRequest(Methods.HotReloadDiscard, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.Discard(p)));
         _connection.OnRequest(Methods.HotReloadEnd, json.HotReloadSessionParams, json.Boolean, (p, _) => Task.FromResult(_hotReload.End(p.Session)));
+        _connection.OnRequest(Methods.CompileExpression, json.CompileExpressionParams, json.CompileExpressionResult, _expressions.CompileAsync);
         _connection.OnRequest(Methods.AspNetEndpoints, json.AspNetEndpointsParams, json.AspNetEndpointsResult,
             (p, ct) => AspNetEndpointsFeature.FindAsync(_workspace.CurrentSolution, p.Project, ct));
         _connection.OnRequest(Methods.EfContexts, json.EfContextsParams, json.EfDiscoveredContextsResult,

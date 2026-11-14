@@ -189,7 +189,7 @@ public sealed class GitChangesRowsTests
         bool Expanded(string path) => vm.FindNode("changes", Path.Combine([folder, .. path.Split('/')]))!.IsExpanded;
         List<string> opened = [];
         vm.OpenFileAsDefault = true;
-        vm.OpenFile = path =>
+        vm.OpenFile = (path, _) =>
         {
             opened.Add(path);
             return Task.CompletedTask;

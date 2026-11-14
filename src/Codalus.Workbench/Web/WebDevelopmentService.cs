@@ -127,7 +127,7 @@ public sealed class WebDevelopmentService(Func<string?> dotnetRoot)
         }
 
         start.Environment["DOTNET_NOLOGO"] = "1";
-        start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         using var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet did not start.");
         var output = new StringBuilder();
         var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);

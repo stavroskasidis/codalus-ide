@@ -217,7 +217,8 @@ public sealed class DebugHotReload : IAsyncDisposable
         await _applying.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var update = await client.HotReloadUpdateAsync(session, cancellationToken).ConfigureAwait(false);
+            // Stopped: where the threads' frames are, so those in an edited method go on in its new version (M58).
+            var update = await client.HotReloadUpdateAsync(session, cancellationToken, await ActiveStatementsAsync(cancellationToken).ConfigureAwait(false)).ConfigureAwait(false);
             HotReloadOutcome outcome;
             if (update.Status == HotReloadUpdateResult.Blocked)
             {
@@ -246,6 +247,10 @@ public sealed class DebugHotReload : IAsyncDisposable
                 if (outcome.Kind == HotReloadOutcome.Applied)
                 {
                     outcome = await ApplyToApplicationAsync(update.Updates, outcome, cancellationToken).ConfigureAwait(false);
+                    if (update.Updates.Any(u => u.ActiveStatements.Length > 0))
+                    {
+                        await _debugger.RefreshFramesAsync().ConfigureAwait(false); // the stopped frames' statements moved with the edit
+                    }
                 }
             }
 
@@ -265,9 +270,40 @@ public sealed class DebugHotReload : IAsyncDisposable
     }
 
     /// <summary>Every Codalus debugger of the session takes the deltas; a module a program doesn't have is skipped.</summary>
+    /// <summary>
+    /// The statements the stopped program's frames are at, from every Codalus debugger of the session; null while the
+    /// program runs (an edit applied then has no frame to move: Hot Reload's semantics).
+    /// </summary>
+    private async Task<HotReloadActiveStatement[]?> ActiveStatementsAsync(CancellationToken cancellationToken)
+    {
+        if (_debugger.State != DebugState.Stopped)
+        {
+            return null;
+        }
+
+        var statements = new List<HotReloadActiveStatement>();
+        foreach (var adapter in _debugger.CodalusAdapters)
+        {
+            try
+            {
+                var response = await adapter.Connection.RequestAsync("codalus/activeStatements", JsonElement.Parse("{}"), s_json.JsonElement, s_json.ActiveStatementsResponse, cancellationToken).ConfigureAwait(false);
+                statements.AddRange(response.Statements.Select(a => new HotReloadActiveStatement(a.ModuleId, a.MethodToken, a.MethodVersion, a.IlOffset, a.Document, a.StartLine, a.StartColumn, a.EndLine, a.EndColumn, a.Leaf, a.UpToDate) { PartiallyExecuted = a.PartiallyExecuted }));
+            }
+            catch (DapException)
+            {
+                // A debugger that runs on meanwhile has none.
+            }
+        }
+
+        return [.. statements];
+    }
+
     private async Task<HotReloadOutcome> ApplyToAdaptersAsync(HotReloadUpdateResult update, CancellationToken cancellationToken)
     {
-        var arguments = new ApplyChangesArguments([.. update.Updates.Select(u => new ModuleDelta(u.ModuleId, u.MetadataDelta, u.IlDelta, u.PdbDelta))]);
+        var arguments = new ApplyChangesArguments([.. update.Updates.Select(u => new ModuleDelta(u.ModuleId, u.MetadataDelta, u.IlDelta, u.PdbDelta)
+        {
+            ActiveStatements = u.ActiveStatements.Length == 0 ? null : [.. u.ActiveStatements.Select(a => new ActiveStatementUpdate(a.MethodToken, a.MethodVersion, a.IlOffset, a.StartLine, a.StartColumn))],
+        })]);
         var applied = false;
         foreach (var adapter in _debugger.CodalusAdapters)
         {

@@ -270,7 +270,7 @@ public sealed class MergeEditorTests
     public async Task The_panes_scroll_together_with_their_conflicts_lined_up()
     {
         // Lines only the current side has before the conflict (and the result, which git merged them into): the panes
-        // line up at the conflict, not by line number.
+        // line up row by row, the incoming side with filler rows above its first line.
         var common = string.Concat(Enumerable.Range(0, 80).Select(i => $"line {i} with some text to scroll sideways through, wider than the pane is at its default size\n"));
         var ours = "extra 1\nextra 2\nextra 3\nstart\nmine\n" + common;
         var theirs = "start\ntheirs\n" + common;
@@ -288,18 +288,112 @@ public sealed class MergeEditorTests
         var lineHeight = result.DefaultLineHeight;
         Assert.Equal("extra 1\nextra 2\nextra 3\nstart\nold\n" + common, view.ResultText);
         var current = view.EditorFor(MergeSide.Current).TextArea.TextView;
+        Assert.Equal((3, 0), view.FillerAt(MergePane.Incoming, 1));
+        Assert.Equal((0, 0), view.FillerAt(MergePane.Result, 1));
+
+        // The caret at the start of the incoming side's first line is on its text, under the filler rows, and stays there.
+        var incomingEditor = view.EditorFor(MergeSide.Incoming);
+        incomingEditor.TextArea.Caret.Offset = 0;
+        ShellFixture.Pump();
+        Assert.Equal(3 * lineHeight, incomingEditor.TextArea.Caret.CalculateCaretRectangle().Top - incoming.ScrollOffset.Y, 1);
+        incomingEditor.TextArea.Focus();
+        Avalonia.Headless.HeadlessWindowExtensions.KeyPress(f.Window, Avalonia.Input.Key.Right, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.ArrowRight, null);
+        Assert.Equal(1, incomingEditor.TextArea.Caret.Offset);
+        Avalonia.Headless.HeadlessWindowExtensions.KeyPress(f.Window, Avalonia.Input.Key.Home, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Home, null);
+        Avalonia.Headless.HeadlessWindowExtensions.KeyPress(f.Window, Avalonia.Input.Key.Left, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.ArrowLeft, null);
+        ShellFixture.Pump();
+        Assert.Equal((0, 3 * lineHeight), (incomingEditor.TextArea.Caret.Offset, incomingEditor.TextArea.Caret.CalculateCaretRectangle().Top - incoming.ScrollOffset.Y));
         ((Avalonia.Controls.Primitives.IScrollable)result).Offset = new Avalonia.Vector(0, 4 * lineHeight); // the result's conflict line
         ShellFixture.Pump();
-        Assert.Equal(1 * lineHeight, incoming.ScrollOffset.Y, 1); // the incoming side's conflict line (it has no extra lines)
+        Assert.Equal(4 * lineHeight, incoming.ScrollOffset.Y, 1); // the incoming side's conflict line, under its 3 filler rows and "start"
         Assert.Equal(4 * lineHeight, current.ScrollOffset.Y, 1);
 
         // Sideways too: the narrow source panes (the wide result has nothing to scroll here).
-        ((Avalonia.Controls.Primitives.IScrollable)incoming).Offset = new Avalonia.Vector(40, 1 * lineHeight);
+        ((Avalonia.Controls.Primitives.IScrollable)incoming).Offset = new Avalonia.Vector(40, 4 * lineHeight);
         ShellFixture.Pump();
         Assert.Equal(40, current.ScrollOffset.X, 1);
         Assert.Equal(4 * lineHeight, result.ScrollOffset.Y, 1);
+    }
 
-        Assert.Equal(1.5, MergeEditorView.MapLine([0, 2, 4, 10], [0, 1, 3, 9], 2.5), 3);
+    [AvaloniaFact]
+    public async Task A_conflicts_shorter_sides_are_padded_so_the_panes_line_up_row_by_row()
+    {
+        // The maintainer's report (2026-11-13): the current side deleted seven lines the incoming side kept and added one
+        // to, and the incoming side removed two lines further up, which git merged on its own. The current side's empty
+        // block was a thin band, and the panes drifted apart past it; in the classic IDE every block is as tall as the
+        // tallest side's, the shorter sides hatched, and the panes line up row by row.
+        var pre = Enumerable.Range(0, 10).Select(i => $"before {i}").ToList();
+        var kept = string.Concat(pre.Where((_, i) => i is not 3 and not 4).Select(l => l + "\n"));
+        var block = string.Concat("RUSVTWX".Select(c => $"option {c}\n"));
+        var tail = string.Concat(Enumerable.Range(0, 60).Select(i => $"after {i}\n"));
+        var @base = string.Concat(pre.Select(l => l + "\n")) + "last kept\n" + block + tail;
+        var ours = string.Concat(pre.Select(l => l + "\n")) + "last kept\n" + tail;
+        var theirs = kept + "last kept\n" + block + "option Y\n" + tail;
+        var merged = kept + "last kept\n<<<<<<< HEAD\n=======\n" + block + "option Y\n>>>>>>> stash\n" + tail;
+        await using var f = ShellFixture.Create();
+        var (l, r, b, m) = Files(f, ours, theirs, @base, merged);
+        _ = f.Shell.MergeFilesAsync(l, r, b, m);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MergeEditorView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+        ShellFixture.Pump();
+        Assert.Equal(kept + "last kept\n" + block + tail, view.ResultText);
+
+        // Two rows where the current side has "before 3" and "before 4"; the block: eight rows in every pane.
+        Assert.Equal((0, 2), view.FillerAt(MergePane.Incoming, 3));
+        Assert.Equal((0, 2), view.FillerAt(MergePane.Result, 3));
+        Assert.Equal((0, 0), view.FillerAt(MergePane.Current, 3));
+        Assert.Equal((0, 8), view.FillerAt(MergePane.Current, 11)); // "last kept", then the empty block's rows
+        Assert.Equal((0, 0), view.FillerAt(MergePane.Incoming, 17)); // "option Y": the tallest side
+        Assert.Equal((0, 1), view.FillerAt(MergePane.Result, 16)); // the base's "option X", then one row
+
+        // Scrolled to the conflict, its block is at the same height and as tall in every pane, and so is the line after it.
+        var result = view.Result.TextArea.TextView;
+        var lineHeight = result.DefaultLineHeight;
+        ((Avalonia.Controls.Primitives.IScrollable)result).Offset = new Avalonia.Vector(0, result.GetVisualTopByDocumentLine(9)); // "last kept", under 2 filler rows
+        ShellFixture.Pump();
+        var conflict = view.ViewModel.Conflicts[0];
+        foreach (var (pane, editor, range) in new[]
+        {
+            (MergePane.Current, view.EditorFor(MergeSide.Current), conflict.Current),
+            (MergePane.Incoming, view.EditorFor(MergeSide.Incoming), conflict.Incoming),
+            (MergePane.Result, view.Result, conflict.Result),
+        })
+        {
+            var text = editor.TextArea.TextView;
+            var bounds = MergeEditorView.BlockBounds(text, editor.Document, range, view.LayoutFor(pane), 0)!.Value;
+            Assert.Equal(1 * lineHeight, bounds.Top, 1);
+            Assert.Equal(9 * lineHeight, bounds.Bottom, 1);
+            var after = editor.Document.GetLineByOffset(range.End).LineNumber;
+            Assert.Equal("after 0", editor.Document.GetText(editor.Document.GetLineByNumber(after)));
+            Assert.Equal(9 * lineHeight, text.GetVisualTopByDocumentLine(after) - text.ScrollOffset.Y, 1);
+        }
+
+        // Taking the incoming block: the result's block is the tallest side's, and nothing pads it.
+        conflict.TakeIncoming = true;
+        ShellFixture.Pump();
+        Assert.Equal((0, 0), view.FillerAt(MergePane.Result, 17));
+        Assert.Equal((0, 8), view.FillerAt(MergePane.Current, 11));
+
+        // Typing a line into the result's block makes it the tallest: every other pane gets a row more.
+        view.Result.Document.Insert(conflict.Result.End - 1, "\nmore");
+        ShellFixture.Pump();
+        Assert.Equal((0, 9), view.FillerAt(MergePane.Current, 11));
+        Assert.Equal((0, 1), view.FillerAt(MergePane.Incoming, 17));
+        Assert.Equal((0, 0), view.FillerAt(MergePane.Result, 18));
+    }
+
+    [Fact]
+    public void Panes_line_up_where_every_pane_has_the_line_and_pad_the_rest()
+    {
+        static MergeAlignment.Pane Pane(string text, params (int, int)[] blocks) => new(text.Split(' '), blocks);
+
+        // Current: a b X c; incoming: a c; result: a Y Z c. Between "a" and "c" the tallest is the result's two lines.
+        var layouts = MergeAlignment.Align([Pane("a b X c"), Pane("a c"), Pane("a Y Z c")]);
+        Assert.Equal("0 0 0 0 0", string.Join(' ', layouts[0].Before));
+        Assert.Equal("0 2 0", string.Join(' ', layouts[1].Before));
+        Assert.Equal(4, layouts[2].RowsAbove(4));
+        Assert.Equal(layouts[0].RowsAbove(layouts[0].LineCount), layouts[1].RowsAbove(layouts[1].LineCount));
+        Assert.Equal((1, 0.5), layouts[1].LineAtRow(3.5));
     }
 
     private static (string Local, string Remote, string Base, string Merged) Files(ShellFixture f, string ours, string theirs, string @base, string merged)

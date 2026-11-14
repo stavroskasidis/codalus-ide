@@ -135,7 +135,9 @@ public sealed class CurrentLineNumberMargin : LineNumberMargin
             }
 
             shown[key] = text;
-            var y = visualLine.GetTextLineVisualYPosition(visualLine.TextLines[0], VisualYPosition.TextTop);
+            // Beside the row the line's text starts on: the merge editor puts filler rows above the first line's.
+            var row = visualLine.TextLines.Count > 1 ? visualLine.GetTextLine(visualLine.GetVisualColumn(0)) : visualLine.TextLines[0];
+            var y = visualLine.GetTextLineVisualYPosition(row, VisualYPosition.TextTop);
             text.Draw(drawingContext, new Point(width - text.Width, y - textView.VerticalOffset));
         }
 

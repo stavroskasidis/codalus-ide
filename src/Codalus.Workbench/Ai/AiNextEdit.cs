@@ -36,7 +36,8 @@ public sealed class AiNextEdit(AiService ai, SettingsService settings)
 
     public AiService Ai { get; } = ai;
 
-    public bool IsEnabled => Ai.State == AiState.Ready && settings.GetBoolean(EnabledSetting, false);
+    /// <summary>Next edits may be asked for: AI can answer (a provider, or AI Chat's agent, ADR 0097) and they are turned on.</summary>
+    public bool IsEnabled => Ai.CanAnswer && settings.GetBoolean(EnabledSetting, false);
 
     /// <summary>The next edit in <paramref name="text"/> around <paramref name="caretLine"/> (1-based), or null.</summary>
     public async Task<AiEditSuggestion?> SuggestAsync(string path, string? languageId, string text, int caretLine, IReadOnlyList<AiRecentEdit> recent, CancellationToken cancellationToken)
@@ -83,8 +84,9 @@ public sealed class AiNextEdit(AiService ai, SettingsService settings)
                 _ => { },
                 cancellationToken,
                 maxOutputTokens: 600,
-                modelOverride: settings.GetString(AiCompletions.ModelSetting) is { Length: > 0 } model ? model : null,
-                quiet: true).ConfigureAwait(false);
+                modelOverride: AiCompletions.ModelOverride(Ai, settings),
+                quiet: true,
+                route: AiRoute.Suggestion).ConfigureAwait(false);
             return Parse(reply.Text, lines, start, end);
         }
         catch (AiUnavailableException)

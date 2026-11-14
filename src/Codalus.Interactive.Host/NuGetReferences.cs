@@ -95,7 +95,7 @@ internal sealed class NuGetReferences(string workingDirectory)
         // The host's own environment must not leak into the SDK it starts.
         start.Environment.Remove("MSBuildExtensionsPath");
         start.Environment.Remove("MSBuildSDKsPath");
-        start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         start.Environment["DOTNET_NOLOGO"] = "1";
 
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start dotnet.");

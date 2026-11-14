@@ -54,6 +54,52 @@ public sealed record DialogRequest(string Title, string Message, IReadOnlyList<s
     /// a single choice rather than <see cref="Choices"/>' checklist; its id is in <see cref="DialogResult.Checked"/> when checked.
     /// </summary>
     public DialogOption? Option { get; init; }
+
+    /// <summary>
+    /// Ways to do it, one picked (Install .NET's: the .pkg, dotnet-install, the distribution's package…): radio buttons,
+    /// each with what it does, its command and its note; the picked one's id is in <see cref="DialogResult.Checked"/>.
+    /// </summary>
+    public IReadOnlyList<DialogAlternative>? Alternatives { get; init; }
+}
+
+/// <summary>One way of a dialog's <see cref="DialogRequest.Alternatives"/>: its name, and under it what it does, its command and a note.</summary>
+public sealed record DialogAlternative(string Id, string Label, bool Selected)
+{
+    public string? Description { get; init; }
+
+    /// <summary>The command it runs, in the editor's font.</summary>
+    public string? Command { get; init; }
+
+    /// <summary>What to know before picking it, with the warning icon.</summary>
+    public string? Note { get; init; }
+}
+
+/// <summary>A radio button of the dialog's alternatives.</summary>
+public sealed class DialogAlternativeViewModel(DialogAlternative alternative) : ObservableObject
+{
+    private bool _isSelected = alternative.Selected;
+
+    public string Id { get; } = alternative.Id;
+
+    public string Label { get; } = alternative.Label;
+
+    public string? Description { get; } = alternative.Description;
+
+    public bool HasDescription => Description is { Length: > 0 };
+
+    public string? Command { get; } = alternative.Command;
+
+    public bool HasCommand => Command is { Length: > 0 };
+
+    public string? Note { get; } = alternative.Note;
+
+    public bool HasNote => Note is { Length: > 0 };
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
 }
 
 /// <summary>A dialog's single check box: its note (wrapped under it) and lines (a list in the editor's font), and whether it can change.</summary>
@@ -71,12 +117,27 @@ public sealed record DialogChoice(string Id, string Label, bool Checked, string?
 {
     /// <summary>The member's icon (an <see cref="Controls.Icon"/> kind) before its label, or null.</summary>
     public string? Icon { get; init; }
+
+    /// <summary>
+    /// How deep the row is in a tree of rows (the save-changes dialog's solution, folders, projects and files): its
+    /// indent, 16 px a level; 0 for a flat list.
+    /// </summary>
+    public int Level { get; init; }
+
+    /// <summary>
+    /// The row has a check box; false for a row that only groups the ones under it (a project in the save-changes tree).
+    /// Select all, the count and <see cref="DialogResult.Checked"/> count only the rows that have one.
+    /// </summary>
+    public bool Checkable { get; init; } = true;
+
+    /// <summary>The label is code (a member, a parameter) in the editor's font; false for names in the UI's (files, projects).</summary>
+    public bool IsCode { get; init; } = true;
 }
 
 /// <summary>A checklist row in the dialog.</summary>
 public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObject
 {
-    private bool _isChecked = choice.Checked;
+    private bool _isChecked = choice.Checked && choice.Checkable;
 
     public string Id { get; } = choice.Id;
 
@@ -90,10 +151,17 @@ public sealed class DialogChoiceViewModel(DialogChoice choice) : ObservableObjec
 
     public bool HasIcon => Icon is { Length: > 0 };
 
+    /// <summary>The row's indent in a tree (<see cref="DialogChoice.Level"/>).</summary>
+    public Avalonia.Thickness Indent { get; } = new(choice.Level * 16, 0, 0, 0);
+
+    public bool Checkable { get; } = choice.Checkable;
+
+    public bool IsCode { get; } = choice.IsCode;
+
     public bool IsChecked
     {
         get => _isChecked;
-        set => SetField(ref _isChecked, value);
+        set => SetField(ref _isChecked, value && Checkable);
     }
 }
 
@@ -284,17 +352,25 @@ public sealed class DialogViewModel : ObservableObject
 
     public bool HasChoices => Choices.Count > 0;
 
+    /// <summary>The checklist has rows with a check box: its header (Select all, the count) and the footer's Space hint show.</summary>
+    public bool HasCheckableChoices => Choices.Any(c => c.Checkable);
+
+    /// <summary>The ways to pick one of (<see cref="DialogRequest.Alternatives"/>).</summary>
+    public ObservableCollection<DialogAlternativeViewModel> Alternatives { get; } = [];
+
+    public bool HasAlternatives => Alternatives.Count > 0;
+
     /// <summary>
     /// The checklist's Select all: true when every item is checked, false when none, null (mixed) otherwise. Checking it
     /// checks all; unchecking it unchecks all, except from mixed, which checks all (as a click on a mixed box expects).
     /// </summary>
     public bool? AllChecked
     {
-        get => Choices.Count == 0 || Choices.All(c => !c.IsChecked) ? false : Choices.All(c => c.IsChecked) ? true : null;
+        get => !HasCheckableChoices || Checkables.All(c => !c.IsChecked) ? false : Checkables.All(c => c.IsChecked) ? true : null;
         set
         {
             var check = value == true || (value == false && AllChecked is null);
-            foreach (var choice in Choices)
+            foreach (var choice in Checkables)
             {
                 choice.IsChecked = check;
             }
@@ -304,7 +380,10 @@ public sealed class DialogViewModel : ObservableObject
     }
 
     /// <summary>How many items are checked: "2 of 4".</summary>
-    public string CheckedSummary => Localizer.Format("dialog.checkedOfTotal", "{0} of {1}", Choices.Count(c => c.IsChecked), Choices.Count);
+    public string CheckedSummary => Localizer.Format("dialog.checkedOfTotal", "{0} of {1}", Checkables.Count(c => c.IsChecked), Checkables.Count());
+
+    /// <summary>The checklist's rows that have a check box.</summary>
+    private IEnumerable<DialogChoiceViewModel> Checkables => Choices.Where(c => c.Checkable);
 
     public bool Reorderable => _request?.Reorderable == true;
 
@@ -400,8 +479,23 @@ public sealed class DialogViewModel : ObservableObject
             Choices.Add(row);
         }
 
-        SelectedChoice = Choices.FirstOrDefault();
+        SelectedChoice = Choices.FirstOrDefault(c => c.Checkable); // a tree's first file, not its solution; none where nothing checks
+        Alternatives.Clear();
+        foreach (var alternative in request.Alternatives ?? [])
+        {
+            var row = new DialogAlternativeViewModel(alternative);
+            row.PropertyChanged += OnAlternativeChanged;
+            Alternatives.Add(row);
+        }
+
+        if (Alternatives.Count > 0 && !Alternatives.Any(a => a.IsSelected))
+        {
+            Alternatives[0].IsSelected = true;
+        }
+
+        OnPropertyChanged(nameof(HasAlternatives));
         OnPropertyChanged(nameof(HasChoices));
+        OnPropertyChanged(nameof(HasCheckableChoices));
         OnPropertyChanged(nameof(Reorderable));
         OnPropertyChanged(nameof(ShowsMoveHint));
         OnPropertyChanged(nameof(AllChecked));
@@ -419,10 +513,22 @@ public sealed class DialogViewModel : ObservableObject
         }
     }
 
+    /// <summary>One way picked at a time: picking one unpicks the others (as the radio buttons show it).</summary>
+    private void OnAlternativeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DialogAlternativeViewModel.IsSelected) && sender is DialogAlternativeViewModel { IsSelected: true } picked)
+        {
+            foreach (var other in Alternatives.Where(a => a != picked && a.IsSelected))
+            {
+                other.IsSelected = false;
+            }
+        }
+    }
+
     /// <summary>Space on the checklist: checks or unchecks the selected item.</summary>
     public void ToggleSelectedChoice()
     {
-        if (_selectedChoice is { } choice)
+        if (_selectedChoice is { Checkable: true } choice)
         {
             choice.IsChecked = !choice.IsChecked;
         }
@@ -452,7 +558,7 @@ public sealed class DialogViewModel : ObservableObject
         }
 
         IEnumerable<string> option = _request?.Option is { } single && _optionChecked ? [single.Id] : [];
-        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id), .. option] });
+        Close(new DialogResult(button, HasInput ? _input : null) { Checked = [.. Choices.Where(c => c.IsChecked).Select(c => c.Id), .. option, .. Alternatives.Where(a => a.IsSelected).Select(a => a.Id)] });
     }
 
     private void Close(DialogResult result)
@@ -471,7 +577,15 @@ public sealed class DialogViewModel : ObservableObject
         }
 
         Choices.Clear();
+        foreach (var alternative in Alternatives)
+        {
+            alternative.PropertyChanged -= OnAlternativeChanged;
+        }
+
+        Alternatives.Clear();
         OnPropertyChanged(nameof(HasChoices));
+        OnPropertyChanged(nameof(HasCheckableChoices));
+        OnPropertyChanged(nameof(HasAlternatives));
         Closed?.Invoke(this, EventArgs.Empty);
         pending.TrySetResult(result);
     }

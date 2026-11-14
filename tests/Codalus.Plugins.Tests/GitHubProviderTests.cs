@@ -99,6 +99,42 @@ public sealed class GitHubProviderTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_401_signs_out_only_when_the_token_itself_is_refused()
+    {
+        await SignInAsync();
+        Assert.Contains("\"signedInAt\"", _context.StoredSecrets["session"], StringComparison.Ordinal);
+
+        // One endpoint refuses, /user accepts: the request fails, the session stays.
+        _github.RefusedPaths.Add($"/api/v3/repos/{_github.Owner}/{_github.Name}");
+        var error = await Assert.ThrowsAsync<HostingHttpException>(() => _provider.GetRepositoryInfoAsync(Repository, Ct));
+        Assert.Equal(401, error.Status);
+        Assert.Contains("Bad credentials (the session is still valid", error.Message, StringComparison.Ordinal);
+        Assert.Equal("ada", (await _provider.GetAccountAsync(Ct))?.Name);
+
+        // /user refuses too: sign in again, with GitHub's reason and the session's age.
+        _github.RefusedPaths.Add("/api/v3/user");
+        var refused = await Assert.ThrowsAsync<HostingAuthenticationException>(() => _provider.GetRepositoryInfoAsync(Repository, Ct));
+        Assert.Equal($"{new Uri(_github.ServerUrl).Authority} refused the token of ada, signed in just now (Bad credentials).", refused.Message);
+    }
+
+    [Fact]
+    public async Task Signing_in_again_keeps_a_stored_token_github_still_accepts()
+    {
+        await SignInAsync();
+        var account = await _provider.SignInAsync(_context, Ct);
+        Assert.Equal("ada", account.Name);
+        Assert.Empty(_context.Codes);
+        Assert.DoesNotContain(_github.Requests, r => r.Path == "/login/device/code");
+
+        // A token GitHub refuses (read by the next start): the device flow makes a new one.
+        _context.StoredSecrets["session"] = _context.StoredSecrets["session"].Replace(MockGitHub.Token, "revoked", StringComparison.Ordinal);
+        using var again = new GitHubProvider(_context);
+        Assert.Equal("ada", (await again.SignInAsync(_context, Ct)).Name);
+        Assert.Single(_context.Codes);
+        Assert.Contains(MockGitHub.Token, _context.StoredSecrets["session"], StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Pull_requests_are_listed_filtered_and_detailed_with_review_threads()
     {
         await SignInAsync();

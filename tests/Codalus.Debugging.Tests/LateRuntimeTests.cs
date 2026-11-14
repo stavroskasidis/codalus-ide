@@ -7,7 +7,8 @@ namespace Codalus.Debugging.Tests;
 /// <summary>
 /// A program whose runtime netcoredbg sees only after its fixed 5 seconds (a loaded machine: PR #23's Windows runners)
 /// is debugged once it does, in the same start: netcoredbg gives up waiting, not the start. On macOS too, where
-/// netcoredbg needs a request to take the runtime up (PR #24's CI).
+/// netcoredbg needs a request to take the runtime up (PR #24's CI). These are netcoredbg's (the fallback since M58), so
+/// they choose it; the Codalus debugger, which waits for the runtime through dbgshim, has the last two.
 /// </summary>
 public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<DebuggeeFixture>
 {
@@ -17,7 +18,7 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
         Assert.SkipWhen(DebuggeeFixture.Adapter is null, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         Assert.SkipWhen(OperatingSystem.IsWindows(), "The runtime's start is held back by a shell that sleeps, then execs dotnet in its own process (Unix).");
         var ct = TestContext.Current.CancellationToken;
-        await using var debug = new DebugService(() => DebuggeeFixture.Adapter);
+        await using var debug = new DebugService(() => DebuggeeFixture.Adapter) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var output = new StringBuilder();
         debug.Output += (_, o) =>
@@ -86,7 +87,7 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
         Assert.SkipWhen(DebuggeeFixture.Adapter is null, "netcoredbg is not installed (eng/get-netcoredbg.sh).");
         Assert.SkipUnless(OperatingSystem.IsLinux(), "A program's state is read from /proc (DebugAdapter.HasExited). TODO(issue): macOS.");
         var ct = TestContext.Current.CancellationToken;
-        await using var debug = new DebugService(() => DebuggeeFixture.Adapter);
+        await using var debug = new DebugService(() => DebuggeeFixture.Adapter) { AdapterSetting = () => DebugService.NetcoredbgAdapter };
         var output = new StringBuilder();
         debug.Output += (_, o) =>
         {
@@ -111,5 +112,43 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
         Assert.Contains("before its runtime started", text, StringComparison.Ordinal);
         Assert.Contains($"starting again ({DebugService.StartupAttempts} of {DebugService.StartupAttempts})", text, StringComparison.Ordinal);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(60), $"took {clock.Elapsed}: a start waited out the longer wait. Debug Console:\n{text}");
+    }
+
+    [Fact]
+    public async Task Under_the_codalus_debugger_a_runtime_that_starts_late_is_debugged_in_the_same_start()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The runtime's start is held back by a shell that sleeps, then execs dotnet in its own process (Unix).");
+        var ct = TestContext.Current.CancellationToken;
+        await using var debug = new DebugService(() => null) { AdapterSetting = () => DebugService.CodalusAdapter, CoreClrAdapter = DebuggeeFixture.CodalusAdapter };
+        var stopped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.StateChanged += (_, _) =>
+        {
+            if (debug.State == DebugState.Stopped)
+            {
+                stopped.TrySetResult();
+            }
+        };
+        var depth = Path.Combine(debuggee.Folder, "Depth.cs");
+        var loop = DebuggeeFixture.Line(depth, "depth-loop");
+        debug.Breakpoints.Set(new BreakpointSpec(depth, loop));
+        await debug.LaunchAsync("/bin/sh", ["-c", "sleep 7; exec $0 $@", DebuggeeFixture.DotnetHost, "exec", debuggee.Dll, "--depth"], debuggee.Folder, new Dictionary<string, string>(), ct);
+        await stopped.Task.WaitAsync(TimeSpan.FromSeconds(90), ct);
+        Assert.Equal(loop, debug.SelectedFrame?.Line);
+        Assert.Equal(debug.ProcessId?.ToString(CultureInfo.InvariantCulture), (await debug.EvaluateAsync("System.Environment.ProcessId", "watch", ct)).Result);
+        await debug.StopAsync();
+    }
+
+    [Fact]
+    public async Task Under_the_codalus_debugger_a_program_that_ends_before_a_runtime_starts_fails_the_start_at_once()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The program is a shell's command (Unix).");
+        var ct = TestContext.Current.CancellationToken;
+        await using var debug = new DebugService(() => null) { AdapterSetting = () => DebugService.CodalusAdapter, CoreClrAdapter = DebuggeeFixture.CodalusAdapter };
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var error = await Assert.ThrowsAnyAsync<Exception>(() =>
+            debug.LaunchAsync("/bin/sh", ["-c", "sleep 2; exit 3"], debuggee.Folder, new Dictionary<string, string>(), ct).WaitAsync(TimeSpan.FromSeconds(120), ct));
+        Assert.Contains("ended (exit code 3) before a .NET runtime started in it", error.Message, StringComparison.Ordinal);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(25), $"took {clock.Elapsed}: the start waited out the runtime's 30 seconds.");
+        Assert.Equal(DebugState.Idle, debug.State);
     }
 }

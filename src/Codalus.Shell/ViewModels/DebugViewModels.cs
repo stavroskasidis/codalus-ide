@@ -175,6 +175,11 @@ public class VariableSource
             reevaluate = variable.EvaluateName is not null;
         }
 
+        if (row.Kind == MemberKind.AdapterView && variable.Name == Variable.ResultsView)
+        {
+            value = Localizer.Get("dataTip.resultsViewHint", "Expanding the Results View enumerates the collection");
+        }
+
         var group = row.Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView;
         int? set = group || row.Container == DebugMember.ByExpression ? null : row.Container ?? container;
         var node = new VariableNode(Label(row), value, group ? null : variable.Type, row.Kind == MemberKind.RawView ? 0 : variable.VariablesReference, this, set, group && row.Kind != MemberKind.StaticGroup ? null : variable.EvaluateName)
@@ -284,6 +289,8 @@ public class VariableSource
         MemberKind.NonPublicGroup => Localizer.Get("dataTip.nonPublicMembers", "Non-Public members"),
         MemberKind.StaticGroup => Localizer.Get("dataTip.staticMembers", "Static members"),
         MemberKind.RawView => Localizer.Get("dataTip.rawView", "Raw View"),
+        MemberKind.AdapterView when row.Variable.Name == Variable.RawView => Localizer.Get("dataTip.rawView", "Raw View"),
+        MemberKind.AdapterView when row.Variable.Name == Variable.ResultsView => Localizer.Get("dataTip.resultsView", "Results View"),
         _ => row.Variable.Name,
     };
 
@@ -294,7 +301,7 @@ public class VariableSource
         MemberKind.Event => "symbol-event",
         MemberKind.NonPublicGroup => "lock",
         MemberKind.StaticGroup => "symbol-class",
-        MemberKind.RawView => "symbol-raw-view",
+        MemberKind.RawView or MemberKind.AdapterView => "symbol-raw-view",
         MemberKind.Unknown => VariableIcons.Guess(row.Variable.Name),
         _ => "symbol-field",
     };
@@ -445,7 +452,7 @@ public sealed class VariableNode : ObservableObject
     public bool HasBadge { get; init; }
 
     /// <summary>A node the shell adds (Non-Public members, Static members, Raw View, an array's range): no value of its own, no pin.</summary>
-    public bool IsGroup => Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView or MemberKind.Range;
+    public bool IsGroup => Kind is MemberKind.NonPublicGroup or MemberKind.StaticGroup or MemberKind.RawView or MemberKind.Range or MemberKind.AdapterView;
 
     /// <summary>False when the member list says the value can't be set (no setter, read-only); null when nothing says.</summary>
     public bool? CanWrite { get; init; }

@@ -96,6 +96,26 @@ public sealed class OlderFrameworksTests
         Assert.Contains(plan.Notes, n => n.Contains("no Arm64 runtime", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData("netcoreapp2.0", true)]
+    [InlineData("netcoreapp2.1", true)]
+    [InlineData("netcoreapp2.2", false)]
+    [InlineData("netcoreapp3.1", false)]
+    [InlineData("net5.0", false)]
+    [InlineData("net10.0", false)]
+    public void A_plan_says_when_its_runtime_runs_no_startup_hooks(string framework, bool none)
+    {
+        // .NET Core 2.0 and 2.1: a debugger that holds a program in the hook can't hold these (the x64 build of the
+        // Codalus debugger on Apple silicon, which leaves them to netcoredbg).
+        var info = Info(framework, "/usr/local/share/dotnet/dotnet", "exec \"/src/App/bin/App.dll\"");
+        var plan = RuntimeSelection.Apply(Plan(info), info, "/usr/local/share/dotnet", Mac("/usr/local/share/dotnet/x64/dotnet"));
+        Assert.Equal(none, plan.StartsWithoutStartupHooks);
+
+        // An Executable profile's program is the user's: nothing is known of its runtime.
+        var other = Plan(info) with { FileName = "/usr/bin/other" };
+        Assert.False(RuntimeSelection.Apply(other, info, "/usr/local/share/dotnet", Mac("/usr/local/share/dotnet/x64/dotnet")).StartsWithoutStartupHooks);
+    }
+
     [Fact]
     public void On_an_arm64_mac_the_apphost_of_netcoreapp31_gets_the_x64_root()
     {

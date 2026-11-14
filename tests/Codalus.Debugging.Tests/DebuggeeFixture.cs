@@ -92,13 +92,16 @@ public sealed class DebuggeeFixture : IAsyncLifetime
             ? line
             : throw new InvalidOperationException($"No [{marker}] marker in {file}.");
 
-    public async ValueTask InitializeAsync()
+    public ValueTask InitializeAsync() => BuildAsync(_root, "Debugging.slnx");
+
+    /// <summary>Copies samples/Debugging into <paramref name="root"/> (with the samples' build files and the SDK pin) and builds <paramref name="solution"/> there.</summary>
+    internal static async ValueTask BuildAsync(string root, string solution)
     {
-        Copy(Path.Combine(RepoRoot, "samples", "Debugging"), Path.Combine(_root, "Debugging"));
-        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(_root, "Directory.Build.props"));
-        Codalus.Tests.FixtureSdk.Pin(_root);
-        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(_root, "Directory.Packages.props"));
-        var start = new ProcessStartInfo("dotnet", ["build", Path.Combine(_root, "Debugging", "Debugging.slnx"), "-nologo", "-v", "quiet"])
+        Copy(Path.Combine(RepoRoot, "samples", "Debugging"), Path.Combine(root, "Debugging"));
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Build.props"), Path.Combine(root, "Directory.Build.props"));
+        Codalus.Tests.FixtureSdk.Pin(root);
+        File.Copy(Path.Combine(RepoRoot, "samples", "Directory.Packages.props"), Path.Combine(root, "Directory.Packages.props"));
+        var start = new ProcessStartInfo("dotnet", ["build", Path.Combine(root, "Debugging", solution), "-nologo", "-v", "quiet"])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -110,11 +113,13 @@ public sealed class DebuggeeFixture : IAsyncLifetime
         Assert.True(process.ExitCode == 0, await output);
     }
 
-    public ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => Delete(_root);
+
+    internal static ValueTask Delete(string root)
     {
         try
         {
-            Directory.Delete(_root, recursive: true);
+            Directory.Delete(root, recursive: true);
         }
         catch (IOException)
         {
@@ -170,6 +175,51 @@ internal sealed class EventLog
     }
 
     public string Output => string.Concat(All.Where(e => e.Name == DapEvents.Output).Select(e => DebugAdapter.Read(e.Body, DapJsonContext.Default.OutputEvent)?.Output));
+
+    /// <summary>
+    /// Waits until the output holds <paramref name="text"/>. What the program writes reaches the adapter through its own
+    /// reader of the program's stdout, not in order with the debugger's events, so a stop can be reported before a line
+    /// the program wrote just before it (macOS CI, run 43388676941). The adapter's own output (a logpoint's) is in order.
+    /// </summary>
+    public async Task OutputContainsAsync(string text, int seconds = 30)
+    {
+        var waited = Stopwatch.StartNew();
+        while (!Output.Contains(text, StringComparison.Ordinal))
+        {
+            if (waited.Elapsed > TimeSpan.FromSeconds(seconds))
+            {
+                throw new TimeoutException($"No '{text}' in the output after {seconds} s. The output: {Output}");
+            }
+
+            await Task.Delay(20);
+        }
+    }
+
+    /// <summary>
+    /// Waits for the next event named one of <paramref name="names"/> (skipping others): its name, and the stop when it's
+    /// a <c>stopped</c> event.
+    /// </summary>
+    public async Task<(string Event, StoppedEvent? Stopped)> NextOfAsync(IReadOnlyList<string> names, int seconds = 60)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(seconds));
+        while (true)
+        {
+            DapEvent e;
+            try
+            {
+                e = await _events.Reader.ReadAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException($"None of [{string.Join(", ", names)}]. Events so far: {string.Join(", ", All.Select(x => x.Name + " " + x.Body))}");
+            }
+
+            if (names.Contains(e.Name))
+            {
+                return (e.Name, e.Name == DapEvents.Stopped ? DebugAdapter.Read(e.Body, DapJsonContext.Default.StoppedEvent) : null);
+            }
+        }
+    }
 
     /// <summary>Waits for the next event named <paramref name="name"/> (skipping others).</summary>
     public async Task<DapEvent> NextAsync(string name, int seconds = 60)

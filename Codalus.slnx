@@ -11,6 +11,7 @@
     <Project Path="samples/plugins/HelloWorld/HelloWorld.csproj" />
     <Project Path="samples/plugins/TodoBoard/TodoBoard.csproj" />
     <Project Path="samples/plugins/TodoLanguage/TodoLanguage.csproj" />
+    <Project Path="samples/plugins/WordCount/WordCount.csproj" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Codalus.Data.Host/Codalus.Data.Host.csproj" />

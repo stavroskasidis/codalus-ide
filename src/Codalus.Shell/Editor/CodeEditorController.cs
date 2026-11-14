@@ -55,6 +55,10 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly BreakpointMargin _breakpointMargin;
     private readonly DebugLineRenderer _debugLines;
     private readonly PerfTipRenderer _perfTip;
+    private readonly InlineValuesRenderer _inlineValues;
+    private IReadOnlyList<InlineValueLine> _inlineValueLines = [];
+    private Dictionary<string, string> _lastInlineValues = new(StringComparer.Ordinal);
+    private CancellationTokenSource? _inlineValuesLoad;
     private readonly Popup? _exceptionPopup;
     private StopInfo? _exceptionShownFor;
     private readonly GitChangeMargin _gitMargin = new();
@@ -155,6 +159,8 @@ public sealed partial class CodeEditorController : IDisposable
         view.BackgroundRenderers.Insert(0, _debugLines);
         _perfTip = new PerfTipRenderer(CurrentDebugLine, () => services.Debugger.CurrentStop?.Elapsed, () => services.Options.PerfTips);
         view.BackgroundRenderers.Add(_perfTip);
+        _inlineValues = new InlineValuesRenderer(() => _inlineValueLines, () => services.Options.PerfTips ? CurrentDebugLine() : null);
+        view.BackgroundRenderers.Add(_inlineValues);
         PinLayer = new PinnedDataTipLayer(editor, services, () => Model.Path, relocate: attach);
         services.Debugger.StateChanged += OnDebuggerChanged;
         services.Debugger.FrameChanged += OnDebuggerChanged;
@@ -176,7 +182,7 @@ public sealed partial class CodeEditorController : IDisposable
         _insights.IsFoldedAway = offset => _folding.GetFoldingsContaining(offset).Any(f => f.IsFolded && f.StartOffset < offset && offset < f.EndOffset);
         _search = new FindWidget(editor);
         _multiCaret = new MultiCaretController(editor.TextArea);
-        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush);
+        _inline = new InlineSuggestions(editor, () => Model, () => services.AiCompletions, () => _completion is not null, InlineSuggestionBrush, services.ShowMessage);
         _nextEdit = new NextEditSuggestions(editor, () => Model, () => services.AiNextEdit, () => _completion is not null || _inline.IsVisible, () => ResourceBrush("Shell.Info"));
         _hoverTimer = new DispatcherTimer { Interval = s_hoverDelay };
         _hoverTimer.Tick += OnHoverTimer;
@@ -492,6 +498,13 @@ public sealed partial class CodeEditorController : IDisposable
             ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
             : null;
 
+    /// <summary>The tokenizer's state and its first lines', for a test's failure: whether each is waiting to be tokenized, and its tokens.</summary>
+    internal string DescribeGrammar() =>
+        _textMate is { } installation && Tokenizer(installation) is { } model
+            ? $"tokenizer {(model.IsStopped ? "stopped" : "running")}; lines " + string.Join(", ", Enumerable.Range(0, Math.Min(model.GetLines().GetNumberOfLines(), 20))
+                .Select(line => $"{line + 1} {(model.IsLineInvalid(line) ? "waiting" : "tokenized")} ({model.GetLineTokens(line)?.Count ?? 0} tokens)"))
+            : "no tokenizer";
+
     private static bool s_noTokenizer;
     private bool _grammarCheckScheduled;
 
@@ -525,14 +538,16 @@ public sealed partial class CodeEditorController : IDisposable
 
     /// <summary>
     /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
-    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread-pool thread blocked for each
-    /// editor as long as its tab is open, and a session of many JSON, XML or Markdown tabs starved the pool (M56). The
+    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread blocked for each editor as long
+    /// as its tab is open (a thread-pool thread up to TextMateSharp 2.0.3, its own thread since 2.0.5), and a session of
+    /// many JSON, XML or Markdown tabs starved the pool (M56). The
     /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
     /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
     /// <para>
     /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
     /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
-    /// visible lines on the UI thread at each scroll, beside the worker), and TextMateSharp queues a line that failed again.
+    /// visible lines on the UI thread at each scroll, beside the worker): TextMateSharp serializes them since 2.0.5 (2.0.3
+    /// gave a line wrong tokens; <c>GrammarTokenizerThreadTests</c>), and queues a line that failed again.
     /// </para>
     /// </summary>
     private void MatchGrammarToView()
@@ -551,7 +566,27 @@ public sealed partial class CodeEditorController : IDisposable
             // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
             // redraw, after the listener is in, shows them.
             model.AddModelTokensChangedListener(transformer);
+            QueueFirstWaitingLine(model);
             Editor.TextArea.TextView.Redraw();
+        }
+    }
+
+    /// <summary>
+    /// Queues again the first line still waiting to be tokenized. A worker stopped just after it took a line off the
+    /// model's queue drops it: the line stays waiting, nothing queues it again, and the next worker waits for work with
+    /// the file uncolored (TextMateSharp 2.0.5: an editor hidden and shown as it opened, <c>LanguageTests</c>, half its
+    /// runs). The worker walks on from that line to the end, as it would have.
+    /// </summary>
+    private static void QueueFirstWaitingLine(TextMateSharp.Model.TMModel model)
+    {
+        var count = model.GetLines().GetNumberOfLines();
+        for (var line = 0; line < count; line++)
+        {
+            if (model.IsLineInvalid(line))
+            {
+                model.InvalidateLine(line);
+                return;
+            }
         }
     }
 
@@ -1163,6 +1198,40 @@ public sealed partial class CodeEditorController : IDisposable
         _autoClosed = document.CreateAnchor(caret);
     }
 
+    /// <summary>
+    /// Enter between a pair of the language's brackets (<c>{|}</c>) puts the closing one on a line of its own, below an
+    /// indented line for the caret, as VS Code and the classic IDE. Where the opening one goes is the language server's
+    /// on-type formatting of Enter, which follows (C#'s <c>csharp_new_line_before_open_brace</c>).
+    /// </summary>
+    private void IndentBetweenBrackets()
+    {
+        if (_multiCaret.ExtraCarets.Count > 0 || Editor.SelectionLength > 0 || Model.IsReadOnly || Configuration is not { Brackets.Count: > 0 } configuration)
+        {
+            return;
+        }
+
+        var document = Model.Text;
+        var caret = Editor.CaretOffset;
+        var line = document.GetLineByOffset(caret);
+        if (line.PreviousLine is not { } previous || !string.IsNullOrWhiteSpace(document.GetText(line.Offset, caret - line.Offset)))
+        {
+            return;
+        }
+
+        var opening = document.GetText(previous).TrimEnd();
+        var after = document.GetText(caret, line.EndOffset - caret);
+        if (!configuration.Brackets.Any(b => b.Open.Length > 0 && opening.EndsWith(b.Open, StringComparison.Ordinal) && after.StartsWith(b.Close, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        var indentation = opening[..(opening.Length - opening.TrimStart().Length)];
+        var inner = indentation + Editor.Options.IndentationString;
+        var newLine = document.GetText(previous.EndOffset, previous.DelimiterLength);
+        document.Replace(line.Offset, caret - line.Offset, inner + newLine + indentation);
+        Editor.CaretOffset = line.Offset + inner.Length;
+    }
+
     /// <summary>Comments or uncomments the selected lines (or the caret's line) with the language's comment syntax.</summary>
     public void Comment(CommentAction action)
     {
@@ -1270,6 +1339,11 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnTextEntered(object? sender, TextInputEventArgs e)
     {
+        if (e.Text is "\n" or "\r\n" or "\r")
+        {
+            IndentBetweenBrackets();
+        }
+
         if (e.Text is { Length: 1 } entered)
         {
             AutoClose(entered);
@@ -2361,8 +2435,133 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         _breakpointMargin.InvalidateVisual();
+        RefreshInlineValues();
         Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
     });
+
+    // ------------------------------------------------------------------ inline values (M62)
+
+    /// <summary>The inline values drawn now, by line (tests).</summary>
+    internal IReadOnlyList<InlineValueLine> InlineValueLines => _inlineValueLines;
+
+    /// <summary>Completes once the values of the latest stop are drawn (tests).</summary>
+    internal Task InlineValuesLoaded { get; private set; } = Task.CompletedTask;
+
+    /// <summary>
+    /// At a stop in this document (the frame selected in the Call Stack), asks the language service which variables each
+    /// line of the method reads, up to the current statement, and draws their values: locals and parameters from the
+    /// frame's scopes, fields and auto-properties evaluated, each with a timeout. It never blocks typing or stepping: the
+    /// values arrive after the stop is drawn, and a newer stop cancels them. Off the stop, they clear.
+    /// </summary>
+    private void RefreshInlineValues()
+    {
+        _inlineValuesLoad?.Cancel();
+        _inlineValuesLoad = null;
+        var debugger = _services.Debugger;
+        if (debugger.State is not (DebugState.Stopped or DebugState.Running))
+        {
+            _lastInlineValues = new(StringComparer.Ordinal); // a new session starts with nothing changed
+        }
+
+        if (!_services.Options.InlineValues || CurrentDebugLine() is not { } line || debugger.SelectedFrame is not { } frame || Client is not { } client)
+        {
+            _inlineValueLines = [];
+            InlineValuesLoaded = Task.CompletedTask;
+            return;
+        }
+
+        var load = new CancellationTokenSource();
+        _inlineValuesLoad = load;
+        InlineValuesLoaded = LoadInlineValuesAsync(client, frame, line, load.Token);
+    }
+
+    private async Task LoadInlineValuesAsync(LanguageHostClient client, Codalus.Debugging.StackFrame frame, int line, CancellationToken cancellationToken)
+    {
+        var debugger = _services.Debugger;
+        try
+        {
+            var stopped = new LanguageServices.Protocol.Range(new Position(line - 1, Math.Max(0, frame.Column - 1)), new Position(line - 1, Math.Max(0, frame.Column - 1)));
+            var answer = await client.InlineValuesAsync(DocumentUris.FromPath(Model.Path), new LanguageServices.Protocol.Range(new Position(0, 0), new Position(line, 0)), new InlineValueContext(frame.Id, stopped), cancellationToken).ConfigureAwait(true);
+            if (answer.Length == 0 || cancellationToken.IsCancellationRequested)
+            {
+                _inlineValueLines = [];
+                return;
+            }
+
+            // Locals and parameters: the frame's scopes, as Locals reads them (an expensive scope is left out).
+            var variables = new Dictionary<string, string>(StringComparer.Ordinal);
+            var folded = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var scope in await debugger.ScopesAsync(frame).ConfigureAwait(true))
+            {
+                if (scope.Expensive)
+                {
+                    continue;
+                }
+
+                foreach (var variable in await debugger.VariablesAsync(scope.VariablesReference).ConfigureAwait(true))
+                {
+                    variables.TryAdd(variable.Name, variable.Value);
+                    folded.TryAdd(variable.Name, variable.Value);
+                }
+            }
+
+            // Fields and auto-properties: evaluated, each with a timeout, at most 40 of them.
+            var evaluated = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var expression in answer.Select(v => v.Expression).OfType<string>().Distinct(StringComparer.Ordinal).Take(40))
+            {
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(TimeSpan.FromSeconds(1));
+                try
+                {
+                    var result = await debugger.EvaluateInFrameAsync(expression, frame.Id, timeout.Token).ConfigureAwait(true);
+                    evaluated[expression] = result.Result;
+                }
+                catch (Exception ex) when (ex is Codalus.Debugging.DapException or OperationCanceledException or InvalidOperationException or IOException or Codalus.Rpc.JsonRpcConnectionLostException)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+
+            var now = new Dictionary<string, string>(StringComparer.Ordinal);
+            var lines = new List<InlineValueLine>();
+            foreach (var group in answer.GroupBy(v => v.Range.Start.Line).OrderBy(g => g.Key))
+            {
+                var values = new List<(string, string, bool)>();
+                foreach (var value in group)
+                {
+                    var (name, found) = value.Expression is { } expression
+                        ? (expression[(expression.LastIndexOf('.') + 1)..], evaluated.GetValueOrDefault(expression))
+                        : (value.VariableName ?? "", value.CaseSensitiveLookup == false ? folded.GetValueOrDefault(value.VariableName ?? "") : variables.GetValueOrDefault(value.VariableName ?? ""));
+                    if (name.Length == 0 || found is null)
+                    {
+                        continue;
+                    }
+
+                    now[name] = found;
+                    values.Add((name, found, _lastInlineValues.TryGetValue(name, out var before) && before != found));
+                }
+
+                if (values.Count > 0)
+                {
+                    lines.Add(new InlineValueLine(group.Key + 1, values));
+                }
+            }
+
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _inlineValueLines = lines;
+                _lastInlineValues = now;
+                Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (ex is Codalus.Debugging.DapException or InvalidOperationException or IOException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
+        {
+            _inlineValueLines = []; // the values are a convenience: a failed read draws none
+        }
+    }
 
     /// <summary>The exception helper, when the program stopped on an exception at a line of this document.</summary>
     public bool IsExceptionHelperOpen => _exceptionPopup?.IsOpen == true;
@@ -2699,9 +2898,39 @@ public sealed partial class CodeEditorController : IDisposable
 
         var location = Model.Text.GetLocation(offset);
         Editor.ScrollTo(location.Line, location.Column);
-        Dispatcher.UIThread.Post(() => Editor.TextArea.TextView.MakeVisible(Editor.TextArea.Caret.CalculateCaretRectangle()), DispatcherPriority.Background);
+        BringCaretIntoView(location.Line, attempts: 4);
         Editor.TextArea.Focus();
     }
+
+    /// <summary>
+    /// After a scroll to <paramref name="line"/>, once laid out: the scroll used estimated heights for the lines it hadn't
+    /// built, and lines with a CodeLens or inlay rows above them are taller, so far down a file it fell short and the line
+    /// stayed off screen (Git Changes opening a file at a change on line 150). While the line isn't among the built ones,
+    /// it scrolls again with the heights now known; then makes the caret visible.
+    /// </summary>
+    private void BringCaretIntoView(int line, int attempts) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_disposed || Editor.TextArea.Caret.Line != line)
+            {
+                return; // moved on meanwhile
+            }
+
+            var view = Editor.TextArea.TextView;
+            view.EnsureVisualLines();
+            var shown = view.VisualLinesValid ? view.GetVisualLine(line) : null;
+            var inView = shown is not null
+                && shown.VisualTop >= view.VerticalOffset
+                && shown.VisualTop + shown.Height <= view.VerticalOffset + view.Bounds.Height;
+            if (!inView && attempts > 0)
+            {
+                Editor.ScrollTo(line, Editor.TextArea.Caret.Column);
+                BringCaretIntoView(line, attempts - 1);
+                return;
+            }
+
+            view.MakeVisible(Editor.TextArea.Caret.CalculateCaretRectangle());
+        }, DispatcherPriority.Background);
 
     // ------------------------------------------------------------------ teardown
 

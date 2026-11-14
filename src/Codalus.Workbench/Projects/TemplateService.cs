@@ -439,7 +439,7 @@ public sealed partial class TemplateService : ITemplateCli
 
         start.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         start.Environment["DOTNET_NOLOGO"] = "1";
-        start.Environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
+        ToolTelemetry.OptOut(start.Environment); // the tools' telemetry opt-outs (M59)
         try
         {
             using var process = Process.Start(start) ?? throw new InvalidOperationException("dotnet did not start.");

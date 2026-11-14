@@ -24,6 +24,13 @@ public sealed partial class ShellHost
 
     public ModulesViewModel ModuleList { get; private set; } = null!;
 
+    /// <summary>The Registers, Disassembly and Memory windows (M58): what the Codalus debugger reads of the machine.</summary>
+    public RegistersViewModel RegistersWindow { get; private set; } = null!;
+
+    public DisassemblyViewModel DisassemblyWindow { get; private set; } = null!;
+
+    public MemoryViewModel MemoryWindow { get; private set; } = null!;
+
     public ParallelStacksViewModel ParallelStacksWindow { get; private set; } = null!;
 
     public ParallelWatchViewModel ParallelWatchWindow { get; private set; } = null!;
@@ -39,6 +46,9 @@ public sealed partial class ShellHost
         QuickWatch = new QuickWatchViewModel(Debugger, AddWatchAsync);
         ThreadList = new ThreadsViewModel(Debugger);
         ModuleList = new ModulesViewModel(Debugger);
+        RegistersWindow = new RegistersViewModel(Debugger);
+        DisassemblyWindow = new DisassemblyViewModel(Debugger);
+        MemoryWindow = new MemoryViewModel(Debugger);
         ParallelStacksWindow = new ParallelStacksViewModel(Debugger);
         ParallelWatchWindow = new ParallelWatchViewModel(Debugger);
         ProcessesWindow = new ProcessesViewModel(Debugger, Run);

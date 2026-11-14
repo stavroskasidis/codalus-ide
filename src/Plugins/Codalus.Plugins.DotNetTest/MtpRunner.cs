@@ -294,6 +294,8 @@ internal sealed class MtpRunner(IDebug debug, Action<string> log)
                 start.Environment[name] = value;
             }
 
+            ToolTelemetry.OptOut(start.Environment); // Microsoft.Testing.Platform's telemetry among them (M59)
+
             var process = new Process { StartInfo = start, EnableRaisingEvents = true };
             process.OutputDataReceived += (_, e) => Forward(e.Data);
             process.ErrorDataReceived += (_, e) => Forward(e.Data);

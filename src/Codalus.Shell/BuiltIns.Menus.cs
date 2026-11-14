@@ -328,13 +328,19 @@ internal static partial class BuiltIns
             Item(Debug, "debug.stop", "2-session", when: "debugActive"),
             Item(Debug, "debug.detachAll", "2-session", when: "debugActive"),
             Item(Debug, "debug.restart", "2-session", when: "debugActive"),
-            Item(Debug, "run.stop", "2-session", when: "programRunning"),
+            Item(Debug, "run.stop", "2-session", when: "programRunning || programStarting"),
             Item(Debug, "debug.attach", "3-attach"),
             Item(Debug, "debug.reattach", "3-attach"),
             Sub(Debug, DebugTargetsMenu, "Other Debug Targets", "3-attach"),
             Item(DebugTargetsMenu, "debug.attachRemote", "1-attach"),
             Item(DebugTargetsMenu, "containers.attach", "1-attach"),
             Item(DebugTargetsMenu, "containers.composeDebug", "2-launch"),
+            Item(DebugTargetsMenu, "containers.composeDebugService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeRestartService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeStopService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeDetachService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeProfileService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeShowOverride", "3-compose"),
             Item(DebugTargetsMenu, "debug.webPage", "2-launch"),
             Item(Debug, "debug.stepInto", "4-step"),
             Item(Debug, "debug.stepOver", "4-step"),
@@ -453,11 +459,11 @@ internal static partial class BuiltIns
             Item(Help, "help.setUp", "help"),
             Item(Help, "help.checkEnvironment", "help"),
             Item(Help, "help.openCrashReports", "help"),
-            Item(Help, "help.about", "help"),
             Item(Help, "help.reportProblem", "help-feedback"), // M51: after the help group, before the updates
             Item(Help, "help.suggestFeature", "help-feedback"),
             Item(Help, "update.check", "updates"),
             Item(Help, "update.whatsNew", "updates"),
+            Item(Help, "help.about", "z-about"), // last, in a group of its own, as in most apps
         ]);
     }
 
@@ -520,6 +526,8 @@ internal static partial class BuiltIns
             Item(EditorBreakpointMenu, "debug.insertTemporaryBreakpoint", "1-breakpoint"),
             Item(EditorBreakpointMenu, "debug.toggleBreakpointEnabled", "1-breakpoint"),
             Item(Context, "debug.runToCursor", "4-debug", when: "debugActive"),
+            Item(Context, "debug.setNextStatement", "4-debug", when: "debugCanSetNextStatement"),
+            Item(Context, "debug.stepIntoSpecific", "4-debug", when: "debugCanStepIntoSpecific"),
             Item(Context, "interactive.sendSelection", "5-send", when: "editorLanguageId != fsharp"),
             Item(Context, "fsi.sendSelection", "5-send", when: "editorLanguageId == fsharp"),
             Item(Context, "fsi.sendLine", "5-send", when: "editorLanguageId == fsharp"),

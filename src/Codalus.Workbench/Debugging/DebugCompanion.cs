@@ -18,7 +18,10 @@ public sealed class DebugCompanion(Func<ProcessLaunchInfo?> launch) : IAsyncDisp
     /// <summary>The host's stderr and supervision messages.</summary>
     public event EventHandler<string>? Log;
 
-    /// <summary>Resolution order: <c>CODALUS_DEBUGHOST</c> (an apphost or a .dll), then <c>debughost/</c> next to the shell.</summary>
+    /// <summary>
+    /// Resolution order: <c>CODALUS_DEBUGHOST</c> (an apphost or a .dll), then <c>debughost/</c> next to the shell, then
+    /// the host's assembly next to the program itself (a build that references the host: the tests' output folders).
+    /// </summary>
     public static ProcessLaunchInfo? Resolve()
     {
         var candidates = new List<string>();
@@ -30,7 +33,8 @@ public sealed class DebugCompanion(Func<ProcessLaunchInfo?> launch) : IAsyncDisp
         var exe = OperatingSystem.IsWindows() ? "codalus-debughost.exe" : "codalus-debughost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "debughost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "debughost", "codalus-debughost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        candidates.Add(Path.Combine(AppContext.BaseDirectory, "codalus-debughost.dll"));
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 
     public async Task<TypeDisplayResult> TypeDisplayAsync(string typeName, IReadOnlyList<string> modules, CancellationToken cancellationToken) =>

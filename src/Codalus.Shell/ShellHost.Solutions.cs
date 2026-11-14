@@ -172,9 +172,9 @@ public sealed partial class ShellHost
         _structureReported = false;
         _evaluationReported = false;
         _designTimeReported = false;
-        if (Solutions.IsOpen)
+        if (Solutions.IsOpen && !await CloseSolutionAsync().ConfigureAwait(true))
         {
-            await CloseSolutionAsync().ConfigureAwait(true);
+            return false; // the save-changes dialog was cancelled: the open solution stays
         }
 
         try
@@ -281,15 +281,27 @@ public sealed partial class ShellHost
         await OpenSolutionAsync(single).ConfigureAwait(true);
     }
 
-    public async Task CloseSolutionAsync()
+    /// <summary>
+    /// Closes the solution and its documents, asking first about their unsaved files (the save-changes dialog); false when
+    /// that was cancelled (or a save failed), and the solution stays open. With <paramref name="askToSave"/> false (the
+    /// smoke test's), the unsaved ones stay open instead, unasked.
+    /// </summary>
+    public async Task<bool> CloseSolutionAsync(bool askToSave = true)
     {
+        List<Docking.ShellDocument> closing = askToSave ? [.. Editors] : [.. Editors.Where(e => !e.Model.IsModified)];
+        if (askToSave && !await AskBeforeClosingAsync(closing).ConfigureAwait(true))
+        {
+            return false;
+        }
+
         var savingIndex = CloseCodeSearchIndex();
         CloseSolutionState();
-        CloseSolutionDocuments();
+        Layout.CloseDocuments(closing.Where(d => d.Owner is not null)); // together (M56)
         await Solutions.CloseAsync().ConfigureAwait(true);
         Git.Close();
         Workbench.Settings.SetWorkspaceFile(null);
         await savingIndex.ConfigureAwait(true); // the completed index is on disk once the solution has closed
+        return true;
     }
 
     public async Task TrustSolutionAsync()

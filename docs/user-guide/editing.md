@@ -60,7 +60,7 @@ Every file type gets the basics, and many get more:
 
 - **Highlighting** for about forty languages from VS Code's TextMate grammars: XML and MSBuild, JSON, YAML, Markdown, HTML, CSS, JavaScript, TypeScript, F#, VB, SQL, PowerShell, shell scripts, Dockerfiles and more. The status bar shows the language.
 - **Comments**: Toggle Line Comment (`Ctrl+/`), Comment Selection (`Ctrl+K Ctrl+C`) and Uncomment Selection (`Ctrl+K Ctrl+U`) use each language's comment style.
-- **Brackets and quotes** close automatically, and typing the closing character steps over it (setting **Text Editor → Auto Closing Brackets**).
+- **Brackets and quotes** close automatically, and typing the closing character steps over it (setting **Text Editor → Auto Closing Brackets**). Enter between a pair (`{|}`) puts the closing one on a line of its own, below an indented line for the caret. In C#, the opening brace then goes where your `.editorconfig` puts it: on a line of its own by default (`csharp_new_line_before_open_brace`), as with **Format on Type**.
 - **Folding** follows the language server, or else XML elements, `#region`-style markers and indentation.
 - **Word completion** (`Ctrl+Alt+Space`, and while you type) offers the words of the document when no language service completes.
 
@@ -216,5 +216,6 @@ The light bulb also offers, for each diagnostic, **Suppress with #pragma** and *
 
 - **Compare Files…** and **Compare Active File With…** (File menu) open two files in the diff viewer.
 - **Close All to the Right** and **Close All But This** (Window menu, and the tab's context menu).
+- **Unsaved changes** are asked about in one dialog, **Save changes to the following items?**, when you close a tab, close several (Close All, All But This, All But Pinned, All to the Right), close the solution or exit. It lists the unsaved files under their solution, solution folders and project, as Solution Explorer does; a file outside the solution comes after them, with its folder. When there are several, each has a check box: **Save** (`Enter`) saves the checked ones and discards the changes to the others, **Don't Save** discards them all, and **Cancel** (`Escape`) closes nothing. If a save fails, nothing closes.
 - **Images** (PNG, JPEG, GIF, BMP, ICO, WebP) open in an image viewer: zoom with `Ctrl+Wheel`, `Ctrl+=` and `Ctrl+-`, `Ctrl+0` for the actual size, or **Fit**. SVG files open as XML.
 - **Binary files** (a `.dll`, a database, any file with NUL bytes and no byte order mark) open in the **hex viewer**: each row shows the offset, 16 bytes in hex and their printable characters. Click a byte, or move with the arrows, `Page Up`/`Page Down`, `Home` and `End` (`Ctrl+Home`, `Ctrl+End` for the whole file); the bar below shows its offset and value. Large files open at once: only the rows on screen are read. **Open With Hex Viewer** (a file's context menu in Solution Explorer, or the command palette for the active file) shows any file this way, and **Reopen With Text Editor** goes back. The hex viewer doesn't edit.

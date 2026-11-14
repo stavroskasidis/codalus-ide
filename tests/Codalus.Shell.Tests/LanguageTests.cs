@@ -42,7 +42,7 @@ public sealed class LanguageTests
         var json = await OpenAsync(f, "appsettings.json", "{\n  \"Logging\": { \"Level\": 3, \"On\": true }\n}\n");
         Assert.Equal("json", json.Model.LanguageId);
         Assert.Equal("source.json", json.GrammarScope);
-        await ShellFixture.PumpUntil(() => Colors(json, 2).Count >= 3, seconds: 20);
+        await ShellFixture.PumpUntil(() => Colors(json, 2).Count >= 3, seconds: 20, describe: json.DescribeGrammar);
 
         var project = await OpenAsync(f, "Sample.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <TargetFramework>net10.0</TargetFramework>\n  </PropertyGroup>\n</Project>\n");
         Assert.Equal("msbuild", project.Model.LanguageId);
@@ -426,5 +426,13 @@ public sealed class LanguageTests
         f.Type(": 1");
         f.Type("}"); // and over the closing brace
         Assert.StartsWith("{\"a\": 1}\n", json.Model.Text.Text, StringComparison.Ordinal);
+
+        // Enter between brackets puts the closing one on a line of its own, below an indented line for the caret.
+        json.Editor.CaretOffset = json.Model.Text.TextLength;
+        f.Type("[");
+        f.Press(Avalonia.Input.Key.Enter);
+        var indent = json.Editor.Options.IndentationString;
+        Assert.EndsWith("\n[\n" + indent + "\n]", json.Model.Text.Text, StringComparison.Ordinal);
+        Assert.Equal(json.Model.Text.TextLength - 2, json.Editor.CaretOffset);
     }
 }

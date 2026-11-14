@@ -42,6 +42,19 @@ public static class CollectionViews
     public const int MaxElements = 1000;
 
     /// <summary>
+    /// The types these views show, by their metadata names: the Codalus debugger, which applies type proxies itself
+    /// (M58), is told to list these types' own members, which the views read.
+    /// </summary>
+    public static readonly string[] ViewedTypes =
+    [
+        "System.Collections.Generic.List`1",
+        "System.Collections.Generic.Dictionary`2",
+        "System.Collections.Generic.HashSet`1",
+        "System.Collections.Generic.Queue`1",
+        "System.Collections.Generic.Stack`1",
+    ];
+
+    /// <summary>
     /// Where each runtime keeps a collection's elements. A view tries each table's names in order: the first whose
     /// fields are all there reads the elements.
     /// </summary>

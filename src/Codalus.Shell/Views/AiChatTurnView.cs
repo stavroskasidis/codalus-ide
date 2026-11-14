@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Automation.Peers;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -28,8 +29,15 @@ internal sealed class AiChatTurnView : StackPanel
     private readonly ObservableCollection<AiStepItem> _steps = [];
     private readonly Border _stepsRail;
     private readonly ContentControl _answer = new();
-    private readonly Expander _thought;
-    private readonly SelectableTextBlock _thoughtText = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly ToggleButton _thought;
+    private readonly TextBlock _thoughtLabel = new();
+    private readonly SelectableTextBlock _thoughtText = new() { TextWrapping = TextWrapping.Wrap, IsVisible = false };
+    private readonly ToggleButton _summary;
+    private readonly TextBlock _summaryText = new() { TextTrimming = TextTrimming.CharacterEllipsis };
+    private readonly StackPanel _changes = new() { Spacing = 2, IsVisible = false, Margin = new Thickness(0, 6, 0, 0) };
+    private readonly HashSet<string> _reverted = new(StringComparer.Ordinal);
+    private string? _renderedChanges;
+    private bool? _renderedCompact;
     private readonly StackPanel _plan = new() { Spacing = 1, IsVisible = false };
     private readonly StackPanel _notices = new() { Spacing = 2, IsVisible = false };
     private readonly WrapPanel _status = new() { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 4 };
@@ -58,6 +66,16 @@ internal sealed class AiChatTurnView : StackPanel
             you.Children.Add(sent);
         }
 
+        if (turn.Images.Count > 0)
+        {
+            var images = Chip(
+                turn.Images.Count == 1 ? Localizer.Get("msg.ai.oneImage", "1 image") : Localizer.Format("msg.ai.images", "{0} images", turn.Images.Count),
+                null,
+                string.Join(", ", turn.Images.Select(i => i.Name)));
+            images.HorizontalAlignment = HorizontalAlignment.Right;
+            you.Children.Add(images);
+        }
+
         Children.Add(new BubbleRow { Child = you });
 
         // The answer, beside the assistant's avatar.
@@ -75,17 +93,8 @@ internal sealed class AiChatTurnView : StackPanel
             // An external agent (M48, ADR 0079): its own program, provider and data policy.
             var external = new Border { Child = new TextBlock { Text = Localizer.Get("msg.acp.externalAgentChip", "External agent") } };
             external.Classes.Add("chip");
-            external.Classes.Add("warning");
             ToolTip.SetTip(external, Localizer.Get("aiChat.externalAgentUsesItsOwn", "External agent: uses its own provider and data policy. Codalus checks what it asks the IDE for."));
             who.Children.Add(external);
-        }
-        else if (turn.IsAgent)
-        {
-            var mode = new Border { Child = new TextBlock { Text = Localizer.Get("msg.ai.agentChip", "Agent") } };
-            mode.Classes.Add("chip");
-            mode.Classes.Add("info");
-            ToolTip.SetTip(mode, Localizer.Get("msg.ai.askedInAgentMode", "Asked in agent mode"));
-            who.Children.Add(mode);
         }
 
         var steps = new ItemsControl { ItemsSource = _steps, ItemTemplate = s_stepTemplate };
@@ -94,16 +103,64 @@ internal sealed class AiChatTurnView : StackPanel
         _stepsRail.Classes.Add("steps");
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         // An external agent's thinking (collapsed), its plan and its notices (M48).
-        _thoughtText.FontFamily = MarkdownRenderer.Monospace;
+        // Its thinking as one short line ("Thought ▸", ADR 0092) that opens on a click, never a box.
         _thoughtText.Classes.Add("small");
-        _thought = new Expander { Header = Localizer.Get("msg.acp.thinking", "Thinking"), Content = _thoughtText, IsVisible = false, HorizontalAlignment = HorizontalAlignment.Stretch };
+        _thoughtText.Classes.Add("muted");
+        _thoughtText.Margin = new Thickness(18, 0, 0, 0);
+        _thought = Disclosure(_thoughtLabel);
+        _thought.IsVisible = false;
+        _thought.IsCheckedChanged += (_, _) => _thoughtText.IsVisible = _thought.IsChecked == true;
         AutomationProperties.SetName(_thought, Localizer.Get("msg.acp.thinking", "Thinking"));
         AutomationProperties.SetName(_plan, Localizer.Get("msg.acp.plan", "Plan"));
-        var body = new StackPanel { Spacing = 8, Children = { who, _thought, _plan, _stepsRail, _answer, _notices, _status } };
+
+        // Compact (ADR 0092): the steps fold into one line ("Read 3 files · ran 2 commands ▸") that opens them.
+        _summary = Disclosure(_summaryText);
+        _summary.IsVisible = false;
+        _summary.IsCheckedChanged += (_, _) => _stepsRail.IsVisible = _steps.Count > 0 && _summary.IsChecked == true;
+        AutomationProperties.SetName(_summary, Localizer.Get("msg.ai.whatTheAssistantDid", "What the assistant did"));
+        AutomationProperties.SetName(_changes, Localizer.Get("msg.ai.changedFilesName", "Changed files"));
+        var body = new StackPanel { Spacing = 6, Children = { who, _thought, _thoughtText, _plan, _summary, _stepsRail, _answer, _changes, _notices, _status } };
         Children.Add(new AnswerRow { Children = { avatar, body } });
     }
 
     public AiChatTurn Turn => _item.Turn;
+
+    /// <summary>Whether the chat folds the steps (the setting; compact when the view has no chat yet).</summary>
+    private bool IsCompact => _owner.ViewModel?.IsCompact ?? true;
+
+    /// <summary>The folded line of the steps (tests).</summary>
+    internal string StepsSummary => _summary.IsVisible ? _summaryText.Text ?? "" : "";
+
+    /// <summary>Whether the steps show (tests).</summary>
+    internal bool StepsShown => _stepsRail.IsVisible;
+
+    /// <summary>The changed files' rows (tests).</summary>
+    internal Panel ChangesPanel => _changes;
+
+    /// <summary>A small muted disclosure: a chevron that turns down when open, then <paramref name="label"/>.</summary>
+    private static ToggleButton Disclosure(TextBlock label)
+    {
+        label.VerticalAlignment = VerticalAlignment.Center;
+        label.Classes.Add("muted");
+        var chevron = new Icon { Kind = "chevron-right", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = RelativePoint.Center, Margin = new Thickness(0, 0, 6, 0) };
+        DockPanel.SetDock(chevron, Avalonia.Controls.Dock.Left);
+
+        // A dock panel, not a stack: the label gets the width there is, so a long line ends in an ellipsis.
+        var toggle = new ToggleButton
+        {
+            Content = new DockPanel { Children = { chevron, label } },
+            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            Padding = new Thickness(2, 1),
+            MinHeight = 0,
+        };
+        toggle.Classes.Add("toolbar");
+        toggle.Classes.Add("disclosure");
+        toggle.Classes.Add("small");
+        toggle.Classes.Add("muted");
+        toggle.IsCheckedChanged += (_, _) => chevron.RenderTransform = toggle.IsChecked == true ? new RotateTransform(90) : null;
+        return toggle;
+    }
 
     /// <summary>The code blocks shown (tests).</summary>
     public IReadOnlyList<AiCodeBlockView> CodeBlocks => _codeBlocks;
@@ -159,6 +216,7 @@ internal sealed class AiChatTurnView : StackPanel
             }
         }
 
+        RenderChanges(turn);
         RenderStatus(turn, answer);
     }
 
@@ -198,7 +256,109 @@ internal sealed class AiChatTurnView : StackPanel
             _steps.RemoveAt(_steps.Count - 1);
         }
 
-        _stepsRail.IsVisible = _steps.Count > 0;
+        // One line for the steps, with the one running now while the turn streams: folded in compact, open in detailed
+        // (where it heads the steps, so they don't read as the thought's), and either way a click flips it.
+        var compact = IsCompact;
+        if (compact != _renderedCompact)
+        {
+            _renderedCompact = compact;
+            _summary.IsChecked = !compact;
+        }
+
+        _summary.IsVisible = _steps.Count > 0;
+        if (_summary.IsVisible)
+        {
+            var line = AiTurnSummary.Describe(steps);
+            if (streaming && AiTurnSummary.Current(steps) is { } current)
+            {
+                var running = AiStepItem.McpTitle(current.Target).Split('\n', 2)[0];
+                line += " · " + Localizer.Format("msg.ai.summary.now", "now: {0}", running.Length > 40 ? running[..40] + "…" : running);
+            }
+
+            if (_summaryText.Text != line)
+            {
+                _summaryText.Text = line;
+                ToolTip.SetTip(_summary, line);
+            }
+        }
+
+        _stepsRail.IsVisible = _steps.Count > 0 && _summary.IsChecked == true;
+    }
+
+    /// <summary>
+    /// The files the turn changed (ADR 0092), once it has ended: each with its name (opens it), Diff (against what it was
+    /// before the turn) and Revert; a change the agent made by itself, outside the preview, says so.
+    /// </summary>
+    private void RenderChanges(AiChatTurn turn)
+    {
+        var changes = turn.IsStreaming ? [] : AiTurnSummary.ChangedFiles(turn.Steps);
+        var key = string.Join("|", changes.Select(c => c.Path + ":" + c.NewText.Length + ":" + _reverted.Contains(c.Path)));
+        if (key == _renderedChanges)
+        {
+            return;
+        }
+
+        _renderedChanges = key;
+        _changes.Children.Clear();
+        _changes.IsVisible = changes.Count > 0;
+        if (changes.Count == 0)
+        {
+            return;
+        }
+
+        var header = new TextBlock
+        {
+            Text = changes.Count == 1 ? Localizer.Get("msg.ai.changedOneFile", "Changed 1 file") : Localizer.Format("msg.ai.changedFiles", "Changed {0} files", changes.Count),
+            FontWeight = FontWeight.SemiBold,
+        };
+        header.Classes.Add("small");
+        _changes.Children.Add(header);
+        foreach (var change in changes)
+        {
+            var row = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8 };
+            var icon = new Icon { Kind = change.OldText is null ? "file-add" : "edit", Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(icon);
+            var open = new Button { Content = new TextBlock { Text = System.IO.Path.GetFileName(change.Path) } };
+            open.Classes.Add("link");
+            ToolTip.SetTip(open, change.Path);
+            AutomationProperties.SetName(open, change.Path);
+            open.Click += (_, _) => _owner.ViewModel?.OpenLocation(new AiStepLocation(change.Path));
+            row.Children.Add(open);
+            if (_reverted.Contains(change.Path))
+            {
+                row.Children.Add(Muted(Localizer.Get("msg.ai.reverted", "reverted")));
+            }
+            else
+            {
+                row.Children.Add(Muted("·"));
+                var diff = new Button { Content = Localizer.Get("msg.ai.diff", "Diff") };
+                diff.Classes.Add("link");
+                AutomationProperties.SetName(diff, Localizer.Format("msg.ai.diffOf", "Compare {0} with before", change.Path));
+                diff.Click += (_, _) => _ = _owner.ViewModel?.OpenChangeDiffAsync(change);
+                row.Children.Add(diff);
+                row.Children.Add(Muted("·"));
+                var revert = new Button { Content = Localizer.Get("msg.ai.revert", "Revert") };
+                revert.Classes.Add("link");
+                AutomationProperties.SetName(revert, Localizer.Format("msg.ai.revertOf", "Revert {0}", change.Path));
+                revert.Click += async (_, _) =>
+                {
+                    if (_owner.ViewModel is { } vm && await vm.RevertChangeAsync(change).ConfigureAwait(true))
+                    {
+                        _reverted.Add(change.Path);
+                        RenderChanges(_item.Turn);
+                    }
+                };
+                row.Children.Add(revert);
+                if (!change.Reviewed)
+                {
+                    var note = Muted(Localizer.Get("msg.ai.notReviewed", "written by the agent, not previewed"));
+                    note.Classes.Add("small");
+                    row.Children.Add(note);
+                }
+            }
+
+            _changes.Children.Add(row);
+        }
     }
 
     /// <summary>An external agent's thinking, plan and notices (M48); the built-in assistant has none.</summary>
@@ -206,6 +366,9 @@ internal sealed class AiChatTurnView : StackPanel
     {
         var thought = turn.Thought;
         _thought.IsVisible = thought.Length > 0;
+        _thoughtLabel.Text = turn.IsStreaming && turn.Answer.Length == 0 && turn.Steps.Count == 0
+            ? Localizer.Get("msg.acp.thinkingNow", "Thinking…")
+            : Localizer.Get("msg.acp.thought", "Thought");
         if (_thoughtText.Text != thought)
         {
             _thoughtText.Text = thought;
@@ -262,13 +425,7 @@ internal sealed class AiChatTurnView : StackPanel
         }
         else
         {
-            var at = index;
-            view = new AiCodeBlockView(
-                _owner.ViewModel!.EditorServices,
-                _owner.ViewModel.EditorFont,
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.CopyAsync(current.Code); } },
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.InsertAsync(_item.Turn, current); } },
-                () => { if (Block(at) is { } current) { _ = _owner.ViewModel?.ApplyAsync(_item.Turn, current); } });
+            view = new AiCodeBlockView(_owner.ViewModel!.EditorServices, _owner.ViewModel.EditorFont);
             _codeBlocks.Add(view);
         }
 
@@ -278,7 +435,6 @@ internal sealed class AiChatTurnView : StackPanel
     }
 
     /// <summary>A code block of the answer as it is now, by its index (the buttons act on the latest text).</summary>
-    private AiCodeBlock? Block(int index) => AiCodeBlocks.Parse(_item.Turn.Answer) is var blocks && index < blocks.Count ? blocks[index] : null;
 
     private void RenderStatus(AiChatTurn turn, string answer)
     {

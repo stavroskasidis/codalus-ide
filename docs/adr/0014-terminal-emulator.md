@@ -40,3 +40,20 @@ Constraints: the shell is Native AOT (no reflection, P/Invoke through source-gen
 - `ioctl` is variadic: on Apple silicon its third argument must be on the stack, so the resize call pads the register arguments (see `UnixPseudoTerminal.Resize`).
 - A process inherits "ignore Ctrl+C" on Windows from the one that starts it (test runners set it), so the shell clears it before creating a pseudo-console; otherwise Ctrl+C in the terminal does nothing.
 - `TODO(issue)`: sixel/kitty graphics, Unicode 15 grapheme clustering beyond combining marks, and right-to-left text are not supported.
+
+## Amendment (2026-11-12): on macOS the program starts through `/bin/sh`
+
+The decision says the pty opened by name on fds 0–2 "makes it the controlling terminal". That holds on Linux, where glibc and musl start the new session (`POSIX_SPAWN_SETSID`) before they run the file actions. On macOS it doesn't: XNU's `posix_spawn` runs the file actions first and starts the session after the image is activated (`bsd/kern/kern_exec.c`), so the open is by a process that leads no session, the kernel's `TIOCSCTTY` refuses it (`EPERM`, ignored), and the program ends up leading a session with no controlling terminal.
+
+Without one the terminal has no foreground process group, and what the kernel sends to it goes to nobody: `SIGWINCH` on a resize, and `SIGINT` on Ctrl+C in a program that leaves Ctrl+C to the terminal. `/dev/tty` can't be opened either. bash hid this: it opens its terminal by name when it starts (`check_dev_tty`), which takes it, so the tests, whose programs are `sh`, passed on macOS. A program started by itself doesn't: the report was AI Console (ADR 0095), where an agent's CLI kept drawing at the size it started with after the window was resized; a console app from Run Without Debugging in the integrated terminal was in the same state. So, by its source, was zsh, macOS's default shell, in the Terminal: it opens its terminal with `O_NOCTTY` everywhere and turns job control off without a word when it has no controlling terminal (not tried on a Mac when this was written).
+
+**Decision.** On macOS the program is started through `/bin/sh -c 'true <>"$0"; exec "$@"' <pty> <program> <arguments…>` (`UnixPseudoTerminal.StartThroughShell`). The shell is what `posix_spawn` starts, so it leads the new session; it opens the pty by name, and the first terminal a session leader opens without `O_NOCTTY` becomes its session's; then it `exec`s the program, which is the same process, so the process id, the exit code and the session are the program's. The program and its arguments are the shell's own arguments, never shell text. Linux keeps the direct start.
+
+Other options: a native helper of our own that does the same two calls (what node-pty ships as `spawn-helper`), which is a binary to build, sign and notarize for each macOS architecture for two lines of work `/bin/sh` already does; sending `SIGWINCH` to the program's process group ourselves after a resize, which fixes the resize and leaves Ctrl+C and `/dev/tty` broken; and `forkpty`, ruled out above.
+
+**Consequences.**
+
+- One more `exec` per terminal on macOS (a few milliseconds).
+- A program that can't be executed is the shell's message in the terminal and exit code 126, not a failed start; the program is looked up before the start, so this is a file that exists and can't run.
+- zsh opens its redirections with `O_NOCTTY`, so with zsh chosen as `/bin/sh` (`/var/select/sh`; bash is macOS's default, and dash works too) the program starts as it did before this amendment.
+- `PseudoTerminalTests` starts `sleep` and `cat /dev/tty` by themselves (Ctrl+C ends the first, the second reads the terminal): programs that, unlike a shell, don't take the terminal themselves. With the open made `O_NOCTTY` on Linux, which is macOS's state, they and the resize test fail without the shell in between and pass with it.

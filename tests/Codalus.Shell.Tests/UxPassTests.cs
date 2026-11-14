@@ -406,7 +406,9 @@ public class UxPassTests
         // Ctrl+Shift+Space is Parameter Info.
         editor.Editor.CaretOffset = text.IndexOf("Describe(", StringComparison.Ordinal) + "Describe(".Length;
         f.Press(Key.Space, RawInputModifiers.Control | RawInputModifiers.Shift);
-        await ShellFixture.PumpUntil(() => executed.Contains("editor.action.triggerParameterHints"));
+        await ShellFixture.PumpUntil(
+            () => executed.Contains("editor.action.triggerParameterHints"),
+            describe: () => $"commands run: [{string.Join(", ", executed)}]; focus: {f.Window.FocusManager?.GetFocusedElement()}, focusedView {f.Shell.Workbench.Context.GetValue("focusedView")}, editorTextFocus {f.Shell.Workbench.Context.GetValue("editorTextFocus")}; completion window open: {editor.CompletionWindow is not null}; toasts: {f.Shell.Notifications.Toasts.Count}");
     }
 
     // ------------------------------------------------------------------ file icons, the navigation bar, outlining
@@ -576,6 +578,18 @@ public class UxPassTests
         await f.Shell.SetupModel.NextAsync();
         ShellFixture.Pump();
         problems.AddRange(Unreached(f.Shell.SetupWindowView!).Select(p => $"setup (settings): {p}"));
+
+        // Its AI step (ADR 0096) with a coding agent chosen, then with the built-in assistant: the cards, the agents and
+        // the two boxes are all reached with Tab.
+        await f.Shell.SetupModel.NextAsync();
+        await f.Shell.SetupModel.NextAsync();
+        Assert.True(f.Shell.SetupModel.IsAi);
+        f.Shell.SetupModel.AiPaths.Single(p => p.Path == ViewModels.SetupAiPath.Agent).SelectCommand.Execute(null);
+        ShellFixture.Pump();
+        problems.AddRange(Unreached(f.Shell.SetupWindowView!).Select(p => $"setup (ai, agent): {p}"));
+        f.Shell.SetupModel.AiPaths.Single(p => p.Path == ViewModels.SetupAiPath.Assistant).SelectCommand.Execute(null);
+        ShellFixture.Pump();
+        problems.AddRange(Unreached(f.Shell.SetupWindowView!).Select(p => $"setup (ai, assistant): {p}"));
         await f.Shell.SetupModel.FinishAsync(done: false);
 
         await f.Shell.FeatureSearchAsync();

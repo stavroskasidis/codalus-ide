@@ -1,0 +1,46 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.MemoryView"
+             x:DataType="vm:MemoryViewModel">
+  <DockPanel>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="6,4" ColumnSpacing="6">
+      <TextBox x:Name="Address" Text="{Binding AddressText}" PlaceholderText="{l:T memory.addressOrExpression}" AutomationProperties.Name="{l:T memory.addressOrExpression}" KeyDown="OnAddressKeyDown" />
+      <Button Grid.Column="1" Content="{l:T memory.go}" Click="OnGo" AutomationProperties.Name="{l:T memory.go}" />
+      <Button Grid.Column="2" Content="{l:T memory.previousPage}" Click="OnPrevious" AutomationProperties.Name="{l:T memory.previousPage}" />
+      <Button Grid.Column="3" Content="{l:T memory.nextPage}" Click="OnNext" AutomationProperties.Name="{l:T memory.nextPage}" />
+    </Grid>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="6,4" ColumnSpacing="6">
+      <TextBox x:Name="Bytes" Text="{Binding WriteText}" PlaceholderText="{l:T memory.bytesToWrite}" AutomationProperties.Name="{l:T memory.bytesToWrite}" KeyDown="OnBytesKeyDown" FontFamily="{x:Static controls:MarkdownRenderer.Monospace}" />
+      <Button Grid.Column="1" Content="{l:T memory.write}" Click="OnWrite" AutomationProperties.Name="{l:T memory.write}" />
+    </Grid>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{l:T memory.typeAnAddressWhilePaused}">
+      <TextBlock.IsVisible>
+        <MultiBinding Converter="{x:Static BoolConverters.And}">
+          <Binding Path="IsEmpty" />
+          <Binding Path="Message" Converter="{x:Static ObjectConverters.IsNull}" />
+        </MultiBinding>
+      </TextBlock.IsVisible>
+    </TextBlock>
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" TextWrapping="Wrap" IsVisible="{Binding Message, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    <ListBox x:Name="List" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T memory.memory}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:MemoryRow">
+          <Setter Property="Padding" Value="1" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:MemoryRow">
+          <Grid ColumnDefinitions="170,400,*" Margin="6,0">
+            <TextBlock Text="{Binding Address}" Classes="muted" FontFamily="{x:Static controls:MarkdownRenderer.Monospace}" />
+            <TextBlock Grid.Column="1" Text="{Binding Hex}" FontFamily="{x:Static controls:MarkdownRenderer.Monospace}" />
+            <TextBlock Grid.Column="2" Text="{Binding Text}" Classes="muted" FontFamily="{x:Static controls:MarkdownRenderer.Monospace}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>

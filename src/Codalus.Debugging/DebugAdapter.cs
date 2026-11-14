@@ -187,7 +187,8 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// machine, M14c) and sends <c>initialize</c>. With <paramref name="terminal"/>, the client offers DAP's
     /// <c>runInTerminal</c> and answers it through the terminal.
     /// </summary>
-    public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null)
+    /// <param name="compiler">Answers the Codalus debugger's <c>codalus/compileExpression</c> (M58): the expressions its evaluator doesn't read.</param>
+    public static async Task<DebugAdapter> StartAsync(DebugAdapterStartInfo info, CancellationToken cancellationToken, ITerminalLauncher? terminal = null, Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>? compiler = null)
     {
         var launch = new ProcessLaunchInfo(info.Program, info.Arguments)
         {
@@ -200,11 +201,20 @@ public sealed partial class DebugAdapter : IDebugAdapter
         {
             Transport = info.Transport,
             _local = info.Transport is null && info.Launcher is null or LocalProcessLauncher,
-            IsCodalus = info.Arguments.Contains(CoreClrAdapter.AdapterArgument),
+            IsCodalus = info.IsCodalus || info.Arguments.Contains(CoreClrAdapter.AdapterArgument),
         };
         if (terminal is not null)
         {
             adapter._connection.Handle("runInTerminal", (arguments, ct) => RunInTerminalAsync(terminal, arguments, ct));
+        }
+
+        if (compiler is not null)
+        {
+            adapter._connection.Handle(CompileExpressionCommand, async (arguments, ct) =>
+            {
+                var request = Read(arguments, DapJsonContext.Default.CompileExpressionArguments) ?? throw new InvalidOperationException("codalus/compileExpression: no arguments.");
+                return JsonSerializer.SerializeToElement(await compiler(request, ct).ConfigureAwait(false), DapJsonContext.Default.CompileExpressionResponse);
+            });
         }
 
         process.BeginErrorRead();
@@ -213,7 +223,7 @@ public sealed partial class DebugAdapter : IDebugAdapter
         {
             adapter.Capabilities = await adapter._connection.RequestAsync(
                 "initialize",
-                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsVariablePaging: true, SupportsRunInTerminalRequest: terminal is not null),
+                new InitializeArguments("codalus", "Codalus IDE", "coreclr", SupportsVariablePaging: true, SupportsRunInTerminalRequest: terminal is not null, SupportsExpressionCompiler: compiler is not null),
                 DapJsonContext.Default.InitializeArguments,
                 DapJsonContext.Default.Capabilities,
                 cancellationToken).ConfigureAwait(false);
@@ -540,6 +550,16 @@ public sealed partial class DebugAdapter : IDebugAdapter
 
                 if (HasExited(program))
                 {
+                    // Its runtime may have started first: the debugger says so in events, which are handled one by one
+                    // and can wait behind others while this loop already sees the process gone. A short-lived program
+                    // was then taken for one that never started, and started again (it ran twice). So the debugger is
+                    // asked something first: by its answer everything it wrote before is read, and then handled.
+                    await SettleEventsAsync(cancellationToken).ConfigureAwait(false);
+                    if (_runtime.Task.IsCompleted)
+                    {
+                        break;
+                    }
+
                     Log?.Invoke(this, $"The program ended {Seconds(waited)} seconds later, before its runtime started.");
                     System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(timeout);
                 }
@@ -602,6 +622,34 @@ public sealed partial class DebugAdapter : IDebugAdapter
             _connection.Post(processEvent);
             await Task.WhenAny(_lateProcessPosted.Task, _connection.Closed, Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>How long <see cref="SettleEventsAsync"/> waits for the debugger's answer and for its events to be handled.</summary>
+    private static readonly TimeSpan SettleLimit = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Waits until the events the debugger wrote so far are handled: a request it answers at once
+    /// (<see cref="WakeCommand"/>), then the events read before that answer. Bounded, and ended by the connection's end:
+    /// a debugger that doesn't answer leaves things as they were.
+    /// </summary>
+    private async Task SettleEventsAsync(CancellationToken cancellationToken)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(SettleLimit);
+        try
+        {
+            await _connection.RequestAsync(WakeCommand, new EmptyArguments(), Json.EmptyArguments, limit.Token).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapException or DapConnectionLostException or IOException or ObjectDisposedException)
+        {
+            // netcoredbg doesn't know the request: its answer, an error, is what was waited for.
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await Task.WhenAny(_connection.EventsHandledAsync(), _connection.Closed, Task.Delay(SettleLimit, cancellationToken)).ConfigureAwait(false);
     }
 
     private async Task OnEventAsync(DapEvent e)
@@ -729,11 +777,99 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// <summary>The launched program's <c>TMPDIR</c>, when the launch sets one (<see cref="HasRuntimeTransport"/>).</summary>
     private string? _programTemp;
 
-    public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
-        (await _connection.RequestAsync("setBreakpoints", new SetBreakpointsArguments(new Source(Path.GetFileName(path), path), breakpoints), Json.SetBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    public async Task<Breakpoint[]> SetBreakpointsAsync(string path, SourceBreakpoint[] breakpoints, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.AppliesBreakpointBehaviors)
+        {
+            // netcoredbg: it stops at every hit, and the session applies hit counts, messages, filters and dependencies.
+            breakpoints = [.. breakpoints.Select(b => b.WithoutBehaviors())];
+        }
 
-    public async Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken) =>
-        (await _connection.RequestAsync("setFunctionBreakpoints", new SetFunctionBreakpointsArguments(breakpoints), Json.SetFunctionBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+        return (await _connection.RequestAsync("setBreakpoints", new SetBreakpointsArguments(new Source(Path.GetFileName(path), path), breakpoints), Json.SetBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    }
+
+    public async Task<Breakpoint[]> SetFunctionBreakpointsAsync(FunctionBreakpoint[] breakpoints, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.SupportsHitConditionalBreakpoints)
+        {
+            breakpoints = [.. breakpoints.Select(b => b.HitCondition is null ? b : b with { HitCondition = null })];
+        }
+
+        return (await _connection.RequestAsync("setFunctionBreakpoints", new SetFunctionBreakpointsArguments(breakpoints), Json.SetFunctionBreakpointsArguments, Json.SetBreakpointsResponse, cancellationToken).ConfigureAwait(false)).Breakpoints;
+    }
+
+    public async Task<StepInTarget[]> StepInTargetsAsync(int frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsStepInTargetsRequest
+            ? (await _connection.RequestAsync("stepInTargets", new StepInTargetsArguments(frameId), Json.StepInTargetsArguments, Json.StepInTargetsResponse, cancellationToken).ConfigureAwait(false)).Targets
+            : [];
+
+    public Task StepInAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("stepIn", new StepInArguments(threadId, targetId), Json.StepInArguments, cancellationToken);
+
+    public async Task<GotoTarget[]> GotoTargetsAsync(int threadId, string path, int line, CancellationToken cancellationToken) =>
+        Capabilities.SupportsGotoTargetsRequest
+            ? (await _connection.RequestAsync("gotoTargets", new GotoTargetsArguments(new Source(Path.GetFileName(path), path), line), Json.GotoTargetsArguments, Json.GotoTargetsResponse, cancellationToken).ConfigureAwait(false)).Targets
+            : [];
+
+    public Task GotoAsync(int threadId, int targetId, CancellationToken cancellationToken) =>
+        _connection.RequestAsync("goto", new GotoArguments(threadId, targetId), Json.GotoArguments, cancellationToken);
+
+    public Task<ReadMemoryResponse> ReadMemoryAsync(int threadId, string memoryReference, long offset, int count, CancellationToken cancellationToken) =>
+        Capabilities.SupportsReadMemoryRequest
+            ? _connection.RequestAsync("readMemory", new ReadMemoryArguments(memoryReference, count, offset), Json.ReadMemoryArguments, Json.ReadMemoryResponse, cancellationToken)
+            : throw new DapException("readMemory", "This debugger doesn't read the program's memory.");
+
+    public async Task<int> WriteMemoryAsync(int threadId, string memoryReference, long offset, byte[] data, CancellationToken cancellationToken) =>
+        Capabilities.SupportsWriteMemoryRequest
+            ? (await _connection.RequestAsync("writeMemory", new WriteMemoryArguments(memoryReference, Convert.ToBase64String(data), offset), Json.WriteMemoryArguments, Json.WriteMemoryResponse, cancellationToken).ConfigureAwait(false)).BytesWritten ?? data.Length
+            : throw new DapException("writeMemory", "This debugger doesn't write the program's memory.");
+
+    public async Task<DisassembledInstruction[]> DisassembleAsync(int threadId, string memoryReference, int instructionOffset, int count, CancellationToken cancellationToken) =>
+        Capabilities.SupportsDisassembleRequest
+            ? (await _connection.RequestAsync("disassemble", new DisassembleArguments(memoryReference, count, InstructionOffset: instructionOffset), Json.DisassembleArguments, Json.DisassembleResponse, cancellationToken).ConfigureAwait(false)).Instructions
+            : throw new DapException("disassemble", "This debugger doesn't show machine code.");
+
+    public async Task<bool> LoadSymbolsAsync(string moduleId, CancellationToken cancellationToken)
+    {
+        if (!Capabilities.SupportsSymbolLoading)
+        {
+            return false;
+        }
+
+        await _connection.RequestAsync("codalus/loadSymbols", new LoadSymbolsArguments(moduleId), Json.LoadSymbolsArguments, cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
+    public async Task<RegisterValue[]> RegistersAsync(int frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsRegisters
+            ? (await _connection.RequestAsync("codalus/registers", new RegistersArguments(frameId), Json.RegistersArguments, Json.RegistersResponse, cancellationToken).ConfigureAwait(false)).Registers
+            : [];
+
+    public Task StepInstructionAsync(int threadId, bool into, CancellationToken cancellationToken) =>
+        Capabilities.SupportsSteppingGranularity
+            ? _connection.RequestAsync(into ? "stepIn" : "next", new StepInArguments(threadId, Granularity: StepInArguments.Instruction), Json.StepInArguments, cancellationToken)
+            : into ? StepInAsync(threadId, cancellationToken) : NextAsync(threadId, cancellationToken);
+
+    public async Task<string> MakeObjectIdAsync(string expression, int? frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsObjectIds
+            ? (await _connection.RequestAsync("codalus/makeObjectId", new MakeObjectIdArguments(expression, frameId), Json.MakeObjectIdArguments, Json.ObjectIdResponse, cancellationToken).ConfigureAwait(false)).Name
+            : throw new DapException("codalus/makeObjectId", "This debugger doesn't make object IDs.");
+
+    public Task DeleteObjectIdAsync(string name, int? frameId, CancellationToken cancellationToken) =>
+        Capabilities.SupportsObjectIds
+            ? _connection.RequestAsync("codalus/deleteObjectId", new DeleteObjectIdArguments(name), Json.DeleteObjectIdArguments, cancellationToken)
+            : Task.CompletedTask;
+
+    /// <summary>The Codalus debugger's reverse request for an expression its evaluator doesn't read (M58).</summary>
+    public const string CompileExpressionCommand = "codalus/compileExpression";
+
+    /// <summary>The Codalus debugger's <c>codalus/freezeThread</c> (M58).</summary>
+    public const string FreezeThreadCommand = "codalus/freezeThread";
+
+    public Task FreezeThreadAsync(int threadId, bool frozen, CancellationToken cancellationToken) =>
+        Capabilities.SupportsFreezingThreads
+            ? _connection.RequestAsync(FreezeThreadCommand, new FreezeThreadArguments(threadId, frozen), Json.FreezeThreadArguments, cancellationToken)
+            : throw new DapException(FreezeThreadCommand, "This debugger can't freeze threads.");
 
     public Task SetExceptionBreakpointsAsync(string[] filters, CancellationToken cancellationToken, ExceptionFilterOptions[]? options = null) =>
         _connection.RequestAsync("setExceptionBreakpoints", new SetExceptionBreakpointsArguments(filters, options), Json.SetExceptionBreakpointsArguments, cancellationToken);

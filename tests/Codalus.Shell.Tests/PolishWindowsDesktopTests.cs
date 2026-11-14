@@ -147,19 +147,37 @@ public partial class PolishTests
             Check("wcf-test-client (fault)", wcfView, DocumentMinWidth, 560);
         }
 
-        // M46: the setup window at its minimum size, each step; the Tools step with a missing SDK's plan shown.
+        // M46, ADR 0096: the setup window at its minimum size, each step; the Tools step with a missing SDK's plan shown;
+        // the AI step with each of its three ways chosen; the summary with what an agent chosen makes it say; and, opened
+        // as at a first start, the welcome page with an origin chosen.
         await f.RunAsync("help.setUp");
         await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
         var setup = f.Shell.SetupModel!;
         var setupWindow = f.Shell.SetupWindowView!;
-        foreach (var step in new[] { "appearance", "keyboard", "settings", "tools" })
+        foreach (var step in new[] { "appearance", "keyboard", "settings", "tools", "ai", "ai agent", "ai assistant", "summary" })
         {
-            if (step == "tools")
+            switch (step)
             {
-                setup.ShowTools([new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects"), new ToolStatus("git", "Git", true, ToolState.Found, "Source control") { Version = "2.47.1" }]);
-                setup.Tools[0].InstallCommand.Execute(null);
-                ShellFixture.Pump();
+                case "tools":
+                    setup.ShowTools([new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects"), new ToolStatus("git", "Git", true, ToolState.Found, "Source control") { Version = "2.47.1" }]);
+                    setup.Tools[0].InstallCommand.Execute(null);
+                    break;
+                case "ai agent":
+                    setup.AiPaths.Single(p => p.Path == SetupAiPath.Agent).SelectCommand.Execute(null);
+                    setup.AiAgents[0].SelectCommand.Execute(null);
+                    break;
+                case "ai assistant":
+                    setup.AiPaths.Single(p => p.Path == SetupAiPath.Assistant).SelectCommand.Execute(null);
+                    setup.AiInlineSuggestions = true;
+                    break;
+                case "summary":
+                    setup.AiAgents[0].SelectCommand.Execute(null);
+                    await setup.NextAsync();
+                    Assert.True(setup.HasAiNext);
+                    break;
             }
+
+            ShellFixture.Pump();
 
             checkedSurfaces.Add("setup " + step);
             foreach (var problem in InspectWindowInEveryTheme(setupWindow, SetupMinWidth, SetupMinHeight))
@@ -167,13 +185,26 @@ public partial class PolishTests
                 problems.Add($"setup ({step}): {problem}");
             }
 
-            if (step != "tools")
+            if (step is "appearance" or "keyboard" or "settings" or "tools")
             {
                 await setup.NextAsync();
             }
         }
 
         await setup.FinishAsync(done: false);
+        await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
+        f.Shell.ShowSetup(firstStart: true);
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        Assert.True(f.Shell.SetupModel!.IsWelcome);
+        f.Shell.SetupModel.Origins[1].SelectCommand.Execute(null);
+        ShellFixture.Pump();
+        checkedSurfaces.Add("setup welcome");
+        foreach (var problem in InspectWindowInEveryTheme(f.Shell.SetupWindowView!, SetupMinWidth, SetupMinHeight))
+        {
+            problems.Add($"setup (welcome): {problem}");
+        }
+
+        await f.Shell.SetupModel.FinishAsync(done: false);
         await ShellFixture.PumpUntil(() => !f.Shell.IsSetupOpen);
 
         // M45: Options' color theme cards.

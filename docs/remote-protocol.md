@@ -48,7 +48,7 @@ Channel 0 carries JSON-RPC 2.0 (LSP framing). Every other channel is opened by t
 | Method | Params | Result |
 |---|---|---|
 | `server/hello` | `{ clientVersion, protocolVersion }` | `{ serverVersion, protocolVersion, os, architecture, processId, home, user, dotnet?, dotnetVersion?, shell, serverFolder }`. Another protocol is an error. The client also refuses another server version. |
-| `process/spawn` | `{ channel, fileName, arguments[], workingDirectory?, environment? }` | `{ processId }`. `fileName` `dotnet` is the server's `dotnet`; a `.dll` runs on it. |
+| `process/spawn` | `{ channel, fileName, arguments[], workingDirectory?, environment?, toolTelemetryOptOut? }` | `{ processId }`. `fileName` `dotnet` is the server's `dotnet`; a `.dll` runs on it. With `toolTelemetryOptOut` (one of the IDE's hosts, M59), the server adds the tools' telemetry opt-outs its own environment doesn't set. |
 | `process/kill` | `{ channel }` | `{}`: the process tree, or the terminal. |
 | `pty/open` | `{ channel, fileName?, arguments[], workingDirectory?, environment?, columns, rows }` | `{ processId }`. No `fileName`: the user's login shell with `-l`. The environment is added to the server's own, with `TERM=xterm-256color`. A missing folder is the home folder. |
 | `pty/resize` | `{ channel, columns, rows }` | `{}` |

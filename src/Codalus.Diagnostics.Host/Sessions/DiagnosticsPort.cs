@@ -249,6 +249,75 @@ internal static class DiagnosticsPort
         }
     }
 
+    /// <summary>The target's name: its process's, or a port's socket name (the compose service's, M63b).</summary>
+    public static string NameOf(DiagnosticsTarget target) =>
+        target.Port is { } port ? Path.GetFileNameWithoutExtension(port) : NameOf(target.ProcessId);
+
+    /// <summary>Whether the target still runs: a port's runtime is taken to have gone once its stream ends.</summary>
+    public static bool IsAlive(DiagnosticsTarget target) => !target.IsPort && IsAlive(target.ProcessId);
+
+    /// <summary>
+    /// Starts an EventPipe session on a process (<see cref="StartSessionAsync(int, IReadOnlyList{EventPipeProvider}, bool, bool, int, bool, CancellationToken)"/>)
+    /// or on the runtime connected to a port's socket (M63b), with the lease that keeps the port's listener open while
+    /// the session runs (null for a process): the caller disposes it after the session.
+    /// </summary>
+    public static async Task<(EventPipeSession Session, PortConnections.Lease? Lease)> StartSessionAsync(DiagnosticsTarget target, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, bool slowStart, CancellationToken cancellationToken) =>
+        target.Port is { } port
+            ? await StartPortSessionAsync(port, providers, rundown, stacks, bufferMegabytes, slowStart, cancellationToken).ConfigureAwait(false)
+            : (await StartSessionAsync(target.ProcessId, providers, rundown, stacks, bufferMegabytes, slowStart, cancellationToken).ConfigureAwait(false), null);
+
+    /// <summary>
+    /// A session on the runtime connected to <paramref name="port"/>'s socket. A try the runtime doesn't answer in
+    /// time lets the listener go (when no other session holds it): that runtime may have gone (its service restarted,
+    /// a new runtime), and the next try accepts the one that runs now.
+    /// </summary>
+    private static async Task<(EventPipeSession Session, PortConnections.Lease? Lease)> StartPortSessionAsync(string port, IReadOnlyList<EventPipeProvider> providers, bool rundown, bool stacks, int bufferMegabytes, bool slowStart, CancellationToken cancellationToken)
+    {
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            var lease = await PortConnections.AcquireAsync(port, cancellationToken).ConfigureAwait(false);
+            using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (!slowStart)
+            {
+                attempt.CancelAfter(s_attemptTimeout);
+            }
+
+            var starting = StartOnceAsync(lease.Client, providers, rundown, stacks, bufferMegabytes, attempt.Token);
+            try
+            {
+                return (await starting.WaitAsync(attempt.Token).ConfigureAwait(false), lease);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                DisposeWhenStarted(starting);
+                await lease.DisposeAsync().ConfigureAwait(false);
+                if (clock.Elapsed >= s_answerTimeout)
+                {
+                    throw new JsonRpcHandlerException(
+                        DiagnosticsErrorCodes.NotAvailable,
+                        $"The runtime at {port} didn't answer within {s_answerTimeout.TotalSeconds:0} s (tried every {s_attemptTimeout.TotalSeconds:0} s).");
+                }
+            }
+            catch (Exception ex) when (ex is ServerNotAvailableException or EndOfStreamException or IOException && clock.Elapsed < s_connectTimeout)
+            {
+                // The runtime's connection closed as it was taken (its service restarting): accept the next.
+                await lease.DisposeAsync().ConfigureAwait(false);
+                await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is UnsupportedProtocolException or UnsupportedCommandException or ServerErrorException or ServerNotAvailableException or EndOfStreamException or IOException)
+            {
+                await lease.DisposeAsync().ConfigureAwait(false);
+                throw new JsonRpcHandlerException(DiagnosticsErrorCodes.NotAvailable, $"The runtime at {port} refused the session: {ex.Message}");
+            }
+            catch
+            {
+                await lease.DisposeAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+    }
+
     /// <summary>
     /// Starts an EventPipe session, retrying while the port isn't open yet (a process that has just started) and while
     /// it doesn't answer. On Windows the client waits for the runtime's pipe without a time limit (one the runtime hasn't

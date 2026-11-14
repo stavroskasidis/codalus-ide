@@ -56,7 +56,7 @@ A device that can't be used yet says why:
 ## Running on Windows
 
 On Windows, MAUI's templates add a Windows framework (`net10.0-windows10.0.19041.0`), which runs on **Windows Machine**. It's a WinUI 3 app on .NET's own runtime (CoreCLR), so it runs and debugs like any desktop program, the way [WinUI 3 apps](windows-desktop.md#winui-3) do:
-- **Unpackaged** (`<WindowsPackageType>None</WindowsPackageType>`, as the templates have it): Codalus IDE builds the Windows framework alone (the other platforms' workloads aren't needed for it), then **Start Without Debugging** runs it, **Start** (`F5`) debugs it with netcoredbg (breakpoints, stepping, Locals, Watch: everything a .NET program gets), and **Start with Hot Reload** runs it under `dotnet watch`.
+- **Unpackaged** (`<WindowsPackageType>None</WindowsPackageType>`, as the templates have it): Codalus IDE builds the Windows framework alone (the other platforms' workloads aren't needed for it), then **Start Without Debugging** runs it, **Start** (`F5`) debugs it with the .NET debugger (breakpoints, stepping, Locals, Watch: everything a .NET program gets), and **Start with Hot Reload** runs it under `dotnet watch`.
 - **Packaged** (MSIX): Codalus IDE builds it, registers the build's layout with Windows (`Add-AppxPackage -Register`), and starts it the way Windows starts packaged apps; **Start** attaches the debugger to it. Registering needs [Developer Mode](windows-desktop.md#packaged-apps-and-developer-mode). Hot Reload isn't available for packaged apps.
 
 Help → Check Environment lists the `maui-windows` workload, the Windows App SDK runtime, and Developer Mode when an app is packaged.

@@ -24,7 +24,7 @@ public static class HostLaunchInfo
         var exe = OperatingSystem.IsWindows() ? "codalus-lshost.exe" : "codalus-lshost";
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", exe));
         candidates.Add(Path.Combine(AppContext.BaseDirectory, "lshost", "codalus-lshost.dll"));
-        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.FromPath(path) : null;
+        return candidates.FirstOrDefault(File.Exists) is { } path ? ProcessLaunchInfo.Host(path) : null;
     }
 }
 
@@ -612,6 +612,10 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public async Task<TypeHierarchyItem[]> SubtypesAsync(TypeHierarchyItem item, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.TypeHierarchySubtypes, new TypeHierarchyParams(item), ProtocolJsonContext.Default.TypeHierarchyParams, ProtocolJsonContext.Default.TypeHierarchyItemArray, cancellationToken).ConfigureAwait(false) ?? [];
 
+    /// <summary>LSP 3.17's <c>textDocument/inlineValue</c> (M62): the values to draw after the lines of a stopped frame's method.</summary>
+    public async Task<InlineValue[]> InlineValuesAsync(string uri, Protocol.Range range, InlineValueContext context, CancellationToken cancellationToken) =>
+        await InvokeNullable(Methods.InlineValue, new InlineValueParams(new TextDocumentIdentifier(uri), range, context), ProtocolJsonContext.Default.InlineValueParams, ProtocolJsonContext.Default.InlineValueArray, cancellationToken).ConfigureAwait(false) ?? [];
+
     public async Task<InlayHint[]> InlayHintsAsync(string uri, Protocol.Range range, CancellationToken cancellationToken) =>
         await InvokeNullable(Methods.InlayHint, new InlayHintParams(new TextDocumentIdentifier(uri), range), ProtocolJsonContext.Default.InlayHintParams, ProtocolJsonContext.Default.InlayHintArray, cancellationToken).ConfigureAwait(false) ?? [];
 
@@ -682,9 +686,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<bool> HotReloadStartAsync(string session, string[] projects, string[] capabilities, CancellationToken cancellationToken) =>
         Invoke(Methods.HotReloadStart, new HotReloadStartParams(session, projects, capabilities), ProtocolJsonContext.Default.HotReloadStartParams, ProtocolJsonContext.Default.Boolean, cancellationToken);
 
+    /// <summary><c>codalus/debug/compileExpression</c> (M58): a debugger expression compiled where a frame is stopped.</summary>
+    public Task<CompileExpressionResult> CompileExpressionAsync(CompileExpressionParams parameters, CancellationToken cancellationToken) =>
+        Invoke(Methods.CompileExpression, parameters, ProtocolJsonContext.Default.CompileExpressionParams, ProtocolJsonContext.Default.CompileExpressionResult, cancellationToken);
+
     /// <summary><c>codalus/hotReload/update</c>: the edits since the session's start or last commit, as deltas or rude edits.</summary>
-    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken) =>
-        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
+    public Task<HotReloadUpdateResult> HotReloadUpdateAsync(string session, CancellationToken cancellationToken, HotReloadActiveStatement[]? activeStatements = null) =>
+        Invoke(Methods.HotReloadUpdate, new HotReloadSessionParams(session, activeStatements), ProtocolJsonContext.Default.HotReloadSessionParams, ProtocolJsonContext.Default.HotReloadUpdateResult, cancellationToken);
 
     /// <summary><c>codalus/hotReload/commit</c>: the debugger applied the last update.</summary>
     public Task<bool> HotReloadCommitAsync(string session, CancellationToken cancellationToken) =>

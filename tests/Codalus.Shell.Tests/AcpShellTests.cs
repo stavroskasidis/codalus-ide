@@ -4,6 +4,7 @@ using Avalonia;
 using System.Text.Json;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
@@ -42,6 +43,9 @@ public sealed class AcpShellTests
         var log = Path.Combine(f.UserData, "agent-log.jsonl");
         var settings = f.Shell.Workbench.Settings;
         await settings.SetAsync(AiService.EnabledSetting, true, SettingScope.User, CancellationToken.None);
+
+        // These tests read the steps one by one: the detailed density shows them unfolded (ADR 0092).
+        await settings.SetAsync(AiChat.DensitySetting, "detailed", SettingScope.User, CancellationToken.None);
         var env = new Dictionary<string, string> { ["ACP_FAKE_LOG"] = log };
         if (choices is not null)
         {
@@ -146,9 +150,10 @@ public sealed class AcpShellTests
         var turn = await AskAsync(f, "hello");
         await ShellFixture.PumpUntil(() => !turn.IsStreaming);
         Assert.Equal(("Hello from the stand-in.", "stand-in"), (turn.Answer, turn.ExternalAgent));
-        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<Expander>().Any(e => (e.Header as string) == "Thinking"), describe: () => Describe(f, turn));
+        // The thought is one short line ("Thought"), closed (ADR 0092).
+        await ShellFixture.PumpUntil(() => ChatView(f).GetVisualDescendants().OfType<ToggleButton>().Any(e => AutomationProperties.GetName(e) == "Thinking" && e.IsEffectivelyVisible), describe: () => Describe(f, turn));
         view = ChatView(f);
-        Assert.False(view.GetVisualDescendants().OfType<Expander>().Single(e => (e.Header as string) == "Thinking").IsExpanded);
+        Assert.False(view.GetVisualDescendants().OfType<ToggleButton>().Single(e => AutomationProperties.GetName(e) == "Thinking").IsChecked);
         Assert.Contains(view.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "☑ Say hello");
         // The agent answers under its own name, with a chip that says it is an external agent.
         Assert.Equal("stand-in", f.Shell.AiChat.Turns[^1].Author);
@@ -156,7 +161,7 @@ public sealed class AcpShellTests
         Assert.Contains(view.GetVisualDescendants().OfType<Border>(), b => b.Classes.Contains("chip") && b.Child is TextBlock { Text: "External agent" });
 
         // The session got the workspace and codalus mcp by its absolute path, with this session's pipe.
-        var created = File.ReadAllLines(log).Select(l => JsonElement.Parse(l)).Single(m => m.TryGetProperty("method", out var method) && method.GetString() == "session/new").GetProperty("params");
+        var created = Codalus.Tests.StandInAcpAgentLog.Read(log).Single(m => m.TryGetProperty("method", out var method) && method.GetString() == "session/new").GetProperty("params");
         Assert.Equal(Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar), created.GetProperty("cwd").GetString());
         var mcp = created.GetProperty("mcpServers")[0];
         var command = mcp.GetProperty("command").GetString()!;
@@ -174,7 +179,7 @@ public sealed class AcpShellTests
             Assert.Contains("BuildAndRun.slnx", solution, StringComparison.Ordinal);
         }
 
-        Assert.Contains("MCP server (external agent stand-in): get_solution", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
+        Assert.Contains("IDE tool (stand-in): get_solution", f.Shell.Workbench.Output.GetOrCreate(AiService.OutputChannelId).GetText(), StringComparison.Ordinal);
 
         // Through its session pipe, an agent sees only what's under the workspace: not a file open from elsewhere, nor its selection.
         var outside = Path.Combine(f.UserData, "outside-notes.txt");
@@ -189,7 +194,8 @@ public sealed class AcpShellTests
             Assert.DoesNotContain("outside-notes", open, StringComparison.Ordinal);
             Assert.DoesNotContain("private notes", open, StringComparison.Ordinal);
             using var elsewhere = JsonDocument.Parse(JsonSerializer.Serialize(new { path = outside }));
-            Assert.Contains("isn't in the workspace", await client.CallAsync("get_diagnostics", elsewhere.RootElement, CancellationToken.None), StringComparison.Ordinal);
+            var refused = await Assert.ThrowsAsync<McpException>(() => client.CallAsync("get_diagnostics", elsewhere.RootElement, CancellationToken.None));
+            Assert.Contains("outside the workspace", refused.Message, StringComparison.Ordinal);
         }
 
         // A read step with its location: clicking it opens the file at the line.
@@ -256,6 +262,52 @@ public sealed class AcpShellTests
         await ShellFixture.PumpUntil(() => f.Shell.ExternalAgents.Current is null && f.Shell.OpenAgentMcpPipes == 0, 30);
         Assert.False(session.IsAlive);
         Assert.Equal("Agent", AutomationProperties.GetName(Visible<DropDownButton>(ChatView(f), "AgentPicker")));
+    }
+
+    /// <summary>
+    /// The IDE's AI features through AI Chat's agent (ADR 0097): the status bar names it, an action's question goes to its
+    /// chat, and with suggestions on a picker of the model for them follows the agent's choices, kept in its entry.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task With_an_agent_picked_the_status_bar_actions_and_the_model_for_suggestions_use_it()
+    {
+        await using var f = ShellFixture.Create();
+        var (view, _) = await SetUpAsync(f, "config");
+        var chat = f.Shell.AiChat;
+        var settings = f.Shell.Workbench.Settings;
+        var folder = f.CopySample("BuildAndRun");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "BuildAndRun.slnx"));
+        await ShellFixture.PumpUntil(() => chat.AgentChoices.Count == 2);
+        chat.SelectedAgentIndex = 1;
+        await ShellFixture.PumpUntil(() => f.Shell.Ai.ExternalAgent == "stand-in");
+        string StatusText() => f.Shell.Workbench.StatusBar.GetItems(Codalus.Workbench.StatusBar.StatusBarAlignment.Right).FirstOrDefault(i => i.Id == "codalus.ai")?.Text ?? "";
+        await ShellFixture.PumpUntil(() => StatusText().Contains("AI: stand-in", StringComparison.Ordinal), 30, StatusText);
+
+        // Suggestions off: the agent's own pickers only. On: the model for them, Automatic first.
+        await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 3, 60);
+        await settings.SetAsync(AiCompletions.EnabledSetting, true, SettingScope.User, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => chat.AgentChoicePickers.Count == 4, 30);
+        var suggestions = chat.AgentChoicePickers[3];
+        Assert.Equal((AiChatViewModel.SuggestionsChoiceId, "Model for suggestions", "Suggestions: Automatic (Sonnet)"), (suggestions.Id, suggestions.Name, suggestions.CurrentName));
+        Assert.Equal(["Automatic (Sonnet)", "Sonnet", "Opus"], suggestions.ValueNames);
+        Assert.Equal(0, suggestions.SelectedIndex);
+        await ShellFixture.PumpUntil(() => (view = ChatView(f)).ChoicePickers.Count == 4, 30);
+
+        // A pick is kept in the agent's entry, and the chat's model stays.
+        await chat.ChooseAsync(AiChatViewModel.SuggestionsChoiceId, 2);
+        Assert.Equal("opus", settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.GetProperty("stand-in").GetProperty("suggestions").GetProperty("model").GetString());
+        Assert.Equal(("Suggestions: Opus", "Sonnet"), (chat.AgentChoicePickers[3].CurrentName, chat.AgentChoicePickers[0].CurrentName));
+        await chat.ChooseAsync(AiChatViewModel.SuggestionsChoiceId, 0);
+        Assert.False(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.GetProperty("stand-in").GetProperty("suggestions").TryGetProperty("model", out _));
+
+        // An action's question (Explain, Generate Tests…) is answered by the agent in its chat, not the built-in assistant.
+        var count = chat.Chat.Turns.Count;
+        await chat.AskAsync("hello", []);
+        await ShellFixture.PumpUntil(() => chat.Chat.Turns.Count > count && !chat.Chat.Turns[^1].IsStreaming, 60);
+        var turn = chat.Chat.Turns[^1];
+        Assert.Null(turn.Error);
+        Assert.Contains("Hello from the stand-in.", turn.Answer, StringComparison.Ordinal);
     }
 
     /// <summary>Opens More agents… from the agent picker's menu, as a click does, and waits for the list (D43).</summary>
@@ -462,9 +514,9 @@ public sealed class AcpShellTests
         await OpenMoreAgentsAsync(f);
         var rows = f.Shell.Palette.Rows;
         Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "pi", "OpenCode", "goose"], rows.Select(r => r.Label));
-        Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.94.0", rows.Single(r => r.Label == "Claude").Detail);
+        Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.107.0", rows.Single(r => r.Label == "Claude").Detail);
         Assert.Equal("npx -y pi-acp@0.0.34 · needs the pi CLI 0.81.0 or later", rows.Single(r => r.Label == "pi").Detail);
-        Assert.Equal("Its own CLI: goose acp (tested with 1.55.0)", rows.Single(r => r.Label == "goose").Detail);
+        Assert.Equal("Its own CLI: goose acp (tested with 1.59.0)", rows.Single(r => r.Label == "goose").Detail);
         Assert.Null(rows.Single(r => r.Label == "goose").KeyLabel); // its CLI is on this PATH
         Assert.Equal("opencode not installed", rows.Single(r => r.Label == "OpenCode").KeyLabel);
         Assert.All(rows, r => Assert.Equal("bot", r.Icon));
@@ -556,6 +608,6 @@ public sealed class AcpShellTests
         Assert.Equal(("stopped", "Permission: cancelled"), (turn.FinishReason, turn.Answer));
         Assert.Equal("cancelled", turn.Steps.Single().Status);
         await ShellFixture.PumpUntil(() => Step(f, s => s.Status == AiStepStatus.Cancelled) is not null);
-        Assert.Contains(File.ReadAllLines(log), l => l.Contains("\"session/cancel\"", StringComparison.Ordinal));
+        Assert.Contains(Codalus.Tests.StandInAcpAgentLog.Read(log), m => m.TryGetProperty("method", out var method) && method.GetString() == "session/cancel");
     }
 }

@@ -13,6 +13,9 @@ public interface IProposedApi
 {
     /// <summary>Language model providers for AI assistance (M28a, ADR 0062).</summary>
     ILanguageModels LanguageModels => throw new NotSupportedException("This context has no language models.");
+
+    /// <summary>Tools for AI agents (ADR 0092).</summary>
+    IAiTools AiTools => throw new NotSupportedException("This context has no AI tools.");
 }
 
 /// <summary>Implemented by plugin contexts that can offer proposed APIs.</summary>

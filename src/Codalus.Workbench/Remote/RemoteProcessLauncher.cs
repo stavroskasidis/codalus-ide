@@ -25,7 +25,8 @@ public sealed class RemoteProcessLauncher(RemoteConnection connection, RemotePat
             map.ToRemote(launch.FileName),
             [.. launch.Arguments.Select(map.ToRemote)],
             launch.WorkingDirectory is { } directory ? map.ToRemote(directory) : null,
-            launch.Environment?.ToDictionary(e => e.Key, e => map.ToRemote(e.Value), StringComparer.Ordinal));
+            launch.Environment?.ToDictionary(e => e.Key, e => map.ToRemote(e.Value), StringComparer.Ordinal),
+            launch.ToolTelemetryOptOut);
         try
         {
             return await connection.SpawnAsync(parameters, cancellationToken, mapJson ? map : null).ConfigureAwait(false);

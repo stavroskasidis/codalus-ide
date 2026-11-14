@@ -146,9 +146,14 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 
 /* Home: hero */
 
-.hero { padding-top: clamp(56px, 8vw, 112px); display: flex; flex-wrap: wrap; align-items: flex-end; gap: 40px 64px; }
+.hero { padding-top: 25px; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 40px 64px; }
 .hero-main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px; align-items: flex-start; }
 .hero .lead { max-width: 640px; }
+.hero-points { list-style: none; margin: -8px 0 0; padding: 0; display: grid; gap: 2px; max-width: 640px; font-size: 17px; }
+.hero-points li { display: flex; align-items: baseline; gap: 12px; }
+.hero-points li::before { content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--violet); transform: translateY(-2px); }
+.hero-points a { display: inline-block; padding: 6px 0; color: var(--text-soft); text-decoration: none; box-shadow: inset 0 -1px 0 var(--line-accent); }
+.hero-points a:hover { color: var(--violet-link-hover); box-shadow: inset 0 -1px 0 var(--violet-border); }
 .pill {
   display: inline-flex; align-items: center; gap: 10px; border: 1px solid var(--line-accent); background: var(--surface);
   border-radius: 999px; padding: 8px 16px; font-size: 14px; color: #d9d2e8; text-decoration: none;
@@ -174,6 +179,14 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
 }
 /* A tab panel holds its figure (a figure can't be a tab panel, M50). */
 .shot > figure { margin: 0; }
+/* A frame that holds only a lazy picture (the home page's spotlights; the Features tour's frames have a caption, whose
+   height the frame couldn't keep) isn't rendered until it nears the viewport, so its picture isn't fetched with the page.
+   loading="lazy" alone still fetches a picture a screen or two below the fold while the page loads (the home page's
+   first spotlight pictures, 320 KB), and Lighthouse's throttled model counts that against the largest contentful paint:
+   the home page's was 3.1 s and its performance 94. The frame keeps the picture's proportions, so nothing moves when
+   it renders; a tab's hidden panel renders, and fetches, when its tab is chosen. site.js renders a frame three
+   quarters of a screen early, so the picture is there by the time it scrolls into view. */
+.shot > figure:has(> img[loading="lazy"]:only-child) { content-visibility: auto; aspect-ratio: 1280 / 800; }
 .shot img { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; }
 .shot figcaption {
   padding: 18px 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;

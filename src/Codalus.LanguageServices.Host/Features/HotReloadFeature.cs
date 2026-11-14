@@ -13,8 +13,10 @@ namespace Codalus.LanguageServices.Host.Features;
 /// Hot Reload while debugging (M55, ADR 0086): sessions of Roslyn's Edit and Continue service, the one <c>dotnet
 /// watch</c> uses, for programs the Codalus debugger runs. A session starts from the build the program runs (each
 /// project's <see cref="CompilationOutputInfo"/>: its assembly and PDB); each update gives the edits since as deltas
-/// for the debugger's <c>codalus/applyChanges</c>, or the rude edits that need a restart. Hot Reload's semantics: no
-/// active statements, so a frame already running a changed method finishes in its old version.
+/// for the debugger's <c>codalus/applyChanges</c>, or the rude edits that need a restart. An update made while the
+/// program is stopped comes with its active statements (M58): Roslyn then checks the edit against them (what a frame
+/// can't follow is a rude edit) and says where each one is in the new code, so the debugger moves the frames there.
+/// One made while the program runs has none: a frame already running a changed method finishes in its old version.
 /// <para>
 /// Roslyn's service is internal to <c>Microsoft.CodeAnalysis.Features</c> (dotnet watch reaches it through an internal
 /// wrapper, <c>HotReloadService</c>, whose calls this mirrors); the host compiles against it publicized.
@@ -25,13 +27,19 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private TaskCompletionSource _projectsChanged = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private sealed record Session(DebuggingSessionId Id, IEditAndContinueService Service, ImmutableDictionary<ProjectId, RunningProjectOptions> Running);
+    private sealed record Session(DebuggingSessionId Id, IEditAndContinueService Service, ImmutableDictionary<ProjectId, RunningProjectOptions> Running, Debugger Debugger)
+    {
+        /// <summary>Whether Roslyn was last told the program is stopped (its break state).</summary>
+        public bool InBreakState { get; set; }
+    }
 
-    /// <summary>The debugger's side, as Roslyn asks for it: the runtime's capabilities, and no active statements.</summary>
+    /// <summary>The debugger's side, as Roslyn asks for it: the runtime's capabilities, and the active statements of the update being made.</summary>
     private sealed class Debugger(ImmutableArray<string> capabilities) : IManagedHotReloadService
     {
-        public ValueTask<ImmutableArray<ManagedActiveStatementDebugInfo>> GetActiveStatementsAsync(CancellationToken cancellationToken) =>
-            ValueTask.FromResult(ImmutableArray<ManagedActiveStatementDebugInfo>.Empty);
+        /// <summary>Where the stopped program's frames are, as the update's request gave them; empty while it runs.</summary>
+        public ImmutableArray<ManagedActiveStatementDebugInfo> ActiveStatements { get; set; } = [];
+
+        public ValueTask<ImmutableArray<ManagedActiveStatementDebugInfo>> GetActiveStatementsAsync(CancellationToken cancellationToken) => ValueTask.FromResult(ActiveStatements);
 
         public ValueTask<ManagedHotReloadAvailability> GetAvailabilityAsync(Guid module, CancellationToken cancellationToken) =>
             ValueTask.FromResult(new ManagedHotReloadAvailability(ManagedHotReloadAvailabilityStatus.Available));
@@ -105,10 +113,11 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
 
         // What the build compiled: a document edited since (open and unsaved) is read from disk for the baseline.
         await EditAndContinueService.HydrateDocumentsAsync(solution, cancellationToken).ConfigureAwait(false);
-        var id = service.StartDebuggingSession(solution, new Debugger([.. parameters.Capabilities]), new StartTexts(solution), reportDiagnostics: false);
+        var debugger = new Debugger([.. parameters.Capabilities]);
+        var id = service.StartDebuggingSession(solution, debugger, new StartTexts(solution), reportDiagnostics: false);
         lock (_sessions)
         {
-            _sessions[parameters.Session] = new Session(id, service, running);
+            _sessions[parameters.Session] = new Session(id, service, running, debugger);
         }
 
         return true;
@@ -121,6 +130,16 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
             return new HotReloadUpdateResult(HotReloadUpdateResult.None, [], [], [], []);
         }
 
+        // The program's state for this update: stopped, with where its frames are, or running. Roslyn reads the active
+        // statements when its break state changes, so it's told each time they do.
+        var statements = parameters.ActiveStatements;
+        session.Debugger.ActiveStatements = statements is null ? [] : [.. statements.Select(ActiveStatement)];
+        if (statements is not null || session.InBreakState)
+        {
+            session.InBreakState = statements is not null;
+            session.Service.BreakStateOrCapabilitiesChanged(session.Id, inBreakState: session.InBreakState);
+        }
+
         var solution = currentSolution();
         var results = await session.Service.EmitSolutionUpdateAsync(session.Id, solution, session.Running,
             (_, _, _) => ValueTask.FromResult(ImmutableArray<ActiveStatementSpan>.Empty), cancellationToken).ConfigureAwait(false);
@@ -131,11 +150,28 @@ internal sealed class HotReloadFeature(Func<Solution> currentSolution, Func<bool
             _ => HotReloadUpdateResult.None,
         };
         var updates = results.ModuleUpdates.Updates.Select(u => new HotReloadModuleUpdate(u.Module, solution.GetProject(u.ProjectId)?.FilePath ?? string.Empty,
-            [.. u.MetadataDelta], [.. u.ILDelta], [.. u.PdbDelta], [.. u.UpdatedTypes])).ToArray();
+            [.. u.MetadataDelta], [.. u.ILDelta], [.. u.PdbDelta], [.. u.UpdatedTypes])
+        {
+            // Roslyn's spans count from 0, the program's symbols from 1.
+            ActiveStatements = [.. u.ActiveStatements.Select(a => new HotReloadActiveStatementUpdate(a.Method.Token, a.Method.Version, a.ILOffset, a.NewSpan.StartLine + 1, a.NewSpan.StartColumn + 1))],
+        }).ToArray();
         var rude = results.GetTransientDiagnostics().SelectMany(p => p.diagnostics).Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).Select(Describe).ToArray();
         var errors = results.GetPersistentDiagnostics().Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error).Select(Describe).ToArray();
         var restart = results.ProjectsToRestart.Keys.Select(p => solution.GetProject(p)?.FilePath).OfType<string>().ToArray();
         return new HotReloadUpdateResult(status, updates, rude, errors, restart);
+    }
+
+    /// <summary>A frame's statement as Roslyn takes it: the instruction, its span (from 0) and what kind of frame it is.</summary>
+    private static ManagedActiveStatementDebugInfo ActiveStatement(HotReloadActiveStatement statement)
+    {
+        var flags = (statement.Leaf ? ActiveStatementFlags.LeafFrame : ActiveStatementFlags.NonLeafFrame)
+            | (statement.UpToDate ? ActiveStatementFlags.MethodUpToDate : ActiveStatementFlags.None)
+            | (statement.PartiallyExecuted ? ActiveStatementFlags.PartiallyExecuted : ActiveStatementFlags.None);
+        return new ManagedActiveStatementDebugInfo(
+            new ManagedInstructionId(new ManagedMethodId(statement.ModuleId, statement.MethodToken, statement.MethodVersion), statement.IlOffset),
+            statement.Document,
+            new SourceSpan(Math.Max(0, statement.StartLine - 1), Math.Max(0, statement.StartColumn - 1), Math.Max(0, statement.EndLine - 1), Math.Max(0, statement.EndColumn - 1)),
+            flags);
     }
 
     /// <summary>The debugger applied the last update: the next one is made from it.</summary>
