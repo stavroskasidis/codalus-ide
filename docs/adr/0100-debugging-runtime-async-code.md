@@ -1,6 +1,6 @@
 # 0100. Debugging runtime-async code (.NET 11)
 
-- **Status:** accepted (0.13, 2026-11-13)
+- **Status:** accepted (0.13, 2026-11-13); the async call stack for state machines added on 2026-11-14 (M61b, [below](#what-m61b-built-2026-11-14))
 - **Date:** 2026-11-13
 - **Deciders:** maintainer (D53 in the [roadmap](../roadmap.md#decision-register), settled after the spike as recommended)
 - **Amends:** [ADR 0086](0086-a-managed-coreclr-debugger.md) and [ADR 0094](0094-the-codalus-debugger-by-default.md) (the Codalus debugger's stepping, for async code of both kinds)
@@ -28,7 +28,7 @@ What the spike found, before and after this milestone's fixes:
 | Step Over a resumed method's closing brace, to the awaiting caller | ran on | ran on | state machines **fixed here**: stops on the caller's next line; runtime async **a limit**: `Main` calls none of the user's code after its await, so the program runs on |
 | An exception thrown after an await (`all` exceptions): the stop's top frame is the throwing method, on the `throw`, with its locals and `$exception` | works | works | works |
 | The call stack after awaits: the resumed method on top, the thread pool's and the runtime's frames `subtle` (folded into [External Code] under Just My Code) | works | works | works |
-| The awaiting callers in the call stack (an async call stack) | not shown | not shown | **a limit** for both (below) |
+| The awaiting callers in the call stack (an async call stack) | not shown | not shown | state machines **built in M61b** (below); runtime async **a limit** (below) |
 | Set Next Statement after an await, to a later line of the method | allowed | allowed | allowed |
 | The two kinds awaiting each other: a breakpoint in the library built the other way, Step Over its await of the program's callback | breakpoint works; the step ran on | breakpoint works; the step ran on | **fixed here** |
 | Step Into the program's callback from that library | missed the body (as above) | works | works |
@@ -50,7 +50,7 @@ Three limits need the runtime's own changes; each is a `TODO(issue)` in the code
 2. **The awaiting call of a runtime-async call can't be found.** There is no task between two runtime-async calls, and the runtime's continuation chain (`Continuation`, `ResumeInfo`) isn't exposed through ICorDebug. So there is no async call stack (the awaiting callers aren't on the thread's stack after a resume), no exact Step Out target, and no value for what the call returned. Reported: an ICorDebug way to walk a suspended or running runtime-async call's continuations (method, IL offset, the continuation's object), as debuggers walk `Task` continuations for state machines.
 3. **The value an awaited runtime-async call returned** (`ICorDebugILFrame3::GetReturnValueForILOffset` at the call or at its `Await`): none is given. Part of 2.
 
-Until they ship, under runtime async: **Step Out of a resumed method** (and Step Over its closing brace) runs it to its end, then stops in the awaiting call where it first calls the user's code after the await (the step goes out of that method to the caller), or runs on like Continue when it calls none. No returned value is shown. The same holds for a state machine awaited by runtime-async code. The **async call stack** is a limit for state machines too: the classic IDE reads it from the tasks' continuations; that is deferred (`TODO(issue)`), not a runtime limit.
+Until they ship, under runtime async: **Step Out of a resumed method** (and Step Over its closing brace) runs it to its end, then stops in the awaiting call where it first calls the user's code after the await (the step goes out of that method to the caller), or runs on like Continue when it calls none. No returned value is shown. The same holds for a state machine awaited by runtime-async code. There is **no async call stack** for runtime-async code: its frames end in the dispatcher. State machines have one since M61b (below), read from their tasks' continuations as the classic IDE reads it.
 
 ## Decision
 
@@ -79,5 +79,61 @@ When the frame below an async call isn't the user's (the thread pool, the dispat
 - Step Over, Step Into and Step Out behave on async code as the classic IDE's do for state machines, but for the async call stack; runtime-async code gets the same for stepping over awaits, breakpoints, values, exceptions and Set Next Statement, and the limits above for Step Out of a resumed call.
 - Each step in an async method sets and removes a breakpoint per line of the method; a stop's removal is immediate. A long method costs a few milliseconds more per step.
 - A static runtime-async method's other calls (on other threads) can end a step over an await in it, when one reaches one of its lines first: nothing tells the calls apart (`TODO(issue)`, with limit 2).
-- `samples/Debugging/Async.slnx` is its own solution, built only by `RuntimeAsyncDebuggingTests`' fixture, so the other debugger classes don't build it.
-- Not covered by the spike, `TODO(issue)`: Edit and Continue in a runtime-async method after an await; Parallel Stacks, the Threads window, and the profiler's .NET Async view and call trees (M18b) on runtime-async code; the async call stack (both kinds); state machines with a synchronization context (a UI thread's continuation isn't the box).
+- `samples/Debugging/Async.slnx` is its own solution, built only by `AsyncDebuggeeFixture` (`RuntimeAsyncDebuggingTests`, and M61b's `AsyncCallStackTests`), so the other debugger classes don't build it.
+- Not covered by the spike, `TODO(issue)`: Edit and Continue in a runtime-async method after an await; Parallel Stacks, the Threads window, and the profiler's .NET Async view and call trees (M18b) on runtime-async code; runtime async's async call stack (limit 2); stepping in state machines with a synchronization context (a UI thread's continuation isn't the box; the async call stack reads through it, M61b).
+
+## What M61b built (2026-11-14)
+
+The maintainer decided on 2026-11-14 to build the async call stack for state-machine code before 0.13. Stopped in an
+async method, the Call Stack shows the thread's own frames as before, then the calls awaiting the method, as the
+classic IDE does:
+
+- **Where they're found.** From the outermost state machine's `MoveNext` on the thread's stack whose task something
+  awaits (a method started by its caller and not yet suspended has its caller on the stack, and no task yet): its task
+  (`<>t__builder.m_task`) names its continuation (`m_continuationObject`), which leads to the awaiting state machine;
+  that one's task names the next, as far as the chain goes (at most 64). A continuation is followed through what holds
+  a state machine: its box (`AsyncStateMachineBox<…>.StateMachine`; the .NET Framework's `MoveNextRunner.m_stateMachine`),
+  a delegate whose target is one (`MoveNextAction`), a `ContinuationWrapper`, an `AwaitTaskContinuation` (a
+  synchronization context's or a task scheduler's), or the first such of a list of continuations. Anything else ends the
+  chain: `ContinueWith`, a blocking wait (the entry point's `GetResult` under an `async Main`), runtime async's own
+  continuations. A task without a continuation yet is looked for, as M61's step out does, on another thread's stack: a
+  state machine holding an awaiter of it (the program's race between a call resuming and its caller handing it its
+  continuation), or, before it has even taken the task, below the method's own frames there (M61b).
+- **How they're shown.** Below the thread's last frame, each as `[Async] Ns.Type.Method` (the method the state machine
+  is, `Program.Main` for `Program.<Main>d__0`), the prefix marking it as an awaiting caller; at the line of the await it
+  waits in: its state (`<>1__state`, 0 and up) indexes the portable PDB's async stepping information of its `MoveNext`
+  (`AsyncMethodSteppingInformation`, `ClrModuleInfo.AsyncYieldOffsets`), whose yield offset's line is the await's. One
+  found running on another thread's stack is at that frame's line. Without a line (a Windows PDB, a method an edit
+  changed, whose awaits may be numbered anew) the frame has no source. Under Just My Code a state machine that isn't the
+  user's (no symbols, optimized, `[DebuggerNonUserCode]`) is `subtle`, as the thread's own frames of code that isn't the
+  user's are, which the Call Stack dims as external code. No change in the shell: its Call Stack shows them as frames
+  with a source.
+- **Selecting one** shows its variables in Locals: its state machine's fields (its parameters, its hoisted locals and
+  its `this`), read through a strong handle on its box until the program runs on; Watch, the Debug Console and data
+  tips evaluate in its scope, func-evals running on the stopped thread. It has no locals of `MoveNext`'s own, registers
+  or machine code, and Set Next Statement doesn't move it (it runs nowhere).
+- **Cost.** The chain is read once per stop and thread, only when a `stackTrace` request reaches the end of the stack (the
+  Threads window asks for the top frame alone), a few field reads per caller. The search of the other threads' stacks
+  runs only for a task without a continuation.
+- **Runtime async**: no async call stack, the runtime limit 2 above; its frames end in the dispatcher, as before.
+
+On the way, Linux CI (runs 43568784192 and 43570667240, two pull requests) failed a step over `await Task.Yield()` (stopped in the caller, on the await's
+line): the method had resumed on a pool thread before the stepping thread had left it, and its state read -1. A state
+machine running on no frame of the stepping thread has resumed elsewhere, so it did suspend (`Suspended`;
+[docs/ci-flakes.md](../ci-flakes.md)). Runs of the classes under CPU load then found the program's race of M61 one step
+earlier: a method resumed elsewhere before its caller had even taken its task (the caller's thread still inside the
+method's await), so neither a continuation nor an awaiter named the caller; the chain stopped short, and a Step Out
+ran the program to its end. The caller is found on its thread's stack too: below the method's own `MoveNext`, or the
+kickoff that started it, past code that isn't the user's (`AwaiterOnAStack`), and the callers of a caller found there,
+which hasn't suspended and has no task, are the state machines below it on that stack.
+
+| Async call stack | State machines | Runtime async |
+|---|---|---|
+| The awaiting callers below the thread's frames, by name and await line | **built (M61b)** | a limit (2) |
+| Their variables in Locals, evaluation in their scope | **built** (the state machine's fields) | — |
+| Through a synchronization context's or a task scheduler's continuation (`AwaitTaskContinuation`) | read, not tested (no UI fixture) | — |
+| Through `ContinueWith`, `Task.WhenAll`/`WhenAny`, a blocking wait | **ends there** (`TODO(issue)`: the classic IDE shows `WhenAll`'s awaiting caller) | — |
+| A state machine without a portable PDB's async information, or edited by Edit and Continue | shown without a line | — |
+| A state machine awaited by runtime-async code, or awaiting it | the chain ends at the runtime-async call | — |
+| Parallel Stacks with the awaiting callers | not checked (`TODO(issue)`) | — |
+

@@ -270,12 +270,13 @@ public sealed class RuntimeAsyncDebuggingTests(AsyncDebuggeeFixture fixture) : I
         // thread pool's, the runtime's dispatcher) is subtle, which the Call Stack folds into [External Code].
         Assert.Contains("InnerAsync", frames[0].Name, StringComparison.Ordinal);
         Assert.Equal(DebuggeeFixture.Line(chain, "chain-inner"), frames[0].Line);
-        var users = frames.Where(f => f.PresentationHint is null).ToList();
-        Assert.All(frames.Where(f => f.Source is null), f => Assert.True(f.PresentationHint is "subtle" or "label", shown));
-        // A limit for both kinds (ADR 0100): a resumed call is called by what resumed it (a task's continuation, the
-        // runtime's dispatcher of runtime-async continuations), so the calls awaiting it (MiddleAsync, OuterAsync) aren't
-        // on the thread's stack. The classic IDE reads them from the continuations; that is deferred.
-        Assert.True(users.Count == 1, shown);
+        // A resumed call is called by what resumed it (a task's continuation, the runtime's dispatcher of runtime-async
+        // continuations), so the calls awaiting it (MiddleAsync, OuterAsync) aren't on the thread's stack: the thread's
+        // own frames have one of the user's. The state machines' awaiting callers follow them as the async call stack
+        // (M61b, AsyncCallStackTests); runtime async has none (a limit, ADR 0100).
+        var own = frames.Where(f => !f.Name.StartsWith("[Async] ", StringComparison.Ordinal)).ToList();
+        Assert.All(own.Where(f => f.Source is null), f => Assert.True(f.PresentationHint is "subtle" or "label", shown));
+        Assert.True(own.Count(f => f.PresentationHint is null) == 1, shown);
 
         await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
     }

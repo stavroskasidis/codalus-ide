@@ -20,6 +20,6 @@ public static class Chain
     {
         await Task.Delay(10);
         var deepest = seed + 100; // [chain-inner]
-        return deepest;
+        return deepest; // [chain-inner-return]
     }
 }

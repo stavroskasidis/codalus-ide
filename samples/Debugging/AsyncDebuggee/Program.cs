@@ -19,7 +19,7 @@ public static class Program
 
         if (scenario is "all" or "chain")
         {
-            total += await Chain.OuterAsync(5);
+            total += await Chain.OuterAsync(5); // [main-chain]
         }
 
         if (scenario is "all" or "throw")
