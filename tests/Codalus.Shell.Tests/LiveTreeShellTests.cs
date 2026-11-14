@@ -105,7 +105,7 @@ public sealed class LiveTreeShellTests
         }
     }
 
-    private static string Output(ShellFixture f, string prefix) =>
+    internal static string Output(ShellFixture f, string prefix) =>
         string.Concat(f.Shell.Workbench.Output.Channels.Where(c => c.Name.StartsWith(prefix, StringComparison.Ordinal)).Select(c => $"--- {c.Name}\n{c.GetText()}\n"));
 
     /// <summary>
@@ -116,7 +116,7 @@ public sealed class LiveTreeShellTests
     /// Calls come on the thread pool, after the build host's answers; one on the UI thread isn't held, as that would
     /// hold up the check too.
     /// </summary>
-    private sealed class PlanGate
+    internal sealed class PlanGate
     {
         private static readonly TimeSpan s_limit = TimeSpan.FromMinutes(2);
         private readonly ShellHost _shell;

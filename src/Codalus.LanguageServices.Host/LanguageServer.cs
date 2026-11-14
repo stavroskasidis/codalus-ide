@@ -194,15 +194,15 @@ internal sealed class LanguageServer : IAsyncDisposable
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,
-            xaml: (xaml, offset, _, ct) => Xaml.XamlNavigation.PrepareRenameAsync(xaml, offset, ct));
+            xaml: (xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
         OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
             (document, offset, p, ct) => RenameFeature.RenameAsync(document, offset, p.NewName, _workspace.Version, ct), null,
-            xaml: (xaml, offset, p, ct) => Xaml.XamlNavigation.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
+            xaml: (xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
         OnDocument(Methods.CodeAction, json.CodeActionParams, json.CodeActionArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
             return await _codeActions.ActionsAsync(document, Positions.ToSpan(text, p.Range), ct).ConfigureAwait(false);
-        }, []);
+        }, [], async (xaml, p, ct) => await Xaml.XamlCodeActions.ActionsAsync(xaml, p.Range, _workspace.Version, ct).ConfigureAwait(false));
         _connection.OnRequest(Methods.CodeActionResolve, json.CodeAction, json.CodeAction, (action, ct) => _codeActions.ResolveAsync(action, _workspace.Version, ct));
         _connection.OnRequest(Methods.CodeActionOptions, json.CodeActionOptionsParams, json.CodeActionOptions, (p, _) => Task.FromResult(_codeActions.Options(p.Action)!));
         OnDocument(Methods.Formatting, json.DocumentFormattingParams, json.TextEditArray, p => p.TextDocument,

@@ -1,0 +1,8 @@
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 16
+-   <DockPanel Margin="12">
++   <Window.Resources>
++     <Thickness x:Key="DockPanelMargin">12</Thickness>
++   </Window.Resources>
++ 
++   <DockPanel Margin="{StaticResource DockPanelMargin}">

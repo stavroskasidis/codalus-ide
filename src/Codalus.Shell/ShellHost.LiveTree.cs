@@ -31,9 +31,13 @@ public sealed partial class ShellHost
     private void InitializeLiveTree()
     {
         LiveTree = new LiveTreeViewModel(() => Live, GoToXamlAsync);
-        LiveProperties = new LivePropertiesViewModel(() => Live);
+        LiveProperties = new LivePropertiesViewModel(() => Live)
+        {
+            OpenStyle = (file, line) => OpenFileAsync(file, preview: false, new Codalus.LanguageServices.Protocol.Position(Math.Max(0, line - 1), 0)),
+        };
         LiveTree.SelectionChanged += (_, node) => _ = LiveProperties.ShowAsync(node);
         Runs.ProgramPlan = (info, plan) => AddOffScreen(AddLiveAgent(info, plan));
+        InitializeXamlBreakpoints();
     }
 
     /// <summary>Whether a project is an Avalonia app: it references an Avalonia package itself (an app references Avalonia.Desktop).</summary>
@@ -86,15 +90,25 @@ public sealed partial class ShellHost
             }
         });
         session.Picked += (_, e) => Ui.Post(() => _ = LiveTree.SelectAsync(e.Element));
+        HookLiveXaml(session);
+        HookXamlBreakpoints(session);
         if (previous is not null)
         {
             _ = previous.DisposeAsync().AsTask();
         }
 
         var environment = new Dictionary<string, string>(plan.Environment, StringComparer.Ordinal);
-        foreach (var (name, value) in session.Environment(plan.Environment))
+        foreach (var (name, value) in session.Environment(plan.Environment, XamlBreakpointsAtLaunch()))
         {
             environment[name] = value;
+        }
+
+        if (!IsAvaloniaApp(info.Path))
+        {
+            // WPF (M64b): its XAML's file and lines at run time (a Debug build's BAML has them), and the visual tree's
+            // notifications, which XAML breakpoints on elements stop at; WPF reads both before its first XAML.
+            environment["ENABLE_XAML_DIAGNOSTICS_SOURCE_INFO"] = "1";
+            environment["ENABLE_XAML_DIAGNOSTICS_VISUAL_TREE_NOTIFICATIONS"] = "1";
         }
 
         return plan with { Environment = environment };

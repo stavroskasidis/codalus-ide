@@ -1,0 +1,20 @@
+=== WpfApp/MainWindow.xaml
+@@ 14
+-         <DataTemplate x:Key="TodoTemplate" DataType="{x:Type models:TodoItem}">
++         <DataTemplate x:Key="TodoTemplate" DataType="{x:Type models:TaskItem}">
+=== WpfApp/Models/TodoItem.cs
+@@ 6
+- public sealed class TodoItem(string title) : INotifyPropertyChanged
++ public sealed class TaskItem(string title) : INotifyPropertyChanged
+=== WpfApp/ViewModels/MainViewModel.cs
+@@ 17
+-         Items.Add(new TodoItem("Open the WPF fixture"));
+-         Items.Add(new TodoItem("Edit its XAML") { IsDone = true });
++         Items.Add(new TaskItem("Open the WPF fixture"));
++         Items.Add(new TaskItem("Edit its XAML") { IsDone = true });
+@@ 28
+-     public ObservableCollection<TodoItem> Items { get; } = [];
++     public ObservableCollection<TaskItem> Items { get; } = [];
+@@ 64
+-         Items.Add(new TodoItem(NewTitle.Trim()));
++         Items.Add(new TaskItem(NewTitle.Trim()));

@@ -1,0 +1,8 @@
+=== WpfApp/MainWindow.xaml
+@@ 28
+-             <Button DockPanel.Dock="Right" Content="Add" Command="{Binding AddCommand}" Style="{StaticResource AccentButton}" Click="OnAddClicked" />
++             <Button DockPanel.Dock="Right" Content="Add" Command="{Binding AddCommand}" Style="{StaticResource AccentButton}" Click="OnAdd" />
+=== WpfApp/MainWindow.xaml.cs
+@@ 15
+-     private void OnAddClicked(object sender, RoutedEventArgs e) => NewTitleBox.Focus();
++     private void OnAdd(object sender, RoutedEventArgs e) => NewTitleBox.Focus();

@@ -1,0 +1,22 @@
+=== AvaloniaApp/Converters/PriorityTextConverter.cs
+@@ 1
++ using System;
++ using System.Globalization;
++ using Avalonia.Data.Converters;
++ 
++ namespace AvaloniaApp.Converters;
++ 
++ public sealed class PriorityTextConverter : IValueConverter
++ {
++     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value;
++ 
++     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotSupportedException();
++ }
++ 
+=== AvaloniaApp/Views/TodoItemView.axaml
+@@ 6
++              xmlns:converters="using:AvaloniaApp.Converters"
+@@ 10
++   <UserControl.Resources>
++     <converters:PriorityTextConverter x:Key="PriorityTextConverter" />
++   </UserControl.Resources>

@@ -301,6 +301,9 @@ public interface IEditorServices
     /// <summary>Whether an exception type breaks when thrown (the exception helper's check box).</summary>
     void SetBreakOnException(string type, bool value);
 
+    /// <summary>Whether a failed binding in the app breaks the debugger (<c>debug.breakOnFailedBinding</c>, M64b): the helper's check box at such a stop.</summary>
+    bool BreakOnFailedBinding { get; set; }
+
     /// <summary>Run to Click: runs the paused program to a line.</summary>
     Task RunToLineAsync(string path, int line);
 

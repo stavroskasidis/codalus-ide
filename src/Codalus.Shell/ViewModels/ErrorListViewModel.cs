@@ -60,7 +60,14 @@ public sealed class ErrorListViewModel : ObservableObject
     /// <summary>Rude edits and compile errors of Hot Reload while debugging (M55).</summary>
     public const string HotReloadSource = "Hot Reload";
 
+    /// <summary>XAML Hot Reload's edits that couldn't be applied to the running app (M64).</summary>
+    public const string XamlHotReloadSource = "XAML Hot Reload";
+
+    /// <summary>Bindings that failed in the running app (M64).</summary>
+    public const string BindingSource = "Binding";
+
     private IReadOnlyList<ErrorListRow> _hotReload = [];
+    private readonly Dictionary<string, IReadOnlyList<ErrorListRow>> _live = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Shows Hot Reload's rude edits or compile errors (M55: an edit that couldn't be applied while debugging), replacing
@@ -71,6 +78,19 @@ public sealed class ErrorListViewModel : ObservableObject
         _hotReload = [.. rows.Select(r => r with { Source = HotReloadSource })];
         ScheduleRefresh();
     }
+
+    /// <summary>
+    /// Shows what the running app reported under <paramref name="source"/> (M64: <see cref="XamlHotReloadSource"/>,
+    /// <see cref="BindingSource"/>), replacing that source's last rows; empty clears them. On the UI thread.
+    /// </summary>
+    public void SetLive(string source, IReadOnlyList<ErrorListRow> rows)
+    {
+        _live[source] = [.. rows.Select(r => r with { Source = source })];
+        ScheduleRefresh();
+    }
+
+    /// <summary>The rows of a source <see cref="SetLive"/> set (tests).</summary>
+    public IReadOnlyList<ErrorListRow> LiveRows(string source) => _live.GetValueOrDefault(source) ?? [];
     public const string GroupBySetting = "errorList.groupBy";
     public const string AnalysisScopeSetting = "languageServices.analysisScope";
 
@@ -381,7 +401,8 @@ public sealed class ErrorListViewModel : ObservableObject
                 _computeAgain = false;
                 var generation = _generation;
                 var query = Query();
-                var view = await Task.Run(() => Compute(query, _store, _builds, _hotReload)).ConfigureAwait(true);
+                IReadOnlyList<ErrorListRow> extra = [.. _hotReload, .. _live.Values.SelectMany(r => r)];
+                var view = await Task.Run(() => Compute(query, _store, _builds, extra)).ConfigureAwait(true);
                 if (generation == _generation)
                 {
                     Apply(view);

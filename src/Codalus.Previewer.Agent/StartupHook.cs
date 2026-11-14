@@ -27,6 +27,14 @@ internal static class StartupHook
 
     public static void Initialize()
     {
+        // The Codalus debugger's launcher (codalus-debughost --launch) runs with the program's environment, startup hooks
+        // included: the variables are the app's, left for it. Its agent took the IDE's one connection, and the app's
+        // waited unread behind it (M64b: the live tools and XAML breakpoints under F5).
+        if (System.Reflection.Assembly.GetEntryAssembly()?.GetName().Name == "codalus-debughost")
+        {
+            return;
+        }
+
         var live = int.TryParse(Environment.GetEnvironmentVariable(LivePortVariable), NumberStyles.Integer, CultureInfo.InvariantCulture, out var livePort) && livePort > 0;
         var portText = Environment.GetEnvironmentVariable(live ? LivePortVariable : PortVariable);
         var token = Environment.GetEnvironmentVariable(live ? LiveTokenVariable : TokenVariable) ?? string.Empty;
@@ -39,6 +47,17 @@ internal static class StartupHook
         foreach (var variable in new[] { PortVariable, TokenVariable, LivePortVariable, LiveTokenVariable })
         {
             Environment.SetEnvironmentVariable(variable, null);
+        }
+
+        // A running app's binding failures (M64): Avalonia's logger is hooked before the app's first binding, the
+        // failures kept until the IDE's connection asks for them.
+        if (live)
+        {
+            LiveBindings.Install(null);
+
+            // XAML breakpoints (M64b): the launch's list, armed before the app's first XAML.
+            LiveBreak.ConfigureFromEnvironment();
+            LiveBreak.Install();
         }
 
         var thread = new Thread(() => Run(port, token, live)) { IsBackground = true, Name = live ? "Codalus live agent" : "Codalus previewer agent" };
@@ -66,6 +85,12 @@ internal static class StartupHook
 
             Send("hello\t" + token);
             Func<string[], string> handle = live ? new LiveAgent(Send).Handle : new PreviewAgent().Handle;
+            if (live)
+            {
+                LiveBindings.Install(Send);
+                LiveBreak.Connect(Send);
+            }
+
             while (reader.ReadLine() is { } line)
             {
                 var parts = line.Split('\t');

@@ -1,0 +1,12 @@
+=== AvaloniaApp/Views/TodoItemView.axaml
+@@ 10
++   <UserControl.Styles>
++     <Style Selector="TextBlock.textBlockStyle">
++       <Setter Property="VerticalAlignment" Value="Center" />
++       <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
++       <Setter Property="Text" Value="{Binding Priority}" />
++     </Style>
++   </UserControl.Styles>
+@@ 17
+-     <TextBlock VerticalAlignment="Center" Foreground="{StaticResource AccentBrush}" Text="{Binding Priority}" />
++     <TextBlock Classes="textBlockStyle" />

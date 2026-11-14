@@ -1,0 +1,15 @@
+=== AvaloniaApp/Views/MainWindow.axaml
+@@ 28
+-           <views:TodoItemView />
++           <views:TaskView />
+=== AvaloniaApp/Views/TodoItemView.axaml
+@@ 8
+-              x:Class="AvaloniaApp.Views.TodoItemView"
++              x:Class="AvaloniaApp.Views.TaskView"
+=== AvaloniaApp/Views/TodoItemView.axaml.cs
+@@ 5
+- public partial class TodoItemView : UserControl
++ public partial class TaskView : UserControl
+@@ 7
+-     public TodoItemView() => InitializeComponent();
++     public TaskView() => InitializeComponent();

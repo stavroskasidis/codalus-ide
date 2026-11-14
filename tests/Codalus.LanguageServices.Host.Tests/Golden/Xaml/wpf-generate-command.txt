@@ -1,0 +1,4 @@
+=== WpfApp/ViewModels/MainViewModel.cs
+@@ 69
++ 
++     public System.Windows.Input.ICommand? ClearCommand { get; set; }

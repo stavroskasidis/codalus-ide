@@ -204,6 +204,13 @@ internal static partial class XamlNavigation
         }
 
         var attributeName = attribute.Name;
+        if (attributeName == "x:Key" && value.Trim() is { Length: > 0 } key && !key.StartsWith('{'))
+        {
+            // A resource's key (M64): a rename of its uses starts here too.
+            var leading = value.Length - value.TrimStart().Length;
+            return Task.FromResult(Result(new XamlTarget(attribute.ValueStart + leading, attribute.ValueStart + leading + key.Length) { ResourceKey = key }));
+        }
+
         if (attributeName is "x:Name" or "Name")
         {
             return Task.FromResult(Result(new XamlTarget(attribute.ValueStart, attribute.ValueEnd) { ElementName = value.Trim(), Symbol = NameField(context, value.Trim()) }));
@@ -453,8 +460,7 @@ internal static partial class XamlNavigation
     }
 
     /// <summary>WPF's markup compiler output (<c>MainWindow.g.cs</c>, <c>MainWindow.g.i.cs</c>), which follows the XAML.</summary>
-    private static bool IsGenerated(string? path) =>
-        path is not null && (path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".g.i.cs", StringComparison.OrdinalIgnoreCase));
+    private static bool IsGenerated(string? path) => XamlRename.IsGenerated(path);
 
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant)]
     private static partial Regex IdentifierRegex();

@@ -1,0 +1,8 @@
+=== WpfApp/MainWindow.xaml
+@@ 20
++         <Thickness x:Key="RatingControlMargin">12,0,0,0</Thickness>
+@@ 34
+-             <controls:RatingControl Value="{Binding Rating, Mode=TwoWay}" Maximum="5" controls:Highlight.IsOn="True" Margin="12,0,0,0" />
+-             <TextBlock Text="{Binding ActualWidth, ElementName=NewTitleBox}" Margin="12,0,0,0" ToolTipService.ShowDuration="2000" />
++             <controls:RatingControl Value="{Binding Rating, Mode=TwoWay}" Maximum="5" controls:Highlight.IsOn="True" Margin="{StaticResource RatingControlMargin}" />
++             <TextBlock Text="{Binding ActualWidth, ElementName=NewTitleBox}" Margin="{StaticResource RatingControlMargin}" ToolTipService.ShowDuration="2000" />

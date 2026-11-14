@@ -657,6 +657,8 @@ public sealed partial class ShellHost
             StatusBar.ShowMessage(Localizer.Format("msg.debug.exceptionThrown", "Exception thrown: {0}: {1}", type, message), TimeSpan.FromSeconds(10));
         }
 
+        ShowXamlStop(stop);
+
         // Through the file system that holds it: a remote window's sources are the server's (M21).
         if (Debugger.SelectedFrame is { Source.Path: { } path } frame && await SourceExistsAsync(path).ConfigureAwait(true))
         {
