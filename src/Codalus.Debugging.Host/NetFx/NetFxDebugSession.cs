@@ -26,7 +26,7 @@ internal interface IClrDebugger
 /// evaluation of C# expressions (<see cref="ClrEvaluator"/>), exceptions (all with a type filter, or unhandled), and
 /// changing primitive values. Handles (frames, variable references) live until the program runs again.
 /// </summary>
-internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
+internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
 {
     /// <summary>Closes the assemblies read for the debugger attributes, and ends the symbol lookups.</summary>
     public void Dispose()
@@ -2174,10 +2174,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         // A state machine's MoveNext is shown by the method it is (its outer type and the name in <Name>d__N).
-        var name = info.MethodDisplayName(frame.MethodToken);
-        return kind == ClrAsyncKind.StateMachine && name.LastIndexOf(".<", StringComparison.Ordinal) is var at and > 0 && name.IndexOf('>', at) is var close and > 0
-            ? name[..at] + "." + name[(at + 2)..close]
-            : name;
+        return kind == ClrAsyncKind.StateMachine ? AsyncMethodName(info, frame.MethodToken) : info.MethodDisplayName(frame.MethodToken);
     }
 
     /// <summary>
@@ -2488,14 +2485,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private bool IsExceptionDispatch(IClrFrame frame) =>
         frame.Module is { } module && Types.Info(module)?.MethodDisplayName(frame.MethodToken) is { } name && name.StartsWith("System.Runtime.EH.", StringComparison.Ordinal);
 
-    // TODO(issue): an async call stack (ADR 0100): the calls awaiting a resumed one, from state machines' tasks'
-    // continuations, and from runtime async's once the runtime exposes them.
+    // TODO(issue): runtime async's awaiting calls in the async call stack (ADR 0100), once the runtime exposes a
+    // runtime-async call's continuations through ICorDebug; state machines' are read from their tasks (M61b).
     private StackTraceResponse StackTrace(int threadId, int start, int levels)
     {
         lock (_gate)
         {
             RequireStopped();
-            var frames = VisibleFrames(Thread(threadId));
+            var thread = Thread(threadId);
+            var frames = VisibleFrames(thread);
             foreach (var module in frames.Select(f => f.Module).OfType<IClrModule>().Distinct())
             {
                 EnsureModule(module);
@@ -2539,7 +2537,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 });
             }
 
-            return new StackTraceResponse([.. result], frames.Count);
+            // The awaiting callers (M61b), below the thread's own frames: read only when the request reaches the end of
+            // the stack (the Threads window asks for the top frame alone).
+            var total = frames.Count;
+            if (levels <= 0 || start + levels > frames.Count)
+            {
+                var callers = AsyncCallers(thread, frames);
+                total += callers.Count;
+                var skip = Math.Max(0, start - frames.Count);
+                var take = levels > 0 ? Math.Max(0, start + levels - Math.Max(start, frames.Count)) : int.MaxValue;
+                foreach (var caller in callers.Skip(skip).Take(take))
+                {
+                    var id = _nextHandle++;
+                    _frames[id] = caller;
+                    result.Add(AsyncStackFrame(id, caller));
+                }
+            }
+
+            return new StackTraceResponse([.. result], total);
         }
     }
 
@@ -2587,7 +2602,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 variables.Add((method.ParameterNames[i], Live(() => frame.Argument(index))));
             }
 
-            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
+            // An awaiting caller of the async call stack (M61b) runs nowhere: it has its state machine's fields, not
+            // MoveNext's locals.
+            foreach (var (slot, name) in frame is AsyncCallerFrame ? [] : info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
             {
                 variables.Add((name, Live(() => frame.Local(slot))));
             }
@@ -3948,6 +3965,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private void ClearHandles()
     {
         _frames.Clear();
+        ClearAsyncCallers();
         _children.Clear();
         _childValues.Clear();
         _pages.Clear();
