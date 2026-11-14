@@ -117,11 +117,11 @@ public sealed partial class AcpAgentCatalogTests : IDisposable
         var user = settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value;
         Assert.Equal(["mine", "claude"], user.EnumerateObject().Select(p => p.Name));
         Assert.Equal(
-            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.106.0"]}""",
+            """{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.107.0"]}""",
             user.GetProperty("claude").GetRawText().Replace(" ", "", StringComparison.Ordinal).Replace("\n", "", StringComparison.Ordinal).Replace("\r", "", StringComparison.Ordinal));
         var configured = AcpAgents.Parse(user);
         Assert.Equal("npx", configured["claude"].Command);
-        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.106.0"], configured["claude"].Args);
+        Assert.Equal(["-y", "@agentclientprotocol/claude-agent-acp@0.107.0"], configured["claude"].Args);
         Assert.Null(settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.Workspace));
         Assert.Equal("{}", File.ReadAllText(_workspaceFile));
 
