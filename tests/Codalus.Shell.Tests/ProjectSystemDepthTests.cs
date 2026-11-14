@@ -50,6 +50,18 @@ public sealed class ProjectSystemDepthTests
     private static Dictionary<string, PropertyRowViewModel> Rows(ShellFixture f) =>
         f.Shell.PropertiesWindow.Categories.SelectMany(c => c.Rows).GroupBy(r => r.Name).ToDictionary(g => g.Key, g => g.First());
 
+    /// <summary>
+    /// What the Properties window and the project show, for a wait that timed out: the edit of Build Action to Content
+    /// never reached App.csproj once on Windows (CI run 43624505680, docs/ci-flakes.md). An error the edit met goes to a
+    /// notification, a reload shows in the rows and IsLoading, and the file says what the build host wrote.
+    /// </summary>
+    private static string Describe(ShellFixture f, string project) =>
+        $"Title: {f.Shell.PropertiesWindow.Title}. Loading: {f.Shell.PropertiesWindow.IsLoading}. Message: {f.Shell.PropertiesWindow.Message}. "
+        + $"Rows: {string.Join("; ", Rows(f).Select(r => $"{r.Key}={r.Value.Value}"))}. "
+        + $"Dialog: {(f.Shell.Dialogs.IsOpen ? f.Shell.Dialogs.Message : "none")}. "
+        + $"Notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => $"{n.Severity}: {n.Message}"))}. "
+        + $"{Path.GetFileName(project)}: {Read(project)}";
+
     [AvaloniaFact]
     public async Task The_properties_window_edits_a_files_build_action_and_metadata()
     {
@@ -61,7 +73,7 @@ public sealed class ProjectSystemDepthTests
         await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<PropertiesWindowView>().Any());
 
         f.Shell.Explorer.Reveal("f:" + appsettings);
-        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "appsettings.json File Properties" && !f.Shell.PropertiesWindow.IsLoading && Rows(f).ContainsKey("Build Action"), seconds: 60);
+        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "appsettings.json File Properties" && !f.Shell.PropertiesWindow.IsLoading && Rows(f).ContainsKey("Build Action"), seconds: 60, describe: () => Describe(f, app));
         var rows = Rows(f);
         Assert.Equal("None", rows["Build Action"].SelectedOption?.Value);
         Assert.Equal("Copy if newer", rows["Copy to Output Directory"].SelectedOption?.Label);
@@ -85,18 +97,18 @@ public sealed class ProjectSystemDepthTests
         var names = grid.Items.OfType<PropertyRowViewModel>().Select(r => r.Name).ToList();
         Assert.Equal(names.Order(StringComparer.OrdinalIgnoreCase), names);
         f.Shell.PropertiesWindow.Alphabetical = false;
-        await ShellFixture.PumpUntil(() => !grid.Alphabetical && !f.Shell.PropertiesWindow.IsLoading && Rows(f).ContainsKey("Build Action"), seconds: 60);
+        await ShellFixture.PumpUntil(() => !grid.Alphabetical && !f.Shell.PropertiesWindow.IsLoading && Rows(f).ContainsKey("Build Action"), seconds: 60, describe: () => Describe(f, app));
         rows = Rows(f);
 
         // Copy always: the attribute changes in place.
         rows["Copy to Output Directory"].SelectedOption = PropertiesWindowViewModel.CopyToOutputOptions.Single(o => o.Value == "Always");
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<None Update=\"appsettings.json\" CopyToOutputDirectory=\"Always\" />", StringComparison.Ordinal), seconds: 60);
+        await ShellFixture.PumpUntil(() => Read(app).Contains("<None Update=\"appsettings.json\" CopyToOutputDirectory=\"Always\" />", StringComparison.Ordinal), seconds: 60, describe: () => Describe(f, app));
 
         // Content: a Remove for the None glob and a Content item that keeps the metadata.
-        await ShellFixture.PumpUntil(() => Rows(f).TryGetValue("Build Action", out var row) && row.Options.Any(o => o.Value == "Content") && !f.Shell.PropertiesWindow.IsLoading, seconds: 60);
+        await ShellFixture.PumpUntil(() => Rows(f).TryGetValue("Build Action", out var row) && row.Options.Any(o => o.Value == "Content") && !f.Shell.PropertiesWindow.IsLoading, seconds: 60, describe: () => Describe(f, app));
         Rows(f)["Build Action"].SelectedOption = Rows(f)["Build Action"].Options.Single(o => o.Value == "Content");
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<None Remove=\"appsettings.json\" />", StringComparison.Ordinal) && Read(app).Contains("<Content Include=\"appsettings.json\"", StringComparison.Ordinal), seconds: 60);
-        await ShellFixture.PumpUntil(() => Rows(f).TryGetValue("Build Action", out var row) && row.Value == "Content", seconds: 60);
+        await ShellFixture.PumpUntil(() => Read(app).Contains("<None Remove=\"appsettings.json\" />", StringComparison.Ordinal) && Read(app).Contains("<Content Include=\"appsettings.json\"", StringComparison.Ordinal), seconds: 60, describe: () => Describe(f, app));
+        await ShellFixture.PumpUntil(() => Rows(f).TryGetValue("Build Action", out var row) && row.Value == "Content", seconds: 60, describe: () => Describe(f, app));
 
         // A metadata of its own, then the Custom Tool.
         f.Shell.PropertiesWindow.AddMetadataCommand.Execute(null);
@@ -106,15 +118,15 @@ public sealed class ProjectSystemDepthTests
         await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen && f.Shell.Dialogs.Message.Contains("Pack", StringComparison.Ordinal));
         f.Shell.Dialogs.InputText = "true";
         f.Shell.Dialogs.Accept();
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<Pack>true</Pack>", StringComparison.Ordinal), seconds: 60);
-        await ShellFixture.PumpUntil(() => Rows(f).ContainsKey("Pack") && !f.Shell.PropertiesWindow.IsLoading, seconds: 60);
+        await ShellFixture.PumpUntil(() => Read(app).Contains("<Pack>true</Pack>", StringComparison.Ordinal), seconds: 60, describe: () => Describe(f, app));
+        await ShellFixture.PumpUntil(() => Rows(f).ContainsKey("Pack") && !f.Shell.PropertiesWindow.IsLoading, seconds: 60, describe: () => Describe(f, app));
         Assert.Equal(["Advanced", "Misc", "Metadata"], grid.Items.OfType<PropertyCategoryViewModel>().Select(c => c.Title));
         Rows(f)["Custom Tool"].Text = "MyGenerator";
-        await ShellFixture.PumpUntil(() => Read(app).Contains("<Generator>MyGenerator</Generator>", StringComparison.Ordinal), seconds: 60);
+        await ShellFixture.PumpUntil(() => Read(app).Contains("<Generator>MyGenerator</Generator>", StringComparison.Ordinal), seconds: 60, describe: () => Describe(f, app));
 
         // A project and the solution show summaries with links.
         f.Shell.Explorer.Reveal("p:" + app);
-        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "App Project Properties" && Rows(f).ContainsKey("Output Type"), seconds: 60);
+        await ShellFixture.PumpUntil(() => f.Shell.PropertiesWindow.Title == "App Project Properties" && Rows(f).ContainsKey("Output Type"), seconds: 60, describe: () => Describe(f, app));
         Assert.Equal("Exe", Rows(f)["Output Type"].Value);
         Assert.Contains(f.Shell.PropertiesWindow.Links, l => l.Title.StartsWith("Open Project Properties", StringComparison.Ordinal));
 
