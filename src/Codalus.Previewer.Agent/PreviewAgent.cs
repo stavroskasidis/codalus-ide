@@ -204,7 +204,7 @@ internal sealed class PreviewAgent
     }
 
     /// <summary>The element's bounds in the window's coordinates (device-independent pixels).</summary>
-    private static (double X, double Y, double Width, double Height) BoundsOf(object element, object window)
+    internal static (double X, double Y, double Width, double Height) BoundsOf(object element, object window)
     {
         var bounds = Property(element, "Bounds")!;
         var width = (double)Property(bounds, "Width")!;

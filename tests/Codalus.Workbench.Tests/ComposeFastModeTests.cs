@@ -220,6 +220,51 @@ public sealed class ComposeFastModeTests : IDisposable
         Assert.Equal("compose-front:dev", merged.Services[0].Image);
     }
 
+    /// <summary>
+    /// M63b: with a diagnostics folder (a Linux engine), each .NET service mounts it at /codalus-diag and its runtime
+    /// connects to its own socket there without waiting (the profiler's way in), in both modes; a port the compose file
+    /// names stays; without one (macOS, Windows, an engine in WSL) the override has neither.
+    /// </summary>
+    [Fact]
+    public void The_override_gives_each_dotnet_service_a_diagnostic_port_in_the_mounted_diagnostics_folder()
+    {
+        var file = Sample("Compose", "compose.yaml");
+        var model = ComposeModel.ReadFiles([file]);
+        var services = ComposeFastMode.DotnetServices(model, file, []);
+        var output = Path.Combine(_folder, "bin", "Debug", "net10.0");
+        Directory.CreateDirectory(output);
+        var diagnostics = Path.Combine(_folder, ".codalus", "state", "Compose.slnx", ComposeFastMode.DiagnosticsFolderName);
+        var front = ComposeFastMode.Plan(services[0], model.Services[0], Path.Combine(output, "Front.dll"), debug: true, diagnostics);
+        var back = ComposeFastMode.Plan(services[1], model.Services[1] with { Environment = new Dictionary<string, string> { [ComposeFastMode.DiagnosticPortsVariable] = "/tmp/mine.sock,listen;" } }, Path.Combine(output, "Back.dll"), debug: false, diagnostics);
+        Assert.Equal(Path.Combine(diagnostics, "front.sock"), front.DiagnosticsSocket);
+        Assert.Equal(Path.Combine(diagnostics, "back.sock"), back.DiagnosticsSocket);
+
+        var root = (JsonObject)ComposeYaml.Parse(ComposeFastMode.Override(file, "compose", [front, back]))!;
+        foreach (var (name, ports) in new[] { ("front", "/codalus-diag/front.sock,connect,nosuspend"), ("back", "/tmp/mine.sock,listen;/codalus-diag/back.sock,connect,nosuspend") })
+        {
+            var service = root["services"]![name]!;
+            Assert.Equal(ports, (string?)service["environment"]![ComposeFastMode.DiagnosticPortsVariable]);
+            var volumes = service["volumes"]!.AsArray();
+            Assert.Equal(output, (string?)volumes[0]!["source"]); // the build first, as before
+            var mount = volumes.Single(v => (string?)v!["target"] == ComposeFastMode.DiagnosticsMount)!;
+            Assert.Equal(("bind", diagnostics), ((string?)mount["type"], (string?)mount["source"]));
+            Assert.Null(mount["read_only"]); // the runtime connects to a socket in it
+        }
+
+        // The debugged program gets it in its launch's environment too (the debugger starts it without the container's).
+        Assert.Equal("/codalus-diag/front.sock,connect,nosuspend", front.Environment[ComposeFastMode.DiagnosticPortsVariable]);
+
+        // A service name a file name can't hold.
+        Assert.Equal("my_api.v2.sock", ComposeFastMode.SocketName("my api.v2"));
+
+        // Without a diagnostics folder: neither.
+        var plain = ComposeFastMode.Plan(services[0], model.Services[0], Path.Combine(output, "Front.dll"), debug: false);
+        Assert.Null(plain.DiagnosticsSocket);
+        var text = ComposeFastMode.Override(file, "compose", [plain]);
+        Assert.DoesNotContain(ComposeFastMode.DiagnosticsMount, text, StringComparison.Ordinal);
+        Assert.DoesNotContain(ComposeFastMode.DiagnosticPortsVariable, text, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Paths_are_quoted_whole_and_mounted_as_the_engine_sees_them()
     {

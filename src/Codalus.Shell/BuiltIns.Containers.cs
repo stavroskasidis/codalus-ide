@@ -66,6 +66,7 @@ internal static partial class BuiltIns
         Add("containers.composeStopService", "Stop Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Stop, service).ConfigureAwait(false), "solutionOpen");
         Add("containers.composeDebugService", "Debug Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Debug, service).ConfigureAwait(false), "solutionOpen && solutionTrusted");
         Add("containers.composeDetachService", "Detach Compose Service…", async service => await shell.ComposeServiceAsync(ShellHost.ComposeServiceAction.Detach, service).ConfigureAwait(false), "solutionOpen && debugActive");
+        Add("containers.composeProfileService", "Profile Compose Service…", async service => await shell.ComposeProfileServiceAsync(service).ConfigureAwait(false), "solutionOpen && !profilerCollecting");
         Add("containers.composeShowOverride", "Show the IDE's Compose Override", _ => shell.ShowComposeOverrideAsync(), "solutionOpen");
         commands.Register(new CommandDescriptor("aspire.show", "Aspire Resources", ContributionSource.Shell) { Category = "Aspire" }, async (_, _) =>
         {

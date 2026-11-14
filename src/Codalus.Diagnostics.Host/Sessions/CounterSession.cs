@@ -30,6 +30,7 @@ internal sealed class CounterSession : IAsyncDisposable
     private List<RuntimeEvent> _events = [];
     private readonly Dictionary<int, (double Start, int Generation, string Reason)> _gcs = [];
     private EventPipeSession? _session;
+    private PortConnections.Lease? _lease;
     private Task _processing = Task.CompletedTask;
     private Task _flushing = Task.CompletedTask;
     private double _lastAt;
@@ -43,6 +44,8 @@ internal sealed class CounterSession : IAsyncDisposable
     }
 
     public string Id => _parameters.Session;
+
+    private DiagnosticsTarget Target => DiagnosticsTarget.Of(_parameters.ProcessId, _parameters.DiagnosticPort);
 
     internal IReadOnlyList<EventPipeProvider> Providers()
     {
@@ -85,8 +88,9 @@ internal sealed class CounterSession : IAsyncDisposable
 
     public async Task<string> StartAsync(CancellationToken cancellationToken)
     {
-        var name = DiagnosticsPort.NameOf(_parameters.ProcessId);
-        _session = await DiagnosticsPort.StartSessionAsync(_parameters.ProcessId, Providers(), rundown: false, stacks: false, bufferMegabytes: 64, slowStart: false, cancellationToken).ConfigureAwait(false);
+        var target = Target;
+        var name = DiagnosticsPort.NameOf(target);
+        (_session, _lease) = await DiagnosticsPort.StartSessionAsync(target, Providers(), rundown: false, stacks: false, bufferMegabytes: 64, slowStart: false, cancellationToken).ConfigureAwait(false);
         var session = _session;
         _processing = Task.Run(() => ProcessAsync(session), CancellationToken.None);
         _flushing = Task.Run(FlushLoopAsync, CancellationToken.None);
@@ -120,6 +124,12 @@ internal sealed class CounterSession : IAsyncDisposable
         }
 
         await _stop.CancelAsync().ConfigureAwait(false);
+        if (_lease is { } lease)
+        {
+            // A port's runtime has gone (or the session was stopped): its listener may close.
+            await lease.DisposeAsync().ConfigureAwait(false);
+        }
+
         try
         {
             await _flushing.ConfigureAwait(false);
@@ -136,7 +146,7 @@ internal sealed class CounterSession : IAsyncDisposable
     {
         for (var i = 0; i < 20; i++)
         {
-            if (!DiagnosticsPort.IsAlive(_parameters.ProcessId))
+            if (!DiagnosticsPort.IsAlive(Target))
             {
                 return false;
             }
@@ -325,7 +335,7 @@ internal sealed class CounterSession : IAsyncDisposable
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        if (_session is { } session)
+        if (_session is { } session && !_processing.IsCompleted)
         {
             try
             {
@@ -352,6 +362,11 @@ internal sealed class CounterSession : IAsyncDisposable
         }
 
         _session?.Dispose();
+        if (_lease is { } lease)
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+        }
+
         if (_processing.IsCompleted)
         {
             _stop.Dispose();

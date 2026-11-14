@@ -205,6 +205,15 @@ public sealed record ComposeFastService(ComposeDotnetService Service, string Out
     /// <summary>The service's compose file sets a <c>command</c>, which the override clears.</summary>
     public bool ClearCommand { get; init; }
 
+    /// <summary>
+    /// The folder of this machine mounted at <see cref="ComposeFastMode.DiagnosticsMount"/> for the program's diagnostic
+    /// port (M63b): null where the engine can't share a Unix socket with this machine (not Linux, or an engine in WSL).
+    /// </summary>
+    public string? DiagnosticsFolder { get; init; }
+
+    /// <summary>The socket the diagnostics host listens on for this service's runtime (in <see cref="DiagnosticsFolder"/>), or null.</summary>
+    public string? DiagnosticsSocket => DiagnosticsFolder is { } folder ? Path.Combine(folder, ComposeFastMode.SocketName(Service.Service)) : null;
+
     /// <summary>The program's path in the container: <c>/app/App.dll</c>.</summary>
     public string ContainerProgram => ContainerLaunch.AppFolder + "/" + Program;
 }
@@ -229,7 +238,28 @@ public static class ComposeFastMode
     /// <summary>The label the override gives a .NET service: <c>debug</c> (the debugger starts it) or <c>run</c>.</summary>
     public const string ModeLabel = "dev.codalus.fastMode";
 
+    /// <summary>Where a .NET service's container mounts the IDE's diagnostics folder (M63b, ADR 0102).</summary>
+    public const string DiagnosticsMount = "/codalus-diag";
+
+    /// <summary>The runtime's variable naming the diagnostic ports it opens besides its own (.NET 5 and later).</summary>
+    public const string DiagnosticPortsVariable = "DOTNET_DiagnosticPorts";
+
+    /// <summary>The diagnostics folder's name in the solution's state folder.</summary>
+    public const string DiagnosticsFolderName = "diag";
+
     private static readonly string[] s_projectExtensions = [".csproj", ".fsproj", ".vbproj"];
+
+    /// <summary>A service's socket in the diagnostics folder: its name, with what a file name can't hold made <c>_</c>.</summary>
+    public static string SocketName(string service) =>
+        new string([.. service.Select(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' ? c : '_')]) + ".sock";
+
+    /// <summary>
+    /// The diagnostic port a service's runtime opens (M63b): it connects to the socket the diagnostics host listens on
+    /// in the mounted folder, and doesn't wait for it (<c>nosuspend</c>: it retries while nothing listens, which costs
+    /// next to nothing). A port the compose file already names stays, before it.
+    /// </summary>
+    public static string DiagnosticPorts(string service, string? existing) =>
+        (existing is { Length: > 0 } ports ? ports.TrimEnd(';') + ";" : string.Empty) + DiagnosticsMount + "/" + SocketName(service) + ",connect,nosuspend";
 
     /// <summary>
     /// The services that run a .NET project: the project the service's label names, else the one project in its
@@ -294,9 +324,10 @@ public static class ComposeFastMode
     /// <summary>
     /// A .NET service's fast-mode run from its built project (<paramref name="targetPath"/>: the project's
     /// <c>TargetPath</c>): the build output mounted at <c>/app</c>, its static web assets, and
-    /// <c>ASPNETCORE_ENVIRONMENT=Development</c> unless the compose file sets it.
+    /// <c>ASPNETCORE_ENVIRONMENT=Development</c> unless the compose file sets it. With <paramref name="diagnosticsFolder"/>
+    /// (M63b), the folder mounted at <see cref="DiagnosticsMount"/> and the diagnostic port that the profiler connects through.
     /// </summary>
-    public static ComposeFastService Plan(ComposeDotnetService service, ComposeService compose, string targetPath, bool debug)
+    public static ComposeFastService Plan(ComposeDotnetService service, ComposeService compose, string targetPath, bool debug, string? diagnosticsFolder = null)
     {
         var output = Path.GetDirectoryName(Path.GetFullPath(targetPath))!;
         var program = Path.GetFileName(targetPath);
@@ -318,11 +349,17 @@ public static class ComposeFastMode
             environment[ContainerLaunch.StaticWebAssetsVariable] = assets.Manifest;
         }
 
+        if (diagnosticsFolder is not null)
+        {
+            environment[DiagnosticPortsVariable] = DiagnosticPorts(service.Service, compose.Environment.GetValueOrDefault(DiagnosticPortsVariable));
+        }
+
         return new ComposeFastService(service, output, program, debug)
         {
             Mounts = mounts,
             Environment = environment,
             ClearCommand = compose.HasCommand,
+            DiagnosticsFolder = diagnosticsFolder,
         };
     }
 
@@ -332,8 +369,8 @@ public static class ComposeFastMode
 
     /// <summary>
     /// The override file: for each .NET service its <c>base</c> stage as <see cref="ImageName"/>, the build output and
-    /// static web assets mounted, its entry point (idle for the debugger, else <c>dotnet /app/App.dll</c>), and labels
-    /// saying it's the IDE's. <paramref name="hostPath"/> turns a local path into one the engine mounts (WSL engines).
+    /// static web assets mounted, the diagnostics folder mounted (M63b), its entry point (idle for the debugger, else
+    /// <c>dotnet /app/App.dll</c>), and labels saying it's the IDE's. <paramref name="hostPath"/> turns a local path into one the engine mounts (WSL engines).
     /// </summary>
     public static string Override(string composeFile, string composeProject, IReadOnlyList<ComposeFastService> services, Func<string, string>? hostPath = null)
     {
@@ -380,6 +417,13 @@ public static class ComposeFastMode
                 {
                     yaml.Append("        read_only: true\n");
                 }
+            }
+
+            if (service.DiagnosticsFolder is { } diagnostics)
+            {
+                yaml.Append("      - type: bind\n");
+                yaml.Append("        source: ").Append(Quote(hostPath(diagnostics))).Append('\n');
+                yaml.Append("        target: ").Append(Quote(DiagnosticsMount)).Append('\n');
             }
 
             yaml.Append("    labels:\n");

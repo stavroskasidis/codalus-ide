@@ -15,6 +15,9 @@ public sealed record ShellOptions
                                                         (turn on Tools > Options > AI > MCP Server first).
                  --agent-session <token>               With mcp: reach the AI Chat session that started this agent
                                                         (AI Chat passes it to external agents itself).
+                 --folder <path>                       With mcp: start a Codalus IDE with no window on a trusted folder,
+                                                        serving the same tools until the agent's pipe closes; its actions
+                                                        run only when ai.agent.ideActions is allow.
 
           --user-data-dir <dir>   Keep settings, state and plugins under <dir> instead of the OS defaults.
           --locale <name>         The display language for this run (qps-ploc: pseudo-language).
@@ -80,6 +83,15 @@ public sealed record ShellOptions
     /// agent's session instead of the one <c>ai.mcpServer.enabled</c> opens.
     /// </summary>
     public string? AgentSession { get; init; }
+
+    /// <summary>
+    /// <c>--folder &lt;path&gt;</c> with <c>mcp</c> (M60b, ADR 0099): the headless mode, an IDE with no window on this folder
+    /// (trusted, or refused), serving the IDE's tools on stdio until the agent's pipe closes.
+    /// </summary>
+    public string? McpFolder { get; init; }
+
+    /// <summary>Whether this is the headless IDE of <c>codalus mcp --folder</c>: no window to show, nobody to ask.</summary>
+    public bool Headless => Mcp && McpFolder is not null;
 
     /// <summary><c>codalus diff left right</c>: two files to compare side by side.</summary>
     public (string Left, string Right)? Diff { get; init; }
@@ -206,6 +218,9 @@ public sealed record ShellOptions
                 case "--agent-session":
                     options = options with { AgentSession = Value() };
                     break;
+                case "--folder":
+                    options = options with { McpFolder = Value() is { } mcpFolder ? System.IO.Path.GetFullPath(mcpFolder) : null };
+                    break;
                 case "--locale":
                     options = options with { Locale = Value() };
                     break;
@@ -281,6 +296,11 @@ public sealed record ShellOptions
                     options = OpenPath(options, arg);
                     break;
             }
+        }
+
+        if (options.McpFolder is not null && !options.Mcp)
+        {
+            errors.Add("'--folder' goes with mcp: codalus mcp --folder <path>.");
         }
 
         return options with { PluginDirs = pluginDirs, InstallPlugins = installs, Errors = errors };

@@ -67,7 +67,9 @@ public static class IdeTools
         "get_diagnostics after an edit; build, run_tests and get_test_results instead of dotnet build or dotnet test; " +
         "debug_* to reproduce a bug under the debugger (breakpoints, stack, variables, evaluate) instead of adding prints. " +
         "When a web app runs, browser_* drives and reads its page (under the debugger, the very page being debugged, so " +
-        "its breakpoints stop). Change code through the IDE where it can: rename_symbol, get_code_actions and " +
+        "its breakpoints stop); when a desktop app (Avalonia, or WPF on Windows) runs, desktop_app_windows, " +
+        "desktop_app_controls and desktop_app_input read its windows and controls and click, type, press keys and scroll " +
+        "in it (offScreen on run_project or debug_start keeps its windows out of the user's way). Change code through the IDE where it can:rename_symbol, get_code_actions and " +
         "apply_code_action, format_document and replace_in_files (each change one undo step in the IDE); apply_code_changes " +
         "for Hot Reload; profile_start, profile_stop and memory_snapshot for performance; git_* for status, diffs, history, " +
         "commits and conflicts (never a push); list_packages, add_package and the *_migrations tools for NuGet and EF Core; " +
@@ -120,12 +122,12 @@ public static class IdeTools
         Read("get_test_results", "The tests Codalus IDE knows and their last results: counts, and each failure with its message and stack trace.", """{"failedOnly":{"type":"boolean","description":"Only failures (the default)."}}"""),
 
         // ---------------------------------------------------------- running
-        Action("run_project", "Start a project without debugging in Codalus IDE (the startup project by default), and wait until it runs (a web app: until it listens, and its address). Its output goes to the IDE; read it with get_run_output.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."}}"""),
+        Action("run_project", "Start a project without debugging in Codalus IDE (the startup project by default), and wait until it runs (a web app: until it listens, and its address). Its output goes to the IDE; read it with get_run_output.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."},"offScreen":{"type":"boolean","description":"A desktop app's windows open off-screen, out of the user's way (under Xvfb on Linux, where it is installed); elsewhere they open as usual, and the result says so."}}"""),
         Read("get_run_output", "The end of the output of the program started last (run or debug), and whether it is still running.", """{"lines":{"type":"integer","description":"At most this many lines from the end (default 200)."}}"""),
         Action("stop_run", "Stop the program started with run_project, or the debug session.", "{}"),
 
         // ---------------------------------------------------------- debugging
-        Action("debug_start", "Start debugging a project (the startup project by default) or one test in Codalus IDE. It builds, then waits until the program runs (a web app: until it listens, with its address) or stops, and says so, with each breakpoint's state (bound or not, and why). Set breakpoints first. Then make the program reach them (a web app: browser_*) and debug_wait_for_stop.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."},"test":{"type":"string","description":"A test's full name, to debug that test instead."}}"""),
+        Action("debug_start", "Start debugging a project (the startup project by default) or one test in Codalus IDE. It builds, then waits until the program runs (a web app: until it listens, with its address) or stops, and says so, with each breakpoint's state (bound or not, and why). Set breakpoints first. Then make the program reach them (a web app: browser_*; a desktop app: desktop_app_*) and debug_wait_for_stop.", """{"project":{"type":"string","description":"A project's name; empty for the startup project."},"offScreen":{"type":"boolean","description":"A desktop app's windows open off-screen (under Xvfb on Linux, where it is installed); elsewhere they open as usual."},"test":{"type":"string","description":"A test's full name, to debug that test instead."}}"""),
         Read("debug_set_breakpoint", "Set a breakpoint in Codalus IDE, optionally with a condition (a C# expression) or a hit count.", """{"path":{"type":"string","description":"A file, relative to the workspace root."},"line":{"type":"integer","description":"A 1-based line."},"condition":{"type":"string"},"hitCount":{"type":"integer"}}""", "path", "line"),
         Read("debug_remove_breakpoint", "Remove a breakpoint, or every breakpoint when no path is given.", """{"path":{"type":"string"},"line":{"type":"integer"}}"""),
         Read("debug_list_breakpoints", "The breakpoints set in Codalus IDE.", "{}"),
