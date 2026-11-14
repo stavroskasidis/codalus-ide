@@ -1183,7 +1183,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
 - **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
-  - **Nightlies**: every push to `develop` whose run passes is published as a nightly (`pipeline.yml`, since 2026-10-14; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13). There is no schedule.
+  - **Nightlies**: once a night (`pipeline.yml`'s schedule, 00:17 UTC, since 2026-11-14), `develop`'s head is published as a nightly when its run passes and it has none yet. From 2026-10-14 to 2026-11-13 every push to `develop` whose run passed was one; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13. A push to `develop` is CI only.
     - It builds the installers on three OSes and smoke-tests the installed packages.
     - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
     - Only the last 14 nightlies are kept.

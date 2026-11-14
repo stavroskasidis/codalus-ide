@@ -2,8 +2,10 @@ name: Pipeline
 
 # The one pipeline for develop, master and pull requests (M31, ADR 0028, D20/D21). Every run builds, tests and
 # smoke-tests on Windows, macOS and Linux (CI), and a branch's run releases what passed:
-# - develop: a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub prerelease with the commits since the
-#   previous nightly as its notes. The newest 14 are kept.
+# - develop: CI on every push; once a night (schedule, 00:17 UTC) a nightly, v<VERSION>-nightly.<date>.<run>, published
+#   as a GitHub prerelease with the commits since the previous nightly as its notes, unless develop's head has one
+#   already (nothing changed). The newest 14 are kept. A push to develop publishes nothing (the maintainer's decision,
+#   2026-11-14, ADR 0028).
 # - master: a stable release, v<VERSION> (every merge of a release/X.Y.Z branch, and every hotfix; the run fails if that
 #   tag exists already), the latest release, with notes from the commits since the previous stable release. Afterwards the
 #   site with the apt and dnf repositories is deployed, the AUR package and the plugin SDK's NuGet packages pushed, and
@@ -36,6 +38,10 @@ on:
     # labeled: adding ci:full starts a run on every OS, replacing the one in progress (gate reads the labels when it
     # runs). Any other label starts the same run again: the required ci check is the newest run's.
     types: [opened, synchronize, reopened, labeled]
+  # The nightly: GitHub runs a schedule on the default branch, develop, at its head. 00:17 UTC is 02:17 in Athens in
+  # winter, 03:17 in summer; a scheduled run can start late, and never during an outage.
+  schedule:
+    - cron: "17 0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -51,7 +57,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: pipeline-${{ github.ref }}
+  # The nightly has a group of its own, so that a push to develop during it doesn't cancel it.
+  group: pipeline-${{ github.ref }}${{ github.event_name == 'schedule' && '-nightly' || '' }}
   # A newer push to develop (or a pull request) replaces the run in progress, and an unpublished nightly's tag goes with
   # it (untag); a stable release always runs to the end.
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
@@ -65,13 +72,15 @@ env:
   DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  # What this run releases: a nightly from develop, a stable release from master, nothing from anywhere else.
+  # What this run releases: a nightly from develop's schedule (or a dispatch on develop), a stable release from master,
+  # nothing from a push to develop or anywhere else.
   plan:
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release's tag
     outputs:
-      kind: ${{ steps.kind.outputs.kind }}
+      kind: ${{ steps.unchanged.outputs.skip != 'true' && steps.kind.outputs.kind || '' }}
+      unchanged: ${{ steps.unchanged.outputs.skip }}
       version: ${{ steps.plan.outputs.version }}
       previous: ${{ steps.plan.outputs.previous }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -80,21 +89,30 @@ jobs:
         shell: bash
         run: |
           kind=""
-          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            case "$GITHUB_REF" in
-              refs/heads/master) kind=stable ;;
-              refs/heads/develop) kind=nightly ;;
-            esac
-          fi
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/heads/master | workflow_dispatch:refs/heads/master) kind=stable ;;
+            schedule:refs/heads/develop | workflow_dispatch:refs/heads/develop) kind=nightly ;;
+          esac
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
       - if: steps.kind.outputs.kind != ''
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - if: steps.kind.outputs.kind != ''
+      # A night with no change to develop makes no nightly: its head has one already. The run then does nothing (gate):
+      # the push's run tested that commit.
+      - id: unchanged
+        if: github.event_name == 'schedule' && steps.kind.outputs.kind == 'nightly'
+        shell: bash
+        run: |
+          tag="$(git tag --points-at HEAD --list 'v*-nightly.*' | head -n 1)"
+          if [[ -n "$tag" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No nightly tonight: develop's head ${GITHUB_SHA::7} is $tag already." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         uses: ./.github/actions/setup
       - id: plan
-        if: steps.kind.outputs.kind != ''
+        if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         shell: bash
         env:
           KIND: ${{ steps.kind.outputs.kind }}
@@ -136,12 +154,13 @@ jobs:
   # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes). A release
   # branch cut from a develop commit whose run passed qualifies; once a fix is merged into it, its head is new and is tested.
   gate:
+    needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
     outputs:
-      skip: ${{ steps.scope.outputs.skip || steps.check.outputs.skip }}
+      skip: ${{ needs.plan.outputs.unchanged || steps.scope.outputs.skip || steps.check.outputs.skip }}
       scope: ${{ steps.scope.outputs.scope }}
       projects: ${{ steps.scope.outputs.projects }}
       test-matrix: ${{ steps.scope.outputs.test-matrix }}
