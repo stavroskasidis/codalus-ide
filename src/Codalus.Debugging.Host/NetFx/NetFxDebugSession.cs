@@ -774,6 +774,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         if (_process is CorDebugTarget target)
         {
             target.DescribeThreads = ThreadsOfTimedOutEval;
+            target.RunsClassConstructor = RunsClassConstructor;
             target.EvalTimedOut = log.WriteLine;
             if (Trace is { } trace)
             {
@@ -3896,7 +3897,10 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         foreach (var thread in Process.Threads())
         {
             var frames = SafeFrames(thread);
-            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture)).Append(':');
+            // Its name says which runtime or library thread a native-only one is (the finalizer, a pool's worker): what the
+            // evaluation may wait on when no frame says (DebugDepthTests' image visualizer, CI run 43587457886).
+            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture))
+                .Append(" (").Append(ThreadName(thread)).Append(thread.Frozen ? ", frozen" : "").Append("):");
             foreach (var frame in frames.Take(TimedOutEvalFrames))
             {
                 text.AppendLine().Append("    ").Append(FrameText(frame));
@@ -3919,19 +3923,32 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             return frame.Description ?? "[?]";
         }
 
-        var token = "0x" + frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture);
-        string name;
+        var name = MethodName(module, frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] 0x{frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture)}";
+        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
+    }
+
+    /// <summary>A method as a frame shows it (<c>Ns.Type.Method</c>), or null when its module's metadata can't say.</summary>
+    private string? MethodName(IClrModule module, int methodToken)
+    {
         try
         {
-            name = Types.Info(module)?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] {token}";
+            return Types.Info(module)?.MethodDisplayName(methodToken);
         }
         catch (Exception ex) when (ex is InvalidOperationException or BadImageFormatException or ArgumentException)
         {
-            name = $"[{Path.GetFileName(module.Path)}] {token}";
+            return null;
         }
-
-        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
     }
+
+    /// <summary>
+    /// Whether a thread is in a class constructor: a <c>.cctor</c> frame, or the runtime's helpers that run one. A
+    /// func-eval that needs the class waits on it (<see cref="CorDebugTarget.RunsClassConstructor"/>).
+    /// </summary>
+    private bool RunsClassConstructor(IClrThread thread) =>
+        SafeFrames(thread).Any(frame => frame.Module is { } module && MethodName(module, frame.MethodToken) is { } name
+            && (name.EndsWith("..cctor", StringComparison.Ordinal)
+                || name.StartsWith("System.Runtime.CompilerServices.InitHelpers.", StringComparison.Ordinal)
+                || name.StartsWith("System.Runtime.CompilerServices.ClassConstructorRunner.", StringComparison.Ordinal)));
 
     private static IReadOnlyList<IClrFrame> SafeFrames(IClrThread thread)
     {
