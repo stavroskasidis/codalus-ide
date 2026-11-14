@@ -195,6 +195,32 @@ internal sealed class EventLog
         }
     }
 
+    /// <summary>
+    /// Waits for the next event named one of <paramref name="names"/> (skipping others): its name, and the stop when it's
+    /// a <c>stopped</c> event.
+    /// </summary>
+    public async Task<(string Event, StoppedEvent? Stopped)> NextOfAsync(IReadOnlyList<string> names, int seconds = 60)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(seconds));
+        while (true)
+        {
+            DapEvent e;
+            try
+            {
+                e = await _events.Reader.ReadAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new TimeoutException($"None of [{string.Join(", ", names)}]. Events so far: {string.Join(", ", All.Select(x => x.Name + " " + x.Body))}");
+            }
+
+            if (names.Contains(e.Name))
+            {
+                return (e.Name, e.Name == DapEvents.Stopped ? DebugAdapter.Read(e.Body, DapJsonContext.Default.StoppedEvent) : null);
+            }
+        }
+    }
+
     /// <summary>Waits for the next event named <paramref name="name"/> (skipping others).</summary>
     public async Task<DapEvent> NextAsync(string name, int seconds = 60)
     {

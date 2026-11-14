@@ -3,7 +3,7 @@
 - **Status:** accepted (M19a, 2026-10-12; the maintainer's standing go-ahead for the milestones)
 - **Date:** 2026-10-12
 - **Deciders:** maintainer
-- **Amended by:** [ADR 0071](0071-wpf-xaml-language-service.md) (WPF XAML, M40a)
+- **Amended by:** [ADR 0071](0071-wpf-xaml-language-service.md) (WPF XAML, M40a), [ADR 0103](0103-xaml-depth.md) (rename across C# and XAML, XAML code actions, M64)
 
 ## Context
 

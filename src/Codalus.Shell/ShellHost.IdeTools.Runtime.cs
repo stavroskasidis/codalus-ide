@@ -259,6 +259,19 @@ public sealed partial class ShellHost
             return IdeToolResult.Error("The diagnostics host (codalus-diaghost) isn't installed with this IDE, so it can't profile.");
         }
 
+        if (Str(args, "service") is { Length: > 0 } service)
+        {
+            // A compose service in fast mode, through its diagnostic port (M63b): attached while it runs.
+            var notified = Workbench.Notifications.Items.Count;
+            if (await StartProfilingAsync(new ProfilerRequest([ProfilerTools.Cpu], Launch: false, null) { ComposeService = service }).ConfigureAwait(true) is not { } attached)
+            {
+                return IdeToolResult.Error("Profiling couldn't start" + (NotificationSince(notified) is { } why ? ": " + why : "."));
+            }
+
+            _agentProfiling = attached;
+            return new($"Profiling the compose service {service} (attached through its diagnostic port while it runs: its start-up isn't in the profile), for CPU usage. Make it do the work to measure (browser_*, requests to it), then call profile_stop for the summary.");
+        }
+
         var project = Str(args, "project") is { Length: > 0 } name ? ProjectPath(name) : null;
         var target = project is null ? AgentProgram() : null;
         if (target is { Debugged: true } && Debugger.State == DebugState.Stopped)
@@ -321,7 +334,7 @@ public sealed partial class ShellHost
         var summary = trace.Summary;
         var filter = new CpuFilter();
         var sb = new StringBuilder();
-        sb.Append(CultureInfo.InvariantCulture, $"CPU profile of {session.ProcessName} (process {session.ProcessId}): {summary.DurationMilliseconds / 1000:0.0} s, {summary.Samples} samples in managed code ({summary.ExternalSamples} in native code or waiting), {summary.Threads.Count(t => t.Samples > 0)} threads with samples.");
+        sb.Append(CultureInfo.InvariantCulture, $"CPU profile of {session.ProcessName} ({(session.ProcessId > 0 ? "process " + session.ProcessId.ToString(CultureInfo.InvariantCulture) : "a compose service")}): {summary.DurationMilliseconds / 1000:0.0} s, {summary.Samples} samples in managed code ({summary.ExternalSamples} in native code or waiting), {summary.Threads.Count(t => t.Samples > 0)} threads with samples.");
         sb.AppendLine().AppendLine("Its report is open in Codalus IDE.");
         var roots = await trace.TopDownAsync(filter, -1, 0, 50, cancellationToken).ConfigureAwait(true);
         var total = roots.Total;
@@ -407,15 +420,33 @@ public sealed partial class ShellHost
             return IdeToolResult.Error("The diagnostics host (codalus-diaghost) isn't installed with this IDE, so it can't take a heap snapshot.");
         }
 
-        if (AgentProgram() is not { } program)
+        var service = Str(args, "service") is { Length: > 0 } named ? named : null;
+        DiagnosticsTarget snapshotTarget;
+        string snapshotName;
+        int snapshotId;
+        var notified = Workbench.Notifications.Items.Count;
+        if (service is not null)
+        {
+            // A compose service in fast mode, through its diagnostic port (M63b).
+            if (ComposeProfileTarget(service) is not { } socket)
+            {
+                return IdeToolResult.Error("The compose service can't be reached" + (NotificationSince(notified) is { } why ? ": " + why : "."));
+            }
+
+            (snapshotTarget, snapshotName, snapshotId) = (DiagnosticsTarget.Socket(socket), service, 0);
+        }
+        else if (AgentProgram() is not { } program)
         {
             return IdeToolResult.Error("No program runs: start it with run_project or debug_start first.");
         }
-
-        if (program.Debugged && Debugger.State == DebugState.Stopped)
+        else if (program.Debugged && Debugger.State == DebugState.Stopped)
         {
             // The snapshot's full garbage collection needs the program's threads to run.
             return IdeToolResult.Error("The program is stopped under the debugger, and a heap snapshot needs it running: debug_continue first.");
+        }
+        else
+        {
+            (snapshotTarget, snapshotName, snapshotId) = (DiagnosticsTarget.Process(program.ProcessId), program.Name, program.ProcessId);
         }
 
         var top = Math.Clamp(Int(args, "top") ?? 20, 1, 100);
@@ -426,11 +457,11 @@ public sealed partial class ShellHost
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromMinutes(5));
             var file = Path.Combine(folder, "heap.nettrace");
-            await Profiling.TakeHeapSnapshotAsync(program.ProcessId, file, timeout.Token).ConfigureAwait(true);
+            await Profiling.TakeHeapSnapshotAsync(snapshotTarget, file, timeout.Token).ConfigureAwait(true);
             var snapshot = await Profiling.OpenHeapSnapshotAsync(file, timeout.Token).ConfigureAwait(true);
             await using (snapshot.ConfigureAwait(true))
             {
-                return new(await HeapSummaryTextAsync(snapshot, program.Name, program.ProcessId, top, timeout.Token).ConfigureAwait(true));
+                return new(await HeapSummaryTextAsync(snapshot, snapshotName, snapshotId, top, timeout.Token).ConfigureAwait(true));
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -449,7 +480,7 @@ public sealed partial class ShellHost
         var summary = snapshot.Summary;
         var types = await snapshot.TypesAsync(null, null, 0, top, cancellationToken).ConfigureAwait(true);
         var sb = new StringBuilder();
-        sb.Append(CultureInfo.InvariantCulture, $"Heap of {name} (process {processId}) after a full garbage collection: {summary.Objects} objects, {HeapBytes(summary.Bytes)}, {summary.Types} types, {summary.Roots} roots.");
+        sb.Append(CultureInfo.InvariantCulture, $"Heap of {name} ({(processId > 0 ? "process " + processId.ToString(CultureInfo.InvariantCulture) : "a compose service")}) after a full garbage collection: {summary.Objects} objects, {HeapBytes(summary.Bytes)}, {summary.Types} types, {summary.Roots} roots.");
         sb.AppendLine().AppendLine().AppendLine("Largest types (the size of their own objects):");
         foreach (var type in types.Types)
         {

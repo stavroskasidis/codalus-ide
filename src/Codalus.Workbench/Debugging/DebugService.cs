@@ -28,6 +28,23 @@ public enum DebugState
 /// </summary>
 public sealed record StopInfo(string Reason, int ThreadId, string? Description, ExceptionInfoResponse? Exception, TimeSpan? Elapsed = null);
 
+/// <summary>
+/// A stop another part of the IDE explains (M64b: the live agent's XAML breakpoints, which break into the debugger
+/// from the app): the reason and description the stop shows, its frames (a frame for the XAML line in front, the
+/// agent's own left out), the one selected, and the exception it reads as, if any.
+/// </summary>
+public sealed record ExplainedStop(string Reason, string Description, IReadOnlyList<StackFrame> Frames, StackFrame? Selected, ExceptionInfoResponse? Exception = null);
+
+/// <summary>Explains stops that came from code of the IDE's own in the program (M64b).</summary>
+public interface IStopExplainer
+{
+    /// <summary>Whether the stopped thread's frames are such a stop (cheap: its frames' names).</summary>
+    bool Claims(IReadOnlyList<StackFrame> frames);
+
+    /// <summary>The stop as it shows, or null to show it as the debugger reported it.</summary>
+    Task<ExplainedStop?> ExplainAsync(IReadOnlyList<StackFrame> frames, CancellationToken cancellationToken);
+}
+
 /// <summary>A module the debuggee loaded (from the adapter's <c>module</c> events).</summary>
 public sealed record DebugModule(string Id, string Name, string? Path, string? SymbolStatus, bool? IsOptimized, bool? IsUserCode, int Order);
 
@@ -220,7 +237,7 @@ public sealed class DebugService : IAsyncDisposable
     /// debugger there (M58b) gets the expression compiler too, asked with this machine's path of the frame's source;
     /// the program's console is the Debug Console (no terminal on that side).
     /// </summary>
-    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken)
+    private async Task<PathMappingDebugAdapter> StartRemoteAdapterAsync(DebugAdapterStartInfo info, SourceMap map, CancellationToken cancellationToken, bool localBuild = false)
     {
         if (!info.IsCodalus)
         {
@@ -231,7 +248,7 @@ public sealed class DebugService : IAsyncDisposable
         var compiler = ExpressionCompiler is { } compile
             ? (Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>)((request, ct) => compile(request with { SourcePath = map.ToLocal(request.SourcePath), ModulePath = null }, ct))
             : null;
-        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map);
+        return new PathMappingDebugAdapter(await DebugAdapter.StartAsync(info, cancellationToken, terminal: null, compiler).ConfigureAwait(false), map) { LocalBuild = localBuild };
     }
 
     /// <summary>
@@ -626,6 +643,48 @@ public sealed class DebugService : IAsyncDisposable
         return (part.Index, Task.Run(() => JoinAddedAsync(session, part, token, cancellationToken), CancellationToken.None));
     }
 
+    /// <summary>
+    /// Ends the program at <paramref name="index"/> of the running multi-program session alone (M63: a compose service
+    /// stopped, detached or restarted while the others run); the session goes on while another program runs. Nothing
+    /// happens when it ended already.
+    /// </summary>
+    public async Task EndProgramAsync(int index)
+    {
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            throw new InvalidOperationException("No multi-program debug session is running.");
+        }
+
+        await session.EndPartAsync(index, _session.Token).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Restarts one program of the running multi-program session (M63): the program at <paramref name="index"/> ends and
+    /// <paramref name="launch"/> joins in its stead, as <see cref="AddLaunch"/> adds it (a new row of
+    /// <see cref="Processes"/>); the session is held open meanwhile, even when that program was its only one.
+    /// </summary>
+    public async Task<(int Index, Task<bool> Joined)> RestartProgramAsync(int index, DebugLaunch launch, CancellationToken cancellationToken)
+    {
+        if (_adapter is not CompoundDebugAdapter { Independent: true } session)
+        {
+            throw new InvalidOperationException("No multi-program debug session is running.");
+        }
+
+        session.Reserve(1);
+        try
+        {
+            await session.EndPartAsync(index, _session.Token).ConfigureAwait(false);
+            var added = AddLaunch(launch, cancellationToken);
+            _ = added.Joined.ContinueWith(_ => session.ReleaseAsync(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+            return added;
+        }
+        catch
+        {
+            await session.ReleaseAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
     /// <summary>An added program's start (<see cref="AddLaunch"/>): false, with the program ended, when it fails.</summary>
     private async Task<bool> JoinAddedAsync(CompoundDebugAdapter session, LaunchPart part, CancellationToken sessionToken, CancellationToken cancellationToken)
     {
@@ -727,7 +786,7 @@ public sealed class DebugService : IAsyncDisposable
                 launch.Name,
                 index,
                 new DebugProcess(launch.Name, null, DebugProcess.Launched, remote.Target),
-                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct).ConfigureAwait(false),
+                async ct => await StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct, remote.LocalBuild).ConfigureAwait(false),
                 adapter => remote.Adapter.IsCodalus
                     ? ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(RemoteCoreClrArguments(remote.Arguments), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                     : ((PathMappingDebugAdapter)adapter).Inner.LaunchAsync(remote.Arguments with { JustMyCode = JustMyCode, EnableStepFiltering = StepFiltering }, DapJsonContext.Default.LaunchArguments, cancellationToken));
@@ -1770,8 +1829,25 @@ public sealed class DebugService : IAsyncDisposable
     /// </summary>
     public Func<CancellationToken, Task<bool>>? BeforeResume { get; set; }
 
-    /// <summary>The session's Codalus debuggers (M54), which take edits while debugging (M55): a compound session can have several.</summary>
-    public IReadOnlyList<DebugAdapter> CodalusAdapters => _adapter is { } adapter ? [.. adapter.Adapters.OfType<DebugAdapter>().Where(a => a.IsCodalus)] : [];
+    /// <summary>
+    /// Files whose breakpoints the debug adapter doesn't bind (M64b: XAML, whose breakpoints the live agent binds):
+    /// they are never sent to it, and their states are someone else's to set.
+    /// </summary>
+    public Func<string, bool>? ExternalBreakpointFiles { get; set; }
+
+    /// <summary>Explains the stops that the IDE's own code in the program makes (M64b: XAML breakpoints).</summary>
+    public IStopExplainer? StopExplainer { get; set; }
+
+    private bool IsExternalBreakpointFile(string path) => ExternalBreakpointFiles is { } external && external(path);
+
+    /// <summary>
+    /// The session's Codalus debuggers (M54), which take edits while debugging (M55): a compound session can have several.
+    /// One on another machine counts when its program runs this machine's build (a compose service in fast mode, M63:
+    /// the build output is mounted into the container, so the modules are the ones the language host compiled).
+    /// </summary>
+    public IReadOnlyList<DebugAdapter> CodalusAdapters => _adapter is { } adapter
+        ? [.. adapter.Adapters.Select(a => a is PathMappingDebugAdapter { LocalBuild: true } remote ? remote.Inner : a).OfType<DebugAdapter>().Where(a => a.IsCodalus)]
+        : [];
 
     private async Task ResumeAsync(Func<IDebugAdapter, Task> resume)
     {
@@ -2321,6 +2397,11 @@ public sealed class DebugService : IAsyncDisposable
 
     private async Task SendBreakpointsAsync(IDebugAdapter adapter, string path, CancellationToken cancellationToken)
     {
+        if (IsExternalBreakpointFile(path))
+        {
+            return; // bound elsewhere (XAML: the live agent)
+        }
+
         var specs = Breakpoints.For(path).Where(b => b.Enabled).ToList();
         // With everything it does: an adapter that applies hit counts, messages, filters and dependencies itself (the
         // Codalus debugger, M58) takes them, and the others drop them (netcoredbg, the browser's) and stop at every hit.
@@ -2501,6 +2582,23 @@ public sealed class DebugService : IAsyncDisposable
         try
         {
             var (threadId, frames) = await StoppedThreadAsync(adapter, stopped).ConfigureAwait(false);
+            if (StopExplainer is { } explainer && explainer.Claims(frames)
+                && await explainer.ExplainAsync(frames, _session.Token).ConfigureAwait(false) is { } explained)
+            {
+                await EndRunToCursorAsync(adapter).ConfigureAwait(false);
+                Threads = await adapter.ThreadsAsync(_session.Token).ConfigureAwait(false);
+                SelectedThreadId = threadId;
+                Frames = explained.Frames;
+                SelectedFrame = explained.Selected ?? explained.Frames.FirstOrDefault(f => f.Source?.Path is not null) ?? (explained.Frames.Count > 0 ? explained.Frames[0] : null);
+                var explainedInfo = new StopInfo(explained.Reason, threadId, explained.Description, explained.Exception, elapsed);
+                CurrentStop = explainedInfo;
+                Values.NextStop();
+                SetState(DebugState.Stopped);
+                Stopped?.Invoke(this, explainedInfo);
+                RefreshPinnedTips();
+                return;
+            }
+
             var atRunTarget = _runTo is { } target && (IsRunToHit(stopped) || frames.Length > 0 && frames[0] is { Source.Path: { } topPath } top
                 && target.Location.Matches(new BreakpointLocation(topPath, top.Line)));
             if (stopped.Reason == "breakpoint" && !atRunTarget && _runTo is { Force: true })
@@ -2592,7 +2690,8 @@ public sealed class DebugService : IAsyncDisposable
             {
             }
 
-            if (!pause || frames.Any(HasSource))
+            // A stop the IDE's code in the program made (a XAML breakpoint's break) is on the thread it names.
+            if (!pause || frames.Any(HasSource) || StopExplainer?.Claims(frames) == true)
             {
                 return (reported, frames);
             }

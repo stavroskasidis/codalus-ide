@@ -6,21 +6,36 @@ using Codalus.Diagnostics.Protocol;
 using Codalus.Rpc;
 using Codalus.Shell.Infrastructure;
 using Codalus.Workbench.Diagnostics;
+using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A .NET process to attach to.</summary>
+/// <summary>A .NET process to attach to, or (M63b) a compose service fast mode runs, reached through its diagnostic port.</summary>
 public sealed record ProcessRowViewModel(DotnetProcess Process)
 {
+    /// <summary>A compose service's row: its name, profiled through its diagnostic port's socket (its process isn't this machine's).</summary>
+    public static ProcessRowViewModel ForComposeService(string service) =>
+        new(new DotnetProcess(0, service, Localizer.Get("msg.profiling.composeServiceDetail", "A compose service in fast mode, reached through its diagnostic port")))
+        {
+            ComposeService = service,
+        };
+
+    /// <summary>The compose service this row is, or null for a process.</summary>
+    public string? ComposeService { get; init; }
+
     public int Id => Process.Id;
 
     public string Name => Process.Name;
 
-    public string Text => string.Create(CultureInfo.InvariantCulture, $"{Process.Name} ({Process.Id})");
+    public string Text => ComposeService is { } service
+        ? Localizer.Format("msg.profiling.composeServiceRow", "{0} (compose service)", service)
+        : string.Create(CultureInfo.InvariantCulture, $"{Process.Name} ({Process.Id})");
 
     public string? Detail => Process.CommandLine;
 
-    public string AccessibleName => $"{Process.Name}, process {Process.Id.ToString(CultureInfo.InvariantCulture)}";
+    public string AccessibleName => ComposeService is { } name
+        ? Localizer.Format("msg.profiling.composeServiceRowName", "{0}, compose service", name)
+        : $"{Process.Name}, process {Process.Id.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>The text an editable combo box shows for the row (Counters' process box, M34h).</summary>
     public override string ToString() => Text;
@@ -28,14 +43,20 @@ public sealed record ProcessRowViewModel(DotnetProcess Process)
     /// <summary>Whether the row matches a filter: a process id, or part of its name or command line.</summary>
     public bool Matches(string filter) =>
         filter.Length == 0
-        || Process.Id.ToString(CultureInfo.InvariantCulture) == filter.Trim()
+        || (ComposeService is null && Process.Id.ToString(CultureInfo.InvariantCulture) == filter.Trim())
         || Process.Name.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase)
         || (Process.CommandLine?.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase) ?? false);
 }
 
-/// <summary>What the Performance Profiler starts: the tools (<see cref="ProfilerTools"/>), and the startup project (launched) or a running process.</summary>
+/// <summary>
+/// What the Performance Profiler starts: the tools (<see cref="ProfilerTools"/>), and the startup project (launched), a
+/// running process, or (M63b) a compose service fast mode runs (<see cref="ComposeService"/>, attached).
+/// </summary>
 public sealed record ProfilerRequest(IReadOnlyList<string> Tools, bool Launch, int? ProcessId)
 {
+    /// <summary>A compose service to profile through its diagnostic port's socket, instead of a process.</summary>
+    public string? ComposeService { get; init; }
+
     public bool Has(string tool) => Tools.Contains(tool);
 }
 
@@ -49,6 +70,9 @@ public interface IProfilerHost
     ProfilingRun? Active { get; }
 
     Task<IReadOnlyList<DotnetProcess>> ProcessesAsync(CancellationToken cancellationToken);
+
+    /// <summary>The compose services fast mode runs that the profiler reaches through their diagnostic port (M63b).</summary>
+    IReadOnlyList<string> ComposeServices();
 
     /// <summary>Starts collecting; null (with the reason in a notification) when it couldn't.</summary>
     Task<ProfilingRun?> StartAsync(ProfilerRequest request);
@@ -89,6 +113,9 @@ public sealed class ProfilingRun
 
     /// <summary>The full dump written, if any (a file name in the session folder).</summary>
     public string? Dump { get; set; }
+
+    /// <summary>The compose service collected from (M63b), through its diagnostic port: <see cref="ProcessId"/> is 0.</summary>
+    public string? ComposeService { get; init; }
 
     public string Target { get; }
 
@@ -387,7 +414,11 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            _allProcesses = [.. (await _host.ProcessesAsync(timeout.Token).ConfigureAwait(true)).Select(p => new ProcessRowViewModel(p))];
+            _allProcesses =
+            [
+                .. _host.ComposeServices().Select(ProcessRowViewModel.ForComposeService),
+                .. (await _host.ProcessesAsync(timeout.Token).ConfigureAwait(true)).Select(p => new ProcessRowViewModel(p)),
+            ];
             ApplyProcessFilter();
             Status = _allProcesses.Count == 0 ? "No .NET processes are running." : null;
         }
@@ -399,14 +430,14 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
 
     private void ApplyProcessFilter()
     {
-        var selected = _selectedProcess?.Id;
+        var selected = _selectedProcess;
         Processes.Clear();
         foreach (var process in _allProcesses.Where(p => p.Matches(_processFilter)))
         {
             Processes.Add(process);
         }
 
-        SelectedProcess = Processes.FirstOrDefault(p => p.Id == selected) ?? (Processes.Count == 1 ? Processes[0] : null);
+        SelectedProcess = Processes.FirstOrDefault(p => selected is not null && p.Id == selected.Id && p.ComposeService == selected.ComposeService) ?? (Processes.Count == 1 ? Processes[0] : null);
     }
 
     public async Task<ProfilingRun?> StartAsync()
@@ -417,7 +448,8 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
         }
 
         Status = _targetIndex == 0 ? "Building and starting the startup project…" : "Attaching…";
-        var run = await _host.StartAsync(new ProfilerRequest(SelectedTools, _targetIndex == 0, _targetIndex == 1 ? _selectedProcess?.Id : null)).ConfigureAwait(true);
+        var service = _targetIndex == 1 ? _selectedProcess?.ComposeService : null;
+        var run = await _host.StartAsync(new ProfilerRequest(SelectedTools, _targetIndex == 0, _targetIndex == 1 && service is null ? _selectedProcess?.Id : null) { ComposeService = service }).ConfigureAwait(true);
         if (run is null)
         {
             Status = "Nothing is being collected.";
@@ -432,7 +464,9 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
     {
         _run = run;
         run.Finished += (_, session) => Ui.Post(() => OnFinished(run, session));
-        Status = $"Collecting from {run.Target} (process {run.ProcessId.ToString(CultureInfo.InvariantCulture)}). Stop Collection to see the report.";
+        Status = run.ComposeService is { } service
+            ? Localizer.Format("msg.profiling.collectingFromComposeService", "Collecting from the compose service {0}, attached through its diagnostic port. Stop Collection to see the report.", service)
+            : $"Collecting from {run.Target} (process {run.ProcessId.ToString(CultureInfo.InvariantCulture)}). Stop Collection to see the report.";
         _clock.Start();
         UpdateElapsed();
         OnPropertyChanged(nameof(IsCollecting));
@@ -935,7 +969,7 @@ public sealed partial class ProfilingReportViewModel : ObservableObject, ILoadab
             var summary = _trace.Summary;
             Summary = string.Create(
                 CultureInfo.CurrentCulture,
-                $"{Session.ProcessName} ({Session.ProcessId}) · {summary.DurationMilliseconds / 1000:0.0} s · {summary.Samples:N0} samples in managed code, {summary.ExternalSamples:N0} in native code or waiting · {summary.Threads.Count} threads · {summary.Functions:N0} functions");
+                $"{Session.ProcessName}{(Session.ProcessId > 0 ? $" ({Session.ProcessId})" : string.Empty)} · {summary.DurationMilliseconds / 1000:0.0} s · {summary.Samples:N0} samples in managed code, {summary.ExternalSamples:N0} in native code or waiting · {summary.Threads.Count} threads · {summary.Functions:N0} functions");
             Threads.Clear();
             Threads.Add(new ThreadChoice(null, "All threads"));
             foreach (var thread in summary.Threads.Where(t => t.Samples > 0))

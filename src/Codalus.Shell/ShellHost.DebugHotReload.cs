@@ -158,7 +158,8 @@ public sealed partial class ShellHost
         var extension = Path.GetExtension(path).ToLowerInvariant();
         if (extension is ".fs" or ".fsx" or ".fsi" or ".xaml" or ".axaml")
         {
-            if (!_debugEditsLanguageSaid)
+            // XAML reaches an app with the live agent through XAML Hot Reload (M64).
+            if (!_debugEditsLanguageSaid && !XamlHotReloadTakes(path))
             {
                 _debugEditsLanguageSaid = true;
                 DebugLog.AppendLine(Localizer.Get("msg.debugHotReload.language", "Hot Reload while debugging applies C#, Visual Basic and Razor edits; F# and XAML edits run after a restart."));

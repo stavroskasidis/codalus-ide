@@ -184,7 +184,7 @@ public sealed partial class ShellHost
                 return ([], $"{engine.Name} doesn't answer: {error} Start Docker or Podman, or choose the engine in the '{ContainerEngine.ToolSetting}' setting.");
             }
 
-            var config = await engine.RunAsync(ComposeCommand(file, "config", "--services"), cancellationToken, workingDirectory: Path.GetDirectoryName(file)).ConfigureAwait(true);
+            var config = await engine.RunAsync(ComposeCommand(file, null, "config", "--services"), cancellationToken, workingDirectory: Path.GetDirectoryName(file)).ConfigureAwait(true);
             if (!config.Succeeded)
             {
                 return ([], $"{engine.Name} compose config failed: {config.Message}");
@@ -259,7 +259,7 @@ public sealed partial class ShellHost
             }
 
             RequireTrustedForAgentActions();
-            if (!await RunComposeAsync(service.File, "up", ["up", "-d", service.Name]).ConfigureAwait(true))
+            if (!await RunComposeAsync(service.File, null, "up", ["up", "-d", service.Name]).ConfigureAwait(true))
             {
                 return IdeToolResult.Error($"Compose up of {service.Name} failed. Its output (Output → Container Tools):\n{ServiceOutputTail(ContainerLog.GetText(), 40)}");
             }

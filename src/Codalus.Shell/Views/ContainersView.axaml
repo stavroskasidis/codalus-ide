@@ -28,6 +28,8 @@
       <Button x:Name="Terminal" Classes="toolbar icon" controls:ButtonIcon.Kind="terminal" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.openTerminal}" AutomationProperties.Name="{l:T containers.openATerminalInTheSelected}" />
       <Button x:Name="Attach" Classes="toolbar icon" controls:ButtonIcon.Kind="debug" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.attachDebugger}" AutomationProperties.Name="{l:T containers.attachTheDebuggerToAProcess}" />
       <Button x:Name="RemoteWindow" Classes="toolbar icon" controls:ButtonIcon.Kind="window-remote" IsEnabled="{Binding HasSelection}" ToolTip.Tip="{l:T containers.openInRemoteWindow}" AutomationProperties.Name="{l:T containers.openTheSelectedContainerInA}" />
+      <Border Classes="toolbarSeparator" />
+      <Button x:Name="ComposeOverride" Classes="toolbar icon" controls:ButtonIcon.Kind="file-code" ToolTip.Tip="{l:T containers.showTheIdesOverride}" AutomationProperties.Name="{l:T containers.showTheIdesComposeOverride}" />
       <TextBlock Classes="muted small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,4,0" Text="{l:T containers.working}" IsVisible="{Binding IsBusy}" />
       <TextBlock Classes="muted small" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="8,0,4,0" Text="{Binding ServerLabel}" IsVisible="{Binding !IsBusy}" AutomationProperties.LiveSetting="Polite" />
     </controls:ToolbarPanel>

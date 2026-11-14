@@ -17,6 +17,8 @@
     <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Themes.Fluent" Version="$(AvaloniaVersion)" />
+    <!-- The shell's headless mode (codalus mcp with a folder, M60b) runs on Avalonia's headless platform, as the UI tests do. -->
+    <PackageVersion Include="Avalonia.Headless" Version="$(AvaloniaVersion)" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="$(AvaloniaVersion)" />
     <!-- Tests only: the previewer's hand-written codec is checked against Avalonia's own transport (M19a). -->
     <PackageVersion Include="Avalonia.Remote.Protocol" Version="$(AvaloniaVersion)" />

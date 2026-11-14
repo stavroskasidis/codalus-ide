@@ -26,7 +26,7 @@ internal interface IClrDebugger
 /// evaluation of C# expressions (<see cref="ClrEvaluator"/>), exceptions (all with a type filter, or unhandled), and
 /// changing primitive values. Handles (frames, variable references) live until the program runs again.
 /// </summary>
-internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
+internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebugger debugger) : IDisposable
 {
     /// <summary>Closes the assemblies read for the debugger attributes, and ends the symbol lookups.</summary>
     public void Dispose()
@@ -774,6 +774,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         if (_process is CorDebugTarget target)
         {
             target.DescribeThreads = ThreadsOfTimedOutEval;
+            target.RunsClassConstructor = RunsClassConstructor;
             target.EvalTimedOut = log.WriteLine;
             if (Trace is { } trace)
             {
@@ -1792,7 +1793,8 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// <summary>
     /// Whether an async step's call suspended (M61), the step being in <paramref name="frame"/>, another method's,
     /// without having reached another line of its own (where it would have stopped). A state machine says so by its
-    /// state (0 and up: waiting at an await; -1: running; -2: done). A runtime-async method has no state to read: it
+    /// state (0 and up: waiting at an await; -1: running, which on another thread than this one's frames means it
+    /// resumed there; -2: done). A runtime-async method has no state to read: it
     /// suspended when its frame is gone from the thread and the thread is in code that isn't the user's (the runtime's
     /// dispatcher) or right after the call in its caller, from a range of IL without a return (a completed method
     /// returns from its closing brace's line; a caller's catch block, after an exception, is at no call).
@@ -1806,7 +1808,11 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 var type = info.DeclaringType(call.Method);
                 if (info.Fields(type).FirstOrDefault(f => f.Name == "<>1__state") is { } state)
                 {
-                    return machine.Field(call.Module, type, state.Token).Primitive is int value && value >= 0;
+                    // Running (-1) but on no frame of this thread: it suspended and has resumed on another thread
+                    // already, which is between its resume and its next line (the await's GetResult). The stepper
+                    // ended in what called it here (Linux CI, run 43568784192: Task.Yield's continuation, at once).
+                    return machine.Field(call.Module, type, state.Token).Primitive is int value
+                        && (value >= 0 || (value == -1 && !SafeFrames(frame.Thread).Any(f => IsCall(f, call))));
                 }
             }
             catch (InvalidOperationException ex)
@@ -2168,10 +2174,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         }
 
         // A state machine's MoveNext is shown by the method it is (its outer type and the name in <Name>d__N).
-        var name = info.MethodDisplayName(frame.MethodToken);
-        return kind == ClrAsyncKind.StateMachine && name.LastIndexOf(".<", StringComparison.Ordinal) is var at and > 0 && name.IndexOf('>', at) is var close and > 0
-            ? name[..at] + "." + name[(at + 2)..close]
-            : name;
+        return kind == ClrAsyncKind.StateMachine ? AsyncMethodName(info, frame.MethodToken) : info.MethodDisplayName(frame.MethodToken);
     }
 
     /// <summary>
@@ -2196,7 +2199,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             _stepHandles.Add(releaseTask);
             var awaiting = Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation
                 ? Types.Field(continuation, "StateMachine")
-                : AwaiterOnAStack(task, frame.Thread);
+                : AwaiterOnAStack(task, frame.Thread, kind == ClrAsyncKind.StateMachine ? SafeValue(() => frame.Argument(0)) : null)?.Machine;
             if (awaiting is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 }
                 || Types.Definition(awaiting.Type) is not { } type || Types.Info(type.Module) is not { } info
                 || info.Methods(type.Token).FirstOrDefault(m => m.Name == "MoveNext") is not { } moveNext
@@ -2239,18 +2242,72 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     /// The state machine awaiting <paramref name="task"/> that hasn't set its continuation on it yet (M61): the call
     /// that started the method goes on on its own thread while the method resumes on another, and the debugger can stop
     /// it between taking the task and handing the task its continuation. It is a state machine's <c>MoveNext</c> on
-    /// another thread's stack, with an awaiter of the task in a field (<c>&lt;&gt;u__1</c>) or a local.
+    /// another thread's stack, with an awaiter of the task in a field (<c>&lt;&gt;u__1</c>) or a local. Or, earlier still
+    /// (M61b), before it has the task at all: that thread is still on its way back from the method that the task is
+    /// <paramref name="machine"/>'s (in its <c>MoveNext</c>, or the kickoff that started it), and the awaiting state
+    /// machine is the first below that, the frames between being code that isn't the user's. Its frame and its thread's
+    /// frames come with it.
     /// </summary>
-    private IClrValue? AwaiterOnAStack(IClrValue task, IClrThread except)
+    private StackCaller? AwaiterOnAStack(IClrValue task, IClrThread except, IClrValue? machine = null)
     {
         foreach (var thread in Process.Threads().Where(t => t.Id != except.Id))
         {
-            foreach (var frame in SafeFrames(thread))
+            var frames = SafeFrames(thread);
+            for (var i = 0; i < frames.Count; i++)
             {
-                if (AwaiterOf(frame, task) is { } machine)
+                if (AwaiterOf(frames[i], task) is { } awaiting)
                 {
-                    return machine;
+                    return new StackCaller(frames[i], awaiting, frames, i);
                 }
+
+                if (machine is { Address: not 0 } started && Starts(frames[i], started) && CallerMachine(frames, i + 1) is { } caller)
+                {
+                    return caller;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="frame"/> runs <paramref name="machine"/> (its <c>MoveNext</c>) or started it (the
+    /// kickoff, a method of the user's holding it in a local), M61b.
+    /// </summary>
+    private bool Starts(IClrFrame frame, IClrValue machine)
+    {
+        if (frame.Module is not { } module || Types.Info(module) is not { } info)
+        {
+            return false;
+        }
+
+        if (info.AsyncKind(frame.MethodToken) == ClrAsyncKind.StateMachine)
+        {
+            return SafeValue(() => frame.Argument(0)) is { Kind: ClrValueKind.Object, IsValueType: false } self && self.Address == machine.Address;
+        }
+
+        return info.MethodHasAttribute(frame.MethodToken, "System.Runtime.CompilerServices.AsyncStateMachineAttribute")
+            && Enumerable.Range(0, 16).Select(slot => SafeValue(() => frame.Local(slot))).TakeWhile(v => v is not null)
+                .Any(v => v is { Kind: ClrValueKind.Object, IsValueType: false } local && local.Address == machine.Address);
+    }
+
+    /// <summary>An awaiting state machine found on a thread's stack (M61, M61b): its frame, and where that is in the stack.</summary>
+    private sealed record StackCaller(IClrFrame Frame, IClrValue Machine, IReadOnlyList<IClrFrame> Stack, int Index);
+
+    /// <summary>The first state machine's frame from <paramref name="from"/> on, past code that isn't the user's only.</summary>
+    private StackCaller? CallerMachine(IReadOnlyList<IClrFrame> frames, int from)
+    {
+        for (var j = from; j < frames.Count; j++)
+        {
+            var frame = frames[j];
+            if (frame.Module is { } module && Types.Info(module)?.AsyncKind(frame.MethodToken) == ClrAsyncKind.StateMachine)
+            {
+                return SafeValue(() => frame.Argument(0)) is { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 } caller ? new StackCaller(frame, caller, frames, j) : null;
+            }
+
+            if (frame.Module is not null && IsUserCode(frame))
+            {
+                return null;
             }
         }
 
@@ -2428,14 +2485,15 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private bool IsExceptionDispatch(IClrFrame frame) =>
         frame.Module is { } module && Types.Info(module)?.MethodDisplayName(frame.MethodToken) is { } name && name.StartsWith("System.Runtime.EH.", StringComparison.Ordinal);
 
-    // TODO(issue): an async call stack (ADR 0100): the calls awaiting a resumed one, from state machines' tasks'
-    // continuations, and from runtime async's once the runtime exposes them.
+    // TODO(issue): runtime async's awaiting calls in the async call stack (ADR 0100), once the runtime exposes a
+    // runtime-async call's continuations through ICorDebug; state machines' are read from their tasks (M61b).
     private StackTraceResponse StackTrace(int threadId, int start, int levels)
     {
         lock (_gate)
         {
             RequireStopped();
-            var frames = VisibleFrames(Thread(threadId));
+            var thread = Thread(threadId);
+            var frames = VisibleFrames(thread);
             foreach (var module in frames.Select(f => f.Module).OfType<IClrModule>().Distinct())
             {
                 EnsureModule(module);
@@ -2479,7 +2537,24 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 });
             }
 
-            return new StackTraceResponse([.. result], frames.Count);
+            // The awaiting callers (M61b), below the thread's own frames: read only when the request reaches the end of
+            // the stack (the Threads window asks for the top frame alone).
+            var total = frames.Count;
+            if (levels <= 0 || start + levels > frames.Count)
+            {
+                var callers = AsyncCallers(thread, frames);
+                total += callers.Count;
+                var skip = Math.Max(0, start - frames.Count);
+                var take = levels > 0 ? Math.Max(0, start + levels - Math.Max(start, frames.Count)) : int.MaxValue;
+                foreach (var caller in callers.Skip(skip).Take(take))
+                {
+                    var id = _nextHandle++;
+                    _frames[id] = caller;
+                    result.Add(AsyncStackFrame(id, caller));
+                }
+            }
+
+            return new StackTraceResponse([.. result], total);
         }
     }
 
@@ -2527,7 +2602,9 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
                 variables.Add((method.ParameterNames[i], Live(() => frame.Argument(index))));
             }
 
-            foreach (var (slot, name) in info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
+            // An awaiting caller of the async call stack (M61b) runs nowhere: it has its state machine's fields, not
+            // MoveNext's locals.
+            foreach (var (slot, name) in frame is AsyncCallerFrame ? [] : info.Locals(frame.MethodToken, frame.IlOffset, frame.CodeVersion))
             {
                 variables.Add((name, Live(() => frame.Local(slot))));
             }
@@ -3820,7 +3897,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         foreach (var thread in Process.Threads())
         {
             var frames = SafeFrames(thread);
-            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture)).Append(':');
+            // Its name says which runtime or library thread a native-only one is (the finalizer, a pool's worker): what the
+            // evaluation may wait on when no frame says (DebugDepthTests' image visualizer, CI run 43587457886).
+            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture))
+                .Append(" (").Append(ThreadName(thread)).Append(thread.Frozen ? ", frozen" : "").Append("):");
             foreach (var frame in frames.Take(TimedOutEvalFrames))
             {
                 text.AppendLine().Append("    ").Append(FrameText(frame));
@@ -3843,19 +3923,32 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
             return frame.Description ?? "[?]";
         }
 
-        var token = "0x" + frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture);
-        string name;
+        var name = MethodName(module, frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] 0x{frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture)}";
+        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
+    }
+
+    /// <summary>A method as a frame shows it (<c>Ns.Type.Method</c>), or null when its module's metadata can't say.</summary>
+    private string? MethodName(IClrModule module, int methodToken)
+    {
         try
         {
-            name = Types.Info(module)?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] {token}";
+            return Types.Info(module)?.MethodDisplayName(methodToken);
         }
         catch (Exception ex) when (ex is InvalidOperationException or BadImageFormatException or ArgumentException)
         {
-            name = $"[{Path.GetFileName(module.Path)}] {token}";
+            return null;
         }
-
-        return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
     }
+
+    /// <summary>
+    /// Whether a thread is in a class constructor: a <c>.cctor</c> frame, or the runtime's helpers that run one. A
+    /// func-eval that needs the class waits on it (<see cref="CorDebugTarget.RunsClassConstructor"/>).
+    /// </summary>
+    private bool RunsClassConstructor(IClrThread thread) =>
+        SafeFrames(thread).Any(frame => frame.Module is { } module && MethodName(module, frame.MethodToken) is { } name
+            && (name.EndsWith("..cctor", StringComparison.Ordinal)
+                || name.StartsWith("System.Runtime.CompilerServices.InitHelpers.", StringComparison.Ordinal)
+                || name.StartsWith("System.Runtime.CompilerServices.ClassConstructorRunner.", StringComparison.Ordinal)));
 
     private static IReadOnlyList<IClrFrame> SafeFrames(IClrThread thread)
     {
@@ -3872,6 +3965,7 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
     private void ClearHandles()
     {
         _frames.Clear();
+        ClearAsyncCallers();
         _children.Clear();
         _childValues.Clear();
         _pages.Clear();

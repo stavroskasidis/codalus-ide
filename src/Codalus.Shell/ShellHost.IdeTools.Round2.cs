@@ -44,6 +44,11 @@ public sealed partial class ShellHost
             return await ShellToolAsync(tool, args, root, cancellationToken).ConfigureAwait(true);
         }
 
+        if (In(IdeDesktopAppTools.Tools, tool))
+        {
+            return await DesktopAppToolAsync(tool, args, cancellationToken).ConfigureAwait(true);
+        }
+
         return null;
     }
 }

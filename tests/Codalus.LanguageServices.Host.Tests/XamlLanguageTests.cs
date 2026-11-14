@@ -8,6 +8,14 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
     protected override (string Sample, string Solution, int Projects) Sample => ("Avalonia", "Avalonia.slnx", 2);
 
     /// <summary>
+    /// A stand-in for CommunityToolkit.Mvvm's command attribute (M64's generate-from-use offers a <c>[RelayCommand]</c>
+    /// method when the project has it; the tests don't restore the package, and the generator finds it by name).
+    /// </summary>
+    protected override void Prepare() =>
+        System.IO.File.WriteAllText(File("AvaloniaApp", "MvvmToolkitStandIn.cs"),
+            "namespace CommunityToolkit.Mvvm.Input;\n\n[System.AttributeUsage(System.AttributeTargets.Method)]\npublic sealed class RelayCommandAttribute : System.Attribute\n{\n}\n");
+
+    /// <summary>
     /// Both projects' design-time builds after their restore: Avalonia's references and its targets' additional files
     /// (a design-time build that ran before the restore finished has neither, and a later one replaces it).
     /// </summary>
@@ -60,7 +68,7 @@ public sealed class AvaloniaLanguageFixture : LanguageFixture
 /// live diagnostics with no false alarms on the fixture, hover, Go to Definition, x:Name rename into the code-behind,
 /// formatting and the logical tree the previewer selects with.
 /// </summary>
-public sealed class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClassFixture<AvaloniaLanguageFixture>
+public sealed partial class XamlLanguageTests(AvaloniaLanguageFixture avalonia) : IClassFixture<AvaloniaLanguageFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

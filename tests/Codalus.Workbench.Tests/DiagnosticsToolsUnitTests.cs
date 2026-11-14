@@ -487,4 +487,43 @@ public sealed class DiagnosticsToolsUnitTests
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    /// <summary>
+    /// M63b: a diagnostic port's socket in a folder too deep for a socket's path (108 bytes on Linux) is bound through
+    /// a link to its folder in the temp folder, the same link each time; a short one is bound where it is.
+    /// </summary>
+    [Fact]
+    public void A_socket_path_too_long_for_a_socket_is_bound_through_a_link_to_its_folder()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A diagnostic port's socket is a Linux and macOS target.");
+        var root = Directory.CreateTempSubdirectory("codalus-bind-").FullName;
+        string? link = null;
+        try
+        {
+            var shortPort = Path.Combine(root, "a.sock");
+            if (System.Text.Encoding.UTF8.GetByteCount(shortPort) <= Codalus.Diagnostics.Host.Sessions.PortConnections.MaxSocketPath)
+            {
+                Assert.Equal(shortPort, Codalus.Diagnostics.Host.Sessions.PortConnections.BindPath(shortPort));
+            }
+
+            var folder = Directory.CreateDirectory(Path.Combine(root, new string('x', 80), "diag")).FullName;
+            var port = Path.Combine(folder, "back.sock");
+            var bound = Codalus.Diagnostics.Host.Sessions.PortConnections.BindPath(port);
+            Assert.NotEqual(port, bound);
+            Assert.Equal("back.sock", Path.GetFileName(bound));
+            Assert.True(System.Text.Encoding.UTF8.GetByteCount(bound) <= Codalus.Diagnostics.Host.Sessions.PortConnections.MaxSocketPath, bound);
+            link = Path.GetDirectoryName(bound)!;
+            Assert.Equal(folder, new DirectoryInfo(link).LinkTarget);
+            Assert.Equal(bound, Codalus.Diagnostics.Host.Sessions.PortConnections.BindPath(port)); // the same link again
+        }
+        finally
+        {
+            if (link is not null)
+            {
+                Directory.Delete(link); // the link, not its folder
+            }
+
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

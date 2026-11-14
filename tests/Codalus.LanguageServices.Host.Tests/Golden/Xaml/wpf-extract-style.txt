@@ -1,0 +1,9 @@
+=== WpfApp/MainWindow.xaml
+@@ 20
++         <Style x:Key="TextBoxStyle" TargetType="TextBox">
++             <Setter Property="Text" Value="{Binding NewTitle, UpdateSourceTrigger=PropertyChanged}" />
++             <Setter Property="Margin" Value="0,0,8,0" />
++         </Style>
+@@ 29
+-             <TextBox x:Name="NewTitleBox" Text="{Binding NewTitle, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" />
++             <TextBox x:Name="NewTitleBox" Style="{StaticResource TextBoxStyle}" />

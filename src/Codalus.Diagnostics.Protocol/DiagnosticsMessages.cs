@@ -9,7 +9,8 @@ namespace Codalus.Diagnostics.Protocol;
 /// </summary>
 public static class DiagnosticsMethods
 {
-    public const string ProtocolVersion = "1";
+    /// <summary>2 (M63b): a session's target can be a diagnostic port's socket (<c>diagnosticPort</c>) instead of a process id.</summary>
+    public const string ProtocolVersion = "2";
 
     public const string Initialize = "initialize";
     public const string Shutdown = "shutdown";
@@ -203,7 +204,11 @@ public sealed record ProcessesResult(IReadOnlyList<DotnetProcess> Processes);
 /// <summary>A counter provider: an EventSource's counters or a meter; <c>Counters</c> limits it to these names (null: all).</summary>
 public sealed record CounterProvider(string Name, string Kind, IReadOnlyList<string>? Counters = null);
 
-public sealed record CountersStartParams(string Session, int ProcessId, IReadOnlyList<CounterProvider> Providers, double IntervalSeconds, bool RuntimeEvents);
+/// <summary>
+/// Starts counters on a process: by <c>ProcessId</c>, or (M63b) by <c>DiagnosticPort</c>, the path of a Unix socket the
+/// host listens on for a runtime started with <c>DOTNET_DiagnosticPorts</c> naming it (a compose service in a container).
+/// </summary>
+public sealed record CountersStartParams(string Session, int ProcessId, IReadOnlyList<CounterProvider> Providers, double IntervalSeconds, bool RuntimeEvents, string? DiagnosticPort = null);
 
 public sealed record SessionStartResult(string ProcessName);
 
@@ -225,8 +230,9 @@ public sealed record SessionEndedParams(string Session, string? Error);
 /// <summary>
 /// Records a trace to <c>OutputPath</c>: the <c>Tools</c> named (<see cref="TraceTools"/>; null: CPU only) with the
 /// runtime's method events for names, plus any other EventSource or EventPipe <c>Providers</c> (the events viewer).
+/// <c>DiagnosticPort</c> targets a runtime by a socket instead of <c>ProcessId</c> (<see cref="CountersStartParams"/>).
 /// </summary>
-public sealed record TraceStartParams(string Session, int ProcessId, string OutputPath, IReadOnlyList<string>? Tools = null, IReadOnlyList<TraceProvider>? Providers = null);
+public sealed record TraceStartParams(string Session, int ProcessId, string OutputPath, IReadOnlyList<string>? Tools = null, IReadOnlyList<TraceProvider>? Providers = null, string? DiagnosticPort = null);
 
 /// <summary>An extra provider for a trace: an EventSource or EventPipe provider by name, its keywords, level (0–5) and arguments.</summary>
 public sealed record TraceProvider(string Name, long Keywords = -1, int Level = 5, IReadOnlyDictionary<string, string>? Arguments = null);
@@ -432,7 +438,7 @@ public sealed record ExportResult(string Path, long Bytes);
 // ------------------------------------------------------------------ memory
 
 /// <summary>A GC heap snapshot of a process (the way dotnet-gcdump takes one: an induced full GC that reports the heap), recorded to <c>OutputPath</c>.</summary>
-public sealed record HeapSnapshotParams(int ProcessId, string OutputPath);
+public sealed record HeapSnapshotParams(int ProcessId, string OutputPath, string? DiagnosticPort = null);
 
 public sealed record HeapSnapshotResult(string Path, long Bytes);
 

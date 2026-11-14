@@ -63,6 +63,8 @@
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
     <PackageReference Include="Avalonia.Themes.Fluent" />
+    <!-- The headless mode (codalus mcp with a folder, M60b): the shell without a window, on the platform the UI tests use. -->
+    <PackageReference Include="Avalonia.Headless" />
     <PackageReference Include="Avalonia.AvaloniaEdit" />
     <PackageReference Include="AvaloniaEdit.TextMate" />
     <!-- Referenced directly to take a newer version than AvaloniaEdit.TextMate's (Directory.Packages.props). -->

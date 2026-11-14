@@ -56,6 +56,7 @@ public static class LoginShellPath
                 start.ArgumentList.Add(argument);
             }
 
+            var waited = Stopwatch.StartNew();
             using var process = Process.Start(start);
             if (process is null)
             {
@@ -73,8 +74,11 @@ public static class LoginShellPath
 
             // A background job the profile started can hold the output open after the shell exited: its end would never
             // come, and the IDE's start waited for it (M56: the environment's gate does). What it printed then can't be
-            // told complete, as for a shell that took too long.
-            if (Task.WaitAny([output], TimeSpan.FromSeconds(1)) < 0)
+            // told complete, as for a shell that took too long. The output's end gets the rest of the timeout, at least a
+            // second: a fixed second wasn't enough for the read's completion on a loaded machine's thread pool, and the
+            // IDE started without the login shell's PATH (Linux CI, run 43569246932).
+            var rest = timeout - waited.Elapsed;
+            if (Task.WaitAny([output], rest > TimeSpan.FromSeconds(1) ? rest : TimeSpan.FromSeconds(1)) < 0)
             {
                 return null;
             }

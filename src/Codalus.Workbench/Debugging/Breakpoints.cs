@@ -367,6 +367,12 @@ public sealed class BreakpointStore
         FunctionsChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>
+    /// What binds a file's breakpoints outside the debug adapter (M64b: XAML's, the live agent) said about them; the
+    /// session's end clears them as it does the adapter's.
+    /// </summary>
+    public void SetExternalStates(string path, IReadOnlyList<(int Line, BreakpointState State)> states) => SetStates(path, states);
+
     internal void SetStates(string path, IReadOnlyList<(int Line, BreakpointState State)> states)
     {
         lock (_gate)

@@ -30,7 +30,7 @@ public sealed record AspireResourceRow(AspireResource Resource)
 /// state and endpoints, the selected one's console output, environment and properties, its commands (start, stop,
 /// restart), and the dashboard. The data comes from the AppHost's resource service, the one the dashboard reads.
 /// </summary>
-public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDisposable
+public sealed class AspireViewModel(Action<Uri> browse, Func<AspireResource, Task>? debug = null) : ObservableObject, IDisposable
 {
     public const string ToolWindowId = "aspire";
 
@@ -423,6 +423,12 @@ public sealed class AspireViewModel(Action<Uri> browse) : ObservableObject, IDis
     public Task<string?> StopAsync() => ExecuteAsync("resource-stop");
 
     public Task<string?> RestartAsync() => ExecuteAsync("resource-restart");
+
+    /// <summary>
+    /// Debugs the selected project resource alone (M63): the debugger attaches to the program the IDE started for it
+    /// while the AppHost runs without the debugger; under F5 every project is debugged already.
+    /// </summary>
+    public Task DebugAsync() => _selected is { } row && debug is not null ? debug(row.Resource) : Task.CompletedTask;
 
     public void OpenDashboard()
     {

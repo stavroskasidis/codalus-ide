@@ -4,6 +4,7 @@
 - **Date:** 2026-10-16
 - **Deciders:** maintainer
 - **Builds on:** [ADR 0048](0048-avalonia-previewer-hosting.md) (the Avalonia previewer), [ADR 0052](0052-live-visual-tree.md) (the live tools), [ADR 0071](0071-wpf-xaml-language-service.md) (WPF XAML)
+- **Extended by:** [ADR 0103](0103-xaml-depth.md) (the WPF agent reloads XAML and reports failed bindings, M64)
 
 ## Context
 

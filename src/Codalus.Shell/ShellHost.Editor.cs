@@ -726,6 +726,7 @@ public sealed partial class ShellHost : IEditorServices
         model.Saved += (_, _) => Ui.Post(() => RunCustomToolOnSave(model.Path));
         model.Saved += (_, _) => Ui.Post(() => OnSavedForPreview(model.Path));
         model.Saved += (_, _) => Ui.Post(() => OnSavedForDebugEdits(model.Path));
+        model.Saved += (_, _) => Ui.Post(() => OnSavedForXamlHotReload(model.Path));
         model.ConflictDetected += (_, _) => _ = ResolveConflictAsync(model);
         TrackForDiffs(model);
         if (model.LanguageId is { } languageId && !model.IsLarge)

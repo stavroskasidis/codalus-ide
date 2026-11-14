@@ -1176,7 +1176,7 @@ internal sealed class CorDebugTarget : IClrProcess
             bool completed;
             try
             {
-                if (!completion.Task.Wait(timeout))
+                if (!WaitForEval(completion, thread, timeout))
                 {
                     var threads = ThreadsOfTimedOutEval();
                     var abort = TryAbort(eval, completion);
@@ -1214,6 +1214,92 @@ internal sealed class CorDebugTarget : IClrProcess
                 }
 
                 FreezeAgain();
+            }
+        }
+    }
+
+    /// <summary>How long a func-eval runs before the debugger looks for a suspended thread it may be waiting on.</summary>
+    internal static readonly TimeSpan ClassConstructorGrace = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>
+    /// Whether a thread is running a class constructor (a <c>.cctor</c> frame, or the runtime's helper that calls one):
+    /// a func-eval that needs that class waits for it, which never ends while the thread is suspended.
+    /// </summary>
+    public Func<IClrThread, bool>? RunsClassConstructor { get; set; }
+
+    /// <summary>
+    /// Waits for a func-eval up to <paramref name="timeout"/>. One that hasn't returned after <see cref="ClassConstructorGrace"/>
+    /// may be waiting for a class constructor that a suspended thread is running (a type's initialization lock): those
+    /// threads run too until it returns, as the classic IDE lets every thread run when an evaluation needs it. A breakpoint
+    /// or exception they reach meanwhile is not a stop (<see cref="Dispatch"/>).
+    /// </summary>
+    private bool WaitForEval(TaskCompletionSource<bool> completion, IClrThread thread, TimeSpan timeout)
+    {
+        var grace = timeout < ClassConstructorGrace ? timeout : ClassConstructorGrace;
+        if (completion.Task.Wait(grace))
+        {
+            return true;
+        }
+
+        ReleaseClassConstructors(thread);
+        var rest = timeout - System.Diagnostics.Stopwatch.GetElapsedTime(_evalStarted);
+        return rest > TimeSpan.Zero ? completion.Task.Wait(rest) : completion.Task.IsCompleted;
+    }
+
+    /// <summary>Stops the program, lets the suspended threads that run a class constructor run, and continues the func-eval.</summary>
+    private void ReleaseClassConstructors(IClrThread evaluating)
+    {
+        if (RunsClassConstructor is not { } runs)
+        {
+            return;
+        }
+
+        List<CorThread> threads;
+        lock (_gate)
+        {
+            threads = [.. _threads.Values.Where(t => t.Id != evaluating.Id && !_frozen.Contains(t.Id))];
+        }
+
+        try
+        {
+            Translate(() => Process.Stop(0));
+        }
+        catch (ClrException)
+        {
+            return;
+        }
+
+        var released = new List<int>();
+        try
+        {
+            foreach (var other in threads)
+            {
+                try
+                {
+                    if (runs(other))
+                    {
+                        other.Raw.DebugState = CorDebugThreadState.THREAD_RUN;
+                        released.Add(other.Id);
+                    }
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            Generation++;
+            Continuing?.Invoke(released.Count == 0
+                ? "[clr] continue (a func-eval; no suspended thread runs a class constructor)"
+                : "[clr] continue (a func-eval; thread " + string.Join(", ", released.Select(id => id.ToString(CultureInfo.InvariantCulture))) + " runs a class constructor, so it runs too)");
+            try
+            {
+                Translate(() => Process.Continue(false));
+            }
+            catch (ClrException)
+            {
+                // The process is ending: the wait says so.
             }
         }
     }

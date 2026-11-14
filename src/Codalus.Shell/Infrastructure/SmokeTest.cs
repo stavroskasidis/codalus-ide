@@ -756,6 +756,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // ADR 0095: AI Console, with a stand-in for the agent's CLI on the shell's agent search path. No network, no agent.
         await StepAsync("ai.console", "ADR 0095", "AI Console runs a connected agent's own CLI in the bottom group: its label, the IDE's tools on a pipe of its own, a reference typed into its prompt, and Close ending it", AiConsoleStepAsync, "projects.open").ConfigureAwait(true);
 
+        // M60b: this app as an agent starts it, headless (codalus mcp --folder) on the trusted solution: no window, no agent.
+        await StepAsync("ai.headless", "M60b", "codalus mcp --folder: this app with no window on the trusted solution lists the IDE's tools, answers a read, runs an action under allow, refuses an untrusted folder, and ends when its input closes", HeadlessMcpStepAsync, "projects.open").ConfigureAwait(true);
+
         // M8: testing, on part of samples/Testing (xUnit on VSTest and on Microsoft.Testing.Platform).
         await StepAsync("testing.discover", "M8", "The Test Explorer lists tests from source; the solution closed for it keeps its session in .codalus/state", async () =>
         {

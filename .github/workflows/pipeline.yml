@@ -2,8 +2,10 @@ name: Pipeline
 
 # The one pipeline for develop, master and pull requests (M31, ADR 0028, D20/D21). Every run builds, tests and
 # smoke-tests on Windows, macOS and Linux (CI), and a branch's run releases what passed:
-# - develop: a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub prerelease with the commits since the
-#   previous nightly as its notes. The newest 14 are kept.
+# - develop: once a night (schedule, 00:17 UTC) a nightly, v<VERSION>-nightly.<date>.<run>, published as a GitHub
+#   prerelease with the commits since the previous nightly as its notes, unless develop's head has one already (nothing
+#   changed). The newest 14 are kept. A push to develop starts no run: its pull request ran CI, and the nightly tests
+#   everything on every OS (the maintainer's decisions, 2026-11-14, ADR 0028).
 # - master: a stable release, v<VERSION> (every merge of a release/X.Y.Z branch, and every hotfix; the run fails if that
 #   tag exists already), the latest release, with notes from the commits since the previous stable release. Afterwards the
 #   site with the apt and dnf repositories is deployed, the AUR package and the plugin SDK's NuGet packages pushed, and
@@ -14,17 +16,19 @@ name: Pipeline
 # benchmarks and the apt, dnf and zypper repositories built and installed from with the site exported (site,
 # pages.yml with deploy: false). Only when all of them pass is anything published; otherwise the tag goes.
 # A run stops at its first failed job, which cancels the rest (ADR 0028, 2026-10-20). A release/X.Y.Z → master pull request
-# skips test and smoke when develop's own run passed on its head (gate). A release is cut from develop as release/X.Y.Z and
+# skips test and smoke when develop's own run (a nightly) passed on its head (gate). A release is cut from develop as release/X.Y.Z and
 # merged into master by pull request, so develop stays open meanwhile (ADR 0028, 2026-10-21; docs/release/releasing.md).
 # A pull request passes when its one ci job does, the check the branch ruleset requires (ADR 0028, 2026-10-26). A pull
 # request tests what its files need (gate, eng/ci-scope.sh; ADR 0028, 2026-11-13): Linux x64 (test shards and smoke) for
 # most, every OS for the platform paths of eng/ci-platform-paths.txt or the ci:full label, one Linux job of a few test
-# projects for the areas of eng/ci-isolated-paths.txt, and nothing for docs only. develop and master test everything.
+# projects for the areas of eng/ci-isolated-paths.txt, and nothing for docs only. develop's nightly and master test
+# everything.
 # Manual dispatch runs the branch's pipeline as a dry run by default (everything built and tested, nothing published).
 # The target framework matrix (M33) is compat.yml, by hand.
 on:
+  # master only: a push to develop is tested by its pull request, and on every OS by the nightly.
   push:
-    branches: [develop, master]
+    branches: [master]
     paths-ignore:
       - "docs/**"
       - "**/*.md"
@@ -36,6 +40,10 @@ on:
     # labeled: adding ci:full starts a run on every OS, replacing the one in progress (gate reads the labels when it
     # runs). Any other label starts the same run again: the required ci check is the newest run's.
     types: [opened, synchronize, reopened, labeled]
+  # The nightly: GitHub runs a schedule on the default branch, develop, at its head. 00:17 UTC is 02:17 in Athens in
+  # winter, 03:17 in summer; a scheduled run can start late, and never during an outage.
+  schedule:
+    - cron: "17 0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -52,8 +60,8 @@ permissions:
 
 concurrency:
   group: pipeline-${{ github.ref }}
-  # A newer push to develop (or a pull request) replaces the run in progress, and an unpublished nightly's tag goes with
-  # it (untag); a stable release always runs to the end.
+  # A newer run on develop (a dispatch) or a pull request replaces the run in progress, and an unpublished nightly's tag
+  # goes with it (untag); a stable release always runs to the end.
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 # The tools' telemetry opt-outs (M59, eng/telemetry-optout.sh): .github/actions/setup fails a job without them.
@@ -65,13 +73,15 @@ env:
   DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
 
 jobs:
-  # What this run releases: a nightly from develop, a stable release from master, nothing from anywhere else.
+  # What this run releases: a nightly from develop's schedule (or a dispatch on develop), a stable release from master,
+  # nothing from anywhere else.
   plan:
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release's tag
     outputs:
-      kind: ${{ steps.kind.outputs.kind }}
+      kind: ${{ steps.unchanged.outputs.skip != 'true' && steps.kind.outputs.kind || '' }}
+      unchanged: ${{ steps.unchanged.outputs.skip }}
       version: ${{ steps.plan.outputs.version }}
       previous: ${{ steps.plan.outputs.previous }}
       publish: ${{ steps.plan.outputs.publish }}
@@ -80,21 +90,30 @@ jobs:
         shell: bash
         run: |
           kind=""
-          if [[ "$GITHUB_EVENT_NAME" != pull_request ]]; then
-            case "$GITHUB_REF" in
-              refs/heads/master) kind=stable ;;
-              refs/heads/develop) kind=nightly ;;
-            esac
-          fi
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF" in
+            push:refs/heads/master | workflow_dispatch:refs/heads/master) kind=stable ;;
+            schedule:refs/heads/develop | workflow_dispatch:refs/heads/develop) kind=nightly ;;
+          esac
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
       - if: steps.kind.outputs.kind != ''
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - if: steps.kind.outputs.kind != ''
+      # A night with no change to develop makes no nightly: its head has one already. The run then does nothing (gate):
+      # the nightly's run tested that commit.
+      - id: unchanged
+        if: github.event_name == 'schedule' && steps.kind.outputs.kind == 'nightly'
+        shell: bash
+        run: |
+          tag="$(git tag --points-at HEAD --list 'v*-nightly.*' | head -n 1)"
+          if [[ -n "$tag" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "No nightly tonight: develop's head ${GITHUB_SHA::7} is $tag already." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         uses: ./.github/actions/setup
       - id: plan
-        if: steps.kind.outputs.kind != ''
+        if: steps.kind.outputs.kind != '' && steps.unchanged.outputs.skip != 'true'
         shell: bash
         env:
           KIND: ${{ steps.kind.outputs.kind }}
@@ -126,22 +145,24 @@ jobs:
         run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v${{ steps.plan.outputs.version }}" -f sha="$GITHUB_SHA" > /dev/null
 
   # What a pull request tests, from the files it changes (eng/ci-scope.sh; the maintainer's decision, 2026-11-13, ADR
-  # 0028): every OS (as develop's and master's runs) for a file under a path of eng/ci-platform-paths.txt, with the
+  # 0028): every OS (as develop's nightly and master's runs) for a file under a path of eng/ci-platform-paths.txt, with the
   # ci:full label, or into master (a release, a hotfix); only the Linux x64 test shards and smoke otherwise; one Linux
   # job of the test projects of the areas in eng/ci-isolated-paths.txt (and the tests that scan every file) when nothing
   # else changes; and no test or smoke for docs/** and *.md files only: pushes of those start no run at all
-  # (paths-ignore), but a pull request runs so that it reports ci. A push or dispatch tests everything.
-  # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run, on a commit that has
-  # all of master, skips test and smoke: the release run on master runs them again before anything is published (the
-  # maintainer's decision, 2026-10-20: the same tree tested twice held up every release by about 50 minutes). A release
-  # branch cut from a develop commit whose run passed qualifies; once a fix is merged into it, its head is new and is tested.
+  # (paths-ignore), but a pull request runs so that it reports ci. A push, the nightly or a dispatch tests everything.
+  # A release/X.Y.Z → master pull request (a release) whose head already passed develop's own run (the nightly or a
+  # dispatch), on a commit that has all of master, skips test and smoke: the release run on master runs them again before
+  # anything is published (the maintainer's decision, 2026-10-20: the same tree tested twice held up every release by
+  # about 50 minutes). A release branch cut from a develop commit whose nightly passed qualifies (cut it from the newest
+  # nightly's commit to skip them); once a fix is merged into it, its head is new and is tested.
   gate:
+    needs: plan
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: read
     outputs:
-      skip: ${{ steps.scope.outputs.skip || steps.check.outputs.skip }}
+      skip: ${{ needs.plan.outputs.unchanged || steps.scope.outputs.skip || steps.check.outputs.skip }}
       scope: ${{ steps.scope.outputs.scope }}
       projects: ${{ steps.scope.outputs.projects }}
       test-matrix: ${{ steps.scope.outputs.test-matrix }}
@@ -235,7 +256,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          passed="$(gh run list -R "$GITHUB_REPOSITORY" --workflow pipeline.yml --branch develop --event push --commit "$HEAD_SHA" --status success --json databaseId --jq length)"
+          passed="$(gh run list -R "$GITHUB_REPOSITORY" --workflow pipeline.yml --branch develop --commit "$HEAD_SHA" --status success --json databaseId --jq length)"
           behind="$(gh api "repos/$GITHUB_REPOSITORY/compare/master...$HEAD_SHA" --jq .behind_by)"
           if [[ "$passed" -gt 0 && "$behind" == 0 ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -286,9 +307,9 @@ jobs:
         run: dotnet restore Codalus.slnx
       - if: matrix.shard != 'projects'
         run: dotnet build Codalus.slnx -c Release --no-restore
-      - name: Save the NuGet cache (develop, one job per OS)
+      - name: Save the NuGet cache (develop's nightly, one job per OS)
         # The job with the others shard restores every project, as the rest do. Pull requests only restore what develop saved.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.nuget/packages

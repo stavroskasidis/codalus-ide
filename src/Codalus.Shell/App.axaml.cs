@@ -16,7 +16,7 @@ public sealed class App : Application
     /// </summary>
     internal static Task<bool> LoginShellImport { get; set; } = Task.FromResult(false);
 
-    public ShellHost? Shell { get; private set; }
+    public ShellHost? Shell { get; internal set; }
 
     public override void RegisterServices()
     {

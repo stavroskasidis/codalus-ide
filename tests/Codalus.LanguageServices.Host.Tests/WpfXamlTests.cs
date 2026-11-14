@@ -54,7 +54,7 @@ public sealed class WpfLanguageFixture : LanguageFixture
 /// <c>d:DataContext</c> (warnings: WPF's bindings aren't compiled), hover, Go to Definition, <c>x:Name</c> rename and
 /// formatting. Roslyn only, so it runs on every OS.
 /// </summary>
-public sealed class WpfXamlTests(WpfLanguageFixture wpf) : IClassFixture<WpfLanguageFixture>
+public sealed partial class WpfXamlTests(WpfLanguageFixture wpf) : IClassFixture<WpfLanguageFixture>
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 

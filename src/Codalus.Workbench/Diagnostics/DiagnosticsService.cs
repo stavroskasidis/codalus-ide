@@ -78,15 +78,19 @@ public sealed class DiagnosticsService : IAsyncDisposable
     }
 
     /// <summary>Starts a counters session on a process; its values arrive on the monitor.</summary>
-    public async Task<CounterMonitor> StartCountersAsync(int processId, IReadOnlyList<CounterProvider> providers, double intervalSeconds, bool runtimeEvents, CancellationToken cancellationToken)
+    public Task<CounterMonitor> StartCountersAsync(int processId, IReadOnlyList<CounterProvider> providers, double intervalSeconds, bool runtimeEvents, CancellationToken cancellationToken) =>
+        StartCountersAsync(DiagnosticsTarget.Process(processId), providers, intervalSeconds, runtimeEvents, cancellationToken);
+
+    /// <summary>Starts a counters session on a process or a diagnostic port's runtime (M63b); its values arrive on the monitor.</summary>
+    public async Task<CounterMonitor> StartCountersAsync(DiagnosticsTarget target, IReadOnlyList<CounterProvider> providers, double intervalSeconds, bool runtimeEvents, CancellationToken cancellationToken)
     {
         var host = await HostAsync(cancellationToken).ConfigureAwait(false);
         var id = "counters-" + Guid.NewGuid().ToString("N");
-        var monitor = new CounterMonitor(this, id, processId, providers, intervalSeconds);
+        var monitor = new CounterMonitor(this, id, target.ProcessId, providers, intervalSeconds);
         _monitors[id] = monitor;
         try
         {
-            var started = await host.InvokeAsync(DiagnosticsMethods.CountersStart, new CountersStartParams(id, processId, providers, intervalSeconds, runtimeEvents), Json.CountersStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
+            var started = await host.InvokeAsync(DiagnosticsMethods.CountersStart, new CountersStartParams(id, target.ProcessId, providers, intervalSeconds, runtimeEvents, target.Port), Json.CountersStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
             monitor.ProcessName = started.ProcessName;
             return monitor;
         }
@@ -128,15 +132,19 @@ public sealed class DiagnosticsService : IAsyncDisposable
     /// Starts recording a trace of a process into <paramref name="outputPath"/>: the <paramref name="tools"/>
     /// (<see cref="TraceTools"/>; null: CPU only) and any extra <paramref name="providers"/>.
     /// </summary>
-    public async Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, IReadOnlyList<string>? tools, IReadOnlyList<TraceProvider>? providers, CancellationToken cancellationToken)
+    public Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, IReadOnlyList<string>? tools, IReadOnlyList<TraceProvider>? providers, CancellationToken cancellationToken) =>
+        StartTraceAsync(DiagnosticsTarget.Process(processId), outputPath, tools, providers, cancellationToken);
+
+    /// <summary>As <see cref="StartTraceAsync(int, string, IReadOnlyList{string}?, IReadOnlyList{TraceProvider}?, CancellationToken)"/>, of a process or a diagnostic port's runtime (M63b).</summary>
+    public async Task<TraceRecordingHandle> StartTraceAsync(DiagnosticsTarget target, string outputPath, IReadOnlyList<string>? tools, IReadOnlyList<TraceProvider>? providers, CancellationToken cancellationToken)
     {
         var host = await HostAsync(cancellationToken).ConfigureAwait(false);
         var id = "trace-" + Guid.NewGuid().ToString("N");
-        var recording = new TraceRecordingHandle(this, id, processId, outputPath);
+        var recording = new TraceRecordingHandle(this, id, target.ProcessId, outputPath);
         _recordings[id] = recording;
         try
         {
-            var started = await host.InvokeAsync(DiagnosticsMethods.TraceStart, new TraceStartParams(id, processId, outputPath, tools, providers), Json.TraceStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
+            var started = await host.InvokeAsync(DiagnosticsMethods.TraceStart, new TraceStartParams(id, target.ProcessId, outputPath, tools, providers, target.Port), Json.TraceStartParams, Json.SessionStartResult, cancellationToken).ConfigureAwait(false);
             recording.ProcessName = started.ProcessName;
             return recording;
         }
@@ -169,8 +177,12 @@ public sealed class DiagnosticsService : IAsyncDisposable
     }
 
     /// <summary>Takes a GC heap snapshot of a process (an induced full GC) into <paramref name="outputPath"/>.</summary>
-    public async Task<HeapSnapshotResult> TakeHeapSnapshotAsync(int processId, string outputPath, CancellationToken cancellationToken) =>
-        await InvokeAsync(DiagnosticsMethods.HeapSnapshot, new HeapSnapshotParams(processId, outputPath), Json.HeapSnapshotParams, Json.HeapSnapshotResult, cancellationToken).ConfigureAwait(false);
+    public Task<HeapSnapshotResult> TakeHeapSnapshotAsync(int processId, string outputPath, CancellationToken cancellationToken) =>
+        TakeHeapSnapshotAsync(DiagnosticsTarget.Process(processId), outputPath, cancellationToken);
+
+    /// <summary>Takes a GC heap snapshot of a process or a diagnostic port's runtime (M63b) into <paramref name="outputPath"/>.</summary>
+    public async Task<HeapSnapshotResult> TakeHeapSnapshotAsync(DiagnosticsTarget target, string outputPath, CancellationToken cancellationToken) =>
+        await InvokeAsync(DiagnosticsMethods.HeapSnapshot, new HeapSnapshotParams(target.ProcessId, outputPath, target.Port), Json.HeapSnapshotParams, Json.HeapSnapshotResult, cancellationToken).ConfigureAwait(false);
 
     /// <summary>Opens a heap snapshot in the host (it stays there; its views are asked for a page at a time).</summary>
     public async Task<HeapSnapshot> OpenHeapSnapshotAsync(string path, CancellationToken cancellationToken)
@@ -298,6 +310,18 @@ public sealed class DiagnosticsService : IAsyncDisposable
 
         _gate.Dispose();
     }
+}
+
+/// <summary>
+/// What a profiling session runs on: a process of this machine by its id, or (M63b, ADR 0102) the runtime that connects
+/// to a diagnostic port's socket, <see cref="Port"/> (a compose service in its container, whose process id here is
+/// unknown: <see cref="ProcessId"/> is 0).
+/// </summary>
+public sealed record DiagnosticsTarget(int ProcessId, string? Port = null)
+{
+    public static DiagnosticsTarget Process(int processId) => new(processId);
+
+    public static DiagnosticsTarget Socket(string path) => new(0, path);
 }
 
 /// <summary>What a profiling launch adds to a program's environment (ADR 0044).</summary>

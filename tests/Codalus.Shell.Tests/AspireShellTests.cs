@@ -113,6 +113,17 @@ public sealed class AspireShellTests
             await ShellFixture.PumpUntil(() => view.ConsoleText.Contains("Now listening on", StringComparison.Ordinal), seconds: 60);
             Assert.DoesNotContain('\u001b', view.ConsoleText);
 
+            // Debug one resource alone (M63): the debugger attaches to the frontend's program while the others run on,
+            // and leaves it running when it detaches.
+            var frontend = f.Shell.Runs.Running.Single(r => r.Name == "Frontend");
+            f.Shell.AspireWindow.Selected = f.Shell.AspireWindow.Resources.Single(r => r.Name == "frontend");
+            await f.Shell.AspireWindow.DebugAsync();
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.IsAttached && f.Shell.Debugger.Processes.Any(p => p.Id == frontend.ProcessId), seconds: 120, () => Describe(f));
+            await f.Shell.Debugger.DetachAsync();
+            await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Idle, seconds: 60);
+            Assert.False(frontend.Exited.IsCompleted);
+            f.Shell.AspireWindow.Selected = f.Shell.AspireWindow.Resources.Single(r => r.Name == "api");
+
             // Stop the api through its command: the IDE ends its program.
             Assert.Null(await f.Shell.AspireWindow.StopAsync());
             await ShellFixture.PumpUntil(() => !f.Shell.Runs.Running.Any(r => r.Name == "Api"), seconds: 60);

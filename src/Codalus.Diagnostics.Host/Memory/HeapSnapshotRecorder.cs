@@ -22,16 +22,18 @@ internal static class HeapSnapshotRecorder
 
     public static async Task<HeapSnapshotResult> RecordAsync(HeapSnapshotParams parameters, CancellationToken cancellationToken)
     {
-        DiagnosticsPort.NameOf(parameters.ProcessId);
+        var target = DiagnosticsTarget.Of(parameters.ProcessId, parameters.DiagnosticPort);
+        DiagnosticsPort.NameOf(target);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(parameters.OutputPath))!);
-        var session = await DiagnosticsPort.StartSessionAsync(
-            parameters.ProcessId,
+        var (session, lease) = await DiagnosticsPort.StartSessionAsync(
+            target,
             [new EventPipeProvider(DiagnosticsPort.RuntimeProvider, EventLevel.Verbose, HeapSnapshotKeywords)],
             rundown: false,
             stacks: false,
             bufferMegabytes: 512,
             slowStart: true,
             cancellationToken).ConfigureAwait(false);
+        await using var held = lease;
         using (session)
         {
             var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

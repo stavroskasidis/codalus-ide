@@ -786,6 +786,89 @@ public sealed class CompoundDebugAdapterTests
         Assert.Equal([1], stop.HitBreakpointIds!);
     }
 
+    [Fact]
+    public async Task Ending_one_program_alone_returns_after_its_end_is_reported_even_when_its_own_end_came_first()
+    {
+        // The program's own end (its adapter's Closed, on the thread pool) and EndPartAsync race to end it; the first one
+        // reports it. EndPartAsync returned as soon as it saw the program ended, before that report (macOS CI, run
+        // 43597436045: the test below found no "ended" event right after EndPartAsync).
+        var adapters = new[] { new FakeAdapter([new DapThread(1, "Main Thread")]), new FakeAdapter([new DapThread(1, "Main Thread")]) { AfterClose = TimeSpan.FromMilliseconds(200) } };
+        var compound = new CompoundDebugAdapter(adapters[0], "Service 0", independent: true);
+        await compound.AddAsync(adapters[1], "Service 1", _ => Task.CompletedTask, Ct);
+        var reported = 0;
+        compound.PartChanged += (_, e) =>
+        {
+            if (e.Ended)
+            {
+                Thread.Sleep(400); // the report takes longer than the disconnect
+                Volatile.Write(ref reported, 1);
+            }
+        };
+
+        await compound.EndPartAsync(1, Ct);
+        Assert.Equal(1, Volatile.Read(ref reported));
+        Assert.False(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
+    public async Task A_session_holds_every_service_of_an_app_and_ends_one_alone_while_the_others_run()
+    {
+        // M63 (ADR 0102): every .NET service of a compose app, or every project of an AppHost, in one session (eight
+        // programs at most before); one of them ends alone (a service stopped, detached or restarted), its adapter
+        // disconnected and disposed, and the others go on.
+        Assert.True(M >= 64);
+        var adapters = Enumerable.Range(0, 20).Select(_ => new FakeAdapter([new DapThread(1, "Main Thread")])).ToList();
+        var compound = new CompoundDebugAdapter(adapters[0], "Service 0", independent: true);
+        var parts = new List<CompoundPartEvent>();
+        compound.PartChanged += (_, e) =>
+        {
+            lock (parts)
+            {
+                parts.Add(e);
+            }
+        };
+        for (var i = 1; i < adapters.Count; i++)
+        {
+            await compound.AddAsync(adapters[i], $"Service {i}", _ => Task.CompletedTask, Ct);
+        }
+
+        Assert.Equal(20, (await compound.ThreadsAsync(Ct)).Length);
+        await compound.ContinueAsync(M + 19, Ct);
+        Assert.Contains("continue 1", adapters[19].Requests);
+        Assert.DoesNotContain("continue 1", adapters[3].Requests);
+
+        await compound.EndPartAsync(19, Ct);
+        Assert.Contains("disconnect True", adapters[19].Requests);
+        Assert.True(adapters[19].Disposed);
+        Assert.Contains(parts, p => p is { Name: "Service 19", Index: 19, Ended: true });
+        Assert.DoesNotContain(adapters.Take(19), a => a.Requests.Contains("disconnect True"));
+        Assert.False(compound.Closed.IsCompleted);
+        Assert.Equal(19, (await compound.ThreadsAsync(Ct)).Length);
+        await compound.EndPartAsync(19, Ct); // ended already: nothing more
+
+        // A restart holds the session open while the program is the only one left, and its new start joins.
+        for (var i = 1; i < 19; i++)
+        {
+            await compound.EndPartAsync(i, Ct);
+        }
+
+        compound.Reserve(1);
+        await compound.EndPartAsync(0, Ct);
+        Assert.False(compound.Closed.IsCompleted);
+        var again = new FakeAdapter([new DapThread(1, "Main Thread")]);
+        await compound.AddAsync(again, "Service 0", _ => Task.CompletedTask, Ct);
+        await compound.ReleaseAsync();
+        Assert.False(compound.Closed.IsCompleted);
+        Assert.Equal([new DapThread(M + 20, "Service 0: Main Thread")], await compound.ThreadsAsync(Ct)); // a place of its own: the ended ones keep theirs
+
+        await again.RaiseAsync(DapEvents.Terminated, new ExitedEvent(0), DapJsonContext.Default.ExitedEvent);
+        Assert.True(compound.Closed.IsCompleted);
+
+        // A session of programs that end with each other ends no one of them alone.
+        var server = new CompoundDebugAdapter(new FakeAdapter([new DapThread(1, "Main Thread")]), "Server");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => server.EndPartAsync(0, Ct));
+    }
+
     /// <summary>An adapter that records its requests: thread 1, frame 7, scope reference 9.</summary>
     internal sealed class FakeAdapter(DapThread[] threads) : IDebugAdapter
     {
@@ -929,7 +1012,14 @@ public sealed class CompoundDebugAdapterTests
             await Record($"disconnect {terminateDebuggee}");
             await DisconnectGate.WaitAsync(cancellationToken);
             _closed.TrySetResult();
+            if (AfterClose > TimeSpan.Zero)
+            {
+                await Task.Delay(AfterClose, cancellationToken); // its end through Closed starts first
+            }
         }
+
+        /// <summary>How long a disconnect takes after its program's end (Closed) is out.</summary>
+        public TimeSpan AfterClose { get; init; }
 
         public ValueTask DisposeAsync()
         {

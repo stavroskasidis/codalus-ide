@@ -1,0 +1,20 @@
+=== WpfApp/Converters/UpperCaseConverter.cs
+@@ 1
++ using System;
++ using System.Globalization;
++ using System.Windows.Data;
++ 
++ namespace WpfApp.Converters;
++ 
++ public sealed class UpperCaseConverter : IValueConverter
++ {
++     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value;
++ 
++     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotSupportedException();
++ }
++ 
+=== WpfApp/MainWindow.xaml
+@@ 9
++         xmlns:converters="clr-namespace:WpfApp.Converters"
+@@ 20
++         <converters:UpperCaseConverter x:Key="UpperCaseConverter" />

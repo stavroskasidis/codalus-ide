@@ -26,6 +26,6 @@
 
 - Only `project` launch configurations come to the IDE; executables, containers and other resource types stay with DCP, as in other IDEs.
 - In a debug session, a project's output goes to the Debug Console, not to the dashboard's console logs (`TODO(issue)`).
-- A debug session holds at most eight programs (the AppHost and seven projects; `CompoundDebugAdapter.MaxParts`); more projects are reported as not started (`TODO(issue)`).
+- A debug session holds at most eight programs (the AppHost and seven projects; `CompoundDebugAdapter.MaxParts`); more projects are reported as not started (`TODO(issue)`). *Amended by [ADR 0102](0102-services-under-the-debugger.md) (M63, 2026-11-13): 64 programs, so every project of an AppHost runs under the debugger.*
 - The Database Explorer's Aspire connections still come from the AppHost's source (M27b); live connection strings from the resource service are a `TODO(issue)`.
 - The protocol version is `2024-03-03`; newer ones (`2024-04-23`, `2025-10-01`) add messages and launch configurations we don't use yet.

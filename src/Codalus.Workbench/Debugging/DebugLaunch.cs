@@ -39,7 +39,14 @@ public sealed record DebugLaunch(string Name, LaunchPlan Plan)
 /// debugger's bundle when <see cref="DebugAdapterStartInfo.IsCodalus"/>, M58b), the <c>launch</c> request with that
 /// machine's program and paths, and the source paths between the two.
 /// </summary>
-public sealed record RemoteLaunch(DebugAdapterStartInfo Adapter, LaunchArguments Arguments, SourceMap Map, string Target);
+public sealed record RemoteLaunch(DebugAdapterStartInfo Adapter, LaunchArguments Arguments, SourceMap Map, string Target)
+{
+    /// <summary>
+    /// The program there runs this machine's build (M63: a compose service in fast mode, its build output mounted), so
+    /// the language host's edits apply to it through the Codalus debugger there (Apply Code Changes).
+    /// </summary>
+    public bool LocalBuild { get; init; }
+}
 
 /// <summary>An attach on another machine (M14c): the debugger there through <see cref="Adapter"/>, and the source paths between the two.</summary>
 public sealed record RemoteAttach(DebugAdapterStartInfo Adapter, SourceMap Map, string Target);

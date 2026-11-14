@@ -17,5 +17,6 @@ public static class IdeToolsRound2
         .. IdePackageTools.Tools,
         .. IdeGitTools.Tools,
         .. IdeShellTools.Tools,
+        .. IdeDesktopAppTools.Tools,
     ];
 }

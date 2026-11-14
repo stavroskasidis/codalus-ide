@@ -24,6 +24,27 @@ public sealed class IdeToolsRound2Tests
     }
 
     [Fact]
+    public void The_desktop_apps_windows_and_controls_are_read_and_its_input_is_an_action()
+    {
+        // M60b (D52): reading the app changes nothing; input is an action under ai.agent.ideActions, no approval of its own.
+        Assert.Equal(
+            [("desktop_app_windows", IdeToolKind.Read), ("desktop_app_controls", IdeToolKind.Read), ("desktop_app_input", IdeToolKind.Action)],
+            IdeDesktopAppTools.Tools.Select(t => (t.Name, t.Kind)));
+        Assert.All(IdeDesktopAppTools.Tools, tool => Assert.Contains(tool, IdeToolsRound2.All));
+        using var input = JsonDocument.Parse(IdeTools.Find("desktop_app_input")!.Schema);
+        Assert.Equal(["click", "text", "keys", "scroll"], input.RootElement.GetProperty("properties").GetProperty("kind").GetProperty("enum").EnumerateArray().Select(e => e.GetString()));
+
+        // An agent's own run can keep the app's windows out of the user's way, and the instructions say how.
+        foreach (var name in new[] { "run_project", "debug_start" })
+        {
+            using var schema = JsonDocument.Parse(IdeTools.Find(name)!.Schema);
+            Assert.Equal("boolean", schema.RootElement.GetProperty("properties").GetProperty("offScreen").GetProperty("type").GetString());
+        }
+
+        Assert.Contains("desktop_app_input", IdeTools.Instructions, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_long_call_reports_progress_while_it_runs_when_the_client_sent_a_token()
     {
         var input = new StringReader(string.Join('\n',
