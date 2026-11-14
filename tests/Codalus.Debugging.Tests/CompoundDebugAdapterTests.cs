@@ -787,6 +787,30 @@ public sealed class CompoundDebugAdapterTests
     }
 
     [Fact]
+    public async Task Ending_one_program_alone_returns_after_its_end_is_reported_even_when_its_own_end_came_first()
+    {
+        // The program's own end (its adapter's Closed, on the thread pool) and EndPartAsync race to end it; the first one
+        // reports it. EndPartAsync returned as soon as it saw the program ended, before that report (macOS CI, run
+        // 43597436045: the test below found no "ended" event right after EndPartAsync).
+        var adapters = new[] { new FakeAdapter([new DapThread(1, "Main Thread")]), new FakeAdapter([new DapThread(1, "Main Thread")]) { AfterClose = TimeSpan.FromMilliseconds(200) } };
+        var compound = new CompoundDebugAdapter(adapters[0], "Service 0", independent: true);
+        await compound.AddAsync(adapters[1], "Service 1", _ => Task.CompletedTask, Ct);
+        var reported = 0;
+        compound.PartChanged += (_, e) =>
+        {
+            if (e.Ended)
+            {
+                Thread.Sleep(400); // the report takes longer than the disconnect
+                Volatile.Write(ref reported, 1);
+            }
+        };
+
+        await compound.EndPartAsync(1, Ct);
+        Assert.Equal(1, Volatile.Read(ref reported));
+        Assert.False(compound.Closed.IsCompleted);
+    }
+
+    [Fact]
     public async Task A_session_holds_every_service_of_an_app_and_ends_one_alone_while_the_others_run()
     {
         // M63 (ADR 0102): every .NET service of a compose app, or every project of an AppHost, in one session (eight
@@ -988,7 +1012,14 @@ public sealed class CompoundDebugAdapterTests
             await Record($"disconnect {terminateDebuggee}");
             await DisconnectGate.WaitAsync(cancellationToken);
             _closed.TrySetResult();
+            if (AfterClose > TimeSpan.Zero)
+            {
+                await Task.Delay(AfterClose, cancellationToken); // its end through Closed starts first
+            }
         }
+
+        /// <summary>How long a disconnect takes after its program's end (Closed) is out.</summary>
+        public TimeSpan AfterClose { get; init; }
 
         public ValueTask DisposeAsync()
         {
