@@ -339,6 +339,7 @@ internal static partial class BuiltIns
             Item(DebugTargetsMenu, "containers.composeRestartService", "3-compose"),
             Item(DebugTargetsMenu, "containers.composeStopService", "3-compose"),
             Item(DebugTargetsMenu, "containers.composeDetachService", "3-compose"),
+            Item(DebugTargetsMenu, "containers.composeProfileService", "3-compose"),
             Item(DebugTargetsMenu, "containers.composeShowOverride", "3-compose"),
             Item(DebugTargetsMenu, "debug.webPage", "2-launch"),
             Item(Debug, "debug.stepInto", "4-step"),

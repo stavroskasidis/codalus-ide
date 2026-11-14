@@ -2,7 +2,7 @@
 
 Codalus IDE profiles .NET programs with the runtime's own **EventPipe**, on Windows, macOS and Linux. The work happens in a separate process, `codalus-diaghost`, started the first time you use a profiling tool: a trace being read never slows the IDE down, and a large trace stays there while you look at it a view at a time.
 
-What you can profile: programs on .NET Core 3.0 or later (profiling from launch needs .NET 5 or later) running on this machine. Programs in containers, in WSL or over SSH aren't reachable yet.
+What you can profile: programs on .NET Core 3.0 or later (profiling from launch needs .NET 5 or later) running on this machine, and on Linux the .NET services of a compose app the IDE runs in fast mode, in their containers ([Containers](containers.md#compose)). Other programs in containers, in WSL or over SSH aren't reachable yet.
 
 ## The Performance Profiler
 
@@ -20,7 +20,7 @@ What you can profile: programs on .NET Core 3.0 or later (profiling from launch 
    - **Activities**: HTTP requests, database commands and `Activity` spans.
 2. Choose the **target**:
    - **The startup project**: it is built and started with its launch profile, and waits before its first line until the tools are attached, so its startup is in the profile too. It stops when you stop collecting.
-   - **A running .NET process**: pick it from the list (type part of its name or its process id to filter).
+   - **A running .NET process**: pick it from the list (type part of its name or its process id to filter). On Linux, the list starts with the .NET services of the compose app the IDE runs in fast mode (**back (compose service)**): the profiler reaches each one in its container through its diagnostic port, attached while it runs. File I/O and the full dump aren't available for a service. **Debug → Other Debug Targets → Profile Compose Service…** starts CPU Usage and .NET Counters on one directly.
 3. **Start**. While collecting, the status bar says so; click it, or **Stop Collection** on the page or the Debug menu, to stop. A program that ends stops the collection too.
 
 The session is saved in your solution's `.codalus/profiler` folder (one folder per session: `session.json`, `trace.nettrace` with the tools' events, `counters.json`, `heap-1.nettrace`… for snapshots, `full.dmp`), and its report opens. The page lists the saved sessions to open again or delete, and **Compare** shows the selected session against another one (the functions whose share changed most, and the heap's growth when both have snapshots); **Debug → Open Profiling Session…** opens one from anywhere, or any `.nettrace` file recorded by another tool (such as `dotnet-trace`). You may want to add `.codalus/profiler/` to your `.gitignore`.

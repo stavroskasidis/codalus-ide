@@ -46,7 +46,7 @@ public sealed class DiagnosticsFixture : IAsyncLifetime
     }
 
     /// <summary>Starts CpuBound for <paramref name="seconds"/> (0: until killed) and waits for it to say it started.</summary>
-    public async Task<Process> StartAsync(double seconds, bool suspended = false)
+    public async Task<Process> StartAsync(double seconds, bool suspended = false, IReadOnlyDictionary<string, string>? environment = null)
     {
         var start = new ProcessStartInfo("dotnet", [Dll, seconds.ToString(System.Globalization.CultureInfo.InvariantCulture)])
         {
@@ -57,6 +57,11 @@ public sealed class DiagnosticsFixture : IAsyncLifetime
         if (suspended)
         {
             start.Environment[ProfilingLaunch.SuspendVariable] = "1";
+        }
+
+        foreach (var (name, value) in environment ?? new Dictionary<string, string>())
+        {
+            start.Environment[name] = value;
         }
 
         var process = Process.Start(start)!;
@@ -443,6 +448,65 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
         {
             Assert.True(overhead < 0.5, $"Sampling overhead {overhead:P1}: {plain} primes alone, {traced} traced");
         }
+    }
+
+    /// <summary>
+    /// M63b (ADR 0102): a runtime started with <c>DOTNET_DiagnosticPorts</c> naming a socket (as a compose service in
+    /// fast mode is, in a folder its container mounts) is profiled by that socket, not its process id: counters, a CPU
+    /// trace and a heap snapshot at once on one listener, in a folder too deep for a socket's path (bound through a
+    /// link), and after its program restarts (a new runtime on the same socket) again.
+    /// </summary>
+    [Fact]
+    public async Task A_runtime_is_profiled_through_the_diagnostic_port_socket_it_connects_to()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "A diagnostic port's socket is a Linux and macOS target (M63b).");
+        var folder = Path.Combine(_work, new string('d', 60), "diag");
+        Directory.CreateDirectory(folder);
+        var socket = Path.Combine(folder, "cpubound.sock");
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(socket) > 100, socket);
+
+        // The runtime reaches the folder by a short path, as a service's does by its container's mount (/codalus-diag).
+        var mount = Path.Combine(Path.GetTempPath(), "codalus-mount-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateSymbolicLink(mount, folder);
+        var environment = new Dictionary<string, string> { ["DOTNET_DiagnosticPorts"] = Path.Combine(mount, "cpubound.sock") + ",connect,nosuspend" };
+        var target = DiagnosticsTarget.Socket(socket);
+        CounterProvider[] runtime = [new("System.Runtime", CounterProviderKinds.EventCounters, ["cpu-usage"])];
+        var process = await fixture.StartAsync(0, environment: environment);
+        try
+        {
+            var monitor = await _diagnostics.StartCountersAsync(target, runtime, 1, runtimeEvents: false, Timeout());
+            Assert.Equal("cpubound", monitor.ProcessName); // the socket's name: the service's
+            var path = Path.Combine(_work, "port.nettrace");
+            var recording = await _diagnostics.StartTraceAsync(target, path, [TraceTools.Cpu], null, Timeout());
+            await WaitUntilAsync(() => monitor.Find("System.Runtime", "cpu-usage") is { Points.Count: >= 2 }, "the counters through the socket");
+            await Task.Delay(2000, TestContext.Current.CancellationToken);
+            var stopped = await recording.StopAsync(Timeout());
+            await using (var trace = await _diagnostics.OpenTraceAsync(stopped.Path, Timeout()))
+            {
+                var functions = await trace.FunctionsAsync(new CpuFilter(), null, 0, 50, Timeout());
+                Assert.Contains("Primes.IsPrime", functions.Functions.FirstOrDefault(f => f.Module == "CpuBound")?.Name ?? "(none)", StringComparison.Ordinal);
+            }
+
+            var heap = await _diagnostics.TakeHeapSnapshotAsync(target, Path.Combine(_work, "port-heap.nettrace"), Timeout());
+            Assert.True(heap.Bytes > 1000, $"{heap.Bytes} bytes");
+            await monitor.StopAsync(Timeout());
+
+            // The program starts again (a service restarted): the next start accepts the new runtime.
+            Kill(process);
+            process = await fixture.StartAsync(0, environment: environment);
+            var again = await _diagnostics.StartCountersAsync(target, runtime, 1, runtimeEvents: false, Timeout());
+            await WaitUntilAsync(() => again.Find("System.Runtime", "cpu-usage") is { Points.Count: >= 1 }, "the counters of the restarted program");
+            await again.StopAsync(Timeout());
+        }
+        finally
+        {
+            Kill(process);
+            Directory.Delete(mount);
+        }
+
+        // A socket in a folder that isn't there: said at once.
+        var missing = await Assert.ThrowsAsync<JsonRpcRemoteException>(() => _diagnostics.StartCountersAsync(DiagnosticsTarget.Socket(Path.Combine(_work, "missing", "x.sock")), runtime, 1, false, Timeout()));
+        Assert.Equal(DiagnosticsErrorCodes.NotAvailable, missing.Code);
     }
 
     [Fact]

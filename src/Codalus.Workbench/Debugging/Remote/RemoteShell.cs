@@ -149,7 +149,7 @@ public static class RemoteShell
     /// </summary>
     public static DebugAdapterStartInfo Adapter(RemoteTarget target, string debuggerPath, bool codalus = false)
     {
-        var (program, arguments) = target.Shell("exec " + Build.WslLaunch.ShellQuote(debuggerPath) + (codalus ? " " + CoreClrAdapter.AdapterArgument : " --interpreter=vscode"));
+        var (program, arguments) = target.Shell(Unset(target) + "exec " + Build.WslLaunch.ShellQuote(debuggerPath) + (codalus ? " " + CoreClrAdapter.AdapterArgument : " --interpreter=vscode"));
         return new DebugAdapterStartInfo(program, arguments, null, new Dictionary<string, string>(Environment), target.Display) { IsCodalus = codalus };
     }
 
@@ -168,9 +168,18 @@ public static class RemoteShell
             return null;
         }
 
-        var (program, arguments) = target.Shell("exec " + Build.WslLaunch.ShellQuote(debugger.Path));
+        var (program, arguments) = target.Shell(Unset(target) + "exec " + Build.WslLaunch.ShellQuote(debugger.Path));
         return new Codalus.Rpc.ProcessLaunchInfo(program, arguments) { Environment = new Dictionary<string, string>(Environment) };
     }
+
+    /// <summary>
+    /// In a container, the debugger and its companion start without the container's <c>DOTNET_DiagnosticPorts</c>
+    /// (M63b): the Codalus debugger is a .NET program, and with it its runtime would connect to the socket a fast-mode
+    /// compose service names for the profiler, which takes the first runtime that connects. A program the debugger
+    /// launches gets it back in its launch's environment.
+    /// </summary>
+    private static string Unset(RemoteTarget target) =>
+        target is ContainerTarget ? "unset " + Containers.ComposeFastMode.DiagnosticPortsVariable + "; " : string.Empty;
 
     internal static string Trim(string text)
     {
