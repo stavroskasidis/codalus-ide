@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Codalus.Previewer.Agent;
 
 namespace Codalus.Shell.Tests;
@@ -100,6 +101,89 @@ public sealed class LiveAgentTests
 
         // An unknown element says so.
         await Assert.ThrowsAsync<InvalidOperationException>(() => Ask("props", "99999"));
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_agent_lists_controls_takes_a_picture_and_sends_input_inside_the_app()
+    {
+        var clicks = 0;
+        var go = new Button { Name = "Go", Content = "Hi" };
+        go.Click += (_, _) => clicks++;
+        var off = new Button { Name = "Off", Content = "Disabled", IsEnabled = false };
+        var check = new CheckBox { Name = "Check", Content = "Done" };
+        var box = new TextBox { Name = "Box", Text = "ab" };
+        var list = new ListBox { Name = "Items", Height = 80, ItemsSource = Enumerable.Range(1, 60).Select(i => "Item " + i).ToList() };
+        var panel = new StackPanel { Children = { go, off, check, box, list } };
+        var window = new Window { Title = "App", Width = 300, Height = 400, Content = panel };
+        var keys = new List<string>();
+        window.KeyDown += (_, e) => keys.Add(e.KeyModifiers == KeyModifiers.None ? e.Key.ToString() : e.KeyModifiers + "+" + e.Key);
+        window.Show();
+        Pump();
+
+        var agent = new LiveAgent(_ => { }, () => [window]);
+        Task<string> Ask(params string[] request) => Task.Run(() => agent.Handle(["1", .. request]));
+        string Text(string text) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(text));
+
+        // Windows carry their size; controls their text, state and bounds in the window.
+        var row = Assert.Single(Records(await Ask("windows")));
+        Assert.Equal(["300", "400"], row[3..5]);
+        var controls = Records(await Ask("controls", row[0]));
+        Assert.All(controls, c => Assert.Equal(10, c.Length));
+        var goRow = Assert.Single(controls, c => c[3] == "Go");
+        Assert.Equal(("Button", "Hi"), (goRow[2], goRow[4]));
+        Assert.Equal("0", goRow[6]); // x: the panel's left edge
+        Assert.True(double.Parse(goRow[8], System.Globalization.CultureInfo.InvariantCulture) > 0);
+        Assert.Contains("disabled", Assert.Single(controls, c => c[3] == "Off")[5].Split(' '));
+        Assert.Contains("unchecked", Assert.Single(controls, c => c[3] == "Check")[5].Split(' '));
+        Assert.Equal("ab", Assert.Single(controls, c => c[3] == "Box")[4]);
+
+        // A picture of the window: a PNG of its size.
+        var picture = (await Ask("picture", row[0])).Split(LiveAgent.Field);
+        var png = Convert.FromBase64String(picture[0]);
+        Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], png[..4]);
+        Assert.Equal(["300", "400"], picture[1..3]);
+
+        // A click invokes the button, through the text its content made too; a check box toggles; a disabled one refuses.
+        Assert.StartsWith("Clicked Button 'Go': invoked", await Ask("input", goRow[0], "click"), StringComparison.Ordinal);
+        Assert.Equal(1, clicks);
+        var content = Records(await Ask("controls", goRow[0])).FirstOrDefault(c => c[2] == "TextBlock");
+        if (content is not null)
+        {
+            Assert.Contains("around TextBlock", await Ask("input", content[0], "click"), StringComparison.Ordinal);
+            Assert.Equal(2, clicks);
+        }
+
+        var checkRow = Assert.Single(controls, c => c[3] == "Check");
+        Assert.Contains("toggled", await Ask("input", checkRow[0], "click"), StringComparison.Ordinal);
+        Assert.True(check.IsChecked);
+        Assert.Contains("checked", Assert.Single(Records(await Ask("controls", row[0])), c => c[3] == "Check")[5].Split(' '));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Ask("input", Assert.Single(controls, c => c[3] == "Off")[0], "click"));
+
+        // Text goes at the end of the box's text, or in place of it.
+        var boxRow = Assert.Single(controls, c => c[3] == "Box");
+        Assert.Contains("Its text is now: abcd", await Ask("input", boxRow[0], "text", Text("cd"), "append"), StringComparison.Ordinal);
+        Assert.Equal("abcd", box.Text);
+        await Ask("input", boxRow[0], "text", Text("new text"), "replace");
+        Assert.Equal("new text", box.Text);
+
+        // Keys are pressed on the control and bubble as the keyboard's would: the button takes Enter (a click), the
+        // window gets Ctrl+A; an unknown one says so.
+        var before = clicks;
+        Assert.Contains("(the app handled them)", await Ask("input", goRow[0], "keys", "Ctrl+A Enter"), StringComparison.Ordinal);
+        Assert.Equal(["Control+A"], keys);
+        Assert.Equal(before + 1, clicks);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Ask("input", goRow[0], "keys", "Hyper+Q"));
+
+        // A scroll moves the list's scroll viewer, inside its template.
+        var listRow = Assert.Single(controls, c => c[3] == "Items");
+        Assert.Contains("offset is now 0,", await Ask("input", listRow[0], "scroll", "down", "4"), StringComparison.Ordinal);
+        Pump();
+        var viewer = list.GetVisualDescendants().OfType<ScrollViewer>().First();
+        Assert.True(viewer.Offset.Y > 0, $"offset {viewer.Offset}");
+        await Ask("input", listRow[0], "scroll", "top", "0");
+        Assert.Equal(0, viewer.Offset.Y);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Ask("input", listRow[0], "scroll", "sideways", "1"));
         window.Close();
     }
 

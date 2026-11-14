@@ -153,7 +153,11 @@ public sealed partial class ShellHost
         IdeToolResult result;
         try
         {
-            if (definition.Kind != IdeToolKind.Read && !await ApproveIdeToolAsync(definition, args, caller, cancellationToken).ConfigureAwait(true))
+            if (HeadlessRefusal(definition) is { } refusal)
+            {
+                result = IdeToolResult.Error(refusal); // codalus mcp --folder: nobody to ask (M60b)
+            }
+            else if (definition.Kind != IdeToolKind.Read && !await ApproveIdeToolAsync(definition, args, caller, cancellationToken).ConfigureAwait(true))
             {
                 result = IdeToolResult.Error("The user didn't allow it. Don't try again; ask what they want instead.");
             }
@@ -1106,9 +1110,17 @@ public sealed partial class ShellHost
     {
         var project = Str(args, "project") is { Length: > 0 } name ? ProjectPath(name) : null;
         var before = LastRunning();
+        var offScreen = Bool(args, "offScreen") == true ? await PrepareOffScreenAsync(cancellationToken).ConfigureAwait(true) + "\n" : "";
         var launch = StartWithoutDebuggingAsync(project);
         _agentLaunch = launch;
-        await launch.WaitAsync(cancellationToken).ConfigureAwait(true);
+        try
+        {
+            await launch.WaitAsync(cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            _offScreenLaunch = null;
+        }
         if (LastRunning() is not { } running || running == before)
         {
             return IdeToolResult.Error("It didn't start. " + LaunchFailureText());
@@ -1130,7 +1142,7 @@ public sealed partial class ShellHost
             : app is not null ? "Started. The web app listens at " + app + "; browser_* opens it (a path such as /counter is relative to it)."
             : expected is not null ? string.Create(CultureInfo.InvariantCulture, $"Started, but nothing listens at {expected} after {s_webAppWait.TotalSeconds:0} s: read the output below.")
             : "Started.";
-        return new(state + "\n" + RunOutputText(40));
+        return new(state + "\n" + offScreen + RunOutputText(40));
     }
 
     /// <summary>The address <paramref name="program"/> was told to listen on (its launch profile's), found once.</summary>
@@ -1200,7 +1212,24 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ debugging
 
+    /// <summary>debug_start, with a desktop app's windows off-screen when asked (M60b).</summary>
     private async Task<IdeToolResult> DebugStartToolAsync(JsonElement args, string? root, CancellationToken cancellationToken)
+    {
+        var offScreen = Bool(args, "offScreen") == true && Str(args, "test") is not { Length: > 0 } && !Debugger.IsActive
+            ? await PrepareOffScreenAsync(cancellationToken).ConfigureAwait(true)
+            : null;
+        try
+        {
+            var result = await DebugLaunchToolAsync(args, root, cancellationToken).ConfigureAwait(true);
+            return offScreen is null ? result : result with { Text = offScreen + "\n" + result.Text };
+        }
+        finally
+        {
+            _offScreenLaunch = null;
+        }
+    }
+
+    private async Task<IdeToolResult> DebugLaunchToolAsync(JsonElement args, string? root, CancellationToken cancellationToken)
     {
         if (Debugger.IsActive)
         {
