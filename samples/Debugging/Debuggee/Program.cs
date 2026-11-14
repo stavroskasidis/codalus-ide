@@ -55,6 +55,11 @@ if (args is ["--read"])
     Console.WriteLine("echo: " + Console.ReadLine()); // [read]
 }
 
+if (args is ["--initializer"])
+{
+    return Initializer.Run(); // [initializer-call]
+}
+
 if (args is ["--crash"])
 {
     // Just-In-Time debugging (M14c): an unhandled exception ends the program, and the runtime writes a dump.

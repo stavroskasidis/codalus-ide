@@ -514,7 +514,7 @@ public sealed class AcpShellTests
         await OpenMoreAgentsAsync(f);
         var rows = f.Shell.Palette.Rows;
         Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "pi", "OpenCode", "goose"], rows.Select(r => r.Label));
-        Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.106.0", rows.Single(r => r.Label == "Claude").Detail);
+        Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.107.0", rows.Single(r => r.Label == "Claude").Detail);
         Assert.Equal("npx -y pi-acp@0.0.34 · needs the pi CLI 0.81.0 or later", rows.Single(r => r.Label == "pi").Detail);
         Assert.Equal("Its own CLI: goose acp (tested with 1.59.0)", rows.Single(r => r.Label == "goose").Detail);
         Assert.Null(rows.Single(r => r.Label == "goose").KeyLabel); // its CLI is on this PATH
