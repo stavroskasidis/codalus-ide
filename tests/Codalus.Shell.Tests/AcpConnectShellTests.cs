@@ -26,7 +26,7 @@ public sealed class AcpConnectShellTests
 
     private static string StandInAgent => Path.Combine(ShellFixture.RepoRoot, "tests", "Codalus.AcpAgent.Fake", "bin", ShellFixture.Configuration, Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-acp-agent.dll");
 
-    private static string ClaudeRecording => Path.Combine(ShellFixture.RepoRoot, "tests", "Shared", "AcpRecordings", "claude-0.106.0-initialize.json");
+    private static string ClaudeRecording => Path.Combine(ShellFixture.RepoRoot, "tests", "Shared", "AcpRecordings", "claude-0.107.0-initialize.json");
 
     private static string Dotnet =>
         Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") is { Length: > 0 } host && File.Exists(host) ? host
@@ -87,7 +87,7 @@ public sealed class AcpConnectShellTests
         var dialog = await ConnectFromOffStateAsync(f, "Claude");
 
         // The header, the requirements found on the search path, the ways Claude signs in.
-        Assert.Equal(("Connect to Claude", "External agent · Anthropic · @agentclientprotocol/claude-agent-acp 0.106.0"), (dialog.Title, dialog.Context));
+        Assert.Equal(("Connect to Claude", "External agent · Anthropic · @agentclientprotocol/claude-agent-acp 0.107.0"), (dialog.Title, dialog.Context));
         Assert.Equal(["Node.js 22.11.0", "npx 10.9.0"], dialog.Requirements.Select(r => r.Name));
         Assert.EndsWith("Claude needs 22 or later", dialog.Requirements[0].Detail, StringComparison.Ordinal);
         Assert.Equal(["Claude subscription", "Anthropic Console account", "API key", "I'm signed in already"], dialog.SignInOptions.Select(o => o.Name));
@@ -95,7 +95,7 @@ public sealed class AcpConnectShellTests
 
         // What runs: the exact commands, Claude's own login in the Terminal, and the variables it starts without.
         Assert.Equal(
-            [("Starts", "npx -y @agentclientprotocol/claude-agent-acp@0.106.0"), ("Signs in (Terminal)", "npx -y @agentclientprotocol/claude-agent-acp@0.106.0 --cli auth login --claudeai")],
+            [("Starts", "npx -y @agentclientprotocol/claude-agent-acp@0.107.0"), ("Signs in (Terminal)", "npx -y @agentclientprotocol/claude-agent-acp@0.107.0 --cli auth login --claudeai")],
             dialog.Runs.Where(r => r.HasCommand).Select(r => (r.Label, r.Command!)));
         Assert.Equal("ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL", dialog.Runs.Single(r => r.Label == "Starts without").Text);
 
@@ -127,7 +127,7 @@ public sealed class AcpConnectShellTests
         await f.RunAsync("ai.agents.connect.claude");
         var dialog = f.Shell.ConnectAgent;
         await ShellFixture.PumpUntil(() => dialog.Mode == ConnectAgentMode.Connect, 30);
-        Assert.Equal("npx -y @agentclientprotocol/claude-agent-acp@0.106.0 --cli", dialog.Runs.Single(r => r.Label == "Signs in (Terminal)").Command);
+        Assert.Equal("npx -y @agentclientprotocol/claude-agent-acp@0.107.0 --cli", dialog.Runs.Single(r => r.Label == "Signs in (Terminal)").Command);
         Assert.Contains("run claude in a terminal and type /login", dialog.RemoteSessionNote, StringComparison.Ordinal);
         dialog.Cancel();
     }
@@ -148,7 +148,7 @@ public sealed class AcpConnectShellTests
 
         var entry = f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.GetProperty("claude");
         Assert.Equal("npx", entry.GetProperty("command").GetString());
-        Assert.Equal("claude@0.106.0", entry.GetProperty("template").GetString());
+        Assert.Equal("claude@0.107.0", entry.GetProperty("template").GetString());
         Assert.Equal(JsonValueKind.True, f.Shell.Workbench.Settings.GetLayerValue(AiService.EnabledSetting, SettingScope.User)!.Value.ValueKind);
         Assert.True(f.Shell.Workbench.Context.GetValue("externalAgentsConfigured") is true);
 
