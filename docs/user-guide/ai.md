@@ -136,6 +136,7 @@ Tell the agent to skip any of this when you don't want it.
 | Packages and EF Core | `list_packages`, `search_packages`, `add_package`, `update_package`, `remove_package` (through the NuGet Package Manager's path, with your feeds and credentials); `list_migrations`, `add_migration`, `apply_migrations`, `script_migrations` (through the Entity Framework window and your `dotnet-ef`) |
 | Services | `list_services` (compose services and Aspire resources, with their state), `service_start`, `service_stop`, `service_restart`, `service_debug`, `service_logs`, `service_traces`, `service_metrics` |
 | The IDE | `list_commands` and `run_command` (a command by its ID, under its own enablement; never exit, sign-ins, plugin installs, settings sync, trust and the like), `get_settings` (never secrets), `ide_screenshot`, `terminal_send` (typing into the integrated terminal) |
+| The desktop app being built | `desktop_app_windows` (an Avalonia app's windows, or a WPF app's on Windows, each with a picture), `desktop_app_controls` (the control tree: each control's type, name, text, state and bounds), `desktop_app_input` (a click, text, keys or a scroll sent to a control inside the app) |
 
 A tool that follows code takes a symbol by name (`OrderService.Submit`), or a file, a line and the name on it.
 
@@ -162,6 +163,13 @@ Otherwise (`run_project`, or a server debugged without its page) the browser too
 
 Either way the agent can read the page, take screenshots, read the console and run JavaScript (to click or fill a form, for example). It opens only addresses on this machine; a path such as `/counter` is relative to the web app's address. The debugging browser keeps its own profile (`debug-browser` in the state folder), so a page you signed in to stays signed in between sessions.
 
+**The desktop app.** While the IDE runs or debugs an Avalonia app (or a WPF app on Windows) with [the Live Visual Tree](avalonia.md#the-live-visual-tree-and-live-property-explorer)'s agent (`debug.liveVisualTree`, on by default), the desktop-app tools reach it through that agent:
+- `desktop_app_windows` lists its windows with their sizes and a PNG picture of each. The app draws the picture itself, so it shows a window that is covered or off-screen.
+- `desktop_app_controls` lists a window's controls, indented by depth: each one's type, name, the text it shows, its state (disabled, hidden, focused, checked, selected, read-only, a value) and where it is in the window, in the picture's pixels. A filter keeps the controls whose type, name or text matches, with the controls around them.
+- `desktop_app_input` sends input to a control, by its ID or its name, **inside the app**: your pointer doesn't move and your focus stays where it is. A click invokes, toggles, selects or expands the control or the nearest control around it that can be (as the app's accessibility interface does it). Text goes into its text box, at the end or in place of its text. Keys are pressed on it (Enter, Tab, Ctrl+A); a WPF app takes keys without Ctrl, Shift or Alt, since WPF reads those from the keyboard itself. A scroll moves its scroll viewer, or brings the control into view.
+
+Reading the app never asks; input is an action like the others, under **Agent IDE Actions**, with no question of its own. An app the agent starts itself can stay out of your way: `run_project` and `debug_start` take `offScreen`. On Linux, with Xvfb installed (the `xvfb` package), its windows open on an X server of the IDE's own, without a screen, which ends with the IDE. On Windows and macOS, or without Xvfb, they open as usual, and the answer says so.
+
 **Plugins' tools.** Plugins can add tools of their own ([AI tools](plugin-api.md)). Each call asks first and names the plugin.
 
 **Long calls.** A build, a test run, a debug wait or a profile can take minutes. When the agent's MCP client asks for progress, `codalus mcp` reports every 10 seconds that the call is still running, so the client doesn't time it out. Each call's line in the *AI* Output channel says how long it took, never what it returned.
@@ -179,6 +187,21 @@ A folder can carry the setup for everyone who opens it, in a committed `.mcp.jso
 (add `"--user-data-dir", "<dir>"` when you run the IDE with one).
 
 **The first call in a folder asks you**, on top of MCP Server being on: **Allow** (until the window closes), **Always for This Folder** (kept in your state folder, `ai-outside-agents-allowed.json`, never in the repository) or **Don't Allow** (the default). A question nobody answers within two minutes refuses that call, and the next one asks again. Listing the tools never asks. The tools reach the running IDE of the same user, and plugins' tools are listed too. The server also tells the agent, in its instructions, to prefer these tools to `grep` and the CLI. Excluded files are left out, and text is redacted. Each call is logged in the AI Output channel. With the setting off (the default), or the IDE closed, every call answers with what to do.
+
+### Without a window
+
+An agent that runs unattended (a script, a CI job, a machine without a display) can start a Codalus IDE of its own, with no window:
+
+```json
+{ "mcpServers": { "codalus": { "command": "codalus", "args": ["mcp", "--folder", "/path/to/repo"] } } }
+```
+
+`codalus mcp --folder <path>` opens the folder (its solution, or the folder itself) in an IDE without a window and serves the same tools, with the same checks, on the agent's standard input and output. It ends when the agent closes that pipe.
+- **The folder must be trusted.** It is one you trusted in Codalus IDE (**Trust Folder**), or inside one. Any other folder is refused at once: the process prints why on its standard error and exits with code 2, before anything starts.
+- **Nobody is there to ask.** Reads run. Actions run only when **Agent IDE Actions** (`ai.agent.ideActions`, in your user settings) is `allow`, the default; with `ask` or `askOncePerSession`, each action is refused with that reason, and **Always Allow in This Workspace** doesn't apply. Plugins' tools, which ask every time, are refused. A dialog or picker a command opens is cancelled.
+- **Nothing asks per folder.** The question an agent outside the IDE gets (above) doesn't apply: the agent started this IDE on a folder it named, and MCP Server (`ai.mcpServer.enabled`) needn't be on.
+- It uses your settings, plugins and trusted folders (`--user-data-dir <dir>` for another set). It takes no requests from other `codalus` commands and opens no pipe of its own, so a window you have open keeps them. It doesn't check for updates or sync settings.
+- It runs on the platform the UI tests use: layout and rendering happen without a display, so `ide_screenshot` still works. A desktop app it runs needs a display of its own: `offScreen` gives it one on Linux with Xvfb.
 
 ## External agents (ACP)
 

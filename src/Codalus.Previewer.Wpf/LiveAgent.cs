@@ -32,8 +32,10 @@ namespace Codalus.Previewer.Wpf;
 /// instead of reaching it</item>
 /// <item><c>path id</c> → the window's class and the element's logical path from it</item>
 /// </list>
+/// The desktop-app tools for agents (M60b, ADR 0099) add <c>controls</c>, <c>picture</c> and <c>input</c>
+/// (<c>LiveAgent.App.cs</c>), and each window's size to <c>windows</c>.
 /// </summary>
-internal sealed class LiveAgent(Action<string> send)
+internal sealed partial class LiveAgent(Action<string> send)
 {
     private readonly ConditionalWeakTable<DependencyObject, object> _ids = new();
     private readonly Dictionary<int, WeakReference<DependencyObject>> _elements = [];
@@ -63,6 +65,9 @@ internal sealed class LiveAgent(Action<string> send)
             "highlight" => Highlight(Arg(2) == "none" ? null : Element(Arg(2))),
             "pick" => Pick(Arg(2) == "on"),
             "path" => Path(Element(Arg(2))),
+            "controls" => Controls(Element(Arg(2))),
+            "picture" => Picture(Element(Arg(2))),
+            "input" => Input(Element(Arg(2)), Arg(3), Arg(4), Arg(5)),
             _ => throw new InvalidOperationException("Unknown command " + command),
         }, DispatcherPriority.Loaded);
     }
@@ -93,7 +98,10 @@ internal sealed class LiveAgent(Action<string> send)
     // ------------------------------------------------------------------ windows and trees
 
     private string Windows(Application application) =>
-        Join(application.Windows.Cast<Window>().Select(w => new[] { Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w) }));
+        Join(application.Windows.Cast<Window>().Select(w => new[]
+        {
+            Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w), Number(w.ActualWidth), Number(w.ActualHeight),
+        }));
 
     private string Tree(DependencyObject root, bool visual)
     {

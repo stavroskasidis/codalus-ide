@@ -194,6 +194,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         InitializeComponentsPage();
         InitializeAi();
         InitializeAgent();
+        InitializeHeadless();
 
         // A file given on the command line: start its language service now, alongside the window.
         if (options.OpenFile is { } file && Languages.LanguageIdOf(file) is { } languageId)
@@ -464,6 +465,13 @@ public sealed partial class ShellHost : IAsyncDisposable
         }
 
         _interactive = true;
+        if (IsHeadless)
+        {
+            // codalus mcp --folder (M60b): the plugins that start with the IDE, and nothing of a window's startup.
+            _ = Plugins.ActivateStartupPluginsAsync(CancellationToken.None);
+            return;
+        }
+
         _ = OfferRecoveryAsync();
         StartUpdates();
 
@@ -1249,6 +1257,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         await DisposeCompanionAsync().ConfigureAwait(false);
         StopListening();
         _mcpBridge?.Dispose();
+        StopOffScreen();
         await McpServers.DisposeAsync().ConfigureAwait(false);
         await ExternalAgents.DisposeAsync().ConfigureAwait(false);
         Askpass?.Dispose();
