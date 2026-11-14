@@ -3880,7 +3880,10 @@ internal sealed class NetFxDebugSession(DapServer dap, TextWriter log, IClrDebug
         foreach (var thread in Process.Threads())
         {
             var frames = SafeFrames(thread);
-            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture)).Append(':');
+            // Its name says which runtime or library thread a native-only one is (the finalizer, a pool's worker): what the
+            // evaluation may wait on when no frame says (DebugDepthTests' image visualizer, CI run 43587457886).
+            text.Append(text.Length == 0 ? "" : Environment.NewLine).Append("  thread ").Append(thread.Id.ToString(CultureInfo.InvariantCulture))
+                .Append(" (").Append(ThreadName(thread)).Append(thread.Frozen ? ", frozen" : "").Append("):");
             foreach (var frame in frames.Take(TimedOutEvalFrames))
             {
                 text.AppendLine().Append("    ").Append(FrameText(frame));
