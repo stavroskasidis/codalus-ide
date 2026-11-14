@@ -25,8 +25,10 @@ internal static class HeapRootPaths
     /// stack the runtime may not walk, so none of its frames' roots are reported. Both gave "no root path" on CI for an
     /// object a waiting thread's frame held (Linux and Windows, runs 43368524423 and 43422861486; docs/ci-flakes.md):
     /// locally, 25 of 25 snapshots of a thread spinning in managed code had none, and 1 of 25 taken while another thread
-    /// allocated caught a GC. Such a snapshot isn't the process's state at a moment its roots can be read, so another is
-    /// taken, up to <see cref="MaxSnapshots"/>, and the answer says how many were set aside and why.
+    /// allocated caught a GC. A third, on Windows: the holder thread stopped in its wait, but its stack walked no further
+    /// than the wait's P/Invoke frames, so it had no roots either (run 43583064438). Such a snapshot isn't the process's
+    /// state at a moment its roots can be read, so another is taken, up to <see cref="MaxSnapshots"/>, and the answer says
+    /// how many were set aside and why.
     /// </remarks>
     public static string Describe(string typeName, Func<ClrObject, bool> isTarget, int maxPaths = 3, int? holder = null)
     {
@@ -104,6 +106,23 @@ internal static class HeapRootPaths
             if (thread.GCMode == GCMode.Cooperative)
             {
                 return $"thread {id} was running managed code";
+            }
+
+            // Stopped in a wait, but its stack walked no further than the wait's own frames: on Windows the snapshot
+            // caught the thread blocked in WaitForMultipleObjectsEx and its walk ended at the two P/Invoke frames, with
+            // none of its callers' frames and so none of their roots (Windows CI, PR #368's run 43583064438). The
+            // holder's own frame holds the object, so a holder stack with no roots isn't one the snapshot could read.
+            try
+            {
+                if (!thread.EnumerateStackRoots().Any())
+                {
+                    var frames = thread.EnumerateStackTrace().Select(f => f.Method is { } m ? $"{m.Type?.Name}.{m.Name}" : f.FrameName).OfType<string>().Take(3);
+                    return $"thread {id}'s stack had no roots (it ended at {string.Join(" < ", frames)})";
+                }
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+            {
+                return $"thread {id}'s stack couldn't be read ({ex.Message})";
             }
         }
 
