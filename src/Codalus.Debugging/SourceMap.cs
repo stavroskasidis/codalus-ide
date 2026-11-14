@@ -187,6 +187,9 @@ public sealed class PathMappingDebugAdapter : IDebugAdapter
 
     public SourceMap Map { get; }
 
+    /// <summary>The program runs this machine's build (a fast-mode container, M63): edits made here apply to it.</summary>
+    public bool LocalBuild { get; init; }
+
     public Capabilities Capabilities => Inner.Capabilities;
 
     public Task Initialized => Inner.Initialized;

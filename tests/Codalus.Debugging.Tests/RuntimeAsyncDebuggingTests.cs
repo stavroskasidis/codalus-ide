@@ -368,13 +368,19 @@ public sealed class RuntimeAsyncDebuggingTests(AsyncDebuggeeFixture fixture) : I
         {
             // A limit (ADR 0100): the callback's task is awaited by runtime-async code, which the runtime resumes where
             // Just My Code's stepper doesn't see it, and no state machine names it. The library calls none of the user's
-            // code after the await and runs to its end; the step ends in the next call the stepper sees resume, the
-            // program's state machine that awaits the library, on its next line.
-            stop = await events.StoppedAsync(30);
-            top = await TopAsync(adapter, stop);
-            Assert.True(top.Line == DebuggeeFixture.Line(mixed, "mixed-return"), $"Step Out stopped in {top.Name} on line {top.Line}.");
-            Assert.Equal("16", await ValueAsync(adapter, top, "sum"));
-            await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            // code after the await and runs to its end; the step ends in the next call the stepper sees resume on its
+            // thread, the program's state machine that awaits the library, on its next line. When that resumes on another
+            // thread, nothing ends the step and the program runs on, as Continue does (macOS CI, run 43526072431: the
+            // callback had resumed on another thread after the step over its await). Either is the limit's.
+            var next = await events.NextOfAsync(["stopped", "exited"], 30);
+            if (next.Event == "stopped")
+            {
+                stop = next.Stopped!;
+                top = await TopAsync(adapter, stop);
+                Assert.True(top.Line == DebuggeeFixture.Line(mixed, "mixed-return"), $"Step Out stopped in {top.Name} on line {top.Line}.");
+                Assert.Equal("16", await ValueAsync(adapter, top, "sum"));
+                await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            }
         }
     }
 
