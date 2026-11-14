@@ -1,5 +1,5 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-11",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-14",
   "protocolVersion": 1,
   "agentCapabilities": {
     "_meta": {
@@ -42,7 +42,7 @@
   "agentInfo": {
     "name": "@agentclientprotocol/claude-agent-acp",
     "title": "Claude Agent",
-    "version": "0.106.0"
+    "version": "0.107.0"
   },
   "authMethods": [
     {
