@@ -83,7 +83,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 
 ## CI and releases
 
-- `pipeline.yml` is the one pipeline: CI on every pull request, nightlies from `develop`, stable releases from `master`. A pull request tests what its files need (`eng/ci-scope.sh`): Linux x64 for most, every OS for the paths in `eng/ci-platform-paths.txt`, the `ci:full` label or a PR into `master`, a few projects for the areas in `eng/ci-isolated-paths.txt`. `develop` and `master` test everything. `pages.yml` deploys the site and apt/dnf repositories; `compat.yml` is the manual old-.NET matrix.
+- `pipeline.yml` is the one pipeline: CI on every pull request, nightlies from `develop`, stable releases from `master`. A pull request tests what its files need (`eng/ci-scope.sh`): Linux x64 for most, every OS for the paths in `eng/ci-platform-paths.txt`, the `ci:full` label or a PR into `master`, a few projects for the areas in `eng/ci-isolated-paths.txt`. `develop`'s nightly (a schedule; a push to `develop` starts no run) and `master` test everything. `pages.yml` deploys the site and apt/dnf repositories; `compat.yml` is the manual old-.NET matrix.
 - A release is atomic: tests, smoke, packages, update and (stable) benchmarks and site gate the release's commit; any failure publishes nothing and removes the tag.
 - Benchmark numbers that decide something (a gate's verdict, `accepted.json` and its evidence, `budgets.json`) come from CI, both versions on the same runner in alternating rounds: never from a local machine, yours or a remote session's (`benchmarks/README.md`).
 - `VERSION` holds the next version; rules in `eng/Codalus.Release`. Packaging is `eng/package.sh` (Velopack); self-update is ADR 0029.

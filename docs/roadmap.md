@@ -1171,7 +1171,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
 
 **Scope.**
 - **Branches** (D21):
-  - `develop` is the default branch. Day-to-day commits land there directly. Every push runs the CI on Windows, macOS and Linux (`pipeline.yml`).
+  - `develop` is the default branch. Day-to-day commits land there directly. Every pull request runs CI (`pipeline.yml`); since 2026-11-14 a push to `develop` starts no run, and the nightly tests its head on Windows, macOS and Linux.
   - `master` only receives merges from `develop` (each one is a stable release) and hotfixes. After a hotfix release, the workflow merges `master` back into `develop`. (Since 2026-10-21 a release reaches `master` through a `release/X.Y.Z` branch cut from `develop`: [ADR 0028](adr/0028-release-cycle-and-installers.md), [docs/release/releasing.md](release/releasing.md).)
   - `CLAUDE.md`, `CONTRIBUTING.md` and the go-public checklist change from committing to `master` to committing to `develop`. The `validate` scratch branch stays.
 - **Versioning** (D21):
@@ -1183,7 +1183,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
   - Versions stay 0.x until the maintainer says otherwise, even after the repository goes public (D14).
 - **Builds** (D27): Windows x64, macOS on Apple silicon, Linux x64 and Linux ARM64. The Linux ARM64 packages use GitHub's ARM64 Linux runners.
 - **Workflows:**
-  - **Nightlies**: once a night (`pipeline.yml`'s schedule, 00:17 UTC, since 2026-11-14), `develop`'s head is published as a nightly when its run passes and it has none yet. From 2026-10-14 to 2026-11-13 every push to `develop` whose run passed was one; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13. A push to `develop` is CI only.
+  - **Nightlies**: once a night (`pipeline.yml`'s schedule, 00:17 UTC, since 2026-11-14), `develop`'s head is published as a nightly when its run passes and it has none yet. From 2026-10-14 to 2026-11-13 every push to `develop` whose run passed was one; before that `release.yml` with kind `nightly`, and `nightly.yml` until 2026-10-13. A push to `develop` starts no run: its pull request ran CI.
     - It builds the installers on three OSes and smoke-tests the installed packages.
     - It publishes a GitHub prerelease, `v0.2.0-nightly.20261011.1`, with the commits since the previous nightly as its notes.
     - Only the last 14 nightlies are kept.
@@ -1191,7 +1191,7 @@ The maintainer added this phase on 2026-10-10 and put it next, after M16b and be
     - It runs the same build and smoke test.
     - It publishes a GitHub release `v0.2.0` with release notes, the update feed (M32), the apt and dnf repositories, and the winget manifests.
   - **Release notes** are generated from the commits since the previous stable tag. They are grouped by milestone (commit subjects name the milestone) and link to the checkpoint summaries. If `CHANGELOG.md` has a hand-written section, it goes first.
-  - **While the repository was private** (D20, until 2026-10-11) the workflows ran on manual dispatch only; since it went public every push to `develop` or `master` runs them.
+  - **While the repository was private** (D20, until 2026-10-11) the workflows ran on manual dispatch only; since it went public every push to `master` runs them, and every push to `develop` did until 2026-11-14 (now the nightly's schedule).
 - **Installers** (D17, D18):
   - **Windows:**
     - a Velopack `Setup.exe`: per-user, no administrator rights, a Start menu entry, an uninstall entry, and the `codalus` command on the `PATH`
@@ -3669,7 +3669,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
   - **Going public:** the repository went public on 2026-10-11 (D29), which switched the releases on (D20).
   - **Built:** M18b (2026-10-12), M19a (2026-10-12), M19b (2026-10-13), M21a (2026-10-12), M21b (2026-10-13), M22a–M22d (2026-10-13), M23a–M23c (2026-10-13), M31b (2026-10-13), M34e (2026-10-13), M37 and M38 (added and built 2026-10-13), and M39, the rename to Codalus IDE (2026-10-13, ADR 0056). Each has its checkpoint in `docs/checkpoints/`, except M39.
   - **Releases:** 0.1.0 (2026-10-13), 0.2.0 (2026-10-14, the first under the new name) and the hotfix 0.2.1 (2026-10-14); `VERSION` is 0.3.0 on `develop`.
-  - **Workflows:** `nightly.yml` was folded into `release.yml` (2026-10-13); on 2026-10-14 `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` became the one `pipeline.yml` (CI, then the branch's release, atomic) with the older-.NET matrix in `compat.yml`, and `linux-repos.yml` became `pages.yml`. Every push to `develop` that passes is a nightly; there is no schedule (D20 superseded).
+  - **Workflows:** `nightly.yml` was folded into `release.yml` (2026-10-13); on 2026-10-14 `ci.yml`, `release.yml`, `packages.yml` and `benchmarks.yml` became the one `pipeline.yml` (CI, then the branch's release, atomic) with the older-.NET matrix in `compat.yml`, and `linux-repos.yml` became `pages.yml`. Every push to `develop` that passed was a nightly, with no schedule (D20 superseded), until 2026-11-14: since then a schedule publishes one a night, and a push to `develop` starts no run.
   - **Review:** the status table uses one form ("done (… at checkpoint)"); a [Deferred work](#deferred-work) table collects the `TODO(issue)` items whose milestone closed without them.
 - 2026-10-15: M28a (AI assistance, part one) at its checkpoint ([m28a](checkpoints/m28a.md), ADR 0062). M28 is split in three: M28a the provider API, the data boundary and chat; M28b inline completions, next-edit suggestions and the AI actions on existing surfaces; M28c agent mode and MCP, with its own ADR on the agent's safety model. Built: `LanguageModels` as a proposed plugin API with streamed replies and tool calls; the built-in `codalus.openai` (OpenAI-compatible endpoints and Ollama) and `codalus.anthropic` plugins, activated only when chosen, with keys in the OS credential store; `AiService`, the one gate every request goes through (off by default, a workspace's settings can only turn it off, `.gitignore`, `.codalusignore`, `ai.exclude` and secret file names exclude files, secrets in text are redacted, every request logged without its content); AI Chat with the context chips, streamed Markdown answers and Apply through the refactoring preview; the `ai.chat` smoke step. Validated on Linux; Windows and the Mac remain to be checked.
 - 2026-10-15: M28b at its checkpoint ([m28b](checkpoints/m28b.md)): inline suggestions (ghost text at the caret, every line of it; Tab, Ctrl+Right, Esc; `ai.completions.enabled`) and next edit suggestions (`ai.nextEdit.enabled`), each off by default and through the same boundary; AI actions on existing surfaces, each on request: commit messages, pull request descriptions, Ask AI in the exception helper, Ask AI Why It Fails in the Test Explorer, Fix with AI and Generate Tests with AI in the editor, Summarize with AI on a CPU report. Validated on Linux.

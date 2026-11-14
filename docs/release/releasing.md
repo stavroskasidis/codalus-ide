@@ -13,8 +13,7 @@ and it is never force-pushed.
 
 - The milestone's checkpoint is validated (`docs/checkpoints/`), and `CHANGELOG.md` has the release's section,
   `## X.Y.Z`: the release notes come from it.
-- `develop`'s head is green: its own push run passed, or it differs from the newest commit whose run passed only in
-  `docs/` and Markdown files (those pushes start no run).
+- `develop`'s head is green: its own run passed (the nightly, or a dispatch). A push to `develop` starts no run.
 - `VERSION` on `develop` is `X.Y.Z`, the version to release.
 
 ## 1. Cut the release branch
@@ -25,13 +24,13 @@ From `develop`'s head:
 git fetch origin develop master
 sha="$(git rev-parse origin/develop)"
 version="$(git show "$sha:VERSION" | tr -d '[:space:]')"
-gh run list --workflow pipeline.yml --branch develop --event push --commit "$sha" --json conclusion --jq '.[0].conclusion // "no run"'
+gh run list --workflow pipeline.yml --branch develop --commit "$sha" --json conclusion --jq '.[0].conclusion // "no run"'
 ```
 
-- `success`: cut it.
-- `no run`: the head is a docs-only merge. Find the newest commit whose run passed
-  (`gh run list --workflow pipeline.yml --branch develop --event push --status success --limit 1 --json headSha`) and
-  check that `git diff --name-only <that sha> "$sha" | grep -vE '^docs/|\.md$'` prints nothing; then cut the head.
+- `success`: cut it (the night's nightly, or a dispatch, passed on it).
+- `no run`: nothing has tested the head since it was merged. Wait for the nightly, or start one now
+  (`gh workflow run pipeline.yml --ref develop -f dry_run=true`, which tests everything and publishes nothing), and look again.
+  Or cut the newest nightly's commit instead (`git rev-list -n 1 <its tag>`) when what came after it can wait.
 - anything else: `develop` is red; fix it first.
 
 `git merge-base --is-ancestor "$sha" origin/master` must fail (master doesn't have it yet). Then:
