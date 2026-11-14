@@ -2,8 +2,8 @@ namespace AsyncDebuggee;
 
 /// <summary>
 /// The async debugging fixture (M61, ADR 0100). Built twice from these files: AsyncDebuggee (state machines) and
-/// AsyncDebuggee.RuntimeAsync (runtime async, .NET 11). An argument picks one scenario (steps, chain, throw, mixed);
-/// none runs them all. Tests find lines by the markers.
+/// AsyncDebuggee.RuntimeAsync (runtime async, .NET 11). An argument picks one scenario (steps, chain, throw, mixed,
+/// race, held); none runs them all but held. Tests find lines by the markers.
 /// </summary>
 public static class Program
 {
@@ -37,6 +37,17 @@ public static class Program
         if (scenario is "all" or "mixed")
         {
             total += await Mixed.RoundTripAsync(4);
+        }
+
+        if (scenario is "all" or "race")
+        {
+            total += await Elsewhere.CallAsync(1);
+        }
+
+        // Not in "all": its caller waits for the method to release it, which only a stop in between makes interesting.
+        if (scenario is "held")
+        {
+            total += await Held.HoldAsync(3); // [main-held]
         }
 
         Console.WriteLine($"async total={total}"); // [main-end]
