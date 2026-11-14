@@ -73,6 +73,9 @@ public sealed record ProfilerSession(
     public const string LaunchTarget = "launch";
     public const string ProcessTarget = "process";
 
+    /// <summary>A compose service, attached through its diagnostic port (M63b): <see cref="ProcessId"/> is 0, <see cref="ProcessName"/> the service.</summary>
+    public const string ServiceTarget = "service";
+
     [JsonIgnore]
     public string Folder { get; init; } = string.Empty;
 

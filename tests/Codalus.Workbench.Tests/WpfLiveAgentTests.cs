@@ -221,4 +221,80 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
         await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(30), Ct);
         Assert.False(session.IsConnected);
     }
+
+    /// <summary>
+    /// M60b (ADR 0099): the desktop-app tools' commands in the WPF fixture: the window's size and picture, its controls
+    /// with text, state and bounds, and input inside the app (text typed into the box, the Add button clicked, a scroll;
+    /// a disabled button and a chord with modifiers refused).
+    /// </summary>
+    [Fact]
+    public async Task A_running_wpf_app_lists_its_controls_takes_a_picture_and_takes_input_inside_it()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "WPF apps run on Windows only (D31).");
+        await using var session = LiveSession.Start(WpfFixture.Previewer) ?? throw new InvalidOperationException("No agent.");
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        session.Connected += (_, _) => connected.TrySetResult();
+        var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, WorkingDirectory = Path.GetDirectoryName(wpf.AppDll)! };
+        start.ArgumentList.Add(wpf.AppDll);
+        foreach (var (name, value) in session.Environment(null))
+        {
+            start.Environment[name] = value;
+        }
+
+        var appOutput = new System.Text.StringBuilder();
+        using var app = Process.Start(start)!;
+        app.OutputDataReceived += (_, e) => { lock (appOutput) { appOutput.AppendLine("[app] " + e.Data); } };
+        app.ErrorDataReceived += (_, e) => { lock (appOutput) { appOutput.AppendLine("[app] " + e.Data); } };
+        app.BeginOutputReadLine();
+        app.BeginErrorReadLine();
+        try
+        {
+            await connected.Task.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+            var window = Assert.Single(await EventuallyAsync(() => session.WindowsAsync(Ct), w => w.Count > 0, "the app's window"));
+            Assert.True(window.Width > 0 && window.Height > 0, $"{window.Width}x{window.Height}");
+
+            // The picture: a PNG of the client area.
+            var picture = await session.PictureAsync(window.Id, Ct);
+            Assert.Equal([0x89, (byte)'P', (byte)'N', (byte)'G'], Convert.FromBase64String(picture.Png)[..4]);
+            Assert.True(picture.Width > 0 && picture.Height > 0);
+
+            // The controls: the box, the Add button (disabled while the box is empty), the count; bounds in the window.
+            var controls = await session.ControlsAsync(window.Id, Ct);
+            var box = Assert.Single(controls, c => c.Name == "NewTitleBox");
+            Assert.Equal("TextBox", box.Type);
+            Assert.NotNull(box.Bounds);
+            var add = Assert.Single(controls, c => c.Type == "Button" && c.Text == "Add");
+            Assert.Contains("disabled", add.State);
+            Assert.Contains(controls, c => c.Type == "TextBlock" && c.Text == "1 remaining");
+            var refused = await Assert.ThrowsAsync<PreviewerException>(() => session.InputAsync(add.Id, "click", "", false, 0, Ct));
+            Assert.Contains("disabled", refused.Message, StringComparison.Ordinal);
+
+            // Text typed into the box enables Add; a click adds the item, and the count follows.
+            Assert.Contains("Buy milk", await session.InputAsync(box.Id, "text", "Buy milk", replace: true, 0, Ct), StringComparison.Ordinal);
+            await EventuallyAsync(() => session.ControlsAsync(window.Id, Ct), c => !c.Single(x => x.Id == add.Id).State.Contains("disabled"), "Add enabled");
+            Assert.Contains("invoked", await session.InputAsync(add.Id, "click", "", false, 0, Ct), StringComparison.Ordinal);
+            await EventuallyAsync(() => session.ControlsAsync(window.Id, Ct), c => c.Any(x => x.Type == "TextBlock" && x.Text == "2 remaining"), "the count after Add");
+
+            // A key alone is pressed on the control; a chord with modifiers is refused (WPF reads them from the keyboard).
+            Assert.StartsWith("Pressed End on TextBox 'NewTitleBox'", await session.InputAsync(box.Id, "keys", "End", false, 0, Ct), StringComparison.Ordinal);
+            await Assert.ThrowsAsync<PreviewerException>(() => session.InputAsync(box.Id, "keys", "Ctrl+A", false, 0, Ct));
+
+            // The list scrolls through its scroll viewer.
+            var list = Assert.Single(controls, c => c.Type == "ListBox");
+            Assert.StartsWith("Scrolled ScrollViewer", await session.InputAsync(list.Id, "scroll", "bottom", false, 0, Ct), StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (!app.HasExited)
+            {
+                ProcessTree.Kill(app);
+            }
+
+            app.WaitForExit();
+            lock (appOutput)
+            {
+                output.WriteLine(appOutput.ToString());
+            }
+        }
+    }
 }

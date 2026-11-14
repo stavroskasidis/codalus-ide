@@ -37,8 +37,10 @@ namespace Codalus.Previewer.Wpf;
 /// <item><c>xbreaks [base64]</c>, <c>watch id property on|off</c>, <c>styles id</c> → XAML breakpoints, Break When Value
 /// Changes and the style explanation (M64b, <see cref="WpfBreak"/>, <see cref="WpfStyles"/>)</item>
 /// </list>
+/// The desktop-app tools for agents (M60b, ADR 0099) add <c>controls</c>, <c>picture</c> and <c>input</c>
+/// (<c>LiveAgent.App.cs</c>), and each window's size to <c>windows</c>.
 /// </summary>
-internal sealed class LiveAgent(Action<string> send)
+internal sealed partial class LiveAgent(Action<string> send)
 {
     private readonly ConditionalWeakTable<DependencyObject, object> _ids = new();
     private readonly Dictionary<int, WeakReference<DependencyObject>> _elements = [];
@@ -75,6 +77,9 @@ internal sealed class LiveAgent(Action<string> send)
             "highlight" => Highlight(Arg(2) == "none" ? null : Element(Arg(2))),
             "pick" => Pick(Arg(2) == "on"),
             "path" => Path(Element(Arg(2))),
+            "controls" => Controls(Element(Arg(2))),
+            "picture" => Picture(Element(Arg(2))),
+            "input" => Input(Element(Arg(2)), Arg(3), Arg(4), Arg(5)),
             "bindings" => WpfBindings.Take(),
             "reload" => WpfReload.Reload(application, WpfReload.Decode(Arg(6))),
             "watch" => Watch(Element(Arg(2)), Arg(3), Arg(4) == "on"),
@@ -109,7 +114,10 @@ internal sealed class LiveAgent(Action<string> send)
     // ------------------------------------------------------------------ windows and trees
 
     private string Windows(Application application) =>
-        Join(application.Windows.Cast<Window>().Select(w => new[] { Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w) }));
+        Join(application.Windows.Cast<Window>().Select(w => new[]
+        {
+            Text(IdOf(w)), w.Title ?? string.Empty, w.GetType().FullName ?? TypeName(w), Number(w.ActualWidth), Number(w.ActualHeight),
+        }));
 
     private string Tree(DependencyObject root, bool visual)
     {

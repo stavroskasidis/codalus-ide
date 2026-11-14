@@ -7,8 +7,25 @@ using System.Text;
 
 namespace Codalus.Workbench.Previewer;
 
-/// <summary>A window of the running app.</summary>
-public sealed record LiveWindow(int Id, string Title, string Type);
+/// <summary>A window of the running app; its size (device-independent pixels) when the agent says it.</summary>
+public sealed record LiveWindow(int Id, string Title, string Type)
+{
+    public double? Width { get; init; }
+
+    public double? Height { get; init; }
+}
+
+/// <summary>Where a control is in its window, in device-independent pixels.</summary>
+public readonly record struct LiveBounds(double X, double Y, double Width, double Height);
+
+/// <summary>
+/// A control of the app's logical tree as the desktop-app tools show it (M60b): its type, name, the text it shows, its
+/// state (words such as disabled, focused, checked, selected, value=3) and where it is, when it is laid out.
+/// </summary>
+public sealed record LiveControl(int Id, int ParentId, string Type, string Name, string Text, IReadOnlyList<string> State, LiveBounds? Bounds);
+
+/// <summary>A picture of a window: a PNG (base64) and its size in pixels, at 96 dpi.</summary>
+public sealed record LivePicture(string Png, int Width, int Height);
 
 /// <summary>An element of the app's logical or visual tree; <see cref="ParentId"/> is 0 for the tree's root.</summary>
 public sealed record LiveNode(int Id, int ParentId, string Type, string Name, bool Templated);
@@ -317,7 +334,50 @@ public sealed class LiveSession : IAsyncDisposable
         reply.Length == 0 ? [] : reply.Split(Record).Select(r => r.Split(Field));
 
     public async Task<IReadOnlyList<LiveWindow>> WindowsAsync(CancellationToken cancellationToken) =>
-        [.. Records(await RequestAsync(cancellationToken, "windows").ConfigureAwait(false)).Where(r => r.Length >= 3).Select(r => new LiveWindow(Int(r[0]), r[1], r[2]))];
+        [.. Records(await RequestAsync(cancellationToken, "windows").ConfigureAwait(false)).Where(r => r.Length >= 3).Select(r => new LiveWindow(Int(r[0]), r[1], r[2])
+        {
+            Width = r.Length >= 5 ? Double(r[3]) : null,
+            Height = r.Length >= 5 ? Double(r[4]) : null,
+        })];
+
+    /// <summary>The controls of <paramref name="root"/>'s logical tree (a window's id), depth first (M60b).</summary>
+    public async Task<IReadOnlyList<LiveControl>> ControlsAsync(int root, CancellationToken cancellationToken) =>
+        [.. Records(await RequestAsync(cancellationToken, "controls", Id(root)).ConfigureAwait(false)).Where(r => r.Length >= 10).Select(r => new LiveControl(
+            Int(r[0]),
+            Int(r[1]),
+            r[2],
+            r[3],
+            r[4],
+            r[5].Split(' ', StringSplitOptions.RemoveEmptyEntries),
+            Double(r[6]) is { } x && Double(r[7]) is { } y && Double(r[8]) is { } width && Double(r[9]) is { } height ? new LiveBounds(x, y, width, height) : null))];
+
+    /// <summary>A PNG of a window (M60b).</summary>
+    public async Task<LivePicture> PictureAsync(int window, CancellationToken cancellationToken)
+    {
+        var reply = (await RequestAsync(cancellationToken, "picture", Id(window)).ConfigureAwait(false)).Split(Field);
+        return reply.Length >= 3 ? new LivePicture(reply[0], Int(reply[1]), Int(reply[2])) : throw new PreviewerException("The app's agent sent no picture.");
+    }
+
+    /// <summary>
+    /// Input sent to a control inside the app (M60b), never through the user's pointer or keyboard focus: a click
+    /// (<paramref name="kind"/> <c>click</c>), <c>text</c> (<paramref name="value"/>, replacing the text when
+    /// <paramref name="replace"/>), <c>keys</c> (<paramref name="value"/>: <c>Ctrl+A Enter</c>) or <c>scroll</c>
+    /// (<paramref name="value"/>: a direction, by <paramref name="amount"/>). Returns what the agent did, in words; throws
+    /// <see cref="PreviewerException"/> with its reason.
+    /// </summary>
+    public Task<string> InputAsync(int control, string kind, string value, bool replace, int amount, CancellationToken cancellationToken) => kind switch
+    {
+        "click" => RequestAsync(cancellationToken, "input", Id(control), "click"),
+        "text" => RequestAsync(cancellationToken, "input", Id(control), "text", Convert.ToBase64String(Encoding.UTF8.GetBytes(value)), replace ? "replace" : "append"),
+        "keys" => RequestAsync(cancellationToken, "input", Id(control), "keys", OneLine(value)),
+        "scroll" => RequestAsync(cancellationToken, "input", Id(control), "scroll", OneLine(value), Id(amount)),
+        _ => throw new ArgumentException("Unknown input " + kind + ".", nameof(kind)),
+    };
+
+    private static string OneLine(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
+
+    private static double? Double(string text) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ? value : null;
 
     public async Task<IReadOnlyList<LiveNode>> TreeAsync(int root, bool visual, CancellationToken cancellationToken) =>
         [.. Records(await RequestAsync(cancellationToken, "tree", Id(root), visual ? "visual" : "logical").ConfigureAwait(false))

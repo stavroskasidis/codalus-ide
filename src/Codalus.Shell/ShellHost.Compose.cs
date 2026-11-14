@@ -6,6 +6,7 @@ using Codalus.Workbench.Build;
 using Codalus.Workbench.Containers;
 using Codalus.Workbench.Debugging;
 using Codalus.Workbench.Debugging.Remote;
+using Codalus.Workbench.Diagnostics;
 using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell;
@@ -201,6 +202,18 @@ public sealed partial class ShellHost
 
     private bool ComposeFastModeOn => Workbench.Settings.GetBoolean(ContainerLaunch.FastModeSetting, true);
 
+    /// <summary>
+    /// The folder fast mode mounts into each .NET service for its diagnostic port (M63b, ADR 0102), the profiler's way
+    /// into a container: <c>.codalus/state/&lt;solution&gt;/diag</c>. Null where the engine can't share a Unix socket
+    /// with this machine: off Linux (Docker Desktop's file sharing on macOS and Windows doesn't carry sockets) and for an
+    /// engine in WSL (the diagnostics host runs on Windows).
+    /// </summary>
+    // TODO(issue): the Container (Dockerfile) launch profile's single container (M17a) could mount it the same way.
+    private string? ComposeDiagnosticsFolder(ContainerEngine engine) =>
+        OperatingSystem.IsLinux() && ComposeHostPath(engine) is null && Solutions.Solution is { } solution
+            ? Path.Combine(SolutionStateLayout.Directory(solution.Path, solution.IsFolder), ComposeFastMode.DiagnosticsFolderName)
+            : null;
+
     /// <summary>A local path as the engine mounts it (a Linux path for an engine in WSL).</summary>
     private Func<string, string>? ComposeHostPath(ContainerEngine engine) =>
         Path.GetFileNameWithoutExtension(engine.Tool[0]).Equals("wsl", StringComparison.OrdinalIgnoreCase) ? p => WslLaunch.ToLinuxPath(p) : null;
@@ -231,6 +244,7 @@ public sealed partial class ShellHost
         run.Model = model;
         var projects = Solutions.Projects.Keys.ToList();
         var startup = ComposeStartupService(file, argument);
+        var diagnostics = ComposeDiagnosticsFolder(engine);
         var dotnet = await Task.Run(() => ComposeFastMode.DotnetServices(model, file, projects, startup)).ConfigureAwait(true);
         foreach (var skipped in dotnet.Where(s => s.BaseStage is null))
         {
@@ -255,7 +269,7 @@ public sealed partial class ShellHost
 
             var compose = model.Services.First(s => s.Name == service.Service);
             var debugged = debug(service.Service);
-            services.Add(await Task.Run(() => ComposeFastMode.Plan(service, compose, target, debugged)).ConfigureAwait(true));
+            services.Add(await Task.Run(() => ComposeFastMode.Plan(service, compose, target, debugged, diagnostics)).ConfigureAwait(true));
         }
 
         run.Services = services;
@@ -273,9 +287,15 @@ public sealed partial class ShellHost
         var text = ComposeFastMode.Override(run.File, run.Project, [.. run.Services], ComposeHostPath(ContainerEngine));
         try
         {
+            var diagnostics = run.Services.Select(s => s.DiagnosticsFolder).FirstOrDefault(f => f is not null);
             return await Task.Run(() =>
             {
                 var path = Path.Combine(SolutionStateLayout.EnsureDirectory(solution.Path, solution.IsFolder), ComposeFastMode.OverrideFileName);
+                if (diagnostics is not null)
+                {
+                    EnsureDiagnosticsFolder(diagnostics);
+                }
+
                 SolutionStateLayout.WriteAllTextAtomic(path, text);
                 return path;
             }).ConfigureAwait(true);
@@ -284,6 +304,20 @@ public sealed partial class ShellHost
         {
             Workbench.Notifications.Error(Localizer.Format("msg.compose.couldNotWriteTheOverride", "Could not write the IDE's compose override: {0}", ex.Message));
             return null;
+        }
+    }
+
+    /// <summary>
+    /// The diagnostics folder, made before compose mounts it (a bind mount's folder must exist). The service's user in
+    /// its container is another uid (the image's <c>$APP_UID</c>), which needs to pass through the folder to reach the
+    /// socket, but not to list it or write to it: the folder is <c>rwx--x--x</c>.
+    /// </summary>
+    private static void EnsureDiagnosticsFolder(string folder)
+    {
+        Directory.CreateDirectory(folder);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute);
         }
     }
 
@@ -765,6 +799,85 @@ public sealed partial class ShellHost
             default:
                 return false;
         }
+    }
+
+    // ------------------------------------------------------------------ profiling (M63b)
+
+    /// <summary>
+    /// The compose services fast mode runs whose runtime the profiler reaches through their diagnostic port (M63b,
+    /// ADR 0102): each one's name and the socket the diagnostics host listens on for it.
+    /// </summary>
+    public IReadOnlyList<(string Service, string Socket)> ComposeProfileTargets() =>
+        _compose is { } run ? [.. run.Services.Where(s => s.DiagnosticsSocket is not null).Select(s => (s.Service.Service, s.DiagnosticsSocket!))] : [];
+
+    /// <summary>The socket <paramref name="service"/>'s runtime connects to, or null with the reason in a notification.</summary>
+    private string? ComposeProfileTarget(string service)
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            Workbench.Notifications.Warning(Localizer.Get("msg.compose.profileNeedsLinux", "Profiling a compose service needs Linux: the profiler reaches a service through a Unix socket in a folder its container mounts, and Docker Desktop's file sharing on macOS and Windows doesn't carry sockets."));
+            return null;
+        }
+
+        if (_compose is not { } run)
+        {
+            Workbench.Notifications.Warning(Localizer.Get("msg.compose.noComposeAppRuns", "No compose app runs from Codalus IDE: use Compose Up or Debug Compose first."));
+            return null;
+        }
+
+        if (run.Service(service) is not { } fast)
+        {
+            Workbench.Notifications.Warning(Localizer.Format("msg.compose.profileNotFastMode", "{0} isn't a .NET service fast mode runs, so the profiler can't reach it.", service));
+            return null;
+        }
+
+        if (fast.DiagnosticsSocket is not { } socket)
+        {
+            Workbench.Notifications.Warning(Localizer.Get("msg.compose.profileNoSocket", "The compose app runs on an engine in WSL, which can't share a Unix socket with the profiler on this machine."));
+            return null;
+        }
+
+        return socket;
+    }
+
+    /// <summary>
+    /// Profile Compose Service…: CPU Usage and .NET Counters of one service fast mode runs (picked, or the argument),
+    /// attached while it runs, until Stop Collection; the Performance Profiler has the other tools for it.
+    /// </summary>
+    // TODO(issue): profiling a service from its start (a suspended port the profiler resumes, the service recreated for it).
+    public async Task<ProfilingRun?> ComposeProfileServiceAsync(string? service = null)
+    {
+        if (service is null)
+        {
+            var targets = ComposeProfileTargets();
+            if (targets.Count == 0)
+            {
+                if (_compose is { Services: [var first, ..] })
+                {
+                    _ = ComposeProfileTarget(first.Service.Service); // says why: not Linux, or an engine in WSL
+                }
+                else if (_compose is null || !OperatingSystem.IsLinux())
+                {
+                    _ = ComposeProfileTarget(string.Empty); // not Linux, or no app
+                }
+                else
+                {
+                    Workbench.Notifications.Warning(Localizer.Get("msg.compose.profileNoDotnetService", "No .NET service of the compose app runs in fast mode, so there's none to profile."));
+                }
+
+                return null;
+            }
+
+            var items = targets.Select(t => new QuickPickItem(t.Service) { Tag = t.Service, Detail = Localizer.Get("msg.compose.fastMode", ".NET, fast mode") }).ToList();
+            if (await Palette.ShowAsync(items, Localizer.Get("msg.compose.profileWhichService", "Profile which service?")).ConfigureAwait(true) is not { Tag: string picked })
+            {
+                return null;
+            }
+
+            service = picked;
+        }
+
+        return await StartProfilingAsync(new ProfilerRequest([ProfilerTools.Cpu, ProfilerTools.Counters], Launch: false, null) { ComposeService = service }).ConfigureAwait(true);
     }
 
     /// <summary>The override as written last, when fast mode runs the app (compose commands then read it too).</summary>

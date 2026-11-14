@@ -155,6 +155,11 @@ public sealed partial class ShellHost
         Runs.EnvironmentOverride = session.AspNetEnvironment;
         Watch.Load(session.Watches);
         Debugger.PinnedTips.Load((session.DataTips ?? []).Select(t => (t.Path, t.Line, t.Expression, t.Comment)));
+        if (IsHeadless)
+        {
+            // codalus mcp --folder (M60b): no tabs, so the tools' changes are written to the files, not left in an editor.
+            return;
+        }
 
         // The tabs come back behind the active one: each other's view (its editor, and what it asks the language service
         // for) is made when it's first shown. Activating every document in turn made them all at startup. They open

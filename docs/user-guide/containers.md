@@ -48,6 +48,8 @@ While the app runs, Debug → Other Debug Targets acts on **one service**, the o
 
 **Apply Code Changes** (`Alt+F10`, a save, or Continue) applies edits to every debugged service under the Codalus debugger, in its container: the container runs your build, so the edits are for its code. After **Stop Debugging**, the debugged services' containers wait idle until Compose Up, Restart Compose Service or Compose Down.
 
+**Profiling a service** (on Linux): each .NET service fast mode runs, debugged or not, can be profiled in its container while it runs. **Profile Compose Service…** (Debug → Other Debug Targets) collects CPU Usage and .NET Counters from the service you pick until you stop collecting, and opens the report; the **Performance Profiler** (`Alt+F2`) lists the services with the running processes (**back (compose service)**) for its other tools: allocations, memory snapshots, .NET Async, threads, exceptions and activities. The profiler attaches while the service runs, so its start-up isn't in the profile. How it gets in: the override mounts the solution's `.codalus/state/<solution>/diag` folder at `/codalus-diag` in each .NET service and sets `DOTNET_DiagnosticPorts=/codalus-diag/<service>.sock,connect,nosuspend`, so the service's runtime connects to the socket the profiler listens on there (and, while nothing listens, tries again without waiting). This needs the engine to run the containers on this machine's Linux kernel, as Docker and Podman do on Linux: Docker Desktop's file sharing (macOS, Windows, and Docker Desktop on Linux) doesn't carry Unix sockets, so there the profiler says no runtime connected, and on macOS and Windows the IDE doesn't add the folder or the variable.
+
 Solutions made in the classic IDE with a Docker Compose project (`.dcproj`) open without errors: the compose project shows its files, and builds leave it out (its SDK ships only with the classic IDE). Its `DockerServiceName` is the service Debug Compose starts first.
 
 Compose files are checked against the Compose Specification's schema as you type, with descriptions on hover. Dockerfiles are colored.
@@ -88,7 +90,8 @@ Right-click a project → **Publish…** (also on the Build menu) opens its Publ
 
 - Linux containers only.
 - HTTPS inside the container (the development certificate) isn't set up; use HTTP ports.
-- Compose: profiling a service in its container isn't available yet; a service run without the debugger takes a code change by a build and a restart (no Hot Reload); with fast mode off, Debug Compose debugs one service, attached after it started.
+- Compose: profiling a service works on Linux engines only (Unix sockets don't cross Docker Desktop's file sharing), attached while it runs (not from its start), without File I/O (the service's process isn't one of this machine's) and without a full dump; a service run without the debugger takes a code change by a build and a restart (no Hot Reload); with fast mode off, Debug Compose debugs one service, attached after it started.
+- A single project run with the **Container (Dockerfile)** launch profile isn't profiled in its container yet.
 - Blazor WebAssembly components aren't debugged in the browser when their server runs in a compose service or under Aspire.
 - Aspire: the AppHost's orchestrator needs Docker or Podman running, even when no container is started (without one, a project that waits for another with `WaitFor` never starts); only project resources are started by the IDE (containers and executables by Aspire's orchestrator); a debug session holds up to 64 programs (the AppHost, its projects and their restarts); in a debug session a project's output goes to the Debug Console, not to the dashboard.
 - Cloud publish targets (Azure, AWS, Google Cloud) aren't built in.

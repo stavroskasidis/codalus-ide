@@ -36,7 +36,7 @@ public sealed partial class ShellHost
             OpenStyle = (file, line) => OpenFileAsync(file, preview: false, new Codalus.LanguageServices.Protocol.Position(Math.Max(0, line - 1), 0)),
         };
         LiveTree.SelectionChanged += (_, node) => _ = LiveProperties.ShowAsync(node);
-        Runs.ProgramPlan = AddLiveAgent;
+        Runs.ProgramPlan = (info, plan) => AddOffScreen(AddLiveAgent(info, plan));
         InitializeXamlBreakpoints();
     }
 
