@@ -40,6 +40,43 @@ public sealed class WpfLiveAgentTests(WpfFixture wpf, ITestOutputHelper output) 
     }
 
     [Fact]
+    public async Task The_agent_leaves_a_dotnet_process_that_isnt_a_wpf_app_alone()
+    {
+        // Under Hot Reload, dotnet watch (and the builds it runs) gets the app's environment, the agent's hook and port
+        // included. The hook read WPF's trace sources at once, which ended any process without WPF at its start
+        // (WindowsDesktopShellTests' Hot Reload step, CI run 43587454991). This test's own program has no WPF, on any OS:
+        // with the hook it ends as it does without it.
+        Assert.True(File.Exists(WpfFixture.Previewer), WpfFixture.Previewer);
+        var (plainExit, _) = await RunHelpAsync(hook: false);
+        var (hookedExit, error) = await RunHelpAsync(hook: true);
+        Assert.DoesNotContain("WindowsBase", error, StringComparison.Ordinal);
+        Assert.Equal(plainExit, hookedExit);
+    }
+
+    /// <summary>This test program's <c>--help</c>, with the WPF agent's hook and port or without.</summary>
+    private static async Task<(int ExitCode, string Error)> RunHelpAsync(bool hook)
+    {
+        var start = new ProcessStartInfo("dotnet") { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        start.ArgumentList.Add("exec");
+        start.ArgumentList.Add(typeof(WpfLiveAgentTests).Assembly.Location);
+        start.ArgumentList.Add("--help");
+        if (hook)
+        {
+            start.Environment["DOTNET_STARTUP_HOOKS"] = WpfFixture.Previewer;
+            start.Environment["CODALUS_LIVE_AGENT_PORT"] = "1";
+            start.Environment["CODALUS_LIVE_AGENT_TOKEN"] = "token";
+        }
+
+        using var process = Process.Start(start)!;
+        process.StandardInput.Close();
+        var error = process.StandardError.ReadToEndAsync(Ct);
+        var standardOutput = process.StandardOutput.ReadToEndAsync(Ct);
+        await process.WaitForExitAsync(Ct).WaitAsync(TimeSpan.FromSeconds(60), Ct);
+        _ = await standardOutput;
+        return (process.ExitCode, await error);
+    }
+
+    [Fact]
     public async Task A_running_wpf_app_shows_its_trees_and_properties_takes_a_value_and_gives_its_paths()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "WPF apps run on Windows only (D31).");
