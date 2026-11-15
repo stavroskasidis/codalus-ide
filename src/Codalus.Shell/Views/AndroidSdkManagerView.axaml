@@ -37,10 +37,10 @@
           <ColumnDefinition Width="Auto" MinWidth="80" SharedSizeGroup="sdkVersion" />
           <ColumnDefinition Width="Auto" MinWidth="140" SharedSizeGroup="sdkStatus" />
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="1" Text="{l:T androidSdkManager.name}" />
-        <TextBlock Grid.Column="2" Text="{l:T androidSdkManager.package}" />
-        <TextBlock Grid.Column="3" Text="{l:T androidSdkManager.version}" />
-        <TextBlock Grid.Column="4" Text="{l:T androidSdkManager.status}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="1" Text="{l:T androidSdkManager.name}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T androidSdkManager.name}" />
+        <TextBlock Grid.Column="2" Text="{l:T androidSdkManager.package}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T androidSdkManager.package}" />
+        <TextBlock Grid.Column="3" Text="{l:T androidSdkManager.version}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T androidSdkManager.version}" />
+        <TextBlock Grid.Column="4" Text="{l:T androidSdkManager.status}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T androidSdkManager.status}" Margin="6,0,0,0" />
       </Grid>
     </Border>
     <ListBox x:Name="PackageList" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T androidSdkManager.androidSdkPackages}">

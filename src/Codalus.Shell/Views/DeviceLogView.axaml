@@ -34,11 +34,11 @@
           <ColumnDefinition Width="160" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
-        <TextBlock Text="{l:T deviceLog.time}" />
-        <TextBlock Grid.Column="1" Text="{l:T deviceLog.level}" />
-        <TextBlock Grid.Column="2" Text="{l:T deviceLog.process}" Margin="6,0,0,0" />
-        <TextBlock Grid.Column="3" Text="{l:T deviceLog.tag}" Margin="6,0,0,0" />
-        <TextBlock Grid.Column="4" Text="{l:T deviceLog.message}" Margin="6,0,0,0" />
+        <TextBlock Text="{l:T deviceLog.time}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T deviceLog.time}" />
+        <TextBlock Grid.Column="1" Text="{l:T deviceLog.level}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T deviceLog.level}" />
+        <TextBlock Grid.Column="2" Text="{l:T deviceLog.process}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T deviceLog.process}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="3" Text="{l:T deviceLog.tag}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T deviceLog.tag}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="4" Text="{l:T deviceLog.message}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{l:T deviceLog.message}" Margin="6,0,0,0" />
       </Grid>
     </Border>
     <ListBox x:Name="LogList" ItemsSource="{Binding Rows}" Background="Transparent" AutomationProperties.Name="{l:T deviceLog.deviceLog}">
