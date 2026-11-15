@@ -12,7 +12,7 @@
                 ToolTip.Tip="{l:T androidSdkManager.kindOfPackage}" AutomationProperties.Name="{l:T androidSdkManager.kindOfPackage}" />
       <TextBox x:Name="SearchBox" Text="{Binding Search}" Width="200" MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,3" VerticalContentAlignment="Center"
                PlaceholderText="{l:T androidSdkManager.searchPackages}" AutomationProperties.Name="{l:T androidSdkManager.searchPackages}" />
-      <ToggleButton Classes="toolbar" IsChecked="{Binding InstalledOnly}" Content="{l:T androidSdkManager.installed}" ToolTip.Tip="{l:T androidSdkManager.onlyInstalledPackages}" AutomationProperties.Name="{l:T androidSdkManager.onlyInstalledPackages}" />
+      <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="filter" IsChecked="{Binding InstalledOnly}" Content="{l:T androidSdkManager.installed}" ToolTip.Tip="{l:T androidSdkManager.onlyInstalledPackages}" AutomationProperties.Name="{l:T androidSdkManager.onlyInstalledPackages}" />
       <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T androidSdkManager.refresh}" AutomationProperties.Name="{l:T androidSdkManager.readThePackagesAgain}" />
       <Border Classes="toolbarSeparator" />
       <Button Classes="toolbar iconText" controls:ButtonIcon.Kind="check" Content="{l:T androidSdkManager.applyChanges}" Command="{Binding ApplyCommand}"

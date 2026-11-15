@@ -15,7 +15,7 @@
       <ComboBox Classes="toolbar" ItemsSource="{Binding Levels}" SelectedIndex="{Binding Level}" MinWidth="100" ToolTip.Tip="{l:T deviceLog.theLowestLevelShown}" AutomationProperties.Name="{l:T deviceLog.lowestLevel}" />
       <TextBox Text="{Binding Search}" Width="200" MinHeight="{DynamicResource Shell.Size.Input}" Padding="6,3" VerticalContentAlignment="Center"
                PlaceholderText="{l:T deviceLog.searchTagsAndMessages}" AutomationProperties.Name="{l:T deviceLog.searchTagsAndMessages}" />
-      <ToggleButton Classes="toolbar" IsChecked="{Binding OnlyMyApp}" Content="{l:T deviceLog.myApp}" ToolTip.Tip="{Binding AppDescription}" AutomationProperties.Name="{l:T deviceLog.onlyTheStartupProjectSApp}" />
+      <ToggleButton Classes="toolbar iconText" controls:ButtonIcon.Kind="phone" IsChecked="{Binding OnlyMyApp}" Content="{l:T deviceLog.myApp}" ToolTip.Tip="{Binding AppDescription}" AutomationProperties.Name="{l:T deviceLog.onlyTheStartupProjectSApp}" />
       <Border Classes="toolbarSeparator" />
       <ToggleButton Classes="toolbar" IsChecked="{Binding Paused}" ToolTip.Tip="{l:T deviceLog.pause}" AutomationProperties.Name="{l:T deviceLog.pauseTheLog}">
         <controls:Icon Kind="pause" />
