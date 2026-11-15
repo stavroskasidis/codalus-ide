@@ -10,6 +10,7 @@ ai-agent.mp4              Linux     eng/showcase/ai-agent.sh
 ai-chat-agent.png         Linux     ai-chat-agent.png
 ai-chat.mp4               Linux     eng/showcase/ai-chat.sh
 ai-chat.png               Linux     ai-chat.png
+ai-console.mp4            Windows   eng/showcase/ai-console.ps1
 ai-console.png            Linux     ai-console.png
 aspire.mp4                Linux     eng/showcase/aspire.sh
 aspire.png                Linux     smoke-test-aspire.png
@@ -29,6 +30,7 @@ git-commit.png            Linux     smoke-test-git-commit.png
 git-repository.png        Linux     smoke-test-git-repository.png
 intellisense.png          Linux     smoke-test-intellisense.png
 maui.png                  Linux     maui-devices.png
+netfx.mp4                 Windows   eng/showcase/netfx.ps1
 netfx.png                 Windows   netfx-debugging.png
 new-project.png           Linux     new-project.png
 profiler.png              Linux     smoke-test-profiler.png
@@ -43,7 +45,10 @@ theme-harbor.png          Linux     smoke-test-theme-harbor.light.png
 wcf-test-client.png       Linux     smoke-test-wcf-test-client.png
 wcf.mp4                   Linux     eng/showcase/wcf.sh
 web-http.png              Linux     smoke-test-web-http.png
+winforms.mp4              Windows   eng/showcase/winforms.ps1
 winforms.png              Windows   winforms-designer.png
+winui.mp4                 Windows   eng/showcase/winui.ps1
 winui.png                 Windows   winui-xaml.png
+wpf.mp4                   Windows   eng/showcase/wpf.ps1
 wpf.png                   Windows   wpf-previewer.png
 xaml-preview.png          Linux     smoke-test-xaml-preview.png
