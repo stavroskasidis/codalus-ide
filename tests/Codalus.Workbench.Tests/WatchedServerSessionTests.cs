@@ -428,6 +428,22 @@ public sealed class WatchedServerSessionTests
     }
 
     [Fact]
+    public async Task A_connection_the_os_made_counts_though_the_attempt_was_up_before_its_completion_ran()
+    {
+        // A busy thread pool runs a connect's completion after the attempt is up: an app that had accepted showed as not
+        // listening (macOS CI, run 43686325192). An attempt of no time at all is the same: the OS's word decides.
+        var port = FreePort();
+        var url = new Uri($"http://127.0.0.1:{port}/");
+        Assert.False(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct));
+        using var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        for (var i = 0; i < 20; i++)
+        {
+            Assert.True(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct), $"attempt {i}");
+        }
+    }
+
+    [Fact]
     public void The_apps_process_name_is_its_apphosts()
     {
         // GetFileNameWithoutExtension would make ContosoStore.Server "ContosoStore" (seen on SDK 10, whose agent doesn't say the id).
