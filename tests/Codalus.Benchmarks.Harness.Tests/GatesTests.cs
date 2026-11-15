@@ -307,7 +307,7 @@ public class GatesTests
         // The slow runner's 330 ms is no regression against the slow runs (the median of all ten would fail it).
         var onSlow = Gates.Compare(new RegressionPolicy(), [Result("shell", "cold-start", 11, slow, null, ("startup_interactive_ms", [330]), ("memory_idle_private_mb", [240]))], baseline);
         Assert.All(onSlow, f => Assert.False(f.Failed || f.Warning));
-        Assert.Contains("median of 5 run(s) on this CPU (325.0)", onSlow.Single(f => f.Metric == "startup_interactive_ms").Rule, StringComparison.Ordinal);
+        Assert.Contains("median of 5 run(s) on this CPU and OS (325.0)", onSlow.Single(f => f.Metric == "startup_interactive_ms").Rule, StringComparison.Ordinal);
 
         // On the fast runner, 270 ms is 23% over its own runs and fails; memory too. Windows pads and capitalizes CPU names.
         var onFast = Gates.Compare(new RegressionPolicy(),
@@ -348,7 +348,7 @@ public class GatesTests
         var early = Gate(3000, runs: 4);
         Assert.False(early.Failed);
         Assert.True(early.Warning);
-        Assert.Contains("fewer than 5 runs on this CPU", early.Rule, StringComparison.Ordinal);
+        Assert.Contains("fewer than 5 runs on this CPU and OS", early.Rule, StringComparison.Ordinal);
         var memory = Enumerable.Range(1, 3).Select(i => Result("shell", "cold-start", i, "EPYC", $"{i}", ("memory_idle_ws_mb", [240]))).ToList();
         Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("shell", "cold-start", 9, "EPYC", null, ("memory_idle_ws_mb", [280]))], memory)).Failed);
     }
@@ -367,7 +367,7 @@ public class GatesTests
         var finding = Assert.Single(Gates.Compare(new RegressionPolicy(), [Result("shell", "editor-100k", 4, "Xeon 6973P-C", null, ("memory_file_private_mb", [940]))], baseline));
         Assert.False(finding.Failed);
         Assert.True(finding.Warning);
-        Assert.Contains("fewer than 3 runs on this CPU", finding.Rule, StringComparison.Ordinal);
+        Assert.Contains("fewer than 3 runs on this CPU and OS", finding.Rule, StringComparison.Ordinal);
         Assert.Contains("| warn |", Gates.Format("Regression gate", [finding]), StringComparison.Ordinal);
         Assert.Contains("0 failed, 1 warning(s)", Gates.Format("Regression gate", [finding]), StringComparison.Ordinal);
 
@@ -377,6 +377,38 @@ public class GatesTests
         Assert.True(confirmed.Warning);
         Assert.False(confirmed.Failed);
     }
+
+    [Fact]
+    public void Runs_on_another_os_release_are_not_a_baseline_for_memory_and_latency()
+    {
+        // The 0.13.0 release run (43640881179): its Linux runner moved from Ubuntu 24.04 to 26.04, and the large file's
+        // shell memory, 3% over the 0.12.0 release run's, was 10.8% over the median of the runs on 24.04 and failed.
+        ScenarioResult On(string os, int day, string? run, double value)
+        {
+            var result = Result("shell", "editor-100k", day, "AMD EPYC 7763 64-Core Processor", run, ("memory_file_shell_private_mb", [value]));
+            return result with { Machine = result.Machine with { OsVersion = os } };
+        }
+
+        var baseline = new[] { On("Ubuntu 24.04.5 LTS", 1, "1", 345), On("Ubuntu 24.04.5 LTS", 2, "2", 351), On("Ubuntu 24.04.5 LTS", 3, "3", 356) };
+        var current = On("Ubuntu 26.04.1 LTS", 9, null, 389);
+        var finding = Assert.Single(Gates.Compare(new RegressionPolicy(), [current], baseline));
+        Assert.False(finding.Failed);
+        Assert.True(finding.Warning);
+        Assert.Contains("fewer than 3 runs on this CPU and OS", finding.Rule, StringComparison.Ordinal);
+
+        // The same runs on the same release (a point release apart) still gate it.
+        var later = new[] { On("Ubuntu 26.04.1 LTS", 1, "1", 345), On("Ubuntu 26.04.2 LTS", 2, "2", 351), On("Ubuntu 26.04.1 LTS", 3, "3", 356) };
+        Assert.True(Assert.Single(Gates.Compare(new RegressionPolicy(), [current], later)).Failed);
+    }
+
+    [Theory]
+    [InlineData("Ubuntu 26.04.1 LTS", "Ubuntu 26.04")]
+    [InlineData("Ubuntu 24.04.5 LTS", "Ubuntu 24.04")]
+    [InlineData("Microsoft Windows 10.0.26100", "Microsoft Windows 10.0.26100")]
+    [InlineData("Darwin 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:40 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T8103", "Darwin 24")]
+    [InlineData("Ubuntu", "Ubuntu")]
+    public void An_os_release_drops_what_a_point_release_changes(string description, string release) =>
+        Assert.Equal(release, Gates.OsRelease(description));
 
     [Fact]
     public void Latency_on_another_cpu_is_normalized_by_the_reference_application_of_the_same_run()

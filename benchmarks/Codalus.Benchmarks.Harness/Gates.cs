@@ -255,7 +255,7 @@ internal static class Gates
                     }
                     else
                     {
-                        var sameCpu = history.Where(h => SameCpu(h.Result.Machine.Cpu, result.Machine.Cpu)).Take(policy.BaselineRuns).Select(h => h.Value).ToList();
+                        var sameCpu = history.Where(h => SameRunner(h.Result.Machine, result.Machine)).Take(policy.BaselineRuns).Select(h => h.Value).ToList();
                         var ratios = isReference || currentReference is null
                             ? []
                             : history
@@ -268,7 +268,7 @@ internal static class Gates
                         if (sameCpu.Count >= policy.MinComparableRuns)
                         {
                             (reference, gating) = (Median(sameCpu), !isReference && sameCpu.Count >= needed);
-                            rule = Describe(threshold, $"the median of {sameCpu.Count} run(s) on this CPU ({reference:F1})");
+                            rule = Describe(threshold, $"the median of {sameCpu.Count} run(s) on this CPU and OS ({reference:F1})");
                             if (kind == MetricKind.Latency && policy.LatencyNoiseSigmas > 0)
                             {
                                 var sigma = 1.4826 * Median([.. sameCpu.Select(v => Math.Abs(v - reference))]);
@@ -295,7 +295,7 @@ internal static class Gates
                         {
                             var previous = sameCpu.Count > 0 ? sameCpu : history.Take(policy.BaselineRuns).Select(h => h.Value).ToList();
                             (reference, gating) = (Median(previous), false);
-                            rule = Describe(threshold, $"the median of {previous.Count} run(s){(sameCpu.Count > 0 ? " on this CPU" : " on other CPUs")} ({reference:F1})");
+                            rule = Describe(threshold, $"the median of {previous.Count} run(s){(sameCpu.Count > 0 ? " on this CPU and OS" : " on other CPUs or OS releases")} ({reference:F1})");
                         }
                         else
                         {
@@ -308,7 +308,7 @@ internal static class Gates
                         }
                         else if (!gating && !informative)
                         {
-                            rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {needed} runs on this CPU: a warning only");
+                            rule += string.Create(CultureInfo.InvariantCulture, $"; fewer than {needed} runs on this CPU and OS: a warning only");
                         }
                     }
 
@@ -347,6 +347,35 @@ internal static class Gates
             .OrderByDescending(r => r.StartedAt)
             .Select(r => r.Summary.TryGetValue(policy.ReferenceMetric, out var d) ? d.P50 : (double?)null)
             .FirstOrDefault(v => v is > 0);
+    }
+
+    /// <summary>
+    /// Runs whose latency and memory compare: the same CPU model on the same OS release. A runner image's new OS moves
+    /// both (Ubuntu 24.04 to 26.04 on GitHub's Linux runners, November 2026: VS Code's memory 11 to 17% higher, Codalus'
+    /// large-file shell 3% over the 0.12.0 release run yet 10.8% over older runs, so the 0.13.0 release run failed,
+    /// 43640881179), and runs from before it aren't a baseline for runs after it.
+    /// </summary>
+    internal static bool SameRunner(MachineInfo a, MachineInfo b) =>
+        SameCpu(a.Cpu, b.Cpu) && string.Equals(OsRelease(a.OsVersion), OsRelease(b.OsVersion), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The OS release in <see cref="System.Runtime.InteropServices.RuntimeInformation.OSDescription"/>, without what a
+    /// point release changes: "Ubuntu 26.04.1 LTS" → "Ubuntu 26.04"; "Microsoft Windows 10.0.26100" keeps its build (the
+    /// Windows release); "Darwin 24.6.0 Darwin Kernel Version …" → "Darwin 24" (the macOS major version).
+    /// </summary>
+    internal static string OsRelease(string description)
+    {
+        var words = description.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var index = Array.FindIndex(words, w => w.Length > 0 && char.IsAsciiDigit(w[0]));
+        if (index < 0)
+        {
+            return description.Trim();
+        }
+
+        var name = string.Join(' ', words[..index]);
+        var parts = words[index].Split('.');
+        var keep = name.StartsWith("Darwin", StringComparison.OrdinalIgnoreCase) ? 1 : name.Contains("Windows", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
+        return name + " " + string.Join('.', parts.Take(keep));
     }
 
     /// <summary>The same CPU model: Windows pads the name with spaces, and some runners report it in capitals.</summary>
