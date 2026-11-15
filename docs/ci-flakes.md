@@ -245,3 +245,10 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   Fixed, by the maintainer's decision: `binary-size` leaves Native AOT's symbols out as it leaves out `*.pdb`, so it
   measures what ships (232.7 MB for that local publish; ADR 0002's 2026-11-05 amendment, `HarnessTests`).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
+- **The English catalogue on macOS, PR #387's merge with `develop`** (43729011051): `LocalizationCatalogTests` found
+  `en.json` without `command.ios.openSimulator`, `command.ios.openXcode` and `menu.menuBar/tools/ios`. `develop`'s, on
+  macOS only: PR #390 (MAUI's native tools, ADR 0104) registered Open Simulator, Open Xcode and Tools → iOS on a Mac
+  only, its catalogue was made on another OS, and its own run tested Linux only (no platform path). The test wants
+  every OS's catalogue the same. Fixed in PR #387: the commands stay a Mac's, with their titles under a Mac's key
+  (`command.ios.openSimulator.mac`, as `workbench.revealDocument`'s), which the test reads from the code on every OS,
+  and the Tools → iOS submenu is registered on every OS and shown when `isMac`.
