@@ -1519,7 +1519,7 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
         {
             if (!chain.IsManaged)
             {
-                result.Add(new CorFrame(this, index++, null, "[Native Code]"));
+                result.Add(new CorFrame(this, index++, null, "[Native Code]") { NativeIp = InstructionPointer(chain) });
                 continue;
             }
 
@@ -1553,6 +1553,25 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
         return (IReadOnlyList<IClrFrame>)result;
     });
 
+    /// <summary>The instruction pointer of a native chain's innermost frame, or null when its registers can't be read.</summary>
+    private static ulong? InstructionPointer(CorDebugChain chain)
+    {
+        try
+        {
+            var set = chain.RegisterSet;
+            if (((ulong)set.RegistersAvailable & 1UL) == 0)
+            {
+                return null; // REGISTER_INSTRUCTION_POINTER is register 0
+            }
+
+            return set.GetRegisters((CorDebugRegister)1UL, 1) is [var ip] ? ip.Value : null;
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// <paramref name="frame"/>'s IL frame now (after a func-eval, frames are read again): the frame of the same method
     /// at the same place on the stack, else the same method at the same index, else the innermost of the method.
@@ -1578,6 +1597,9 @@ internal sealed class CorFrame : IClrFrame
     private readonly int _generation;
     private CorDebugILFrame? _reread;
     private int _rereadGeneration;
+
+    /// <summary>A native frame's instruction pointer (<see cref="IClrFrame.NativeIp"/>).</summary>
+    public ulong? NativeIp { get; init; }
 
     public CorFrame(CorThread thread, int index, CorDebugILFrame? frame, string? description)
     {

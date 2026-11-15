@@ -280,6 +280,13 @@ public static class CommandIcons
         ["key"] = Yellow,
         ["lock"] = Yellow,
         ["locked"] = Yellow,
+
+        // Solution Explorer's source control glyphs (#357), in the classic IDE's colors: a blue lock on a committed file,
+        // a red check mark on a changed one, a green plus on a new one, red on a conflict.
+        ["git-unchanged"] = Blue,
+        ["git-modified"] = Red,
+        ["git-added"] = Green,
+        ["git-conflict"] = Red,
         ["star"] = Yellow,
         ["bell"] = Yellow,
         ["database"] = Yellow,

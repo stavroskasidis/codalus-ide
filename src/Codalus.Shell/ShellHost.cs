@@ -1270,6 +1270,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = Interactive.DisposeAsync().AsTask();
         }
 
+        GitFiles.Dispose();
         Git.Dispose();
         EntityFramework.Dispose();
 

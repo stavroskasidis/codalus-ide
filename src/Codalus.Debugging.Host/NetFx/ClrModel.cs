@@ -214,6 +214,12 @@ internal interface IClrFrame
     /// <summary>What a frame without a module is (<c>[Managed to Native Transition]</c>).</summary>
     string? Description { get; }
 
+    /// <summary>
+    /// Where a native frame's code is (its region's innermost instruction pointer), for the log of a func-eval that timed
+    /// out; null for any other frame, or where it can't be read.
+    /// </summary>
+    ulong? NativeIp => null;
+
     /// <summary>The generic type's and method's arguments (class arguments first).</summary>
     IReadOnlyList<ClrType> TypeArguments { get; }
 

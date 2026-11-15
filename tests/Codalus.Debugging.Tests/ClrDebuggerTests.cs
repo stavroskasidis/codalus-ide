@@ -64,6 +64,10 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
             var evaluation = evalThread.IndexOf("[Function Evaluation]", StringComparison.Ordinal);
             Assert.Contains("Sleep", evalThread[..evaluation], StringComparison.Ordinal);
             Assert.Contains("Program", evalThread[evaluation..], StringComparison.Ordinal);
+
+            // Where a native frame's code is, as a module and an offset: what a wait in native code waits in (the runtime,
+            // the OS loader), which "[Native Code]" alone didn't say (Windows CI, run 43731649744, docs/ci-flakes.md).
+            Assert.True(System.Text.RegularExpressions.Regex.IsMatch(threads, @"\[Native Code\] at [^\s+]+\+0x[0-9A-F]+"), "The threads:\n" + threads);
         }
         finally
         {
