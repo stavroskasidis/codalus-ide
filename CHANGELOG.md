@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 0.14.0
+
+- **Fixed: in Settings, the scroll bar's thumb ran away from the pointer that dragged it** ([#355](https://github.com/stavroskasidis/codalus-ide/issues/355)): the settings list made only the rows in view and guessed its height from them, and its rows are from 60 to 550 px high, so the guess changed as it scrolled (All Settings between 16,700 and 41,200 px) and the thumb jumped about under the pointer. The list now makes the rows near the view at once and the others in the background right after, so it is its real height and the thumb stays where you drag it.
+
 ## 0.13.0
 
 - **SQLite through Microsoft.Data.Sqlite 11** ([user guide](docs/user-guide/data.md)): the data tools' SQLite driver moves to .NET 11's Microsoft.Data.Sqlite and SQLitePCLRaw 3, with SQLite 3.53.4. Databases open and query as before.
