@@ -79,7 +79,7 @@ internal sealed partial class WindowsPseudoTerminal : PseudoTerminal
             // Programs inherit "ignore Ctrl+C" from the process that starts them (a process started in a new process
             // group, as test runners and some launchers do, has it set). Clear it so Ctrl+C in the terminal interrupts.
             _ = SetConsoleCtrlHandler(0, false);
-            var commandLine = BuildCommandLine(file, info.Arguments);
+            var commandLine = WindowsCommandLine.Build(file, info.Arguments);
             var environment = BuildEnvironment(info.Environment);
             if (!CreateProcessW(null, commandLine, 0, 0, false, ExtendedStartupInfoPresent | CreateUnicodeEnvironment, environment, info.WorkingDirectory, ref startup, out var process))
             {
@@ -100,55 +100,6 @@ internal sealed partial class WindowsPseudoTerminal : PseudoTerminal
                 DeleteProcThreadAttributeList(attributes);
                 Marshal.FreeHGlobal(attributes);
             }
-        }
-    }
-
-    /// <summary>Arguments quoted the way <c>CommandLineToArgvW</c> parses them.</summary>
-    internal static string BuildCommandLine(string file, IReadOnlyList<string> arguments)
-    {
-        var builder = new StringBuilder();
-        Append(builder, file);
-        foreach (var argument in arguments)
-        {
-            builder.Append(' ');
-            Append(builder, argument);
-        }
-
-        return builder.ToString();
-
-        static void Append(StringBuilder builder, string argument)
-        {
-            if (argument.Length > 0 && argument.IndexOfAny([' ', '\t', '"']) < 0)
-            {
-                builder.Append(argument);
-                return;
-            }
-
-            builder.Append('"');
-            var backslashes = 0;
-            foreach (var c in argument)
-            {
-                if (c == '\\')
-                {
-                    backslashes++;
-                    continue;
-                }
-
-                if (c == '"')
-                {
-                    builder.Append('\\', (backslashes * 2) + 1);
-                }
-                else
-                {
-                    builder.Append('\\', backslashes);
-                }
-
-                backslashes = 0;
-                builder.Append(c);
-            }
-
-            builder.Append('\\', backslashes * 2);
-            builder.Append('"');
         }
     }
 

@@ -69,6 +69,40 @@ public sealed class PseudoTerminalTests
     }
 
     [Fact]
+    public async Task A_shell_line_with_a_quoted_path_reaches_the_program_as_written()
+    {
+        // A path with a space, in quotes, on the shell's line (as Install Workloads runs dotnet workload restore "<project>"):
+        // on Windows cmd.exe reads that line itself, and a \" escape for CommandLineToArgvW left the quotes in the path.
+        var folder = Path.Combine(Path.GetTempPath(), "codalus-pty " + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var path = Path.Combine(folder, "the file.txt");
+            await File.WriteAllTextAsync(path, "quoted path read", TestContext.Current.CancellationToken);
+            var (file, args) = OperatingSystem.IsWindows()
+                ? ("cmd.exe", new[] { "/c", $"type \"{path}\" & exit 4" })
+                : ("/bin/sh", new[] { "-c", $"cat \"{path}\"; exit 4" });
+            var (pty, terminal, raw) = Start(file, args);
+            using (pty)
+            {
+                var exited = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+                pty.Exited += code => exited.TrySetResult(code);
+                if (pty.ExitCode is { } already)
+                {
+                    exited.TrySetResult(already);
+                }
+
+                Assert.Equal(4, await exited.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+                Assert.True(await WaitUntilAsync(() => terminal.ScreenText().Contains("quoted path read", StringComparison.Ordinal)), "Output: " + raw);
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task An_interactive_shell_echoes_input_and_resizes()
     {
         var (file, args) = OperatingSystem.IsWindows()
