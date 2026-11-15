@@ -137,7 +137,9 @@ public sealed class GitFileStatesTests : IAsyncLifetime
 
     /// <summary>
     /// A solution opened through a link to the repository's folder (macOS's temporary folder is one: /var is /private/var)
-    /// has its states, though git names the files by the resolved path.
+    /// has its states, though git names the files by the resolved path. On Windows links aren't resolved
+    /// (<c>RealPath.Resolve</c>: rare in solution paths there, and the rest of git's paths aren't either), so a path
+    /// through one has no state (Windows CI, run 43706913240, where the runner could create the link).
     /// </summary>
     [Fact]
     public async Task A_path_through_a_link_has_the_state_of_the_file_it_links_to()
@@ -155,8 +157,10 @@ public sealed class GitFileStatesTests : IAsyncLifetime
         await File.AppendAllTextAsync(App, "<!-- edited -->\n", Ct);
         await RefreshAsync();
 
-        Assert.Equal(GitFileState.Unchanged, _states.StateOf(Path.Combine(link, "src", "Committed.cs")));
-        Assert.Equal(GitFileState.Modified, _states.StateOf(Path.Combine(link, "src", "App.csproj")));
+        var resolves = !OperatingSystem.IsWindows();
+        Assert.Equal(resolves ? GitFileState.Unchanged : GitFileState.None, _states.StateOf(Path.Combine(link, "src", "Committed.cs")));
+        Assert.Equal(resolves ? GitFileState.Modified : GitFileState.None, _states.StateOf(Path.Combine(link, "src", "App.csproj")));
+        Assert.Equal(GitFileState.Modified, _states.StateOf(App)); // the real path, on every OS
         Directory.Delete(link);
     }
 
