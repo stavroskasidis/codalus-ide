@@ -234,87 +234,99 @@ public static class WatchedServer
     public static Task<bool> AcceptsAsync(Uri url, CancellationToken cancellationToken) => AcceptsAsync(url, TimeSpan.FromMilliseconds(500), cancellationToken);
 
     /// <summary>
-    /// <see cref="AcceptsAsync(Uri, CancellationToken)"/> within <paramref name="attempt"/>. When the attempt is up, the
-    /// sockets still connecting are asked the OS whether they connected: their completions run on the thread pool, which
-    /// a busy machine can keep from running them until after the attempt, and an app that accepted showed as not
-    /// listening (macOS CI, run 43686325192). The attempt bounds the network's answer, not the IDE's own scheduling.
+    /// <see cref="AcceptsAsync(Uri, CancellationToken)"/> within <paramref name="attempt"/>. The connects are the OS's
+    /// own (non-blocking, waited for with <see cref="Socket.Select"/>, their error read from the socket), not the
+    /// runtime's asynchronous ones: those end on the thread pool, which a busy machine kept from running a connect
+    /// that had gone through until the attempt was up, and an app that accepted showed as not listening (macOS CI, run
+    /// 43686325192). The attempt bounds the network's answer, not the IDE's own scheduling.
     /// </summary>
     internal static async Task<bool> AcceptsAsync(Uri url, TimeSpan attempt, CancellationToken cancellationToken)
     {
         var host = url.Host is "*" or "+" or "0.0.0.0" or "[::]" or "" ? "localhost" : url.DnsSafeHost; // [::1] → ::1
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(attempt);
+        var started = Stopwatch.StartNew();
         IPAddress[] addresses;
         try
         {
-            addresses = IPAddress.TryParse(host, out var literal) ? [literal] : await Dns.GetHostAddressesAsync(host, timeout.Token).ConfigureAwait(false);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(attempt);
+            // localhost is the loopback addresses (RFC 6761), with no lookup: its completion would wait for the thread pool too.
+            addresses = IPAddress.TryParse(host, out var literal) ? [literal]
+                : string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase) ? Socket.OSSupportsIPv6 ? [IPAddress.IPv6Loopback, IPAddress.Loopback] : [IPAddress.Loopback]
+                : await Dns.GetHostAddressesAsync(host, timeout.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return false;
         }
 
-        var sockets = addresses.Select(address => new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)).ToList();
+        var sockets = new List<Socket>();
         try
         {
-            var socketOf = sockets.Select((socket, i) => (Socket: socket, Connect: ConnectsAsync(socket, new IPEndPoint(addresses[i], url.Port)))).ToDictionary(c => c.Connect, c => c.Socket);
-            var connects = socketOf.Keys.ToList();
-            var up = Task.Delay(Timeout.Infinite, timeout.Token);
-            while (connects.Count > 0)
+            var connecting = new List<Socket>();
+            foreach (var address in addresses)
             {
-                var done = await Task.WhenAny([.. connects, up]).ConfigureAwait(false);
-                if (done == up)
+                var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { Blocking = false };
+                sockets.Add(socket);
+                try
                 {
-                    break;
+                    socket.Connect(new IPEndPoint(address, url.Port));
+                    return true; // at once
                 }
-
-                var connect = (Task<bool>)done;
-                connects.Remove(connect);
-                if (await connect.ConfigureAwait(false))
+                catch (SocketException ex) when (ex.SocketErrorCode is SocketError.WouldBlock or SocketError.InProgress)
                 {
-                    return true;
+                    connecting.Add(socket);
+                }
+                catch (SocketException)
+                {
+                    // refused at once
                 }
             }
 
-            cancellationToken.ThrowIfCancellationRequested();
-            return connects.Any(c => Connected(socketOf[c])); // only those still on their way: an ended one's error is taken
+            var left = attempt - started.Elapsed;
+            return connecting.Count > 0 && await Task.Run(() => AnyConnects(connecting, left), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             foreach (var socket in sockets)
             {
-                socket.Dispose(); // a connect still on its way ends with it
+                socket.Dispose();
             }
         }
     }
 
-    private static async Task<bool> ConnectsAsync(Socket socket, IPEndPoint endPoint)
-    {
-        try
-        {
-            await socket.ConnectAsync(endPoint).ConfigureAwait(false);
-            return true;
-        }
-        catch (Exception ex) when (ex is SocketException or ObjectDisposedException or OperationCanceledException)
-        {
-            return false;
-        }
-    }
-
     /// <summary>
-    /// The OS's word on whether <paramref name="socket"/>'s connect went through: writable, and neither readable nor in
-    /// error. A refused one is writable too, and its error can be taken already (the runtime's own wait for it reads
-    /// it), but it's hung up, which reads as readable; a connection just made has nothing to read yet.
+    /// Whether any of <paramref name="connecting"/> connects within <paramref name="left"/>: writable with no error. A
+    /// refused one is writable too, with its error (Linux, macOS), or in error (Windows).
     /// </summary>
-    private static bool Connected(Socket socket)
+    private static bool AnyConnects(List<Socket> connecting, TimeSpan left)
     {
-        try
+        var started = Stopwatch.StartNew();
+        var pending = new List<Socket>(connecting);
+        while (pending.Count > 0)
         {
-            return socket.Poll(0, SelectMode.SelectWrite) && !socket.Poll(0, SelectMode.SelectRead) && !socket.Poll(0, SelectMode.SelectError);
+            var writable = new List<Socket>(pending);
+            var failed = new List<Socket>(pending);
+            var wait = left - started.Elapsed;
+            Socket.Select(null, writable, failed, wait <= TimeSpan.Zero ? 0 : (int)Math.Min(int.MaxValue, wait.TotalMicroseconds));
+            if (writable.Count == 0 && failed.Count == 0)
+            {
+                return false; // the attempt is up
+            }
+
+            foreach (var socket in failed)
+            {
+                pending.Remove(socket);
+            }
+
+            foreach (var socket in writable)
+            {
+                if (pending.Remove(socket) && socket.GetSocketOption(SocketOptionLevel.Socket, SocketOptionName.Error) is 0)
+                {
+                    return true;
+                }
+            }
         }
-        catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
-        {
-            return false;
-        }
+
+        return false;
     }
 }
