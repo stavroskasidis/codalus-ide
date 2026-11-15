@@ -103,6 +103,12 @@ public sealed record AcceptedValue(string Os, string Target, string Scenario, st
     /// </summary>
     public string? Cpu { get; init; }
 
+    /// <summary>
+    /// For latency and memory: the OS release the value was measured on (<see cref="Gates.OsRelease"/>, e.g.
+    /// "Ubuntu 26.04"). On another release the value isn't a reference. Without it, the first run after the entry tells.
+    /// </summary>
+    public string? OsRelease { get; init; }
+
     /// <summary>Where the value was measured: the commit and the CI run.</summary>
     public string? Commit { get; init; }
 
@@ -220,7 +226,8 @@ internal static class Gates
                         .Where(r => r.Value is not null)
                         .Select(r => (r.Result, Value: r.Value!.Value))
                         .ToList();
-                    var acceptedReference = acceptance is not null && (kind == MetricKind.Size || acceptance.Cpu is null || SameCpu(acceptance.Cpu, result.Machine.Cpu))
+                    var acceptedReference = acceptance is not null
+                        && (kind == MetricKind.Size || ((acceptance.Cpu is null || SameCpu(acceptance.Cpu, result.Machine.Cpu)) && AcceptedOnThisOs(acceptance, history.Select(h => h.Result), result.Machine)))
                         ? acceptance
                         : null;
 
@@ -361,7 +368,8 @@ internal static class Gates
     /// <summary>
     /// The OS release in <see cref="System.Runtime.InteropServices.RuntimeInformation.OSDescription"/>, without what a
     /// point release changes: "Ubuntu 26.04.1 LTS" → "Ubuntu 26.04"; "Microsoft Windows 10.0.26100" keeps its build (the
-    /// Windows release); "Darwin 24.6.0 Darwin Kernel Version …" → "Darwin 24" (the macOS major version).
+    /// Windows release); "macOS 26.7.2" → "macOS 26" and "Darwin 24.6.0 Darwin Kernel Version …" → "Darwin 24" (a macOS major version: GitHub's
+    /// runners take a minor update about monthly, 26.6.2 for 0.12.0 and 26.7.2 for 0.13.0, on the same image).
     /// </summary>
     internal static string OsRelease(string description)
     {
@@ -374,8 +382,21 @@ internal static class Gates
 
         var name = string.Join(' ', words[..index]);
         var parts = words[index].Split('.');
-        var keep = name.StartsWith("Darwin", StringComparison.OrdinalIgnoreCase) ? 1 : name.Contains("Windows", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
+        var keep = name.StartsWith("Darwin", StringComparison.OrdinalIgnoreCase) || name.StartsWith("macOS", StringComparison.OrdinalIgnoreCase) ? 1 : name.Contains("Windows", StringComparison.OrdinalIgnoreCase) ? 3 : 2;
         return name + " " + string.Join('.', parts.Take(keep));
+    }
+
+    /// <summary>
+    /// Whether an accepted latency or memory value was measured on this run's OS release, so it is still a reference:
+    /// its <see cref="AcceptedValue.OsRelease"/>, or else the release of the first run on the same CPU after it was
+    /// accepted (entries from before 2026-11-15 don't name it). With no such run nothing says the image changed. The
+    /// 0.13.0 release run on macOS (43700514486) failed against values accepted on macOS 15 while it ran on macOS 26.
+    /// </summary>
+    private static bool AcceptedOnThisOs(AcceptedValue acceptance, IEnumerable<ScenarioResult> after, MachineInfo machine)
+    {
+        var release = acceptance.OsRelease
+            ?? after.Where(r => acceptance.Cpu is null || SameCpu(r.Machine.Cpu, acceptance.Cpu)).OrderBy(r => r.StartedAt).FirstOrDefault()?.Machine.OsVersion;
+        return release is null || string.Equals(OsRelease(release), OsRelease(machine.OsVersion), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>The same CPU model: Windows pads the name with spaces, and some runners report it in capitals.</summary>
