@@ -92,10 +92,7 @@ internal static partial class BuiltIns
             new(ToolsAndroidMenu, "mobile.deviceLog", shell) { Group = "1-tools", Order = 4 },
             new(ToolsAndroidMenu, "mobile.installAndroidSdk", shell) { Group = "2-install", Order = 1, When = WhenClause.Parse("mobileProjects") },
 
-            // View → Other Windows.
-            new(OtherWindowsMenu, "android.deviceManager", shell) { Group = "windows", Order = AlphabeticalOrder("Android Device Manager") },
-            new(OtherWindowsMenu, "android.sdkManager", shell) { Group = "windows", Order = AlphabeticalOrder("Android SDK Manager") },
-            new(OtherWindowsMenu, "mobile.deviceLog", shell) { Group = "windows", Order = AlphabeticalOrder("Device Log") },
+            // Not in View → Other Windows: it's at a classic IDE's length (UxPassTests' 32 entries), and Tools → Android has them.
 
             // The standard toolbar's Android group, while the solution has an Android project (each removable in Customize).
             new(MenuCustomizations.StandardToolbar, "android.deviceManager", shell) { Group = "mobile-android", Order = 1, When = WhenClause.Parse("androidProjects") },

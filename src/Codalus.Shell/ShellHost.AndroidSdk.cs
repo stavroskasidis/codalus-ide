@@ -102,6 +102,16 @@ public sealed partial class ShellHost
         var logPath = Path.Combine(folder, "output.log");
         var exitPath = Path.Combine(folder, "exit.txt");
         var inputPath = Path.Combine(folder, "input.txt");
+
+        // The elevated process starts from the user's profile, not this process's environment: the tools' telemetry
+        // opt-outs go in its script, with this process's value where it has one (an AVALONIA_TELEMETRY_OPTOUT=0 the user set).
+        var environment = new Dictionary<string, string>(command.Environment ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var name in ToolTelemetry.Variables)
+        {
+            environment.TryAdd(name, Environment.GetEnvironmentVariable(name) ?? "1");
+        }
+
+        command = command with { Environment = environment };
         try
         {
             if (command.Input is { } input)

@@ -104,7 +104,7 @@ Tools → Android → **Android adb Command Prompt** opens a terminal in the sta
 
 ### Device Log
 
-Tools → Android → **Device Log** (also in View → Other Windows) shows a device's log as it comes: a running Android device or emulator (`adb logcat`), or on a Mac a booted iOS simulator (its unified log).
+Tools → Android → **Device Log** (and Tools → iOS on a Mac) shows a device's log as it comes: a running Android device or emulator (`adb logcat`), or on a Mac a booted iOS simulator (its unified log).
 - Pick the device at the top. The startup project's device is picked first.
 - Filter by the lowest **level** (Verbose to Fatal) and by **text** in the tag or the message.
 - **My App** shows only the startup project's app: on Android its processes (by the project's `ApplicationId`, including earlier runs), in a simulator its process name.
