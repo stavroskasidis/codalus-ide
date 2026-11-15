@@ -231,44 +231,88 @@ public static class WatchedServer
     /// connection takes about two seconds (it retries the SYN), so trying them in turn never reached an app that
     /// listens only on IPv4 within the attempt.
     /// </summary>
-    public static async Task<bool> AcceptsAsync(Uri url, CancellationToken cancellationToken)
+    public static Task<bool> AcceptsAsync(Uri url, CancellationToken cancellationToken) => AcceptsAsync(url, TimeSpan.FromMilliseconds(500), cancellationToken);
+
+    /// <summary>
+    /// <see cref="AcceptsAsync(Uri, CancellationToken)"/> within <paramref name="attempt"/>. When the attempt is up, the
+    /// sockets still connecting are asked the OS whether they connected: their completions run on the thread pool, which
+    /// a busy machine can keep from running them until after the attempt, and an app that accepted showed as not
+    /// listening (macOS CI, run 43686325192). The attempt bounds the network's answer, not the IDE's own scheduling.
+    /// </summary>
+    internal static async Task<bool> AcceptsAsync(Uri url, TimeSpan attempt, CancellationToken cancellationToken)
     {
         var host = url.Host is "*" or "+" or "0.0.0.0" or "[::]" or "" ? "localhost" : url.DnsSafeHost; // [::1] → ::1
-        using var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        attempt.CancelAfter(TimeSpan.FromMilliseconds(500));
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(attempt);
+        IPAddress[] addresses;
         try
         {
-            var addresses = await Dns.GetHostAddressesAsync(host, attempt.Token).ConfigureAwait(false); // a literal isn't looked up
-            var connects = addresses.Select(address => ConnectsAsync(new IPEndPoint(address, url.Port), attempt.Token)).ToList();
-            while (connects.Count > 0)
-            {
-                var done = await Task.WhenAny(connects).ConfigureAwait(false);
-                connects.Remove(done);
-                if (await done.ConfigureAwait(false))
-                {
-                    await attempt.CancelAsync().ConfigureAwait(false); // the others
-                    return true;
-                }
-            }
+            addresses = IPAddress.TryParse(host, out var literal) ? [literal] : await Dns.GetHostAddressesAsync(host, timeout.Token).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is SocketException or OperationCanceledException && !cancellationToken.IsCancellationRequested)
         {
             return false;
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        return false;
+        var sockets = addresses.Select(address => new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp)).ToList();
+        try
+        {
+            var socketOf = sockets.Select((socket, i) => (Socket: socket, Connect: ConnectsAsync(socket, new IPEndPoint(addresses[i], url.Port)))).ToDictionary(c => c.Connect, c => c.Socket);
+            var connects = socketOf.Keys.ToList();
+            var up = Task.Delay(Timeout.Infinite, timeout.Token);
+            while (connects.Count > 0)
+            {
+                var done = await Task.WhenAny([.. connects, up]).ConfigureAwait(false);
+                if (done == up)
+                {
+                    break;
+                }
+
+                var connect = (Task<bool>)done;
+                connects.Remove(connect);
+                if (await connect.ConfigureAwait(false))
+                {
+                    return true;
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return connects.Any(c => Connected(socketOf[c])); // only those still on their way: an ended one's error is taken
+        }
+        finally
+        {
+            foreach (var socket in sockets)
+            {
+                socket.Dispose(); // a connect still on its way ends with it
+            }
+        }
     }
 
-    private static async Task<bool> ConnectsAsync(IPEndPoint endPoint, CancellationToken cancellationToken)
+    private static async Task<bool> ConnectsAsync(Socket socket, IPEndPoint endPoint)
     {
         try
         {
-            using var socket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
-            await socket.ConnectAsync(endPoint, cancellationToken).ConfigureAwait(false);
+            await socket.ConnectAsync(endPoint).ConfigureAwait(false);
             return true;
         }
-        catch (Exception ex) when (ex is SocketException or OperationCanceledException)
+        catch (Exception ex) when (ex is SocketException or ObjectDisposedException or OperationCanceledException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The OS's word on whether <paramref name="socket"/>'s connect went through: writable, and neither readable nor in
+    /// error. A refused one is writable too, and its error can be taken already (the runtime's own wait for it reads
+    /// it), but it's hung up, which reads as readable; a connection just made has nothing to read yet.
+    /// </summary>
+    private static bool Connected(Socket socket)
+    {
+        try
+        {
+            return socket.Poll(0, SelectMode.SelectWrite) && !socket.Poll(0, SelectMode.SelectRead) && !socket.Poll(0, SelectMode.SelectError);
+        }
+        catch (Exception ex) when (ex is SocketException or ObjectDisposedException)
         {
             return false;
         }
