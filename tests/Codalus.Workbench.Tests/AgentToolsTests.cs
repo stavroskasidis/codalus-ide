@@ -116,6 +116,20 @@ public sealed class AgentToolsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_command_with_a_quoted_path_runs_as_written()
+    {
+        // cmd.exe has no \" escape: quoted for CommandLineToArgvW, the path reached the program with its quotes in it.
+        Directory.CreateDirectory(_root);
+        await File.WriteAllTextAsync(Path.Combine(_root, "the file.txt"), "quoted path read", TestContext.Current.CancellationToken);
+        _host.Allow = true;
+        var command = (OperatingSystem.IsWindows() ? "type" : "cat") + " \"the file.txt\"";
+        var ran = await Call("run_command", $$"""{"command":{{System.Text.Json.JsonSerializer.Serialize(command)}}}""");
+        Assert.False(ran.IsError, ran.Text);
+        Assert.Contains("Exit code 0.", ran.Text, StringComparison.Ordinal);
+        Assert.Contains("quoted path read", ran.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Commands_and_external_tools_ask_first()
     {
         _host.Allow = false;

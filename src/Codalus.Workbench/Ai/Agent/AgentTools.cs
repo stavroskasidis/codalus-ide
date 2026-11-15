@@ -322,9 +322,9 @@ public sealed partial class AgentTools(AiService ai, IAgentHost host, string wor
             return new AgentToolResult("The user didn't allow the command. Don't run it again; ask what they want instead.", IsError: true, Summary: "not allowed");
         }
 
-        var start = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/s", "/c", command } }
-            : new ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", command } };
+        // cmd.exe reads its line as written (WindowsCommandLine): ArgumentList's \" escapes would leave quotes in paths.
+        var start = new ProcessStartInfo(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh");
+        Codalus.Platform.WindowsCommandLine.SetArguments(start, OperatingSystem.IsWindows() ? ["/d", "/s", "/c", command] : ["-c", command]);
         start.WorkingDirectory = folder;
         start.RedirectStandardOutput = true;
         start.RedirectStandardError = true;

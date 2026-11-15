@@ -1,4 +1,4 @@
-using Codalus.Platform.Pty;
+using Codalus.Platform;
 
 namespace Codalus.Workbench.Tests;
 
@@ -43,6 +43,30 @@ public sealed class WindowsCommandLineTests
         Assert.Equal(@"cmd.exe /d /c run.cmd ""a b"" ""C:\My Dir\\""", WindowsCommandLine.Build("cmd.exe", ["/d", "/c", "run.cmd", "a b", @"C:\My Dir\"]));
         Assert.Equal("cmd.exe /k", WindowsCommandLine.Build("cmd.exe", ["/k"]));
         Assert.Equal("cmd.exe", WindowsCommandLine.Build("cmd.exe", []));
+    }
+
+    [Fact]
+    public void A_process_gets_the_line_cmd_runs_as_written()
+    {
+        // Process.Start: ArgumentList would quote the line for CommandLineToArgvW, so the raw Arguments carry it on Windows.
+        var line = @"dotnet test ""C:\My Dir\App.csproj""";
+        Assert.Equal($"/d /s /c \"{line}\"", WindowsCommandLine.Arguments("cmd.exe", ["/d", "/s", "/c", line]));
+        var start = new System.Diagnostics.ProcessStartInfo("cmd.exe");
+        WindowsCommandLine.SetArguments(start, ["/d", "/s", "/c", line]);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal($"/d /s /c \"{line}\"", start.Arguments);
+            Assert.Empty(start.ArgumentList);
+        }
+        else
+        {
+            Assert.Equal(["/d", "/s", "/c", line], start.ArgumentList);
+        }
+
+        var program = new System.Diagnostics.ProcessStartInfo("dotnet");
+        WindowsCommandLine.SetArguments(program, ["test", @"C:\My Dir\App.csproj"]);
+        Assert.Equal(["test", @"C:\My Dir\App.csproj"], program.ArgumentList);
+        Assert.Empty(program.Arguments);
     }
 
     [Fact]

@@ -223,6 +223,13 @@ public sealed class ProjectSystemDepthTests : IDisposable
         Assert.Equal(0, await FolderConfiguration.RunTaskAsync(shell, variables, channel, TestContext.Current.CancellationToken));
         Assert.Contains("hello world", channel.GetText(), StringComparison.Ordinal);
 
+        // An argument with a space is quoted on the shell's line; on Windows cmd.exe reads that line as written (no \").
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(Path.Combine(_root, "the file.txt"), "quoted path read");
+        var quoted = new FolderTask("type", "shell", OperatingSystem.IsWindows() ? "type" : "cat", ["the file.txt"], _root, new Dictionary<string, string>(), null, false);
+        Assert.Equal(0, await FolderConfiguration.RunTaskAsync(quoted, variables, channel, TestContext.Current.CancellationToken));
+        Assert.Contains("quoted path read", channel.GetText(), StringComparison.Ordinal);
+
         var broken = Path.Combine(_root, "broken");
         Directory.CreateDirectory(Path.Combine(broken, ".codalus"));
         File.WriteAllText(FolderConfiguration.TasksPath(broken), "{ \"tasks\": [ ");
