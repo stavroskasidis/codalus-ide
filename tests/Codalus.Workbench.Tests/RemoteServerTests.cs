@@ -627,10 +627,13 @@ public sealed class RemoteServerTests
 
     /// <summary>
     /// Podman with the local Ubuntu image (never pulled): here on Linux, in the WSL distribution on Windows; and the
-    /// .NET folder on the machine that runs the containers, to mount into one. Null when there is none.
+    /// .NET folder on the machine that runs the containers, to mount into one. Null, with what's missing, when there is
+    /// none. On Windows that .NET is the WSL distribution's, not the one running the tests: it must have the runtime the
+    /// server was built for (a distribution with only .NET 11's release candidates can't run a server built for 11.0.0).
     /// </summary>
-    private static (IReadOnlyList<string> Tool, string DotnetRoot)? ContainerStandIn()
+    private static ((IReadOnlyList<string> Tool, string DotnetRoot)? StandIn, string Missing) ContainerStandIn()
     {
+        const string Wanted = "Podman with docker.io/library/ubuntu:24.04 (here on Linux, in WSL on Windows)";
         const string Image = "docker.io/library/ubuntu:24.04";
         IReadOnlyList<string> tool;
         IReadOnlyList<string> shell;
@@ -639,7 +642,7 @@ public sealed class RemoteServerTests
             var distribution = Environment.GetEnvironmentVariable("CODALUS_TEST_WSL") is { Length: > 0 } name ? name : "Ubuntu";
             if (!RemoteTargets.WslDistributionsAsync(CancellationToken.None).GetAwaiter().GetResult().Contains(distribution, StringComparer.OrdinalIgnoreCase))
             {
-                return null;
+                return (null, $"{Wanted}: no WSL distribution {distribution}");
             }
 
             tool = ["wsl.exe", "-d", distribution, "--exec", "podman"];
@@ -652,22 +655,31 @@ public sealed class RemoteServerTests
         }
         else
         {
-            return null;
+            return (null, $"{Wanted}: not on this OS");
         }
 
         try
         {
             if (Run(tool, ["image", "exists", Image]).Code != 0)
             {
-                return null;
+                return (null, $"{Wanted}: no podman, or no {Image} image");
             }
 
             var root = Run(shell, ["if [ -x \"$HOME/.dotnet/dotnet\" ]; then echo \"$HOME/.dotnet\"; else dirname \"$(readlink -f \"$(command -v dotnet)\")\"; fi"]).Output.Trim();
-            return root.StartsWith('/') ? (tool, root) : null;
+            if (!root.StartsWith('/'))
+            {
+                return (null, $"{Wanted}: no dotnet on its PATH");
+            }
+
+            var needed = ServerRuntime();
+            var runtimes = Run(shell, [$"ls '{root}/shared/Microsoft.NETCore.App'"]).Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return runtimes.Any(r => RunsOn(needed, r))
+                ? ((tool, root), string.Empty)
+                : (null, $"{Wanted}: its .NET ({root}) has no Microsoft.NETCore.App {needed} or a later patch to run the server with, only {string.Join(", ", runtimes)}");
         }
-        catch (System.ComponentModel.Win32Exception)
+        catch (System.ComponentModel.Win32Exception ex)
         {
-            return null;
+            return (null, $"{Wanted}: {ex.Message}");
         }
 
         static (int Code, string Output) Run(IReadOnlyList<string> command, IReadOnlyList<string> arguments)
@@ -680,12 +692,54 @@ public sealed class RemoteServerTests
         }
     }
 
+    /// <summary>The Microsoft.NETCore.App version the server's runtimeconfig.json asks for.</summary>
+    private static string ServerRuntime()
+    {
+        using var config = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.ChangeExtension(ServerDll, ".runtimeconfig.json")));
+        var options = config.RootElement.GetProperty("runtimeOptions");
+        var frameworks = options.TryGetProperty("frameworks", out var list) ? list.EnumerateArray().ToList() : [options.GetProperty("framework")];
+        return frameworks.Single(f => f.GetProperty("name").GetString() == "Microsoft.NETCore.App").GetProperty("version").GetString()!;
+    }
+
+    /// <summary>
+    /// Whether the host runs an app that asks for <paramref name="needed"/> on <paramref name="installed"/> (the default
+    /// roll-forward: the same major and minor, a patch as late or later; a prerelease only for a prerelease).
+    /// </summary>
+    internal static bool RunsOn(string needed, string installed)
+    {
+        static (Version Core, bool Prerelease) Parse(string version) =>
+            (Version.Parse(version.Split('-')[0]), version.Contains('-', StringComparison.Ordinal));
+
+        var (want, wantPre) = Parse(needed);
+        var (have, havePre) = Parse(installed);
+        if (have.Major != want.Major || have.Minor != want.Minor || (havePre && !wantPre))
+        {
+            return false;
+        }
+
+        return have != want ? have > want : !havePre || string.CompareOrdinal(installed, needed) >= 0;
+    }
+
+    [Fact]
+    public void The_container_stand_in_needs_a_runtime_that_runs_the_server()
+    {
+        // The Windows validation found WSL's .NET with only 11.0.0-rc.* runtimes, which a server built for 11.0.0 refuses.
+        Assert.False(RunsOn("11.0.0", "11.0.0-rc.3.26522.148"));
+        Assert.False(RunsOn("11.0.0", "10.0.12"));
+        Assert.False(RunsOn("11.0.2", "11.0.1"));
+        Assert.True(RunsOn("11.0.0", "11.0.0"));
+        Assert.True(RunsOn("11.0.0", "11.0.3"));
+        Assert.True(RunsOn("11.0.0-rc.2.26504.105", "11.0.0-rc.3.26522.148"));
+        Assert.True(RunsOn("11.0.0-rc.2.26504.105", "11.0.0"));
+    }
+
     [Fact]
     public async Task A_running_container_is_a_remote_window_target_the_server_is_copied_into_and_runs_in()
     {
-        if (ContainerStandIn() is not { } containers)
+        var (standIn, missing) = ContainerStandIn();
+        if (standIn is not { } containers)
         {
-            Assert.Skip("No container stand-in: Podman with docker.io/library/ubuntu:24.04 (here on Linux, in WSL on Windows).");
+            Assert.Skip("No container stand-in: " + missing + ".");
             return;
         }
 
