@@ -12,7 +12,7 @@ function Prepare {
 }
 
 # The previewer's process shows the previewed app's own main window (its App's StartupUri runs): hidden, it's not what
-# the video shows. TODO(issue): the WPF previewer shouldn't start the app's StartupUri.
+# the video shows. TODO(#392): the WPF previewer shouldn't start the app's StartupUri.
 function Hide-PreviewedApp {
     Get-CimInstance Win32_Process -Filter "ParentProcessId=$($App.Id)" |
         Where-Object { $_.CommandLine -match 'WpfApp\.runtimeconfig\.json' } |
