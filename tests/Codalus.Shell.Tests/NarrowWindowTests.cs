@@ -298,8 +298,8 @@ public class NarrowWindowTests
 
     private static void ShowSolution(ShellFixture f)
     {
-        f.Shell.Toolbar.SetSolution([("Debug", "Any CPU"), ("Release", "Any CPU")], ("Debug", "Any CPU"), "TabletopAssistant.Everything");
-        f.Shell.Toolbar.SetStartup([new StartupProjectChoice("TabletopAssistant", "/work/TabletopAssistant/TabletopAssistant.csproj")], "/work/TabletopAssistant/TabletopAssistant.csproj", null);
+        f.Shell.Toolbar.SetSolution([("Debug", "Any CPU"), ("Release", "Any CPU")], ("Debug", "Any CPU"), "ContosoDashboards.Everything");
+        f.Shell.Toolbar.SetStartup([new StartupProjectChoice("ContosoDashboards", "/work/ContosoDashboards/ContosoDashboards.csproj")], "/work/ContosoDashboards/ContosoDashboards.csproj", null);
         ShellFixture.Pump();
     }
 

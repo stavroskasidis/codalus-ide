@@ -232,9 +232,9 @@ AI Chat can also run a coding agent that is a program of its own (to use the age
 | GitHub Copilot | `npx -y @github/copilot@1.0.112 --acp` | 1.0.112 | a GitHub token (`GH_TOKEN`), or signed in already | not confirmed |
 | pi | `npx -y pi-acp@0.0.34` (and pi's own CLI, 0.81 or later) | 0.0.34 | pi's setup in the Terminal, or signed in already | not confirmed |
 | OpenCode | `opencode acp` (install OpenCode first) | tested with 1.19.5 | `opencode auth login` in the Terminal, or signed in already | not confirmed |
-| goose | `goose acp` (install goose first) | tested with 1.59.0 | `goose configure` in the Terminal, or signed in already | not confirmed |
+| goose | `goose acp` (install goose first) | tested with 1.59.1 | `goose configure` in the Terminal, or signed in already | not confirmed |
 
-The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-11-14 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
+The versions are the [ACP registry](https://agentclientprotocol.com/get-started/registry)'s, checked on 2026-11-15 and committed with Codalus: it doesn't fetch the list. The npx packages are pinned to those exact versions; `npx` downloads the package from npm the first time and runs it as you, with your account's access to your files, not only the folder's. An agent's process starts in an empty folder of the IDE's, not in your workspace, so a repository's `.npmrc` or `node_modules` can't change what `npx` runs; the workspace reaches the agent as its session's folder. On Windows, `npx` is `npx.cmd`: Codalus runs npm's own script with Node.js directly, so nothing in its arguments is read by `cmd.exe`.
 
 Where Codalus can set an agent up without opening a page:
 
