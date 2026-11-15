@@ -72,9 +72,16 @@ public class SettingsScrollTests
             offsets.Add(page.Scroll.Offset.Y);
         }
 
-        page.Window.MouseUp(new Point(start.X, bottom), MouseButton.Left);
+        // Past the track's end the list is at its end. (Within 2 px of the pointer is up to about 25 px of the list per
+        // pixel of the thumb: Linux CI's last step was 58 px short of the end, run 43701085779.)
+        var past = start.WithY(Math.Round(bottom + thumb.Bounds.Height));
+        page.Window.MouseMove(past, RawInputModifiers.LeftMouseButton);
+        ShellFixture.Pump();
+        offsets.Add(page.Scroll.Offset.Y);
+        page.Window.MouseUp(past, MouseButton.Left);
         Assert.Equal(offsets.Order(), offsets);
-        Assert.Equal(page.Scroll.Extent.Height - page.Scroll.Viewport.Height, offsets[^1], tolerance: 2);
+        Assert.Equal(page.Scroll.Extent.Height - page.Scroll.Viewport.Height, offsets[^1], tolerance: 1);
+        Assert.True(Math.Abs(page.Scroll.Extent.Height - extent) < 1, $"At the end: the list's height changed from {extent:F0} to {page.Scroll.Extent.Height:F0} px.");
     }
 
     [AvaloniaFact]
