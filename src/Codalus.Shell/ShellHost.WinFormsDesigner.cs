@@ -137,6 +137,14 @@ public sealed partial class ShellHost
 
         var was = _winFormsCSharpState;
         _winFormsCSharpState = status.State;
+
+        // Each change the designers see, in their log: a form that wasn't read again in its project (the shell test
+        // A_form_opened_before_the_CSharp_service_has_its_project…, a local run of 2026-11-15) shows which ones came.
+        if (status.State != was && Layout.Documents.OfType<WinFormsDesignerDocument>().Any())
+        {
+            WinFormsDesignerLog.AppendLine($"The C# service: {was ?? "unknown"} → {status.State} ({status.Projects} project(s)).");
+        }
+
         if (status.State != WorkspaceStates.Ready || was == WorkspaceStates.Ready)
         {
             return;
