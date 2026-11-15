@@ -38,7 +38,7 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 public static class AcpAgentCatalog
 {
     /// <summary>When the entries were last checked against the ACP registry.</summary>
-    public const string RegistryChecked = "2026-11-14";
+    public const string RegistryChecked = "2026-11-15";
 
     /// <summary>The known agents, in the order the list shows them.</summary>
     public static IReadOnlyList<AcpKnownAgent> Agents { get; } =
@@ -49,7 +49,7 @@ public static class AcpAgentCatalog
         Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.68.0", ["--acp"], "gemini"),
         Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.112", ["--acp"], "copilot"),
         Installed("opencode", "OpenCode", "The open source coding agent", "1.19.5", "opencode", ["acp"]),
-        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.59.0", "goose", ["acp"]),
+        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.59.1", "goose", ["acp"]),
     ];
 
     private static AcpKnownAgent Npx(string id, string name, string description, string package, string version, string[] args, string cli) =>
