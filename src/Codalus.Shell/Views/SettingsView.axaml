@@ -67,6 +67,38 @@
     </Style>
   </UserControl.Styles>
 
+  <UserControl.Resources>
+    <!-- A setting's row (M34h): the title, a Modified chip and Reset, the description and the editor. -->
+    <DataTemplate x:Key="SettingRow" x:DataType="vm:SettingItemViewModel">
+      <Border Classes="setting" Classes.modified="{Binding IsModified}">
+        <StackPanel Spacing="4">
+          <!-- The title, a Modified chip and Reset; a boolean is one check box, its label the title (M34h). -->
+          <WrapPanel Orientation="Horizontal">
+            <ContentControl Content="{Binding}" IsVisible="{Binding IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" />
+            <TextBlock FontWeight="SemiBold" Text="{Binding DisplayTitle}" IsVisible="{Binding !IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Border Classes="chip info" IsVisible="{Binding IsModified}" Margin="0,0,8,0">
+              <TextBlock Text="{l:T settings.modified}" />
+            </Border>
+            <Button Classes="link"
+                    Content="{l:T settings.reset}"
+                    Command="{Binding ResetCommand}"
+                    IsVisible="{Binding IsModified}"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
+          </WrapPanel>
+          <StackPanel Spacing="4" Classes.indented="{Binding IsBool}">
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" MaxWidth="640" HorizontalAlignment="Left" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
+            <ContentControl Content="{Binding}" Margin="0,4,0,0" IsVisible="{Binding !IsBool}" />
+            <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" IsVisible="{Binding HasStatus}" MaxWidth="640" HorizontalAlignment="Left" />
+            <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
+            <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" Text="{Binding Key}" IsVisible="{Binding IsSetting}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <!-- Editors by setting type. -->
   <UserControl.DataTemplates>
     <DataTemplate DataType="vm:BoolSettingViewModel">
@@ -232,41 +264,15 @@
             </StackPanel>
           </DockPanel>
           <TextBlock Classes="muted" Text="{l:T settings.noSettingsFound}" IsVisible="{Binding IsEmpty}" Margin="0,8" />
+          <!--
+            All Settings is hundreds of editors: making them all at once stalled the UI, and a virtualizing panel guessed
+            the list's height from the rows in view, so the scroll bar's thumb ran away from the pointer (issue 355).
+            Each row is made when it comes near the view, or in the background soon after.
+          -->
           <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
-            <!-- All Settings is hundreds of editors: only those in view are made (opening it stalled the UI for a second). -->
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <VirtualizingStackPanel />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:SettingItemViewModel">
-                <Border Classes="setting" Classes.modified="{Binding IsModified}">
-                  <StackPanel Spacing="4">
-                    <!-- The title, a Modified chip and Reset; a boolean is one check box, its label the title (M34h). -->
-                    <WrapPanel Orientation="Horizontal">
-                      <ContentControl Content="{Binding}" IsVisible="{Binding IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" />
-                      <TextBlock FontWeight="SemiBold" Text="{Binding DisplayTitle}" IsVisible="{Binding !IsBool}" Margin="0,0,8,0" VerticalAlignment="Center" TextWrapping="Wrap" />
-                      <Border Classes="chip info" IsVisible="{Binding IsModified}" Margin="0,0,8,0">
-                        <TextBlock Text="{l:T settings.modified}" />
-                      </Border>
-                      <Button Classes="link"
-                              Content="{l:T settings.reset}"
-                              Command="{Binding ResetCommand}"
-                              IsVisible="{Binding IsModified}"
-                              VerticalAlignment="Center"
-                              AutomationProperties.Name="{Binding Title, StringFormat='Reset {0}'}" />
-                    </WrapPanel>
-                    <StackPanel Spacing="4" Classes.indented="{Binding IsBool}">
-                      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Description}" IsVisible="{Binding HasDescription}" MaxWidth="640" HorizontalAlignment="Left" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontStyle="Italic" Text="{l:T settings.thisSettingCanOnlyBeChanged}" IsVisible="{Binding IsUserOnlyHere}" />
-                      <ContentControl Content="{Binding}" Margin="0,4,0,0" IsVisible="{Binding !IsBool}" />
-                      <TextBlock Classes="muted" TextWrapping="Wrap" Text="{Binding Status}" IsVisible="{Binding HasStatus}" MaxWidth="640" HorizontalAlignment="Left" />
-                      <TextBlock Classes="error" TextWrapping="Wrap" Text="{Binding Error}" IsVisible="{Binding HasError}" />
-                      <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" FontFamily="Cascadia Mono,Consolas,Menlo,DejaVu Sans Mono,Noto Sans Mono,Ubuntu Mono,Liberation Mono,Noto Mono,monospace" Text="{Binding Key}" IsVisible="{Binding IsSetting}" />
-                    </StackPanel>
-                  </StackPanel>
-                </Border>
+                <controls:DeferredContent ContentTemplate="{StaticResource SettingRow}" />
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
