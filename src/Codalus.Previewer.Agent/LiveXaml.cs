@@ -171,13 +171,18 @@ internal static class LiveBindings
         Action<string>? send = null;
         lock (s_gate)
         {
-            if (s_failures.Count >= MaxFailures || !s_seen.Add(failure.Hash + "\u001f" + failure.ElementName + "\u001f" + failure.Property + "\u001f" + failure.Path))
+            if (!s_seen.Add(failure.Hash + "\u001f" + failure.ElementName + "\u001f" + failure.Property + "\u001f" + failure.Path))
             {
                 return;
             }
 
-            s_failures.Add(failure);
-            send = Notify();
+            // The Error List gets the first MaxFailures until the IDE takes them; a break doesn't wait for room there
+            // (a burst of more, a list's rows each with a failing binding, stopped no more breaks).
+            if (s_failures.Count < MaxFailures)
+            {
+                s_failures.Add(failure);
+                send = Notify();
+            }
         }
 
         Tell(send);

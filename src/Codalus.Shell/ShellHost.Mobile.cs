@@ -29,6 +29,7 @@ public sealed partial class ShellHost
     {
         Workbench.Settings.Register(MobileService.Descriptors(ContributionSource.Shell));
         DevicesWindow = new DevicesViewModel(this);
+        InitializeAndroidTools();
         UseMobileService(new MobileService(
             Workbench.Platform,
             new AndroidToolchain(Workbench.Platform, Environment.GetEnvironmentVariable, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)),
@@ -47,11 +48,14 @@ public sealed partial class ShellHost
     internal void UseMobileService(MobileService service)
     {
         Mobile = service;
+        InitializeAndroidSdk();
         service.Changed += (_, _) => Ui.Post(() =>
         {
             if (ReferenceEquals(Mobile, service))
             {
                 DevicesWindow.Refresh();
+                AndroidDeviceManager?.OnDevicesChanged();
+                DeviceLogWindow?.OnDevicesChanged();
                 UpdateToolbarDevice();
             }
         });
@@ -97,7 +101,12 @@ public sealed partial class ShellHost
             return;
         }
 
-        Workbench.Context.Set("mobileProjects", MobileProjects().Count > 0);
+        var mobileProjects = MobileProjects();
+        Workbench.Context.Set("mobileProjects", mobileProjects.Count > 0);
+
+        // The toolbar's Android and iOS groups (ADR 0104): while the solution has a project for that platform.
+        Workbench.Context.Set("androidProjects", mobileProjects.Any(p => MobileTargets.FrameworkFor(p, MobilePlatform.Android) is not null));
+        Workbench.Context.Set("iosProjects", Workbench.Platform == Codalus.Platform.PlatformKind.MacOS && mobileProjects.Any(p => MobileTargets.FrameworkFor(p, MobilePlatform.iOS) is not null));
         if (Runs.StartupProject is not { } startup || !Solutions.Projects.TryGetValue(startup, out var project) || !MobileTargets.IsMobile(project))
         {
             Workbench.Context.Set("mobileStartup", false);
@@ -200,8 +209,8 @@ public sealed partial class ShellHost
         _ = RefreshDevicesAsync();
     }
 
-    /// <summary>Starts an emulator or boots a simulator.</summary>
-    public async Task<MobileDevice?> StartDeviceAsync(MobileDevice device)
+    /// <summary>Starts an emulator (from its cold state with <paramref name="coldBoot"/>) or boots a simulator.</summary>
+    public async Task<MobileDevice?> StartDeviceAsync(MobileDevice device, bool coldBoot = false)
     {
         try
         {
@@ -212,7 +221,7 @@ public sealed partial class ShellHost
             }
 
             StatusBar.ShowMessage(Localizer.Format("msg.mobile.starting", "Starting {0}…", device.Name), TimeSpan.FromSeconds(10));
-            var started = await Mobile.StartEmulatorAsync(device, CancellationToken.None).ConfigureAwait(true);
+            var started = await Mobile.StartEmulatorAsync(device, CancellationToken.None, coldBoot: coldBoot).ConfigureAwait(true);
             if (started is null)
             {
                 Workbench.Notifications.Warning(Localizer.Format("msg.mobile.didNotStart", "{0} didn't finish starting within 5 minutes.", device.Name));
@@ -305,7 +314,7 @@ public sealed partial class ShellHost
         if (device is null && platform != MobilePlatform.MacCatalyst)
         {
             Workbench.Notifications.Warning(platform == MobilePlatform.Android
-                ? Localizer.Get("msg.mobile.noDevices", "There's no Android device or emulator. Connect a phone with USB debugging on, or create an emulator with the Android SDK's Device Manager.")
+                ? Localizer.Get("msg.mobile.noDevices", "There's no Android device or emulator. Connect a phone with USB debugging on, or create an emulator in the Android Device Manager (Tools → Android).")
                 : Localizer.Get("msg.mobile.noSimulators", "There's no iOS simulator or device. Add a simulator in Xcode (Window → Devices and Simulators)."));
             ShowDevices();
             return;
@@ -463,31 +472,57 @@ public sealed partial class ShellHost
             return;
         }
 
-        var plan = Mobile.InstallAndroidDependenciesPlan(EnvironmentCheck.FindDotnet() ?? "dotnet", project);
         var locations = Mobile.Android();
+        var sdk = locations.Sdk ?? Mobile.Toolchain.DefaultSdkDirectory;
+
+        // An SDK only an administrator can change (the classic IDE's, under Program Files) is changed elevated (ADR 0104),
+        // and then the restore's files go to a temporary folder rather than the project's obj, where they'd be theirs.
+        var writable = CanWriteSdk(sdk);
+        var intermediate = writable ? null : Path.Combine(Path.GetTempPath(), "codalus-android-dependencies", Guid.NewGuid().ToString("N"));
+        var command = Mobile.InstallAndroidDependenciesCommand(EnvironmentCheck.FindDotnet() ?? "dotnet", project, intermediate);
+        var elevation = writable ? string.Empty
+            : Workbench.Platform == Codalus.Platform.PlatformKind.Windows ? Localizer.Format("msg.mobile.androidElevated", "\n\n{0} can only be changed by an administrator: Windows will ask for permission.", sdk)
+            : Localizer.Format("msg.mobile.androidSudo", "\n\n{0} can only be changed by an administrator: it runs with sudo in the terminal.", sdk);
         if (!await Dialogs.ConfirmAsync(
                 Localizer.Get("msg.mobile.installAndroidTitle", "Install the Android SDK"),
                 Localizer.Format(
                     "msg.mobile.installAndroidMessage",
                     "This installs the Android SDK into {0}{1} through the Android workload. Installing accepts the Android SDK's licenses (https://developer.android.com/studio/terms).\n\nThis runs:\ndotnet {2}",
-                    locations.Sdk ?? Mobile.Toolchain.DefaultSdkDirectory,
+                    sdk,
                     locations.Jdk is null ? Localizer.Format("msg.mobile.andJdk", ", and a JDK into {0},", Mobile.Toolchain.DefaultJdkDirectory) : string.Empty,
-                    string.Join(' ', plan.ArgumentList!)),
+                    string.Join(' ', command.Arguments)) + elevation,
                 Localizer.Get("msg.setup.installNow", "Install")).ConfigureAwait(true))
         {
             return;
         }
 
-        var program = Runs.StartPlan(project.Path + "#android-dependencies", Localizer.Get("msg.mobile.androidSetupChannel", "Android SDK Setup"), plan);
-        if (program.Channel is { } channel)
+        int? code;
+        try
         {
-            Workbench.Output.Show(channel);
+            code = await RunSdkChangeAsync(command, sdk, Localizer.Get("msg.mobile.androidSetupChannel", "Android SDK Setup")).ConfigureAwait(true);
+        }
+        finally
+        {
+            if (intermediate is not null)
+            {
+                try
+                {
+                    Directory.Delete(intermediate, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+            }
         }
 
-        var code = await program.Exited.ConfigureAwait(true);
+        if (code is null)
+        {
+            return;
+        }
+
         if (code == 0)
         {
-            await Workbench.Settings.SetAsync(MobileService.SdkSetting, locations.Sdk ?? Mobile.Toolchain.DefaultSdkDirectory, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+            await Workbench.Settings.SetAsync(MobileService.SdkSetting, sdk, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None).ConfigureAwait(true);
             if (locations.Jdk is null)
             {
                 await Workbench.Settings.SetAsync(MobileService.JdkSetting, Mobile.Toolchain.DefaultJdkDirectory, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None).ConfigureAwait(true);

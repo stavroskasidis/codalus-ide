@@ -231,7 +231,7 @@ public sealed class TerminalViewModel : ObservableObject
     public void FindNext(bool backwards) => FindRequested?.Invoke(this, backwards);
 
     /// <summary>Opens a terminal with a profile (null: the default profile).</summary>
-    public TerminalSession? NewTerminal(string? profileId = null, string? workingDirectory = null)
+    public TerminalSession? NewTerminal(string? profileId = null, string? workingDirectory = null, IReadOnlyDictionary<string, string>? environment = null, string? name = null)
     {
         var profile = _service.FindProfile(profileId ?? _defaultProfile());
         if (profile is null)
@@ -242,7 +242,7 @@ public sealed class TerminalViewModel : ObservableObject
 
         try
         {
-            var session = _service.Start(profile, workingDirectory ?? _workingDirectory());
+            var session = _service.Start(profile, workingDirectory ?? _workingDirectory(), environment, name);
             var tab = new TerminalTabViewModel(session);
             Tabs.Add(tab);
             Selected = tab;

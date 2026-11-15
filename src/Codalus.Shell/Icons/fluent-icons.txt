@@ -77,6 +77,7 @@ comment_off_16_regular
 content_view_gallery_16_regular
 copy_16_regular
 cube_16_regular
+cube_arrow_curve_down_20_regular
 cursor_16_regular
 cut_16_regular
 data_bar_vertical_16_regular
@@ -148,6 +149,9 @@ password_16_regular
 pause_16_regular
 person_16_regular
 phone_16_regular
+phone_link_setup_20_regular
+phone_tablet_20_regular
+phone_vertical_scroll_20_regular
 pin_16_regular
 play_16_filled
 play_16_regular
