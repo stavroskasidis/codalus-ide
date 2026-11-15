@@ -431,15 +431,18 @@ public sealed class WatchedServerSessionTests
     public async Task A_connection_the_os_made_counts_though_the_attempt_was_up_before_its_completion_ran()
     {
         // A busy thread pool runs a connect's completion after the attempt is up: an app that had accepted showed as not
-        // listening (macOS CI, run 43686325192). An attempt of no time at all is the same: the OS's word decides.
+        // listening (macOS CI, run 43686325192). An attempt of no time whose wait runs late is the same: the OS's word
+        // decides. (Without the late wait, an attempt of no time asks before the OS has answered: on macOS a loopback
+        // connect is still on its way when it returns, macOS CI, run 43755266667.)
         var port = FreePort();
         var url = new Uri($"http://127.0.0.1:{port}/");
-        Assert.False(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct));
+        static Task Late() => Task.Delay(200);
+        Assert.False(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct, Late));
         using var listener = new TcpListener(IPAddress.Loopback, port);
         listener.Start();
         for (var i = 0; i < 20; i++)
         {
-            Assert.True(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct), $"attempt {i}");
+            Assert.True(await WatchedServer.AcceptsAsync(url, TimeSpan.Zero, Ct, Late), $"attempt {i}");
         }
     }
 
