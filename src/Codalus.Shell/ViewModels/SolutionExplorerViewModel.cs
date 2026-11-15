@@ -3,18 +3,21 @@ using Avalonia;
 using Codalus.Projects.Protocol;
 using Codalus.Rpc;
 using Codalus.Shell.Infrastructure;
+using Codalus.Workbench.Git;
 using Codalus.Workbench.Projects;
 using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
 /// <summary>One visible line of the Solution Explorer (the tree is flattened so the list can virtualize).</summary>
-public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null) : ObservableObject, ITreeRow
+public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expanded, Func<string, ProjectInfo?>? project = null, Func<string, GitFileState>? git = null) : ObservableObject, ITreeRow
 {
     private readonly Func<string, ProjectInfo?> _project = project ?? (_ => null);
+    private readonly Func<string, GitFileState>? _git = git;
     private ExplorerNode _node = node;
     private bool _isExpanded = expanded;
     private bool _isStartup;
+    private GitFileState _gitState = GitStateOf(node, git);
 
     public ExplorerNode Node
     {
@@ -23,6 +26,9 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
         {
             if (SetField(ref _node, value))
             {
+                _gitState = GitStateOf(value, _git);
+                OnPropertyChanged(nameof(GitState));
+                OnPropertyChanged(nameof(GitGlyph));
                 OnPropertyChanged(nameof(Name));
                 OnPropertyChanged(nameof(Detail));
                 OnPropertyChanged(nameof(HasDetail));
@@ -53,9 +59,64 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
 
     /// <summary>
     /// The row's tooltip: the path, or for a message (a project's reason it can't build, M43a) its whole text, which
-    /// trims in a narrow pane (M34g).
+    /// trims in a narrow pane (M34g). A file with a source control glyph says what it means on a second line (#357).
     /// </summary>
-    public string? ToolTip => _node.Path ?? (_node.Kind == ExplorerNodeKind.Message ? _node.Name : null);
+    public string? ToolTip => _node.Path is { } path
+        ? GitDescription(_gitState) is { } git ? path + "\n" + git : path
+        : _node.Kind == ExplorerNodeKind.Message ? _node.Name : null;
+
+    /// <summary>
+    /// The source control state of the row's file (#357): a file's or solution item's, a project's project file and the
+    /// solution's file. Folders, dependencies and members have none.
+    /// </summary>
+    public GitFileState GitState => _gitState;
+
+    /// <summary>
+    /// The classic IDE's source control glyph over the row's icon (#357): a lock on a committed file, a check mark on a
+    /// changed one, a plus on a new one and an exclamation mark on a conflict; none outside a repository or when ignored.
+    /// </summary>
+    public string? GitGlyph => _gitState switch
+    {
+        GitFileState.Unchanged => "git-unchanged",
+        GitFileState.Modified => "git-modified",
+        GitFileState.Added => "git-added",
+        GitFileState.Conflict => "git-conflict",
+        _ => null,
+    };
+
+    /// <summary>Reads the row's source control state again (the repository's status changed).</summary>
+    public void RefreshGit()
+    {
+        var state = GitStateOf(_node, _git);
+        if (state != _gitState)
+        {
+            _gitState = state;
+            OnPropertyChanged(nameof(GitState));
+            OnPropertyChanged(nameof(GitGlyph));
+            OnPropertyChanged(nameof(ToolTip));
+            OnPropertyChanged(nameof(AccessibleName));
+        }
+    }
+
+    private static GitFileState GitStateOf(ExplorerNode node, Func<string, GitFileState>? git) =>
+        git is not null && node is { Path: { } path, Kind: ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem or ExplorerNodeKind.Project or ExplorerNodeKind.Solution }
+            && !(node.Kind == ExplorerNodeKind.Solution && !IsSolutionFile(path))
+            ? git(path)
+            : GitFileState.None;
+
+    /// <summary>A solution's file: in folder mode the solution's path is its folder, which has no glyph.</summary>
+    private static bool IsSolutionFile(string path) =>
+        System.IO.Path.GetExtension(path) is { Length: > 0 } extension
+        && (extension.Equals(".sln", StringComparison.OrdinalIgnoreCase) || extension.Equals(".slnx", StringComparison.OrdinalIgnoreCase) || extension.Equals(".slnf", StringComparison.OrdinalIgnoreCase));
+
+    private static string? GitDescription(GitFileState state) => state switch
+    {
+        GitFileState.Unchanged => Localizer.Get("msg.solutionExplorerViewModel.gitUnchanged", "Committed, unchanged"),
+        GitFileState.Modified => Localizer.Get("msg.solutionExplorerViewModel.gitModified", "Changed"),
+        GitFileState.Added => Localizer.Get("msg.solutionExplorerViewModel.gitAdded", "New, not committed"),
+        GitFileState.Conflict => Localizer.Get("msg.solutionExplorerViewModel.gitConflict", "Conflict"),
+        _ => null,
+    };
 
     /// <summary>File-type, folder and project icons (M34a, <see cref="Controls.FileIcons"/>); folders open when expanded.</summary>
     public string Icon => Controls.FileIcons.ForNode(_node, _isExpanded, _project);
@@ -110,7 +171,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
             var detail = _node.Detail is { } d ? " " + d : string.Empty;
             var warning = _node.IsWarning ? ", warning" : string.Empty;
             var excluded = _node.IsExcluded ? ", not in the project" : string.Empty;
-            return $"{_node.Name}{detail}{warning}{excluded}";
+            var git = GitDescription(_gitState) is { } state ? ", " + state : string.Empty;
+            return $"{_node.Name}{detail}{warning}{excluded}{git}";
         }
     }
 }
@@ -171,6 +233,38 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
     private ProjectInfo? ProjectInfoOf(string path) => _shell.Solutions?.Projects.GetValueOrDefault(path);
+
+    // The source control glyphs' states (#357), once the shell's git has started; a change refreshes the rows, once per post.
+    private GitFileStates? _gitStates;
+    private int _gitRefreshQueued;
+
+    private GitFileState GitStateOf(string path) => _gitStates?.StateOf(path) ?? GitFileState.None;
+
+    /// <summary>
+    /// Shows the classic IDE's source control glyphs over the rows' icons (#357) from <paramref name="states"/>, and
+    /// refreshes them as the repository's status changes.
+    /// </summary>
+    internal void AttachGit(GitFileStates states)
+    {
+        _gitStates = states;
+        states.Changed += (_, _) =>
+        {
+            if (Interlocked.Exchange(ref _gitRefreshQueued, 1) == 0)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.Post(RefreshGit);
+            }
+        };
+        RefreshGit();
+    }
+
+    private void RefreshGit()
+    {
+        Volatile.Write(ref _gitRefreshQueued, 0);
+        foreach (var row in Rows)
+        {
+            row.RefreshGit();
+        }
+    }
 
     public SolutionExplorerViewModel(ShellHost shell)
     {
@@ -1615,7 +1709,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
         _filtering = false;
         var selectedId = _selected?.Id;
-        Rows.Reset(rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, true, ProjectInfoOf)));
+        Rows.Reset(rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, true, ProjectInfoOf, GitStateOf)));
         MarkStartupProject();
         Selected = selectedId is null ? null : Rows.FirstOrDefault(r => r.Id == selectedId);
         AfterRefresh(reveal);
@@ -1702,7 +1796,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         Rows.RemoveRange(prefix, Rows.Count - suffix - prefix);
-        Rows.InsertRange(prefix, rows.Skip(prefix).Take(rows.Count - suffix - prefix).Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf)).ToList());
+        Rows.InsertRange(prefix, rows.Skip(prefix).Take(rows.Count - suffix - prefix).Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf, GitStateOf)).ToList());
 
         MarkStartupProject();
         var before = _selected;
@@ -1773,7 +1867,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         row.IsExpanded = true;
-        Rows.InsertRange(Rows.IndexOf(row) + 1, rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf)).ToList());
+        Rows.InsertRange(Rows.IndexOf(row) + 1, rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf, GitStateOf)).ToList());
         MarkStartupProject();
     }
 

@@ -45,6 +45,9 @@ internal static partial class BuiltIns
     /// <summary>Whether a history's Branch / Tag column shows tags.</summary>
     public const string HistoryTagsSetting = "git.history.showTags";
 
+    /// <summary>Whether Solution Explorer shows the classic IDE's source control glyphs over its files' icons (#357).</summary>
+    public const string ExplorerGlyphsSetting = "git.solutionExplorer.showGlyphs";
+
     public static IReadOnlyList<SettingDescriptor> GitSettings()
     {
         var shell = ContributionSource.Shell;
@@ -109,6 +112,14 @@ internal static partial class BuiltIns
                 Description = "Show tags in the history's Branch / Tag column. The history's toolbar toggles it.",
                 Scope = SettingScope.User,
                 Order = 26,
+            },
+            SettingDescriptor.Create(ExplorerGlyphsSetting, "true", SettingType.Boolean, shell) with
+            {
+                Title = "Solution Explorer: Show Source Control Glyphs",
+                Category = "Source Control",
+                Description = "Mark each file, project and solution in Solution Explorer with its state in Git, as the classic IDE does: a lock when it is committed and unchanged, a check mark when it is changed, a plus when it is new, and an exclamation mark when it has a conflict.",
+                Scope = SettingScope.User,
+                Order = 27,
             },
         ];
     }

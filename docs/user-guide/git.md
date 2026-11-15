@@ -195,6 +195,10 @@ A file's diff opens in a document, laid out like the classic IDE's, scrolled to 
 
 The diff refreshes by itself after edits, saves and changes to the index, and keeps its caret, scroll position and splitter when you switch tabs. Git → Compare with Unmodified opens the active file's diff.
 
+## In Solution Explorer
+
+Each file, project and the solution show their state at the bottom left of their icon, as in the classic IDE: a blue lock when committed and unchanged, a red check mark when changed, a green plus when new, a red exclamation mark on a conflict. A project's is its project file's. See [Solution Explorer](solutions.md#solution-explorer).
+
 ## In the editor
 
 - **Change markers** in the gutter, as you type, against the staged version: green for added lines, blue for modified lines, a red wedge for deleted lines.
