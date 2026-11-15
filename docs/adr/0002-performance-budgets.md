@@ -180,3 +180,13 @@ M56 adds the `everyday` scenario: the everyday flows run in the real app (`--ben
 - **Native AOT's debug symbols are left out of `binary-size`**, as `*.pdb` always was: `*.dbg` (Linux) and `*.dSYM` bundles (macOS). The packages never ship them (`eng/package.sh` publishes with `DebugType=none`), but the benchmarks job's publish keeps them, so Linux's `shell_mb` was 421.4 MB, 188.7 MB of it `codalus.dbg`, and the shell's real growth since 0.11.0 (1 MB) moved it as much as the symbols did (1.2 MB). Windows's numbers don't change; Linux's `shell_mb` becomes about 233 MB, and macOS's drops by its `.dSYM`.
 - **Their baselines are re-set** with `accepted.json` entries from the first release run that measures this way, so the medians of the earlier, symbol-inflated runs don't leave the size gate 80 % of headroom for ten releases. 0.12.0's release run (42005574912, `014cb5b4`) gave them: Linux `shell_mb` 232.7 MB (419.2 in 0.11.0) and `shell_zip_mb` 95.3 MB (142.2), macOS `shell_mb` 243.6 MB (527.2) and `shell_zip_mb` 90.3 MB (121.7). The helpers' sizes and Windows's didn't change, so they need none.
 - **The reference application's sizes never fail**, as its latency and memory never did: VS Code's `install_mb` is its latest release's (it grew 16.6 MB on Linux between 0.11.0's and 0.12.0's runs).
+
+## Amendment (2026-11-15): the OS release is part of the runner
+
+Latency and memory are compared only with earlier runs on the same CPU model **and the same OS release** (`Gates.SameRunner`: `Ubuntu 26.04`, a Windows build, a macOS major version; a point release counts as the same). GitHub moved its Linux runners from Ubuntu 24.04 to 26.04 in November 2026, and the CPU stayed the same (AMD EPYC 7763). Memory moved with the image:
+- **VS Code:** its memory rose 11 to 17% between the 0.12.0 release run (42005574912) and the 0.13.0 release run (43640881179).
+- **Codalus:** with the 100k-line file open, the shell's private memory was 3.3% over the 0.12.0 release run, but 10.8% over the median of the runs on 24.04, and the 0.13.0 release run's gate failed on it.
+- **Locally:** a comparison of the two versions on one machine found no increase (0.12.0 449 MB, 0.13.0 433 MB, p50 of 5 runs each).
+
+The runs from before an image change aren't a baseline for the runs after it: until 3 runs on the new release exist, an increase there is a warning, as on a new CPU. Binary size still compares with every run, since the image doesn't change what ships.
+

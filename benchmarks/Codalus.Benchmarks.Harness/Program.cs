@@ -148,15 +148,15 @@ switch (command)
             }
         }
 
-        // Which runners were compared: latency and memory follow the CPU and its L3 cache.
+        // Which runners were compared: latency and memory follow the CPU, its L3 cache and the OS release.
         var preamble = latest.Select(r => r.Machine.Os).Distinct().Order().Select(os =>
         {
             var machine = latest.First(r => r.Machine.Os == os).Machine;
             var runs = baseline.Where(b => b.Machine.Os == os).GroupBy(b => b.Run ?? b.StartedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture))
                 .Select(g => g.First().Machine).ToList();
-            var sameCpu = runs.Count(m => Gates.SameCpu(m.Cpu, machine.Cpu));
-            return $"- {os}: {machine.Cpu.Trim()}, L3 {Codalus.Benchmarks.Harness.Platform.Machine.FormatCache(machine.L3CacheBytes)}; " +
-                   $"baseline: {runs.Count} run(s), {sameCpu} on this CPU; {accepted.Count(a => a.Os == os)} accepted value(s).";
+            var sameCpu = runs.Count(m => Gates.SameRunner(m, machine));
+            return $"- {os}: {machine.Cpu.Trim()}, L3 {Codalus.Benchmarks.Harness.Platform.Machine.FormatCache(machine.L3CacheBytes)}, {Gates.OsRelease(machine.OsVersion)}; " +
+                   $"baseline: {runs.Count} run(s), {sameCpu} on this CPU and OS; {accepted.Count(a => a.Os == os)} accepted value(s).";
         }).ToList();
         var report = Gates.Format("Regression gate", findings, preamble);
         Console.WriteLine(report);
