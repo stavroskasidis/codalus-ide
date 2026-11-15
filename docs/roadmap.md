@@ -83,6 +83,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M62 | Inline values while debugging | done ([m62](checkpoints/m62.md), [ADR 0101](adr/0101-inline-values-while-debugging.md), D54): the language host answers `textDocument/inlineValue` for C# and Visual Basic, and the editor draws each line's values after it at a stop, for the selected frame, changed values highlighted; `debug.inlineValues`, on by default |
 | M63 | Services under the debugger: compose and Aspire | done ([m63](checkpoints/m63.md), [ADR 0102](adr/0102-services-under-the-debugger.md), D55): compose fast mode by default (Debug builds mounted on the `base` stage through the IDE's override in the state folder; reruns and builds restart only changed services); Debug Compose debugs every .NET service in one session; one service restarted, stopped, debugged or detached alone; Apply Code Changes in containers; every Aspire project under the debugger (64 programs), one resource debugged alone. Profiling in containers, Hot Reload without the debugger, Blazor WebAssembly in containers and a smoke step deferred |
 | M64 | XAML depth: Hot Reload, refactorings and XAML debugging | done ([m64](checkpoints/m64.md), [m64b](checkpoints/m64b.md), [ADR 0103](adr/0103-xaml-depth.md), D56): rename across C# and XAML both ways (binding paths, `x:Class`, types, `{x:Static}`, handlers, resource keys); Extract Resource, Extract Style and generate from use; failed bindings from the running app in the Error List at their XAML lines; XAML Hot Reload on save through the live agent (Avalonia; WPF on Windows only); XAML breakpoints (element creation, attribute set), Break When Value Changes, break at a failed binding (`debug.breakOnFailedBinding`) and the Live Property Explorer's style explanation built in M64b ([m64b](checkpoints/m64b.md)); binding values while stopped deferred |
+| M65 | 1.0: hardening and the 1.0.0 release | planned 2026-11-15 (D57): after the 0.14.0 release, `develop` moves to 1.0.0 under a feature freeze; every open flake and bug fixed, M34 closed for 1.0, the 1.x promise (settings, the command line, user data) written down, netcoredbg kept as a fallback, macOS notarization verified (Windows signing in 1.0.x), one validation pass on every platform, then `release/1.0.0` after five green nightlies in a row |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -162,7 +163,7 @@ All seven are settled:
 | 9. Ecosystem | M22, M23, M28, M60 | Plugin API 1.0, marketplace, profiles, sync, localization, and AI assistance (opt-in, with any provider). |
 | 10. Mobile | M20 | .NET MAUI for Android, iOS and Mac Catalyst. |
 | Windows desktop | M42, M40, M41, M44, M43 | WinForms, WPF, WCF, .NET Framework and MAUI's Windows target, on Windows (D31, 2026-10-16); the other OSes are decided later. |
-| 11. Polish | M34, M39, M37, M38, M45, M46, M47, M50, M51 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46). |
+| 11. Polish | M34, M39, M37, M38, M45, M46, M47, M50, M51, M65 | Every panel, window and feature brought to one finished standard; a setup that installs what's missing (M37); a start window (M38); four theme families (M45) and a first-run setup that offers them (M46); the hardening before 1.0 (M65). |
 | 12. Visual Basic and F# | M35, M36 | Rich editing for the mission's other .NET languages, on top of the language platform. Always last. |
 
 Phase 4 was added on 2026-10-10, after M15, M16a and M16b (phase 5) were built. After M30a, the maintainer moved M16c ahead of the rest of phase 4 (M31–M33).
@@ -2864,6 +2865,64 @@ Every user-visible item updates the user guide and the website in the same chang
 
 **Status.** Built 2026-10-28 for 0.10.0 ([m53](checkpoints/m53.md)).
 
+### M65 — 1.0: hardening and the 1.0.0 release
+
+**Why.** The maintainer asked on 2026-11-15 whether Codalus IDE could be released as 1.0. Every planned milestone was built (through M64, Visual Basic and F# included), and the plugin API had been 1.0 since M22a. The project's own rules said not yet:
+- `develop`'s nightly of that day failed on macOS (run 43686325192: `WatchedServerSessionTests.The_probe_reaches_an_app_listening_on_only_one_of_localhosts_addresses`, and the smoke test ended between steps). Only 3 of `develop`'s 10 latest full runs had passed.
+- About 44 entries in `docs/ci-flakes.md` were still open, many in the Codalus debugger (the default since M58b), Hot Reload under the debugger, the Windows Forms designer and the remote shell.
+- 17 checkpoints recorded a platform that wasn't validated directly: M16c, M16d, M21b, M28, M34c, M34d, M34h, M43b, M46, M48, M49, M56, M57, M58a, M58b, M63, M63b and the connect-agents notes. CI aside, M49's Mac check was still the maintainer's to run.
+- M34 closes only when the maintainer approves the gallery on three OSes and the display scales are checked (D25), and M34h listed open items.
+- Four bugs were filed that day (#391–#394).
+
+D57 records the maintainer's answers to that day's questions.
+
+**Depends on.** The 0.14.0 release (what `develop` held on 2026-11-15). Right after `release/0.14.0` is cut, `develop`'s `VERSION` moves to 1.0.0 instead of 0.15.0, so the hardening's nightlies are `1.0.0-nightly` builds.
+
+**Decisions.** D57. Nothing here is open; a question that comes up while hardening goes to the [decision register](#decision-register) first.
+
+**Feature freeze.** From the `VERSION` move until `release/1.0.0` is cut, only these merge into `develop`: bug fixes, flake fixes and their diagnostics, tests, validation, documentation, the website, and patch updates of dependencies. New features wait on their branches for 1.1. After the cut, `develop`'s `VERSION` moves to 1.1.0.
+
+**Scope.**
+
+1. **Every open flake fixed.** Each open entry in `docs/ci-flakes.md` (about 44 on 2026-11-15) is fixed at its root cause, in the product when users can hit it (skill `ci-failure`). An entry whose diagnostic hasn't fired again isn't closed by waiting: it is reproduced or reasoned to its cause. Any new failure during the hardening joins the list and the gate.
+2. **Every open bug fixed.** No open issue without the `enhancement` label when `release/1.0.0` is cut. On 2026-11-15 that was #391 (Rename in a `.razor` `@code` block), #392 (the WPF XAML Previewer runs `App.xaml`'s `StartupUri`), #393 (the Windows Forms designer's Properties selector after a drop) and #394 (a single click on a bottom tool window tab). Bugs filed during the hardening join the gate. Enhancements (#357 among them) go to 1.1 or later.
+3. **M34 closed for 1.0.**
+   - The maintainer approves the gallery on Windows, Linux and macOS.
+   - The display scales are checked (D25).
+   - Each M34h open item is fixed, or moved to 1.x with a `TODO(issue)` at that review. AI Chat's Native AOT publish is fixed in any case, because 1.0 ships as Native AOT.
+4. **The 1.x promise written down.** An ADR and a user guide page say what 1.x keeps stable, alongside the plugin API that ADR 0058 already covers:
+   - settings keys and their values;
+   - the `codalus` command line;
+   - user data: profiles, window layouts, settings sync folders and repositories.
+
+   Within 1.x a change is additive or migrated on first start; a removal is deprecated first and made only in 2.0. The one named exception is `debug.adapter`'s `netcoredbg` value (item 5).
+5. **netcoredbg in 1.0.** `debug.adapter: netcoredbg` stays a supported fallback in 1.0, superseding M58b's "for one release" (ADR 0094 amended). A 1.x minor may deprecate it, with a warning in Options and the release notes, and a later 1.x minor may remove it once the parity suites pass on every OS (D48).
+6. **Small leftovers.**
+   - Roslyn 5.12 from nuget.org, and `dotnet-tools` out of `NuGet.config`, if nuget.org has it by the cut (M30b's `TODO(issue)`). Otherwise the `TODO(issue)` stays.
+   - Hosted Weblate (D11) isn't a gate.
+7. **Signing.**
+   - macOS: a nightly or the 0.14.0 release comes out signed and notarized. `spctl --assess -vv` reports `source=Notarized Developer ID` for the app and, with `--type install`, for the `.pkg` (`docs/release/releasing.md`, "macOS signing"; the secrets are already set).
+   - Windows: signing (D19) isn't a 1.0 gate and follows in a 1.0.x patch. Until then the Download page and the user guide's install page show how to get past SmartScreen's warning.
+8. **The 1.0 validation pass.** It runs on the release candidate, `develop`'s head that is about to be cut. Each result is reported separately in M65's checkpoint (`docs/checkpoints/m65.md`), and the pass supersedes the per-milestone gaps listed above.
+   - Linux: `bash eng/validate.sh --smoke`.
+   - Windows: `dotnet test` and the smoke test, with WSL through `eng/wsl-test.sh --smoke`.
+   - macOS: the Mac session, at the pushed snapshot (`eng/push-snapshot.sh`).
+   - By hand on the Mac: M49's runtime check, a missing .NET runtime named and installed without a restart.
+   - By hand on each OS: M34's display-scale check.
+9. **1.0's release text.** The 1.0.0 release notes, the website's Home and Download pages and the user guide's "What's new" for 1.0: the headline features since 0.1, the 1.x promise, the known limits (the user guide's, collected), and Windows signing to follow.
+
+**Exit criteria.**
+- Five scheduled nightlies of `develop` in a row pass every job on Linux, Windows and macOS. `release/1.0.0` is cut from the head of one of them. A failure resets the count.
+- No open entry in `docs/ci-flakes.md`, and no open bug.
+- M34 closed as in item 3.
+- The validation pass passes on every platform, each reported separately.
+- The 1.x promise's ADR and user guide page are merged.
+- The macOS build is verified notarized.
+
+Then `release/1.0.0` is cut from `develop` and released through the usual pipeline (`docs/release/releasing.md`).
+
+**Status.** Planned 2026-11-15.
+
 ---
 
 ## Phase 12: Visual Basic and F#
@@ -3554,6 +3613,7 @@ These are the maintainer decisions this plan depends on. Update the status colum
 | D54 | M62's open questions: on by default, which values, how many lines, and following the selected frame? | M62 | On; locals, parameters and fields, auto-properties through their field, other properties on a click; the method up to the stop; yes | decided 2026-11-13 at M62's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask): on by default with a per-language override; locals, parameters, fields and auto-properties, nothing that runs other code; the method's lines up to the stop, at most 100; the values follow the frame selected in the Call Stack ([ADR 0101](adr/0101-inline-values-while-debugging.md)) |
 | D55 | M63's open questions: where the compose override lives, fast mode by default, how profiling reaches a container, Aspire's seven-project limit | M63 | `.codalus/state/<solution>/`, shown read-only; yes; the diagnostics port's socket through a mount; it goes | decided 2026-11-13 at M63's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask) ([ADR 0102](adr/0102-services-under-the-debugger.md)); confirmed by the maintainer on 2026-11-14, who pulled profiling in containers into 0.13: built in M63b through the shared diagnostics socket (the runtime connects to the IDE's listener, `connect,nosuspend`; attached, not from a service's start; Docker Desktop can't share the socket) |
 | D56 | M64's open questions: how XAML Hot Reload replaces live content, what it keeps and refuses, on save or as you type, MAUI and WinUI | M64 | The live agent's runtime loader into each live instance of the `x:Class` (WPF: System.Xaml); keep the data context and state, refuse what can't apply with a restart; on save; MAUI and WinUI out | decided 2026-11-13 at M64's plan, as recommended (the maintainer's goal of that day: M59–M64 built without stopping to ask) ([ADR 0103](adr/0103-xaml-depth.md)); confirmed by the maintainer on 2026-11-14, who also pulled XAML breakpoints, a setting to break at a failed binding and the Live Property Explorer's style explanation into 0.13 (M64b); binding values while stopped stay deferred; built in M64b (2026-11-14): the live agent breaks into the debugger, and the stop is shown at the XAML line |
+| D57 | Is Codalus IDE ready for 1.0, and what gates the 1.0.0 release? | before 1.0 | Not yet; a hardening milestone (M65) with exit criteria | decided 2026-11-15, the maintainer's answers to that day's questions, as recommended unless noted: five scheduled nightlies in a row green on every OS, the cut from one of them; every open `docs/ci-flakes.md` entry fixed; every open bug at the cut fixed (enhancements excluded); one validation pass at the release candidate on Linux, Windows and the Mac, with M49's runtime check and M34's display scales by hand; the M34 gallery approved on three OSes and the display scales checked, M34h's items fixed or moved to 1.x (AI Chat's Native AOT publish fixed); macOS signing already set up, only verified; Windows signing (D19) not a gate, in 1.0.x (not the recommendation); 0.14.0 first, then `VERSION` 1.0.0 with a feature freeze (fixes, tests, docs); 1.x keeps settings, the command line and user data stable, a removal only in 2.0; netcoredbg kept in 1.0 and named the promise's one exception, removable in a 1.x minor after a deprecation (not the recommendation) |
 
 ## Change log
 
@@ -3825,3 +3885,4 @@ These are the maintainer decisions this plan depends on. Update the status colum
 - 2026-11-13: M64 built ([m64](checkpoints/m64.md), [ADR 0103](adr/0103-xaml-depth.md)): XAML Hot Reload, rename across C# and XAML, Extract Resource and Style, generate from use, failed bindings in the Error List; XAML breakpoints deferred. D56 records the plan's answers.
 - 2026-11-14: M64b built ([m64b](checkpoints/m64b.md), [ADR 0103](adr/0103-xaml-depth.md#what-m64b-built-2026-11-14)): XAML breakpoints through the live agent (`Debugger.Break()` from the agent, shown at the XAML line by `DebugService.StopExplainer`), Break When Value Changes, break at a failed binding, the style explanation (Avalonia; WPF on Windows); fixed the live agent loading into the Codalus debugger's launcher under F5. Binding values while stopped stay deferred.
 - 2026-11-15: .NET MAUI's native tools ([ADR 0104](adr/0104-maui-native-tools.md), the maintainer's request): the Android Device Manager, the Android SDK Manager (licenses shown before installing), the adb Command Prompt and the Device Log, in Tools → Android and as a toolbar group; Open Simulator and Open Xcode on a Mac; an Android SDK only an administrator can change (the classic IDE's, under Program Files) is changed elevated on Windows and with sudo elsewhere.
+- 2026-11-15: M65 planned (D57), from the maintainer's question of that day, whether Codalus IDE can be released as 1.0: not yet. After 0.14.0, `develop` moves to 1.0.0 under a feature freeze until five nightlies in a row pass on every OS, every open flake and bug is fixed, M34 is closed for 1.0, the 1.x promise is written down, and one validation pass has run on every platform. netcoredbg stays in 1.0 as a fallback; Windows signing follows in 1.0.x.

@@ -1,6 +1,7 @@
 using Codalus.Shell.ViewModels;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Context;
+using Codalus.Workbench.Localization;
 using Codalus.Workbench.Menus;
 using Codalus.Workbench.ToolWindows;
 
@@ -25,12 +26,9 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(DeviceLogViewModel.ToolWindowId, "Device Log", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "phone-log" };
     }
 
-    /// <summary>
-    /// The mobile commands for <paramref name="platform"/> into <paramref name="commands"/>: the shell's own registry and
-    /// OS, or another OS's for the English catalogue, which holds every OS's texts (LocalizationCatalogTests).
-    /// </summary>
-    public static void RegisterMobileCommands(ShellHost shell, CommandRegistry commands, Codalus.Platform.PlatformKind platform)
+    public static void RegisterMobileCommands(ShellHost shell)
     {
+        var commands = shell.Workbench.Commands;
         void Add(string id, string title, Func<Task> handler, string? enablement = null) =>
             commands.Register(
                 new CommandDescriptor(id, title, ContributionSource.Shell) { Category = "Mobile", Enablement = WhenClause.Parse(enablement) },
@@ -70,10 +68,12 @@ internal static partial class BuiltIns
             shell.ShowDeviceLog();
             return Task.CompletedTask;
         });
-        if (platform == Codalus.Platform.PlatformKind.MacOS)
+        // macOS only, so their titles are declared through the localizer: en.json, the same on every OS, gets them from
+        // the code (LocalizationCatalogTests) where the commands aren't registered.
+        if (shell.Workbench.Platform == Codalus.Platform.PlatformKind.MacOS)
         {
-            Add("ios.openSimulator", "Open Simulator", shell.OpenSimulatorAsync);
-            Add("ios.openXcode", "Open Xcode", shell.OpenXcodeAsync);
+            Add("ios.openSimulator", Localizer.Get("command.ios.openSimulator", "Open Simulator"), shell.OpenSimulatorAsync);
+            Add("ios.openXcode", Localizer.Get("command.ios.openXcode", "Open Xcode"), shell.OpenXcodeAsync);
         }
     }
 
@@ -108,7 +108,7 @@ internal static partial class BuiltIns
         {
             rules.AddRange(
             [
-                MenuItemRule.ForSubmenu(tools, ToolsIosMenu, "iOS", shell) with { Group = "1-mobile", Order = 2 },
+                MenuItemRule.ForSubmenu(tools, ToolsIosMenu, Localizer.Get("menu.menuBar/tools/ios", "iOS"), shell) with { Group = "1-mobile", Order = 2 },
                 new(ToolsIosMenu, "ios.openSimulator", shell) { Group = "1-tools", Order = 1 },
                 new(ToolsIosMenu, "ios.openXcode", shell) { Group = "1-tools", Order = 2 },
                 new(ToolsIosMenu, "mobile.deviceLog", shell) { Group = "1-tools", Order = 3 },

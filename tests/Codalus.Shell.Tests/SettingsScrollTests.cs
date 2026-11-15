@@ -106,9 +106,17 @@ public class SettingsScrollTests
         var top = page.Rows.First(r => r.IsBuilt && r.TranslatePoint(new Point(0, r.Bounds.Height), page.Scroll)!.Value.Y > 0);
         var at = top.TranslatePoint(default, page.Scroll)!.Value.Y;
         Assert.Contains(page.Rows.TakeWhile(r => r != top), r => !r.IsBuilt);
+        string State() => $"row {page.Rows.ToList().IndexOf(top)} of {page.Rows.Count()} at {top.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px, "
+            + $"offset {page.Scroll.Offset.Y:F0}, extent {page.Scroll.Extent.Height:F0}, viewport {page.Scroll.Viewport.Height:F0}, "
+            + $"built {page.Rows.Count(r => r.IsBuilt)}, row height {top.Bounds.Height:F0}";
+        var before = State();
         ShellFixture.Pump();
         page.Window.UpdateLayout();
         Assert.All(page.Rows, r => Assert.True(r.IsBuilt));
-        Assert.Equal(at, top.TranslatePoint(default, page.Scroll)!.Value.Y, tolerance: 1);
+
+        // Windows CI once had the row 52 px lower (-60 to -8, run 43733266567), with no cause known yet: what the view
+        // and the row were before and after the rows above were made.
+        var moved = top.TranslatePoint(default, page.Scroll)!.Value.Y;
+        Assert.True(Math.Abs(at - moved) <= 1, $"The setting at the top of the view moved from {at:F0} to {moved:F0} px. Before: {before}. After: {State()}.");
     }
 }

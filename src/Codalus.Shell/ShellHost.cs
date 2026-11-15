@@ -222,7 +222,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterWinFormsCommands(this);
         BuiltIns.RegisterRemoteCommands(this);
         BuiltIns.RegisterAiCommands(this);
-        BuiltIns.RegisterMobileCommands(this, Workbench.Commands, Workbench.Platform);
+        BuiltIns.RegisterMobileCommands(this);
         BuiltIns.RegisterFSharpCommands(this);
         BuiltIns.RegisterGitCommands(this);
         BuiltIns.RegisterTestingCommands(this);

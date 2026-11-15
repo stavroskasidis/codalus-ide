@@ -31,7 +31,8 @@ public sealed partial class LocalizationCatalogTests
     [GeneratedRegex(@"\{l:T ([A-Za-z0-9_.]+)\}")]
     private static partial Regex ViewKey();
 
-    [GeneratedRegex("""Localizer\.(?:Get|Format)\("([A-Za-z0-9_.]+)",\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
+    // Keys of menus have slashes (menu.menuBar/tools/ios).
+    [GeneratedRegex("""Localizer\.(?:Get|Format)\("([A-Za-z0-9_./]+)",\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex CodeKey();
 
     private static IEnumerable<string> Views() =>
@@ -48,23 +49,7 @@ public sealed partial class LocalizationCatalogTests
         await using var f = ShellFixture.Create();
         var workbench = f.Shell.Workbench;
         var expected = new SortedDictionary<string, string>(StringComparer.Ordinal);
-
-        // Every OS's catalogue is the same, so the commands and menus only one OS registers (Tools → iOS on a Mac) count on
-        // every OS: a catalogue regenerated on Linux left them out, and the test failed on macOS (PR 398's CI, run 43734210763).
-        var otherCommands = new List<CommandDescriptor>();
-        var otherMenus = new List<Codalus.Workbench.Menus.MenuItemRule>();
-        foreach (var platform in Enum.GetValues<Codalus.Platform.PlatformKind>())
-        {
-            var context = new Codalus.Workbench.Context.ContextKeyService();
-            var commands = new CommandRegistry(context);
-            var menus = new Codalus.Workbench.Menus.MenuRegistry(commands, new Codalus.Workbench.Keybindings.KeybindingService(context, platform), context);
-            BuiltIns.RegisterMobileCommands(f.Shell, commands, platform);
-            BuiltIns.RegisterMobileMenus(menus, platform);
-            otherCommands.AddRange(commands.Descriptors);
-            otherMenus.AddRange(menus.Rules);
-        }
-
-        foreach (var command in workbench.Commands.Descriptors.Concat(otherCommands).Where(c => c.Source == ContributionSource.Shell))
+        foreach (var command in workbench.Commands.Descriptors.Where(c => c.Source == ContributionSource.Shell))
         {
             expected[$"command.{command.Id}"] = command.Title;
             if (command.Category is { Length: > 0 } category)
@@ -101,7 +86,7 @@ public sealed partial class LocalizationCatalogTests
             expected[$"menu.{menu.Id}"] = menu.Title;
         }
 
-        foreach (var rule in workbench.Menus.Rules.Concat(otherMenus).Where(r => r is { Submenu: not null, Title: not null } && r.Source == ContributionSource.Shell))
+        foreach (var rule in workbench.Menus.Rules.Where(r => r is { Submenu: not null, Title: not null } && r.Source == ContributionSource.Shell))
         {
             expected[$"menu.{rule.Submenu}"] = rule.Title!;
         }
