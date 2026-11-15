@@ -271,6 +271,35 @@ public class GatesTests
     }
 
     [Fact]
+    public void A_latency_accepted_on_another_os_release_is_no_reference()
+    {
+        // The 0.13.0 release run on macOS (43700514486): file_highlight_ms accepted at 3883 on 2026-10-20 (macOS 15), the
+        // run on macOS 26 measured 5390 with one earlier run on that release, and failed against the old acceptance.
+        ScenarioResult On(string os, int day, string? run, double value)
+        {
+            var result = Result("shell", "editor-100k", day, "Apple M1 (Virtual)", run, ("file_highlight_ms", Enumerable.Repeat(value, 5).ToArray()));
+            return result with { Machine = result.Machine with { OsVersion = os } };
+        }
+
+        var accepted = new[] { Accepted("file_highlight_ms", 3883, day: 1, cpu: "Apple M1 (Virtual)", scenario: "editor-100k") };
+        var earlier = new[] { On("Darwin 24.6.0 Darwin Kernel Version 24.6.0", 2, "2", 3900), On("Darwin 25.7.0 Darwin Kernel Version 25.7.0", 3, "3", 5200) };
+        var current = On("Darwin 25.7.0 Darwin Kernel Version 25.7.0", 4, null, 5390);
+        var finding = Assert.Single(Gates.Compare(new RegressionPolicy(), [current], earlier, accepted), f => f.Stat == "p50");
+        Assert.False(finding.Failed);
+        Assert.DoesNotContain("accepted", finding.Rule, StringComparison.Ordinal); // the run on macOS 26 is its reference
+
+        // On the release it was accepted on, it is still the reference, and 5390 is over it.
+        var old = On("Darwin 24.6.0 Darwin Kernel Version 24.6.0", 4, null, 5390);
+        var onOld = Assert.Single(Gates.Compare(new RegressionPolicy(), [old], [earlier[0]], accepted), f => f.Stat == "p50");
+        Assert.True(onOld.Failed);
+        Assert.Contains("the value accepted on", onOld.Rule, StringComparison.Ordinal);
+
+        // An entry that names its release needs no run after it.
+        var named = new[] { accepted[0] with { OsRelease = "Darwin 24" } };
+        Assert.DoesNotContain(Gates.Compare(new RegressionPolicy(), [current], [], named), f => f.Failed); // no reference on this release yet
+    }
+
+    [Fact]
     public void Of_two_values_accepted_on_the_same_day_the_later_in_the_file_counts()
     {
         // A baseline accepted in the morning and the fix's lower value accepted the same afternoon (the scroll, 2026-11-02).
@@ -406,6 +435,8 @@ public class GatesTests
     [InlineData("Ubuntu 24.04.5 LTS", "Ubuntu 24.04")]
     [InlineData("Microsoft Windows 10.0.26100", "Microsoft Windows 10.0.26100")]
     [InlineData("Darwin 24.6.0 Darwin Kernel Version 24.6.0: Mon Jul 14 11:30:40 PDT 2025; root:xnu-11417.140.69~1/RELEASE_ARM64_T8103", "Darwin 24")]
+    [InlineData("macOS 26.7.2", "macOS 26")]
+    [InlineData("macOS 26.6.2", "macOS 26")]
     [InlineData("Ubuntu", "Ubuntu")]
     public void An_os_release_drops_what_a_point_release_changes(string description, string release) =>
         Assert.Equal(release, Gates.OsRelease(description));
