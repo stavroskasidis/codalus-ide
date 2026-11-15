@@ -42,6 +42,7 @@ public class SolutionExplorerFolderViewTests
             await f.Shell.OpenFolderWorkspaceAsync(folder);
             await ShellFixture.PumpUntil(() => f.Shell.Explorer.IsFolderView && f.Shell.Explorer.Rows.Any(r => r.Name == "README.md"), seconds: 60);
             await SettledAsync(f.Shell.Explorer);
+            await FenceAsync(f, folder);
             return (f, folder);
         }
         catch
@@ -49,6 +50,45 @@ public class SolutionExplorerFolderViewTests
             await f.DisposeAsync(); // the test's own disposal never comes: its window and hosts would stay for the tests after it
             throw;
         }
+    }
+
+    /// <summary>
+    /// FSEvents (macOS) can deliver the fixture's own writes from just before the build host's watch started, and the
+    /// folder view then lists a folder again (src/App, expanded, with Show All Files' project too): one listing more than
+    /// the test's own (macOS CI, run 43705139112). Events come in order, so once a folder created now in docs/deep (listed
+    /// by no test yet) is reported, and its removal after it, those have been, and every listing counted after is the
+    /// test's own. (A folder, as its creation is one event.)
+    /// </summary>
+    private static async Task FenceAsync(ShellFixture f, string folder)
+    {
+        var deep = Path.Combine(folder, "docs", "deep");
+        var fence = Path.Combine(deep, "fence");
+        var reported = 0;
+        void OnChanged(object? sender, FilesChangedParams changes)
+        {
+            if (changes.Directories.Any(d => Path.TrimEndingDirectorySeparator(d).EndsWith(Path.Combine("docs", "deep"), StringComparison.Ordinal)
+                                             || d.Contains(Path.Combine("docs", "deep", "fence"), StringComparison.Ordinal)))
+            {
+                Interlocked.Increment(ref reported);
+            }
+        }
+
+        f.Shell.Solutions.FilesChanged += OnChanged;
+        try
+        {
+            Directory.CreateDirectory(fence);
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref reported) > 0, seconds: 60, describe: () => "the watcher reported no change in docs/deep for the fence");
+            var created = Volatile.Read(ref reported);
+            Directory.Delete(fence);
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref reported) > created, seconds: 60, describe: () => "the watcher reported no change in docs/deep for the fence's removal");
+        }
+        finally
+        {
+            f.Shell.Solutions.FilesChanged -= OnChanged;
+        }
+
+        ShellFixture.Pump(); // the explorer's own handler posts to the UI thread
+        await SettledAsync(f.Shell.Explorer);
     }
 
     /// <summary>Until no listing is queued or on its way, and the refresh it queued has run.</summary>
