@@ -182,11 +182,13 @@ jobs:
           tests='[
             { "os": "ubuntu-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
             { "os": "ubuntu-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "ubuntu-latest", "shard": "shell-3", "shards": "shell-3", "timeout": 50 },
             { "os": "ubuntu-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
             { "os": "windows-latest", "shard": "shell-1", "shards": "shell-1", "timeout": 50 },
             { "os": "windows-latest", "shard": "shell-2", "shards": "shell-2", "timeout": 50 },
+            { "os": "windows-latest", "shard": "shell-3", "shards": "shell-3", "timeout": 50 },
             { "os": "windows-latest", "shard": "others", "shards": "others debug-netcoredbg", "timeout": 70 },
-            { "os": "macos-latest", "shard": "all", "shards": "shell-1 shell-2 others debug-netcoredbg", "timeout": 150 },
+            { "os": "macos-latest", "shard": "all", "shards": "shell-1 shell-2 shell-3 others debug-netcoredbg", "timeout": 150 },
             { "os": "ubuntu-24.04-arm", "shard": "debug-codalus", "shards": "debug-codalus", "timeout": 50 }
           ]'
           if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
@@ -345,6 +347,13 @@ jobs:
         shell: bash
         timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
         run: bash eng/ci-test.sh shell-2
+      # The third Shell shard (eng/ci-shell-third.txt): Windows' two ran out of their 40 minutes with every test passing
+      # (runs 43624505680 and 43714153100). About 20 minutes on macOS, which stops it at 30 as it does shell-2.
+      - name: Test (shell-3)
+        if: contains(format(' {0} ', matrix.shards), ' shell-3 ')
+        shell: bash
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 30 || 40 }}
+        run: bash eng/ci-test.sh shell-3
       - name: Test (others)
         if: contains(format(' {0} ', matrix.shards), ' others ')
         shell: bash
