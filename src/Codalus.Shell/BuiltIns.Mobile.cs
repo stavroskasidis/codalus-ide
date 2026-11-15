@@ -68,12 +68,12 @@ internal static partial class BuiltIns
             shell.ShowDeviceLog();
             return Task.CompletedTask;
         });
-        // A Mac's only. Their titles have a key for the Mac (translated here), so every OS's catalogue has them: one
-        // made on Linux missed them, and the Mac's catalogue test failed (PR #387's macOS CI, run 43729011051).
+        // macOS only, so their titles are declared through the localizer: en.json, the same on every OS, gets them from
+        // the code (LocalizationCatalogTests) where the commands aren't registered.
         if (shell.Workbench.Platform == Codalus.Platform.PlatformKind.MacOS)
         {
-            Add("ios.openSimulator", Localizer.Get("command.ios.openSimulator.mac", "Open Simulator"), shell.OpenSimulatorAsync);
-            Add("ios.openXcode", Localizer.Get("command.ios.openXcode.mac", "Open Xcode"), shell.OpenXcodeAsync);
+            Add("ios.openSimulator", Localizer.Get("command.ios.openSimulator", "Open Simulator"), shell.OpenSimulatorAsync);
+            Add("ios.openXcode", Localizer.Get("command.ios.openXcode", "Open Xcode"), shell.OpenXcodeAsync);
         }
     }
 
@@ -102,16 +102,13 @@ internal static partial class BuiltIns
             new(MenuCustomizations.StandardToolbar, "android.sdkManager", shell) { Group = "mobile-android", Order = 2, When = WhenClause.Parse("androidProjects") },
             new(MenuCustomizations.StandardToolbar, "android.adbPrompt", shell) { Group = "mobile-android", Order = 3, When = WhenClause.Parse("androidProjects") },
             new(MenuCustomizations.StandardToolbar, "mobile.deviceLog", shell) { Group = "mobile-android", Order = 4, When = WhenClause.Parse("androidProjects || iosProjects") },
-
-            // Tools → iOS ▸ on a Mac. Registered on every OS, shown on a Mac, so every OS's catalogue has its title (its
-            // items are a Mac's only).
-            MenuItemRule.ForSubmenu(tools, ToolsIosMenu, "iOS", shell) with { Group = "1-mobile", Order = 2, When = WhenClause.Parse("isMac") },
         };
 
         if (mac)
         {
             rules.AddRange(
             [
+                MenuItemRule.ForSubmenu(tools, ToolsIosMenu, Localizer.Get("menu.menuBar/tools/ios", "iOS"), shell) with { Group = "1-mobile", Order = 2 },
                 new(ToolsIosMenu, "ios.openSimulator", shell) { Group = "1-tools", Order = 1 },
                 new(ToolsIosMenu, "ios.openXcode", shell) { Group = "1-tools", Order = 2 },
                 new(ToolsIosMenu, "mobile.deviceLog", shell) { Group = "1-tools", Order = 3 },
