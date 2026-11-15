@@ -59,5 +59,5 @@ The tools are all command-line tools: `adb`, `emulator`, `avdmanager` and `sdkma
 - On Linux in a container without `USER`, the workload's SDK installer fails. The IDE sets `USER` for Android tools and builds.
 - The IDE depends on the tools' output formats. JSON is used wherever a tool offers it (`simctl`, `devicectl`). `adb`'s and the emulator's text output has been stable for years, and each parser is tested with recorded output.
 - MAUI's XAML Hot Reload and a XAML previewer don't exist in open source. They are gaps (candidates). C# Hot Reload on devices comes with .NET 11's `dotnet watch` (M30b).
-- Creating AVDs (`avdmanager`) and managing SDK packages (`sdkmanager`) are left to the SDK's own tools for now. `TODO(issue)`
+- Creating AVDs (`avdmanager`) and managing SDK packages (`sdkmanager`) were left to the SDK's own tools; [ADR 0104](0104-maui-native-tools.md) adds the Android Device Manager, the Android SDK Manager, the adb Command Prompt and the Device Log.
 - MAUI's Windows target came with M44 ([ADR 0074](0074-maui-on-windows-and-winui.md), "MAUI on Windows and WinUI 3"): "Windows Machine" in the device picker, on Windows (D31).

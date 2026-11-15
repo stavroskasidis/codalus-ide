@@ -1215,7 +1215,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
         // M19a: Avalonia XAML (ADR 0047 and 0048): the C# host's XAML service and the previewer.
         await StepAsync("xaml.preview", "M19", "An .axaml file completes from the C# host; the XAML Previewer builds the Avalonia app, renders the file, follows an edit and selects in the XAML what is clicked", XamlPreviewStepAsync).ConfigureAwait(true);
-        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, and the Devices window lists the Android toolchain", MauiStepAsync).ConfigureAwait(true);
+        await StepAsync("maui.devices", "M20a", "The .NET MAUI app is a mobile project with a device picker, its .xaml completes binding paths from the C# host, the Devices window lists the Android toolchain, and the Android tools open", MauiStepAsync).ConfigureAwait(true);
 
         // M40a: WinForms and WPF (ADR 0071, D31: Windows only).
         const string desktopTitle = "The WPF app opens, its XAML completes binding paths from d:DataContext, and it builds and runs";
@@ -2495,6 +2495,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.DevicesWindow.Toolchain.Length > 0, "the Devices window shows the Android toolchain").ConfigureAwait(true);
         await Task.Delay(500).ConfigureAwait(true);
         Screenshot("maui-devices.png");
+
+        // The native tools (ADR 0104): the toolbar's Android group, the Device Manager on this machine's emulators (their
+        // files, no download), and the Device Log (adb's devices). The SDK Manager asks Google's repository: not here.
+        await WaitAsync(() => shell.Toolbar.Extra.Any(g => g.Items.Any(i => i.Command == "android.deviceManager")), "the toolbar shows the Android tools").ConfigureAwait(true);
+        shell.ShowAndroidDeviceManager();
+        await WaitAsync(() => shell.AndroidDeviceManager.Emulators.Count > 0 || shell.AndroidDeviceManager.Status.Length > 0, "the Android Device Manager lists the emulators, or says why there are none").ConfigureAwait(true);
+        shell.ShowDeviceLog();
+        await WaitAsync(() => shell.DeviceLogWindow.Sources.Count > 0 || shell.DeviceLogWindow.Status.Length > 0, "the Device Log lists the running devices, or says there are none").ConfigureAwait(true);
+        await Task.Delay(500).ConfigureAwait(true);
+        Screenshot("maui-android-tools.png");
+        shell.DeviceLogWindow.StopFollowing();
+        shell.Layout.CloseToolWindow(DeviceLogViewModel.ToolWindowId);
+        shell.Layout.CloseToolWindow(AndroidDeviceManagerViewModel.ToolWindowId);
         await SoftWaitAsync(() => shell.Solutions.RestoreState is "succeeded" or "failed", 300).ConfigureAwait(true);
         DismissRestoreFailureWithoutMauiWorkloads();
     }

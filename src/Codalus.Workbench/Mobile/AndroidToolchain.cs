@@ -142,6 +142,32 @@ public sealed class AndroidToolchain(PlatformKind platform, Func<string, string?
     private bool IsJdk(string folder) =>
         _fileExists(Path.Combine(folder, "bin", Exe("java"))) && _fileExists(Path.Combine(folder, "bin", Exe("javac")));
 
+    /// <summary>
+    /// The SDK's command-line tools (ADR 0104): <c>sdkmanager</c> and <c>avdmanager</c> from <c>cmdline-tools/latest</c>,
+    /// else the newest <c>cmdline-tools/&lt;version&gt;</c>, else the old <c>tools/bin</c>; null when the SDK has none.
+    /// </summary>
+    public (string SdkManager, string AvdManager)? CommandLineTools(string sdk)
+    {
+        var script = platform == PlatformKind.Windows ? ".bat" : string.Empty;
+        var folders = new List<string> { Path.Combine(sdk, "cmdline-tools", "latest", "bin") };
+        folders.AddRange(_subdirectories(Path.Combine(sdk, "cmdline-tools"))
+            .Where(d => Path.GetFileName(d) != "latest")
+            .OrderByDescending(d => Version.TryParse(Path.GetFileName(d), out var version) ? version : new Version(0, 0))
+            .Select(d => Path.Combine(d, "bin")));
+        folders.Add(Path.Combine(sdk, "tools", "bin"));
+        foreach (var folder in folders)
+        {
+            var sdkManager = Path.Combine(folder, "sdkmanager" + script);
+            var avdManager = Path.Combine(folder, "avdmanager" + script);
+            if (_fileExists(sdkManager) && _fileExists(avdManager))
+            {
+                return (sdkManager, avdManager);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>The SDK platforms installed (<c>android-35</c>…), for Check Environment.</summary>
     public IReadOnlyList<string> Platforms(string sdk) =>
         [.. _subdirectories(Path.Combine(sdk, "platforms")).Select(Path.GetFileName).OfType<string>().Order(StringComparer.Ordinal)];

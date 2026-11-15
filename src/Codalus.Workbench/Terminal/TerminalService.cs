@@ -244,9 +244,23 @@ public sealed class TerminalService : IDisposable
     /// Starts a shell of <paramref name="profile"/> in <paramref name="workingDirectory"/>. <paramref name="outputText"/>
     /// receives its output as text from the start (see <see cref="TerminalSession.OutputText"/>).
     /// </summary>
-    public TerminalSession Start(TerminalProfile profile, string workingDirectory, int columns = 120, int rows = 30, Action<string>? outputText = null)
+    public TerminalSession Start(TerminalProfile profile, string workingDirectory, int columns = 120, int rows = 30, Action<string>? outputText = null) =>
+        Start(profile, workingDirectory, null, null, columns, rows, outputText);
+
+    /// <summary>
+    /// Starts a shell of <paramref name="profile"/> with <paramref name="extraEnvironment"/> on top of this process's
+    /// (a <c>PATH</c> replaces it, whatever its case on Windows), named <paramref name="name"/> (the adb Command Prompt,
+    /// ADR 0104).
+    /// </summary>
+    public TerminalSession Start(TerminalProfile profile, string workingDirectory, IReadOnlyDictionary<string, string>? extraEnvironment, string? name, int columns = 120, int rows = 30, Action<string>? outputText = null)
     {
         var environment = BaseEnvironment();
+        foreach (var (key, value) in extraEnvironment ?? new Dictionary<string, string>())
+        {
+            var existing = environment.Keys.FirstOrDefault(k => k.Equals(key, Platform == PlatformKind.Windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) ?? key;
+            environment[existing] = value;
+        }
+
         var arguments = new List<string>(profile.Arguments);
         if (ShellIntegration && IntegrationScripts is { } scripts)
         {
@@ -260,7 +274,7 @@ public sealed class TerminalService : IDisposable
             environment["DOTNET_ROOT"] = root;
         }
 
-        return Launch(profile.Name, profile.Executable, arguments, workingDirectory, environment, columns, rows, outputText);
+        return Launch(name ?? profile.Name, profile.Executable, arguments, workingDirectory, environment, columns, rows, outputText);
     }
 
     /// <summary>Runs a program (not a shell) in a new terminal, e.g. a console app for Run Without Debugging.</summary>

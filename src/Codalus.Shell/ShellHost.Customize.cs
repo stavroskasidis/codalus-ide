@@ -21,9 +21,22 @@ public sealed partial class ShellHost
 
     public MenuCustomizations Customizations => Workbench.Menus.Customizations;
 
+    /// <summary>The group of the commands the user added to a location (<see cref="MenuRegistry"/>).</summary>
+    private const string CustomGroup = "~custom";
+
+    /// <summary>The context keys the standard toolbar's contributed groups depend on; a change shows or hides them.</summary>
+    private static readonly HashSet<string> s_toolbarContextKeys = new(StringComparer.Ordinal) { "androidProjects", "iosProjects" };
+
     private void InitializeCustomizations()
     {
         ApplyCustomizations();
+        Workbench.Context.Changed += (_, key) =>
+        {
+            if (s_toolbarContextKeys.Contains(key))
+            {
+                Infrastructure.Ui.Post(ApplyCustomizations);
+            }
+        };
         Workbench.Settings.Changed += (_, e) =>
         {
             if (e.Affects(MenuCustomizations.SettingKey))
@@ -43,10 +56,13 @@ public sealed partial class ShellHost
         }
 
         ToolbarCommandItem Item(MenuItem item) => new(item.Command, item.Title, CommandFor(item.Command));
-        var extra = new List<(string?, IReadOnlyList<ToolbarCommandItem>)>
-        {
-            (null, [.. Workbench.Menus.GetAllItems(MenuCustomizations.StandardToolbar).Select(Item)]),
-        };
+
+        // The groups features contribute (Android's and iOS's tools, ADR 0104), each shown while its when-clause holds,
+        // then the commands the user added.
+        var standard = Workbench.Menus.GetItems(MenuCustomizations.StandardToolbar);
+        var extra = new List<(string?, IReadOnlyList<ToolbarCommandItem>)>();
+        extra.AddRange(standard.Where(i => i.Group != CustomGroup).GroupBy(i => i.Group).Select(g => ((string?)null, (IReadOnlyList<ToolbarCommandItem>)[.. g.Select(Item)])));
+        extra.Add((null, [.. Workbench.Menus.GetAllItems(MenuCustomizations.StandardToolbar).Where(i => i.Group == CustomGroup).Select(Item)]));
         extra.AddRange(customizations.Toolbars.Select(t => ((string?)t.Name, (IReadOnlyList<ToolbarCommandItem>)[.. Workbench.Menus.GetAllItems(MenuCustomizations.ToolbarLocation(t.Name)).Select(Item)])));
         Toolbar.ApplyCustomization(new HashSet<string>(customizations.For(MenuCustomizations.StandardToolbar).Remove, StringComparer.Ordinal), extra);
     }
@@ -62,7 +78,7 @@ public sealed partial class ShellHost
     {
         if (location == MenuCustomizations.StandardToolbar)
         {
-            return [.. StandardToolbarCommands, .. Customizations.For(location).Add];
+            return [.. StandardToolbarCommands, .. Workbench.Menus.GetContributedKeys(location), .. Customizations.For(location).Add];
         }
 
         if (location.StartsWith(MenuCustomizations.ToolbarPrefix, StringComparison.Ordinal))

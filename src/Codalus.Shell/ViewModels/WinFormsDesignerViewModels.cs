@@ -644,6 +644,11 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
             // Nothing read (the first read hasn't started, and will be made with the projects loaded, or it failed), or complete.
             if (_disposed || _designerCode is null || _read is not { IsPartial: true })
             {
+                if (!_disposed)
+                {
+                    _shell.WinFormsDesignerLog.AppendLine($"Not reading {System.IO.Path.GetFileName(CodePath)} again: {(_designerCode is null ? "its code isn't open yet" : _read is null ? "it isn't read yet" : "its last read is complete")}.");
+                }
+
                 return;
             }
 

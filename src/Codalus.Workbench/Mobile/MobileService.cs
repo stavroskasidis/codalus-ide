@@ -245,9 +245,10 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
 
     /// <summary>
     /// Starts an emulator and waits until Android has booted in it (at most <paramref name="timeout"/>, 5 minutes by
-    /// default); the running emulator, or null when it didn't come up.
+    /// default); the running emulator, or null when it didn't come up. <paramref name="coldBoot"/> starts it from its cold
+    /// state, not its last snapshot (<c>-no-snapshot-load</c>, the Device Manager's Cold Boot, ADR 0104).
     /// </summary>
-    public async Task<MobileDevice?> StartEmulatorAsync(MobileDevice emulator, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null)
+    public async Task<MobileDevice?> StartEmulatorAsync(MobileDevice emulator, CancellationToken cancellationToken, TimeSpan? timeout = null, TimeSpan? poll = null, bool coldBoot = false)
     {
         if (emulator.IsRunning)
         {
@@ -260,7 +261,7 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
             throw new InvalidOperationException("The Android emulator isn't installed: install it with the SDK's emulator package (Tools → Android SDK Manager, or sdkmanager \"emulator\").");
         }
 
-        if (!start(program, ["-avd", avd], AndroidEnvironment(locations)))
+        if (!start(program, coldBoot ? ["-avd", avd, "-no-snapshot-load"] : ["-avd", avd], AndroidEnvironment(locations)))
         {
             throw new InvalidOperationException($"The emulator didn't start ({program}).");
         }
@@ -393,6 +394,20 @@ public sealed class MobileService(PlatformKind platform, AndroidToolchain androi
         {
             ArgumentList = arguments,
         };
+    }
+
+    /// <summary>
+    /// The same install as a <see cref="ToolCommand"/> (ADR 0104), to run elevated when the SDK's folder isn't writable.
+    /// <paramref name="intermediateFolder"/> keeps the restore's files out of the project: run as an administrator (or
+    /// root) they would belong to them, and the user's own builds couldn't replace them.
+    /// </summary>
+    public ToolCommand InstallAndroidDependenciesCommand(string dotnet, ProjectInfo project, string? intermediateFolder = null)
+    {
+        var plan = InstallAndroidDependenciesPlan(dotnet, project);
+        IReadOnlyList<string> arguments = intermediateFolder is null
+            ? plan.ArgumentList!
+            : [.. plan.ArgumentList!, "-p:BaseIntermediateOutputPath=" + Path.TrimEndingDirectorySeparator(intermediateFolder) + Path.DirectorySeparatorChar];
+        return new ToolCommand(dotnet, arguments) { Environment = plan.Environment, WorkingDirectory = plan.WorkingDirectory };
     }
 
     /// <summary>
