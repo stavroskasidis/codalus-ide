@@ -76,10 +76,8 @@ public sealed class LocalProcessLauncher : IProcessLauncher
             psi.WorkingDirectory = directory;
         }
 
-        foreach (var argument in launch.Arguments)
-        {
-            psi.ArgumentList.Add(argument);
-        }
+        // A line for cmd.exe goes as cmd.exe reads it: ArgumentList's \" escapes would leave quotes in its paths.
+        WindowsCommandLine.SetArguments(psi, launch.Arguments);
 
         foreach (var name in launch.UnsetEnvironment ?? [])
         {

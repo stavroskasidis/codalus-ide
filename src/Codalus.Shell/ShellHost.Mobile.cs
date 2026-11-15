@@ -440,7 +440,8 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// <c>dotnet workload restore</c> for the project, in the terminal (it may need an administrator, and the terminal
-    /// is where <c>sudo</c> asks), after the user agrees to the exact command.
+    /// is where <c>sudo</c> asks), after the user agrees to the exact command. It runs in the project's folder: the SDK
+    /// its <c>global.json</c> picks is the one whose workloads it needs.
     /// </summary>
     public async Task InstallWorkloadsAsync(ProjectInfo project)
     {
@@ -454,7 +455,7 @@ public sealed partial class ShellHost
         }
 
         SetupLog.AppendLine($"[{DateTime.Now:T}] {command}");
-        RunInstallInTerminal(new InstallPlan("workloads", InstallKind.Terminal, Localizer.Get("msg.mobile.workloadsTerminal", "Install .NET workloads"), command));
+        RunInstallInTerminal(new InstallPlan("workloads", InstallKind.Terminal, Localizer.Get("msg.mobile.workloadsTerminal", "Install .NET workloads"), command), Path.GetDirectoryName(project.Path));
         Workbench.Notifications.Info(Localizer.Get("msg.mobile.workloadsStarted", "The workloads install in the terminal. When it's done, reload the project (or reopen the solution)."));
     }
 

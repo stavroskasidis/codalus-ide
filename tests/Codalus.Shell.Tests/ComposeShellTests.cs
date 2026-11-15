@@ -305,6 +305,9 @@ public sealed class ComposeShellTests
     [AvaloniaFact]
     public async Task A_compose_service_in_its_container_is_profiled_through_its_diagnostic_port()
     {
+        // The product refuses elsewhere (ComposeProfileServiceAsync: Docker Desktop's file sharing on macOS and Windows
+        // doesn't carry the diagnostic port's Unix socket), so an engine on those isn't enough.
+        Assert.SkipUnless(OperatingSystem.IsLinux(), "Profiling a compose service needs Linux.");
         var engine = await ContainerShellTests.RequireEngineAsync();
         var (f, folder) = await OpenAsync();
         await using var fixture = f;

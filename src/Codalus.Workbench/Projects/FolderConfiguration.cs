@@ -233,9 +233,9 @@ public static partial class FolderConfiguration
         if (task.Type == "shell")
         {
             var line = string.Join(' ', args.Prepend(command).Select(a => a.Contains(' ', StringComparison.Ordinal) && !a.StartsWith('"') ? $"\"{a}\"" : a));
-            start = OperatingSystem.IsWindows()
-                ? new System.Diagnostics.ProcessStartInfo("cmd.exe") { ArgumentList = { "/d", "/s", "/c", line } }
-                : new System.Diagnostics.ProcessStartInfo("/bin/sh") { ArgumentList = { "-c", line } };
+            // cmd.exe reads its line as written (WindowsCommandLine): ArgumentList's \" escapes would leave quotes in paths.
+            start = new System.Diagnostics.ProcessStartInfo(OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/sh");
+            Codalus.Platform.WindowsCommandLine.SetArguments(start, OperatingSystem.IsWindows() ? ["/d", "/s", "/c", line] : ["-c", line]);
         }
         else
         {
