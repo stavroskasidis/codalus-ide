@@ -13,7 +13,8 @@ Codalus IDE builds and runs .NET MAUI apps on Android devices and emulators on W
 
 You don't have to install these yourself:
 - **Workloads:** when a project needs a workload that isn't installed, Codalus IDE offers **Install Workloads**. That runs `dotnet workload restore` for the project in the terminal, where you can enter a password if the .NET SDK is in a system folder.
-- **The Android SDK and a JDK:** **Install the Android SDK** (in the Devices window, Help → Check Environment, or Debug → Other Debug Targets) installs them through the Android workload's own `InstallAndroidDependencies` target. Android Studio's folder is the default (`%LOCALAPPDATA%\Android\Sdk`, `~/Library/Android/sdk`, `~/Android/Sdk`). Installing accepts the [Android SDK's license](https://developer.android.com/studio/terms), so the dialog shows the exact command first.
+- **The Android SDK and a JDK:** **Install the Android SDK** (in the Devices window, Tools → Android, Help → Check Environment, or Debug → Other Debug Targets) installs them through the Android workload's own `InstallAndroidDependencies` target. Android Studio's folder is the default (`%LOCALAPPDATA%\Android\Sdk`, `~/Library/Android/sdk`, `~/Android/Sdk`). Installing accepts the [Android SDK's license](https://developer.android.com/studio/terms), so the dialog shows the exact command first.
+- **An SDK only an administrator can change:** the classic IDE installs the Android SDK in `C:\Program Files (x86)\Android\android-sdk`, which a normal user can't write. Codalus IDE checks the folder first and, on Windows, runs the same install elevated: Windows asks for an administrator's permission once, and the output still shows in the Android SDK channel. On macOS and Linux it runs the command with `sudo` in the terminal, where sudo asks for your password. The SDK Manager's installs, updates and uninstalls do the same.
 
 Codalus IDE finds an SDK that's already installed through these settings, in this order:
 1. **Android SDK Location** and **Java Development Kit Location** (Tools → Options → Mobile; `android.sdkDirectory`, `android.jdkDirectory`).
@@ -69,7 +70,51 @@ View → Other Windows → **Devices** lists everything apps can run on. The dev
 - **Refresh** the list;
 - **Install the Android SDK** when it's missing.
 
-The window also shows where the Android SDK and the JDK are. Create virtual devices with the SDK's Device Manager (`avdmanager`, or Android Studio).
+The window also shows where the Android SDK and the JDK are. Create and change virtual devices in the [Android Device Manager](#android-device-manager).
+
+## Android and iOS tools
+
+Tools → **Android** has the Android SDK's own tools, and on a Mac Tools → **iOS** has Xcode's. While the solution has an Android project, the toolbar shows them as a group of buttons at its end: **Android Device Manager**, **Android SDK Manager**, **Android adb Command Prompt** and **Device Log**. On a Mac with an iOS project, a second group has **Open Simulator** and **Open Xcode**. You can remove any of these buttons in Tools → Customize.
+
+They use the SDK's command-line tools (`sdkmanager` and `avdmanager`, in `cmdline-tools`). When the SDK doesn't have them, the windows offer **Install**, which runs the Android workload's install (it adds them).
+
+### Android Device Manager
+
+Tools → Android → **Android Device Manager** lists your emulators (Android virtual devices) with their device, API level, processor and system image, and whether each one is running.
+- **New** creates one: pick a device profile (Pixel 7, a tablet…), then a system image for this machine's processor (Google Play or Google APIs, the newest first), then its name. A system image that isn't installed yet is downloaded first, after its license.
+- **Start** starts it and waits until Android has booted. **Cold Boot** (in Start's menu) starts it from scratch instead of its last saved state. **Stop** ends it.
+- **Wipe Data** erases everything installed and saved on it, as a factory reset does. **Delete** removes it. Both ask first, and only for a stopped emulator.
+- **Open Folder** shows its files.
+- Below the list, the selected emulator's **settings**: memory, internal storage, SD card, processor cores, graphics mode and the hardware keyboard. **Save** writes them to its `config.ini`; they apply at its next start. Settings change only while the emulator is stopped.
+
+A double-click starts a stopped emulator.
+
+### Android SDK Manager
+
+Tools → Android → **Android SDK Manager** lists the SDK's packages, installed and available: platforms, system images, build tools, tools (platform tools, the emulator, the command-line tools, the NDK, CMake) and sources. Filter them by kind, search them, or show only the installed ones.
+- **Check** a package to install it, **uncheck** an installed one to uninstall it, then **Apply Changes**. Each row says what will happen.
+- **Update All** updates every installed package that has a newer version.
+- Before installing, it shows each license the packages need that you haven't accepted yet, in full. Nothing installs until you click **Accept**, as in the classic IDE.
+
+The output goes to the **Android SDK** channel of the Output window.
+
+### Android adb Command Prompt
+
+Tools → Android → **Android adb Command Prompt** opens a terminal in the startup project's folder with the SDK's tools on `PATH` (`adb`, `emulator`, `sdkmanager`, `avdmanager`, and the JDK's `java`) and `ANDROID_HOME` and `JAVA_HOME` set.
+
+### Device Log
+
+Tools → Android → **Device Log** (also in View → Other Windows) shows a device's log as it comes: a running Android device or emulator (`adb logcat`), or on a Mac a booted iOS simulator (its unified log).
+- Pick the device at the top. The startup project's device is picked first.
+- Filter by the lowest **level** (Verbose to Fatal) and by **text** in the tag or the message.
+- **My App** shows only the startup project's app: on Android its processes (by the project's `ApplicationId`, including earlier runs), in a simulator its process name.
+- **Pause** stops the list from moving (entries still come in, and show when you resume). **Clear** empties it. **Save** writes the entries shown to a file, in logcat's layout.
+
+Errors show in red and warnings in yellow. The window keeps the last 50,000 entries, and stops following the device when you close it. The log of a physical iPhone or iPad isn't available.
+
+### Simulator and Xcode
+
+On a Mac, Tools → iOS → **Open Simulator** opens Xcode's Simulator app, and **Open Xcode** opens Xcode. Xcode's Devices and Simulators window has no command to open it from outside, so open it from Xcode's Window menu.
 
 ## Editing MAUI XAML
 
@@ -88,5 +133,5 @@ With the MAUI workload installed, File → New Project lists **.NET MAUI App**, 
 
 - Debugging on iPhones and iPads, and debugging .NET 11 apps on CoreCLR.
 - A XAML previewer and XAML Hot Reload for MAUI: no open-source ones exist.
-- Creating virtual devices and managing SDK packages from the IDE. Use the SDK's `avdmanager` and `sdkmanager`, or Android Studio.
+- Changing an emulator's device profile after it's created (create a new one), and the log of a physical iPhone or iPad.
 - Running the Windows target from Linux and macOS (through a Windows machine), and breakpoints in a packaged Windows app's start-up code.

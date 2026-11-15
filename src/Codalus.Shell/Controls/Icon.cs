@@ -404,6 +404,10 @@ public static class IconSet
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
+        ["phone-settings"] = "phone_link_setup_20_regular",
+        ["phone-log"] = "phone_vertical_scroll_20_regular",
+        ["simulator"] = "phone_tablet_20_regular",
+        ["package-download"] = "cube_arrow_curve_down_20_regular",
 
         // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
         // at Cursor and Apply….

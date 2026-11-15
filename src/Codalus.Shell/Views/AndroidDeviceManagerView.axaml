@@ -1,0 +1,118 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             x:Class="Codalus.Shell.Views.AndroidDeviceManagerView"
+             x:DataType="vm:AndroidDeviceManagerViewModel">
+  <!-- The Android Device Manager (ADR 0104): the emulators, their actions, and the selected one's settings below. -->
+  <DockPanel Grid.IsSharedSizeScope="True">
+    <controls:ToolbarPanel DockPanel.Dock="Top">
+      <Button x:Name="NewButton" Classes="toolbar iconText" controls:ButtonIcon.Kind="add" Content="{l:T androidDeviceManager.new}" Command="{Binding NewCommand}" ToolTip.Tip="{l:T androidDeviceManager.createAnEmulator}" />
+      <Border Classes="toolbarSeparator" />
+      <SplitButton Classes="toolbar" Command="{Binding StartCommand}" ToolTip.Tip="{l:T androidDeviceManager.startTheEmulator}" AutomationProperties.Name="{l:T androidDeviceManager.startTheEmulator}">
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <controls:Icon Kind="play" Classes="start" />
+          <TextBlock Text="{l:T androidDeviceManager.start}" VerticalAlignment="Center" />
+        </StackPanel>
+        <SplitButton.Flyout>
+          <MenuFlyout Placement="BottomEdgeAlignedLeft">
+            <MenuItem controls:MenuEntry.Icon="play" Header="{l:T androidDeviceManager.start}" Command="{Binding StartCommand}" />
+            <MenuItem controls:MenuEntry.Icon="restart" Header="{l:T androidDeviceManager.coldBoot}" Command="{Binding ColdBootCommand}" />
+          </MenuFlyout>
+        </SplitButton.Flyout>
+      </SplitButton>
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="stop" Command="{Binding StopCommand}" ToolTip.Tip="{l:T androidDeviceManager.stopTheEmulator}" AutomationProperties.Name="{l:T androidDeviceManager.stopTheEmulator}" />
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="broom" Command="{Binding WipeDataCommand}" ToolTip.Tip="{l:T androidDeviceManager.wipeDataFactoryReset}" AutomationProperties.Name="{l:T androidDeviceManager.wipeTheEmulatorSData}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="trash" Command="{Binding DeleteCommand}" ToolTip.Tip="{l:T androidDeviceManager.deleteTheEmulator}" AutomationProperties.Name="{l:T androidDeviceManager.deleteTheEmulator}" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="folder-open" Command="{Binding OpenFolderCommand}" ToolTip.Tip="{l:T androidDeviceManager.openTheEmulatorSFolder}" AutomationProperties.Name="{l:T androidDeviceManager.openTheEmulatorSFolder}" />
+      <Border Classes="toolbarSeparator" />
+      <Button Classes="toolbar icon" controls:ButtonIcon.Kind="refresh" Command="{Binding RefreshCommand}" ToolTip.Tip="{l:T androidDeviceManager.refresh}" AutomationProperties.Name="{l:T androidDeviceManager.refreshTheEmulators}" />
+    </controls:ToolbarPanel>
+    <TextBlock DockPanel.Dock="Top" Classes="muted small" Margin="8,2,8,4" Text="{Binding Status}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"
+               IsVisible="{Binding Status, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- The selected emulator's settings: changed while it's stopped, read again at its next start. -->
+    <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource Shell.Grid.Rule}" BorderThickness="0,1,0,0" Padding="8,6" IsVisible="{Binding HasSelection}">
+      <StackPanel Spacing="6">
+        <TextBlock Classes="muted small" Text="{Binding Details}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Details}" />
+        <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T androidDeviceManager.memoryMb}" VerticalAlignment="Center" />
+            <TextBox Text="{Binding Ram}" Width="80" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T androidDeviceManager.memoryInMegabytes}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T androidDeviceManager.internalStorageMb}" VerticalAlignment="Center" />
+            <TextBox Text="{Binding Storage}" Width="90" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T androidDeviceManager.internalStorageInMegabytes}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T androidDeviceManager.sdCardMb}" VerticalAlignment="Center" />
+            <TextBox Text="{Binding SdCard}" Width="80" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T androidDeviceManager.sdCardInMegabytesEmptyFor}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T androidDeviceManager.cores}" VerticalAlignment="Center" />
+            <TextBox Text="{Binding Cores}" Width="50" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T androidDeviceManager.processorCores}" />
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T androidDeviceManager.graphics}" VerticalAlignment="Center" />
+            <ComboBox ItemsSource="{Binding GpuModes}" SelectedIndex="{Binding Gpu}" MinWidth="150" IsEnabled="{Binding CanEdit}" AutomationProperties.Name="{l:T androidDeviceManager.graphicsMode}" />
+          </StackPanel>
+          <CheckBox Content="{l:T androidDeviceManager.hardwareKeyboard}" IsChecked="{Binding Keyboard}" IsEnabled="{Binding CanEdit}" />
+          <Button Classes="iconText" controls:ButtonIcon.Kind="save" Content="{l:T androidDeviceManager.save}" Command="{Binding SaveCommand}" ToolTip.Tip="{l:T androidDeviceManager.saveTheSettingsToTheEmulator}" />
+        </WrapPanel>
+        <TextBlock Classes="error small" Text="{Binding SettingsError}" IsVisible="{Binding HasSettingsError}" TextWrapping="Wrap" />
+      </StackPanel>
+    </Border>
+
+    <Border DockPanel.Dock="Top" Classes="gridHeader">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="3*" />
+          <ColumnDefinition Width="2*" />
+          <ColumnDefinition Width="Auto" MinWidth="44" SharedSizeGroup="avdApi" />
+          <ColumnDefinition Width="Auto" MinWidth="90" SharedSizeGroup="avdAbi" />
+          <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="avdImage" />
+          <ColumnDefinition Width="Auto" MinWidth="140" SharedSizeGroup="avdState" />
+        </Grid.ColumnDefinitions>
+        <TextBlock Text="{l:T androidDeviceManager.name}" />
+        <TextBlock Grid.Column="1" Text="{l:T androidDeviceManager.device}" />
+        <TextBlock Grid.Column="2" Text="{l:T androidDeviceManager.api}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="3" Text="{l:T androidDeviceManager.processor}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="4" Text="{l:T androidDeviceManager.image}" Margin="6,0,0,0" />
+        <TextBlock Grid.Column="5" Text="{l:T androidDeviceManager.state}" Margin="6,0,0,0" />
+      </Grid>
+    </Border>
+    <ListBox x:Name="EmulatorList" ItemsSource="{Binding Emulators}" SelectedItem="{Binding Selected}" Background="Transparent" AutomationProperties.Name="{l:T androidDeviceManager.androidEmulators}">
+      <ListBox.Styles>
+        <Style Selector="ListBoxItem" x:DataType="vm:EmulatorRow">
+          <Setter Property="Padding" Value="4,2" />
+          <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+        </Style>
+      </ListBox.Styles>
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:EmulatorRow">
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="3*" />
+              <ColumnDefinition Width="2*" />
+              <ColumnDefinition Width="Auto" MinWidth="44" SharedSizeGroup="avdApi" />
+              <ColumnDefinition Width="Auto" MinWidth="90" SharedSizeGroup="avdAbi" />
+              <ColumnDefinition Width="Auto" MinWidth="100" SharedSizeGroup="avdImage" />
+              <ColumnDefinition Width="Auto" MinWidth="140" SharedSizeGroup="avdState" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <controls:Icon Kind="phone" />
+              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Text="{Binding Device}" Classes="muted" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="2" Text="{Binding Api}" Margin="6,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="3" Text="{Binding Abi}" Classes="muted" Margin="6,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="4" Text="{Binding Image}" Classes="muted" Margin="6,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="5" Text="{Binding State}" Margin="6,0,0,0" VerticalAlignment="Center" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</UserControl>
