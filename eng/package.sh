@@ -230,7 +230,10 @@ case "$rid" in
       mkdir -p "$rpmtop/SPECS" "$rpmtop/RPMS"
       sed -e "s|{{VERSION}}|$pkgversion|g" -e "s|{{STAGE}}|$app|g" -e "s|{{REPO}}|$repo|g" \
         "$repo/eng/packaging/linux/codalus.spec" > "$rpmtop/SPECS/codalus.spec"
-      rpmbuild --quiet -bb --target "$rpmarch" --define "_topdir $rpmtop" "$rpmtop/SPECS/codalus.spec"
+      # rpm's v4 package format, signed with a v4 signature (below). rpm 6 (Ubuntu 26.04's runners) builds v6 by default and
+      # signs it with a v6 signature only, which rpm 4 (Fedora 42, RHEL 9 and 10) ignores: dnf refused the 0.13.0 release's
+      # package as "not signed" (run 43663228796). rpm 4 doesn't know the macro and builds v4 anyway.
+      rpmbuild --quiet -bb --target "$rpmarch" --define "_topdir $rpmtop" --define "_rpmformat 4" "$rpmtop/SPECS/codalus.spec"
       mv "$rpmtop/RPMS/$rpmarch/"codalus-*.rpm "$out/$name.rpm"
       # The dnf repository serves this very file from the release (eng/linux-repos.sh), with gpgcheck on.
       if [ -n "${CODALUS_PACKAGES_KEY:-}" ]; then
