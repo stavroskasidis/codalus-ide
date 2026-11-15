@@ -193,7 +193,7 @@ internal sealed class CorDebugTarget : IClrProcess
     private TaskCompletionSource<bool>? _eval;
     private readonly List<string> _evalCallbacks = [];
     private long _evalStarted;
-    private bool _exited;
+    private volatile bool _exited;
 
     public CorDebugTarget(CorDebug corDebug, string version, bool justMyCode)
     {
@@ -229,7 +229,7 @@ internal sealed class CorDebugTarget : IClrProcess
     /// </summary>
     public CoreClr.LaunchedProgram? Launched { get; set; }
 
-    private CorDebugProcess Process => _process ?? throw new ClrException("The process isn't running.");
+    private CorDebugProcess Process => !_exited && _process is { } process ? process : throw new ClrException("The process isn't running.");
 
     // ------------------------------------------------------------------ starting
 
@@ -637,8 +637,13 @@ internal sealed class CorDebugTarget : IClrProcess
         _events.Writer.TryComplete();
     }
 
+    /// <summary>
+    /// The process's threads; none once it has exited. The runtime's process is gone then: asking it crashed the
+    /// adapter on macOS (a SIGSEGV in <c>CordbProcess::EnumerateThreads</c>, macOS CI, run 43755266667), and every
+    /// call into it after the exit fails (<see cref="Process"/>).
+    /// </summary>
     public IReadOnlyList<IClrThread> Threads() =>
-        Translate(() => Process.Threads.Select(Thread).Cast<IClrThread>().ToList());
+        _exited ? [] : Translate(() => Process.Threads.Select(Thread).Cast<IClrThread>().ToList());
 
     public IClrBreakpoint CreateBreakpoint(IClrModule module, int methodToken, int ilOffset) =>
         Translate(() =>
