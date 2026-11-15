@@ -365,11 +365,13 @@ public sealed class WebsiteTests : IDisposable
         Assert.True(saved.Count > 50, $"only {saved.Count} Screenshot calls found");
         Assert.All(entries.Where(e => e[0].EndsWith(".png", StringComparison.Ordinal)), e => Assert.True(saved.Any(r => r.IsMatch(e[2])), $"{e[0]}: the smoke test saves no {e[2]}"));
 
-        // A video comes from the story of the same name, recorded on Linux (eng/showcase/record.sh); nothing else is there.
+        // A video comes from the story of the same name: a .sh recorded on Linux (eng/showcase/record.sh), or a .ps1 on
+        // Windows (eng/showcase/record.ps1); nothing else is there.
         Assert.All(entries.Where(e => !e[0].EndsWith(".png", StringComparison.Ordinal)), e =>
         {
             Assert.EndsWith(".mp4", e[0], StringComparison.Ordinal);
-            Assert.Equal(("Linux", $"eng/showcase/{Path.GetFileNameWithoutExtension(e[0])}.sh"), (e[1], e[2]));
+            var story = $"eng/showcase/{Path.GetFileNameWithoutExtension(e[0])}";
+            Assert.True((e[1], e[2]) == ("Linux", story + ".sh") || (e[1], e[2]) == ("Windows", story + ".ps1"), string.Join(' ', e));
             Assert.True(File.Exists(Path.Combine(s_repoRoot, e[2])), $"{e[0]}: there's no {e[2]}");
         });
     }
@@ -382,8 +384,9 @@ public sealed class WebsiteTests : IDisposable
             .Select(m => (Picture: m.Groups["picture"].Value, Video: m.Groups["video"].Value))
             .ToList();
 
-        // The hero, three app models and two AI features (Home.razor); each picture without a video has no attribute.
-        Assert.Equal(6, videos.Count);
+        // The hero, the app models and the AI features that have one (Home.razor); a picture without a video has no
+        // attribute.
+        Assert.True(videos.Count >= 10, $"only {videos.Count} videos");
         Assert.Equal(videos.Count, Regex.Count(html, "data-video="));
         Assert.Contains(("assets/screenshots/editor-dark.png", "assets/screenshots/editor.mp4"), videos);
         Assert.All(videos, v =>

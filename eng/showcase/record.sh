@@ -118,7 +118,16 @@ echo "{\"folders\":[$trusted]}" > "$WORK/ud/state/trusted-folders.json"
 Xvfb :99 -screen 0 1280x800x24 -nolisten tcp > "$WORK/xvfb.log" 2>&1 &
 XVFB_PID=$!
 sleep 2
-CODALUS_CREDENTIAL_STORE=memory setsid "$codalus" --user-data-dir "$WORK/ud" --skip-setup "${OPEN[@]}" > "$WORK/app.log" 2>&1 &
+# Sign-ins in memory, and the app (and what it runs, whose environment a video can show) gets none of this machine's
+# agent, cloud, token or key variables, nor those that make Connect to an agent treat this as a remote session.
+hidden=()
+while IFS='=' read -r var _; do
+  case "$var" in
+    AI_AGENT* | ANTHROPIC_* | AWS_* | AZURE_* | CLAUDE* | GH_* | GITHUB_* | *TOKEN* | *SECRET* | *PASSWORD* | *_KEY | *_KEY_* | \
+      NO_BROWSER | SSH_CONNECTION | SSH_CLIENT | SSH_TTY) hidden+=(-u "$var") ;;
+  esac
+done < <(env)
+CODALUS_CREDENTIAL_STORE=memory setsid env "${hidden[@]}" "$codalus" --user-data-dir "$WORK/ud" --skip-setup "${OPEN[@]}" > "$WORK/app.log" 2>&1 &
 APP_PID=$!
 sleep "$LOAD"
 rest

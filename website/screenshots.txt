@@ -1,7 +1,8 @@
 # The website's screenshots (website/wwwroot/assets/screenshots), each a picture the smoke test saves (SmokeTest's
 # Screenshot calls) on one CI runner. eng/update-screenshots.sh copies them from a run's smoke-test-<OS> artifacts;
 # WebsiteTests checks that every picture on the site is listed here and every source is one the smoke test saves.
-# The home page's looping videos (.mp4) come from a story instead, recorded on Linux by eng/showcase/record.sh <name>.
+# The home page's looping videos (.mp4) come from a story instead: eng/showcase/<name>.sh, recorded on Linux by
+# eng/showcase/record.sh <name>, or eng/showcase/<name>.ps1, recorded on Windows by eng/showcase/record.ps1 <name>.
 #
 # <picture on the site>   <runner: Linux, Windows or macOS>   <the smoke test's picture, or the video's story>
 agent-connect.png         Linux     agent-connect.png
@@ -10,11 +11,14 @@ ai-chat-agent.png         Linux     ai-chat-agent.png
 ai-chat.mp4               Linux     eng/showcase/ai-chat.sh
 ai-chat.png               Linux     ai-chat.png
 ai-console.png            Linux     ai-console.png
+aspire.mp4                Linux     eng/showcase/aspire.sh
 aspire.png                Linux     smoke-test-aspire.png
 aspnet.mp4                Linux     eng/showcase/aspnet.sh
 avalonia.mp4              Linux     eng/showcase/avalonia.sh
+blazor.mp4                Linux     eng/showcase/blazor.sh
 blazor.png                Linux     smoke-test-blazor-compound-debug.png
 code-search.png           Linux     smoke-test-code-search.png
+connect.mp4               Linux     eng/showcase/connect.sh
 console.mp4               Linux     eng/showcase/console.sh
 debugging.png             Linux     smoke-test-debug-depth.png
 editor-dark.png           Linux     smoke-test-theme-dark.png
@@ -37,6 +41,7 @@ theme-ember.png           Linux     smoke-test-theme-ember.dark.png
 theme-graphite.png        Linux     smoke-test-theme-graphite.dark.png
 theme-harbor.png          Linux     smoke-test-theme-harbor.light.png
 wcf-test-client.png       Linux     smoke-test-wcf-test-client.png
+wcf.mp4                   Linux     eng/showcase/wcf.sh
 web-http.png              Linux     smoke-test-web-http.png
 winforms.png              Windows   winforms-designer.png
 winui.png                 Windows   winui-xaml.png
