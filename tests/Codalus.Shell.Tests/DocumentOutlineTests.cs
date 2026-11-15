@@ -297,12 +297,22 @@ public sealed class DocumentOutlineTests
 
         // Back to the large document: its rows are flattened on the pool, and the small one's showed meanwhile and went to
         // their symbols' positions in the large one. They go at once; the same document's stay (they patch, no flicker).
-        var old = outline.Rows[^1];
+        // A flatten that finished before its await continues at once, so the large document's rows may already show.
+        var smallRows = outline.Rows.ToList();
+        var old = smallRows[^1];
         var caret = large.Editor.CaretOffset;
         outline.SetEditor(large);
-        Assert.Empty(outline.Rows);
-        Assert.True(outline.HasMessage);
-        Assert.Null(outline.Current);
+        Assert.DoesNotContain(outline.Rows, smallRows.Contains);
+        Assert.DoesNotContain(outline.Current, smallRows);
+        if (outline.Rows.Count == 0)
+        {
+            Assert.True(outline.HasMessage);
+            Assert.Null(outline.Current);
+        }
+        else
+        {
+            Assert.Equal(111, outline.Rows.Count);
+        }
         outline.Navigate(old);
         Assert.Equal(caret, large.Editor.CaretOffset);
         await ShellFixture.PumpUntil(() => outline.Rows.Count == 111 && !outline.IsBuilding, describe: () => $"{outline.Rows.Count} rows");
