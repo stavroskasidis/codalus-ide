@@ -190,3 +190,5 @@ Latency and memory are compared only with earlier runs on the same CPU model **a
 
 The runs from before an image change aren't a baseline for the runs after it: until 3 runs on the new release exist, an increase there is a warning, as on a new CPU. Binary size still compares with every run, since the image doesn't change what ships.
 
+On macOS the release is the major version only (`macOS 26` for 26.6.2 and 26.7.2): GitHub's macOS runners take a minor update about monthly on the same image. Counting 26.7 apart from 26.6 left the third 0.13.0 release run (43700514486) with 1 comparable run of 10, so it fell back to values accepted before the update and failed. Accepted latency and memory values follow the same rule: an entry is a reference only on the OS release it was measured on, its `osRelease` or else the release of the first run on its CPU after it (`Gates.AcceptedOnThisOs`).
+
