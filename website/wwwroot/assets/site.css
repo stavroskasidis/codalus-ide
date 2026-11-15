@@ -188,6 +188,24 @@ p code, span code { font-size: 0.88em; color: #dcd5ea; }
    quarters of a screen early, so the picture is there by the time it scrolls into view. */
 .shot > figure:has(> img[loading="lazy"]:only-child) { content-visibility: auto; aspect-ratio: 1280 / 800; }
 .shot img { display: block; width: 100%; height: auto; aspect-ratio: 1280 / 800; }
+/* A picture's looping video (site.js, the home page): over the picture, shown once it plays, with a button that pauses
+   it, shown under the pointer, on focus, while paused and on touch screens. */
+.motion { position: relative; }
+.motion video { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.3s ease; }
+.motion.is-playing video { opacity: 1; }
+.motion-toggle {
+  position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; display: grid; place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 50%; background: rgba(0, 0, 0, 0.6); color: #fff;
+  cursor: pointer; opacity: 0; transition: opacity 0.2s ease;
+}
+.motion-toggle::before {
+  content: ""; box-sizing: border-box; width: 10px; height: 12px; border: solid currentColor; border-width: 0 3px;
+}
+.motion.is-paused .motion-toggle::before {
+  width: 0; height: 0; margin-left: 3px; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent currentColor;
+}
+.motion:hover .motion-toggle, .motion-toggle:focus-visible, .motion.is-paused .motion-toggle { opacity: 1; }
+@media (hover: none) { .motion-toggle { opacity: 0.85; } }
 .shot figcaption {
   padding: 18px 22px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
 }
