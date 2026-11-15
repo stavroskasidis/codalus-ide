@@ -16,13 +16,8 @@
             {
                 <a class="pill rise" href="@Releases.ReleaseUrl(Releases.Nightly)"><span class="pill-tag">PREVIEW</span>Nightly builds are available while 0.x takes shape <Icon Name="arrow" Size="14" /></a>
             }
-            <h1 class="display display-xl rise rise-1">A real .NET IDE.<br /><span class="accent">Native on every desktop.</span></h1>
-            <p class="lead rise rise-2">An open-source IDE for .NET, free, MIT-licensed and without telemetry. What sets it apart:</p>
-            <ul class="hero-points rise rise-2">
-                <li><a href="docs/getting-started/#the-first-run-setup">The classic IDE's look and feel, on macOS and Linux too</a></li>
-                <li><a href="docs/remote/">Remote development over SSH, in WSL and in Dev Containers</a></li>
-                <li><a href="docs/ai/#codalus-as-an-mcp-server">An MCP server that gives your coding agents the IDE's compiler, tests and debugger</a></li>
-            </ul>
+            <h1 class="display display-xl rise rise-1">A real .NET IDE.<br /><span class="accent">Native on every platform.</span></h1>
+            <p class="lead rise rise-2">An open-source IDE for .NET, free, MIT-licensed and without telemetry.</p>
             <div class="hero-actions rise rise-3">
                 <a class="button" href="download/" data-download-os @attributes="DownloadFiles">
                     <Icon Name="download" Size="18" />
@@ -42,8 +37,8 @@
 
     <section class="viewer rise rise-5" aria-label="Screenshot">
         <figure class="shot">
-            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" alt="The editor with inlay hints, the References window with the references to Greet, and the Solution Explorer" />
-            <figcaption><strong>Editor</strong><span>Roslyn-powered C# with inlay hints, Find All References and the Solution Explorer.</span></figcaption>
+            <img src="assets/screenshots/editor-dark.png" width="1280" height="800" data-video="assets/screenshots/editor.mp4" alt="The editor with inlay hints, the References window with the references to Greet, and the Solution Explorer" />
+            <figcaption><strong>Editor</strong><span>Roslyn-powered C# with IntelliSense and inlay hints, and the debugger one key away.</span></figcaption>
         </figure>
     </section>
 
@@ -63,7 +58,7 @@
                 @foreach (var (model, i) in s_models.Select((m, i) => (m, i)))
                 {
                     <div class="shot model" role="tabpanel" id="model-@model.Key" aria-labelledby="tab-@model.Key" hidden="@(i != 0)">
-                        <figure><img src="assets/screenshots/@model.File" width="1280" height="800" loading="lazy" alt="@model.Alt" /></figure>
+                        <figure><img src="assets/screenshots/@model.File" width="1280" height="800" loading="lazy" data-video="@VideoUrl(model)" alt="@model.Alt" /></figure>
                         <div class="model-text">
                             <div class="model-what">
                                 <h3>@model.Label</h3>
@@ -105,7 +100,7 @@
                 @foreach (var (feature, i) in s_ai.Select((f, i) => (f, i)))
                 {
                     <div class="shot model" role="tabpanel" id="ai-@feature.Key" aria-labelledby="aitab-@feature.Key" hidden="@(i != 0)">
-                        <figure><img src="assets/screenshots/@feature.File" width="1280" height="800" loading="lazy" alt="@feature.Alt" /></figure>
+                        <figure><img src="assets/screenshots/@feature.File" width="1280" height="800" loading="lazy" data-video="@VideoUrl(feature)" alt="@feature.Alt" /></figure>
                         <div class="model-text">
                             <div class="model-what">
                                 <h3>@feature.Label</h3>
@@ -217,7 +212,14 @@
 </div>
 
 @code {
-    private sealed record Model(string Key, string Label, string Ext, string File, string Alt, string[] Points, string Where, string Guide);
+    /// <summary>
+    /// An app model or AI feature: its picture from the smoke test and, where it has one, its looping video (Video,
+    /// recorded by eng/showcase/&lt;name&gt;.sh), which site.js plays over the picture. Both are in website/screenshots.txt.
+    /// </summary>
+    private sealed record Model(string Key, string Label, string Ext, string File, string Alt, string[] Points, string Where, string Guide, string? Video = null);
+
+    /// <summary>The video's address for the picture's data-video, or none (Blazor leaves the attribute out).</summary>
+    private static string? VideoUrl(Model model) => model.Video is null ? null : "assets/screenshots/" + model.Video;
 
     /// <summary>
     /// The offered release's recommended file for Windows and macOS: site.js points the Download buttons at the
@@ -232,8 +234,8 @@
     };
 
     /// <summary>
-    /// The AI features the second spotlight shows, each with its picture from the smoke test (website/screenshots.txt)
-    /// and, where the app models say where they run, what stays under the user's control.
+    /// The AI features the second spotlight shows, each with its picture from the smoke test and its video if it has one
+    /// (website/screenshots.txt) and, where the app models say where they run, what stays under the user's control.
     /// </summary>
     private static readonly Model[] s_ai =
     [
@@ -242,25 +244,25 @@
             ["Claude, Codex, Gemini CLI, GitHub Copilot, pi, OpenCode or goose in their own command-line interface, in a console beside the Output and the Terminal",
              "The IDE's tools connected for that run where the CLI takes them, with nothing written to its own configuration",
              "Tabs that come back with their conversations, and Add Selection to send a reference instead of the text"],
-            "It runs only while AI assistance is on, in folders you trust, and says that the agent changes files with its own approvals.", "docs/ai/#ai-console"),
+            "It runs only while AI assistance is on, in folders you trust, and says that the agent changes files with its own approvals.", "docs/ai/#ai-console", "ai-console.mp4"),
         new("agent", "An agent that uses the IDE", "MCP", "ai-chat-agent.png",
             "AI Chat's agent: its step folded into one line, Read 1 file, and its explanation with the code it suggests",
             ["Symbols, references, implementations and callers through the compiler instead of grep",
              "Build, run the tests, start the program, and debug it with breakpoints, variables and steps",
              "A web app's page driven under the debugger, so its breakpoints stop"],
-            "Every change shows in a preview first, every command runs after you allow it, and each answer lists the files it changed, with Revert.", "docs/ai/#the-ides-tools"),
+            "Every change shows in a preview first, every command runs after you allow it, and each answer lists the files it changed, with Revert.", "docs/ai/#the-ides-tools", "ai-agent.mp4"),
         new("chat", "AI Chat", "@-mentions", "ai-chat.png",
             "AI Chat beside the editor: a question about the selected method that mentions @selection, the file sent with it, and the answer with its code block",
             ["Ask about your code and @-mention what goes with it: the selection, the errors, the build, any file",
              "Each answer's steps folded into one line, and code blocks in your editor's colors",
              "Inline and next edit suggestions, commit messages, Fix with AI, and tests for the selection"],
-            "Off until you turn it on, with your own key or a model on your machine. Only what a question mentions is sent; secrets and ignored files never are.", "docs/ai/#ai-chat"),
+            "Off until you turn it on, with your own key or a model on your machine. Only what a question mentions is sent; secrets and ignored files never are.", "docs/ai/#ai-chat", "ai-chat.mp4"),
         new("connect", "Connect your agent", "ACP", "agent-connect.png",
             "Connect to Claude over AI Chat: Node.js and npx found, Claude's ways to sign in, the exact commands it runs, and the box that turns AI assistance on",
             ["Claude, Codex, Gemini CLI or GitHub Copilot connected from one dialog",
              "Node.js found or installed with your own package manager, and the agent signed in its own way",
              "The connection tested in an empty folder before anything is saved"],
-            "The exact commands show before they run, keys go to the OS credential store, and Disconnect undoes it.", "docs/ai/#connecting-one"),
+            "The exact commands show before they run, keys go to the OS credential store, and Disconnect undoes it.", "docs/ai/#connecting-one", "connect.mp4"),
     ];
 
     private static readonly (string Name, string Role)[] s_hosts =
@@ -274,8 +276,8 @@
     ];
 
     /// <summary>
-    /// The app models the spotlight under the main screenshot shows, each with its picture from the smoke test
-    /// (website/screenshots.txt).
+    /// The app models the spotlight under the main screenshot shows, each with its picture from the smoke test and its
+    /// video if it has one (website/screenshots.txt).
     /// </summary>
     private static readonly Model[] s_models =
     [
@@ -284,19 +286,19 @@
             ["C# on Roslyn: semantic highlighting, completion, live diagnostics and refactorings with previews",
              "Multi-targeting, .NET Standard libraries, NuGet, and every .NET from .NET Core 2.0 to .NET 11",
              "Build, run, debug and test from one window, with the Test Explorer and coverage"],
-            "Windows, macOS and Linux.", "docs/editing/"),
+            "Windows, macOS and Linux.", "docs/editing/", "console.mp4"),
         new("blazor", "Blazor", ".razor", "blazor.png",
             "Debugging a Razor component, paused inside Counter.razor, with the Test Explorer and the Debug Console",
             ["C# inside .razor files: completion, diagnostics, Go to Definition and rename",
              "The server and its WebAssembly page debugged as one session, in the browser",
              "Hot Reload through dotnet watch"],
-            "Windows, macOS and Linux.", "docs/web/#razor-and-blazor"),
+            "Windows, macOS and Linux.", "docs/web/#razor-and-blazor", "blazor.mp4"),
         new("aspnet", "ASP.NET Core", ".http", "web-http.png",
             "A .http file with run buttons, the HTTP Response window and the Endpoints Explorer",
             ["An Endpoints Explorer, and .http files with the response's status, headers and history",
              "Scaffolding, and OpenAPI and gRPC service references",
              "The HTTPS development certificate and user secrets"],
-            "Windows, macOS and Linux.", "docs/web/"),
+            "Windows, macOS and Linux.", "docs/web/", "aspnet.mp4"),
         new("maui", ".NET MAUI", "mobile", "maui.png",
             "A .NET MAUI page's XAML in the editor, the device picker on the toolbar, and the Devices window with the Android toolchain",
             ["A device picker on the toolbar, and the Android Device Manager, SDK Manager and Device Log built in",
@@ -308,42 +310,42 @@
             ["XAML completion for controls, properties, markup extensions, styles and resources",
              "A previewer that draws your XAML on your app's own WPF as you type",
              "The Live Visual Tree and Live Property Explorer for running apps"],
-            "Run, debug and preview on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-wpf-xaml-previewer"),
+            "Run, debug and preview on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-wpf-xaml-previewer", "wpf.mp4"),
         new("winforms", "Windows Forms", "Designer", "winforms.png",
             "The Windows Forms designer with an order form, the Toolbox on the left and the Properties window on the right",
             ["A designer on your app's own Windows Forms, with snap lines, smart tags and the Format menu",
              "The Toolbox with your own controls, and the Properties window with its Events view",
              "InitializeComponent written as the smallest edit, so a diff shows only what changed"],
-            "Design, run and debug on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-windows-forms-designer"),
+            "Design, run and debug on Windows; open, edit and build on macOS and Linux.", "docs/windows-desktop/#the-windows-forms-designer", "winforms.mp4"),
         new("winui", "WinUI 3", "x:Bind", "winui.png",
             "A WinUI 3 page's XAML in the editor, with x:Bind bindings, and the build's output below",
             ["x:Bind paths checked against the page's class",
              "Packaged (MSIX) apps registered, started by Windows and attached to",
              "Hot Reload, and WinUI's compiler errors in their files"],
-            "Build, run and debug on Windows; open and edit everywhere.", "docs/windows-desktop/#winui-3"),
+            "Build, run and debug on Windows; open and edit everywhere.", "docs/windows-desktop/#winui-3", "winui.mp4"),
         new("avalonia", "Avalonia", ".axaml", "xaml-preview.png",
             "An Avalonia .axaml file in the editor with the XAML Previewer rendering it beside the code",
             ["Completion and binding paths in .axaml files",
              "A live XAML Previewer beside the code that follows every edit",
              "The Live Visual Tree and Live Property Explorer"],
-            "Windows, macOS and Linux, the previewer included.", "docs/avalonia/"),
+            "Windows, macOS and Linux, the previewer included.", "docs/avalonia/", "avalonia.mp4"),
         new("aspire", "Aspire and containers", "AppHost", "aspire.png",
             "An Aspire AppHost's code in the editor, and the Aspire window below it: the api and frontend projects running, the Redis cache, and the api's console output",
             ["Debug an AppHost with all its projects, and see its resources and their output",
              "Run and debug in a container with docker or podman, and Add Docker Support",
              "Debug every .NET service of a compose app at once, on your Debug build, and publish profiles with container images"],
-            "Windows, macOS and Linux, with your docker or podman.", "docs/containers/#net-aspire"),
+            "Windows, macOS and Linux, with your docker or podman.", "docs/containers/#net-aspire", "aspire.mp4"),
         new("wcf", "WCF", "CoreWCF", "wcf-test-client.png",
             "The WCF Test Client with a CoreWCF service's operations, the request form of Greet and its response as a tree",
             ["Add Service Reference with your dotnet-svcutil",
              "CoreWCF services from CoreWCF's templates",
              "A WCF Test Client: a typed form per operation, the SOAP envelope, the response as a tree"],
-            "Windows, macOS and Linux.", "docs/wcf/"),
+            "Windows, macOS and Linux.", "docs/wcf/", "wcf.mp4"),
         new("netfx", ".NET Framework", "net48", "netfx.png",
             "A .NET Framework console app paused at a breakpoint on Windows, with the solution's old-style projects in the Solution Explorer",
             ["Old-style projects and packages.config, built with the .NET SDK's MSBuild and no targeting pack",
              "Convert to SDK-Style after a preview of every change",
              "Our own .NET Framework debugger, with Just My Code and Attach to Process"],
-            "Run, debug and test on Windows; open, restore and build on macOS and Linux.", "docs/net-framework/"),
+            "Run, debug and test on Windows; open, restore and build on macOS and Linux.", "docs/net-framework/", "netfx.mp4"),
     ];
 }
