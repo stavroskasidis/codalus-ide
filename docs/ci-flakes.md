@@ -241,4 +241,10 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   as that job makes it measures 421.4 MB, CI's number, of which `codalus.dbg` is 188.7 MB (macOS keeps a `.dSYM`).
   Fixed, by the maintainer's decision: `binary-size` leaves Native AOT's symbols out as it leaves out `*.pdb`, so it
   measures what ships (232.7 MB for that local publish; ADR 0002's 2026-11-05 amendment, `HarnessTests`).
+- **`LocalizationCatalogTests.The_english_catalogue_has_every_text_of_the_code_and_the_views` on macOS** (43734210763,
+  PR 398): "en.json is out of date (3 new or changed: command.ios.openSimulator, command.ios.openXcode,
+  menu.menuBar/tools/ios)". Not a flake: it fails on every macOS run since the MAUI tools (ADR 0104) registered Tools →
+  iOS only on a Mac. The test built the catalogue from the registries of the OS it ran on, so `en.json`, regenerated on
+  Linux, lacked them. Fixed: `RegisterMobileCommands` takes the registry and the OS, as `RegisterMobileMenus` does, and
+  the test adds every OS's mobile commands and menus, so the catalogue is the same on each.
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.

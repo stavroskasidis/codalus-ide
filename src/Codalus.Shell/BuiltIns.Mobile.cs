@@ -25,9 +25,12 @@ internal static partial class BuiltIns
         yield return new ToolWindowDescriptor(DeviceLogViewModel.ToolWindowId, "Device Log", ToolWindowLocation.Bottom, ToolWindowKind.BuiltIn, shell) { Icon = "phone-log" };
     }
 
-    public static void RegisterMobileCommands(ShellHost shell)
+    /// <summary>
+    /// The mobile commands for <paramref name="platform"/> into <paramref name="commands"/>: the shell's own registry and
+    /// OS, or another OS's for the English catalogue, which holds every OS's texts (LocalizationCatalogTests).
+    /// </summary>
+    public static void RegisterMobileCommands(ShellHost shell, CommandRegistry commands, Codalus.Platform.PlatformKind platform)
     {
-        var commands = shell.Workbench.Commands;
         void Add(string id, string title, Func<Task> handler, string? enablement = null) =>
             commands.Register(
                 new CommandDescriptor(id, title, ContributionSource.Shell) { Category = "Mobile", Enablement = WhenClause.Parse(enablement) },
@@ -67,7 +70,7 @@ internal static partial class BuiltIns
             shell.ShowDeviceLog();
             return Task.CompletedTask;
         });
-        if (shell.Workbench.Platform == Codalus.Platform.PlatformKind.MacOS)
+        if (platform == Codalus.Platform.PlatformKind.MacOS)
         {
             Add("ios.openSimulator", "Open Simulator", shell.OpenSimulatorAsync);
             Add("ios.openXcode", "Open Xcode", shell.OpenXcodeAsync);
