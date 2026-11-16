@@ -51,6 +51,61 @@ public sealed class RazorTests(BlazorFixture blazor) : IClassFixture<BlazorFixtu
     }
 
     [Fact]
+    public async Task Rename_in_a_code_block_renames_the_field_and_its_uses_in_markup()
+    {
+        // #391: Rename of a field in @code said "Nothing to rename." (no Razor mapping for rename).
+        await blazor.OpenAsync(Counter);
+        var text = blazor.Text(Counter).Text;
+        var expected = text.Replace("currentCount", "count", StringComparison.Ordinal);
+
+        foreach (var (marker, delta) in new[] { ("int currentCount", 5), ("@currentCount", 3), ("currentCount++", 2) })
+        {
+            var at = blazor.At(Counter, marker, delta);
+            var prepared = await blazor.Client.PrepareRenameAsync(Uri(Counter), at, Ct);
+            Assert.Equal("currentCount", prepared?.Placeholder);
+            Assert.Equal(at.Line, prepared!.Range.Start.Line);
+            Assert.Equal("currentCount", Slice(text, prepared.Range));
+
+            var edit = await blazor.Client.RenameAsync(Uri(Counter), at, "count", Ct);
+            var change = Assert.Single(edit!.DocumentChanges, c => c.TextDocument.Uri == Uri(Counter));
+            Assert.Equal(3, change.Edits.Length);
+            Assert.Equal(expected, Apply(text, change.Edits));
+            Assert.DoesNotContain(edit.DocumentChanges, c => Razor.RazorLocations.IsRazorGenerated(DocumentUris.ToPath(c.TextDocument.Uri)));
+        }
+    }
+
+    [Fact]
+    public async Task Rename_of_a_component_parameter_renames_its_attribute_in_other_razor_files()
+    {
+        await blazor.OpenAsync(Greeting);
+        await blazor.OpenAsync(Home);
+        var greeting = blazor.Text(Greeting).Text;
+        var home = blazor.Text(Home).Text;
+
+        var edit = await blazor.Client.RenameAsync(Uri(Greeting), blazor.At(Greeting, "string Name", 8), "Person", Ct);
+        Assert.Equal(greeting.Replace("@Name", "@Person", StringComparison.Ordinal).Replace("string Name", "string Person", StringComparison.Ordinal),
+            Apply(greeting, Assert.Single(edit!.DocumentChanges, c => c.TextDocument.Uri == Uri(Greeting)).Edits));
+        Assert.Equal(home.Replace("Name=", "Person=", StringComparison.Ordinal),
+            Apply(home, Assert.Single(edit.DocumentChanges, c => c.TextDocument.Uri == Uri(Home)).Edits));
+    }
+
+    private static string Slice(string text, Protocol.Range range)
+    {
+        var start = LanguageFixture.OffsetOf(text, range.Start);
+        return text[start..LanguageFixture.OffsetOf(text, range.End)];
+    }
+
+    private static string Apply(string text, Protocol.TextEdit[] edits)
+    {
+        foreach (var edit in edits.OrderByDescending(e => LanguageFixture.OffsetOf(text, e.Range.Start)))
+        {
+            text = string.Concat(text.AsSpan(0, LanguageFixture.OffsetOf(text, edit.Range.Start)), edit.NewText, text.AsSpan(LanguageFixture.OffsetOf(text, edit.Range.End)));
+        }
+
+        return text;
+    }
+
+    [Fact]
     public async Task Razor_markup_completes_components_parameters_and_directives()
     {
         await blazor.OpenAsync(Home);

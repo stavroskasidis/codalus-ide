@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.0.0
+
+- **Fixed: Rename in a `.razor` file said "Nothing to rename."** ([#391](https://github.com/stavroskasidis/codalus-ide/issues/391), [user guide](docs/user-guide/web.md#razor-and-blazor)): the C# language service mapped completion, hover and Go to Definition from a Razor file to the C# the Razor compiler writes for it, but not rename, and the compiler's C# is never edited itself. Rename (`F2`) on C# in a Razor file (an `@code` block's field, `@currentCount` in markup) now renames the symbol in C# files and in every Razor file that uses it, a component parameter's attributes in other components included; a rename started in a `.cs` file renames the uses in Razor files too.
+
 ## 0.14.0
 
 - **Fixed: on Linux, an Aspire resource's address could answer 401 (Unauthorized)**: the IDE's server for the AppHost listened on `localhost`, which on a system that resolves it to `::1` first took only the IPv6 loopback. When Aspire put a resource on the same port of `127.0.0.1`, its `http://localhost:<port>` address reached the IDE's server first, which refused it. The IDE's server, and the one that refreshes the browser after a Hot Reload edit, now hold `127.0.0.1` too on Linux and macOS.

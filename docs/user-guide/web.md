@@ -66,7 +66,7 @@ Console apps run with Hot Reload where `run.console` says, as without it: in a *
 
 `.razor` and `.cshtml` files are served by the C# language service, through the same Razor compiler the build uses:
 - **Colors** as the classic IDE gives them, in every theme: components (like types) and their parameters (in the component's color, bold in Classic, so they stand apart from HTML attributes), HTML elements, attributes and values, `@` transitions and directives (`@using`, `@inject`, `@code`), Razor (`@* *@`) and HTML comments, tag helpers in `.cshtml`, and the C# inside the markup as in a `.cs` file. A component is colored as one only when it resolves to a component, so a misspelled tag stays an HTML element. Each kind has its own entry in Fonts and Colors (Razor component element, Markup element…). Until the project has loaded, and for a Razor file outside a project, the Razor grammar colors the file.
-- **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References and highlighting. Errors appear in the editor and the Error List as you type.
+- **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References, highlighting and rename (`F2`): renaming a field, method or property renames its uses in C# files and in every Razor file, a component parameter's attributes in other components' markup included. Errors appear in the editor and the Error List as you type.
 - **Markup:**
   - after `<`: component names (your own and the framework's), with HTML elements;
   - inside a component's tag: its parameters (`[Parameter]` properties) and directive attributes such as `@onclick` and `@bind`;
@@ -78,7 +78,7 @@ Console apps run with Hot Reload where `run.console` says, as without it: in a *
 
 Run, Debug and Hot Reload work as for other ASP.NET Core apps: with Hot Reload, saving a component applies markup and code changes to the running app.
 
-Not available in Razor files yet: rename, quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
+Not available in Razor files yet: quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
 
 ## Blazor WebAssembly
 

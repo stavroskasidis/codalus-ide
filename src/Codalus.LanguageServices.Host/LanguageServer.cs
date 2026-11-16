@@ -194,10 +194,12 @@ internal sealed class LanguageServer : IAsyncDisposable
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,
-            xaml: (xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
+            razor: (mapping, offset, _, ct) => Razor.RazorRename.PrepareAsync(mapping, offset, ct),
+            xaml:(xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
         OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
             (document, offset, p, ct) => RenameFeature.RenameAsync(document, offset, p.NewName, _workspace.Version, ct), null,
-            xaml: (xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
+            razor: (mapping, offset, p, ct) => Razor.RazorRename.RenameAsync(mapping, offset, p.NewName, _workspace.Version, ct),
+            xaml:(xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
         OnDocument(Methods.CodeAction, json.CodeActionParams, json.CodeActionArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
