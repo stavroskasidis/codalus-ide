@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.0.0
+
+- **AI Chat checked in the app as it ships (Native AOT)** ([user guide](docs/user-guide/ai.md)): 1.0 ships as a Native AOT app, so AI Chat was checked in that build on Windows, macOS and Linux, with the built-in assistant and with an external agent: its answers, a file it reads through the IDE, and the IDE's tools it is given. Nothing needed fixing; the smoke test now runs an external agent's chat in every release's published app.
+
 ## 0.14.0
 
 - **Fixed: on Linux, an Aspire resource's address could answer 401 (Unauthorized)**: the IDE's server for the AppHost listened on `localhost`, which on a system that resolves it to `::1` first took only the IPv6 loopback. When Aspire put a resource on the same port of `127.0.0.1`, its `http://localhost:<port>` address reached the IDE's server first, which refused it. The IDE's server, and the one that refreshes the browser after a Hot Reload edit, now hold `127.0.0.1` too on Linux and macOS.
