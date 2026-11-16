@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.0.0
+
+- **Fixed: the WPF XAML Previewer opened your app's own window** ([#392](https://github.com/stavroskasidis/codalus-ide/issues/392)): previewing a WPF window or control also opened the app's main window on the desktop, beside the IDE. The previewer creates the app's `Application` class for App.xaml's resources, and WPF's constructor queues the app's start (`OnStartup`, its `Startup` handlers and `StartupUri`), which ran as soon as the previewer drew. The previewer now cancels that start, so nothing of the app's runs beyond its `App` constructor and `InitializeComponent`.
+
 ## 0.14.0
 
 - **Fixed: on Linux, an Aspire resource's address could answer 401 (Unauthorized)**: the IDE's server for the AppHost listened on `localhost`, which on a system that resolves it to `::1` first took only the IPv6 loopback. When Aspire put a resource on the same port of `127.0.0.1`, its `http://localhost:<port>` address reached the IDE's server first, which refused it. The IDE's server, and the one that refreshes the browser after a Hot Reload edit, now hold `127.0.0.1` too on Linux and macOS.
