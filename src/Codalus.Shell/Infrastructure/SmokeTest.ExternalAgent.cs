@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia.VisualTree;
+using Codalus.Platform;
 using Codalus.Shell.ViewModels;
 using Codalus.Shell.Views;
 using Codalus.Workbench.Ai.Mcp;
@@ -111,13 +112,15 @@ internal sealed partial class SmokeTest
         var project = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(samples))!, "tests", "Codalus.AcpAgent.Fake", "Codalus.AcpAgent.Fake.csproj");
         Check(File.Exists(project), $"the stand-in agent's project is at {project}");
         var output = Path.Combine(Work, "acp-stand-in");
-        using var process = Process.Start(new ProcessStartInfo("dotnet", ["build", project, "-c", "Release", "-o", output, "-nologo", "-v", "q"])
+        var start = new ProcessStartInfo("dotnet", ["build", project, "-c", "Release", "-o", output, "-nologo", "-v", "q"])
         {
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             CreateNoWindow = true,
-        }) ?? throw new SmokeFailure("dotnet build didn't start.");
+        };
+        ToolTelemetry.OptOut(start.Environment); // ADR 0098: no telemetry from the tools the IDE runs
+        using var process = Process.Start(start) ?? throw new SmokeFailure("dotnet build didn't start.");
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
@@ -127,7 +130,7 @@ internal sealed partial class SmokeTest
         }
         catch (OperationCanceledException)
         {
-            Platform.ProcessTree.Kill(process);
+            ProcessTree.Kill(process);
             throw new SmokeFailure("Building the stand-in agent took over 5 minutes.");
         }
 
