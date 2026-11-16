@@ -131,10 +131,13 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         _listener.Prefixes.Add(Prefix(Port));
     }
 
-    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}/");
+    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://{Http.LoopbackHost.Name}:{port}/");
 
     /// <summary>The server's port; one it chose itself can change in <see cref="Start"/>, so read it after that.</summary>
     public int Port { get; private set; }
+
+    /// <summary>Where the server is reached, <c>host:port</c>: 127.0.0.1 except on Windows (<see cref="Http.LoopbackHost"/>).</summary>
+    public string Authority => string.Create(CultureInfo.InvariantCulture, $"{Http.LoopbackHost.Name}:{Port}");
 
     public string Token { get; }
 
@@ -150,7 +153,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     {
         var environment = new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["DEBUG_SESSION_PORT"] = "localhost:" + Port.ToString(CultureInfo.InvariantCulture),
+            ["DEBUG_SESSION_PORT"] = Authority,
             ["DEBUG_SESSION_TOKEN"] = Token,
             ["DEBUG_SESSION_RUN_MODE"] = debug ? "Debug" : "NoDebug",
             ["DEBUG_SESSION_INFO"] = """{"protocols_supported":["2024-03-03"],"supported_launch_configurations":["project"]}""",
