@@ -197,6 +197,9 @@ public sealed class LiveBreakTests
         LiveBindings.Install(null);
         LiveBindings.Hook();
         Assert.True(LiveBindings.Hooked, "Avalonia's logger isn't hooked.");
+
+        // The failures other tests left (the logger stays hooked for the process): the Error List's 500 were full.
+        LiveBindings.Take([]);
         var on = "Missing" + Guid.NewGuid().ToString("N");
         var off = "Missing" + Guid.NewGuid().ToString("N");
 
@@ -234,6 +237,47 @@ public sealed class LiveBreakTests
         Assert.True(listed, "The failure with the setting off wasn't kept.");
         Assert.DoesNotContain(recorder.Stops, s => s.What.BindingPath == off);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_failed_binding_stops_even_when_the_error_lists_failures_are_full()
+    {
+        // The agent keeps 500 failures for the Error List until the IDE takes them. A burst of more (a list's rows, each
+        // with its own failing binding) stopped no more breaks: a failure past the 500th was dropped before the break.
+        // The shell's tests, run in one process with the logger hooked, filled it before this class ran (Linux, the full
+        // Shell suite of 2026-11-15: A_failed_binding_stops_with_the_setting_on_and_not_with_it_off found no stop).
+        using var recorder = new Recorder();
+        LiveBindings.Install(null);
+        LiveBindings.Hook();
+        LiveBindings.Take([]);
+        var burst = "Burst" + Guid.NewGuid().ToString("N");
+        for (var i = 0; i < 500; i++)
+        {
+            LiveBindings.Line($"[Binding]An error occurred binding 'Text' to '{burst}' at '{burst}': 'Could not find a matching property accessor for '{burst}'.' (TextBlock #{i})");
+        }
+
+        LiveBreak.Configure("bindings\t1\n");
+        var on = "Missing" + Guid.NewGuid().ToString("N");
+        var failing = new TextBlock { Name = "FailingPastTheBurst" };
+        failing.Bind(TextBlock.TextProperty, new Binding(on));
+        var window = new Window { Width = 300, Height = 200, DataContext = new LiveReloadModel(), Content = failing };
+        try
+        {
+            window.Show();
+            Pump();
+            for (var i = 0; i < 100 && !recorder.Stops.Any(s => s.What.BindingPath == on); i++)
+            {
+                await Task.Delay(20);
+                Pump();
+            }
+
+            Assert.Single(recorder.Stops, s => s.What.BindingPath == on);
+        }
+        finally
+        {
+            window.Close();
+            LiveBindings.Take([]);
+        }
     }
 
     [AvaloniaFact]

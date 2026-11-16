@@ -7,9 +7,10 @@ namespace Codalus.Website.Site;
 /// <summary>
 /// Writes the running site to static files, the way GitHub Pages serves them: a page at <c>download/</c> becomes
 /// <c>download/index.html</c>, other files keep their names. It starts from every route without parameters and every
-/// guide page, then follows each local link and CSS <c>url()</c>, so assets come along and a link to something that
-/// isn't there fails the export, as does an <c>#anchor</c> with no matching id. Links are relative to the pages'
-/// <c>&lt;base href&gt;</c>, so a bare <c>#anchor</c> or a <c>/rooted</c> path is an error too.
+/// guide page, then follows each local link, picture's video (<c>data-video</c>, which site.js plays) and CSS
+/// <c>url()</c>, so assets come along and a link to something that isn't there fails the export, as does an
+/// <c>#anchor</c> with no matching id. Links are relative to the pages' <c>&lt;base href&gt;</c>, so a bare
+/// <c>#anchor</c> or a <c>/rooted</c> path is an error too.
 /// </summary>
 internal sealed partial class SiteExporter(UserGuide guide, EndpointDataSource endpoints)
 {
@@ -155,7 +156,7 @@ internal sealed partial class SiteExporter(UserGuide guide, EndpointDataSource e
         return (path, fragment);
     }
 
-    [GeneratedRegex(@"\s(?:href|src)=""(?<url>[^""]*)""")]
+    [GeneratedRegex(@"\s(?:href|src|data-video)=""(?<url>[^""]*)""")]
     private static partial Regex LinkPattern();
 
     [GeneratedRegex(@"<base\s[^>]*>")]

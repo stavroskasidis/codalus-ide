@@ -1,7 +1,7 @@
 @page "/features"
 @inject SiteOptions Site
 
-<PageMeta Image="intellisense.png" ImageAlt="IntelliSense in the C# editor of Codalus IDE" Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
+<PageMeta Image="intellisense.png" ImageAlt="IntelliSense in the C# editor of Codalus IDE" Title="Features" Description="Everything in Codalus IDE: the C# editor, navigation, solutions and NuGet, build and test, debugging, Git and pull requests, web, data, containers, remote development over SSH, in WSL and in Dev Containers, .NET MAUI, WPF, Windows Forms and WinUI 3, .NET Framework, Visual Basic, F#, WCF, profiling and more." />
 
 <div class="container">
     <section class="page-intro rise">
@@ -154,6 +154,7 @@
                 <h3>Git and hosting</h3>
                 <ul>
                     <li>Per-file, per-change and per-line staging, from Git Changes or the diff, and blame</li>
+                    <li>Source control glyphs in Solution Explorer, as in the classic IDE: a lock on committed files, a check mark on changed files and projects, a plus on new files</li>
                     <li>Git Changes with thousands of changed files: only the rows on screen are built, and a refresh keeps your selection, scroll position and collapsed folders</li>
                     <li>Open a changed file from Git Changes at its first change</li>
                     <li>Diffs and the merge editor in the editor's colors; diffs open at their first change, with Quick Info and CodeLens on the working tree</li>
@@ -194,6 +195,19 @@
                     <li>Profile a compose service in its container on Linux: CPU, counters, allocations and memory snapshots, through its diagnostic port</li>
                     <li>Aspire AppHosts and their resources, on a page among the documents, with every project under the debugger, or one alone</li>
                     <li>Publish profiles, including container images</li>
+                </ul>
+            </div>
+            <div class="card lift reveal" id="remote-development">
+                <h3>Remote development over SSH, in WSL and in Dev Containers</h3>
+                <ul>
+                    <li>A remote window on code that lives elsewhere: another machine over your own ssh (your config, keys and agent, never a password), a WSL distribution, or a running container through docker or podman</li>
+                    <li>The editor and your typing stay here; projects, builds, the C# language service, terminals, running and debugging happen on the other machine, in a small server copied there and checked by its SHA-256</li>
+                    <li>Dev Containers: Reopen in Container builds or pulls the image, mounts your folder, runs postCreateCommand once, and reuses the container next time</li>
+                    <li>F5 and Ctrl+F5 on the other machine, with the debugger copied there when you agree</li>
+                    <li>Ports a program there listens on, forwarded to localhost and opened in the browser, with a Ports window</li>
+                    <li>The Test Explorer and workspace plugins run there too, and a local solution's tests run in WSL, Docker or over SSH without a remote window</li>
+                    <li>Reconnects by itself after a network drop or a laptop's sleep, with nothing lost or repeated: the server keeps your solution, programs, terminals and debugging sessions for 15 minutes</li>
+                    <li>From the command line: <code>codalus --remote ssh:me@build-box /home/me/src/App</code></li>
                 </ul>
             </div>
             <div class="card lift reveal" id="make-it-yours">
@@ -240,7 +254,10 @@
                     <li>Build, deploy and run with the platform SDK's own run target</li>
                     <li>Debug on Android devices and emulators, iOS simulators and Mac Catalyst with our own Mono debugger: breakpoints, stepping, locals, watch and exceptions</li>
                     <li>MAUI XAML: completion, compiled binding paths from x:DataType, live errors, hover and Go to Definition</li>
-                    <li>The MAUI workloads, the Android SDK and a JDK installed when you agree, and listed in Check Environment</li>
+                    <li>Android Device Manager: create, start, cold boot, stop, wipe and delete emulators, and edit their memory, storage and graphics</li>
+                    <li>Android SDK Manager: install, update and uninstall platforms, system images and tools, after their licenses</li>
+                    <li>Device Log: logcat and the iOS simulator's log, filtered by level, text or your app; the adb Command Prompt; Open Simulator and Xcode on a Mac</li>
+                    <li>The MAUI workloads, the Android SDK and a JDK installed when you agree (elevated when the SDK is in Program Files), and listed in Check Environment</li>
                     <li>The Windows target runs and debugs as a desktop app (Hot Reload with dotnet watch), packaged or unpackaged</li>
                 </ul>
             </div>
@@ -320,7 +337,6 @@
             <div class="card lift reveal" id="and-more">
                 <h3>And more</h3>
                 <ul>
-                    <li>Remote development over SSH, in WSL and in containers; Dev Containers; reconnecting after a network drop; the Test Explorer and workspace plugins on the remote machine; tests in WSL, Docker or over SSH</li>
                     <li>Profiling: counters, CPU traces and flame graphs, memory snapshots and diffs, allocations, .NET Async, threads, exceptions, file I/O and BenchmarkDotNet</li>
                     <li>Avalonia XAML editing, a live previewer and the Live Visual Tree; XAML Hot Reload into the running app when you save, failed bindings in the Error List at their lines, rename across C# and XAML both ways, Extract Resource, Extract Style and generate-from-use code actions; XAML breakpoints at an element's creation or an attribute's set, Break When Value Changes, a break at a failed binding, and why each style applies or doesn't</li>
                     <li>An integrated terminal and C# Interactive</li>
@@ -367,6 +383,7 @@
         ("git-and-hosting", "Git and hosting"),
         ("web", "Web"),
         ("data-containers-and-cloud", "Data, containers and cloud"),
+        ("remote-development", "Remote development"),
         ("make-it-yours", "Make it yours"),
         ("ai-assistance-your-way", "AI assistance"),
         ("net-maui", ".NET MAUI"),

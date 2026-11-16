@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Copies the website's screenshots from the smoke test's pictures (CLAUDE.md, Website): each line of
 # website/screenshots.txt names a picture on the site, the CI runner whose smoke job takes it, and the smoke test's
-# picture. Then review the pictures (git diff shows which changed) and commit them.
+# picture. Then review the pictures (git diff shows which changed) and commit them. The site's videos, recorded by a
+# story of eng/showcase/ instead, are skipped: eng/showcase/record.sh <name> records one again.
 #
 # Usage:
 #   eng/update-screenshots.sh <run id> [picture ...]   a CI run's smoke-test-<OS> artifacts, downloaded with gh
@@ -59,6 +60,7 @@ png_size() {
 copied=0 missing=0 skipped=0 found_wanted=()
 while read -r picture os from; do
   [[ -z "$picture" || "$picture" == \#* ]] && continue
+  [[ "$from" == eng/showcase/* ]] && continue # a video, recorded by its story (eng/showcase/record.sh)
   if ((${#wanted[@]})); then
     [[ " ${wanted[*]} " == *" $picture "* ]] || continue
     found_wanted+=("$picture")

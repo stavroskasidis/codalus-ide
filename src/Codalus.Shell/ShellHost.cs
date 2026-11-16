@@ -247,7 +247,7 @@ public sealed partial class ShellHost : IAsyncDisposable
         BuiltIns.RegisterWinFormsMenus(Workbench.Menus);
         BuiltIns.RegisterRemoteMenus(Workbench.Menus);
         BuiltIns.RegisterAiMenus(Workbench.Menus);
-        BuiltIns.RegisterMobileMenus(Workbench.Menus);
+        BuiltIns.RegisterMobileMenus(Workbench.Menus, Workbench.Platform);
         BuiltIns.RegisterFSharpMenus(Workbench.Menus);
         BuiltIns.RegisterPackageMenus(Workbench.Menus);
         BuiltIns.RegisterProjectManagementMenus(Workbench.Menus);
@@ -715,6 +715,9 @@ public sealed partial class ShellHost : IAsyncDisposable
             ToolboxViewModel.ToolWindowId => Toolbox,
             RemotePortsViewModel.ToolWindowId => PortsWindow,
             DevicesViewModel.ToolWindowId => DevicesWindow,
+            AndroidDeviceManagerViewModel.ToolWindowId => AndroidDeviceManager,
+            AndroidSdkManagerViewModel.ToolWindowId => AndroidSdkManager,
+            DeviceLogViewModel.ToolWindowId => DeviceLogWindow,
             SourceControlProvidersWindow => SourceControlProviders(),
             ComponentsWindow => ComponentsPage(),
             _ => null,
@@ -1267,6 +1270,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             _ = Interactive.DisposeAsync().AsTask();
         }
 
+        GitFiles.Dispose();
         Git.Dispose();
         EntityFramework.Dispose();
 

@@ -516,7 +516,7 @@ public sealed class AcpShellTests
         Assert.Equal(["Claude", "Codex", "Gemini CLI", "GitHub Copilot", "pi", "OpenCode", "goose"], rows.Select(r => r.Label));
         Assert.Equal("Anthropic · npx -y @agentclientprotocol/claude-agent-acp@0.107.0", rows.Single(r => r.Label == "Claude").Detail);
         Assert.Equal("npx -y pi-acp@0.0.34 · needs the pi CLI 0.81.0 or later", rows.Single(r => r.Label == "pi").Detail);
-        Assert.Equal("Its own CLI: goose acp (tested with 1.59.0)", rows.Single(r => r.Label == "goose").Detail);
+        Assert.Equal("Its own CLI: goose acp (tested with 1.59.1)", rows.Single(r => r.Label == "goose").Detail);
         Assert.Null(rows.Single(r => r.Label == "goose").KeyLabel); // its CLI is on this PATH
         Assert.Equal("opencode not installed", rows.Single(r => r.Label == "OpenCode").KeyLabel);
         Assert.All(rows, r => Assert.Equal("bot", r.Icon));

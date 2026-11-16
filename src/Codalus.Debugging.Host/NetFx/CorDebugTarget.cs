@@ -193,7 +193,7 @@ internal sealed class CorDebugTarget : IClrProcess
     private TaskCompletionSource<bool>? _eval;
     private readonly List<string> _evalCallbacks = [];
     private long _evalStarted;
-    private bool _exited;
+    private volatile bool _exited;
 
     public CorDebugTarget(CorDebug corDebug, string version, bool justMyCode)
     {
@@ -229,7 +229,7 @@ internal sealed class CorDebugTarget : IClrProcess
     /// </summary>
     public CoreClr.LaunchedProgram? Launched { get; set; }
 
-    private CorDebugProcess Process => _process ?? throw new ClrException("The process isn't running.");
+    private CorDebugProcess Process => !_exited && _process is { } process ? process : throw new ClrException("The process isn't running.");
 
     // ------------------------------------------------------------------ starting
 
@@ -470,14 +470,18 @@ internal sealed class CorDebugTarget : IClrProcess
             case BreakpointCorDebugManagedCallbackEventArgs hit when Breakpoint(hit.Breakpoint) is { } breakpoint:
                 Queue(new ClrBreakpointHit(Thread(hit.Thread), breakpoint), e, false);
                 return;
-            case StepCompleteCorDebugManagedCallbackEventArgs step when Cancelled(step.Stepper):
+            case StepCompleteCorDebugManagedCallbackEventArgs step when Cancelled(step.Stepper) is { } cancelled:
                 // A stepper cancelled while its completion was already on its way (M61: a step over an await ends where
                 // the call resumes, on another thread, while the step's own stepper ran on): not the current step's end.
-                Continuing?.Invoke("[clr] a cancelled step's completion");
+                // Which stepper it was, and which one runs now, by their numbers in "continue (step N)" (Linux CI, run
+                // 43828283396: after a Step Out, a cancelled stepper's completion and no stop, the log naming neither).
+                Continuing?.Invoke($"[clr] a cancelled step's completion (step {cancelled.ToString(CultureInfo.InvariantCulture)} on thread {Thread(step.Thread).Id.ToString(CultureInfo.InvariantCulture)}; "
+                    + (_stepper is null ? "no step runs)" : $"step {_stepperNumber.ToString(CultureInfo.InvariantCulture)} runs)"));
                 ContinueFromCallback(e);
                 return;
             case StepCompleteCorDebugManagedCallbackEventArgs step:
                 _stepper = null;
+                Continuing?.Invoke($"[clr] step {_stepperNumber.ToString(CultureInfo.InvariantCulture)} completed on thread {Thread(step.Thread).Id.ToString(CultureInfo.InvariantCulture)}");
                 Queue(new ClrStepCompleted(Thread(step.Thread)), e, false);
                 return;
             case FunctionRemapOpportunityCorDebugManagedCallbackEventArgs remap:
@@ -637,8 +641,13 @@ internal sealed class CorDebugTarget : IClrProcess
         _events.Writer.TryComplete();
     }
 
+    /// <summary>
+    /// The process's threads; none once it has exited. The runtime's process is gone then: asking it crashed the
+    /// adapter on macOS (a SIGSEGV in <c>CordbProcess::EnumerateThreads</c>, macOS CI, run 43755266667), and every
+    /// call into it after the exit fails (<see cref="Process"/>).
+    /// </summary>
     public IReadOnlyList<IClrThread> Threads() =>
-        Translate(() => Process.Threads.Select(Thread).Cast<IClrThread>().ToList());
+        _exited ? [] : Translate(() => Process.Threads.Select(Thread).Cast<IClrThread>().ToList());
 
     public IClrBreakpoint CreateBreakpoint(IClrModule module, int methodToken, int ilOffset) =>
         Translate(() =>
@@ -771,24 +780,29 @@ internal sealed class CorDebugTarget : IClrProcess
             }
 
             _stepper = stepper;
+            _stepperNumber = ++_steppers;
             ReleaseHandles();
             Generation++;
-            Continuing?.Invoke("[clr] continue (a step)");
+            Continuing?.Invoke($"[clr] continue (step {_stepperNumber.ToString(CultureInfo.InvariantCulture)}, {step.Kind.ToString().ToLowerInvariant()}{(step.JustMyCode ? ", Just My Code" : "")}, on thread {thread.Id.ToString(CultureInfo.InvariantCulture)})");
             Process.Continue(false);
         });
 
-    /// <summary>The steppers cancelled last (M61), whose completions are dropped when they come after all.</summary>
-    private readonly Queue<CorDebugStepper> _cancelled = new();
+    /// <summary>The steppers cancelled last (M61), whose completions are dropped when they come after all, with their numbers.</summary>
+    private readonly Queue<(CorDebugStepper Stepper, int Number)> _cancelled = new();
+
+    /// <summary>How many steppers the session started, and the number of the one running (<see cref="_stepper"/>), for the log.</summary>
+    private int _steppers;
+    private int _stepperNumber;
 
     /// <summary>
-    /// Whether a completed stepper is one that was cancelled. By reference: ClrDebug hands out one wrapper per stepper.
-    /// Were it ever another wrapper, the completion would be taken as the step's, as before.
+    /// The number of a completed stepper that was cancelled; null for any other. By reference: ClrDebug hands out one
+    /// wrapper per stepper. Were it ever another wrapper, the completion would be taken as the step's, as before.
     /// </summary>
-    private bool Cancelled(CorDebugStepper? stepper)
+    private int? Cancelled(CorDebugStepper? stepper)
     {
         lock (_gate)
         {
-            return stepper is not null && _cancelled.Any(c => ReferenceEquals(c.Raw, stepper.Raw));
+            return stepper is null ? null : _cancelled.Where(c => ReferenceEquals(c.Stepper.Raw, stepper.Raw)).Select(c => (int?)c.Number).FirstOrDefault();
         }
     }
 
@@ -803,7 +817,7 @@ internal sealed class CorDebugTarget : IClrProcess
                     _cancelled.Dequeue();
                 }
 
-                _cancelled.Enqueue(stepper);
+                _cancelled.Enqueue((stepper, _stepperNumber));
             }
 
             _stepper = null;
@@ -1519,7 +1533,7 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
         {
             if (!chain.IsManaged)
             {
-                result.Add(new CorFrame(this, index++, null, "[Native Code]"));
+                result.Add(new CorFrame(this, index++, null, "[Native Code]") { NativeIp = InstructionPointer(chain) });
                 continue;
             }
 
@@ -1553,6 +1567,25 @@ internal sealed class CorThread(CorDebugTarget target, CorDebugThread thread) : 
         return (IReadOnlyList<IClrFrame>)result;
     });
 
+    /// <summary>The instruction pointer of a native chain's innermost frame, or null when its registers can't be read.</summary>
+    private static ulong? InstructionPointer(CorDebugChain chain)
+    {
+        try
+        {
+            var set = chain.RegisterSet;
+            if (((ulong)set.RegistersAvailable & 1UL) == 0)
+            {
+                return null; // REGISTER_INSTRUCTION_POINTER is register 0
+            }
+
+            return set.GetRegisters((CorDebugRegister)1UL, 1) is [var ip] ? ip.Value : null;
+        }
+        catch (Exception ex) when (ex is COMException or ClrException or InvalidCastException or ArgumentException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// <paramref name="frame"/>'s IL frame now (after a func-eval, frames are read again): the frame of the same method
     /// at the same place on the stack, else the same method at the same index, else the innermost of the method.
@@ -1578,6 +1611,9 @@ internal sealed class CorFrame : IClrFrame
     private readonly int _generation;
     private CorDebugILFrame? _reread;
     private int _rereadGeneration;
+
+    /// <summary>A native frame's instruction pointer (<see cref="IClrFrame.NativeIp"/>).</summary>
+    public ulong? NativeIp { get; init; }
 
     public CorFrame(CorThread thread, int index, CorDebugILFrame? frame, string? description)
     {

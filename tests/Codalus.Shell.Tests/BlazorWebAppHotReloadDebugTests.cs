@@ -1,5 +1,3 @@
-using System.Net;
-using System.Net.Sockets;
 using Avalonia.Headless.XUnit;
 using Codalus.Debugging;
 using Codalus.Workbench.Build;
@@ -26,12 +24,8 @@ public sealed class BlazorWebAppHotReloadDebugTests
     private static int Line(string file, string marker) =>
         Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
 
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>The server's port, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>): an OS-picked one was held by another connection when the server first bound it (Linux CI, run 43636497934).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     /// <summary>
     /// The dotnet watch cases are netcoredbg's, the fallback's (the Codalus debugger launches the server, ADR 0090): they

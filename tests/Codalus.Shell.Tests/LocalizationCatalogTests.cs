@@ -31,7 +31,8 @@ public sealed partial class LocalizationCatalogTests
     [GeneratedRegex(@"\{l:T ([A-Za-z0-9_.]+)\}")]
     private static partial Regex ViewKey();
 
-    [GeneratedRegex("""Localizer\.(?:Get|Format)\("([A-Za-z0-9_.]+)",\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
+    // Keys of menus have slashes (menu.menuBar/tools/ios).
+    [GeneratedRegex("""Localizer\.(?:Get|Format)\("([A-Za-z0-9_./]+)",\s*"((?:[^"\\]|\\.)*)" """, RegexOptions.IgnorePatternWhitespace)]
     private static partial Regex CodeKey();
 
     private static IEnumerable<string> Views() =>

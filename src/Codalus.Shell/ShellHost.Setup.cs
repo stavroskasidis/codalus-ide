@@ -636,13 +636,17 @@ public sealed partial class ShellHost
         }
     }
 
-    private Codalus.Workbench.Terminal.TerminalSession RunInstallInTerminal(InstallPlan plan)
+    /// <summary>
+    /// Runs an install's command line in the terminal, in <paramref name="workingDirectory"/> (the user's home when null):
+    /// a project's own install runs in its folder, so the SDK its <c>global.json</c> picks is the one it changes.
+    /// </summary>
+    private Codalus.Workbench.Terminal.TerminalSession RunInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
     {
         // The command's exit code is the terminal's (Unix): the one awaiting it tells a failed install from a done one.
         var (program, arguments) = Workbench.Platform == PlatformKind.Windows
             ? ("cmd.exe", (IReadOnlyList<string>)["/c", plan.Command + " & echo. & pause"])
             : ("bash", ["-c", plan.Command + "; status=$?; echo; read -r -p 'Done. Press Enter to close. '; exit $status"]);
-        var session = Terminals.Run(plan.Summary, program, arguments, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
+        var session = Terminals.Run(plan.Summary, program, arguments, workingDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
         Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
         TerminalWindow.Show(session);
         return session;

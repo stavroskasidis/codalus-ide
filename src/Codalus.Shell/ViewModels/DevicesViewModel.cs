@@ -107,7 +107,7 @@ public sealed class DevicesViewModel(ShellHost shell) : ObservableObject
         {
             Status = Devices.Count > 0 ? string.Empty
                 : android.Adb is null ? "No devices: the Android SDK isn't installed."
-                : "No devices. Connect a phone with USB debugging on, or create an emulator with the Android SDK's Device Manager.";
+                : "No devices. Connect a phone with USB debugging on, or create an emulator in the Android Device Manager (Tools → Android).";
         }
     }
 

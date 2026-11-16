@@ -269,6 +269,10 @@ public static class CommandIcons
         ["insert"] = Blue,
         ["document-check"] = Green,
         ["phone"] = Green,
+        ["phone-settings"] = Green,
+        ["phone-log"] = Green,
+        ["simulator"] = Green,
+        ["package-download"] = Blue,
         ["method"] = Purple,
         ["solution"] = Purple,
         ["warning"] = Yellow,
@@ -276,6 +280,13 @@ public static class CommandIcons
         ["key"] = Yellow,
         ["lock"] = Yellow,
         ["locked"] = Yellow,
+
+        // Solution Explorer's source control glyphs (#357), in the classic IDE's colors: a blue lock on a committed file,
+        // a red check mark on a changed one, a green plus on a new one, red on a conflict.
+        ["git-unchanged"] = Blue,
+        ["git-modified"] = Red,
+        ["git-added"] = Green,
+        ["git-conflict"] = Red,
         ["star"] = Yellow,
         ["bell"] = Yellow,
         ["database"] = Yellow,
@@ -653,6 +664,14 @@ public static class CommandIcons
         // An eye-off in blue (question 10): it was the menu's only entry without an icon.
         ["explorer.addToGitignore"] = new("eye-off"),
         ["terminal.openInTerminal"] = new("terminal"),
+
+        // .NET MAUI's native tools (ADR 0104).
+        ["android.deviceManager"] = new("phone-settings"),
+        ["android.sdkManager"] = new("package-download"),
+        ["android.adbPrompt"] = new("terminal"),
+        ["mobile.deviceLog"] = new("phone-log"),
+        ["ios.openSimulator"] = new("simulator"),
+        ["ios.openXcode"] = new("build"),
         ["run.setStartupProject"] = new("play-outline", Run),
 
         // The built-in plugins' title commands (toolWindow/title), drawn as icons in their tree views' toolbars (M34h).

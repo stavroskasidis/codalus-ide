@@ -1,0 +1,23 @@
+# The Shell test classes CI runs in its third Shell shard (eng/ci-test.sh shell-3); eng/ci-shell-second-half.txt lists
+# shell-2's, and every other class, new ones too, runs in shell-1. A class is in one list at most.
+# Made after Windows' shell-1 reached its step's 40 minutes on a slow runner with every test passing, twice (develop's run
+# 43624505680 and PR #387's 43714153100: 824 passed, 2,400 s of tests where develop's run 43629835602 had 1,869), after
+# the rebalance of run 43177882900 had said the next answer was a third shard (docs/ci-flakes.md). Two shards held about
+# 63 minutes of Shell tests on Windows for two 40-minute steps (31 and 32 minutes in 43629835602). Chosen from the
+# classes' times on each OS in 43629835602, the largest that fit, about a third of Windows' time from each of the two
+# shards: shell-1, shell-2 and shell-3 are then 1247, 1248 and 1246 s on Windows (about 21 minutes each, 27 on a runner
+# as slow as the one that timed out), 996, 758 and 691 on Linux, and 1417, 1149 and 1164 on macOS, which runs them one
+# after another in one job (60, 30 and 30 minutes' limits).
+BlazorWasmTests
+BlazorWebAppHotReloadDebugTests
+EditorLargeTextTests
+EverydayResponsivenessTests
+GitTreesRowsTests
+HotReloadConsoleTests
+IdeToolsShellTests
+NavigationDepthTests
+PolishTests
+SweepFindingsTests
+WinFormsPropertiesShellTests
+WinUIShellTests
+WindowsDesktopShellTests

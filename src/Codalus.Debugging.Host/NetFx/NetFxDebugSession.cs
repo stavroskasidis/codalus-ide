@@ -1675,8 +1675,13 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// </summary>
     private void StepOutOfResumed(IClrThread thread, IClrFrame top, string resumed)
     {
-        var (awaiting, task) = AwaitingCall(thread, top);
+        var (awaiting, task, found) = AwaitingCall(thread, top);
         var stateMachine = Types.Info(top.Module!)?.AsyncKind(top.MethodToken) == ClrAsyncKind.StateMachine;
+
+        // Which way the step goes, in the adapter's log file: a Step Out of a resumed DoubleAsync ran the program to its
+        // end, a cancelled stepper's completion dropped, and the log said nothing of why (Linux CI, run 43828283396).
+        Trace?.WriteLine($"[step] out of {resumed} on thread {thread.Id.ToString(CultureInfo.InvariantCulture)}: {found}; "
+            + (awaiting is not null && stateMachine ? "the step ends where the awaiting call resumes." : "a Just My Code step on to what runs next."));
         if (awaiting is not null && stateMachine)
         {
             _step = new StepState(ClrStepKind.Out, thread.Id, top.Module, top.MethodToken) { AsyncOut = resumed, AwaitedTask = task };
@@ -2183,9 +2188,10 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// outermost runtime-async call of the chain the call is in. The awaiting call: the continuation the task runs when
     /// it completes, when that is another state machine's box (<c>StateMachine</c>, an await of the task in an async
     /// method without a synchronization context), or a state machine about to set it (<see cref="AwaiterOnAStack"/>).
-    /// Either is null when there's none (another kind of continuation, a runtime-async awaiting call).
+    /// Either is null when there's none (another kind of continuation, a runtime-async awaiting call). Found: where the
+    /// awaiting call came from or why there's none, for the adapter's log.
     /// </summary>
-    private (AsyncCall? Awaiting, IClrValue? Task) AwaitingCall(IClrThread thread, IClrFrame frame)
+    private (AsyncCall? Awaiting, IClrValue? Task, string Found) AwaitingCall(IClrThread thread, IClrFrame frame)
     {
         try
         {
@@ -2193,28 +2199,41 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                 || (kind == ClrAsyncKind.StateMachine ? StateMachineTask(frame) : DispatchedTask(thread)) is not { Kind: ClrValueKind.Object, Address: not 0 } task
                 || Process.Keep(task, out var releaseTask) is not { } keptTask)
             {
-                return (null, null);
+                return (null, null, "no task");
             }
 
             _stepHandles.Add(releaseTask);
-            var awaiting = Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation
-                ? Types.Field(continuation, "StateMachine")
-                : AwaiterOnAStack(task, frame.Thread, kind == ClrAsyncKind.StateMachine ? SafeValue(() => frame.Argument(0)) : null)?.Machine;
+            IClrValue? awaiting;
+            string found;
+            if (Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation)
+            {
+                awaiting = Types.Field(continuation, "StateMachine");
+                found = $"the task's continuation is a {TypeName(continuation)}";
+            }
+            else
+            {
+                var onStack = AwaiterOnAStack(task, frame.Thread, kind == ClrAsyncKind.StateMachine ? SafeValue(() => frame.Argument(0)) : null);
+                awaiting = onStack?.Machine;
+                found = onStack is null
+                    ? "the task has no continuation, and no other thread's stack has its awaiter"
+                    : $"the task has no continuation; thread {onStack.Frame.Thread.Id.ToString(CultureInfo.InvariantCulture)}'s stack has its awaiter";
+            }
+
             if (awaiting is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 }
                 || Types.Definition(awaiting.Type) is not { } type || Types.Info(type.Module) is not { } info
                 || info.Methods(type.Token).FirstOrDefault(m => m.Name == "MoveNext") is not { } moveNext
                 || Process.Keep(awaiting, out var releaseAwaiting) is not { } keptAwaiting)
             {
-                return (null, keptTask);
+                return (null, keptTask, found + (awaiting is { Kind: ClrValueKind.Object, Address: not 0 } ? $", whose {TypeName(awaiting)} has no MoveNext" : ", with no state machine"));
             }
 
             _stepHandles.Add(releaseAwaiting);
-            return (new AsyncCall(ClrAsyncKind.StateMachine, type.Module, moveNext.Token, keptAwaiting), keptTask);
+            return (new AsyncCall(ClrAsyncKind.StateMachine, type.Module, moveNext.Token, keptAwaiting), keptTask, found + $", awaited by a {TypeName(awaiting)}");
         }
         catch (InvalidOperationException ex)
         {
             log.WriteLine("The awaiting call: " + ex.Message);
-            return (null, null);
+            return (null, null, "the awaiting call couldn't be read");
         }
     }
 
@@ -3894,6 +3913,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     private string ThreadsOfTimedOutEval()
     {
         var text = new System.Text.StringBuilder();
+        var modules = NativeModules();
         foreach (var thread in Process.Threads())
         {
             var frames = SafeFrames(thread);
@@ -3903,7 +3923,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                 .Append(" (").Append(ThreadName(thread)).Append(thread.Frozen ? ", frozen" : "").Append("):");
             foreach (var frame in frames.Take(TimedOutEvalFrames))
             {
-                text.AppendLine().Append("    ").Append(FrameText(frame));
+                text.AppendLine().Append("    ").Append(FrameText(frame, modules));
             }
 
             if (frames.Count > TimedOutEvalFrames)
@@ -3915,16 +3935,64 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         return text.ToString();
     }
 
-    /// <summary>A frame for the log: its method and IL offset, or what an internal or native frame is.</summary>
-    private string FrameText(IClrFrame frame)
+    /// <summary>
+    /// A frame for the log: its method and IL offset, or what an internal or native frame is, and for a native frame the
+    /// module and offset of its code when <paramref name="modules"/> holds it. A func-eval that waited on a lock in native
+    /// code showed only "[Native Code]" for the evaluating thread and the suspended one (Windows CI, run 43731649744,
+    /// docs/ci-flakes.md): the module says which (the runtime, the OS loader, a wait).
+    /// </summary>
+    private static string FrameText(IClrFrame frame, IReadOnlyList<NativeModule>? modules, Func<IClrModule, int, string?> methodName)
     {
         if (frame.Module is not { } module)
         {
-            return frame.Description ?? "[?]";
+            var description = frame.Description ?? "[?]";
+            return frame.NativeIp is { } ip && modules is not null ? description + " at " + NativeLocation(ip, modules) : description;
         }
 
-        var name = MethodName(module, frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] 0x{frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture)}";
+        var name = methodName(module, frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}] 0x{frame.MethodToken.ToString("X8", CultureInfo.InvariantCulture)}";
         return name + " (IL 0x" + frame.IlOffset.ToString("X", CultureInfo.InvariantCulture) + ")";
+    }
+
+    private string FrameText(IClrFrame frame, IReadOnlyList<NativeModule>? modules = null) => FrameText(frame, modules, MethodName);
+
+    /// <summary>A module of the debugged process: its file name, where it's loaded and its size.</summary>
+    internal readonly record struct NativeModule(string Name, ulong Base, ulong Size);
+
+    /// <summary><paramref name="ip"/> as <c>module+0xOFFSET</c>, or the bare address when no module of <paramref name="modules"/> holds it.</summary>
+    internal static string NativeLocation(ulong ip, IReadOnlyList<NativeModule> modules) =>
+        modules.FirstOrDefault(m => ip >= m.Base && ip - m.Base < m.Size) is { Name: not null } found
+            ? found.Name + "+0x" + (ip - found.Base).ToString("X", CultureInfo.InvariantCulture)
+            : "0x" + ip.ToString("X", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The debugged process's modules, read once for a timed-out func-eval's log; none when they can't be read. On macOS
+    /// they are the files its memory maps: <c>Process.Modules</c> has only the executable there.
+    /// </summary>
+    private List<NativeModule> NativeModules()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return [.. CoreClr.RuntimeLocator.MappedFiles(Process.Id).Select(f => new NativeModule(Path.GetFileName(f.Path), f.Start, f.End - f.Start))];
+        }
+
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(Process.Id);
+            var modules = new List<NativeModule>();
+            foreach (System.Diagnostics.ProcessModule module in process.Modules)
+            {
+                using (module)
+                {
+                    modules.Add(new NativeModule(module.ModuleName ?? "?", (ulong)module.BaseAddress, (ulong)module.ModuleMemorySize));
+                }
+            }
+
+            return modules;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or IOException)
+        {
+            return [];
+        }
     }
 
     /// <summary>A method as a frame shows it (<c>Ns.Type.Method</c>), or null when its module's metadata can't say.</summary>

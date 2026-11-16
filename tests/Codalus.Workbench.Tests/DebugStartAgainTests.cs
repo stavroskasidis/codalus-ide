@@ -169,11 +169,47 @@ public sealed class DebugStartAgainTests : IDisposable
             Assert.Contains("The debugger didn't see the program's runtime start; starting again (2 of 3).", output.ToString(), StringComparison.Ordinal);
         }
 
-        Assert.True(LeftPrograms().Running.Count == 0);
+        AssertNoProgramLeft();
     }
 
     /// <summary>The ids of the "programs" the timed-out starts left (the scripted adapter lists them), with those still running.</summary>
     private (int[] Ids, List<System.Diagnostics.Process> Running) LeftPrograms() => (ProgramIds(), Programs());
+
+    /// <summary>
+    /// No program a start started is still running (each gets 5 s to exit). The message says what it found: each process's
+    /// name and start time against when the last program was started (the programs file's last write), which tells a
+    /// program left running from another process that took its id after it exited. Windows CI, run 43706913240: one was
+    /// found running after a session that had reported its exit code, under 100% CPU, and the assertion said no more.
+    /// </summary>
+    private void AssertNoProgramLeft()
+    {
+        var running = Programs();
+        if (running.Count == 0)
+        {
+            return;
+        }
+
+        var lastStarted = File.GetLastWriteTimeUtc(_starts + ".programs");
+        var found = string.Join("; ", running.Select(Describe));
+        foreach (var process in running)
+        {
+            process.Dispose();
+        }
+
+        Assert.Fail($"{running.Count} program(s) still running 5 s after the session: {found}. The last program was started at {lastStarted:HH:mm:ss.fff} UTC; one that started later is another process with its id.");
+
+        static string Describe(System.Diagnostics.Process process)
+        {
+            try
+            {
+                return $"{process.Id} {process.ProcessName}, started {process.StartTime.ToUniversalTime():HH:mm:ss.fff} UTC";
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+            {
+                return $"{process.Id} ({ex.Message})";
+            }
+        }
+    }
 
     /// <summary>The ids of the programs the timed-out starts started.</summary>
     private int[] ProgramIds() =>
@@ -265,7 +301,7 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
         Assert.Equal("1", File.ReadAllText(_starts));
         Assert.Equal(DebugState.Idle, debug.State);
-        Assert.True(LeftPrograms().Running.Count == 0);
+        AssertNoProgramLeft();
     }
 
     [Fact]
@@ -294,7 +330,7 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.DoesNotContain("starting again", text, StringComparison.Ordinal);
         Assert.Contains("Hello from the scripted program", text, StringComparison.Ordinal);
         Assert.Equal("1", File.ReadAllText(_starts));
-        Assert.True(LeftPrograms().Running.Count == 0);
+        AssertNoProgramLeft();
     }
 
     [Fact]
@@ -552,7 +588,7 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Equal([7], ended);
         Assert.All(debug.Processes, p => Assert.Equal(7, p.ExitCode));
         Assert.Equal(DebugState.Idle, debug.State);
-        Assert.True(LeftPrograms().Running.Count == 0);
+        AssertNoProgramLeft();
     }
 
     [Fact]
@@ -595,7 +631,7 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.All(debug.Processes, p => Assert.Equal(7, p.ExitCode));
         Assert.Equal("1", File.ReadAllText(_starts));
         Assert.Equal(DebugState.Idle, debug.State);
-        Assert.True(LeftPrograms().Running.Count == 0);
+        AssertNoProgramLeft();
     }
 
     [Fact]

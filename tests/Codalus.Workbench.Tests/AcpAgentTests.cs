@@ -396,6 +396,21 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_shell_line_with_a_quoted_path_runs_as_written()
+    {
+        // The line goes through cmd.exe /d /s /c on Windows, started by LocalProcessLauncher: ArgumentList's \" escapes
+        // left the quotes in the path.
+        Directory.CreateDirectory(_root);
+        await File.WriteAllTextAsync(Path.Combine(_root, "the file.txt"), "quoted path read", Ct);
+        await using var terminals = new AcpTerminals();
+        var (display, launch) = AcpTerminals.CommandLine((OperatingSystem.IsWindows() ? "type" : "cat") + " \"the file.txt\"", [], _root, null);
+        var terminal = await terminals.StartAsync(display, launch, null, Ct);
+        var status = await terminal.Exited.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.True(status.ExitCode == 0, $"exit {status.ExitCode} {status.Signal}, output: {terminal.Output.Text}");
+        Assert.Contains("quoted path read", terminal.Output.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_command_stops_at_the_timeout_and_its_output_is_cut_from_the_start()
     {
         var terminals = new AcpTerminals { Timeout = TimeSpan.FromSeconds(1) };

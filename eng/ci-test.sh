@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Runs one shard of the tests (CI runs the shards on separate runners at the same time, and macOS all four in one job;
+# Runs one shard of the tests (CI runs the shards on separate runners at the same time, and macOS all five in one job;
 # pipeline.yml):
-#   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt
-#   shell-2  those classes
+#   shell-1  the Shell tests but the classes listed in eng/ci-shell-second-half.txt and eng/ci-shell-third.txt
+#   shell-2  the classes of eng/ci-shell-second-half.txt
+#   shell-3  the classes of eng/ci-shell-third.txt
 #   others   every other test project (CI runs debug-netcoredbg after it, in the same job)
 #   debug-netcoredbg  the debugger classes in eng/ci-debug-parity.txt again under netcoredbg, the fallback (M58, ADR
 #                     0094: every other shard runs them under the default, Codalus IDE's own CoreCLR adapter)
@@ -14,7 +15,7 @@
 # Bash 3.2 (macOS): no mapfile, and an empty array is expanded with ${array[@]+"${array[@]}"} under set -u.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
-shard="${1:?shard: shell-1, shell-2, others, debug-netcoredbg, debug-codalus or projects}"
+shard="${1:?shard: shell-1, shell-2, shell-3, others, debug-netcoredbg, debug-codalus or projects}"
 configuration="${2:-Release}"
 cd "$(dirname "$0")/.."
 
@@ -244,19 +245,31 @@ report() {
   fi
 }
 trap report EXIT
-second=()
-while IFS= read -r line; do
-  line="${line%%#*}"
-  line="$(echo "$line" | tr -d '[:space:]')"
-  [[ -n "$line" ]] && second+=("$line")
-done < eng/ci-shell-second-half.txt
+# The classes of a list file, one per line (# starts a comment).
+classes_of() {
+  while IFS= read -r line; do
+    line="${line%%#*}"
+    line="$(echo "$line" | tr -d '[:space:]')"
+    [[ -n "$line" ]] && echo "$line"
+  done < "$1"
+}
+
+# A class in both lists would run twice and never in shell-1's place: the lists say which shard, once.
+twice="$(sort <(classes_of eng/ci-shell-second-half.txt) <(classes_of eng/ci-shell-third.txt) | uniq -d)"
+if [[ -n "$twice" ]]; then
+  echo "::error::In both eng/ci-shell-second-half.txt and eng/ci-shell-third.txt: $twice" >&2
+  exit 1
+fi
 
 case "$shard" in
-  shell-1|shell-2)
-    flag=--filter-class
-    [[ "$shard" == shell-1 ]] && flag=--filter-not-class
+  shell-1|shell-2|shell-3)
+    # shell-2 and shell-3 run the classes of their lists; shell-1 every other class, so a new class runs somewhere.
     filters=()
-    for class in "${second[@]}"; do filters+=("$flag" "Codalus.Shell.Tests.$class"); done
+    case "$shard" in
+      shell-1) while IFS= read -r class; do filters+=(--filter-not-class "Codalus.Shell.Tests.$class"); done < <(classes_of eng/ci-shell-second-half.txt; classes_of eng/ci-shell-third.txt) ;;
+      shell-2) while IFS= read -r class; do filters+=(--filter-class "Codalus.Shell.Tests.$class"); done < <(classes_of eng/ci-shell-second-half.txt) ;;
+      shell-3) while IFS= read -r class; do filters+=(--filter-class "Codalus.Shell.Tests.$class"); done < <(classes_of eng/ci-shell-third.txt) ;;
+    esac
     # Every test is listed as it ends, so a shard that stalls shows how far it got next to the memory lines above.
     dotnet test --project tests/Codalus.Shell.Tests --output detailed "${common[@]}" "${filters[@]}" >> "$console" 2>&1
     ;;

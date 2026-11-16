@@ -93,7 +93,11 @@ public sealed class UiStallMonitorTests
         monitor.Reset(); // the probe is on its way
         Thread.Sleep(300); // a job that holds the UI thread
         await ShellFixture.PumpUntil(() => monitor.Report().Probes > 0);
-        Assert.True(monitor.Report().LongestMilliseconds >= 250, monitor.Report().Describe());
+
+        // The wait with its GC pauses, which the monitor takes out of it (Linux CI, run 43709911399: a gen2 collection of
+        // the test process paused it 139 ms inside the 300, and the wait alone was 159 ms), as EverydayBenchTests counts it.
+        var report = monitor.Report();
+        Assert.True(report.LongestMilliseconds + report.LongestGcMilliseconds >= 250, report.Describe());
     }
 
     [AvaloniaFact]

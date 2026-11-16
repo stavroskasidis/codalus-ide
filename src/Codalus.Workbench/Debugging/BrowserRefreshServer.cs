@@ -93,10 +93,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     {
         _startupGrace = startupGrace;
         Port = Containers.ContainerLaunch.FreePort();
-        _listener.Prefixes.Add(Prefix(Port));
+        Http.LoopbackPrefixes.Add(_listener, Port);
     }
-
-    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}/");
 
     public int Port { get; private set; }
 
@@ -132,7 +130,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
                 CloseListener(server._listener);
                 server.Port = Containers.ContainerLaunch.FreePort();
                 server._listener = new HttpListener();
-                server._listener.Prefixes.Add(Prefix(server.Port));
+                Http.LoopbackPrefixes.Add(server._listener, server.Port);
             }
         }
 

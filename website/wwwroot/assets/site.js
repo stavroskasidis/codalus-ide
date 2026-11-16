@@ -84,6 +84,60 @@
     for (const picture of document.querySelectorAll('.shot > figure > img[loading="lazy"]:only-child')) near.observe(picture.parentElement);
   }
 
+  // Videos: a picture with data-video (the home page's) plays its looping video over itself, muted, once the page has
+  // loaded and the picture comes within three quarters of a screen; it plays only while it's on screen, and its button
+  // pauses it. The picture stays (its alt text, and what shows until the video plays); visitors who ask for reduced
+  // motion or for less data keep the picture alone.
+  const motion = !matchMedia("(prefers-reduced-motion: reduce)").matches && !(navigator.connection && navigator.connection.saveData);
+  const pictures = document.querySelectorAll("img[data-video]");
+  if (motion && pictures.length && "IntersectionObserver" in window) {
+    const shown = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const frame = entry.target;
+        const video = frame.querySelector("video");
+        if (entry.isIntersecting && !frame.classList.contains("is-paused")) video.play().catch(() => {});
+        else video.pause();
+      }
+    }, { threshold: 0.2 });
+    const play = (picture) => {
+      const frame = document.createElement("div");
+      frame.className = "motion";
+      picture.replaceWith(frame);
+      const video = document.createElement("video");
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.disablePictureInPicture = true;
+      video.poster = picture.currentSrc || picture.src;
+      video.setAttribute("aria-hidden", "true");
+      video.addEventListener("playing", () => frame.classList.add("is-playing"), { once: true });
+      video.src = picture.dataset.video;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "motion-toggle";
+      button.setAttribute("aria-label", "Pause the video");
+      button.addEventListener("click", () => {
+        const paused = frame.classList.toggle("is-paused");
+        button.setAttribute("aria-label", paused ? "Play the video" : "Pause the video");
+        if (paused) video.pause();
+        else video.play().catch(() => {});
+      });
+      frame.append(picture, video, button);
+      shown.observe(frame);
+    };
+    const near = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        near.unobserve(entry.target);
+        play(entry.target);
+      }
+    }, { rootMargin: "0px 0px 75% 0px" });
+    const start = () => pictures.forEach((picture) => near.observe(picture));
+    if (document.readyState === "complete") start();
+    else addEventListener("load", start, { once: true });
+  }
+
   // A hash in nested tabs (download/#zypper): the panels it's in are shown now, which moved it, so back to it. A tab's
   // own heading (download/#linux) stays put, under the tabs.
   const anchored = hash && document.getElementById(hash);

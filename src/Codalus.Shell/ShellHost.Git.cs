@@ -20,6 +20,9 @@ public sealed partial class ShellHost
 
     public GitChangesViewModel GitChanges { get; private set; } = null!;
 
+    /// <summary>Each file's state in Git for Solution Explorer's glyphs (#357), read while its setting is on.</summary>
+    public GitFileStates GitFiles { get; private set; } = null!;
+
     GitService IEditorServices.Git => Git;
 
     public OutputChannel GitLog => Workbench.Output.GetOrCreate("codalus.git", "Git");
@@ -39,6 +42,15 @@ public sealed partial class ShellHost
         // it runs, and the one it put off when it ends.
         Git.IsBuilding = () => Builds.IsBuilding;
         Builds.Finished += (_, _) => Git.OnBuildEnded();
+        GitFiles = new GitFileStates(Git) { Enabled = Workbench.Settings.GetBoolean(BuiltIns.ExplorerGlyphsSetting, true) };
+        Workbench.Settings.Changed += (_, e) =>
+        {
+            if (e.Affects(BuiltIns.ExplorerGlyphsSetting))
+            {
+                GitFiles.Enabled = Workbench.Settings.GetBoolean(BuiltIns.ExplorerGlyphsSetting, true);
+            }
+        };
+        Explorer.AttachGit(GitFiles);
         GitChanges = new GitChangesViewModel(Git, (path, staged) => OpenDiffAsync(path, staged), command => RunGitCommandAsync(command));
         GitChanges.OpenFile = OpenChangedFileAsync;
         GitChanges.RunWithArguments = RunOnGitChangeAsync;

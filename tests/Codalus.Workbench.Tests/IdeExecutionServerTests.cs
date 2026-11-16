@@ -352,8 +352,8 @@ public sealed class IdeExecutionServerTests
     {
         // A port given to the server is the one it uses (only a port it chose is replaced when taken), and the shell
         // disposes a server that couldn't start: that disposal doesn't throw either. The port is taken by a listener of
-        // the same prefix: a socket on 127.0.0.1 alone doesn't always collide with the managed listener's localhost (it
-        // can bind ::1 as well; CI's Linux runner let the server start), but the same prefix collides on every OS.
+        // the same prefix: a socket on 127.0.0.1 alone didn't always collide with the managed listener's localhost (it
+        // can bind ::1 alone; CI's Linux runner let the server start), but the same prefix collides on every OS.
         var port = FreePort();
         using var taken = new System.Net.HttpListener();
         taken.Prefixes.Add($"http://localhost:{port}/");
@@ -363,6 +363,52 @@ public sealed class IdeExecutionServerTests
 
         await server.DisposeAsync().AsTask().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
         Assert.Equal(port, server.Port);
+    }
+
+    /// <summary>
+    /// The server holds 127.0.0.1 at its port, the address the port was found free on. Where <c>localhost</c> resolves to
+    /// <c>::1</c> first, a listener on <c>http://localhost:port/</c> held only <c>::1</c>; Aspire's orchestrator put the
+    /// frontend's proxy on 127.0.0.1 at the same port, and the frontend's URL, <c>http://localhost:port</c>, reached this
+    /// server instead, which answered 401 (Linux CI, run 43821705690). The bind shows that only on such a host (CI's
+    /// Linux runner, not WSL or a Mac); <see cref="The_loopback_prefixes_hold_127_0_0_1_off_windows"/> shows it on any.
+    /// </summary>
+    [Fact]
+    public async Task The_server_holds_the_ipv4_loopback_address_its_port_was_found_free_on()
+    {
+        var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."));
+        server.Start();
+        try
+        {
+            AssertHeld(server.Port);
+            Assert.Equal($"localhost:{server.Port}", server.AppHostEnvironment(debug: false)["DEBUG_SESSION_PORT"]);
+        }
+        finally
+        {
+            await server.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// The servers' prefixes: <c>localhost</c>, which the orchestrator's requests name (the managed listener matches a
+    /// request's <c>Host</c> to a prefix's host exactly: a server on 127.0.0.1 alone never got the AppHost's requests),
+    /// and off Windows 127.0.0.1 too.
+    /// </summary>
+    [Fact]
+    public void The_loopback_prefixes_hold_127_0_0_1_off_windows()
+    {
+        using var listener = new System.Net.HttpListener();
+        Http.LoopbackPrefixes.Add(listener, 5301);
+        string[] expected = OperatingSystem.IsWindows() ? ["http://localhost:5301/"] : ["http://127.0.0.1:5301/", "http://localhost:5301/"];
+        Assert.Equal(expected, listener.Prefixes.Order(StringComparer.Ordinal));
+    }
+
+    internal static void AssertHeld(int port)
+    {
+        using var other = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+        var error = Assert.Throws<System.Net.Sockets.SocketException>(other.Start);
+
+        // Windows' http.sys holds its ports exclusively: a bind beside it is refused, AccessDenied.
+        Assert.True(error.SocketErrorCode is System.Net.Sockets.SocketError.AddressAlreadyInUse or System.Net.Sockets.SocketError.AccessDenied, $"Binding 127.0.0.1:{port}: {error.SocketErrorCode}");
     }
 
     private static int FreePort()

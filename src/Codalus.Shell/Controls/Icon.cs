@@ -25,9 +25,34 @@ public sealed class Icon : Control
     /// <summary>What the badge stands on: the row's background, so it reads over the icon under it.</summary>
     public static readonly StyledProperty<IBrush?> BadgeBackgroundProperty = AvaloniaProperty.Register<Icon, IBrush?>(nameof(BadgeBackground));
 
+    /// <summary>
+    /// Where the badge sits: the bottom right (the default), or the bottom left, where Solution Explorer's source control
+    /// glyph is (#357), as the classic IDE's.
+    /// </summary>
+    public static readonly StyledProperty<Avalonia.Layout.HorizontalAlignment> BadgePlacementProperty =
+        AvaloniaProperty.Register<Icon, Avalonia.Layout.HorizontalAlignment>(nameof(BadgePlacement), Avalonia.Layout.HorizontalAlignment.Right);
+
+    /// <summary>
+    /// A 1 px outline around the badge's shape, in the row's background, so it reads over the icon under it without the
+    /// square <see cref="BadgeBackground"/> draws (Solution Explorer's glyphs, #357: on a hovered or selected row too).
+    /// </summary>
+    public static readonly StyledProperty<IBrush?> BadgeOutlineProperty = AvaloniaProperty.Register<Icon, IBrush?>(nameof(BadgeOutline));
+
     static Icon()
     {
-        AffectsRender<Icon>(KindProperty, ForegroundProperty, BadgeProperty, BadgeBackgroundProperty);
+        AffectsRender<Icon>(KindProperty, ForegroundProperty, BadgeProperty, BadgeBackgroundProperty, BadgePlacementProperty, BadgeOutlineProperty);
+    }
+
+    public Avalonia.Layout.HorizontalAlignment BadgePlacement
+    {
+        get => GetValue(BadgePlacementProperty);
+        set => SetValue(BadgePlacementProperty, value);
+    }
+
+    public IBrush? BadgeOutline
+    {
+        get => GetValue(BadgeOutlineProperty);
+        set => SetValue(BadgeOutlineProperty, value);
     }
 
     public string? Badge
@@ -92,10 +117,11 @@ public sealed class Icon : Control
         RenderIcon(context);
         if (Badge is { } badge && IconSet.GetFilled(badge) is { } filled && Foreground is { } foreground)
         {
-            // 9 px at the bottom right, on the row's background, in the badge kind's color (the text color in High Contrast).
+            // 9 px at the bottom right (or left), on the row's background, in the badge kind's color (the text color in High Contrast).
             var size = Math.Min(Bounds.Width, Bounds.Height);
             var side = size * 9 / 16;
-            var at = new Point(((Bounds.Width + size) / 2) - side, ((Bounds.Height + size) / 2) - side);
+            var x = BadgePlacement == Avalonia.Layout.HorizontalAlignment.Left ? (Bounds.Width - size) / 2 : ((Bounds.Width + size) / 2) - side;
+            var at = new Point(x, ((Bounds.Height + size) / 2) - side);
             if (BadgeBackground is { } background)
             {
                 context.DrawRectangle(background, null, new Rect(at.X - 1, at.Y - 1, side + 1, side + 1), 1, 1);
@@ -108,6 +134,16 @@ public sealed class Icon : Control
             var scale = side / filled.DesignSize;
             using (context.PushTransform(Matrix.CreateScale(scale, scale) * Matrix.CreateTranslation(at.X, at.Y)))
             {
+                if (BadgeOutline is { } outline)
+                {
+                    // 2 px wide on the screen, half of it under the shape: 1 px around it.
+                    var pen = new Pen(outline, 2 / scale, lineJoin: PenLineJoin.Round);
+                    foreach (var layer in filled.Layers)
+                    {
+                        context.DrawGeometry(null, pen, layer.Geometry);
+                    }
+                }
+
                 foreach (var layer in filled.Layers)
                 {
                     context.DrawGeometry(brush, null, layer.Geometry);
@@ -404,6 +440,10 @@ public static class IconSet
         ["update"] = "arrow_sync_circle_16_regular",
         ["sparkle"] = "sparkle_16_regular",
         ["phone"] = "phone_16_regular",
+        ["phone-settings"] = "phone_link_setup_20_regular",
+        ["phone-log"] = "phone_vertical_scroll_20_regular",
+        ["simulator"] = "phone_tablet_20_regular",
+        ["package-download"] = "cube_arrow_curve_down_20_regular",
 
         // AI Chat (M34h, docs/design/controls/AiChat.dc.html): a new chat, sending a question, and a code block's Insert
         // at Cursor and Apply….
@@ -510,6 +550,14 @@ public static class IconSet
         ["template-solution"] = "stack_16_regular",
         ["template-generic"] = "apps_16_regular",
         ["template-install"] = "arrow_download_16_regular",
+
+        // Solution Explorer's source control glyphs (#357), the classic IDE's, drawn small over a file's icon: solid
+        // shapes, because they are marks at 9 px, where a regular outline or a bare check mark is a hairline. The circled
+        // marks' check, plus and exclamation mark are holes, which the badge's outline fills with the row's background.
+        ["git-unchanged"] = "lock_closed_16_filled",
+        ["git-modified"] = "checkmark_circle_16_filled",
+        ["git-added"] = "add_circle_16_filled",
+        ["git-conflict"] = "error_circle_16_filled",
     };
 
     private static readonly DispatcherCache<string, FilledIcon?> s_filled = new(StringComparer.Ordinal);
