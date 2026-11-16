@@ -128,10 +128,8 @@ public sealed class IdeExecutionServer : IAsyncDisposable
         Token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24));
         _choosePort = port is null;
         Port = port ?? Containers.ContainerLaunch.FreePort();
-        _listener.Prefixes.Add(Prefix(Port));
+        Http.LoopbackPrefixes.Add(_listener, Port);
     }
-
-    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://localhost:{port}/");
 
     /// <summary>The server's port; one it chose itself can change in <see cref="Start"/>, so read it after that.</summary>
     public int Port { get; private set; }
@@ -186,7 +184,7 @@ public sealed class IdeExecutionServer : IAsyncDisposable
                 CloseListener(_listener);
                 Port = Containers.ContainerLaunch.FreePort();
                 _listener = new HttpListener();
-                _listener.Prefixes.Add(Prefix(Port));
+                Http.LoopbackPrefixes.Add(_listener, Port);
             }
         }
 
