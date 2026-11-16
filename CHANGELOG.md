@@ -4,7 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 1.0.0
 
-- **Fixed: after a drop in the Windows Forms designer, the Properties window's selector named the previous component** ([#393](https://github.com/stavroskasidis/codalus-ide/issues/393)): drop a Button from the Toolbox and the grid showed `button1`'s properties while the selector above it still read the form (or the control selected before). Clicking the new control didn't help; only selecting another control and then the new one did. The selector now names the dropped control.
+- **AI Chat checked in the app as it ships (Native AOT)** ([user guide](docs/user-guide/ai.md)): 1.0 ships as a Native AOT app, so AI Chat was checked in that build on Windows, macOS and Linux, with the built-in assistant and with an external agent: its answers, a file it reads through the IDE, and the IDE's tools it is given. Nothing needed fixing; the smoke test now runs an external agent's chat in every release's published app.
 
 ## 0.14.0
 

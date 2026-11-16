@@ -16,6 +16,7 @@ namespace Codalus.LspConformance.Server;
 /// first <c>runtimeArgs</c> entry scripts how the children's attaches go:
 /// <list type="bullet">
 /// <item><c>page-fails</c>: the page's start fails, as when the page closes while js-debug attaches to it;</item>
+/// <item><c>page-closes</c>: the page's session ends at its <c>configurationDone</c>, answering neither that nor its start;</item>
 /// <item><c>page-fails-while-another-attaches</c>: two children; the first to connect fails its <c>initialize</c> once the
 /// second has connected, and the second is answered half a second after that, and attaches.</item>
 /// </list>
@@ -154,6 +155,8 @@ internal static class ScriptedJsDebug
                     case "launch" or "attach":
                         start = (requestSeq, command);
                         break;
+                    case "configurationDone" when script.Name == "page-closes":
+                        return; // the connection closes with both requests unanswered
                     case "configurationDone":
                         await ScriptedDap.RespondAsync(stream, requestSeq, command, null);
                         if (start is { } started)

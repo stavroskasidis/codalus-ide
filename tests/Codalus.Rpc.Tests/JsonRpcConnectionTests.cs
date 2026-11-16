@@ -363,6 +363,63 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_request_cancelled_as_its_error_arrives_leaves_no_unobserved_fault()
+    {
+        // The caller stops waiting (its token) just as the peer's error comes back: the error lands on the request's own
+        // task after the wait has given up on it, and nothing looked at it, so the finalizer reported an unobserved
+        // "Request cancelled" (the Linux smoke's command sweep, textDocument/documentHighlight, run 43881088712).
+        var unobserved = new List<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Any(x => x is JsonRpcRemoteException { Method: "race" }))
+            {
+                lock (unobserved)
+                {
+                    unobserved.Add(e.Exception);
+                }
+            }
+        }
+
+        _b.OnRequest<Ping, Pong>("race", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (_, _) =>
+            throw new JsonRpcHandlerException(JsonRpcConnection.RequestCancelled, "Request cancelled."));
+        _a.Start();
+        _b.Start();
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            for (var i = 0; i < 2000; i++)
+            {
+                using var cts = new CancellationTokenSource();
+                var call = _a.InvokeAsync("race", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, cts.Token);
+                for (var spin = i % 50; spin > 0; spin--)
+                {
+                    Thread.SpinWait(200);
+                }
+
+                await cts.CancelAsync();
+                await Assert.ThrowsAnyAsync<Exception>(() => call);
+            }
+
+            for (var i = 0; i < 3; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(50, TestContext.Current.CancellationToken);
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+
+        lock (unobserved)
+        {
+            Assert.Empty(unobserved);
+        }
+    }
+
+    [Fact]
     public async Task A_message_the_dispatcher_cannot_read_is_reported_and_later_messages_still_arrive()
     {
         var failures = new List<Exception>();
