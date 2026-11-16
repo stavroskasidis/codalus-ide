@@ -4,7 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 1.0.0
 
-- **Fixed: the WPF XAML Previewer opened your app's own window** ([#392](https://github.com/stavroskasidis/codalus-ide/issues/392)): previewing a WPF window or control also opened the app's main window on the desktop, beside the IDE. The previewer creates the app's `Application` class for App.xaml's resources, and WPF's constructor queues the app's start (`OnStartup`, its `Startup` handlers and `StartupUri`), which ran as soon as the previewer drew. The previewer now cancels that start, so nothing of the app's runs beyond its `App` constructor and `InitializeComponent`.
+- **AI Chat checked in the app as it ships (Native AOT)** ([user guide](docs/user-guide/ai.md)): 1.0 ships as a Native AOT app, so AI Chat was checked in that build on Windows, macOS and Linux, with the built-in assistant and with an external agent: its answers, a file it reads through the IDE, and the IDE's tools it is given. Nothing needed fixing; the smoke test now runs an external agent's chat in every release's published app.
 
 ## 0.14.0
 

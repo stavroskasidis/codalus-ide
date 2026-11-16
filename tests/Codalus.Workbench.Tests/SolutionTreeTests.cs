@@ -84,25 +84,28 @@ public sealed class SolutionTreeTests
 
         // One pass: the 450 projects cost what one project costs (17 ms each on a quiet machine), where looking for each
         // node's project among all of them, 9 million comparisons, costs a hundred times that (1.8 s there). The two are
-        // timed here, the best of five each, not against a fixed limit: the one second this test allowed was 1,053 ms
+        // timed here, the best of seven each, not against a fixed limit: the one second this test allowed was 1,053 ms
         // for a first, single build on a macOS runner where the whole test took ten times its usual time (develop's
-        // nightly, run 43113076593).
-        TimeSpan Best(SolutionInfo of)
+        // nightly, run 43113076593). The two alternate, a round of each at a time, so a busy spell slows both alike: timed one
+        // batch after the other, the batch of 450 alone met one and took 303 ms against 61 ms (Linux CI, run 43886669518).
+        TimeSpan Time(SolutionInfo of)
         {
-            var best = TimeSpan.MaxValue;
-            for (var i = 0; i < 5; i++)
-            {
-                var time = Stopwatch.StartNew();
-                SolutionTree.FolderView(of, FolderListing.FromTree(P("ws"), entries, truncated: false));
-                time.Stop();
-                best = time.Elapsed < best ? time.Elapsed : best;
-            }
-
-            return best;
+            var time = Stopwatch.StartNew();
+            SolutionTree.FolderView(of, FolderListing.FromTree(P("ws"), entries, truncated: false));
+            time.Stop();
+            return time.Elapsed;
         }
 
-        var withOne = Best(solution with { Projects = [projects[0]] });
-        var withAll = Best(solution);
+        var one = solution with { Projects = [projects[0]] };
+        var withOne = TimeSpan.MaxValue;
+        var withAll = TimeSpan.MaxValue;
+        for (var round = 0; round < 7; round++)
+        {
+            var first = Time(one);
+            withOne = first < withOne ? first : withOne;
+            var second = Time(solution);
+            withAll = second < withAll ? second : withAll;
+        }
 
         // Every node has the project it had (a sample, checked the old way): of the projects whose folder holds it, the one
         // with the longest path.

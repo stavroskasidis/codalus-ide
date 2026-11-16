@@ -175,7 +175,7 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>
     /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>codalus</c>, Codalus
     /// IDE's own (<c>codalus-debughost --clr-dap</c>, ADR 0086), the default since M58 (ADR 0094), also when nothing is
-    /// set; or <c>netcoredbg</c>, the fallback for one release. <see cref="AdapterVariable"/> overrides it. Remote
+    /// set; or <c>netcoredbg</c>, the fallback, supported in 1.0 (ADR 0105). <see cref="AdapterVariable"/> overrides it. Remote
     /// targets, .NET Framework programs and x64 programs on Apple silicon don't follow it.
     /// </summary>
     public Func<string?> AdapterSetting { get; set; } = () => null;
