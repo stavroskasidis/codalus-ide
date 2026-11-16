@@ -11,22 +11,11 @@ function Prepare {
     $script:Load = 40
 }
 
-# The previewer's process shows the previewed app's own main window (its App's StartupUri runs): hidden, it's not what
-# the video shows. TODO(#392): the WPF previewer shouldn't start the app's StartupUri.
-function Hide-PreviewedApp {
-    Get-CimInstance Win32_Process -Filter "ParentProcessId=$($App.Id)" |
-        Where-Object { $_.CommandLine -match 'WpfApp\.runtimeconfig\.json' } |
-        ForEach-Object { Get-Process -Id $_.ProcessId } |
-        Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } |
-        ForEach-Object { [void][CodalusShowcase]::ShowWindow($_.MainWindowHandle, 0) }
-}
-
 function Setup {
     Click 973 589; Wait 0.5; Click 973 589          # the Error List and Output close: the editor gets the height
     Key shift+F7                                     # the XAML Previewer, which builds the app first
     Wait 75
-    Hide-PreviewedApp
-    Click 1060 16                                    # the shell in front again
+    Click 1060 16                                    # the shell in front
     Drag 993 300 640 300                             # the previewer gets half the window
     Click 300 400; Scroll -4                         # the editor scrolled to line 14 (y 166)
     Wait 1
