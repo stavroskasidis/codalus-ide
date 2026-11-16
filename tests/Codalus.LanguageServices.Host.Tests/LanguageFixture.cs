@@ -183,6 +183,18 @@ public class LanguageFixture : IAsyncLifetime
         return new Position(line, offset - lineStart);
     }
 
+    /// <summary>The offset of a position in <paramref name="text"/> (lines end at <c>\n</c>).</summary>
+    public static int OffsetOf(string text, Position position)
+    {
+        var offset = 0;
+        for (var line = 0; line < position.Line; line++)
+        {
+            offset = text.IndexOf('\n', offset) + 1;
+        }
+
+        return offset + position.Character;
+    }
+
     /// <summary>The position of <paramref name="marker"/> in the file's current text, plus <paramref name="delta"/> characters.</summary>
     public Position At(string path, string marker, int delta = 0)
     {
