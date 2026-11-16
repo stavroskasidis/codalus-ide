@@ -39,8 +39,10 @@ public sealed class EditorEditingAtScaleTests
         private readonly System.Diagnostics.Stopwatch _clock = System.Diagnostics.Stopwatch.StartNew();
         private TimeSpan _last;
         private int _pauses;
+        private readonly long _start = System.Diagnostics.Stopwatch.GetTimestamp();
+        private readonly List<(string Text, TimeSpan At)> _keys = [];
 
-        public void Key()
+        public void Key(string text = "")
         {
             var now = _clock.Elapsed;
             if (_last > TimeSpan.Zero && now - _last >= FindWidget.SearchDelay)
@@ -49,9 +51,20 @@ public sealed class EditorEditingAtScaleTests
             }
 
             _last = now;
+            _keys.Add((text, now));
         }
 
         public int MostSearches => 1 + _pauses + (int)(_clock.Elapsed / FindWidget.SearchMaxDelay);
+
+        /// <summary>When each key and each search came, from the first key: what a count above the bound needs to be
+        /// explained (Windows CI, run 43807637976: 2 searches, 1 allowed).</summary>
+        public string Describe(FindWidget find) =>
+            $"{_pauses} pause(s), {_clock.Elapsed.TotalMilliseconds:0} ms in all; keys: "
+            + string.Join(", ", _keys.Select(k => $"'{k.Text}' {k.At.TotalMilliseconds:0}"))
+            + "; searches: "
+            + string.Join(", ", find.SearchLog.Where(s => s.Started >= _start)
+                .Select(s => $"'{s.Pattern}' {System.Diagnostics.Stopwatch.GetElapsedTime(_start, s.Started).TotalMilliseconds:0}"))
+            + " (ms)";
     }
 
     private static async Task<CodeEditorController> OpenAsync(ShellFixture f, string name, string text)
@@ -461,7 +474,7 @@ public sealed class EditorEditingAtScaleTests
             var typing = new Typing();
             foreach (var typed in s_typedQueries)
             {
-                typing.Key();
+                typing.Key(typed);
                 find.SearchPattern = typed;
                 ShellFixture.Pump();
             }
@@ -469,7 +482,8 @@ public sealed class EditorEditingAtScaleTests
             await ShellFixture.PumpUntil(() => !find.IsSearching && find.MatchCount > 0, seconds: 60);
             Assert.Equal(FindWidget.MaxMatches, find.MatchCount);
             Assert.True(find.IsCapped);
-            Assert.InRange(find.SearchesRun - searches, 1, typing.MostSearches); // once per pause in typing, not once per key
+            var run = find.SearchesRun - searches;
+            Assert.True(run >= 1 && run <= typing.MostSearches, $"{run} search(es), 1 to {typing.MostSearches} allowed: {typing.Describe(find)}"); // once per pause in typing, not once per key
             // The first match from where the search began is selected: "item" at 4, or at 12 (in "items") when a search ran
             // while the box held "items" (a loaded machine paused mid-typing), as an incremental find goes on from the match it
             // selected (M57 validation, the whole suite: (12, 4)).
@@ -485,13 +499,14 @@ public sealed class EditorEditingAtScaleTests
             typing = new Typing();
             for (var i = 0; i < 20; i++)
             {
-                typing.Key();
+                typing.Key("z");
                 editor.Editor.TextArea.PerformTextInput("z");
                 ShellFixture.Pump();
             }
 
             await ShellFixture.PumpUntil(() => !find.IsSearching, seconds: 60);
-            Assert.InRange(find.SearchesRun - searches, 1, typing.MostSearches);
+            run = find.SearchesRun - searches;
+            Assert.True(run >= 1 && run <= typing.MostSearches, $"{run} search(es), 1 to {typing.MostSearches} allowed: {typing.Describe(find)}");
             Assert.Equal(FindWidget.MaxMatches, find.MatchCount);
             for (var undo = 0; undo < 20 && editor.Model.Text.Text != text; undo++)
             {

@@ -156,6 +156,9 @@ public sealed partial class DebugAdapter : IDebugAdapter
     /// <summary>The start of the adapter's stderr, to say why a pipe transport failed.</summary>
     private readonly System.Text.StringBuilder _stderr = new();
 
+    /// <summary>The adapter process's exit code once it has exited (tests tell a clean end from a crash by it).</summary>
+    internal Task<int?> AdapterExited => _process.Exited;
+
     public Capabilities Capabilities { get; private set; } = new();
 
     /// <summary>
