@@ -261,6 +261,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
     private async Task AttachChildAsync(StartDebuggingArguments arguments)
     {
         Session? child = null;
+        Task? started = null;
         var attached = false;
         try
         {
@@ -273,7 +274,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             session.Connection.HandlerFailed += (_, ex) => Log?.Invoke(this, "Event handler failed: " + ex);
             session.Connection.Start();
             await session.Connection.RequestAsync("initialize", InitializeArguments(), Json.InitializeArguments, Json.Capabilities).ConfigureAwait(false);
-            var started = session.Connection.RequestAsync(arguments.Request, arguments.Configuration, Json.JsonElement);
+            started = session.Connection.RequestAsync(arguments.Request, arguments.Configuration, Json.JsonElement);
             await ((Task)session.Initialized.Task).WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             lock (_gate)
             {
@@ -296,6 +297,13 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         }
         finally
         {
+            if (!attached)
+            {
+                // A connection that closed after the start was sent fails the start too, and nothing awaits it any more:
+                // the finalizer reported its fault as unobserved (the Linux smoke's command sweep, run 43859884969).
+                _ = started?.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            }
+
             // Whatever ended the attach, it no longer counts as attaching.
             await OpenPageAsync(attached ? child : null).ConfigureAwait(false);
         }

@@ -4,7 +4,7 @@ Hand-written notes for each release. The release pages add the list of changes, 
 
 ## 1.0.0
 
-- **Fixed: Rename in a `.razor` file said "Nothing to rename."** ([#391](https://github.com/stavroskasidis/codalus-ide/issues/391), [user guide](docs/user-guide/web.md#razor-and-blazor)): the C# language service mapped completion, hover and Go to Definition from a Razor file to the C# the Razor compiler writes for it, but not rename, and the compiler's C# is never edited itself. Rename (`F2`) on C# in a Razor file (an `@code` block's field, `@currentCount` in markup) now renames the symbol in C# files and in every Razor file that uses it, a component parameter's attributes in other components included; a rename started in a `.cs` file renames the uses in Razor files too.
+- **AI Chat checked in the app as it ships (Native AOT)** ([user guide](docs/user-guide/ai.md)): 1.0 ships as a Native AOT app, so AI Chat was checked in that build on Windows, macOS and Linux, with the built-in assistant and with an external agent: its answers, a file it reads through the IDE, and the IDE's tools it is given. Nothing needed fixing; the smoke test now runs an external agent's chat in every release's published app.
 
 ## 0.14.0
 
