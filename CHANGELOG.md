@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.0.0
+
+- **Fixed: a click on a tool window's tab could miss it once its tooltip showed** ([#394](https://github.com/stavroskasidis/codalus-ide/issues/394)): with the pointer resting on a tab of the bottom tool windows (the Output, the Debug Console…) in a window near the screen's bottom edge, as a maximized one is, the tab's name showed in a tooltip right over the pointer, and the click went to the tooltip: the tab took its hover color but stayed unselected. A tooltip shows 20 px below the pointer, and where that doesn't fit it flips above the pointer but keeps the 20 px. A tool window tab's tooltip now shows above the tab, or below it when there's no room above, never over it.
+
 ## 0.14.0
 
 - **Fixed: on Linux, an Aspire resource's address could answer 401 (Unauthorized)**: the IDE's server for the AppHost listened on `localhost`, which on a system that resolves it to `::1` first took only the IPv6 loopback. When Aspire put a resource on the same port of `127.0.0.1`, its `http://localhost:<port>` address reached the IDE's server first, which refused it. The IDE's server, and the one that refreshes the browser after a Hot Reload edit, now hold `127.0.0.1` too on Linux and macOS.
