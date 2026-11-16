@@ -378,7 +378,10 @@ public sealed class IdeExecutionServerTests
         server.Start();
         try
         {
+            // The bind shows the bug only where localhost resolves to ::1 first (CI's Linux runner, not WSL or a Mac);
+            // the address the AppHost is given shows it everywhere.
             AssertHeld(server.Port);
+            Assert.Equal($"{(OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1")}:{server.Port}", server.AppHostEnvironment(debug: false)["DEBUG_SESSION_PORT"]);
         }
         finally
         {

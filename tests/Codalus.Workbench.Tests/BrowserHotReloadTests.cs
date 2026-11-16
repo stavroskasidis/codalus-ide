@@ -118,7 +118,7 @@ public sealed class BrowserHotReloadTests
     {
         await using var server = BrowserRefreshServer.Start();
         IdeExecutionServerTests.AssertHeld(server.Port);
-        Assert.Equal($"ws://{Http.LoopbackHost.Name}:{server.Port}", server.Environment()[BrowserRefreshServer.EndpointVariable]);
+        Assert.Equal($"ws://{(OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1")}:{server.Port}", server.Environment()[BrowserRefreshServer.EndpointVariable]);
     }
 
     /// <summary>A page as aspnetcore-browser-refresh.js connects: its secret encrypted with the server's key as the subprotocol.</summary>

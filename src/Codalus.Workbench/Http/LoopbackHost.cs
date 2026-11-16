@@ -6,12 +6,12 @@ namespace Codalus.Workbench.Http;
 /// <see cref="Containers.ContainerLaunch.FreePort"/> found free on 127.0.0.1.
 /// </summary>
 /// <remarks>
-/// On Linux and macOS the managed listener binds only the first address a host name resolves to, and <c>localhost</c>
-/// resolves to <c>::1</c> first there: a server on <c>http://localhost:port/</c> held <c>[::1]:port</c> and left
-/// 127.0.0.1's same port free. Aspire's orchestrator then put the frontend's proxy on 127.0.0.1 at that port, and its
+/// Off Windows the managed listener binds only the first address a host name resolves to, and where <c>localhost</c>
+/// resolves to <c>::1</c> first (CI's Linux runner; WSL and a Mac resolved 127.0.0.1 first) a server on
+/// <c>http://localhost:port/</c> held <c>[::1]:port</c> and left 127.0.0.1's same port free. Aspire's orchestrator then put the frontend's proxy on 127.0.0.1 at that port, and its
 /// URL, <c>http://localhost:port</c>, tried <c>::1</c> first and reached the IDE's server, which answered 401 (Linux CI,
-/// run 43821705690). A browser opening the resource's URL got the same. So there the servers listen on 127.0.0.1 itself
-/// and give that address out. On Windows http.sys holds a <c>localhost</c> port on every address, and lets an unelevated
+/// run 43821705690). A browser opening the resource's URL got the same. So off Windows the servers listen on 127.0.0.1
+/// itself, whatever <c>localhost</c> resolves to first, and give that address out. On Windows http.sys holds a <c>localhost</c> port on every address, and lets an unelevated
 /// user register only <c>localhost</c>, not <c>127.0.0.1</c>.
 /// </remarks>
 internal static class LoopbackHost
