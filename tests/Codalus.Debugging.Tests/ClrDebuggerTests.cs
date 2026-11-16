@@ -123,6 +123,11 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         await events.NextAsync(DapEvents.Terminated);
         Assert.Contains("total=15 Ada is 36", events.Output, StringComparison.Ordinal);
         Assert.Contains("done", events.Output, StringComparison.Ordinal);
+
+        // A client that asks for the threads after the end gets none: the runtime's process is gone, and asking it
+        // crashed the adapter on macOS (a SIGSEGV in CordbProcess::EnumerateThreads, macOS CI, run 43755266667).
+        Assert.Empty(await adapter.ThreadsAsync(Ct));
+        Assert.Empty(await adapter.ThreadsAsync(Ct));
     }
 
     [Fact]

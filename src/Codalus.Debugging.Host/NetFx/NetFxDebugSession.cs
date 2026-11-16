@@ -3945,9 +3945,17 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             ? found.Name + "+0x" + (ip - found.Base).ToString("X", CultureInfo.InvariantCulture)
             : "0x" + ip.ToString("X", CultureInfo.InvariantCulture);
 
-    /// <summary>The debugged process's modules, read once for a timed-out func-eval's log; none when they can't be read.</summary>
+    /// <summary>
+    /// The debugged process's modules, read once for a timed-out func-eval's log; none when they can't be read. On macOS
+    /// they are the files its memory maps: <c>Process.Modules</c> has only the executable there.
+    /// </summary>
     private List<NativeModule> NativeModules()
     {
+        if (OperatingSystem.IsMacOS())
+        {
+            return [.. CoreClr.RuntimeLocator.MappedFiles(Process.Id).Select(f => new NativeModule(Path.GetFileName(f.Path), f.Start, f.End - f.Start))];
+        }
+
         try
         {
             using var process = System.Diagnostics.Process.GetProcessById(Process.Id);

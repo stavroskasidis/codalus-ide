@@ -238,9 +238,11 @@ public static class WatchedServer
     /// own (non-blocking, waited for with <see cref="Socket.Select"/>, their error read from the socket), not the
     /// runtime's asynchronous ones: those end on the thread pool, which a busy machine kept from running a connect
     /// that had gone through until the attempt was up, and an app that accepted showed as not listening (macOS CI, run
-    /// 43686325192). The attempt bounds the network's answer, not the IDE's own scheduling.
+    /// 43686325192). The attempt bounds the network's answer, not the IDE's own scheduling. <paramref name="late"/>
+    /// runs after the connects have started and the attempt's time left is taken, before the wait: a test's stand-in
+    /// for a thread pool that runs it late.
     /// </summary>
-    internal static async Task<bool> AcceptsAsync(Uri url, TimeSpan attempt, CancellationToken cancellationToken)
+    internal static async Task<bool> AcceptsAsync(Uri url, TimeSpan attempt, CancellationToken cancellationToken, Func<Task>? late = null)
     {
         var host = url.Host is "*" or "+" or "0.0.0.0" or "[::]" or "" ? "localhost" : url.DnsSafeHost; // [::1] → ::1
         var started = Stopwatch.StartNew();
@@ -283,6 +285,11 @@ public static class WatchedServer
             }
 
             var left = attempt - started.Elapsed;
+            if (late is not null)
+            {
+                await late().ConfigureAwait(false);
+            }
+
             return connecting.Count > 0 && await Task.Run(() => AnyConnects(connecting, left), cancellationToken).ConfigureAwait(false);
         }
         finally

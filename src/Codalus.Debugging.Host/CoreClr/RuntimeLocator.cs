@@ -108,11 +108,48 @@ internal static partial class RuntimeLocator
     }
 
     /// <summary>
-    /// The file named <paramref name="name"/> among a macOS process's memory regions (<c>proc_pidinfo</c>,
-    /// <c>PROC_PIDREGIONPATHINFO</c>): what dbgshim itself walks, without reading the files. Null when there is none, or
+    /// The file named <paramref name="name"/> among a macOS process's memory regions (<see cref="VisitRegions"/>): what
+    /// dbgshim itself walks, without reading the files. Null when there is none, or the regions can't be read.
+    /// </summary>
+    internal static string? FromRegions(int processId, string name)
+    {
+        string? found = null;
+        VisitRegions(processId, (path, _, _) =>
+        {
+            if (Path.GetFileName(path) == name)
+            {
+                found = path;
+                return false;
+            }
+
+            return true;
+        });
+        return found;
+    }
+
+    /// <summary>
+    /// The files a macOS process maps (<see cref="VisitRegions"/>), each with where it starts (its lowest region, a
+    /// Mach-O image's <c>__TEXT</c>: its header) and how far it reaches. <c>Process.Modules</c> lists only the
+    /// executable on macOS, so a native frame's address was in no module there (macOS CI, run 43755266667). Empty when
     /// the regions can't be read.
     /// </summary>
-    internal static unsafe string? FromRegions(int processId, string name)
+    internal static List<(string Path, ulong Start, ulong End)> MappedFiles(int processId)
+    {
+        var files = new Dictionary<string, (ulong Start, ulong End)>(StringComparer.Ordinal);
+        VisitRegions(processId, (path, start, size) =>
+        {
+            files[path] = files.TryGetValue(path, out var file) ? (Math.Min(file.Start, start), Math.Max(file.End, start + size)) : (start, start + size);
+            return true;
+        });
+        return [.. files.Select(f => (f.Key, f.Value.Start, f.Value.End))];
+    }
+
+    /// <summary>
+    /// Calls <paramref name="region"/> with each of a macOS process's memory regions that maps a file (<c>proc_pidinfo</c>,
+    /// <c>PROC_PIDREGIONPATHINFO</c>): the file's path, the region's address and its size, until it returns false.
+    /// Nothing when the regions can't be read.
+    /// </summary>
+    private static unsafe void VisitRegions(int processId, Func<string, ulong, ulong, bool> region)
     {
         // struct proc_regionwithpathinfo (xnu, bsd/sys/proc_info.h): proc_regioninfo, 96 bytes, with pri_address at 80
         // and pri_size at 88; then vnode_info, 152 bytes; then the file's path, MAXPATHLEN (1024) bytes.
@@ -125,21 +162,23 @@ internal static partial class RuntimeLocator
             {
                 if (proc_pidinfo(processId, Flavor, address, buffer, Size) != Size)
                 {
-                    return null;
+                    return;
                 }
 
                 var path = new ReadOnlySpan<byte>(buffer + PathAt, PathSize);
                 var end = path.IndexOf((byte)0);
                 var text = System.Text.Encoding.UTF8.GetString(end < 0 ? path : path[..end]);
-                if (text.Length > 0 && text[0] == '/' && Path.GetFileName(text) == name)
+                var start = BitConverter.ToUInt64(new ReadOnlySpan<byte>(buffer + Address, 8));
+                var size = BitConverter.ToUInt64(new ReadOnlySpan<byte>(buffer + Length, 8));
+                if (text.Length > 0 && text[0] == '/' && !region(text, start, size))
                 {
-                    return text;
+                    return;
                 }
 
-                var next = BitConverter.ToUInt64(new ReadOnlySpan<byte>(buffer + Address, 8)) + BitConverter.ToUInt64(new ReadOnlySpan<byte>(buffer + Length, 8));
+                var next = start + size;
                 if (next <= address)
                 {
-                    return null;
+                    return;
                 }
 
                 address = next;
@@ -148,8 +187,6 @@ internal static partial class RuntimeLocator
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
         {
         }
-
-        return null;
     }
 
     [LibraryImport("libproc")]
