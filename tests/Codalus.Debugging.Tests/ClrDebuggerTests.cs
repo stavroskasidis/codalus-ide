@@ -119,15 +119,25 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         await adapter.SetBreakpointsAsync(fixture.Types, [], Ct);
         await adapter.ContinueAsync(describe.ThreadId.Value, Ct);
         var exited = await events.NextAsync(DapEvents.Exited);
+
+        // A client that asks for the threads once the program has exited gets none: the runtime's process is gone, and
+        // asking it crashed the adapter on macOS (a SIGSEGV in CordbProcess::EnumerateThreads, macOS CI, run
+        // 43755266667). The adapter ends on its own 200 ms after the program, so on a loaded runner the request can
+        // find it gone (Windows CI, run 43795741043): then it must have ended cleanly, not crashed.
+        try
+        {
+            Assert.Empty(await adapter.ThreadsAsync(Ct));
+            Assert.Empty(await adapter.ThreadsAsync(Ct));
+        }
+        catch (DapConnectionLostException)
+        {
+            Assert.Equal(0, await adapter.AdapterExited.WaitAsync(TimeSpan.FromSeconds(10), Ct));
+        }
+
         Assert.Equal(15, exited.Body.GetProperty("exitCode").GetInt32());
         await events.NextAsync(DapEvents.Terminated);
         Assert.Contains("total=15 Ada is 36", events.Output, StringComparison.Ordinal);
         Assert.Contains("done", events.Output, StringComparison.Ordinal);
-
-        // A client that asks for the threads after the end gets none: the runtime's process is gone, and asking it
-        // crashed the adapter on macOS (a SIGSEGV in CordbProcess::EnumerateThreads, macOS CI, run 43755266667).
-        Assert.Empty(await adapter.ThreadsAsync(Ct));
-        Assert.Empty(await adapter.ThreadsAsync(Ct));
     }
 
     [Fact]
