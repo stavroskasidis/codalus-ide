@@ -278,6 +278,10 @@ public sealed class FindWidget : Border, IBackgroundRenderer
 
     internal int SearchesRun { get; private set; }
 
+    /// <summary>The last searches' patterns and starts (<see cref="System.Diagnostics.Stopwatch"/> timestamps; tests say
+    /// when each ran next to the keys, for a count above its bound: Windows CI, run 43807637976).</summary>
+    internal List<(string Pattern, long Started)> SearchLog { get; } = [];
+
     /// <summary>The matches found by steps past the counted ones (tests: a step back finds those near the caret, not all).</summary>
     internal long MatchesStepped { get; private set; }
 
@@ -444,6 +448,12 @@ public sealed class FindWidget : Border, IBackgroundRenderer
         var selected = Area.Selection.Length;
         _searching = true;
         SearchesRun++;
+        SearchLog.Add((SearchPattern, System.Diagnostics.Stopwatch.GetTimestamp()));
+        if (SearchLog.Count > 32)
+        {
+            SearchLog.RemoveAt(0);
+        }
+
         var (result, error) = await Task.Run(() => Search(snapshot, query, MaxMatches, () => Volatile.Read(ref _generation) != generation)).ConfigureAwait(true);
         if (generation != Volatile.Read(ref _generation) || !ReferenceEquals(version, _document?.Version))
         {
