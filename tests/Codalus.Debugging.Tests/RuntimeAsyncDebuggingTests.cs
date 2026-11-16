@@ -102,14 +102,17 @@ public sealed class RuntimeAsyncDebuggingTests(AsyncDebuggeeFixture fixture) : I
         var stop = await events.StoppedAsync();
         var main = stop.ThreadId;
 
-        // Over Task.Delay: the method resumes on a thread-pool thread, and the step ends there.
+        // Over Task.Delay: the method resumes on a thread-pool thread, and the step ends there. Or, when the step took
+        // longer than the delay to reach the await, the method goes on on this thread: the task was complete already
+        // (macOS CI, PR #406's run 43831740546, where the thread was still the main one). So no thread is asserted here.
         (stop, var top) = await StepAsync(adapter, events, stop, adapter.NextAsync, Worker, "run-after-delay");
-        Assert.NotEqual(main, stop.ThreadId);
         Assert.Equal("30", await ValueAsync(adapter, top, "before"));
         (stop, _) = await StepAsync(adapter, events, stop, adapter.NextAsync, Worker, "run-yield");
 
-        // Over Task.Yield, which always suspends the method.
+        // Over Task.Yield, which always suspends the method: the main thread is waiting for Main's task by then, so the
+        // method resumes on a thread-pool thread, and the step ends there.
         (stop, top) = await StepAsync(adapter, events, stop, adapter.NextAsync, Worker, "run-after-yield");
+        Assert.NotEqual(main, stop.ThreadId);
         Assert.Equal("31", await ValueAsync(adapter, top, "afterDelay"));
         (stop, _) = await StepAsync(adapter, events, stop, adapter.NextAsync, Worker, "run-double");
 
