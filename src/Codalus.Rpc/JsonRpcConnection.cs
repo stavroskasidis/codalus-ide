@@ -381,6 +381,12 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         {
             _pending.TryRemove(id, out _);
             _outgoing.TryRemove(id, out _);
+
+            // A caller that stopped waiting (its token) as the answer came in, or before an answer the read loop had
+            // already taken, leaves the error on this task with nobody to look at it: the finalizer reported it as an
+            // unobserved "Request cancelled" (the Linux smoke's command sweep, textDocument/documentHighlight, run
+            // 43881088712). An awaited failure is observed already, so this changes nothing else.
+            Observe(completion.Task);
         }
     }
 

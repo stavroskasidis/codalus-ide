@@ -804,6 +804,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
         await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
+        // M65: an external agent in AI Chat, in the published (Native AOT) app; after the gallery, which photographs the
+        // ai.chat step's conversation (choosing an agent starts a new chat). The Testing solution is the workspace.
+        await StepAsync("ai.externalChat", "M65", "AI Chat with an external agent (the stand-in ACP agent): it answers under its name, reads a workspace file through the IDE as a step, and its codalus mcp is this app, reaching the IDE through the session's pipe", ExternalAgentChatStepAsync, "testing.discover").ConfigureAwait(true);
+
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
         {
