@@ -1675,8 +1675,13 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// </summary>
     private void StepOutOfResumed(IClrThread thread, IClrFrame top, string resumed)
     {
-        var (awaiting, task) = AwaitingCall(thread, top);
+        var (awaiting, task, found) = AwaitingCall(thread, top);
         var stateMachine = Types.Info(top.Module!)?.AsyncKind(top.MethodToken) == ClrAsyncKind.StateMachine;
+
+        // Which way the step goes, in the adapter's log file: a Step Out of a resumed DoubleAsync ran the program to its
+        // end, a cancelled stepper's completion dropped, and the log said nothing of why (Linux CI, run 43828283396).
+        Trace?.WriteLine($"[step] out of {resumed} on thread {thread.Id.ToString(CultureInfo.InvariantCulture)}: {found}; "
+            + (awaiting is not null && stateMachine ? "the step ends where the awaiting call resumes." : "a Just My Code step on to what runs next."));
         if (awaiting is not null && stateMachine)
         {
             _step = new StepState(ClrStepKind.Out, thread.Id, top.Module, top.MethodToken) { AsyncOut = resumed, AwaitedTask = task };
@@ -2183,9 +2188,10 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// outermost runtime-async call of the chain the call is in. The awaiting call: the continuation the task runs when
     /// it completes, when that is another state machine's box (<c>StateMachine</c>, an await of the task in an async
     /// method without a synchronization context), or a state machine about to set it (<see cref="AwaiterOnAStack"/>).
-    /// Either is null when there's none (another kind of continuation, a runtime-async awaiting call).
+    /// Either is null when there's none (another kind of continuation, a runtime-async awaiting call). Found: where the
+    /// awaiting call came from or why there's none, for the adapter's log.
     /// </summary>
-    private (AsyncCall? Awaiting, IClrValue? Task) AwaitingCall(IClrThread thread, IClrFrame frame)
+    private (AsyncCall? Awaiting, IClrValue? Task, string Found) AwaitingCall(IClrThread thread, IClrFrame frame)
     {
         try
         {
@@ -2193,28 +2199,41 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                 || (kind == ClrAsyncKind.StateMachine ? StateMachineTask(frame) : DispatchedTask(thread)) is not { Kind: ClrValueKind.Object, Address: not 0 } task
                 || Process.Keep(task, out var releaseTask) is not { } keptTask)
             {
-                return (null, null);
+                return (null, null, "no task");
             }
 
             _stepHandles.Add(releaseTask);
-            var awaiting = Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation
-                ? Types.Field(continuation, "StateMachine")
-                : AwaiterOnAStack(task, frame.Thread, kind == ClrAsyncKind.StateMachine ? SafeValue(() => frame.Argument(0)) : null)?.Machine;
+            IClrValue? awaiting;
+            string found;
+            if (Types.Field(task, "m_continuationObject") is { Kind: ClrValueKind.Object, Address: not 0 } continuation)
+            {
+                awaiting = Types.Field(continuation, "StateMachine");
+                found = $"the task's continuation is a {TypeName(continuation)}";
+            }
+            else
+            {
+                var onStack = AwaiterOnAStack(task, frame.Thread, kind == ClrAsyncKind.StateMachine ? SafeValue(() => frame.Argument(0)) : null);
+                awaiting = onStack?.Machine;
+                found = onStack is null
+                    ? "the task has no continuation, and no other thread's stack has its awaiter"
+                    : $"the task has no continuation; thread {onStack.Frame.Thread.Id.ToString(CultureInfo.InvariantCulture)}'s stack has its awaiter";
+            }
+
             if (awaiting is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 }
                 || Types.Definition(awaiting.Type) is not { } type || Types.Info(type.Module) is not { } info
                 || info.Methods(type.Token).FirstOrDefault(m => m.Name == "MoveNext") is not { } moveNext
                 || Process.Keep(awaiting, out var releaseAwaiting) is not { } keptAwaiting)
             {
-                return (null, keptTask);
+                return (null, keptTask, found + (awaiting is { Kind: ClrValueKind.Object, Address: not 0 } ? $", whose {TypeName(awaiting)} has no MoveNext" : ", with no state machine"));
             }
 
             _stepHandles.Add(releaseAwaiting);
-            return (new AsyncCall(ClrAsyncKind.StateMachine, type.Module, moveNext.Token, keptAwaiting), keptTask);
+            return (new AsyncCall(ClrAsyncKind.StateMachine, type.Module, moveNext.Token, keptAwaiting), keptTask, found + $", awaited by a {TypeName(awaiting)}");
         }
         catch (InvalidOperationException ex)
         {
             log.WriteLine("The awaiting call: " + ex.Message);
-            return (null, null);
+            return (null, null, "the awaiting call couldn't be read");
         }
     }
 
