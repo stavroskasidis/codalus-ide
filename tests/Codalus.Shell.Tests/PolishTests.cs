@@ -412,7 +412,7 @@ public partial class PolishTests
             Assert.All(tabs.Where(t => t.Bounds.Width > 0), t => Assert.True(t.Bounds.Right <= strip.Bounds.Width + 1, $"a tab ends at {t.Bounds.Right:0} of {strip.Bounds.Width:0}"));
             Assert.Contains(tabs, t => t is Avalonia.Controls.Primitives.TabStripItem { IsSelected: true } && t.Bounds.Width > 0);
             var titles = tabs.SelectMany(t => t.GetVisualDescendants().OfType<TextBlock>().Where(b => b.Classes.Contains("tabTitle"))).ToList();
-            Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip((Control)b.GetVisualParent()!)));
+            Assert.All(titles, b => Assert.Equal(b.Text, ToolTip.GetTip(b.FindAncestorOfType<Dock.Avalonia.Controls.ToolTabStripItem>()!)));
             if (titles.Any(b => !double.IsPositiveInfinity(b.MaxWidth)) || tabs.Any(FittingTabPanel.GetIconOnly))
             {
                 crowded++;

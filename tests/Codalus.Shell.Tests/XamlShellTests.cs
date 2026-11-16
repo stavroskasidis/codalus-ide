@@ -89,7 +89,7 @@ public sealed class XamlShellTests
         var frames = preview.FrameCount;
         var text = model.Text.Text.IndexOf("Text=\"{Binding Greeting}\"", StringComparison.Ordinal);
         model.Text.Replace(text, "Text=\"{Binding Greeting}\"".Length, "Text=\"Edited in the editor\"");
-        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 60, describe: () => PreviewState(f));
 
         // Zoom doubles the shown size; the frame is the same.
         preview.ZoomInCommand.Execute(null);
@@ -125,19 +125,20 @@ public sealed class XamlShellTests
         // The loader's errors show with their line; fixing them renders again.
         var list = model.Text.Text.IndexOf("<ListBox x:Name", StringComparison.Ordinal);
         model.Text.Insert(list + "<ListBox".Length, " Orientation=\"Sideways\"");
-        await ShellFixture.PumpUntil(() => preview.Error is not null, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Error is not null, seconds: 60, describe: () => PreviewState(f));
         Assert.Contains("Line 25", preview.Error, StringComparison.Ordinal);
         Assert.Contains("Orientation", preview.Error, StringComparison.Ordinal);
         frames = preview.FrameCount;
         model.Text.Remove(list + "<ListBox".Length, " Orientation=\"Sideways\"".Length);
-        await ShellFixture.PumpUntil(() => preview.Error is null && preview.FrameCount > frames, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Error is null && preview.FrameCount > frames, seconds: 60, describe: () => PreviewState(f));
 
         // The theme variant and the render scale.
         frames = preview.FrameCount;
         preview.SelectedTheme = "Dark";
-        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 30);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 30, describe: () => PreviewState(f));
         preview.SelectedScale = "2×";
-        await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60,
+            describe: () => $"the last frame {preview.Frame?.Width}x{preview.Frame?.Height} at {preview.Frame?.Scale}, scale \"{preview.SelectedScale}\", error \"{preview.Error}\"\n{PreviewState(f)}");
         Assert.Equal(480d, preview.ImageWidth);
 
         // Fit again: the frame within the pane.

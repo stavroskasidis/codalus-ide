@@ -128,7 +128,7 @@
   <Style Selector="ToolControl">
     <Setter Property="HeaderTemplate">
       <DataTemplate DataType="docking:IShellTab">
-        <StackPanel Orientation="Horizontal" ToolTip.Tip="{Binding Title}">
+        <StackPanel Orientation="Horizontal">
           <controls:Icon Classes="tabIcon" Kind="{Binding TabIcon}" Width="14" Height="14" VerticalAlignment="Center"
                          IsVisible="{Binding $parent[ToolTabStripItem].(controls:FittingTabPanel.IconOnly)}" />
           <TextBlock Classes="tabTitle" Text="{Binding Title}" Padding="2" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
@@ -137,6 +137,17 @@
         </StackPanel>
       </DataTemplate>
     </Setter>
+  </Style>
+  <!--
+    The name's tooltip shows above the tab (below it when there's no room above), never over it (#394). At the pointer,
+    Avalonia's default, it shows 20 below the pointer; near the screen's bottom edge, where the bottom tool windows' tabs
+    are in a maximized window, it flips above the pointer and keeps the 20, so it opened over the pointer and took the
+    click: the tab took its hover color and stayed unselected.
+  -->
+  <Style Selector="ToolTabStripItem" x:DataType="docking:IShellTab">
+    <Setter Property="ToolTip.Tip" Value="{Binding Title}" />
+    <Setter Property="ToolTip.Placement" Value="Top" />
+    <Setter Property="ToolTip.VerticalOffset" Value="0" />
   </Style>
   <Style Selector="ToolTabStrip">
     <Setter Property="ItemsPanel">
