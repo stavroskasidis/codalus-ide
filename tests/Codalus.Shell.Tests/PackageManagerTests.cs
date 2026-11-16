@@ -31,6 +31,17 @@ public sealed class PackageManagerTests
         f.Shell.Dialogs.Buttons.Single(b => b.Label == button).Command.Execute(null);
     }
 
+    /// <summary>
+    /// What the package manager showed when a wait for its first list ran out: both tests timed out there on macOS CI at
+    /// once, 60 s each, the list's search going only to the local folder feed, and the failure said nothing of what the
+    /// view had (PR #405's run 43828283396).
+    /// </summary>
+    private static string Describe(ShellFixture f, PackageManagerViewModel vm) =>
+        $"tab {vm.Tab}, source '{vm.SelectedSource}', search '{vm.Search}', loading {vm.IsLoading}, error '{vm.Error ?? "none"}'; "
+        + $"rows [{string.Join(", ", vm.Rows.Select(r => $"{r.Id} {r.InstalledVersion ?? "-"}→{r.Version}"))}]; "
+        + $"sources [{string.Join(", ", vm.Sources)}]; restore {f.Shell.Solutions.RestoreState}, "
+        + $"{f.Shell.Solutions.Projects.Values.Count(p => p.Restored)} of {f.Shell.Solutions.Projects.Count} project(s) restored";
+
     private static async Task<(string Folder, string Plain)> OpenAsync(ShellFixture f)
     {
         var folder = f.CopySample("Packages");
@@ -61,7 +72,7 @@ public sealed class PackageManagerTests
         // Browse the local feed: the installed version shows next to the latest one.
         vm.SelectedSource = "local";
         vm.Search = "Codalus.Sample";
-        await ShellFixture.PumpUntil(() => vm.Rows.Any(r => r is { Id: "Codalus.Sample.Greeting", InstalledVersion: not null }) && !vm.IsLoading, seconds: 60);
+        await ShellFixture.PumpUntil(() => vm.Rows.Any(r => r is { Id: "Codalus.Sample.Greeting", InstalledVersion: not null }) && !vm.IsLoading, seconds: 60, () => Describe(f, vm));
         var greeting = vm.Rows.Single(r => r.Id == "Codalus.Sample.Greeting");
         Assert.Equal("1.1.0", greeting.Version);
         Assert.Equal("1.0.0", greeting.InstalledVersion);
@@ -127,7 +138,7 @@ public sealed class PackageManagerTests
 
         // Updates: Greeting is at 1.0.0 in three projects; the feed has 1.1.0.
         vm.Tab = PackageTab.Updates;
-        await ShellFixture.PumpUntil(() => vm.Rows.Any(r => r.Id == "Codalus.Sample.Greeting"), seconds: 60);
+        await ShellFixture.PumpUntil(() => vm.Rows.Any(r => r.Id == "Codalus.Sample.Greeting"), seconds: 60, () => Describe(f, vm));
         Assert.Equal("Updates 1", vm.UpdatesLabel);
         var update = vm.Rows.Single(r => r.Id == "Codalus.Sample.Greeting");
         Assert.Equal(("1.0.0", "1.1.0", true), (update.InstalledVersion, update.LatestVersion, update.IsChecked));
