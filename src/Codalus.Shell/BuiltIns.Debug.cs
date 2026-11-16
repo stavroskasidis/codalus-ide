@@ -153,7 +153,7 @@ internal static partial class BuiltIns
         {
             Title = "Debugger for .NET programs",
             Category = "Debugging",
-            Description = "The debugger that debugs .NET programs from the next session: the Codalus debugger, Codalus IDE's own (the default), or netcoredbg, kept for one release as a fallback when something goes wrong under the Codalus debugger. Hot Reload and Edit and Continue while debugging, Set Next Statement, lambdas in expressions, the Disassembly, Registers and Memory windows and symbol servers need the Codalus debugger. It doesn't yet debug remote targets or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
+            Description = "The debugger that debugs .NET programs from the next session: the Codalus debugger, Codalus IDE's own (the default), or netcoredbg, kept in 1.0 as a fallback when something goes wrong under the Codalus debugger. Hot Reload and Edit and Continue while debugging, Set Next Statement, lambdas in expressions, the Disassembly, Registers and Memory windows and symbol servers need the Codalus debugger. It doesn't yet debug remote targets or x64 programs on Apple silicon, which netcoredbg debugs then (the Debug Console says so). .NET Framework programs have their own debugger.",
             Enum = [Workbench.Debugging.DebugService.CodalusAdapter, Workbench.Debugging.DebugService.NetcoredbgAdapter],
             EnumDescriptions = ["Codalus debugger", "netcoredbg (fallback)"],
             Order = 8,

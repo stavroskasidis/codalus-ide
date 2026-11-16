@@ -1,6 +1,6 @@
 # Debugging
 
-Codalus IDE debugs .NET programs with **its own debugger**, the Codalus debugger, built on .NET's own debugging API ([below](#the-codalus-debugger)). It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and are debugged by the debugger's x64 build, which Codalus IDE downloads the first time you debug one; those of .NET Core 2.0 and 2.1 are attached to once they run, not held at their start ([Older .NET versions](dotnet-versions.md)). **netcoredbg**, the open-source .NET debugger from Samsung that Codalus IDE used before, is still bundled for one release as a fallback: set `debug.adapter` to `netcoredbg` if something goes wrong, and please report it.
+Codalus IDE debugs .NET programs with **its own debugger**, the Codalus debugger, built on .NET's own debugging API ([below](#the-codalus-debugger)). It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and are debugged by the debugger's x64 build, which Codalus IDE downloads the first time you debug one; those of .NET Core 2.0 and 2.1 are attached to once they run, not held at their start ([Older .NET versions](dotnet-versions.md)). **netcoredbg**, the open-source .NET debugger from Samsung that Codalus IDE used before, is still bundled as a fallback, supported in 1.0 ([below](#the-codalus-debugger)): set `debug.adapter` to `netcoredbg` if something goes wrong, and please report it.
 
 On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
 
@@ -216,7 +216,7 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 
 The Codalus debugger is Codalus IDE's own .NET debugger, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). It is the default: Start Debugging, Attach to Process, debugging tests, several startup projects, remote targets and containers use it, and the first line in the Debug Console says which debugger a session uses.
 
-**netcoredbg is the fallback** for one release: set **`debug.adapter`** to `netcoredbg` (Options › Debugging › **Debugger for .NET programs**) and the next session uses it. It will be removed once the Codalus debugger has been the default for a release, so tell us what made you switch.
+**netcoredbg is the fallback**, supported in 1.0: set **`debug.adapter`** to `netcoredbg` (Options › Debugging › **Debugger for .NET programs**) and the next session uses it. It's the one exception to [what 1.x keeps stable](compatibility.md#netcoredbg): a 1.x minor version may deprecate it, with a warning in Options and the release notes, and a later one may remove it once the Codalus debugger passes the same tests on every operating system. So tell us what made you switch.
 
 What the Codalus debugger does that netcoredbg doesn't:
 - **Hot Reload and Edit and Continue**: edits apply to the program you're debugging, and the method you're stopped in goes on in its new code ([below](#hot-reload-while-debugging))
@@ -319,7 +319,7 @@ Edit and Continue after an `await` and the profiler's .NET Async view haven't be
 
 ## Settings
 
-- `debug.adapter`: the debugger for .NET programs, `codalus` ([the Codalus debugger](#the-codalus-debugger), the default) or `netcoredbg` (the fallback, for one release).
+- `debug.adapter`: the debugger for .NET programs, `codalus` ([the Codalus debugger](#the-codalus-debugger), the default) or `netcoredbg` (the fallback, supported in 1.0; [compatibility.md](compatibility.md#netcoredbg)).
 - `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger). Off, a Blazor Web App's WebAssembly edits wait for a restart.
 - `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
 - `debug.breakAllProcesses`: with several startup projects, a stop in one program pauses the others (the Codalus debugger's programs; on by default).
