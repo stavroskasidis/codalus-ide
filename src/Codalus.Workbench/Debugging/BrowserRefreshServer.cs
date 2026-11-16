@@ -93,10 +93,8 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     {
         _startupGrace = startupGrace;
         Port = Containers.ContainerLaunch.FreePort();
-        _listener.Prefixes.Add(Prefix(Port));
+        Http.LoopbackPrefixes.Add(_listener, Port);
     }
-
-    private static string Prefix(int port) => string.Create(CultureInfo.InvariantCulture, $"http://{Http.LoopbackHost.Name}:{port}/");
 
     public int Port { get; private set; }
 
@@ -132,7 +130,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
                 CloseListener(server._listener);
                 server.Port = Containers.ContainerLaunch.FreePort();
                 server._listener = new HttpListener();
-                server._listener.Prefixes.Add(Prefix(server.Port));
+                Http.LoopbackPrefixes.Add(server._listener, server.Port);
             }
         }
 
@@ -143,7 +141,7 @@ public sealed class BrowserRefreshServer : IAsyncDisposable
     /// <summary>The variables that point the server's middleware, and through it its pages, here.</summary>
     public IReadOnlyDictionary<string, string> Environment() => new Dictionary<string, string>(StringComparer.Ordinal)
     {
-        [EndpointVariable] = string.Create(CultureInfo.InvariantCulture, $"ws://{Http.LoopbackHost.Name}:{Port}"),
+        [EndpointVariable] = string.Create(CultureInfo.InvariantCulture, $"ws://localhost:{Port}"),
         [KeyVariable] = Convert.ToBase64String(_key.ExportSubjectPublicKeyInfo()),
     };
 

@@ -82,9 +82,9 @@ public sealed class IdeExecutionServerTests
         {
             using var socket = new ClientWebSocket();
             socket.Options.SetRequestHeader("Authorization", "Bearer " + server.Token);
-            await socket.ConnectAsync(new Uri($"ws://{server.Authority}/run_session/notify"), ct);
+            await socket.ConnectAsync(new Uri($"ws://localhost:{server.Port}/run_session/notify"), ct);
 
-            using var http = new HttpClient { BaseAddress = new Uri($"http://{server.Authority}/") };
+            using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{server.Port}/") };
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
             using var body = new StringContent("""{"launch_configurations":[{"type":"project","project_path":"/app/Api/Api.csproj","mode":"NoDebug"}]}""", Encoding.UTF8, "application/json");
             using var created = await http.PutAsync("run_session", body, ct);
@@ -180,7 +180,7 @@ public sealed class IdeExecutionServerTests
                     var socket = new ClientWebSocket();
                     sockets.Add(socket);
                     socket.Options.SetRequestHeader("Authorization", "Bearer " + server.Token);
-                    await socket.ConnectAsync(new Uri($"ws://{server.Authority}/run_session/notify"), ct);
+                    await socket.ConnectAsync(new Uri($"ws://localhost:{server.Port}/run_session/notify"), ct);
                     reads.Add(Task.Run(
                         async () =>
                         {
@@ -198,7 +198,7 @@ public sealed class IdeExecutionServerTests
                         ct));
                 }
 
-                using var http = new HttpClient { BaseAddress = new Uri($"http://{server.Authority}/") };
+                using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{server.Port}/") };
                 http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
                 for (var i = 0; i < 3; i++)
                 {
@@ -266,7 +266,7 @@ public sealed class IdeExecutionServerTests
         server.Start();
         try
         {
-            using var http = new HttpClient { BaseAddress = new Uri($"http://{server.Authority}/") };
+            using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{server.Port}/") };
             http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", server.Token);
             async Task StartAsync()
             {
@@ -333,7 +333,7 @@ public sealed class IdeExecutionServerTests
 
             using var socket = new ClientWebSocket();
             socket.Options.SetRequestHeader("Authorization", "Bearer " + server.Token);
-            await socket.ConnectAsync(new Uri($"ws://{server.Authority}/run_session/notify"), ct);
+            await socket.ConnectAsync(new Uri($"ws://localhost:{server.Port}/run_session/notify"), ct);
             var buffer = new byte[4096];
             var received = await socket.ReceiveAsync(buffer, ct).WaitAsync(s_timeout, ct);
             var text = Encoding.UTF8.GetString(buffer, 0, received.Count);
@@ -352,11 +352,11 @@ public sealed class IdeExecutionServerTests
     {
         // A port given to the server is the one it uses (only a port it chose is replaced when taken), and the shell
         // disposes a server that couldn't start: that disposal doesn't throw either. The port is taken by a listener of
-        // the same prefix: a socket on 127.0.0.1 alone doesn't always collide with the managed listener's localhost (it
-        // can bind ::1 as well; CI's Linux runner let the server start), but the same prefix collides on every OS.
+        // the same prefix: a socket on 127.0.0.1 alone didn't always collide with the managed listener's localhost (it
+        // can bind ::1 alone; CI's Linux runner let the server start), but the same prefix collides on every OS.
         var port = FreePort();
         using var taken = new System.Net.HttpListener();
-        taken.Prefixes.Add($"http://{Http.LoopbackHost.Name}:{port}/");
+        taken.Prefixes.Add($"http://localhost:{port}/");
         taken.Start();
         var server = new IdeExecutionServer((_, _) => throw new InvalidOperationException("No runs here."), port);
         Assert.Throws<System.Net.HttpListenerException>(server.Start);
@@ -366,10 +366,11 @@ public sealed class IdeExecutionServerTests
     }
 
     /// <summary>
-    /// The server holds 127.0.0.1 at its port, the address the port was found free on. On Linux a listener on
-    /// <c>http://localhost:port/</c> held only <c>::1</c>; Aspire's orchestrator put the frontend's proxy on 127.0.0.1 at
-    /// the same port, and the frontend's URL, <c>http://localhost:port</c>, reached this server instead, which answered
-    /// 401 (Linux CI, run 43821705690).
+    /// The server holds 127.0.0.1 at its port, the address the port was found free on. Where <c>localhost</c> resolves to
+    /// <c>::1</c> first, a listener on <c>http://localhost:port/</c> held only <c>::1</c>; Aspire's orchestrator put the
+    /// frontend's proxy on 127.0.0.1 at the same port, and the frontend's URL, <c>http://localhost:port</c>, reached this
+    /// server instead, which answered 401 (Linux CI, run 43821705690). The bind shows that only on such a host (CI's
+    /// Linux runner, not WSL or a Mac); <see cref="The_loopback_prefixes_hold_127_0_0_1_off_windows"/> shows it on any.
     /// </summary>
     [Fact]
     public async Task The_server_holds_the_ipv4_loopback_address_its_port_was_found_free_on()
@@ -378,15 +379,27 @@ public sealed class IdeExecutionServerTests
         server.Start();
         try
         {
-            // The bind shows the bug only where localhost resolves to ::1 first (CI's Linux runner, not WSL or a Mac);
-            // the address the AppHost is given shows it everywhere.
             AssertHeld(server.Port);
-            Assert.Equal($"{(OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1")}:{server.Port}", server.AppHostEnvironment(debug: false)["DEBUG_SESSION_PORT"]);
+            Assert.Equal($"localhost:{server.Port}", server.AppHostEnvironment(debug: false)["DEBUG_SESSION_PORT"]);
         }
         finally
         {
             await server.DisposeAsync();
         }
+    }
+
+    /// <summary>
+    /// The servers' prefixes: <c>localhost</c>, which the orchestrator's requests name (the managed listener matches a
+    /// request's <c>Host</c> to a prefix's host exactly: a server on 127.0.0.1 alone never got the AppHost's requests),
+    /// and off Windows 127.0.0.1 too.
+    /// </summary>
+    [Fact]
+    public void The_loopback_prefixes_hold_127_0_0_1_off_windows()
+    {
+        using var listener = new System.Net.HttpListener();
+        Http.LoopbackPrefixes.Add(listener, 5301);
+        string[] expected = OperatingSystem.IsWindows() ? ["http://localhost:5301/"] : ["http://127.0.0.1:5301/", "http://localhost:5301/"];
+        Assert.Equal(expected, listener.Prefixes.Order(StringComparer.Ordinal));
     }
 
     internal static void AssertHeld(int port)
@@ -395,7 +408,8 @@ public sealed class IdeExecutionServerTests
         var error = Assert.Throws<System.Net.Sockets.SocketException>(other.Start);
 
         // Windows' http.sys holds its ports exclusively: a bind beside it is refused, AccessDenied.
-        Assert.True(error.SocketErrorCode is System.Net.Sockets.SocketError.AddressAlreadyInUse or System.Net.Sockets.SocketError.AccessDenied, $"Binding 127.0.0.1:{port}: {error.SocketErrorCode}");    }
+        Assert.True(error.SocketErrorCode is System.Net.Sockets.SocketError.AddressAlreadyInUse or System.Net.Sockets.SocketError.AccessDenied, $"Binding 127.0.0.1:{port}: {error.SocketErrorCode}");
+    }
 
     private static int FreePort()
     {

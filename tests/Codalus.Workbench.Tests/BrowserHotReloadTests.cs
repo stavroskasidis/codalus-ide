@@ -109,16 +109,17 @@ public sealed class BrowserHotReloadTests
     }
 
     /// <summary>
-    /// The refresh server holds 127.0.0.1 at its port, as the IDE execution server does: on Linux its
-    /// <c>http://localhost:port/</c> held only <c>::1</c>, and another server could take 127.0.0.1's same port and have
-    /// its <c>localhost</c> URL reach this one (Linux CI, run 43821705690, with the IDE execution server).
+    /// The refresh server holds 127.0.0.1 at its port, as the IDE execution server does: where <c>localhost</c> resolves
+    /// to <c>::1</c> first its <c>http://localhost:port/</c> held only <c>::1</c>, and another server could take
+    /// 127.0.0.1's same port and have its <c>localhost</c> URL reach this one (Linux CI, run 43821705690, with the IDE
+    /// execution server). Its pages still connect at <c>localhost</c>.
     /// </summary>
     [Fact]
     public async Task The_refresh_server_holds_the_ipv4_loopback_address_its_port_was_found_free_on()
     {
         await using var server = BrowserRefreshServer.Start();
         IdeExecutionServerTests.AssertHeld(server.Port);
-        Assert.Equal($"ws://{(OperatingSystem.IsWindows() ? "localhost" : "127.0.0.1")}:{server.Port}", server.Environment()[BrowserRefreshServer.EndpointVariable]);
+        Assert.Equal($"ws://localhost:{server.Port}", server.Environment()[BrowserRefreshServer.EndpointVariable]);
     }
 
     /// <summary>A page as aspnetcore-browser-refresh.js connects: its secret encrypted with the server's key as the subprotocol.</summary>
