@@ -88,6 +88,14 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     /// assets file without the build's RuntimeIdentifier: NETSDK1047 in publishes, on every OS).</summary>
     private Task _building = Task.CompletedTask;
 
+    /// <summary>
+    /// Guards <see cref="_restore"/> and <see cref="_building"/> together. A build sets one and reads the other, and a
+    /// restore reads one and sets the other. Without it, both could read the old value (a build that starts as the
+    /// restore after opening starts), so the restore ran during a publish and rewrote its assets file without the
+    /// RuntimeIdentifier (NETSDK1047, macOS CI, run 43799102796).
+    /// </summary>
+    private readonly Lock _restoreGate = new();
+
     public SolutionSession(ISessionEvents events, string dotnet)
     {
         _events = events;
@@ -835,13 +843,18 @@ internal sealed partial class SolutionSession : IAsyncDisposable
         }
 
         var building = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        _building = building.Task;
+        Task restore;
+        lock (_restoreGate)
+        {
+            _building = building.Task;
+            restore = _restore;
+        }
 
         // A background restore (the one after opening) finishes first: it would rewrite the assets file without the
         // build's own global properties (a publish's RuntimeIdentifier: NETSDK1047, seen on macOS).
         try
         {
-            await _restore.WaitAsync(cancellation.Token).ConfigureAwait(false);
+            await restore.WaitAsync(cancellation.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -1064,9 +1077,11 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             path = BuildEntryPoint(); // without the compose projects and those that need the classic IDE's targets, which dotnet restore can't load
         }
 
-        var building = _building;
-        _restore = Task.WhenAll(_restore.ContinueWith(_ => { }, TaskScheduler.Default), building)
-            .ContinueWith(_ => RestoreAsync(path ?? Path, force), TaskScheduler.Default).Unwrap();
+        lock (_restoreGate)
+        {
+            _restore = Task.WhenAll(_restore.ContinueWith(_ => { }, TaskScheduler.Default), _building)
+                .ContinueWith(_ => RestoreAsync(path ?? Path, force), TaskScheduler.Default).Unwrap();
+        }
     }
 
     private async Task RestoreAsync(string target, bool force = false)
