@@ -179,12 +179,17 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
     public IReadOnlyList<DesignerComponentChoice> ComponentChoices => _choices;
 
     private IReadOnlyList<DesignerComponentChoice> _choices = [];
+    private DesignerComponentChoice? _selectedChoice;
     private bool _syncingSelector;
 
-    /// <summary>The selector's entry: the one selected component, or null for several (blank). Setting it selects that component in the designer.</summary>
+    /// <summary>
+    /// The selector's entry: the one selected component, or null for several (blank). Setting it selects that component
+    /// in the designer. Like <see cref="ComponentChoices"/>, it's what the window last raised, not the source's live
+    /// selection (#393, see <see cref="RaiseSourceState"/>).
+    /// </summary>
     public DesignerComponentChoice? SelectedComponent
     {
-        get => _source?.SelectedComponent is { } name ? _choices.FirstOrDefault(c => c.Name == name) : null;
+        get => _selectedChoice;
         set
         {
             // While the window updates the selector (its list or its entry), the combo box's own echo isn't a pick.
@@ -278,6 +283,12 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
         _syncingSelector = true;
         try
         {
+            // The list first, with the entry still the previous one (#393): a new list makes the combo box clear its
+            // selection and restore the entry it had, writing both back through its two-way binding, and the binding
+            // re-reads the entry each time. Were the entry already the new one (a drop: the new control, added and
+            // selected in one change), the binding would take it as published while the combo box, in the middle of its
+            // update, kept the previous one, and raising the entry next would change nothing: the selector named the form
+            // over the dropped control's properties until another selection.
             var choices = _source?.ComponentChoices ?? [];
             if (!choices.SequenceEqual(_choices))
             {
@@ -285,6 +296,7 @@ public sealed class PropertiesWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(ComponentChoices));
             }
 
+            _selectedChoice = _source?.SelectedComponent is { } name ? _choices.FirstOrDefault(c => c.Name == name) : null;
             OnPropertyChanged(nameof(SelectedComponent));
         }
         finally

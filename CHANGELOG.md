@@ -2,6 +2,10 @@
 
 Hand-written notes for each release. The release pages add the list of changes, grouped by milestone, from the commits.
 
+## 1.0.0
+
+- **Fixed: after a drop in the Windows Forms designer, the Properties window's selector named the previous component** ([#393](https://github.com/stavroskasidis/codalus-ide/issues/393)): drop a Button from the Toolbox and the grid showed `button1`'s properties while the selector above it still read the form (or the control selected before). Clicking the new control didn't help; only selecting another control and then the new one did. The selector now names the dropped control.
+
 ## 0.14.0
 
 - **Fixed: on Linux, an Aspire resource's address could answer 401 (Unauthorized)**: the IDE's server for the AppHost listened on `localhost`, which on a system that resolves it to `::1` first took only the IPv6 loopback. When Aspire put a resource on the same port of `127.0.0.1`, its `http://localhost:<port>` address reached the IDE's server first, which refused it. The IDE's server, and the one that refreshes the browser after a Hot Reload edit, now hold `127.0.0.1` too on Linux and macOS.

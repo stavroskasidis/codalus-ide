@@ -52,7 +52,7 @@ public sealed class PropertyGridViewTests
 
         public bool HasOpenEditor { get; set; }
 
-        public IReadOnlyList<DesignerComponentChoice> ComponentChoices { get; } =
+        public IReadOnlyList<DesignerComponentChoice> ComponentChoices { get; set; } =
             [new("Form1", "System.Windows.Forms.Form"), new("button1", "System.Windows.Forms.Button"), new("textBox1", "System.Windows.Forms.TextBox")];
 
         public string? SelectedComponent => Selected;
@@ -271,6 +271,40 @@ public sealed class PropertyGridViewTests
         source.HasOpenEditor = false;
         source.Changed();
         await ShellFixture.PumpUntil(() => properties.IsInputEnabled && properties.Grid.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task The_selector_names_a_dropped_component_when_its_entry_and_the_selection_change_together()
+    {
+        // #393: a drop adds an entry and selects it in one change; the combo box showed the previous selection.
+        var (f, source, view) = await ShowAsync();
+        await using var _f = f;
+        var properties = f.Shell.PropertiesWindow;
+        var selector = view.GetVisualDescendants().OfType<ComboBox>().First(c => c.Name == "ComponentSelector");
+        string? Shown() => (selector.SelectedItem as DesignerComponentChoice)?.Name;
+        source.SelectComponent("Form1");
+        await ShellFixture.PumpUntil(() => Shown() == "Form1");
+
+        // The drop: button2 joins the list and is selected in one change.
+        source.ComponentChoices = [.. source.ComponentChoices, new("button2", "System.Windows.Forms.Button")];
+        source.SelectComponent("button2");
+        await ShellFixture.PumpUntil(() => properties.ComponentChoices.Count == 4 && properties.SelectedComponent?.Name == "button2");
+        ShellFixture.Pump();
+        Assert.Equal("button2", Shown());
+        Assert.Equal("button2", source.Selected);
+
+        // A click on the dropped control (the same selection, raised again) keeps it; another entry, then a component removed.
+        source.Changed();
+        ShellFixture.Pump();
+        Assert.Equal("button2", Shown());
+        source.SelectComponent("textBox1");
+        await ShellFixture.PumpUntil(() => Shown() == "textBox1");
+        source.ComponentChoices = [.. source.ComponentChoices.Where(c => c.Name != "textBox1")];
+        source.SelectComponent("Form1");
+        await ShellFixture.PumpUntil(() => properties.ComponentChoices.Count == 3);
+        ShellFixture.Pump();
+        Assert.Equal("Form1", Shown());
+        Assert.Equal("Form1", source.Selected);
     }
 
     [AvaloniaFact]
