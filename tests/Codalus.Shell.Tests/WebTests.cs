@@ -10,12 +10,8 @@ namespace Codalus.Shell.Tests;
 /// <summary>M15a in the shell: the Endpoints Explorer, .http files against the running fixture app, generated requests and the environment.</summary>
 public sealed class WebTests
 {
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     [AvaloniaFact]
     public async Task Endpoints_http_files_and_the_running_app()

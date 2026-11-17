@@ -18,6 +18,8 @@
     <Compile Include="$(MSBuildThisFileDirectory)Shared/WslStandIn.cs" Link="Shared/WslStandIn.cs" />
     <!-- Stand-in programs written so they start ("Text file busy" on Linux, #209). -->
     <Compile Include="$(MSBuildThisFileDirectory)Shared/StandInScript.cs" Link="Shared/StandInScript.cs" />
+    <!-- A port for a server started later, below every OS's ephemeral range (Linux CI, run 43636497934). -->
+    <Compile Include="$(MSBuildThisFileDirectory)Shared/TestPorts.cs" Link="Shared/TestPorts.cs" />
     <!-- Names a test that hangs and prints the stacks while the process still runs (CI's silent macOS hangs). Test
          projects only: the stand-in tools here have no xUnit (items see the project's own IsTestProject). -->
     <Compile Include="$(MSBuildThisFileDirectory)Shared/TestWatchdog.cs" Link="Shared/TestWatchdog.cs" Condition="'$(IsTestProject)' == 'true'" />

@@ -36,12 +36,8 @@ internal sealed class MockNuGetServer : IDisposable
     /// <summary>Every path asked for, lowercased, in order (tests: which packages a source was asked about).</summary>
     public System.Collections.Concurrent.ConcurrentQueue<string> Paths { get; } = new();
 
-    private static int FreePort()
-    {
-        using var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        return ((IPEndPoint)probe.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     private async Task ServeAsync()
     {

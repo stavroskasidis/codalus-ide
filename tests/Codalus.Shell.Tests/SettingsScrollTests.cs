@@ -108,8 +108,26 @@ public class SettingsScrollTests
         Assert.Contains(page.Rows.TakeWhile(r => r != top), r => !r.IsBuilt);
         string State() => $"row {page.Rows.ToList().IndexOf(top)} of {page.Rows.Count()} at {top.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px, "
             + $"offset {page.Scroll.Offset.Y:F0}, extent {page.Scroll.Extent.Height:F0}, viewport {page.Scroll.Viewport.Height:F0}, "
-            + $"built {page.Rows.Count(r => r.IsBuilt)}, row height {top.Bounds.Height:F0}";
+            + $"built {page.Rows.Count(r => r.IsBuilt)}, row height {top.Bounds.Height:F0}, the scroll viewer's anchor {Anchor()}";
+        string Anchor() => page.Scroll.CurrentAnchor is DeferredContent anchor
+            ? $"row {page.Rows.ToList().IndexOf(anchor)} at {anchor.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px"
+            : page.Scroll.CurrentAnchor?.GetType().Name ?? "none";
         var before = State();
+
+        // Each change of the offset while the rows above are made, and what made it: the movement was reproduced locally (2
+        // of 80 jumps at 800×800, in one of five sweeps of window sizes and places) with the row's own height unchanged, so
+        // either the anchoring didn't make up for the rows above or something else moved the view.
+        var scrolls = new List<string>();
+        var offset = page.Scroll.Offset.Y;
+        void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
+        {
+            var callers = new System.Diagnostics.StackTrace().GetFrames().Select(frame => frame.GetMethod()).OfType<System.Reflection.MethodBase>()
+                .Select(method => $"{method.DeclaringType?.Name}.{method.Name}").Where(name => !name.StartsWith("Dispatcher", StringComparison.Ordinal)).Skip(1).Take(8);
+            scrolls.Add($"{offset:F0} → {page.Scroll.Offset.Y:F0} (row at {top.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px, anchor {Anchor()}) from {string.Join(" < ", callers)}");
+            offset = page.Scroll.Offset.Y;
+        }
+
+        page.Scroll.ScrollChanged += OnScrollChanged;
         ShellFixture.Pump();
         page.Window.UpdateLayout();
         Assert.All(page.Rows, r => Assert.True(r.IsBuilt));
@@ -117,6 +135,8 @@ public class SettingsScrollTests
         // Windows CI once had the row 52 px lower (-60 to -8, run 43733266567), with no cause known yet: what the view
         // and the row were before and after the rows above were made.
         var moved = top.TranslatePoint(default, page.Scroll)!.Value.Y;
-        Assert.True(Math.Abs(at - moved) <= 1, $"The setting at the top of the view moved from {at:F0} to {moved:F0} px. Before: {before}. After: {State()}.");
+        page.Scroll.ScrollChanged -= OnScrollChanged;
+        Assert.True(Math.Abs(at - moved) <= 1, $"The setting at the top of the view moved from {at:F0} to {moved:F0} px. Before: {before}. After: {State()}. "
+            + $"The offset's changes meanwhile: {(scrolls.Count == 0 ? "none" : string.Join("; ", scrolls))}.");
     }
 }

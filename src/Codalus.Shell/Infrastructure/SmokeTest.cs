@@ -91,6 +91,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     public async Task RunAsync()
     {
+        if (OperatingSystem.IsMacOS() && !MacActivity.Begin("The smoke test drives the app."))
+        {
+            shell.Workbench.Log.AppendLine("[smoke] macOS's App Nap couldn't be held off: timers may run late.");
+        }
+
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
         {
             lifetime.Exit += (_, e) =>

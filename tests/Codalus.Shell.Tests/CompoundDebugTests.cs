@@ -19,12 +19,8 @@ public sealed class CompoundDebugTests
     private static int Line(string file, string marker) =>
         Array.FindIndex(File.ReadAllLines(file), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
 
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     private static bool IsRunning(int processId)
     {
