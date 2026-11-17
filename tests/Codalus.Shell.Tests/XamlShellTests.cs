@@ -185,6 +185,32 @@ public sealed class XamlShellTests
         Assert.Equal(File.ReadAllLines(styles).ToList().FindIndex(l => l.Contains("NoSuchProperty", StringComparison.Ordinal)), error.Range.Start.Line);
     }
 
+    /// <summary>
+    /// A preview shown before the project is restored can't find Avalonia's previewer (its package's properties come with
+    /// the restore) and says so; the restore's success prepares it again, and it renders. It stayed on that message, the
+    /// restore on open ending after it (Windows CI, runs 42294063461 and 44031325117).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_preview_shown_before_the_restore_renders_once_the_restore_succeeds()
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("Avalonia");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Avalonia.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "AvaloniaApp", "Views", "TodoItemView.axaml"), preview: false, null);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        f.Shell.ShowXamlPreview();
+        var preview = f.Shell.XamlPreview;
+        await ShellFixture.PumpUntil(() => preview.Status.Contains("doesn't reference Avalonia", StringComparison.Ordinal), seconds: 120, describe: () => PreviewState(f));
+        Assert.Equal(0, preview.FrameCount);
+
+        await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300, describe: () => $"restore {f.Shell.Solutions.RestoreState}, {PreviewState(f)}");
+        Assert.Contains("The restore succeeded: preparing the preview again.", f.Shell.PreviewerLog.GetText(), StringComparison.Ordinal);
+    }
+
     /// <summary>The preview's stage and status, its log, and the end of the build output, for a wait that timed out.</summary>
     private static string PreviewState(ShellFixture f)
     {
