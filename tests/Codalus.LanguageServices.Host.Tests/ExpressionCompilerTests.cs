@@ -257,6 +257,9 @@ public sealed class ExpressionCompilerTests
         var error = Assert.Single(result.Errors);
         Assert.Contains("isn't in a loaded project yet", error, StringComparison.Ordinal);
         Assert.Contains("still loading", error, StringComparison.Ordinal);
+
+        // What the workspace has for the project, for a project that never gets them (DebugCodalusTests, run 43447015536).
+        Assert.Contains("(Shop: 0 references; 1 of the loaded projects have the file.)", error, StringComparison.Ordinal);
     }
 
     [Fact]
