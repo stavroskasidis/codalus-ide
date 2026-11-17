@@ -1,7 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <Compile Include="..\Shared\MockNuGetFeed.cs" Link="Shared\MockNuGetFeed.cs" />
-    <Compile Include="..\Shared\TestPorts.cs" Link="Shared\TestPorts.cs" />
     <!-- External agents' Connect (ADR 0083): stand-in node and npx, and a credential store that says it persists. -->
     <Compile Include="..\Shared\StandInNode.cs" Link="Shared\StandInNode.cs" />
     <Compile Include="..\Shared\StandInAcpAgentLog.cs" Link="Shared\StandInAcpAgentLog.cs" />

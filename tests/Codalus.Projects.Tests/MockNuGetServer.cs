@@ -33,12 +33,8 @@ internal sealed class MockNuGetServer : IDisposable
 
     public int Requests { get; private set; }
 
-    private static int FreePort()
-    {
-        using var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        return ((IPEndPoint)probe.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     private async Task ServeAsync()
     {

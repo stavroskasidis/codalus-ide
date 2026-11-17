@@ -179,10 +179,6 @@ public sealed class HttpFileTests : IDisposable
         Assert.Null(await http.SendAsync(file, "# nothing here", 1, TestContext.Current.CancellationToken));
     }
 
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 }
