@@ -174,6 +174,45 @@ public sealed class RuntimeAsyncDebuggingTests(AsyncDebuggeeFixture fixture) : I
         await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
     }
 
+    [Fact]
+    public async Task Step_out_of_a_resumed_method_whose_caller_has_its_task_only_as_the_calls_return_value_stops_in_the_caller()
+    {
+        // Linux CI, runs 43828283396 and 43865623534: the step over DoubleAsync's await ended where it resumed, on another
+        // thread, while the caller's thread was at its own step's end, right after the call: the task only in the
+        // call's return register, no awaiter of it anywhere. The Step Out found no awaiting call and took the Just My
+        // Code way; the caller then found the task complete and went on on its own thread, and the program ran to its
+        // end. Made certain here: the caller is held right after the call (a Step Out of the method before its await,
+        // then its thread frozen), and once let go it waits for the method's task before awaiting it. State machines
+        // only: runtime async has no task to find the caller by (ADR 0100).
+        var elsewhere = fixture.Source("Elsewhere.cs");
+        var (adapter, events) = await StartAsync(AsyncDebuggeeFixture.StateMachines, "handed", elsewhere,
+            [DebuggeeFixture.Line(elsewhere, "handed-start"), DebuggeeFixture.Line(elsewhere, "handed-resumed")]);
+        await using var session = adapter;
+        var stop = await events.StoppedAsync();
+        var caller = stop.ThreadId!.Value;
+        await adapter.StepOutAsync(caller, Ct);
+        stop = await events.StoppedAsync(30);
+        var top = await TopAsync(adapter, stop);
+        Assert.True(stop.ThreadId == caller && top.Line == DebuggeeFixture.Line(elsewhere, "handed-call"), $"Step Out stopped in {top.Name} on line {top.Line}, thread {stop.ThreadId}.");
+
+        await adapter.FreezeThreadAsync(caller, true, Ct);
+        await adapter.SetExpressionAsync("AsyncDebuggee.ResumeOnGo.Go", "true", top.Id, Ct);
+        await adapter.ContinueAsync(caller, Ct);
+        stop = await events.StoppedAsync(30);
+        Assert.Equal("breakpoint", stop.Reason);
+        Assert.NotEqual(caller, stop.ThreadId);
+
+        await adapter.FreezeThreadAsync(caller, false, Ct);
+        await adapter.StepOutAsync(stop.ThreadId!.Value, Ct);
+        stop = await events.StoppedAsync(30);
+        Assert.Equal("step", stop.Reason);
+        top = await TopAsync(adapter, stop);
+        Assert.True(top.Line == DebuggeeFixture.Line(elsewhere, "handed-return"), $"Step Out stopped in {top.Name} on line {top.Line}.");
+        Assert.Equal("40", await ValueAsync(adapter, top, "handed"));
+        Assert.Equal("40", await ValueAsync(adapter, top, "$ReturnValue"));
+        await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+    }
+
     [Theory]
     [MemberData(nameof(Builds))]
     public async Task Step_into_an_awaited_call_and_step_out_back_to_the_awaiting_caller(string build)

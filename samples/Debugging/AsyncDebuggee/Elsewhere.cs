@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace AsyncDebuggee;
@@ -95,6 +96,67 @@ public readonly struct HoldCaller
             s_released.Wait(TimeSpan.FromSeconds(10));
             Thread.Sleep(500);
         }
+
+        public void GetResult()
+        {
+        }
+    }
+}
+
+/// <summary>
+/// A caller that has the task of the method it awaits only as the call's return value (Linux CI, runs 43828283396 and
+/// 43865623534): a step's completion held the caller's thread right after the call, before it had an awaiter of the
+/// task, while the method resumed elsewhere. The test holds it there (a Step Out of the method before its await, then
+/// the thread frozen) and lets the method resume (<see cref="ResumeOnGo.Go"/>). Back, the caller waits for the task
+/// to complete before it awaits it, so the method's completion resumes nothing and the caller goes on on its own thread.
+/// </summary>
+public static class Handed
+{
+    public static async Task<int> HandAsync(int value)
+    {
+        var handed = await HandedAsync(value).OnceCompleted(); // [handed-call]
+        return handed + 1; // [handed-return]
+    }
+
+    private static async Task<int> HandedAsync(int value)
+    {
+        var start = value + 1; // [handed-start]
+        await new ResumeOnGo();
+        var resumed = start * 10; // [handed-resumed]
+        return resumed;
+    }
+
+    [DebuggerNonUserCode]
+    private static Task<int> OnceCompleted(this Task<int> task)
+    {
+        ((IAsyncResult)task).AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(10));
+        return task;
+    }
+}
+
+/// <summary>Never complete when awaited: the continuation runs on a new thread once the debugger sets <see cref="Go"/>.</summary>
+[DebuggerNonUserCode]
+public readonly struct ResumeOnGo
+{
+    public static volatile bool Go;
+
+    public Awaiter GetAwaiter() => default;
+
+    [DebuggerNonUserCode]
+    public readonly struct Awaiter : INotifyCompletion
+    {
+        public bool IsCompleted => false;
+
+        public void OnCompleted(Action continuation) =>
+            new Thread(() =>
+            {
+                while (!Go)
+                {
+                    Thread.Sleep(10);
+                }
+
+                continuation();
+            }) { IsBackground = true }.Start();
 
         public void GetResult()
         {
