@@ -64,6 +64,13 @@ internal sealed partial class SmokeTest
     /// <summary>The commands that have run from an entry point (the next run of each is warm).</summary>
     private readonly HashSet<string> _sweepRan = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// How long each 20 ms wait after a command took until the UI thread ran again, for the report: a sweep that is slow
+    /// with nothing stalling the UI thread has late timers (macOS's App Nap made each about 100 ms, runs 43617802812 and
+    /// 43914513384; <see cref="MacActivity"/>).
+    /// </summary>
+    private readonly List<double> _sweepWaits = [];
+
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
     private static readonly Dictionary<string, string> s_sweepSkips = new(StringComparer.Ordinal)
     {
@@ -1028,7 +1035,9 @@ internal sealed partial class SmokeTest
             for (var i = 0; i < 5; i++)
             {
                 CloseSweepOverlays(saw);
+                var waited = Stopwatch.GetTimestamp();
                 await Task.Delay(20).ConfigureAwait(true);
+                _sweepWaits.Add(Stopwatch.GetElapsedTime(waited).TotalMilliseconds);
             }
         }
         catch (Exception ex)
@@ -1709,6 +1718,20 @@ internal sealed partial class SmokeTest
         json.WriteString("os", $"{System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.OSArchitecture})");
         json.WriteNumber("seconds", Math.Round(elapsed.TotalSeconds, 1));
         json.WriteNumber("commands", _sweepRows.Select(r => r.Command).Distinct().Count());
+        if (_sweepWaits.Count > 0)
+        {
+            var waits = _sweepWaits.Order().ToList();
+            json.WriteStartObject("wait20Ms");
+            json.WriteNumber("count", waits.Count);
+            json.WriteNumber("p50", Math.Round(waits[waits.Count / 2], 1));
+            json.WriteNumber("p90", Math.Round(waits[waits.Count * 9 / 10], 1));
+            json.WriteNumber("max", Math.Round(waits[^1], 1));
+            json.WriteEndObject();
+            var summary = $"a 20 ms wait took {waits[waits.Count / 2]:0} ms at the median, {waits[waits.Count * 9 / 10]:0} at the 90th percentile";
+            SweepProgress($"({summary})");
+            Console.Out.WriteLine($"  [sweep] {summary}");
+        }
+
         json.WriteStartObject("totals");
         foreach (var group in _sweepRows.GroupBy(r => r.Entry).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
