@@ -90,6 +90,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// <summary>What the method a step just returned from returned (M58): shown first in Locals, and <c>$ReturnValue</c>.</summary>
     private (int ThreadId, string Method, IClrValue Value)? _returnValue;
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _ending;
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
 
@@ -903,28 +904,34 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         _ = dap.SendEventAsync(DapEvents.Stopped, new StoppedEvent(reason, description, thread.Id, AllThreadsStopped: true, text, hitBreakpoints is { Length: > 0 } ? hitBreakpoints : null), DapJsonContext.Default.StoppedEvent);
     }
 
+    /// <summary>
+    /// Ends the session: <see cref="Ended"/> completes once <c>exited</c> and <c>terminated</c> are written, since the
+    /// adapter's process ends after it (<see cref="DapServer.SendEndAsync"/>).
+    /// </summary>
     private void End(int? exitCode)
     {
-        if (_ended.TrySetResult())
+        if (Interlocked.Exchange(ref _ending, 1) != 0)
         {
-            if (exitCode is { } code)
-            {
-                _ = dap.SendEventAsync(DapEvents.Exited, new ExitedEvent(code), DapJsonContext.Default.ExitedEvent);
-            }
-
-            _ = dap.SendEventAsync(DapEvents.Terminated);
-            lock (_gate)
-            {
-                foreach (var (_, info) in _modules)
-                {
-                    info.Dispose();
-                }
-
-                _modules.Clear();
-                _objectIds.Clear();
-            }
+            return;
         }
+
+        var written = dap.SendEndAsync(exitCode);
+        lock (_gate)
+        {
+            foreach (var (_, info) in _modules)
+            {
+                info.Dispose();
+            }
+
+            _modules.Clear();
+            _objectIds.Clear();
+        }
+
+        _ = written.ContinueWith(_ => _ended.TrySetResult(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
+
+    /// <summary>Whether the session has ended (<see cref="End"/> ran), though its last events may still be on their way.</summary>
+    private bool Ending => Volatile.Read(ref _ending) != 0;
 
     // ------------------------------------------------------------------ modules
 
@@ -1118,7 +1125,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         lock (_gate)
         {
             var index = _modules.FindIndex(m => ReferenceEquals(m.Module, module));
-            if (index < 0 || _ended.Task.IsCompleted)
+            if (index < 0 || Ending)
             {
                 return;
             }
@@ -1253,7 +1260,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// </summary>
     private void WhileStopped(Action change)
     {
-        var pause = _process is { } process && _configured.Task.IsCompleted && !_userStopped && !_ended.Task.IsCompleted;
+        var pause = _process is { } process && _configured.Task.IsCompleted && !_userStopped && !Ending;
         if (pause)
         {
             try
