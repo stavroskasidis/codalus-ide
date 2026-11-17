@@ -55,7 +55,7 @@ Setting **NuGet → Offline** limits the package manager to local sources (folde
 - add, remove, rename, enable and disable sources, and change their order
 - map package patterns to a source (**package source mapping**: `Contoso.*` restores only from that source; `*` matches everything)
 
-With package source mapping, the package manager's search and the details' versions leave out copies from sources an ID isn't mapped to, since restore would refuse them: with `Contoso.*` mapped to nuget.org, a local feed's `Contoso.Verified` build isn't offered.
+With package source mapping, the package manager's search, the details' versions and the latest versions that **Installed** and **Updates** show leave out copies from sources an ID isn't mapped to, since restore would refuse them (and those sources aren't asked about it): with `Contoso.*` mapped to nuget.org, a local feed's `Contoso.Verified` build isn't offered.
 
 Saving writes each change to the file that defines the source. New sources and mappings go into the solution folder's `nuget.config`, which is created when there is none, so your user-wide settings and other solutions don't change. Machine-wide sources are read-only.
 

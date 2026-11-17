@@ -33,6 +33,9 @@ internal sealed class MockNuGetServer : IDisposable
 
     public int Requests { get; private set; }
 
+    /// <summary>Every path asked for, lowercased, in order (tests: which packages a source was asked about).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> Paths { get; } = new();
+
     /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
     private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
@@ -52,6 +55,7 @@ internal sealed class MockNuGetServer : IDisposable
 
             Requests++;
             var path = context.Request.Url!.AbsolutePath.ToLowerInvariant();
+            Paths.Enqueue(path);
             var (status, body, type) = path switch
             {
                 _ when path == _index => (200, Index(), "application/json"),
