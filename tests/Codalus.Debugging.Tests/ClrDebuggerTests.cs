@@ -102,6 +102,10 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         Assert.Equal("0", locals.Single(v => v.Name == "i").Value);
         Assert.Equal("5", (await adapter.EvaluateAsync("numbers.Count", top.Id, "watch", Ct)).Result);
         Assert.Equal("3", (await adapter.EvaluateAsync("numbers[2] + total", top.Id, "watch", Ct)).Result);
+
+        // A method of a number in the frame: its func-eval threw "Enum value was out of legal range" for every one.
+        Assert.Equal("\"0\"", (await adapter.EvaluateAsync("total.ToString(System.Globalization.CultureInfo.InvariantCulture)", top.Id, "watch", Ct)).Result);
+        Assert.Equal("-1", (await adapter.EvaluateAsync("total.CompareTo(1)", top.Id, "watch", Ct)).Result);
         await adapter.NextAsync(loop.ThreadId.Value, Ct);
         Assert.Equal("step", (await events.StoppedAsync()).Reason);
 
