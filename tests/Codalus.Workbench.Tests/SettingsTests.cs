@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Codalus.Platform;
 using Codalus.Workbench.Commands;
 using Codalus.Workbench.Settings;
 
@@ -50,6 +51,78 @@ public sealed class SettingsServiceTests : IDisposable
             await reloading;
             Assert.Equal(value, settings.GetString("workbench.colorTheme"));
         }
+    }
+
+    /// <summary>
+    /// On Windows a settings file another program keeps open for reading (an antivirus, an indexer) refuses the write
+    /// through all its retries; most settings are saved without waiting (<c>_ = settings.SetAsync(…)</c>, the Code
+    /// Search window's scope among them), so the failed task was the only trace and the change was lost. The change now
+    /// stays in effect, the failure is reported, and the change is written once the file can be.
+    /// </summary>
+    [Fact]
+    public async Task A_change_its_locked_file_refuses_is_reported_kept_and_written_later()
+    {
+        File.WriteAllText(UserFile, """{ "editor.fontSize": 14 }""");
+        using var settings = new SettingsService(UserFile);
+        settings.Register(Schema());
+        settings.RetryDelay = TimeSpan.FromMilliseconds(200);
+        var failures = new List<SettingsWriteFailedEventArgs>();
+        var written = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        settings.WriteFailed += (_, e) => failures.Add(e);
+        settings.PendingWritten += (_, file) => written.TrySetResult(file);
+
+        // Readers may share it on Windows; on Linux and macOS only an exclusive lock keeps .NET's writer out.
+        var holder = new FileStream(UserFile, FileMode.Open, FileAccess.Read, OperatingSystem.IsWindows() ? FileShare.Read : FileShare.None);
+        try
+        {
+            await settings.SetAsync("editor.fontSize", JsonSerializer.SerializeToElement(20), SettingScope.User, TestContext.Current.CancellationToken);
+
+            var failure = Assert.Single(failures);
+            Assert.Equal(UserFile, failure.File);
+            Assert.Equal([UserFile], settings.PendingFiles);
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal(20, settings.GetInt32("editor.fontSize"));
+            }
+        }
+        finally
+        {
+            holder.Dispose();
+        }
+
+        Assert.Equal(UserFile, await written.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
+        Assert.Empty(settings.PendingFiles);
+        Assert.Contains("\"editor.fontSize\": 20", File.ReadAllText(UserFile), StringComparison.Ordinal);
+        Assert.Equal(20, settings.GetInt32("editor.fontSize"));
+    }
+
+    /// <summary>The workbench warns once while a settings file's changes wait, and takes the warning back once written.</summary>
+    [Fact]
+    public async Task The_workbench_warns_while_a_settings_change_waits_for_its_file()
+    {
+        using var workbench = new WorkbenchServices(AppPaths.Resolve(PlatformInfo.Current, _ => null, Path.Combine(_dir, ".user")), PlatformInfo.Current, watchFiles: false);
+        var file = workbench.Settings.UserFile;
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "{}");
+        workbench.Settings.Register(Schema());
+        workbench.Settings.RetryDelay = TimeSpan.FromMilliseconds(200);
+        var written = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        workbench.Settings.PendingWritten += (_, _) => written.TrySetResult();
+
+        using (new FileStream(file, FileMode.Open, FileAccess.Read, OperatingSystem.IsWindows() ? FileShare.Read : FileShare.None))
+        {
+            await workbench.Settings.SetAsync("editor.fontSize", JsonSerializer.SerializeToElement(18), SettingScope.User, TestContext.Current.CancellationToken);
+            await workbench.Settings.SetAsync("workbench.colorTheme", JsonSerializer.SerializeToElement("light"), SettingScope.User, TestContext.Current.CancellationToken);
+            var warning = Assert.Single(workbench.Notifications.Items);
+            Assert.Equal(Notifications.NotificationSeverity.Warning, warning.Severity);
+            Assert.Contains(file, warning.Message, StringComparison.Ordinal);
+        }
+
+        await written.Task.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        Assert.Empty(workbench.Notifications.Items);
+        var text = File.ReadAllText(file);
+        Assert.Contains("\"editor.fontSize\": 18", text, StringComparison.Ordinal);
+        Assert.Contains("\"workbench.colorTheme\": \"light\"", text, StringComparison.Ordinal);
     }
 
     [Fact]
