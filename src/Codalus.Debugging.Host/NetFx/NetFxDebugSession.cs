@@ -777,6 +777,13 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             target.DescribeThreads = ThreadsOfTimedOutEval;
             target.RunsClassConstructor = RunsClassConstructor;
             target.EvalTimedOut = log.WriteLine;
+            if (Environment.GetEnvironmentVariable("CODALUS_CLR_DEBUGGER_LOG") is { Length: > 0 } logs)
+            {
+                // The adapter's log folder (CI sets it for every shard): a timed-out func-eval's dump goes with the log.
+                var id = _process.Id;
+                target.DumpWhileStopped = () => ProgramDump.Write(id, logs);
+            }
+
             if (Trace is { } trace)
             {
                 target.Continuing = trace.WriteLine; // the log file only: the log also goes to the IDE's Debug log
