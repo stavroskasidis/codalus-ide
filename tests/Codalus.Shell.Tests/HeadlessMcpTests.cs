@@ -45,17 +45,23 @@ public sealed class HeadlessMcpTests
         Assert.Contains("desktop_app_input", tools);
         Assert.Contains("run_command", tools);
 
-        // A read: the folder's solution, once it has loaded. Its projects are listed as each one loads, so the wait is for
-        // both: waiting for Hello alone, Greetings wasn't there yet (Linux CI, run 44031552657).
+        // A read: the folder's solution, once it has loaded. The projects come as they're evaluated, so the wait was over
+        // at the first and the other wasn't listed yet (Linux CI, run 44031552657: Hello without Greetings); while they
+        // come the tool says so.
         var solution = "";
+        var reads = new List<string>();
         var watch = Stopwatch.StartNew();
         while (watch.Elapsed < TimeSpan.FromMinutes(3)
                && !(solution.Contains("- Hello", StringComparison.Ordinal) && solution.Contains("- Greetings", StringComparison.Ordinal)))
         {
             solution = (await ide.CallAsync("get_solution", "{}")).Text;
-            await Task.Delay(500, TestContext.Current.CancellationToken);
+            reads.Add(solution);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
         }
 
+        Assert.DoesNotContain("Loading:", solution, StringComparison.Ordinal);
+        Assert.All(reads.Where(r => r.Contains("Solution: ", StringComparison.Ordinal) && !(r.Contains("- Hello", StringComparison.Ordinal) && r.Contains("- Greetings", StringComparison.Ordinal))),
+            r => Assert.Contains("Loading:", r, StringComparison.Ordinal));
         Assert.Contains("BuildAndRun.slnx", solution, StringComparison.Ordinal);
         Assert.Contains("Trusted: yes", solution, StringComparison.Ordinal);
         Assert.Contains("- Greetings", solution, StringComparison.Ordinal);
