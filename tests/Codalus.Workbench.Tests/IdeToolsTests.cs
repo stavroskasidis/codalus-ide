@@ -322,19 +322,15 @@ public sealed class IdeToolsTests : IDisposable
     }
 
     /// <summary>
-    /// A loopback TCP socket bound to a free port and not listening: connections to it are refused. On Windows it holds the
-    /// port on every address: another process's socket could otherwise bind the same port on the wildcard address, and while
-    /// this one isn't listening yet Windows hands it the connections, so the browser got another server's answer
-    /// (net::ERR_INVALID_HTTP_RESPONSE, Windows CI, develop's run 43424616628; inferred, not proven: see the ledger).
+    /// A loopback TCP socket bound to a free port and not listening: connections to it are refused. It held the port on
+    /// Windows with exclusive use for a while, against another socket binding the wildcard address at it (Windows CI,
+    /// develop's run 43424616628, net::ERR_INVALID_HTTP_RESPONSE); that didn't stop such a bind (checked on Windows 11: a
+    /// wildcard bind at the port still succeeds and takes its connections), and no port-0 bind, on any address, is handed
+    /// a held port, so it was dropped: the ledger has what is known.
     /// </summary>
     private static System.Net.Sockets.Socket Bound()
     {
         var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-        if (OperatingSystem.IsWindows())
-        {
-            socket.ExclusiveAddressUse = true;
-        }
-
         socket.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
         return socket;
     }
