@@ -471,13 +471,39 @@ jobs:
         # The smoke test prints the C# host's stacks when a step fails: a host that stopped answering says where it is.
         if: runner.os != 'Windows'
         run: dotnet tool install -g dotnet-stack || true
+      # The smoke's live output, as the test jobs' (.github/actions/live-output): its console and memory samples off the
+      # runner about once a minute. A macOS smoke runner went silent 36 to 38 minutes into this step and left neither log
+      # nor artifact (run 43744919726, docs/ci-flakes.md); the next one leaves the step it was in.
+      - uses: ./.github/actions/live-output
+        with:
+          name: live-${{ matrix.os }}-smoke-${{ github.run_attempt }}
+          path: artifacts/smoke-live
       - name: End-to-end smoke test of the published app
         shell: bash
         # The command sweep (shell.commandSweep) takes up to 25 of these.
         timeout-minutes: 40
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
-        run: bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test
+        run: |
+          live=artifacts/smoke-live/smoke
+          mkdir -p "$live"
+          # The free memory and the largest processes every 30 s (Linux and macOS), for the live output.
+          (
+            while sleep 30; do
+              case "$RUNNER_OS" in
+                macOS) memory="free=$(sysctl -n kern.memorystatus_level)%" ;;
+                Linux) memory="$(awk '/^MemAvailable:/ { print "available=" int($2 / 1024) "M" }' /proc/meminfo)" ;;
+                *) continue ;;
+              esac
+              echo "$(date +%H:%M:%S) $memory largest: $(ps -A -o rss=,comm= | sort -rn | head -3 | awk '{ printf "%dM %s  ", $1 / 1024, $2 }')" >> "$live/memory.txt"
+            done
+          ) &
+          sampler=$!
+          set -o pipefail
+          status=0
+          bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test 2>&1 | tee "$live/console.txt" || status=$?
+          kill "$sampler" 2> /dev/null || true
+          exit "$status"
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded
         if: always() && steps.setup.outputs.downloads-hit != 'true'
