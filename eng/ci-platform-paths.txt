@@ -22,7 +22,6 @@ src/Codalus.Shell/Infrastructure/Rendering.cs
 src/Codalus.Shell/Infrastructure/SingleInstance.cs
 src/Codalus.Shell/Infrastructure/Installation.cs
 src/Codalus.Shell/Infrastructure/MacUpdateLocator.cs
-src/Codalus.Shell/Infrastructure/MacActivity.cs
 src/Codalus.Shell/Infrastructure/Updates.cs
 # The build, its SDK and packages, the scripts and the workflows (but the release tool, eng/ci-isolated-paths.txt)
 global.json
