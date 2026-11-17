@@ -946,6 +946,9 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     /// </summary>
     internal string LastRefreshCause { get; private set; } = "none";
 
+    /// <summary>How many refreshes started on the UI thread (tests: what a change started, apart from the status reads of other threads).</summary>
+    internal int RefreshesStarted { get; private set; }
+
     /// <summary>Whether a refresh is waiting or running (tests).</summary>
     internal bool IsRefreshing => _computing || Volatile.Read(ref _refreshPosted) == 1 || _filterRefresh?.IsPending == true;
 
@@ -996,6 +999,7 @@ public sealed partial class GitChangesViewModel : ObservableObject, ITreeRowsOwn
     public void Refresh([System.Runtime.CompilerServices.CallerMemberName] string caller = "", [System.Runtime.CompilerServices.CallerLineNumber] int line = 0)
     {
         LastRefreshCause = $"{caller} (line {line}) at {DateTime.UtcNow:HH:mm:ss.fff}";
+        RefreshesStarted++;
         _generation++;
         _ = RefreshInBackgroundAsync();
     }

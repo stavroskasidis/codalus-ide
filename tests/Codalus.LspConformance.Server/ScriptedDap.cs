@@ -416,7 +416,9 @@ internal static class ScriptedDap
 
         start.ArgumentList.Add("--program");
         using var program = System.Diagnostics.Process.Start(start)!;
-        File.AppendAllText(programs, program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture) + "\n");
+
+        // With its start time: once it has gone, another process can have its id (DebugStartAgainTests.ProgramLine).
+        File.AppendAllText(programs, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {program.StartTime.ToUniversalTime().Ticks}\n"));
         return program.Id;
     }
 

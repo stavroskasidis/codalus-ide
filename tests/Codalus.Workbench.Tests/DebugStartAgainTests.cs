@@ -71,7 +71,7 @@ public sealed class DebugStartAgainTests : IDisposable
             var start = new System.Diagnostics.ProcessStartInfo("dotnet", [ScriptedAdapter, "--program"]) { UseShellExecute = false, RedirectStandardInput = true };
             using var program = System.Diagnostics.Process.Start(start)!;
             var id = program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            File.AppendAllText(test._starts + ".programs", id + "\n");
+            File.AppendAllText(test._starts + ".programs", ProgramLine(program));
             var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + id);
             var folder = launch.Environment[HeldLaunch.WaitVariable]!;
             lock (test._scratch)
@@ -177,9 +177,12 @@ public sealed class DebugStartAgainTests : IDisposable
 
     /// <summary>
     /// No program a start started is still running (each gets 5 s to exit). The message says what it found: each process's
-    /// name and start time against when the last program was started (the programs file's last write), which tells a
-    /// program left running from another process that took its id after it exited. Windows CI, run 43706913240: one was
-    /// found running after a session that had reported its exit code, under 100% CPU, and the assertion said no more.
+    /// name and start time against when the last program was started (the programs file's last write). Windows CI, run
+    /// 43706913240: one was found running after a session that had reported its exit code, under 100% CPU with Chromium
+    /// and test hosts starting, and the assertion said no more. The scripted adapter had killed that program before it
+    /// reported the exit, and Windows can give a gone process's id to the next process at once, so the check can find
+    /// another process by the program's id. A program's line has its start time too (<see cref="ProgramLine"/>), and a
+    /// process that started at another time isn't the program.
     /// </summary>
     private void AssertNoProgramLeft()
     {
@@ -212,25 +215,48 @@ public sealed class DebugStartAgainTests : IDisposable
     }
 
     /// <summary>The ids of the programs the timed-out starts started.</summary>
-    private int[] ProgramIds() =>
+    private int[] ProgramIds() => [.. ProgramLines().Select(p => p.Id)];
+
+    /// <summary>
+    /// A program's line in the programs file: its id and its start time (UTC ticks), as the scripted adapter writes it
+    /// (<c>ScriptedDap.StartProgram</c>).
+    /// </summary>
+    internal static string ProgramLine(System.Diagnostics.Process program) =>
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {program.StartTime.ToUniversalTime().Ticks}\n");
+
+    private IEnumerable<(int Id, DateTime? Started)> ProgramLines() =>
         File.Exists(_starts + ".programs")
-            ? File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0).Select(l => int.Parse(l, System.Globalization.CultureInfo.InvariantCulture)).ToArray()
+            ? File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0).Select(l => l.Split(' ')).Select(p => (
+                int.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture),
+                p.Length > 1 ? new DateTime(long.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc) : (DateTime?)null))
             : [];
+
+    /// <summary>
+    /// Whether <paramref name="process"/>, found by a program's id, is another process that took the id once the
+    /// program had gone: it started at another time. A second's leeway: each process reads a start time from the OS
+    /// its own way (on Linux from the boot time it computes).
+    /// </summary>
+    internal static bool TookItsId(System.Diagnostics.Process process, DateTime? started)
+    {
+        try
+        {
+            return started is { } time && (process.StartTime.ToUniversalTime() - time).Duration() > TimeSpan.FromSeconds(1);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return false;
+        }
+    }
 
     private List<System.Diagnostics.Process> Programs()
     {
         var running = new List<System.Diagnostics.Process>();
-        if (!File.Exists(_starts + ".programs"))
-        {
-            return running;
-        }
-
-        foreach (var line in File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0))
+        foreach (var (id, started) in ProgramLines())
         {
             try
             {
-                var process = System.Diagnostics.Process.GetProcessById(int.Parse(line, System.Globalization.CultureInfo.InvariantCulture));
-                if (process.WaitForExit(5000))
+                var process = System.Diagnostics.Process.GetProcessById(id);
+                if (TookItsId(process, started) || process.WaitForExit(5000))
                 {
                     process.Dispose();
                 }
@@ -302,6 +328,31 @@ public sealed class DebugStartAgainTests : IDisposable
         Assert.Equal("1", File.ReadAllText(_starts));
         Assert.Equal(DebugState.Idle, debug.State);
         AssertNoProgramLeft();
+    }
+
+    [Fact]
+    public void The_check_for_programs_left_running_tells_a_program_from_another_process_with_its_id()
+    {
+        // Windows CI, run 43706913240: the check found a process by the id of a program the scripted adapter had killed,
+        // which Windows can give to the next process at once. Here a running process stands for both: listed with
+        // another start time it is a process that took a gone program's id, and with its own it is a program left.
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", [ScriptedAdapter, "--program"]) { UseShellExecute = false, RedirectStandardInput = true })!;
+        try
+        {
+            File.WriteAllText(_starts + ".programs", string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{process.Id} {process.StartTime.ToUniversalTime().AddMinutes(-1).Ticks}\n"));
+            Assert.Empty(Programs());
+
+            File.WriteAllText(_starts + ".programs", ProgramLine(process));
+            var left = Assert.Single(Programs());
+            Assert.Equal(process.Id, left.Id);
+            left.Dispose();
+        }
+        finally
+        {
+            process.Kill();
+            process.WaitForExit();
+            File.Delete(_starts + ".programs");
+        }
     }
 
     [Fact]
@@ -800,7 +851,7 @@ public sealed class DebugStartAgainTests : IDisposable
         // reports a second after the timeout, and threads fails until a moment after that (ScriptedDap.AttachLateAsync).
         using var program = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("dotnet", [ScriptedAdapter, "--program"]) { UseShellExecute = false, RedirectStandardInput = true })!;
         var id = program.Id.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        File.AppendAllText(_starts + ".programs", id + "\n");
+        File.AppendAllText(_starts + ".programs", ProgramLine(program));
         var script = Path.Combine(Path.GetTempPath(), "codalus-scripted-attach-" + id);
         _scratch.Add(script);
         File.WriteAllText(script, "slow 1000");
