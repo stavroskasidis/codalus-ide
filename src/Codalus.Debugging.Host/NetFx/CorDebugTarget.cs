@@ -1325,6 +1325,12 @@ internal sealed class CorDebugTarget : IClrProcess
     /// </summary>
     public Func<string>? DescribeThreads { get; set; }
 
+    /// <summary>
+    /// Writes a dump of the program for a func-eval that timed out, while the program is stopped to read its threads, and
+    /// says where (<see cref="ProgramDump"/>); null: none (no log folder).
+    /// </summary>
+    public Func<string>? DumpWhileStopped { get; set; }
+
     /// <summary>Told every func-eval that timed out, from any request: what it saw, how the abort went, and the threads.</summary>
     public Action<string>? EvalTimedOut { get; set; }
 
@@ -1347,7 +1353,10 @@ internal sealed class CorDebugTarget : IClrProcess
 
         try
         {
-            return Environment.NewLine + "The threads before the abort, innermost frame first:" + Environment.NewLine + describe();
+            var threads = Environment.NewLine + "The threads before the abort, innermost frame first:" + Environment.NewLine + describe();
+
+            // While the program is stopped, as the threads were read: its native stacks, which the list doesn't have.
+            return DumpWhileStopped is { } dump ? threads + Environment.NewLine + dump().TrimStart() : threads;
         }
         catch (Exception ex) when (ex is InvalidOperationException or COMException or ArgumentException)
         {
