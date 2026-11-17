@@ -115,7 +115,7 @@ public sealed class ComposeShellTests
     [AvaloniaFact]
     public async Task Debug_compose_debugs_every_dotnet_service_restarts_one_alone_and_takes_an_edit()
     {
-        var engine = await ContainerShellTests.RequireEngineAsync();
+        var engine = await ContainerShellTests.RequireComposeEngineAsync();
         var (f, folder) = await OpenAsync();
         await using var fixture = f;
         var file = Path.Combine(folder, "compose.yaml");
@@ -308,7 +308,7 @@ public sealed class ComposeShellTests
         // The product refuses elsewhere (ComposeProfileServiceAsync: Docker Desktop's file sharing on macOS and Windows
         // doesn't carry the diagnostic port's Unix socket), so an engine on those isn't enough.
         Assert.SkipUnless(OperatingSystem.IsLinux(), "Profiling a compose service needs Linux.");
-        var engine = await ContainerShellTests.RequireEngineAsync();
+        var engine = await ContainerShellTests.RequireComposeEngineAsync();
         var (f, folder) = await OpenAsync();
         await using var fixture = f;
         var file = Path.Combine(folder, "compose.yaml");
