@@ -576,6 +576,17 @@ public sealed class WinFormsDesignerShellTests
             Assert.Equal("System.Windows.Forms.Form", hosts[0].Model!.BaseType);
             Assert.Contains("reading OrderForm.cs again", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
 
+            // The C# host's statuses as a pass over no project that ends just after the projects arrived sends them: loading
+            // with the project, ready with none (the stale pass), then ready with the project. The last is the change: the
+            // form is read again (the read after the gate never came, a local Linux run of 2026-11-15).
+            static int ReadsAgain(ShellFixture f) => f.Shell.WinFormsDesignerLog.GetText().Split("reading OrderForm.cs again").Length - 1;
+            var readsAgain = ReadsAgain(f);
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 0, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
+            await ShellFixture.PumpUntil(() => ReadsAgain(f) == readsAgain + 1 && hosts[0].Loads == 4, seconds: 60, () => Describe("a read again after a ready with no project, then one with the project"));
+            await designer.WhenIdleAsync();
+
             // The C# host gets the project (before the restore): the form is read again, now in its project. It's still
             // partial when the design-time build's compilation lacks Windows Forms (off Windows its reference pack comes
             // with the restore).
