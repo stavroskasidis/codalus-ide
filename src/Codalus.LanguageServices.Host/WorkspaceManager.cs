@@ -238,12 +238,20 @@ internal sealed class WorkspaceManager : IDisposable
     {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         TimeSpan parsing = default, applying = default, referencing = default;
+
+        // Where a slow load is, said while it runs: the C# host's projects/update once ran for minutes after a 15 s
+        // report and nothing said whether it waited for the lock or for a project (the Data fixture, Windows CI, run
+        // 41685545193, docs/ci-flakes.md). Once after 15 s, then every 30 s.
+        var phase = "waiting for the workspace's lock";
+        using var slow = new Timer(_ => Log?.Invoke(this, $"Loading {projects.Count} project(s) has taken {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0} s so far: {Volatile.Read(ref phase)}."),
+            null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30));
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
             foreach (var data in projects)
             {
                 var path = Path.GetFullPath(data.Path);
+                Volatile.Write(ref phase, $"reading {data.Name}");
                 var step = System.Diagnostics.Stopwatch.GetTimestamp();
                 var parsed = _loader.Parse(data with { Path = path });
                 parsing += System.Diagnostics.Stopwatch.GetElapsedTime(step);
@@ -258,6 +266,7 @@ internal sealed class WorkspaceManager : IDisposable
                     _projects[path] = entry;
                 }
 
+                Volatile.Write(ref phase, $"adding {data.Name}");
                 step = System.Diagnostics.Stopwatch.GetTimestamp();
                 solution = Apply(solution, entry, parsed);
                 entry.Parsed = parsed;
@@ -265,9 +274,11 @@ internal sealed class WorkspaceManager : IDisposable
                 applying += System.Diagnostics.Stopwatch.GetElapsedTime(step);
             }
 
+            Volatile.Write(ref phase, "the references between projects");
             var references = System.Diagnostics.Stopwatch.GetTimestamp();
             solution = ApplyReferences(solution);
             referencing = System.Diagnostics.Stopwatch.GetElapsedTime(references);
+            Volatile.Write(ref phase, "the open documents");
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
             _incomplete = Incomplete();
@@ -280,6 +291,7 @@ internal sealed class WorkspaceManager : IDisposable
                               + $"adding {applying.TotalMilliseconds:0}, references {referencing.TotalMilliseconds:0}).");
         }
 
+        Volatile.Write(ref phase, "telling the features the projects changed");
         ProjectsChanged?.Invoke(this, EventArgs.Empty);
     }
 
