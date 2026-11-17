@@ -25,13 +25,20 @@ public sealed class DebugCodalusTests
     private static string StillLoading(ShellFixture f, Exception ex)
     {
         var projects = string.Join("; ", f.Shell.Solutions.Projects.Keys.Select(path => Path.GetFileName(path) + ": " + (f.Shell.Solutions.CompilerInputs.TryGetValue(path, out var i)
-            ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : string.Empty)}, {i.Arguments.Count(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))} references, {i.TargetFramework}"
+            ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : string.Empty)}, {References(i.Arguments)} references, {i.TargetFramework}"
             : "no compiler inputs")));
         var channels = string.Join('\n', f.Shell.Workbench.Output.Channels.Select(c => c.GetText() is var text && text.Length > 3000
             ? $"Output '{c.Name}' (the last 3000 characters):\n{text[^3000..]}"
             : $"Output '{c.Name}':\n{text}"));
         return $"{ex.Message}\nThe solution's projects: {projects}. The restore {f.Shell.Solutions.RestoreState}.\n{channels}";
     }
+
+    /// <summary>
+    /// The references of a compiler command line: csc's has an option for each, vbc's one option with all of them,
+    /// comma-separated (run 43447015536 counted options: "1 references" for every Visual Basic project).
+    /// </summary>
+    private static int References(IEnumerable<string> arguments) =>
+        arguments.Where(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase)).Sum(a => a["/reference:".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries).Length);
 
     private static async Task<string> OpenAsync(ShellFixture f)
     {

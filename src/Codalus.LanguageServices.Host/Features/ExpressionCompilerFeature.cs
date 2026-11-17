@@ -49,10 +49,15 @@ internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
         // A project is in the workspace before its references are: they come with its design-time build. Compiled in
         // between, the expression's errors were the compiler's for a program with no core library ("BC30002: Type
         // 'System.String' is not defined", four of them), which say nothing of the cause; a moment later it compiles.
+        // What the workspace has for the project comes with it: once, a Visual Basic project's still didn't compile two
+        // minutes after the stop (DebugCodalusTests, Linux CI run 43447015536), and nothing said what it had.
         if (await document.Project.GetCompilationAsync(cancellationToken).ConfigureAwait(false) is not { } compilation
             || compilation.GetSpecialType(SpecialType.System_Object).TypeKind == TypeKind.Error)
         {
-            return Failed("The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment.");
+            var project = document.Project;
+            var missing = project.MetadataReferences.OfType<PortableExecutableReference>().Count(r => r.FilePath is { } file && !File.Exists(file));
+            return Failed("The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment. "
+                + $"({project.Name}: {project.MetadataReferences.Count} references{(missing > 0 ? $", {missing} of them missing" : string.Empty)}; {documents.Count} of the loaded projects have the file.)");
         }
 
         try
