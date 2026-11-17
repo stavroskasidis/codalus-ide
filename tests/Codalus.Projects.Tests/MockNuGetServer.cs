@@ -33,6 +33,9 @@ internal sealed class MockNuGetServer : IDisposable
 
     public int Requests { get; private set; }
 
+    /// <summary>Every path asked for, lowercased, in order (tests: which packages a source was asked about).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> Paths { get; } = new();
+
     private static int FreePort()
     {
         using var probe = new TcpListener(IPAddress.Loopback, 0);
@@ -56,6 +59,7 @@ internal sealed class MockNuGetServer : IDisposable
 
             Requests++;
             var path = context.Request.Url!.AbsolutePath.ToLowerInvariant();
+            Paths.Enqueue(path);
             var (status, body, type) = path switch
             {
                 _ when path == _index => (200, Index(), "application/json"),
