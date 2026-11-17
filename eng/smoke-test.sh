@@ -73,14 +73,6 @@ test_app() {
   local userdata="$results/user-data"
   rm -rf "$userdata"
   local cmd=("$exe" --user-data-dir "$userdata" --smoke-test "$repo/samples")
-  # On the macOS runner a 20 ms timer fired after about 100 ms, the .NET runtime's own on the thread pool as much as
-  # the UI thread's, while the UI thread answered a posted job at once (20 and 32 ms on Linux and Windows, run
-  # 44073370973, docs/ci-flakes.md): the runner starts jobs at a latency QoS tier that lets macOS coalesce timers, and
-  # the command sweep's waits made it three times as slow. The smoke test runs at the latency and throughput tiers of
-  # an app in front of its user (0), as on a Mac someone is using; a CI-only setting.
-  if [[ "$(uname -s)" == Darwin && "${CI:-}" == true ]] && command -v taskpolicy > /dev/null; then
-    cmd=(taskpolicy -l 0 -t 0 "${cmd[@]}")
-  fi
   local status=0
   # A DISPLAY without an X server behind it (WSLg not running) aborts the app: use xvfb-run then, as without one.
   local display_number="${DISPLAY:-}"
