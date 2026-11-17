@@ -309,6 +309,12 @@ jobs:
         run: dotnet restore Codalus.slnx
       - if: matrix.shard != 'projects'
         run: dotnet build Codalus.slnx -c Release --no-restore
+      - name: What the other jobs would fetch from nuget.org (develop's nightly, before the cache is saved)
+        # The smoke's Native AOT publish for this RID and the samples' local tools (eng/warm-nuget-cache.sh): a runner
+        # that couldn't reach nuget.org failed both (runs 40886959558 and 41606373671, docs/ci-flakes.md).
+        if: github.event_name == 'schedule' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
+        shell: bash
+        run: bash eng/warm-nuget-cache.sh
       - name: Save the NuGet cache (develop's nightly, one job per OS)
         # The job with the others shard restores every project, as the rest do. Pull requests only restore what develop saved.
         if: github.event_name == 'schedule' && github.ref == 'refs/heads/develop' && contains(matrix.shards, 'others') && steps.setup.outputs.nuget-cache-hit != 'true'
