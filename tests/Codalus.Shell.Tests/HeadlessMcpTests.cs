@@ -45,10 +45,12 @@ public sealed class HeadlessMcpTests
         Assert.Contains("desktop_app_input", tools);
         Assert.Contains("run_command", tools);
 
-        // A read: the folder's solution, once it has loaded.
+        // A read: the folder's solution, once it has loaded. Its projects are listed as each one loads, so the wait is for
+        // both: waiting for Hello alone, Greetings wasn't there yet (Linux CI, run 44031552657).
         var solution = "";
         var watch = Stopwatch.StartNew();
-        while (watch.Elapsed < TimeSpan.FromMinutes(3) && !solution.Contains("- Hello", StringComparison.Ordinal))
+        while (watch.Elapsed < TimeSpan.FromMinutes(3)
+               && !(solution.Contains("- Hello", StringComparison.Ordinal) && solution.Contains("- Greetings", StringComparison.Ordinal)))
         {
             solution = (await ide.CallAsync("get_solution", "{}")).Text;
             await Task.Delay(500, TestContext.Current.CancellationToken);
