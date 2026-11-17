@@ -34,6 +34,7 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
     private readonly Dictionary<int, Func<int, int, IReadOnlyList<Variable>>> _pages = [];
     private readonly Dictionary<int, ObjectMirror> _exceptions = [];
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _ending;
     private VirtualMachine? _vm;
     private TypeLoadEventRequest? _typeLoad;
     private StepEventRequest? _step;
@@ -329,16 +330,12 @@ internal sealed class MonoDebugSession(DapServer dap, TextWriter log)
         _ = dap.SendEventAsync(DapEvents.Stopped, new StoppedEvent(reason, ThreadId: ThreadId(thread), AllThreadsStopped: true, Text: text, HitBreakpointIds: hitBreakpoints is { Length: > 0 } ? hitBreakpoints : null), DapJsonContext.Default.StoppedEvent);
     }
 
+    /// <summary>Ends the session: <see cref="Ended"/> completes once its last events are written (<see cref="DapServer.SendEndAsync"/>).</summary>
     private void End(int? exitCode)
     {
-        if (_ended.TrySetResult())
+        if (Interlocked.Exchange(ref _ending, 1) == 0)
         {
-            if (exitCode is { } code)
-            {
-                _ = dap.SendEventAsync(DapEvents.Exited, new ExitedEvent(code), DapJsonContext.Default.ExitedEvent);
-            }
-
-            _ = dap.SendEventAsync(DapEvents.Terminated);
+            _ = dap.SendEndAsync(exitCode).ContinueWith(_ => _ended.TrySetResult(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 

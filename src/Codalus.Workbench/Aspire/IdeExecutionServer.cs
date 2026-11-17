@@ -561,9 +561,11 @@ public sealed class IdeExecutionServer : IAsyncDisposable
     /// <summary>
     /// When disposal reached each step of the teardown, from its start, for a test's failure and the log of a teardown
     /// left behind: this named the cancellation as what blocked on Windows CI (run 43184717554; the cause is at
-    /// <see cref="SendToAsync"/>). TODO(issue): in that run the listener's close, after the cancellation's 5 s, also took
-    /// over 5 s, with the two blocked threads still holding the socket; why isn't known, and it hasn't been seen without
-    /// them (HttpListener.Abort makes the same calls as Close but for removing the prefixes, so it is no way around it).
+    /// <see cref="SendToAsync"/>). In that run the listener's close, after the cancellation's 5 s, also took over 5 s: it
+    /// was seen only while the two deadlocked threads held the socket's locks, and with the deadlock gone (no socket
+    /// operation takes a token) it has not been seen again, in CI or in 3,000 local disposals on Windows under load
+    /// (<c>Disposal_never_blocks_while_sessions_end_and_orchestrators_listen</c>, which fails when a disposal, its close
+    /// included, takes over 3 s; docs/ci-flakes.md).
     /// </summary>
     private readonly Stopwatch _teardownClock = new();
 

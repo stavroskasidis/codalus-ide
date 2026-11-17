@@ -455,6 +455,13 @@ public sealed partial class ShellHost
             sb.Append("Startup project: ").AppendLine(Path.GetFileNameWithoutExtension(startup));
         }
 
+        // The projects below are those evaluated so far: while the solution loads, an agent read a part of the list as
+        // all of it (a headless test read one project of two, Linux CI, run 44031552657).
+        if (Solutions.Progress is not { Completed: true } && Solutions.Projects.Count < solution.Projects.Length)
+        {
+            sb.Append("Loading: ").Append(Solutions.Projects.Count).Append(" of ").Append(solution.Projects.Length).AppendLine(" projects evaluated so far");
+        }
+
         foreach (var project in Solutions.Projects.Values.OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
             sb.Append("- ").Append(project.Name).Append(" (").Append(Relative(project.Path, solution.Directory)).Append("): ").Append(string.Join(", ", project.TargetFrameworks));

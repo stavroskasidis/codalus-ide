@@ -148,7 +148,10 @@ public sealed class CodeSearchTests
         await f.Shell.GoToAllAsync();
         search.Scope = CodeSearchScope.CurrentDocument;
         await SearchAsync(f, "Circle", () => search.Rows.Count > 0 && search.Rows.All(r => r.Result?.Path == program && r.Result.Kind == CodeSearchKind.Text));
-        Assert.Equal("currentDocument", f.Shell.Workbench.Settings.GetString(ShellHost.CodeSearchScopeSetting));
+        // The scope is saved in the background (the settings file is written, then read again): the search, in one
+        // document's text, ended before the write did on Linux CI (run 44075755320: still "entireSolution").
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetString(ShellHost.CodeSearchScopeSetting) == "currentDocument",
+            describe: () => $"the setting is '{f.Shell.Workbench.Settings.GetString(ShellHost.CodeSearchScopeSetting)}', the window's scope {search.Scope}");
         search.Scope = CodeSearchScope.EntireSolution;
 
         // : goes to a line of the active document.

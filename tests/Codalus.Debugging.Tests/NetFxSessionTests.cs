@@ -145,13 +145,15 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         private readonly CancellationTokenSource _stop = new();
         private readonly DapServer _server;
 
-        public Harness(FakeProcess process)
+        /// <param name="output">Wraps the adapter's output to the client (a client that reads late).</param>
+        public Harness(FakeProcess process, Func<Stream, Stream>? output = null)
         {
             Process = process;
             Debugger = new FakeDebugger(process);
             var toServer = new Pipe();
             var toClient = new Pipe();
-            _server = new DapServer(toServer.Reader.AsStream(), toClient.Writer.AsStream());
+            var written = toClient.Writer.AsStream();
+            _server = new DapServer(toServer.Reader.AsStream(), output?.Invoke(written) ?? written);
             Session = new NetFxDebugSession(_server, TextWriter.Null, Debugger);
             _server.Handler = Session.HandleAsync;
             _ = _server.RunAsync(_stop.Token);
@@ -719,6 +721,87 @@ public sealed class NetFxSessionTests(NetFxDebuggeeFixture fixture) : IClassFixt
         Assert.DoesNotContain(list, p => p.Id == Environment.ProcessId);
         Assert.All(list, p => Assert.True(p.IsDotnet || !p.IsDesktopClr));
         Assert.Equal(list.OrderByDescending(p => p.IsDotnet).Select(p => p.Id), list.Select(p => p.Id));
+    }
+
+    [Fact]
+    public async Task The_session_ends_once_the_programs_exit_and_its_end_are_written()
+    {
+        // The adapter's process ends 200 ms after its session does. The session ended before its exited and terminated
+        // events were even sent, so when its thread was held up the process ended first: its log had the program's last
+        // output and no exited, and the IDE saw the connection close with no exit code (Linux CI, runs 41547730079 and
+        // 43134505327, the Codalus debugger). Here the client reads late: the session hasn't ended while they can't be
+        // written, and has once they are.
+        var process = new FakeProcess();
+        var gate = new GatedStream();
+        await using var dap = new Harness(process, inner => gate.Over(inner));
+        await dap.RequestAsync("initialize", new InitializeArguments("codalus", "Codalus IDE", "clr"), s_json.InitializeArguments, s_json.Capabilities);
+        await dap.RequestAsync("attach", new NetFxDebugArguments(ProcessId: 4242, Request: "attach"), s_json.NetFxDebugArguments);
+        await dap.RequestAsync("configurationDone", new EmptyArguments(), s_json.EmptyArguments);
+
+        gate.Hold();
+        process.Send(new ClrExited(7));
+        Assert.NotSame(dap.Session.Ended, await Task.WhenAny(dap.Session.Ended, Task.Delay(TimeSpan.FromSeconds(1), Ct)));
+
+        gate.Release();
+        await dap.Session.Ended.WaitAsync(TimeSpan.FromSeconds(30), Ct);
+        Assert.Equal(7, (await dap.NextAsync(DapEvents.Exited)).GetProperty("exitCode").GetInt32());
+        await dap.NextAsync(DapEvents.Terminated);
+    }
+
+    /// <summary>A stream whose writes wait while it is held: a client that doesn't read for a while.</summary>
+    private sealed class GatedStream : Stream
+    {
+        private TaskCompletionSource _open = Opened();
+        private Stream? _inner;
+
+        public GatedStream Over(Stream inner)
+        {
+            _inner = inner;
+            return this;
+        }
+
+        public void Hold() => Volatile.Write(ref _open, new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
+        public void Release() => Volatile.Read(ref _open).TrySetResult();
+
+        private static TaskCompletionSource Opened()
+        {
+            var open = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            open.SetResult();
+            return open;
+        }
+
+        public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Volatile.Read(ref _open).Task.WaitAsync(cancellationToken);
+            await _inner!.WriteAsync(buffer, cancellationToken);
+        }
+
+        public override async Task FlushAsync(CancellationToken cancellationToken)
+        {
+            await Volatile.Read(ref _open).Task.WaitAsync(cancellationToken);
+            await _inner!.FlushAsync(cancellationToken);
+        }
+
+        public override bool CanRead => false;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => true;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override void Flush() => _inner!.Flush();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

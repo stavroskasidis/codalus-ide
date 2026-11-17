@@ -1620,7 +1620,8 @@ public sealed class DebugService : IAsyncDisposable
         // A launched program's session that ends without the adapter saying how the program exited reports exit code 0,
         // the initial one: so it says so, with what the adapter's process did. netcoredbg (Linux CI, PR #300's run
         // 41898116148) and Codalus IDE's adapter (Linux arm64 CI, run 41547730079) both went silent after the program's
-        // end, without exited or terminated, and the session ended on the connection closing. TODO(issue): why.
+        // end, without exited or terminated, and the session ended on the connection closing. Codalus IDE's adapter ended
+        // its process before it had sent them (fixed: DapServer.SendEndAsync); TODO(issue): why netcoredbg did.
         if (!_exitReported && !_stopRequested && !_attached)
         {
             Output?.Invoke(this, new DebugOutput("console", $"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));

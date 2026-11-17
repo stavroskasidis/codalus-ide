@@ -170,6 +170,24 @@ internal sealed class DapServer(Stream input, Stream output) : IDisposable
             }
         });
 
+    /// <summary>How long <see cref="SendEndAsync"/> waits for a client that doesn't read.</summary>
+    public static readonly TimeSpan EndTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// Sends the session's end, <c>exited</c> (when the exit code is known) and <c>terminated</c>, and completes once
+    /// both are written, or after <see cref="EndTimeout"/> for a client that doesn't read. The adapter's process ends
+    /// after its session, so it must not end before these are out: it ended 200 ms after the session did, and the events
+    /// were sent after that and not awaited, so a session whose thread was held up lost them; the IDE then saw the
+    /// connection close with no exit code (Linux CI, runs 41547730079 and 43134505327).
+    /// </summary>
+    public Task SendEndAsync(int? exitCode)
+    {
+        var exited = exitCode is { } code ? SendEventAsync(DapEvents.Exited, new ExitedEvent(code), DapJsonContext.Default.ExitedEvent) : Task.CompletedTask;
+        var terminated = SendEventAsync(DapEvents.Terminated);
+        return Task.WhenAll(exited, terminated).WaitAsync(EndTimeout).ContinueWith(
+            static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+    }
+
     private Task RespondAsync(int requestSeq, string command, bool success, JsonElement? body, string? message) =>
         WriteAsync(w =>
         {
