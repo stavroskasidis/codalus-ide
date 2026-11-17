@@ -2264,17 +2264,19 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// another thread's stack, with an awaiter of the task in a field (<c>&lt;&gt;u__1</c>) or a local. Or, earlier still
     /// (M61b), before it has the task at all: that thread is still on its way back from the method that the task is
     /// <paramref name="machine"/>'s (in its <c>MoveNext</c>, or the kickoff that started it), and the awaiting state
-    /// machine is the first below that, the frames between being code that isn't the user's. Its frame and its thread's
-    /// frames come with it.
+    /// machine is the first below that, the frames between being code that isn't the user's. Or in between: back in its
+    /// <c>MoveNext</c>, the task just returned to it (<see cref="JustReturned"/>). Its frame and its thread's frames come
+    /// with it.
     /// </summary>
     private StackCaller? AwaiterOnAStack(IClrValue task, IClrThread except, IClrValue? machine = null)
     {
         foreach (var thread in Process.Threads().Where(t => t.Id != except.Id))
         {
             var frames = SafeFrames(thread);
+            var top = frames.FirstOrDefault(f => f.Module is not null);
             for (var i = 0; i < frames.Count; i++)
             {
-                if (AwaiterOf(frames[i], task) is { } awaiting)
+                if ((AwaiterOf(frames[i], task) ?? (ReferenceEquals(frames[i], top) ? JustReturned(thread, frames[i], task) : null)) is { } awaiting)
                 {
                     return new StackCaller(frames[i], awaiting, frames, i);
                 }
@@ -2287,6 +2289,29 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The state machine of a thread's top frame when the call it has just returned from returned <paramref name="task"/>
+    /// (Linux CI, runs 43828283396 and 43865623534): back in its <c>MoveNext</c> from the awaited method, the task only
+    /// in the call's return register, before an awaiter of it is anywhere. A step's end holds a thread right there: a
+    /// step over the method's await whose completion came as the method's resumption elsewhere ended the step, so the
+    /// thread waits for its dropped completion while the program runs on. Null otherwise. Any call of the frame's line
+    /// is tried: at the return address the frame's IL offset is only near the call.
+    /// </summary>
+    private IClrValue? JustReturned(IClrThread thread, IClrFrame frame, IClrValue task)
+    {
+        if (frame.Module is not { } module || Types.Info(module) is not { } info || info.AsyncKind(frame.MethodToken) != ClrAsyncKind.StateMachine
+            || frame.Il() is not { Length: > 0 } il || info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is not { } range
+            || SafeValue(() => frame.Argument(0)) is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 } machine)
+        {
+            return null;
+        }
+
+        return IlCalls.Of(il).Where(c => c.Offset >= range.Start && c.Offset < range.End)
+            .Any(c => SafeValue(() => Process.ReturnValue(thread, c.Offset)) is { Kind: ClrValueKind.Object, Address: not 0 } returned && returned.Address == task.Address)
+            ? machine
+            : null;
     }
 
     /// <summary>
