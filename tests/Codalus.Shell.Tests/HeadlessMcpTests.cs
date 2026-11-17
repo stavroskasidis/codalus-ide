@@ -51,7 +51,8 @@ public sealed class HeadlessMcpTests
         var solution = "";
         var reads = new List<string>();
         var watch = Stopwatch.StartNew();
-        while (watch.Elapsed < TimeSpan.FromMinutes(3) && !(solution.Contains("- Hello", StringComparison.Ordinal) && solution.Contains("- Greetings", StringComparison.Ordinal)))
+        while (watch.Elapsed < TimeSpan.FromMinutes(3)
+               && !(solution.Contains("- Hello", StringComparison.Ordinal) && solution.Contains("- Greetings", StringComparison.Ordinal)))
         {
             solution = (await ide.CallAsync("get_solution", "{}")).Text;
             reads.Add(solution);

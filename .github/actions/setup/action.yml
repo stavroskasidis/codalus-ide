@@ -97,7 +97,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ~/.nuget/packages
-        key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+        key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'eng/warm-nuget-cache.sh', 'samples/*/.config/dotnet-tools.json') }}
         restore-keys: nuget-${{ runner.os }}-
     - if: inputs.netcoredbg == 'true'
       id: netcoredbg-key

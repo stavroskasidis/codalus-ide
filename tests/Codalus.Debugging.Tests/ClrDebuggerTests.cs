@@ -68,6 +68,13 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
             // Where a native frame's code is, as a module and an offset: what a wait in native code waits in (the runtime,
             // the OS loader), which "[Native Code]" alone didn't say (Windows CI, run 43731649744, docs/ci-flakes.md).
             Assert.True(System.Text.RegularExpressions.Regex.IsMatch(threads, @"\[Native Code\] at [^\s+]+\+0x[0-9A-F]+"), "The threads:\n" + threads);
+
+            // A dump of the program beside the log, written by its runtime while it was stopped: the native stacks and the
+            // memory, which tell what an eval waiting in native code waits on (Windows CI, runs 41449676058 and
+            // 43731649744; Linux CI, run 43587457886).
+            var dump = Assert.Single(Directory.GetFiles(logs, "func-eval-*.dmp"));
+            Assert.True(new FileInfo(dump).Length > 0, "An empty dump.");
+            Assert.Contains("A dump of the program: " + dump, log, StringComparison.Ordinal);
         }
         finally
         {
