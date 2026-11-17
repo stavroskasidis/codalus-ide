@@ -1573,7 +1573,8 @@ public sealed partial class CodeEditorController : IDisposable
             var caret = Editor.CaretOffset;
             if (caret < start || caret - start > 200)
             {
-                return; // the caret moved away meanwhile
+                _services.Log($"{Model.Name}: completion not shown (the caret moved away meanwhile: at {caret}, the word from {start})");
+                return;
             }
 
             var window = NewCompletionPopup(start, caret);

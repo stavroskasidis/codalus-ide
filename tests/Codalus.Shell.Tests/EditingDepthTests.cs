@@ -305,7 +305,13 @@ public class EditingDepthTests
         editor.Editor.CaretOffset = line.Offset;
         f.Type("cw");
         editor.ShowCompletion();
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow?.CompletionList.CompletionData.Any(d => d.Text == "cw") == true, seconds: 90);
+        // What the completion was when "cw" never showed: it timed out after 90 s on macOS CI (run 44030324314) with
+        // nothing to say whether a window was open (and with what), the request was dropped, or the C# service answered.
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow?.CompletionList.CompletionData.Any(d => d.Text == "cw") == true, seconds: 90, describe: () =>
+            $"window {(editor.CompletionWindow is { } window ? $"open with {window.CompletionList.CompletionData.Count} item(s) from {window.StartOffset} ({string.Join(", ", window.CompletionList.CompletionData.Take(8).Select(d => d.Text))})" : "none")}; "
+            + $"caret {editor.Editor.CaretOffset}, text before it '{text.GetText(Math.Max(0, editor.Editor.CaretOffset - 30), Math.Min(30, editor.Editor.CaretOffset))}'; "
+            + $"the C# service {f.Shell.Languages.Status(ShellHost.CSharpLanguageId)}, client {f.Shell.Languages.RunningClient("csharp") is not null}; snippets {f.Shell.Workbench.Snippets.For("csharp").Count}. Log:\n"
+            + f.Shell.Workbench.Output.GetOrCreate("codalus.languages", "Language Services").GetText());
         editor.CompletionWindow!.CompletionList.SelectItem("cw");
         await ShellFixture.PumpUntil(() => (editor.CompletionWindow?.CompletionList.SelectedItem as CompletionData)?.Item.Kind == LanguageServices.Protocol.CompletionItemKind.Snippet);
         f.Press(Key.Enter);
