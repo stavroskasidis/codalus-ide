@@ -160,6 +160,29 @@ public sealed class UiStallMonitorTests
         Assert.Contains("didn't answer input", failure.Message, StringComparison.Ordinal);
     }
 
+    [AvaloniaFact]
+    public async Task A_stall_says_the_ui_threads_state_in_the_kernel_on_linux()
+    {
+        // A wait in no posted job: the UI thread runnable and not run, waiting in the kernel, or stopped (Linux CI, run
+        // 44073138183, 2428 ms in no posted job). Here it sleeps, so the kernel has it asleep (S) for most of the wait.
+        using var monitor = new UiStallMonitor();
+        ShellFixture.Pump();
+        monitor.Reset();
+        Thread.Sleep(30); // the monitor's next probe is posted
+        Thread.Sleep(300); // and waits for the UI thread, asleep in the kernel
+        await ShellFixture.PumpUntil(() => monitor.Report().LongestMilliseconds > 0);
+
+        var report = monitor.Report();
+        if (!OperatingSystem.IsLinux())
+        {
+            Assert.Null(report.LongestKernel);
+            return;
+        }
+
+        Assert.True(report.LongestKernel?.StartsWith('S') == true, report.Describe());
+        Assert.Contains("the UI thread in the kernel then: S", report.Describe(), StringComparison.Ordinal);
+    }
+
     private static void Block(int milliseconds)
     {
         var until = DateTime.UtcNow.AddMilliseconds(milliseconds);

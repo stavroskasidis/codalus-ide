@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Avalonia.Threading;
 
 namespace Codalus.Shell.Infrastructure;
@@ -13,7 +14,7 @@ namespace Codalus.Shell.Infrastructure;
 /// (<see cref="Ui.RunningJob"/>, often none: the flow's own work, layout and timers aren't posted jobs) to name the longest
 /// wait, and counts the garbage collector's pauses in it, which aren't the flow's code.
 /// </summary>
-internal sealed class UiStallMonitor : IDisposable
+internal sealed partial class UiStallMonitor : IDisposable
 {
     /// <summary>A wait longer than this is a stall: a key press that waited so long shows (<see cref="UiStallReport.StalledMilliseconds"/>).</summary>
     public const double StallMilliseconds = 50;
@@ -33,12 +34,59 @@ internal sealed class UiStallMonitor : IDisposable
     private long _firstSent;
     private long _waitingSince;
     private long _resetAt;
+    private string? _longestKernel;
+
+    /// <summary>On Linux, the UI thread's id in the kernel (0 until known): a stall samples its state there.</summary>
+    private volatile int _uiThreadId;
 
     public UiStallMonitor()
     {
         Ui.Watch();
+        if (OperatingSystem.IsLinux())
+        {
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                _uiThreadId = GetTid();
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(() => _uiThreadId = GetTid(), DispatcherPriority.Send);
+            }
+        }
+
         _thread = new Thread(Loop) { IsBackground = true, Name = "UI stall monitor" };
         _thread.Start();
+    }
+
+    [LibraryImport("libc", EntryPoint = "gettid")]
+    private static partial int GetTid();
+
+    /// <summary>
+    /// The UI thread's state in the kernel (Linux): <c>R</c> running or runnable, <c>S</c> asleep (a wait), <c>D</c> in an
+    /// uninterruptible wait (I/O, a page fault on a busy disk), <c>t</c> stopped by a tracer, with the kernel function it
+    /// waits in when the kernel says. A wait in no posted job could be the UI thread runnable and not run, waiting in the
+    /// kernel, or stopped (Linux CI, run 44073138183: 2428 ms while createdump wrote a core of the test host): this tells
+    /// which. Null off Linux or when it can't be read.
+    /// </summary>
+    private string? KernelState()
+    {
+        if (_uiThreadId is not (> 0 and var id))
+        {
+            return null;
+        }
+
+        try
+        {
+            var task = $"/proc/self/task/{id}/";
+            var stat = File.ReadAllText(task + "stat");
+            var state = stat.LastIndexOf(')') is var end and >= 0 && end + 2 < stat.Length ? stat[end + 2].ToString() : "?";
+            var wchan = File.ReadAllText(task + "wchan").Trim();
+            return state != "R" && wchan is { Length: > 0 } and not "0" ? $"{state} in {wchan}" : state;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The longest wait since the last <see cref="Reset"/>, without the garbage collector's pauses in it.</summary>
@@ -65,7 +113,7 @@ internal sealed class UiStallMonitor : IDisposable
     {
         lock (_gate)
         {
-            return new UiStallReport(_probes, _longest, _longestGc, _longestJob, _stalls, _stalled, _longestStep, _longestCollections);
+            return new UiStallReport(_probes, _longest, _longestGc, _longestJob, _stalls, _stalled, _longestStep, _longestCollections, _longestKernel);
         }
     }
 
@@ -103,6 +151,7 @@ internal sealed class UiStallMonitor : IDisposable
             _longestJob = null;
             _longestStep = null;
             _longestCollections = null;
+            _longestKernel = null;
             _probes = 0;
             _stalls = 0;
             _stalled = 0;
@@ -113,6 +162,7 @@ internal sealed class UiStallMonitor : IDisposable
     {
         var jobs = new Dictionary<string, int>(StringComparer.Ordinal);
         var steps = new Dictionary<string, int>(StringComparer.Ordinal);
+        var kernel = new Dictionary<string, int>(StringComparer.Ordinal);
         while (!_stopped)
         {
             using var answered = new ManualResetEventSlim();
@@ -129,6 +179,7 @@ internal sealed class UiStallMonitor : IDisposable
 
             jobs.Clear();
             steps.Clear();
+            kernel.Clear();
             var stepSent = _step;
             while (!answered.Wait(5))
             {
@@ -141,6 +192,10 @@ internal sealed class UiStallMonitor : IDisposable
                 jobs[job] = jobs.GetValueOrDefault(job) + 1;
                 var step = _step ?? string.Empty;
                 steps[step] = steps.GetValueOrDefault(step) + 1;
+                if (Stopwatch.GetElapsedTime(sent).TotalMilliseconds > StallMilliseconds && KernelState() is { } state)
+                {
+                    kernel[state] = kernel.GetValueOrDefault(state) + 1;
+                }
             }
 
             Interlocked.Exchange(ref _waitingSince, 0);
@@ -149,7 +204,7 @@ internal sealed class UiStallMonitor : IDisposable
             BeforeRecord?.Invoke();
             lock (_gate)
             {
-                Record(Volatile.Read(ref ran), waited, gc, gcMark, jobs, steps, stepSent);
+                Record(Volatile.Read(ref ran), waited, gc, gcMark, jobs, steps, stepSent, kernel);
             }
 
             Thread.Sleep(10);
@@ -157,7 +212,7 @@ internal sealed class UiStallMonitor : IDisposable
     }
 
     /// <summary>Counts an answered probe (under the gate), unless it was answered before the last <see cref="Reset"/>.</summary>
-    private void Record(long answeredAt, double waited, double gc, GcMark gcMark, Dictionary<string, int> jobs, Dictionary<string, int> steps, string? stepSent)
+    private void Record(long answeredAt, double waited, double gc, GcMark gcMark, Dictionary<string, int> jobs, Dictionary<string, int> steps, string? stepSent, Dictionary<string, int> kernel)
     {
         if (answeredAt < _resetAt)
         {
@@ -178,6 +233,7 @@ internal sealed class UiStallMonitor : IDisposable
             _longestJob = jobs.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault();
             _longestStep = steps.Where(p => p.Key.Length > 0).OrderByDescending(p => p.Value).Select(p => p.Key).FirstOrDefault() ?? stepSent;
             _longestCollections = GcReport.Since(gcMark);
+            _longestKernel = kernel.Count == 0 ? null : string.Join(", ", kernel.OrderByDescending(p => p.Value).Select(p => $"{p.Key} {p.Value}×"));
         }
     }
 
@@ -195,12 +251,14 @@ internal sealed class UiStallMonitor : IDisposable
 /// waits over <see cref="UiStallMonitor.StallMilliseconds"/>: how many, and their sum (each without its GC pauses). The
 /// collections during the longest wait are named (<see cref="GcReport"/>): a wait of 1011 ms in no posted job with only 135 ms
 /// of pauses, under a whole local run of the shell tests (the Git Repository's filter flow, 0 ms alone), could be the UI
-/// thread held by a background collection, which the pauses don't count (docs/ci-flakes.md).
+/// thread held by a background collection, which the pauses don't count (docs/ci-flakes.md). On Linux, the UI thread's
+/// states in the kernel during it, sampled every 5 ms past the first 50 (<see cref="LongestKernel"/>).
 /// </summary>
-internal readonly record struct UiStallReport(int Probes, double LongestMilliseconds, double LongestGcMilliseconds, string? LongestJob, int Stalls, double StalledMilliseconds, string? LongestStep = null, string? LongestCollections = null)
+internal readonly record struct UiStallReport(int Probes, double LongestMilliseconds, double LongestGcMilliseconds, string? LongestJob, int Stalls, double StalledMilliseconds, string? LongestStep = null, string? LongestCollections = null, string? LongestKernel = null)
 {
-    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it, the collections then.</summary>
+    /// <summary>What the longest wait was: its length, its GC pauses, the posted job the UI thread ran most during it, the collections and the UI thread's kernel states then.</summary>
     public string Describe() =>
         $"{LongestMilliseconds:0} ms (and {LongestGcMilliseconds:0} ms of GC pauses) in {LongestJob ?? "no posted job (layout, rendering, input or a handler)"}{(LongestStep is null ? string.Empty : $" at {LongestStep}")}, over {Probes} probes"
-        + (LongestCollections is null ? string.Empty : $"; during it, {LongestCollections}");
+        + (LongestCollections is null ? string.Empty : $"; during it, {LongestCollections}")
+        + (LongestKernel is null ? string.Empty : $"; the UI thread in the kernel then: {LongestKernel}");
 }
