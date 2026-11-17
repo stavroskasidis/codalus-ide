@@ -347,12 +347,8 @@ public sealed class WatchedServerSessionTests
 
     // ------------------------------------------------------------------ finding the server
 
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     [Fact]
     public async Task The_server_is_found_from_the_agents_id_once_it_logs_its_address()

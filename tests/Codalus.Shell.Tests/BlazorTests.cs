@@ -8,12 +8,8 @@ namespace Codalus.Shell.Tests;
 /// <summary>M16a in the shell: Razor files served by the C# host (ADR 0023), and a Blazor app with Hot Reload.</summary>
 public sealed class BlazorTests
 {
-    private static int FreePort()
-    {
-        using var socket = new TcpListener(IPAddress.Loopback, 0);
-        socket.Start();
-        return ((IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     [AvaloniaFact]
     public async Task Razor_editing_and_a_blazor_app_with_hot_reload()
