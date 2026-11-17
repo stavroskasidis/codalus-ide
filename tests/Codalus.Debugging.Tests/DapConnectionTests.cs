@@ -107,6 +107,69 @@ public sealed class DapConnectionTests
         await connection.Closed.WaitAsync(TimeSpan.FromSeconds(10), ct);
     }
 
+    /// <summary>
+    /// A request that gave up as the adapter's output ended (it found the reading stopped) still had its response in the
+    /// pending ones, and the end failed that response after nothing waited for it: the finalizer reported an unobserved
+    /// "The debug adapter exited." (BrowserPageOpenTests on Linux CI, run 44073658524).
+    /// </summary>
+    [Fact]
+    public async Task Requests_made_as_the_output_ends_leave_no_unobserved_fault()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var unobserved = new List<Exception>();
+        void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs e)
+        {
+            if (e.Exception.InnerExceptions.Any(x => x is DapConnectionLostException))
+            {
+                lock (unobserved)
+                {
+                    unobserved.Add(e.Exception);
+                }
+            }
+        }
+
+        TaskScheduler.UnobservedTaskException += OnUnobserved;
+        try
+        {
+            for (var i = 0; i < 300; i++)
+            {
+                var toClient = new Pipe();
+                var toAdapter = new Pipe();
+                await using var connection = new DapConnection(toClient.Reader.AsStream(), toAdapter.Writer.AsStream());
+                connection.Start();
+                var requests = Enumerable.Range(0, 4)
+                    .Select(_ => Task.Run(() => connection.RequestAsync("threads", new EmptyArguments(), DapJsonContext.Default.EmptyArguments, ct), ct))
+                    .ToList();
+                for (var spin = i % 20; spin > 0; spin--)
+                {
+                    Thread.SpinWait(100);
+                }
+
+                await toClient.Writer.CompleteAsync();
+                foreach (var request in requests)
+                {
+                    await Assert.ThrowsAsync<DapConnectionLostException>(() => request.WaitAsync(TimeSpan.FromSeconds(10), ct));
+                }
+            }
+
+            for (var i = 0; i < 3; i++)
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                await Task.Delay(50, ct);
+            }
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= OnUnobserved;
+        }
+
+        lock (unobserved)
+        {
+            Assert.Empty(unobserved);
+        }
+    }
+
     private static async Task WaitAsync(Func<bool> condition, CancellationToken cancellationToken)
     {
         while (!condition())
