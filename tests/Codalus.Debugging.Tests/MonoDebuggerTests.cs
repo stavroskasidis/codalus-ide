@@ -74,12 +74,8 @@ public sealed class MonoDebuggerTests(MonoDebuggeeFixture fixture) : IClassFixtu
         Assert.True(fixture.App is not null, "The Mono debuggee didn't build:\n" + fixture.BuildOutput);
     }
 
-    private static int FreePort()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        return ((IPEndPoint)listener.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     private static DebugAdapterStartInfo Adapter()
     {

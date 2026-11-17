@@ -285,12 +285,8 @@ public sealed class IdeToolsShellTests
         }
     }
 
-    private static int FreePort()
-    {
-        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        socket.Start();
-        return ((System.Net.IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 
     [AvaloniaFact]
     public async Task A_plugins_tool_is_listed_beside_the_ides_and_asks_before_every_call()

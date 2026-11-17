@@ -63,6 +63,13 @@ mkdir -p "$msbuild_debug"
 MSBUILDDEBUGPATH="$msbuild_debug"
 command -v cygpath > /dev/null && MSBUILDDEBUGPATH="$(cygpath -w "$msbuild_debug")" # Git Bash: MSBuild wants a Windows path
 export MSBUILDDEBUGPATH
+# The fixtures' own builds (a test's `dotnet build` of its sample) start MSBuild nodes of their own, which end with the
+# build: by default the CLI leaves its nodes running for the next build to reuse, so the test modules that build at once
+# shared one set of long-lived nodes, connected and handed over between processes. Three times on the macOS runner a
+# fixture's build failed with MSB4166 in such a node, twice reading its pipe ("No buffer space available", ENOBUFS)
+# and once in its shutdown ("MSB0001: Entry must be waiting on another request to be unblocked"), runs 40375629247,
+# 40869489322 and 40918787207 (docs/ci-flakes.md). The IDE's own builds never reuse nodes (SolutionBuilder).
+export MSBUILDDISABLENODEREUSE=1
 started_at="$(date '+%Y-%m-%d %H:%M:%S')"
 touch "$results/.started"
 # Each sample also goes to the log as one line (the free memory, the swap in use, the number of processes and the

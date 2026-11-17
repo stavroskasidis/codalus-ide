@@ -402,6 +402,17 @@ internal sealed class ClrEvaluator(ClrTypeSystem types, IClrProcess process, Clr
                 }
 
                 var receiver = ((RemoteValue)target).Value;
+                if (receiver is { Kind: ClrValueKind.Primitive, Primitive: { } number })
+                {
+                    // An unboxed number (a local, a parameter, a value made for the evaluation) isn't a receiver the
+                    // runtime takes: its func-eval threw ArgumentOutOfRangeException ("Enum value was out of legal range")
+                    // for any method of it, total.ToString() or i.GetType(), where an evaluation's result, which comes
+                    // boxed, worked. A box of it is called instead, the same to a method of a primitive (none changes it).
+                    var type = receiver.Type;
+                    receiver = Boxed(number);
+                    return new RemoteValue(CallMethod(receiver, type, member.Name, arguments, member.Name));
+                }
+
                 return new RemoteValue(CallMethod(receiver, receiver.Type, member.Name, arguments, member.Name));
             default:
                 throw new ExpressionException("Only methods can be called.");

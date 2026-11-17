@@ -59,6 +59,8 @@ echo "== target framework matrix"
 bash eng/get-runtimes.sh > /dev/null
 export CODALUS_DOTNET_COMPAT="$repo/.work/dotnet-compat"
 
+# The fixtures' builds start MSBuild nodes of their own, as on CI (eng/ci-test.sh).
+export MSBUILDDISABLENODEREUSE=1
 echo "== restore / build / test"
 dotnet restore Codalus.slnx
 dotnet build Codalus.slnx -c Release --no-restore
