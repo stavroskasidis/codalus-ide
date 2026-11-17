@@ -50,7 +50,8 @@ public sealed class LateRuntimeTests(DebuggeeFixture debuggee) : IClassFixture<D
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException)
         {
-            Assert.Fail($"The program didn't stop ({ex.Message}). Debug Console:\n{Text()}");
+            // It stalled once on macOS after the runtime's first module (CI, run 41620973752): where the session waits.
+            Assert.Fail($"The program didn't stop ({ex.Message}). Debug Console:\n{Text()}\n{NativeStacks.Describe(debug)}");
         }
 
         Assert.Equal(loop, debug.SelectedFrame?.Line);

@@ -66,10 +66,14 @@ internal sealed partial class SmokeTest
 
     /// <summary>
     /// How long each 20 ms wait after a command took until the UI thread ran again, for the report: a sweep that is slow
-    /// with nothing stalling the UI thread has late timers (macOS's App Nap made each about 100 ms, runs 43617802812 and
-    /// 43914513384; <see cref="MacActivity"/>).
+    /// with nothing stalling the UI thread has late timers: on the macOS runner each took about 100 ms, 20 on Linux and
+    /// 32 on Windows, so its sweep took three times as long (run 44031325117, docs/ci-flakes.md).
     /// </summary>
     private readonly List<double> _sweepWaits = [];
+
+    /// <summary>A 20 ms <c>Task.Delay</c> on the thread pool, and a job posted to the UI thread from it, once per entry point: which of the two is late.</summary>
+    private readonly List<double> _sweepTimers = [];
+    private readonly List<double> _sweepPosts = [];
 
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
     private static readonly Dictionary<string, string> s_sweepSkips = new(StringComparer.Ordinal)
@@ -1031,7 +1035,19 @@ internal sealed partial class SmokeTest
                 }
             }
 
-            // Close whatever it opened, and give late dialogs a moment.
+            // Close whatever it opened, and give late dialogs a moment. Meanwhile, which half of a late wait is late: a
+            // 20 ms timer on the thread pool, and a job posted to the UI thread from another thread.
+            var timer = Task.Run(static async () =>
+            {
+                var started = Stopwatch.GetTimestamp();
+                await Task.Delay(20).ConfigureAwait(false);
+                return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            });
+            var post = Task.Run(static () =>
+            {
+                var posted = Stopwatch.GetTimestamp();
+                return Dispatcher.UIThread.InvokeAsync(() => Stopwatch.GetElapsedTime(posted).TotalMilliseconds).GetTask();
+            });
             for (var i = 0; i < 5; i++)
             {
                 CloseSweepOverlays(saw);
@@ -1039,6 +1055,9 @@ internal sealed partial class SmokeTest
                 await Task.Delay(20).ConfigureAwait(true);
                 _sweepWaits.Add(Stopwatch.GetElapsedTime(waited).TotalMilliseconds);
             }
+
+            _sweepTimers.Add(await timer.ConfigureAwait(true));
+            _sweepPosts.Add(await post.ConfigureAwait(true));
         }
         catch (Exception ex)
         {
@@ -1718,16 +1737,21 @@ internal sealed partial class SmokeTest
         json.WriteString("os", $"{System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.OSArchitecture})");
         json.WriteNumber("seconds", Math.Round(elapsed.TotalSeconds, 1));
         json.WriteNumber("commands", _sweepRows.Select(r => r.Command).Distinct().Count());
-        if (_sweepWaits.Count > 0)
+        foreach (var (name, values, what) in new[] { ("wait20Ms", _sweepWaits, "a 20 ms wait on the UI thread"), ("timer20Ms", _sweepTimers, "a 20 ms timer on the thread pool"), ("postMs", _sweepPosts, "a job posted to the UI thread") })
         {
-            var waits = _sweepWaits.Order().ToList();
-            json.WriteStartObject("wait20Ms");
-            json.WriteNumber("count", waits.Count);
-            json.WriteNumber("p50", Math.Round(waits[waits.Count / 2], 1));
-            json.WriteNumber("p90", Math.Round(waits[waits.Count * 9 / 10], 1));
-            json.WriteNumber("max", Math.Round(waits[^1], 1));
+            if (values.Count == 0)
+            {
+                continue;
+            }
+
+            var sorted = values.Order().ToList();
+            json.WriteStartObject(name);
+            json.WriteNumber("count", sorted.Count);
+            json.WriteNumber("p50", Math.Round(sorted[sorted.Count / 2], 1));
+            json.WriteNumber("p90", Math.Round(sorted[sorted.Count * 9 / 10], 1));
+            json.WriteNumber("max", Math.Round(sorted[^1], 1));
             json.WriteEndObject();
-            var summary = $"a 20 ms wait took {waits[waits.Count / 2]:0} ms at the median, {waits[waits.Count * 9 / 10]:0} at the 90th percentile";
+            var summary = $"{what} took {sorted[sorted.Count / 2]:0} ms at the median, {sorted[sorted.Count * 9 / 10]:0} at the 90th percentile";
             SweepProgress($"({summary})");
             Console.Out.WriteLine($"  [sweep] {summary}");
         }
