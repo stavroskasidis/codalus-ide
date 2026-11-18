@@ -52,6 +52,7 @@ public sealed partial class ShellHost
 
     private void InitializeWinFormsDesigner()
     {
+        InitializeToolbox();
         WinFormsDesigner = new WinFormsDesignerService(Solutions, path => Trust.IsTrusted(path), BuildForPreviewAsync, PreviewPropertiesAsync)
         {
             StartupProject = () => Runs.StartupProject,

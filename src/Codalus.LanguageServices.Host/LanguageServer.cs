@@ -327,7 +327,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.WinFormsEdit, json.WinFormsEditParams, json.WinFormsEditResult, (p, ct) =>
             WinForms.WinFormsFeature.EditAsync(_workspace.CurrentSolution, p, _workspace.OpenText, _workspace.Version, ct));
         _connection.OnRequest(Methods.WinFormsToolbox, json.WinFormsToolboxParams, json.WinFormsToolboxResult, (p, ct) =>
-            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct));
+            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct, p.Assemblies));
         OnDocument(Methods.XamlLogicalTree, json.XamlLogicalTreeParams, json.XamlLogicalTreeResult, p => p.TextDocument,
             (_, _, _) => Task.FromResult<XamlLogicalTreeResult?>(null), new XamlLogicalTreeResult([]),
             (xaml, _, _) => Task.FromResult<XamlLogicalTreeResult?>(new XamlLogicalTreeResult(Xaml.XamlAnalysis.LogicalTree(xaml))));

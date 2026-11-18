@@ -57,14 +57,49 @@ internal static class ToolboxReferences
 
             var cached = s_items.TryGetValue(path, out var entry) && entry.Length == file.Length && entry.Time == file.LastWriteTimeUtc
                 ? entry.Items
-                : (s_items[path] = (file.Length, file.LastWriteTimeUtc, Read(assembly, PackageOf(path) ?? assembly.Identity.Name))).Items;
+                : (s_items[path] = (file.Length, file.LastWriteTimeUtc, Read(assembly, PackageOf(path) ?? assembly.Identity.Name, compilation))).Items;
             items.AddRange(cached);
         }
 
         return items.DistinctBy(i => i.Type).OrderBy(i => i.Project, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static WinFormsToolboxItem[] Read(IAssemblySymbol assembly, string group)
+    /// <summary>
+    /// The items of the assemblies chosen in Choose Toolbox Items (#460) that the project doesn't reference: each read
+    /// with the project's references (its base types resolve through them), grouped by the assembly's name, and marked
+    /// with the assembly's path so a drop adds the reference. A path that isn't an assembly lists nothing.
+    /// </summary>
+    public static IEnumerable<WinFormsToolboxItem> Chosen(Compilation compilation, IReadOnlyList<string> paths, CancellationToken cancellationToken)
+    {
+        var referenced = compilation.References.OfType<PortableExecutableReference>().Select(r => r.FilePath).OfType<string>().ToHashSet(Paths.Comparer);
+        var items = new List<WinFormsToolboxItem>();
+        foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(Path.GetFullPath).Distinct(Paths.Comparer))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (referenced.Contains(path) || !File.Exists(path))
+            {
+                continue;
+            }
+
+            try
+            {
+                var reference = MetadataReference.CreateFromFile(path);
+                var withIt = compilation.AddReferences(reference);
+                if (withIt.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly
+                    && referenced.All(r => !string.Equals(Path.GetFileNameWithoutExtension(r), assembly.Identity.Name, StringComparison.OrdinalIgnoreCase)))
+                {
+                    items.AddRange(Read(assembly, assembly.Identity.Name, withIt).Select(i => i with { Assembly = path }));
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+            {
+            }
+        }
+
+        return items.DistinctBy(i => i.Type).OrderBy(i => i.Project, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static WinFormsToolboxItem[] Read(IAssemblySymbol assembly, string group, Compilation compilation)
     {
         if (IsFramework(assembly.Identity) || !assembly.Modules.SelectMany(m => m.ReferencedAssemblies).Any(r => s_componentAssemblies.Contains(r.Name)))
         {
@@ -72,11 +107,12 @@ internal static class ToolboxReferences
         }
 
         var items = new List<WinFormsToolboxItem>();
+        using var pictures = new ToolboxBitmaps(compilation);
         foreach (var type in Types(assembly.GlobalNamespace))
         {
             if (WinFormsFeature.ToolboxItem(type, group, internalToo: false) is { } item)
             {
-                items.Add(item);
+                items.Add(pictures.Of(type) is { } bitmap ? item with { Bitmap = bitmap } : item);
             }
         }
 

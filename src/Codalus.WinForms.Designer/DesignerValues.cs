@@ -226,8 +226,12 @@ internal sealed class DesignerTypes
     /// its controls have none. Such a <see cref="DesignerAttribute"/> is replaced, for <paramref name="type"/> and the
     /// types deriving from it, by the nearest base type's of the same kind that is there (<c>Form</c>'s for a form,
     /// <c>Control</c>'s for a control), so it's designed as what it derives from. The framework's own types are left
-    /// alone: their designers are always there.
+    /// alone: their designers are always there. A vendor's design-time assembly that is there but built for the
+    /// classic IDE's out-of-process designer (DevExpress's, against <c>Microsoft.DotNet.DesignTools.Server</c>) doesn't
+    /// load either, and gets the same fallback.
     /// </summary>
+    // TODO(issue): #461, a 1.x study of an MIT compatibility layer for the classic IDE's designer-server API, so a
+    // vendor's own designers (DevExpress's Grid Designer, its smart tags) load here.
     private void CoverMissingDesigners(Type type)
     {
         if (!_covered.Add(type) || !typeof(IComponent).IsAssignableFrom(type) || s_framework.Contains(type.Assembly))

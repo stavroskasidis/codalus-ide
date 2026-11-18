@@ -256,6 +256,29 @@ public sealed class WinFormsDesignerShellTests
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
         var buttonItem = f.Shell.Toolbox.Items.First(i => i.Type == "System.Windows.Forms.Button");
 
+        // #460: Choose Toolbox Items lists the project's items by group, checked; one unchecked is left out of the
+        // Toolbox (the user's setting), and checked again comes back.
+        var choose = f.Shell.ChooseToolboxItemsAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Choose Toolbox Items", f.Shell.Dialogs.Title);
+        Assert.Contains(f.Shell.Dialogs.Choices, c => c is { Id: "group:WinFormsApp Components", Checkable: false });
+        var counterChoice = f.Shell.Dialogs.Choices.Single(c => c.Id == CounterControlType);
+        Assert.True(counterChoice.IsChecked);
+        counterChoice.IsChecked = false;
+        f.Shell.Dialogs.Accept();
+        await choose;
+        Assert.Equal([CounterControlType], f.Shell.Workbench.Settings.GetStrings(ShellHost.ToolboxHiddenItemsSetting));
+        await ShellFixture.PumpUntil(() => !f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType));
+        choose = f.Shell.ChooseToolboxItemsAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        counterChoice = f.Shell.Dialogs.Choices.Single(c => c.Id == CounterControlType);
+        Assert.False(counterChoice.IsChecked);
+        counterChoice.IsChecked = true;
+        f.Shell.Dialogs.Accept();
+        await choose;
+        Assert.Empty(f.Shell.Workbench.Settings.GetStrings(ShellHost.ToolboxHiddenItemsSetting));
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType));
+
         // A form opened before the restore was read without Windows Forms (#76): once restored, it's read again and loads
         // again on its host. The loads below are counted from there.
         await WhenReadCompleteAsync(f, designer);

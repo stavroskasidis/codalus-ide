@@ -821,10 +821,34 @@ internal sealed partial class DesignerSession : IDisposable
     /// text, a split container fills an empty container, the first menu strip becomes the form's main menu);
     /// components that aren't controls go to the tray. What a designer refused comes back as the change's error.
     /// </summary>
+    /// <summary>
+    /// The type of a Toolbox item from an assembly chosen in Choose Toolbox Items (#460) that isn't in the project's
+    /// output yet: the assembly is loaded from its path, and its folder searched for its dependencies.
+    /// </summary>
+    private Type? FromChosenAssembly(DesignerCreateParams parameters)
+    {
+        if (parameters.Assembly is not { } path || !File.Exists(path))
+        {
+            return null;
+        }
+
+        var full = Path.GetFullPath(path);
+        if (Path.GetDirectoryName(full) is { } folder && !_searchFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+        {
+            _searchFolders = [.. _searchFolders, folder];
+            _types.SearchIn(_searchFolders);
+        }
+
+        var assembly = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, full, StringComparison.OrdinalIgnoreCase))
+            ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(full);
+        _types.Add(assembly);
+        return _types.Find(parameters.Type);
+    }
+
     public DesignerChangeResult Create(DesignerCreateParams parameters)
     {
         var before = Capture();
-        var type = _types.Find(parameters.Type) ?? throw new InvalidOperationException($"The type {parameters.Type} wasn't found (build the project?).");
+        var type = _types.Find(parameters.Type) ?? FromChosenAssembly(parameters) ?? throw new InvalidOperationException($"The type {parameters.Type} wasn't found (build the project?).");
         if (Host.Container.Components[parameters.Name] is not null)
         {
             throw new InvalidOperationException($"The form already has a component named {parameters.Name}.");
