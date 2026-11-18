@@ -1,7 +1,9 @@
 using System.Reflection;
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Input;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
 using Codalus.Shell.Views;
 
@@ -96,7 +98,12 @@ internal sealed class ShellFixture : IAsyncDisposable
             Codalus.Workbench.Setup.OsLauncher.Current(userData), Path.Combine(userData, "os", "data"), Path.Combine(userData, "os", "config"),
             (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
         Window = new MainWindow(Shell);
-        Window.Closed += (_, _) => _closed = true;
+        s_windows.Add(Window);
+        Window.Closed += (_, _) =>
+        {
+            _closed = true;
+            s_windows.Remove(Window);
+        };
         var collections = (Gen0: GC.CollectionCount(0), Gen1: GC.CollectionCount(1), Gen2: GC.CollectionCount(2));
         try
         {
@@ -463,8 +470,12 @@ internal sealed class ShellFixture : IAsyncDisposable
     /// </summary>
     public static RawInputModifiers Primary { get; } = OperatingSystem.IsMacOS() ? RawInputModifiers.Meta : RawInputModifiers.Control;
 
+    /// <summary>Every fixture's window still open (the UI thread's): <see cref="TakeKeyboard"/> takes the focus back only from those.</summary>
+    private static readonly HashSet<Avalonia.Controls.Window> s_windows = [];
+
     public void Press(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
     {
+        TakeKeyboard();
         Window.KeyPress(key, modifiers, PhysicalKey.None, null);
         Window.KeyRelease(key, modifiers, PhysicalKey.None, null);
         Pump();
@@ -472,8 +483,46 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     public void Type(string text)
     {
+        TakeKeyboard();
         Window.KeyTextInput(text);
         Pump();
+    }
+
+    /// <summary>
+    /// Makes this window the one its keys reach, as the OS does by activating the window it sends keys to. Tests share
+    /// one UI thread, whose jobs (each <see cref="Pump"/>) run other tests' code too, and Avalonia has one keyboard focus
+    /// for every window: a key sent to this window goes to the element focused in any window. Another test that focused
+    /// an element of its own window between two presses took this test's Ctrl+Shift+Space (UxPassTests, a local run of
+    /// seven Shell test classes, 2026-11-04). Activating the window focuses again the element it last had focused.
+    /// </summary>
+    /// <remarks>
+    /// Only from another fixture's window (its own, its dialogs', its popups'): a window this test's shell opened, or one
+    /// the test made, keeps the keys the test sends it here.
+    /// </remarks>
+    private void TakeKeyboard()
+    {
+        if (Window.FocusManager?.GetFocusedElement() is ILogical focused && WindowOf(focused) is { } other && !ReferenceEquals(other, Window) && s_windows.Contains(other))
+        {
+            Window.Activate();
+        }
+    }
+
+    /// <summary>The window an element is in (a popup's: the window its owner control is in), up to the window that owns that.</summary>
+    private static Avalonia.Controls.Window? WindowOf(ILogical element)
+    {
+        var root = element;
+        while (root.LogicalParent is { } parent)
+        {
+            root = parent;
+        }
+
+        var window = root as Avalonia.Controls.Window;
+        while (window?.Owner is Avalonia.Controls.Window owner)
+        {
+            window = owner;
+        }
+
+        return window;
     }
 
     public async ValueTask DisposeAsync()
