@@ -65,7 +65,7 @@ public sealed class ShellCollectionTests
         // A tool window's viewer (Code Definition, an HTTP response), which its owner never releases: its grammar's
         // tokenizer thread waited for work and held it, its window and the shell.
         await using var f = ShellFixture.Create();
-        var viewer = new Codalus.Shell.Editor.CodeViewer(f.Shell, f.Shell.EditorFont);
+        var viewer = new Codalus.Shell.Editor.CodeViewer(f.Shell, f.Shell.EditorFont) { EditorColors = false };
         var window = new Avalonia.Controls.Window { Content = viewer, Width = 400, Height = 300 };
         window.Show();
         viewer.Show("class C { int x = 1; }", "csharp", null);

@@ -89,11 +89,20 @@ public sealed class GrammarColorizer : DocumentColorizingTransformer
     /// <summary>Forgets the tokens (a text without a grammar).</summary>
     public void Clear() => _lines = [];
 
-    /// <summary>The token type of a TextMate token: its innermost scope that names one.</summary>
+    /// <summary>
+    /// The token type of a TextMate token: its innermost scope that names one. A string's quotes and a comment's slashes
+    /// take the string's or the comment's, as the C# service gives them (M65: Peek Definition drew them as punctuation).
+    /// </summary>
     public static int? TypeOf(IEnumerable<string> scopes)
     {
         foreach (var scope in scopes.Reverse())
         {
+            if (scope.StartsWith("punctuation.definition.string.", StringComparison.Ordinal) || scope.StartsWith("punctuation.definition.char.", StringComparison.Ordinal)
+                || scope.StartsWith("punctuation.definition.comment.", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             foreach (var (prefix, type) in s_scopes)
             {
                 if (scope.Equals(prefix, StringComparison.Ordinal) || scope.StartsWith(prefix + ".", StringComparison.Ordinal))

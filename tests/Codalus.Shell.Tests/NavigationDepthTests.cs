@@ -553,6 +553,13 @@ public class NavigationDepthTests
 
         var view = View()!;
         Assert.Contains("class Circle", view.Peek!.Viewer.Editor.Document.Text, StringComparison.Ordinal);
+
+        // In the editor's colors (M65), as the file is in the editor: "class" a keyword, "Circle" a class.
+        var peeked = view.Peek.Viewer;
+        var circle = peeked.Editor.Document.Text.IndexOf("class Circle", StringComparison.Ordinal);
+        Assert.NotNull(peeked.GrammarColors);
+        Assert.Equal(f.Shell.EditorTheme.TokenColor("keyword"), PolishTests.Drawn(peeked, circle));
+        Assert.Equal(f.Shell.EditorTheme.TokenColor("class"), PolishTests.Drawn(peeked, circle + "class ".Length));
         Assert.Equal(program, f.Shell.ActiveEditor!.Controller);
         view.Peek.Close();
 

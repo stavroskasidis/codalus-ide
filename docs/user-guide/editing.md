@@ -79,7 +79,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 | Command | Shortcut | Notes |
 |---|---|---|
 | Go to Definition | `F12`, `Ctrl+Click` (holding `Ctrl` (`⌘` on macOS) over a symbol underlines it as a link) | Into source-generated files and library code (read-only): its original source when the library's PDB embeds it, or through Source Link (setting **Navigation → Source Link**, off by default because it downloads); otherwise decompiled. The tab says which. |
-| Peek Definition | `Alt+F12` | The definition in a popup under the line. `Enter` or **Open** opens it; `Esc` closes. |
+| Peek Definition | `Alt+F12` | The definition in a popup under the line, in the editor's colors. `Enter` or **Open** opens it; `Esc` closes. |
 | Go to Implementation, Go to Derived Types | `Ctrl+F12` | |
 | Go to Base | `Alt+Home` | Base types and interfaces, or the members a member overrides or implements. |
 | Find All References | `Shift+F12` | In the References window: see [Find All References](#find-all-references) below. |
@@ -94,7 +94,7 @@ Plugins can add languages, grammars and language servers ([plugins.md](../plugin
 
 **Tool windows** (View menu, or View → Other Windows)
 - **Document Outline**: the document's types and members. It follows the caret; click a symbol to go there, or type to filter. The chevron, `Right` and `Left` expand and collapse, and what you collapsed stays collapsed as you edit. It lists a file of thousands of members without holding up typing, and does nothing while hidden.
-- **Code Definition**: the definition of the symbol at the caret, read-only, updated as the caret moves.
+- **Code Definition**: the definition of the symbol at the caret, read-only, in the editor's colors, updated as the caret moves.
 - **Hierarchy**: Call Hierarchy and Type Hierarchy results.
 - **Class View** (View → Other Windows): each C# and Visual Basic project's namespaces, types and members, with their signatures. Select one to see its declaration and summary at the bottom; double-click it, or press Enter, to go to it. The search box lists the types and members whose names contain what you type, the first 1,000 of them: type more to narrow it down.
 - **Object Browser** (View → Other Windows → Object Browser): the assemblies a project compiles against, its own first, down to their namespaces, types and members. Pick the project at the top. Library code opens read-only, from its PDB's source or decompiled, as Go to Definition does. Search looks through them all.
