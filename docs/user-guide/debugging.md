@@ -361,6 +361,9 @@ These are netcoredbg's, when you choose it as the fallback; [the Codalus debugge
 - remote debugging covers Linux and macOS targets with `sh`, `tar` and `gzip`; not Windows machines over SSH, nor Windows containers
 - on macOS, the program's exit code is reported as 0
 - no debugger for macOS on Intel
+- on Apple silicon, .NET Core 2.0 and 2.1 programs run as x64 under Rosetta 2 and are left to netcoredbg's x64 build, which can end as it starts them on some macOS versions; later versions are debugged by the Codalus debugger
+- an evaluation that runs past netcoredbg's limit (a property getter blocked in native code) can leave a collection's elements, and an exception's inner exceptions, unshown; the Codalus debugger shows both
+- the last lines a program writes just before it exits are now and then missing from the Debug Console: netcoredbg drops output it already read when both of the program's streams end at once (a fix is proposed upstream)
 - .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
 Under netcoredbg, hit counts, logpoints, filters and dependent breakpoints are implemented by the IDE, so each hit pauses the program briefly; temporary breakpoints, exception module conditions and Run to Cursor are the IDE's under both debuggers.
