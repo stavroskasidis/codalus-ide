@@ -30,7 +30,7 @@ internal sealed partial class DesignerSession
             object? collection;
             try
             {
-                collection = component.GetType().GetProperty(info.Property)?.GetValue(component);
+                collection = DesignerTypes.Property(component.GetType(), info.Property)?.GetValue(component);
             }
             catch (System.Reflection.TargetInvocationException)
             {

@@ -10,14 +10,18 @@
     The Toolbox (M41a): a click (or Space) arms an item for a click or a drag on the designer's surface, and the armed
     item is drawn as the selection (#66); a double-click or Enter adds it at once; an item can be dragged onto the
     surface too. The hint for the armed item is the designer's status line, so the list never moves (docs/design/controls/Toolbox.dc.html).
+    #460: groups with the classic IDE's headers, a control library's items with their own pictures, and the context
+    menu (Choose Items…, Sort Items Alphabetically, Show All, Collapse All, Refresh). With Show All and no designer,
+    the list stays under the message, grayed.
   -->
   <DockPanel>
     <TextBox DockPanel.Dock="Top" Margin="6,6,6,4" Text="{Binding Filter}" PlaceholderText="{l:T toolbox.searchToolbox}" AutomationProperties.Name="{l:T toolbox.searchToolbox}" />
+    <TextBlock DockPanel.Dock="Top" Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasListMessage}" TextWrapping="Wrap" Margin="8,4" />
     <Grid>
-      <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextWrapping="Wrap" />
+      <TextBlock Classes="emptyState" Text="{Binding Message}" IsVisible="{Binding !IsListVisible}" TextWrapping="Wrap" />
       <TextBlock Classes="emptyState" Text="{Binding NoMatchesText}" IsVisible="{Binding HasNoMatches}" TextWrapping="Wrap" />
-      <ScrollViewer IsVisible="{Binding IsAvailable}">
-        <ItemsControl x:Name="CategoryList" ItemsSource="{Binding Categories}" AutomationProperties.Name="{l:T toolbox.toolbox}">
+      <ScrollViewer x:Name="List" IsVisible="{Binding IsListVisible}" Background="Transparent">
+        <ItemsControl x:Name="CategoryList" ItemsSource="{Binding Categories}" IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{l:T toolbox.toolbox}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:ToolboxCategoryViewModel">
               <Expander Header="{Binding Title}" IsExpanded="{Binding IsExpanded}" HorizontalAlignment="Stretch" Padding="0" Margin="0,0,0,1">
@@ -26,10 +30,11 @@
                     <DataTemplate x:DataType="vm:ToolboxItemViewModel">
                       <Button Classes="toolbar toolboxItem" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,2" Click="OnItemClicked"
                               AttachedToVisualTree="OnItemAttached" DataContextChanged="OnItemDataContextChanged" ToolTip.Tip="{Binding ToolTip}"
-                              AutomationProperties.Name="{Binding Name}" AutomationProperties.HelpText="{Binding HelpText}">
+                              AutomationProperties.Name="{Binding DisplayName}" AutomationProperties.HelpText="{Binding HelpText}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                          <controls:Icon Kind="{Binding Icon}" />
-                          <TextBlock Text="{Binding Name}" VerticalAlignment="Center" />
+                          <controls:Icon Kind="{Binding Icon}" IsVisible="{Binding HasIcon}" />
+                          <Image Source="{Binding Picture}" IsVisible="{Binding HasPicture}" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center" />
+                          <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" />
                         </StackPanel>
                       </Button>
                     </DataTemplate>

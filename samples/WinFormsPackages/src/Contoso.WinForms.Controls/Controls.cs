@@ -48,6 +48,71 @@ public class ContosoTextEdit : ContosoEditBase
 {
 }
 
+/// <summary>What <see cref="ContosoToolboxItemAttribute"/> says about a type.</summary>
+public enum ContosoToolboxItemKind
+{
+    Free,
+    Regular,
+    Hidden,
+}
+
+/// <summary>
+/// The library's own Toolbox attribute, derived from <see cref="ToolboxItemAttribute"/> as a control library's is: a
+/// type marked with it is a Toolbox item unless it's given <c>false</c> or <see cref="ContosoToolboxItemKind.Hidden"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ContosoToolboxItemAttribute : ToolboxItemAttribute
+{
+    public ContosoToolboxItemAttribute(bool defaultType)
+        : base(defaultType)
+    {
+    }
+
+    public ContosoToolboxItemAttribute(ContosoToolboxItemKind kind)
+        : base(kind != ContosoToolboxItemKind.Hidden)
+    {
+    }
+}
+
+/// <summary>The Toolbox tab a library names for its controls (a vendor's own attribute, as DevExpress's is).</summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ToolboxTabNameAttribute(string tabName) : Attribute
+{
+    public string TabName { get; } = tabName;
+}
+
+/// <summary>The namespace the library's Toolbox pictures are embedded under (<c>ToolboxIcons/</c>).</summary>
+internal sealed class ToolboxIconsRoot
+{
+}
+
+/// <summary>An editor marked with the library's own attribute: a Toolbox item again, though its base isn't. Its tab and picture are the library's.</summary>
+[ContosoToolboxItem(true)]
+[ToolboxTabName("Contoso: Editors")]
+[ToolboxBitmap(typeof(ToolboxIconsRoot), "ToolboxIcons.SpinEdit.bmp")]
+public class ContosoSpinEdit : ContosoEditBase
+{
+}
+
+/// <summary>An editor marked with the library's own attribute and a kind that shows it, in the library's tab.</summary>
+[ContosoToolboxItem(ContosoToolboxItemKind.Regular)]
+[ToolboxTabName("Contoso: Editors")]
+public class ContosoDateEdit : ContosoEditBase
+{
+}
+
+/// <summary>Hidden by the library's own attribute and its kind.</summary>
+[ContosoToolboxItem(ContosoToolboxItemKind.Hidden)]
+public class ContosoPopupEdit : Control
+{
+}
+
+/// <summary>Hidden by the library's own attribute given <c>false</c>.</summary>
+[ContosoToolboxItem(false)]
+public class ContosoInnerEdit : Control
+{
+}
+
 /// <summary>Derives from a base that isn't a Toolbox item, and isn't one either (the attribute is inherited).</summary>
 public class ContosoEditHelper : ContosoEditBase
 {

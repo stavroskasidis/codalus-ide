@@ -177,7 +177,7 @@ internal sealed partial class DesignerSession
 
     private static ActionItem Describe(DesignerActionList list, DesignerActionPropertyItem item)
     {
-        var property = list.GetType().GetProperty(item.MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var property = DesignerTypes.Property(list.GetType(), item.MemberName, nonPublic: true);
         var result = new ActionItem(DesignerActionKinds.Property, item.MemberName, item.DisplayName ?? item.MemberName) { Category = item.Category, Description = item.Description };
         if (property is null)
         {
@@ -294,7 +294,7 @@ internal sealed partial class DesignerSession
                 {
                     case DesignerActionPropertyItem property when property.MemberName == parameters.Member:
                     {
-                        var info = list.GetType().GetProperty(property.MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        var info = DesignerTypes.Property(list.GetType(), property.MemberName, nonPublic: true)
                             ?? throw new InvalidOperationException($"{property.DisplayName} isn't a property of its action list.");
                         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
                         info.SetValue(list, TypeDescriptor.GetConverter(type).ConvertFromInvariantString(parameters.Text ?? string.Empty));

@@ -196,6 +196,12 @@ public sealed record DesignerCreateParams(string Type, string Name, string? Pare
 
     /// <summary>The IDE's selection, the primary selection first (for <see cref="AtDefaultLocation"/>).</summary>
     public string[] Selected { get; init; } = [];
+
+    /// <summary>
+    /// The assembly the type comes from when the project doesn't reference it yet (#460: chosen in Choose Toolbox Items;
+    /// the IDE adds the reference): the host loads the type from it, its dependencies from its folder.
+    /// </summary>
+    public string? Assembly { get; init; }
 }
 
 /// <summary>A new component as the code must say it: what the C# host's <c>addComponent</c> edit takes.</summary>

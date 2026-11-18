@@ -461,7 +461,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         ToolboxRequests++;
         try
         {
-            if (await client.WinFormsToolboxAsync(project, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)
+            if (await client.WinFormsToolboxAsync(project, _shell.ToolboxAssemblies, CancellationToken.None).ConfigureAwait(true) is { } toolbox && !_disposed)
             {
                 _shell.Toolbox.SetProjectItems(request, toolbox.Items);
             }
@@ -1016,8 +1016,9 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
 
         var name = NewName(type);
         var container = HitTest(x, y, containersOnly: true);
+        var assembly = await ReferenceToolboxAssemblyAsync(type).ConfigureAwait(true);
 
-        await RunAsync(host => host.CreateAsync(new DesignerCreateParams(type, name, container is null || container == Root ? null : container.Name, x, y) { Width = width, Height = height }, CancellationToken.None),
+        await RunAsync(host => host.CreateAsync(new DesignerCreateParams(type, name, container is null || container == Root ? null : container.Name, x, y) { Width = width, Height = height, Assembly = assembly }, CancellationToken.None),
             after: () => SetSelection([name], notify: true)).ConfigureAwait(true);
         _shell.Toolbox.Disarm();
     }
@@ -1037,18 +1038,47 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
         }
 
         string? name = null;
+        var assembly = await ReferenceToolboxAssemblyAsync(type).ConfigureAwait(true);
         await RunAsync(host =>
         {
             // Named once the host is there: a restart in between may have loaded other components.
             name = NewName(type);
             var root = Root;
-            return host.CreateAsync(new DesignerCreateParams(type, name, null, root?.ClientX ?? 0, root?.ClientY ?? 0) { AtDefaultLocation = true, Selected = [.. _selection] }, CancellationToken.None);
+            return host.CreateAsync(new DesignerCreateParams(type, name, null, root?.ClientX ?? 0, root?.ClientY ?? 0) { AtDefaultLocation = true, Selected = [.. _selection], Assembly = assembly }, CancellationToken.None);
         }, after: () => SetSelection([name!], notify: true)).ConfigureAwait(true);
         _shell.Toolbox.Disarm();
         if (!_disposed)
         {
             _shell.Layout.OpenDocument(this, preview: false, focus: true);
         }
+    }
+
+    /// <summary>
+    /// A Toolbox item from an assembly chosen in Choose Toolbox Items that the project doesn't reference (#460): the
+    /// reference is added to the project (a <c>Reference</c> with its <c>HintPath</c>, as the classic IDE adds it), and
+    /// its path goes to the designer host, which loads the type from it until a build copies it to the output. Null for
+    /// any other item. A project the reference can't be added to keeps the path: the designer still creates it.
+    /// </summary>
+    private async Task<string?> ReferenceToolboxAssemblyAsync(string type)
+    {
+        if (_shell.Toolbox.AssemblyOf(type) is not { } assembly)
+        {
+            return null;
+        }
+
+        if (ToolboxProject is { } project)
+        {
+            try
+            {
+                await _shell.ProjectManagement.AddReferenceAsync(project, Codalus.Projects.Protocol.ReferenceEditKinds.Assembly, assembly, CancellationToken.None).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is Rpc.JsonRpcRemoteException or Rpc.JsonRpcConnectionLostException or InvalidOperationException or IOException)
+            {
+                _shell.WinFormsDesignerLog.AppendLine(Localizer.Format("msg.toolbox.referenceNotAdded", "The reference to {0} wasn't added to the project: {1}", Path.GetFileName(assembly), ex.Message));
+            }
+        }
+
+        return assembly;
     }
 
     /// <summary>The classic IDE's name for a new component: its type's name, first letter lowercased, and the first free number (<c>button1</c>).</summary>
@@ -1897,6 +1927,22 @@ public sealed record ToolboxItemViewModel(string Name, string Type, string Categ
 
     public string? Description { get; init; }
 
+    /// <summary>The name as the Toolbox shows it: with its namespace when another item of its group has the same name (#460).</summary>
+    public string DisplayName { get; init; } = Name;
+
+    /// <summary>Its own picture, the one its <c>[ToolboxBitmap]</c> names (#460: a control library's), or null for <see cref="Icon"/>.</summary>
+    public Avalonia.Media.IImage? Picture { get; init; }
+
+    public bool HasPicture => Picture is not null;
+
+    public bool HasIcon => Picture is null;
+
+    /// <summary>The assembly it comes from when it was chosen in Choose Toolbox Items and the project doesn't reference it (#460): a drop adds the reference.</summary>
+    public string? Assembly { get; init; }
+
+    /// <summary>The item's namespace (its type's, without the name), or empty.</summary>
+    public string Namespace => Type.LastIndexOf('.') is var dot and > 0 ? Type[..dot] : string.Empty;
+
     public string ToolTip => IsPointer ? Name : Description is { } description ? $"{Type}\n{description}" : Type;
 
     /// <summary>What the item does, for a screen reader (#66): the Pointer only cancels the armed item; the others are added, armed or dragged.</summary>
@@ -2050,6 +2096,12 @@ public sealed class ToolboxViewModel : ObservableObject
     private string _filter = string.Empty;
     private ToolboxItemViewModel? _armed;
     private bool _isAvailable;
+    private bool _sortAlphabetically;
+    private bool _showAll;
+    private IReadOnlySet<string> _hidden = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The groups the user collapsed (by title), kept as their items are listed again (a filter, a new answer from the C# host).</summary>
+    private readonly HashSet<string> _collapsed = new(StringComparer.Ordinal);
 
     public ToolboxViewModel()
     {
@@ -2116,6 +2168,8 @@ public sealed class ToolboxViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(Message));
                 OnPropertyChanged(nameof(HasMessage));
+                OnPropertyChanged(nameof(IsListVisible));
+                OnPropertyChanged(nameof(HasListMessage));
                 OnPropertyChanged(nameof(HasNoMatches));
                 if (!value)
                 {
@@ -2129,8 +2183,82 @@ public sealed class ToolboxViewModel : ObservableObject
 
     public bool HasMessage => !_isAvailable;
 
+    /// <summary>The list is shown: while a designer is active, or with Show All (#460), which shows it grayed without one.</summary>
+    public bool IsListVisible => _isAvailable || _showAll;
+
+    /// <summary>Show All without a designer: the message above the grayed list.</summary>
+    public bool HasListMessage => _showAll && !_isAvailable;
+
+    /// <summary>
+    /// Show All (#460, the classic IDE's): the Toolbox's groups and items stay listed, grayed, while no Windows Forms
+    /// designer is active, under the message.
+    /// </summary>
+    public bool ShowAll
+    {
+        get => _showAll;
+        set
+        {
+            if (SetField(ref _showAll, value))
+            {
+                OnPropertyChanged(nameof(IsListVisible));
+                OnPropertyChanged(nameof(HasListMessage));
+                OnPropertyChanged(nameof(HasNoMatches));
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary>Sort Items Alphabetically (#460, the classic IDE's): every group's items by name, the framework's too, instead of their own order.</summary>
+    public bool SortAlphabetically
+    {
+        get => _sortAlphabetically;
+        set
+        {
+            if (SetField(ref _sortAlphabetically, value))
+            {
+                Rebuild();
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    /// <summary><see cref="ShowAll"/> or <see cref="SortAlphabetically"/> changed (their menu entries' checks).</summary>
+    public event EventHandler? StateChanged;
+
+    /// <summary>Collapse All (#460): every group closed, as their headers close them one at a time.</summary>
+    public void CollapseAll()
+    {
+        foreach (var category in Categories)
+        {
+            category.IsExpanded = false;
+        }
+    }
+
+    /// <summary>
+    /// The items left out of the Toolbox in Choose Toolbox Items (#460: unchecked there), by full type name (the
+    /// <c>winforms.toolbox.hiddenItems</c> setting).
+    /// </summary>
+    public IReadOnlySet<string> Hidden
+    {
+        get => _hidden;
+        set
+        {
+            if (!_hidden.SetEquals(value))
+            {
+                _hidden = value;
+                Rebuild();
+            }
+        }
+    }
+
+    /// <summary>Every item the C# host listed for the active designer's project, hidden ones too: Choose Toolbox Items' checklist (#460).</summary>
+    public IReadOnlyList<WinFormsToolboxItem> ProjectItems => _projectItems;
+
+    /// <summary>The assembly an item comes from when it was chosen in Choose Toolbox Items and the project doesn't reference it, else null.</summary>
+    public string? AssemblyOf(string type) => _projectItems.FirstOrDefault(i => i.Type == type)?.Assembly;
+
     /// <summary>A filter that matches nothing says so (M34g: the Toolbox went blank), with the way back.</summary>
-    public bool HasNoMatches => _isAvailable && Categories.Count == 0 && _filter.Length > 0;
+    public bool HasNoMatches => IsListVisible && Categories.Count == 0 && _filter.Length > 0;
 
     public string NoMatchesText => Localizer.Format("msg.toolbox.noMatches", "No Toolbox items match '{0}'. Clear the search box to see them all.", _filter);
 
@@ -2172,29 +2300,65 @@ public sealed class ToolboxViewModel : ObservableObject
         bool Matches(string name) => _filter.Length == 0 || name.Contains(_filter, StringComparison.OrdinalIgnoreCase);
         Categories.Clear();
         var pointer = Localizer.Get("msg.toolbox.pointer", "Pointer");
-        foreach (var group in _projectItems.GroupBy(i => i.Project))
+
+        // #460: a component's [ToolboxTabName] is its group (a control library's tabs, "DX.26.1: Common Controls", across
+        // its packages), else its project or package; groups in the order the C# host lists their first items (the
+        // projects', the references', the chosen assemblies').
+        foreach (var group in _projectItems.Where(i => !_hidden.Contains(i.Type)).GroupBy(i => i.Tab ?? Localizer.Format("msg.toolbox.projectComponents", "{0} Components", i.Project)))
         {
-            var category = Localizer.Format("msg.toolbox.projectComponents", "{0} Components", group.Key);
-            var items = group.Where(i => Matches(i.Name)).Select(i => new ToolboxItemViewModel(i.Name, i.Type, category, i.IsControl, IconFor(i.Type, i.IsControl)) { Description = i.Description }).ToList();
-            if (items.Count > 0)
+            var category = group.Key;
+            AddCategory(category, [.. group.Where(i => Matches(i.Name)).Select(i => new ToolboxItemViewModel(i.Name, i.Type, category, i.IsControl, IconFor(i.Type, i.IsControl))
             {
-                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, PointerIcon), .. items]));
-            }
+                Description = i.Description,
+                Picture = ToolboxPictures.From(i.Bitmap),
+                Assembly = i.Assembly,
+            })]);
         }
 
         foreach (var (title, types) in Framework)
         {
             var category = CategoryTitle(title);
-            var items = types.Select(t => (Type: t, Name: t[(t.LastIndexOf('.') + 1)..])).Where(t => Matches(t.Name))
-                .Select(t => new ToolboxItemViewModel(t.Name, FullType(t.Type), category, !s_components.Contains(t.Type), IconFor(t.Type, !s_components.Contains(t.Type)))).ToList();
-            if (items.Count > 0)
-            {
-                Categories.Add(new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, PointerIcon), .. items]));
-            }
+            AddCategory(category, [.. types.Select(t => (Type: t, Name: t[(t.LastIndexOf('.') + 1)..])).Where(t => Matches(t.Name))
+                .Select(t => new ToolboxItemViewModel(t.Name, FullType(t.Type), category, !s_components.Contains(t.Type), IconFor(t.Type, !s_components.Contains(t.Type))))]);
         }
 
         OnPropertyChanged(nameof(HasNoMatches));
         OnPropertyChanged(nameof(NoMatchesText));
+
+        void AddCategory(string category, List<ToolboxItemViewModel> items)
+        {
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            // #460: two items of a group with one name (one library's StackPanel beside another's) show their namespaces.
+            var clashing = items.GroupBy(i => i.Name, StringComparer.Ordinal).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
+            IEnumerable<ToolboxItemViewModel> shown = [.. items.Select(i => clashing.Contains(i.Name) && i.Namespace.Length > 0 ? i with { DisplayName = $"{i.Name} ({i.Namespace})" } : i)];
+            if (_sortAlphabetically)
+            {
+                shown = shown.OrderBy(i => i.DisplayName, StringComparer.CurrentCultureIgnoreCase);
+            }
+
+            var model = new ToolboxCategoryViewModel(category, [new ToolboxItemViewModel(pointer, string.Empty, category, false, PointerIcon), .. shown]) { IsExpanded = !_collapsed.Contains(category) };
+            model.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName != nameof(ToolboxCategoryViewModel.IsExpanded))
+                {
+                    return;
+                }
+
+                if (model.IsExpanded)
+                {
+                    _collapsed.Remove(category);
+                }
+                else
+                {
+                    _collapsed.Add(category);
+                }
+            };
+            Categories.Add(model);
+        }
     }
 
     private static string CategoryTitle(string title) => title switch

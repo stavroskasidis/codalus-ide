@@ -36,6 +36,19 @@ public partial class ToolboxView : UserControl
         }, RoutingStrategies.Tunnel);
         AddHandler(DoubleTappedEvent, OnItemDoubleTapped, RoutingStrategies.Bubble, handledEventsToo: true);
         AddHandler(KeyDownEvent, OnItemKeyDown, RoutingStrategies.Tunnel);
+        ContextRequested += OnContextRequested;
+    }
+
+    private ShellHost? Shell => (TopLevel.GetTopLevel(this) as MainWindow)?.DataContext as ShellHost;
+
+    /// <summary>The Toolbox's context menu (#460, the classic IDE's): Choose Items…, Sort Items Alphabetically, Show All, Collapse All, Refresh.</summary>
+    private void OnContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if (Shell is { } shell && MenuBuilder.Context(shell, BuiltIns.ToolboxMenu) is { } menu)
+        {
+            menu.Open(this);
+            e.Handled = true;
+        }
     }
 
     /// <summary>Starts the drag of an item onto the surface (tests replace it: Avalonia.Headless has no drag source).</summary>
