@@ -180,8 +180,13 @@ public sealed partial class EnvironmentCheckTests : IDisposable
         // A shell's environment check, cancelled when its window closes: its probes kept running, and held the shell,
         // until they ended by themselves.
         var file = Path.Combine(_dir, "pid");
+        // .NET's calls, not Set-Content and Start-Sleep: a cmdlet's first use auto-loads its module, and Windows PowerShell
+        // first reads every module on PSModulePath into its module analysis cache when that cache is missing or stale, as
+        // on a fresh runner with the image's many modules. Here that took 5.5 s under load against 1.7 s for the same
+        // program without cmdlets (a fresh cache each), and on CI the pid wasn't written within 30 s while PowerShell ran
+        // (Windows others, run 41459412070).
         var (program, arguments) = OperatingSystem.IsWindows()
-            ? ("powershell.exe", new[] { "-NoProfile", "-Command", $"$PID | Set-Content -Path '{file}'; Start-Sleep -Seconds 300" })
+            ? ("powershell.exe", new[] { "-NoProfile", "-NonInteractive", "-Command", $"[System.IO.File]::WriteAllText('{file}', [string]$PID); [System.Threading.Thread]::Sleep(300000)" })
             : ("/bin/sh", ["-c", $"echo $$ > '{file}'; exec sleep 300"]);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var run = EnvironmentCheck.RunProcessAsync(program, arguments, _dir, TimeSpan.FromSeconds(120), cancel.Token);

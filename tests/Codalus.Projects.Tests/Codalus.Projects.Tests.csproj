@@ -19,6 +19,7 @@
     <Compile Include="..\..\src\Codalus.Projects.Host\ProjectWatcher.cs" Link="Host\ProjectWatcher.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\RestoreOutput.cs" Link="Host\RestoreOutput.cs" />
     <Compile Include="..\..\src\Codalus.Projects.Host\Packages\VerifiedOwner.cs" Link="Host\VerifiedOwner.cs" />
+    <Compile Include="..\..\src\Codalus.Projects.Host\Packages\ChildProcesses.cs" Link="Host\ChildProcesses.cs" />
     <Compile Include="..\Shared\MockHttpServer.cs" Link="Shared\MockHttpServer.cs" />
   </ItemGroup>
   <ItemGroup>

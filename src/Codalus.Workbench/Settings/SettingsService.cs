@@ -26,6 +26,14 @@ public sealed class SettingsChangedEventArgs(IReadOnlySet<string> keys, IReadOnl
 /// <see cref="Diagnostics"/>), so a typo never breaks the IDE. External edits are picked up live when
 /// watching is enabled. Writes go through <see cref="JsoncEditor"/> and keep comments and formatting.
 /// </summary>
+/// <summary>A setting couldn't be written to <see cref="File"/>; the change is kept and written later (<see cref="SettingsService.WriteFailed"/>).</summary>
+public sealed class SettingsWriteFailedEventArgs(string file, Exception error) : EventArgs
+{
+    public string File { get; } = file;
+
+    public Exception Error { get; } = error;
+}
+
 public sealed class SettingsService : IDisposable
 {
     private static readonly JsonDocumentOptions s_jsonc = new() { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true };
@@ -35,6 +43,12 @@ public sealed class SettingsService : IDisposable
     private long _reloadApplied;
     private readonly Dictionary<string, SettingDescriptor> _descriptors = new(StringComparer.Ordinal);
     private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly Lock _pendingGate = new();
+
+    /// <summary>Per settings file, the edits that couldn't be written yet, in order (<see cref="WriteAsync"/>).</summary>
+    private readonly Dictionary<string, List<Func<string, string>>> _pending = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _disposed = new();
+    private bool _retrying;
     private readonly bool _watch;
     private readonly FileWatcher? _userWatcher;
     private FileWatcher? _workspaceWatcher;
@@ -341,10 +355,57 @@ public sealed class SettingsService : IDisposable
     {
         var file = scope == SettingScope.User ? UserFile : WorkspaceFile ?? throw new InvalidOperationException("No workspace is open.");
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        Exception? failure;
+        bool wrotePending;
+        try
+        {
+            (failure, wrotePending) = await WriteAsync(file, edit, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+
+        if (_watch && scope == SettingScope.Workspace)
+        {
+            _workspaceWatcher ??= Watch(WorkspaceFile);
+        }
+
+        Reload();
+        if (failure is not null)
+        {
+            WriteFailed?.Invoke(this, new SettingsWriteFailedEventArgs(file, failure));
+            StartRetrying();
+        }
+        else if (wrotePending)
+        {
+            PendingWritten?.Invoke(this, file);
+        }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="file"/> with its pending edits and <paramref name="edit"/> applied to what it holds now, under
+    /// <see cref="_writeLock"/>. Returns null when it was written; otherwise the error, and <paramref name="edit"/> joins the
+    /// file's pending edits: a setting whose file stayed locked (an antivirus, an indexer, another program holding it on
+    /// Windows) was lost without a word, as most of the shell's settings are saved without waiting for the write.
+    /// </summary>
+    private async Task<(Exception? Failure, bool WrotePending)> WriteAsync(string file, Func<string, string>? edit, CancellationToken cancellationToken)
+    {
+        Func<string, string>[] pending;
+        lock (_pendingGate)
+        {
+            pending = _pending.TryGetValue(file, out var edits) ? [.. edits] : [];
+        }
+
         try
         {
             var text = File.Exists(file) ? ReadShared(file) : string.Empty;
-            var updated = edit(text);
+            foreach (var earlier in pending)
+            {
+                text = earlier(text);
+            }
+
+            var updated = edit is null ? text : edit(text);
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(file))!);
             // The watcher's reload (or another program, an indexer, an antivirus) may be reading the file: on Windows that
             // is a sharing violation for the writer, which passes in moments.
@@ -361,17 +422,122 @@ public sealed class SettingsService : IDisposable
                 }
             }
         }
-        finally
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _writeLock.Release();
+            if (edit is not null)
+            {
+                lock (_pendingGate)
+                {
+                    if (!_pending.TryGetValue(file, out var edits))
+                    {
+                        _pending[file] = edits = [];
+                    }
+
+                    edits.Add(edit);
+                }
+            }
+
+            return (ex, false);
         }
 
-        if (_watch && scope == SettingScope.Workspace)
+        lock (_pendingGate)
         {
-            _workspaceWatcher ??= Watch(WorkspaceFile);
+            // Every edit pending when this write read them is in the file now; a newer one waits for _writeLock.
+            _pending.Remove(file);
         }
 
-        Reload();
+        return (null, pending.Length > 0);
+    }
+
+    /// <summary>The settings files with changes that couldn't be written yet (<see cref="WriteFailed"/>).</summary>
+    public IReadOnlyList<string> PendingFiles
+    {
+        get
+        {
+            lock (_pendingGate)
+            {
+                return [.. _pending.Keys];
+            }
+        }
+    }
+
+    /// <summary>
+    /// A setting couldn't be written to its file. The change is in effect, and kept: it is written with the next change of
+    /// that file or by a retry (after 1 s, then less and less often), and <see cref="PendingWritten"/> says when.
+    /// </summary>
+    public event EventHandler<SettingsWriteFailedEventArgs>? WriteFailed;
+
+    /// <summary>A file's changes that <see cref="WriteFailed"/> reported were written after all (the file's path).</summary>
+    public event EventHandler<string>? PendingWritten;
+
+    /// <summary>How long the first retry of a failed write waits; each next one waits twice as long, up to 30 s.</summary>
+    internal TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+
+    private void StartRetrying()
+    {
+        lock (_pendingGate)
+        {
+            if (_retrying || _pending.Count == 0 || _disposed.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _retrying = true;
+        }
+
+        _ = Task.Run(RetryPendingAsync, CancellationToken.None);
+    }
+
+    private async Task RetryPendingAsync()
+    {
+        var delay = RetryDelay;
+        var token = _disposed.Token;
+        try
+        {
+            while (true)
+            {
+                await Task.Delay(delay, token).ConfigureAwait(false);
+                string[] files;
+                lock (_pendingGate)
+                {
+                    files = [.. _pending.Keys];
+                    if (files.Length == 0)
+                    {
+                        _retrying = false;
+                        return;
+                    }
+                }
+
+                foreach (var file in files)
+                {
+                    await _writeLock.WaitAsync(token).ConfigureAwait(false);
+                    bool wrotePending;
+                    try
+                    {
+                        (_, wrotePending) = await WriteAsync(file, null, token).ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        _writeLock.Release();
+                    }
+
+                    if (wrotePending)
+                    {
+                        Reload();
+                        PendingWritten?.Invoke(this, file);
+                    }
+                }
+
+                delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, TimeSpan.FromSeconds(30).Ticks));
+            }
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // Disposed: Dispose writes what is still pending once more.
+        }
+        catch (ObjectDisposedException)
+        {
+        }
     }
 
     /// <summary>
@@ -518,8 +684,8 @@ public sealed class SettingsService : IDisposable
     {
         var reload = Interlocked.Increment(ref _reloadsStarted);
         var diagnostics = new List<string>();
-        var user = ReadLayer(UserFile, diagnostics);
-        var workspace = WorkspaceFile is null ? new Dictionary<string, JsonElement>(StringComparer.Ordinal) : ReadLayer(WorkspaceFile, diagnostics);
+        var user = ReadLayer(UserFile, diagnostics, PendingEdits(UserFile));
+        var workspace = WorkspaceFile is null ? new Dictionary<string, JsonElement>(StringComparer.Ordinal) : ReadLayer(WorkspaceFile, diagnostics, PendingEdits(WorkspaceFile));
         Recompute(() =>
         {
             if (reload < _reloadApplied)
@@ -642,17 +808,31 @@ public sealed class SettingsService : IDisposable
     private static IEnumerable<string> LayerChanges(Dictionary<string, JsonElement> before, Dictionary<string, JsonElement> after) =>
         before.Keys.Union(after.Keys).Where(k => !(before.TryGetValue(k, out var b) && after.TryGetValue(k, out var a) && b.GetRawText() == a.GetRawText()));
 
-    private static Dictionary<string, JsonElement> ReadLayer(string file, List<string> diagnostics)
+    /// <summary>The edits of <paramref name="file"/> that couldn't be written yet: a reload applies them to what it reads.</summary>
+    private Func<string, string>[] PendingEdits(string file)
+    {
+        lock (_pendingGate)
+        {
+            return _pending.TryGetValue(file, out var edits) ? [.. edits] : [];
+        }
+    }
+
+    private static Dictionary<string, JsonElement> ReadLayer(string file, List<string> diagnostics, Func<string, string>[] pending)
     {
         var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        if (!File.Exists(file))
+        if (!File.Exists(file) && pending.Length == 0)
         {
             return values;
         }
 
         try
         {
-            var text = ReadShared(file);
+            var text = File.Exists(file) ? ReadShared(file) : string.Empty;
+            foreach (var edit in pending)
+            {
+                text = edit(text);
+            }
+
             if (string.IsNullOrWhiteSpace(text))
             {
                 return values;
@@ -686,6 +866,18 @@ public sealed class SettingsService : IDisposable
     {
         _userWatcher?.Dispose();
         _workspaceWatcher?.Dispose();
+        _disposed.Cancel();
+        // A last try for the changes a locked file kept out (WriteFailed already told the user about them), unless a
+        // write is still under way.
+        if (_writeLock.Wait(TimeSpan.FromSeconds(2)))
+        {
+            foreach (var file in PendingFiles)
+            {
+                _ = WriteAsync(file, null, CancellationToken.None).GetAwaiter().GetResult();
+            }
+        }
+
+        _disposed.Dispose();
         _writeLock.Dispose();
     }
 }

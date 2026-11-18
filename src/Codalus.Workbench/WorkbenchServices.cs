@@ -37,6 +37,8 @@ public sealed class WorkbenchServices : IDisposable
         LanguageDefinitions = new Languages.LanguageRegistry();
         Snippets = new Snippets.SnippetRegistry();
         LanguageServers = new Languages.LanguageServiceRegistry();
+        Settings.WriteFailed += OnSettingsWriteFailed;
+        Settings.PendingWritten += OnSettingsPendingWritten;
         if (watchFiles)
         {
             _keybindingsWatcher = new FileWatcher(paths.KeybindingsFile);
@@ -45,6 +47,43 @@ public sealed class WorkbenchServices : IDisposable
     }
 
     private readonly FileWatcher? _keybindingsWatcher;
+    private readonly Lock _settingsWarningsGate = new();
+    private readonly Dictionary<string, Notification> _settingsWarnings = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Says that a settings file couldn't be written, once while its changes wait, and takes it back when they are written:
+    /// most settings are saved without the UI waiting for the write, so a failure that only faulted its task was a change
+    /// lost without a word (a file an antivirus or another program kept locked on Windows).
+    /// </summary>
+    private void OnSettingsWriteFailed(object? sender, SettingsWriteFailedEventArgs e)
+    {
+        Log.AppendLine($"[settings] couldn't write {e.File}: {e.Error.Message}; the change is kept and written when the file can be.");
+        lock (_settingsWarningsGate)
+        {
+            if (_settingsWarnings.ContainsKey(e.File))
+            {
+                return;
+            }
+
+            var message = Localization.Localizer.Format("msg.settings.writeFailed", "Couldn't save settings to {0}: {1} The change is in effect and will be saved when the file can be written.", e.File, e.Error.Message);
+            _settingsWarnings[e.File] = Notifications.Warning(message);
+        }
+    }
+
+    private void OnSettingsPendingWritten(object? sender, string file)
+    {
+        Log.AppendLine($"[settings] wrote the changes kept for {file}.");
+        Notification? warning;
+        lock (_settingsWarningsGate)
+        {
+            _settingsWarnings.Remove(file, out warning);
+        }
+
+        if (warning is not null)
+        {
+            Notifications.Dismiss(warning);
+        }
+    }
 
     public AppPaths Paths { get; }
 
