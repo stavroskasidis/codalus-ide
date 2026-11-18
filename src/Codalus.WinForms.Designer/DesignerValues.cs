@@ -15,6 +15,9 @@ namespace Codalus.WinForms.Designer;
 /// loaded yet when only the designer names their types: a form's base type from a control library's package, or a
 /// package's control dropped from the Toolbox.
 /// </summary>
+// TODO(issue): a class library designed with no app that references it runs on its own output folder, which has none of
+// its packages' assemblies (a library's build doesn't copy them): add the packages' folders from its assets file to the
+// search folders (ADR 0073, "1.0: control libraries from packages").
 internal sealed class DesignerTypes
 {
     private readonly Dictionary<string, Type?> _cache = new(StringComparer.Ordinal);
