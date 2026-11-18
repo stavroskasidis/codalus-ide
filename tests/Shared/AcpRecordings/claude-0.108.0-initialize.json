@@ -1,5 +1,5 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-14",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-18",
   "protocolVersion": 1,
   "agentCapabilities": {
     "_meta": {
@@ -14,7 +14,8 @@
     },
     "mcpCapabilities": {
       "http": true,
-      "sse": true
+      "sse": true,
+      "acp": true
     },
     "auth": {
       "logout": {},
@@ -42,7 +43,7 @@
   "agentInfo": {
     "name": "@agentclientprotocol/claude-agent-acp",
     "title": "Claude Agent",
-    "version": "0.107.0"
+    "version": "0.108.0"
   },
   "authMethods": [
     {
