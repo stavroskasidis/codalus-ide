@@ -165,7 +165,7 @@ public static class AcpAgentTemplates
     public const string PiCliPackage = "@earendil-works/pi-coding-agent@1.5.2";
 
     /// <summary>OpenCode's CLI from npm, pinned to the version the registry lists.</summary>
-    public const string OpenCodeCliPackage = "opencode-ai@1.19.5";
+    public const string OpenCodeCliPackage = "opencode-ai@1.19.6";
 
     private static readonly AcpInstallOption GoosePage =
         new("page", "goose's install page", "Download goose for your OS yourself.", InstallKind.OpenPage, "https://block.github.io/goose/docs/getting-started/installation");
