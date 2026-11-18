@@ -653,9 +653,11 @@ public sealed class MergeEditorViewModel : ObservableObject
         var (current, currentRanges, currentFileLines) = Locate(Ours, oursProjection.ToString(), oursLines);
         var (incoming, incomingRanges, incomingFileLines) = Locate(Theirs, theirsProjection.ToString(), theirsLines);
 
-        // The merge base's text of each conflict: from git's diff3 section, else found through a side's file.
+        // The merge base's text of each conflict: from git's diff3 section, else found through both sides' files. Like
+        // diff3's base section, it spans the base lines either side changed: a side whose block is empty (it deleted
+        // the lines the other side changed) maps to a place between lines, and only the other side finds them.
         LineMap? oursToBase = Base is not null && currentFileLines is not null ? new LineMap(LineDiff.Lines(Ours), LineDiff.Lines(Base)) : null;
-        LineMap? theirsToBase = Base is not null && incomingFileLines is not null && oursToBase is null ? new LineMap(LineDiff.Lines(Theirs), LineDiff.Lines(Base)) : null;
+        LineMap? theirsToBase = Base is not null && incomingFileLines is not null ? new LineMap(LineDiff.Lines(Theirs), LineDiff.Lines(Base)) : null;
         var baseLines = Base is null ? [] : LineDiff.Lines(Base);
 
         var display = new StringBuilder();
@@ -669,13 +671,9 @@ public sealed class MergeEditorViewModel : ObservableObject
             {
                 @base = conflict.Base;
             }
-            else if (oursToBase is not null && oursToBase.Map(currentFileLines![i].Start, currentFileLines[i].End) is var (b0, b1))
+            else if (Span(oursToBase?.Map(currentFileLines![i].Start, currentFileLines[i].End), theirsToBase?.Map(incomingFileLines![i].Start, incomingFileLines[i].End)) is var (b0, b1))
             {
                 @base = Join(baseLines, b0, b1, LineEnding);
-            }
-            else if (theirsToBase is not null && theirsToBase.Map(incomingFileLines![i].Start, incomingFileLines[i].End) is var (t0, t1))
-            {
-                @base = Join(baseLines, t0, t1, LineEnding);
             }
             else
             {
@@ -691,6 +689,14 @@ public sealed class MergeEditorViewModel : ObservableObject
         display.Append(result, previous, result.Length - previous);
         return (display.ToString(), current, incoming);
     }
+
+    /// <summary>The base lines both sides' blocks map to (from the first one's start to the last one's end), or null.</summary>
+    private static (int Start, int End)? Span((int Start, int End)? ours, (int Start, int End)? theirs) => (ours, theirs) switch
+    {
+        ({ } o, { } t) => (Math.Min(o.Start, t.Start), Math.Max(o.End, t.End)),
+        ({ } o, null) => o,
+        (null, var t) => t,
+    };
 
     /// <summary>
     /// A side's pane: its file from the index when each block's lines are found in it (by a line diff against the

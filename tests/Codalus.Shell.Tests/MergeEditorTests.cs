@@ -63,6 +63,32 @@ public sealed class MergeEditorTests
     }
 
     [AvaloniaFact]
+    public void A_conflict_whose_current_side_is_empty_shows_the_base_lines_the_current_side_deleted()
+    {
+        // The current branch replaced x1 and x2 with N; git's histogram diff kept N out of the conflict, so the
+        // conflict's current side is empty and its incoming side is the incoming branch's edit of the old lines.
+        var vm = ViewModel(
+            "a\nN\n<<<<<<< HEAD\n=======\nx1\nX2\n>>>>>>> master\nz\n",
+            ours: "a\nN\nz\n",
+            theirs: "a\nx1\nX2\nz\n",
+            @base: "a\nx1\nx2\nz\n");
+
+        var block = Assert.Single(vm.Conflicts);
+        Assert.Equal("a\nN\nx1\nx2\nz\n", vm.Result.Text);
+        Assert.Equal("x1\nx2\n", vm.Result.GetText(block.Result.Start, block.Result.Length));
+        Assert.Equal(0, block.Current.Length);
+        Assert.Equal("x1\nX2\n", vm.IncomingText.Substring(block.Incoming.Start, block.Incoming.Length));
+
+        // The mirror image: the incoming side deleted the lines the current side changed.
+        var mirror = ViewModel(
+            "a\nN\n<<<<<<< HEAD\nx1\nX2\n=======\n>>>>>>> master\nz\n",
+            ours: "a\nx1\nX2\nz\n",
+            theirs: "a\nN\nz\n",
+            @base: "a\nx1\nx2\nz\n");
+        Assert.Equal("a\nN\nx1\nx2\nz\n", mirror.Result.Text);
+    }
+
+    [AvaloniaFact]
     public void Checking_a_side_takes_its_block_checking_both_takes_both_and_unchecking_takes_it_out()
     {
         var vm = ViewModel();
