@@ -95,7 +95,7 @@ dotnet run --project benchmarks/Codalus.Benchmarks.FixtureGen -- all samples
 Before merging changes to platform-sensitive code (processes, paths, hosts, debugger, git, packaging, file watching, rendering, shortcuts, `OperatingSystem.Is*`), validate on each platform and report each result separately. Never call a change cross-platform when a platform was skipped.
 
 - **The platform you're on**: validate it directly (`dotnet test` on Windows, `bash eng/validate.sh [--smoke]` on Linux and macOS).
-- **On Windows, also Linux through WSL**: `wsl -d Ubuntu -- bash eng/wsl-test.sh [--smoke]` (run in the background; it mirrors the tree into `~/codalus` and runs `eng/validate.sh`).
+- **On Windows, also Linux through WSL**: `wsl -d Ubuntu -- bash eng/wsl-test.sh [--smoke]` (run in the background; it mirrors the tree into `~/codalus` and runs `eng/validate.sh`; a worktree's own mirror, `CODALUS_WSL_DIR`, is removed when its run passes).
 - **Other platforms, through remote Claude sessions** (Remote Control sessions on the user's other machines, such as `codalus-mac`, listed by `ListAgents`): `bash eng/push-snapshot.sh` pushes a snapshot to the scratch branch `validate`; then `SendMessage` the commit to that session, asking it to run the platform's validation in a worktree at `FETCH_HEAD` outside the user's checkout and reply with counts, failures and artifact paths. If the session is missing or offline, ask the user to start it; don't fall back to hosted runners without asking. Silence isn't a result.
 
 ## Git workflow
