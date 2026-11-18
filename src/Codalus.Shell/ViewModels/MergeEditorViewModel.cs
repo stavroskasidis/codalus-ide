@@ -152,6 +152,7 @@ public sealed class MergeEditorViewModel : ObservableObject
 
     private readonly Func<string, Task> _accept;
     private readonly List<MergeConflictBlock> _blocks = [];
+    private readonly Dictionary<int, IReadOnlyList<(int Start, int Length)>>[] _changedWords;
     private MergeConflictBlock? _applying;
     private int _remaining;
     private int _caretOffset;
@@ -168,10 +169,21 @@ public sealed class MergeEditorViewModel : ObservableObject
         Func<string, Task> accept,
         string? currentName = null,
         string? incomingName = null,
-        TextFileFormat? format = null)
+        TextFileFormat? format = null,
+        string? remerged = null)
     {
         Path = path;
         InitialResult = result;
+        var conflicts = Parse(result);
+
+        // The line-by-line re-merge (GitService.RemergeAsync), when its conflicts aren't git's own.
+        if (remerged is not null && Parse(remerged) is { Count: > 0 } finer && !SameConflicts(conflicts, finer))
+        {
+            GitConflictCount = conflicts.Count;
+            result = remerged;
+            conflicts = finer;
+        }
+
         Ours = ours ?? string.Empty;
         Theirs = theirs ?? string.Empty;
         Base = @base;
@@ -180,13 +192,13 @@ public sealed class MergeEditorViewModel : ObservableObject
         EncodingName = format?.EncodingName ?? "UTF-8";
         Encoding = format?.Encoding;
 
-        var conflicts = Parse(result);
         CurrentName = Name(currentName, conflicts.Count > 0 ? conflicts[0].OursLabel : null);
         IncomingName = Name(incomingName, conflicts.Count > 0 ? conflicts[0].TheirsLabel : null);
         var (display, currentText, incomingText) = Build(result, conflicts);
         CurrentText = currentText;
         IncomingText = incomingText;
         IndentationName = TextFiles.IndentationName(result);
+        _changedWords = [ChangedWords(MergeSide.Current), ChangedWords(MergeSide.Incoming)];
 
         Result = new TextDocument(display);
         Result.UndoStack.ClearAll();
@@ -206,7 +218,7 @@ public sealed class MergeEditorViewModel : ObservableObject
 
     public string FileName => System.IO.Path.GetFileName(Path);
 
-    /// <summary>The file as git left it, with its conflict markers.</summary>
+    /// <summary>The file as git left it, with its conflict markers (git's own, also when the editor shows a re-merge's).</summary>
     public string InitialResult { get; }
 
     /// <summary>The current version from the index (stage 2), or empty.</summary>
@@ -297,6 +309,17 @@ public sealed class MergeEditorViewModel : ObservableObject
         1 => Localizer.Format("mergeEditor.oneConflict", "1 Conflict ({0} Remaining)", _remaining),
         _ => Localizer.Format("mergeEditor.conflicts", "{0} Conflicts ({1} Remaining)", Total, _remaining),
     };
+
+    /// <summary>
+    /// How many conflicts git's markers had when the editor shows the line-by-line re-merge's instead (its conflicts
+    /// differ from git's); null when it shows git's.
+    /// </summary>
+    public int? GitConflictCount { get; }
+
+    /// <summary>The count's tooltip: what git found, when the conflicts are the re-merge's; null otherwise.</summary>
+    public string? SummaryTip => GitConflictCount is { } count
+        ? Localizer.Format("mergeEditor.remergedTip", "Conflicts recomputed with a line-by-line merge (git found {0})", count)
+        : null;
 
     /// <summary>Whether the result differs from what the editor opened with (the tab's <c>*</c>).</summary>
     public bool IsModified => !Result.UndoStack.IsOriginalFile;
@@ -975,6 +998,56 @@ public sealed class MergeEditorViewModel : ObservableObject
         }
 
         return lines;
+    }
+
+    /// <summary>Whether two parses found the same conflicts (each side's text, whatever the line endings).</summary>
+    private static bool SameConflicts(IReadOnlyList<MergeConflict> a, IReadOnlyList<MergeConflict> b)
+    {
+        static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        return a.Count == b.Count && a.Zip(b).All(p => Lf(p.First.Ours) == Lf(p.Second.Ours) && Lf(p.First.Theirs) == Lf(p.Second.Theirs));
+    }
+
+    // ------------------------------------------------------------------ changed words
+
+    /// <summary>
+    /// The changed words of a source pane's 0-based line (as the diff view marks them: a character diff widened to whole
+    /// words), where the line is in a conflict's block and paired with a line of the other side's block; none elsewhere.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Length)> ChangedWordsAt(MergeSide side, int line) =>
+        _changedWords[(int)side].TryGetValue(line, out var ranges) ? ranges : [];
+
+    private Dictionary<int, IReadOnlyList<(int Start, int Length)>> ChangedWords(MergeSide side)
+    {
+        var words = new Dictionary<int, IReadOnlyList<(int Start, int Length)>>();
+        var other = side == MergeSide.Current ? MergeSide.Incoming : MergeSide.Current;
+        var starts = LineStarts(TextFor(side));
+        foreach (var block in _blocks)
+        {
+            var mine = LineDiff.Lines(TextIn(block, side));
+            var theirs = LineDiff.Lines(TextIn(block, other));
+            if (mine.Length == 0 || theirs.Length == 0)
+            {
+                continue;
+            }
+
+            var found = starts.BinarySearch(block.RangeIn(side).Start);
+            var first = found >= 0 ? found : ~found - 1;
+            foreach (var row in DiffRows.Align(LineDiff.Diff(theirs, mine)))
+            {
+                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.Ranges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
+                {
+                    words[first + n - 1] = ranges;
+                }
+            }
+        }
+
+        return words;
+    }
+
+    private string TextIn(MergeConflictBlock block, MergeSide side)
+    {
+        var range = block.RangeIn(side);
+        return TextFor(side).Substring(range.Start, range.Length);
     }
 
     /// <summary>What replaces a conflict: <c>current</c>, <c>incoming</c>, <c>both</c> (current then incoming) or <c>base</c>.</summary>

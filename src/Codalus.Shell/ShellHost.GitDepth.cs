@@ -319,6 +319,9 @@ public sealed partial class ShellHost
         var git = Git.ServiceFor(path);
         var (@base, ours, theirs) = await git.ConflictVersionsAsync(path).ConfigureAwait(true);
         var (result, format) = File.Exists(path) ? TextFiles.Decode(await File.ReadAllBytesAsync(path).ConfigureAwait(true)) : (string.Empty, TextFileFormat.Default);
+        var remerged = @base is not null && ours is not null && theirs is not null && await git.IsGitsOwnMergeAsync(path, result).ConfigureAwait(true)
+            ? await Task.Run(() => ThreeWayMerge.Remerge(@base, ours, theirs, result)).ConfigureAwait(true)
+            : null;
         MergeEditorDocument? document = null;
         var viewModel = new MergeEditorViewModel(path, result, ours, theirs, @base, async text =>
         {
@@ -334,7 +337,7 @@ public sealed partial class ShellHost
             }
 
             StatusBar.ShowMessage(Localizer.Format("msg.gitDepth.isResolved", "{0} is resolved.", Path.GetFileName(path)), TimeSpan.FromSeconds(5));
-        }, CurrentBranchFor(path), format: format);
+        }, CurrentBranchFor(path), format: format, remerged: remerged);
         document = new MergeEditorDocument(SetUpMergeEditor(viewModel), EditorFont);
         Layout.OpenDocument(document, focus: true);
         return document;
@@ -416,6 +419,9 @@ public sealed partial class ShellHost
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         MergeEditorDocument? document = null;
         var (result, format) = File.Exists(merged) ? TextFiles.Decode(await File.ReadAllBytesAsync(merged).ConfigureAwait(true)) : (string.Empty, TextFileFormat.Default);
+        var remerged = await Git.ServiceFor(merged).IsGitsOwnMergeOfFilesAsync(local, @base, remote, result).ConfigureAwait(true)
+            ? await Task.Run(() => ThreeWayMerge.Remerge(Read(@base), Read(local), Read(remote), result)).ConfigureAwait(true)
+            : null;
         var viewModel = new MergeEditorViewModel(merged, result, Read(local), Read(remote), Read(@base), async text =>
         {
             await File.WriteAllTextAsync(merged, text, format.Encoding).ConfigureAwait(true);
@@ -424,7 +430,7 @@ public sealed partial class ShellHost
             {
                 Layout.CloseDocument(document);
             }
-        }, CurrentBranchFor(merged), format: format);
+        }, CurrentBranchFor(merged), format: format, remerged: remerged);
         document = new MergeEditorDocument(SetUpMergeEditor(viewModel), EditorFont);
         void OnClosed(object? sender, Docking.ShellDocument closed)
         {

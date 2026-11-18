@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Codalus.Workbench.Git;
 
 namespace Codalus.Workbench.Tests;
@@ -116,6 +117,43 @@ public sealed class GitDepthTests : IAsyncLifetime
         // Line history: only the commits that touched lines 2–3.
         Assert.Equal(["change two", "initial"], (await _git.LineHistoryAsync(FileA, 2, 3, Ct)).Select(c => c.Subject));
         Assert.Equal(["initial"], (await _git.LineHistoryAsync(FileA, 5, 6, Ct)).Select(c => c.Subject));
+    }
+
+    [Fact]
+    public async Task A_conflicted_file_counts_as_gits_own_merge_until_it_is_edited()
+    {
+        await Git(Repo, "switch", "-q", "-c", "other");
+        await Write(FileA, "one", "THEIRS", "three", "four", "five", "six");
+        await Commit("theirs");
+        await Git(Repo, "switch", "-q", "main");
+        await Write(FileA, "one", "OURS", "three", "four", "five", "six");
+        await Commit("ours");
+        await _git.RefreshAsync(Ct);
+        await Assert.ThrowsAsync<GitException>(() => _git.MergeAsync("other", Ct));
+
+        // git merge-file learned --diff-algorithm in 2.44; older git can't confirm it, and the merge editor keeps git's markers.
+        var version = (await Git(Repo, "--version")).Split(' ', StringSplitOptions.RemoveEmptyEntries)[2].Split('.');
+        var supported = int.Parse(version[0], CultureInfo.InvariantCulture) > 2 || int.Parse(version[1], CultureInfo.InvariantCulture) >= 44;
+        var text = await File.ReadAllTextAsync(FileA, Ct);
+        Assert.Contains("<<<<<<< HEAD", text, StringComparison.Ordinal);
+        Assert.Equal(supported, await _git.IsGitsOwnMergeAsync(FileA, text, Ct));
+        Assert.Equal(supported, await _git.IsGitsOwnMergeAsync(FileA, text.ReplaceLineEndings("\r\n"), Ct));
+
+        // An edit (or rerere, or a merge driver) made it something else: git's markers stay.
+        Assert.False(await _git.IsGitsOwnMergeAsync(FileA, text.Replace("five", "FIVE", StringComparison.Ordinal), Ct));
+        Assert.False(await _git.IsGitsOwnMergeAsync(FileA, "no markers\n", Ct));
+
+        // git mergetool's files.
+        var (@base, ours, theirs) = await _git.ConflictVersionsAsync(FileA, Ct);
+        string Temp(string name, string? content)
+        {
+            var path = Path.Combine(_root, name);
+            File.WriteAllText(path, content);
+            return path;
+        }
+
+        Assert.Equal(supported, await _git.IsGitsOwnMergeOfFilesAsync(Temp("LOCAL.txt", ours), Temp("BASE.txt", @base), Temp("REMOTE.txt", theirs), text, Ct));
+        await _git.AbortAsync(Ct);
     }
 
     [Fact]
