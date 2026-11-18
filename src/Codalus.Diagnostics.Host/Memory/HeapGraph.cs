@@ -36,6 +36,9 @@ internal sealed class HeapGraph
 
     public int RootCount { get; private set; }
 
+    /// <summary>How the events fit together (<see cref="Codalus.Diagnostics.Protocol.HeapSummary.Integrity"/>).</summary>
+    public string Integrity { get; private set; } = string.Empty;
+
     public string TypeName(int type) => _typeNames[type];
 
     public int TypeOf(int node) => _types[node];
@@ -63,8 +66,10 @@ internal sealed class HeapGraph
         int? dumping = null;
         var done = false;
         var events = 0;
+        var gc = "before any GC";
         clr.GCStart += e =>
         {
+            gc = $"GC {e.Count} (gen {e.Depth}, {e.Reason}, {e.Type}, thread {e.ThreadID})";
             if (dumping is null && !done && e.Depth == 2 && e.Reason == GCReason.Induced)
             {
                 dumping = e.Count;
@@ -93,6 +98,7 @@ internal sealed class HeapGraph
         {
             if (Active())
             {
+                builder.Walk(gc);
                 for (var i = 0; i < e.Count; i++)
                 {
                     var node = e.Values(i);
@@ -157,7 +163,9 @@ internal sealed class HeapGraph
         };
         source.Process();
         cancellationToken.ThrowIfCancellationRequested();
-        return builder.Build();
+        var graph = builder.Build();
+        graph.Integrity += $"; {source.EventsLost} events lost";
+        return graph;
     }
 
     /// <summary>Collects the events (nodes, then their edges in order, roots and types) and links them by address.</summary>
@@ -170,6 +178,7 @@ internal sealed class HeapGraph
         private readonly List<ulong> _targets = [];
         private readonly List<(ulong Address, int Kind)> _roots = [];
         private readonly Dictionary<ulong, (string Name, ulong[] Parameters)> _types = [];
+        private readonly List<(string Gc, int FirstNode)> _walks = [];
 
         public void Node(ulong address, long size, ulong type, int edges)
         {
@@ -182,6 +191,15 @@ internal sealed class HeapGraph
         public void Edge(ulong target) => _targets.Add(target);
 
         public void Root(ulong address, int kind) => _roots.Add((address, kind));
+
+        /// <summary>A batch of nodes came during <paramref name="gc"/>: the heap walks a snapshot holds, which should be one.</summary>
+        public void Walk(string gc)
+        {
+            if (_walks.Count == 0 || _walks[^1].Gc != gc)
+            {
+                _walks.Add((gc, _addresses.Count));
+            }
+        }
 
         public void Type(ulong id, string name, ulong[] parameters) => _types[id] = (name, parameters);
 
@@ -218,9 +236,13 @@ internal sealed class HeapGraph
         {
             var graph = new HeapGraph();
             var index = new Dictionary<ulong, int>(_addresses.Count);
+            var repeated = 0;
             for (var i = 0; i < _addresses.Count; i++)
             {
-                index.TryAdd(_addresses[i], i);
+                if (!index.TryAdd(_addresses[i], i))
+                {
+                    repeated++;
+                }
             }
 
             var typeIndex = new Dictionary<ulong, int>();
@@ -287,6 +309,15 @@ internal sealed class HeapGraph
 
             graph._parent = parent;
             graph.RootCount = roots;
+            long expected = 0;
+            foreach (var count in _edgeCounts)
+            {
+                expected += count;
+            }
+
+            var walks = _walks.Count == 0 ? "no heap walk" : string.Join(", ", _walks.Select(w => $"{w.Gc} from node {w.FirstNode}"));
+            graph.Integrity = $"{_walks.Count} heap walk(s): {walks}; {repeated} repeated addresses; {expected} edges expected, {_targets.Count} received; "
+                + $"{_roots.Count} root events, {_roots.Count(r => !index.ContainsKey(r.Address))} not at an object, {graph.ObjectCount - parent.Count(p => p != Unreached)} objects unreached";
             return graph;
         }
     }
