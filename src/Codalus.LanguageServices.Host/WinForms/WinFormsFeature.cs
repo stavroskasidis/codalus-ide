@@ -12,7 +12,7 @@ namespace Codalus.LanguageServices.Host.WinForms;
 /// The C# host's side of the Windows Forms designer (M41a, ADR 0073): <c>codalus/winforms/read</c> reads a form's
 /// InitializeComponent through the project's compilation, <c>codalus/winforms/edit</c> writes the designer's changes as
 /// minimal edits (and event handlers in the code file), and <c>codalus/winforms/toolbox</c> lists the components the
-/// project and the projects it references declare. Reading and writing both happen here, on the same syntax, so the
+/// project, the projects it references and (#454) its referenced packages declare. Reading and writing both happen here, on the same syntax, so the
 /// code and the designer's model can't drift apart.
 /// </summary>
 internal static class WinFormsFeature
@@ -537,7 +537,12 @@ internal static class WinFormsFeature
         return edits;
     }
 
-    /// <summary>The components of a project and of the projects it references, for the Toolbox (<c>[ToolboxItem(false)]</c> and forms left out).</summary>
+    /// <summary>
+    /// The components of a project and of the projects it references, then (#454) those of the assemblies it references
+    /// (its packages', a control library's), for the Toolbox: <c>[ToolboxItem(false)]</c>, <c>[DesignTimeVisible(false)]</c>
+    /// (their own or a base type's, as Windows Forms reads them) and forms left out. A referenced assembly's items are
+    /// grouped by the package it comes from (<see cref="ToolboxReferences"/>), after the projects'.
+    /// </summary>
     public static async Task<WinFormsToolboxResult> ToolboxAsync(Solution solution, string projectPath, CancellationToken cancellationToken)
     {
         var project = solution.Projects.FirstOrDefault(p => p.FilePath is { } path && Paths.Comparer.Equals(path, Path.GetFullPath(projectPath)) && p.Language == LanguageNames.CSharp);
@@ -548,6 +553,7 @@ internal static class WinFormsFeature
 
         var items = new List<WinFormsToolboxItem>();
         var projects = new[] { project }.Concat(project.ProjectReferences.Select(r => solution.GetProject(r.ProjectId)).OfType<Project>()).DistinctBy(p => p.Id);
+        Compilation? ownCompilation = null;
         foreach (var candidate in projects)
         {
             if (await candidate.GetCompilationAsync(cancellationToken).ConfigureAwait(false) is not { } compilation)
@@ -556,29 +562,72 @@ internal static class WinFormsFeature
             }
 
             var own = candidate.Id == project.Id;
+            if (own)
+            {
+                ownCompilation = compilation;
+            }
+
             foreach (var type in Types(compilation.Assembly.GlobalNamespace))
             {
-                if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsGenericType: false, IsStatic: false }
-                    || !(type.DeclaredAccessibility == Accessibility.Public || (own && type.DeclaredAccessibility == Accessibility.Internal))
-                    || !InheritsFrom(type, ComponentType) || InheritsFrom(type, FormType)
-                    || !type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public))
+                if (ToolboxItem(type, candidate.Name, internalToo: own) is { } item)
                 {
-                    continue;
+                    items.Add(item);
                 }
-
-                var attributes = type.GetAttributes();
-                if (attributes.Any(a => a.AttributeClass?.Name is "ToolboxItemAttribute" && a.ConstructorArguments is [{ Value: false }])
-                    || attributes.Any(a => a.AttributeClass?.Name is "DesignTimeVisibleAttribute" && a.ConstructorArguments is [{ Value: false }]))
-                {
-                    continue;
-                }
-
-                var description = attributes.FirstOrDefault(a => a.AttributeClass?.Name is "DescriptionAttribute")?.ConstructorArguments.FirstOrDefault().Value as string;
-                items.Add(new WinFormsToolboxItem(SemanticDesignerTypeResolver.Name(type), type.Name, candidate.Name, InheritsFrom(type, ControlType)) { Description = description });
             }
         }
 
-        return new WinFormsToolboxResult([.. items.OrderBy(i => i.Project, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)]);
+        var sorted = items.OrderBy(i => i.Project, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
+        return new WinFormsToolboxResult([.. sorted, .. ownCompilation is null ? [] : ToolboxReferences.Items(project, ownCompilation, cancellationToken)]);
+    }
+
+    /// <summary>
+    /// <paramref name="type"/> as a Toolbox item of <paramref name="group"/>, or null when the Toolbox doesn't list it: it
+    /// must be a public class (or internal in the designed project, <paramref name="internalToo"/>; nested in public
+    /// classes), not abstract, generic or static, with a public parameterless constructor, a component that isn't a form,
+    /// and neither it nor a base type <c>[ToolboxItem(false)]</c> or <c>[DesignTimeVisible(false)]</c> unless a nearer
+    /// type says otherwise (both attributes are inherited).
+    /// </summary>
+    internal static WinFormsToolboxItem? ToolboxItem(INamedTypeSymbol type, string group, bool internalToo)
+    {
+        if (type is not { TypeKind: TypeKind.Class, IsAbstract: false, IsGenericType: false, IsStatic: false }
+            || !Visible(type, internalToo)
+            || !InheritsFrom(type, ComponentType) || InheritsFrom(type, FormType)
+            || !type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public)
+            || Inherited(type, "ToolboxItemAttribute") is { ConstructorArguments: [{ Value: false }] }
+            || Inherited(type, "DesignTimeVisibleAttribute") is { ConstructorArguments: [{ Value: false }] })
+        {
+            return null;
+        }
+
+        var description = type.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name is "DescriptionAttribute")?.ConstructorArguments.FirstOrDefault().Value as string;
+        return new WinFormsToolboxItem(SemanticDesignerTypeResolver.Name(type), type.Name, group, InheritsFrom(type, ControlType)) { Description = description };
+
+        static bool Visible(INamedTypeSymbol type, bool internalToo)
+        {
+            for (INamedTypeSymbol? current = type; current is not null; current = current.ContainingType)
+            {
+                if (!(current.DeclaredAccessibility == Accessibility.Public || (internalToo && current.DeclaredAccessibility == Accessibility.Internal)))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        // The nearest of the type and its base types that has the attribute (an inherited one, as TypeDescriptor reads it).
+        static AttributeData? Inherited(INamedTypeSymbol type, string attribute)
+        {
+            for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                if (current.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name == attribute) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
     }
 
     private static IEnumerable<INamedTypeSymbol> Types(INamespaceSymbol ns)

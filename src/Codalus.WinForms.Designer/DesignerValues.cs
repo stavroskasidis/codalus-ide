@@ -2,15 +2,27 @@ using System.ComponentModel;
 using System.ComponentModel.Design.Serialization;
 using System.Globalization;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
+using System.Runtime.Loader;
 using Codalus.LanguageServices.Protocol;
 
 namespace Codalus.WinForms.Designer;
 
-/// <summary>Finds types by the full C# names the model uses, in the framework and the loaded assemblies.</summary>
+/// <summary>
+/// Finds types by the full C# names the model uses: in the framework and the loaded assemblies, then (#454) in the
+/// assemblies of the search folders (the app's build output, its packages' assemblies among them), which nothing has
+/// loaded yet when only the designer names their types: a form's base type from a control library's package, or a
+/// package's control dropped from the Toolbox.
+/// </summary>
 internal sealed class DesignerTypes
 {
     private readonly Dictionary<string, Type?> _cache = new(StringComparer.Ordinal);
-    private readonly List<Assembly> _assemblies = [typeof(Control).Assembly, typeof(Point).Assembly, typeof(Color).Assembly, typeof(Component).Assembly, typeof(object).Assembly];
+    private static readonly Assembly[] s_framework = [typeof(Control).Assembly, typeof(Point).Assembly, typeof(Color).Assembly, typeof(Component).Assembly, typeof(object).Assembly];
+    private readonly List<Assembly> _assemblies = [.. s_framework];
+    private readonly HashSet<Type> _covered = [];
+    private string[] _folders = [];
+    private Dictionary<string, string>? _index;
 
     private static readonly Dictionary<string, Type> s_keywords = new(StringComparer.Ordinal)
     {
@@ -24,6 +36,17 @@ internal sealed class DesignerTypes
         if (!_assemblies.Contains(assembly))
         {
             _assemblies.Insert(0, assembly);
+            _cache.Clear();
+        }
+    }
+
+    /// <summary>The folders whose assemblies declare the types the loaded ones don't (the project's and its app's output).</summary>
+    public void SearchIn(IReadOnlyList<string> folders)
+    {
+        if (!_folders.SequenceEqual(folders, StringComparer.OrdinalIgnoreCase))
+        {
+            _folders = [.. folders];
+            _index = null;
             _cache.Clear();
         }
     }
@@ -59,8 +82,210 @@ internal sealed class DesignerTypes
             }
         }
 
+        // #454: a type of an assembly nothing has loaded yet (the project's code names it, but only running that code loads it).
+        foreach (var candidate in Candidates(name))
+        {
+            if (found is not null || name.Contains(',', StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            found = FromSearchFolders(candidate);
+        }
+
+        if (found is not null)
+        {
+            CoverMissingDesigners(found);
+        }
+
         _cache[name] = found;
         return found;
+    }
+
+    /// <summary>The type <paramref name="name"/> (<c>A.B+C</c>) declared by an assembly of the search folders, loaded for it.</summary>
+    private Type? FromSearchFolders(string name)
+    {
+        _index ??= Index(_folders);
+        if (!_index.TryGetValue(name, out var path) || Load(path) is not { } assembly)
+        {
+            return null;
+        }
+
+        try
+        {
+            return assembly.GetType(name, throwOnError: false);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or BadImageFormatException or TypeLoadException)
+        {
+            // A type whose base type's assembly is missing: not found, and why in the IDE's log.
+            Console.Error.WriteLine($"[designer] {name} in {Path.GetFileName(path)} didn't load: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The public types each assembly of <paramref name="folders"/> declares (nested ones as <c>Outer+Inner</c>), read
+    /// from their metadata without loading them: loading every assembly of a control library's output to look would
+    /// take seconds, and what isn't needed stays unloaded. Only the folders' own files: satellites and <c>runtimes/</c>
+    /// are the runtime's to pick.
+    /// </summary>
+    private static Dictionary<string, string> Index(IEnumerable<string> folders)
+    {
+        var index = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var folder in folders)
+        {
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(folder, "*.dll");
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            foreach (var file in files)
+            {
+                try
+                {
+                    using var pe = new PEReader(File.OpenRead(file));
+                    if (!pe.HasMetadata)
+                    {
+                        continue;
+                    }
+
+                    var reader = pe.GetMetadataReader();
+                    if (!reader.IsAssembly)
+                    {
+                        continue;
+                    }
+
+                    foreach (var handle in reader.TypeDefinitions)
+                    {
+                        if (PublicName(reader, reader.GetTypeDefinition(handle)) is { } typeName)
+                        {
+                            index.TryAdd(typeName, file);
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)
+                {
+                    // Not an assembly (a native library), or held: its types aren't found here.
+                }
+            }
+        }
+
+        return index;
+    }
+
+    /// <summary>A public type's reflection name (<c>A.B+C</c>), or null for a type code outside its assembly can't name.</summary>
+    private static string? PublicName(MetadataReader reader, TypeDefinition type)
+    {
+        var visibility = type.Attributes & TypeAttributes.VisibilityMask;
+        var name = reader.GetString(type.Name);
+        if (visibility == TypeAttributes.Public)
+        {
+            var ns = reader.GetString(type.Namespace);
+            return ns.Length == 0 ? name : ns + "." + name;
+        }
+
+        return visibility == TypeAttributes.NestedPublic && PublicName(reader, reader.GetTypeDefinition(type.GetDeclaringType())) is { } outer ? outer + "+" + name : null;
+    }
+
+    /// <summary>
+    /// The assembly at <paramref name="path"/>, through the default context by its name (the app's deps file binds it,
+    /// else the session's resolver finds it in the search folders), so it isn't loaded twice; else from the path.
+    /// </summary>
+    private static Assembly? Load(string path)
+    {
+        try
+        {
+            return AssemblyLoadContext.Default.LoadFromAssemblyName(AssemblyName.GetAssemblyName(path));
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or BadImageFormatException)
+        {
+            try
+            {
+                return AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+            }
+            catch (Exception again) when (again is FileNotFoundException or FileLoadException or BadImageFormatException)
+            {
+                Console.Error.WriteLine($"[designer] {Path.GetFileName(path)} didn't load: {again.Message}");
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A control library's designers that aren't there (#454): a vendor names its controls' designers in a design-time
+    /// assembly of its own, which the app's output doesn't have unless its design-time package is referenced. Windows
+    /// Forms then finds no designer: a form deriving from the library's form has no root designer and doesn't load, and
+    /// its controls have none. Such a <see cref="DesignerAttribute"/> is replaced, for <paramref name="type"/> and the
+    /// types deriving from it, by the nearest base type's of the same kind that is there (<c>Form</c>'s for a form,
+    /// <c>Control</c>'s for a control), so it's designed as what it derives from. The framework's own types are left
+    /// alone: their designers are always there.
+    /// </summary>
+    private void CoverMissingDesigners(Type type)
+    {
+        if (!_covered.Add(type) || !typeof(IComponent).IsAssignableFrom(type) || s_framework.Contains(type.Assembly))
+        {
+            return;
+        }
+
+        try
+        {
+            Dictionary<string, DesignerAttribute>? replacements = null;
+            foreach (var missing in TypeDescriptor.GetAttributes(type).OfType<DesignerAttribute>().Where(a => !Resolves(a.DesignerTypeName)))
+            {
+                for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
+                {
+                    if (TypeDescriptor.GetAttributes(baseType).OfType<DesignerAttribute>().FirstOrDefault(a => a.TypeId.Equals(missing.TypeId) && Resolves(a.DesignerTypeName)) is { } replacement)
+                    {
+                        (replacements ??= [])[Key(missing)] = replacement;
+                        Console.Error.WriteLine($"[designer] {NameOf(type)}'s designer {missing.DesignerTypeName} isn't there: it's designed as a {NameOf(baseType)}.");
+                        break;
+                    }
+                }
+            }
+
+            if (replacements is not null)
+            {
+                TypeDescriptor.AddProvider(new ReplacedDesigners(TypeDescriptor.GetProvider(type), replacements), type);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // An attribute that throws as it's read: the type keeps its designers, and Windows Forms says what fails.
+            Console.Error.WriteLine($"[designer] {NameOf(type)}'s designers couldn't be read: {ex.Message}");
+        }
+    }
+
+    private bool Resolves(string designerTypeName)
+    {
+        try
+        {
+            return Type.GetType(designerTypeName, throwOnError: false) is not null
+                || (!designerTypeName.Contains(',', StringComparison.Ordinal) && Find(designerTypeName) is not null);
+        }
+        catch (Exception ex) when (ex is FileLoadException or BadImageFormatException or TypeLoadException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    private static string Key(DesignerAttribute attribute) => attribute.DesignerTypeName + "|" + attribute.DesignerBaseTypeName;
+
+    /// <summary>A type's attributes with its missing designers replaced by its base type's (#454).</summary>
+    private sealed class ReplacedDesigners(TypeDescriptionProvider parent, Dictionary<string, DesignerAttribute> replacements) : TypeDescriptionProvider(parent)
+    {
+        public override ICustomTypeDescriptor? GetTypeDescriptor(Type objectType, object? instance) =>
+            base.GetTypeDescriptor(objectType, instance) is { } descriptor ? new Descriptor(descriptor, replacements) : null;
+
+        private sealed class Descriptor(ICustomTypeDescriptor parent, Dictionary<string, DesignerAttribute> replacements) : CustomTypeDescriptor(parent)
+        {
+            public override AttributeCollection GetAttributes() =>
+                new([.. base.GetAttributes().Cast<Attribute>().Select(a => a is DesignerAttribute designer && replacements.TryGetValue(Key(designer), out var replacement) ? replacement : a)]);
+        }
     }
 
     /// <summary><c>A.B.C</c> as written, then with the last dots as nested types (<c>A.B+C</c>, <c>A+B+C</c>).</summary>

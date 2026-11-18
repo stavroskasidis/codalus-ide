@@ -44,8 +44,16 @@ public class LanguageFixture : IAsyncLifetime
 
     public string File(params string[] relative) => Path.Combine([Fixture, .. relative]);
 
+    /// <summary>Whether the fixture starts its hosts (false: a fixture whose tests run on one OS, elsewhere, where they skip).</summary>
+    protected virtual bool Enabled => true;
+
     public async ValueTask InitializeAsync()
     {
+        if (!Enabled)
+        {
+            return;
+        }
+
         Assert.True(System.IO.File.Exists(RepoPaths.HostAssembly), $"Language host not built: {RepoPaths.HostAssembly}");
         Assert.True(System.IO.File.Exists(RepoPaths.BuildHostAssembly), $"Build host not built: {RepoPaths.BuildHostAssembly}");
         Fixture = RepoPaths.CopyFixture(Sample.Sample, _root);
@@ -102,9 +110,14 @@ public class LanguageFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
+        GC.SuppressFinalize(this);
+        if (!Enabled)
+        {
+            return;
+        }
+
         await Languages.DisposeAsync();
         await Solutions.DisposeAsync();
-        GC.SuppressFinalize(this);
         try
         {
             Directory.Delete(_root, recursive: true);

@@ -102,6 +102,7 @@ internal sealed partial class DesignerSession : IDisposable
         Unload();
         var errors = new List<string>();
         _searchFolders = [.. parameters.SearchFolders.Append(Path.GetDirectoryName(parameters.ProjectAssembly)!).Distinct(StringComparer.OrdinalIgnoreCase)];
+        _types.SearchIn(_searchFolders);
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {
