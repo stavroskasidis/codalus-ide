@@ -49,6 +49,15 @@ public sealed class WinFormsPackageHostFixture : IAsyncLifetime
         AppDll = Directory.EnumerateFiles(Path.Combine(App, "bin"), "WinFormsPackageApp.dll", SearchOption.AllDirectories).Single();
     }
 
+    /// <summary>Builds one of the fixture's libraries the app doesn't reference (<c>src/</c>), and gives its assembly's path.</summary>
+    public async Task<string> BuildLibraryAsync(string library)
+    {
+        var project = Path.Combine(_root, WinFormsPackages.Sample, "src", library, library + ".csproj");
+        var (code, output) = await WinFormsHostFixture.DotnetAsync("build", project, "-nologo", "-v", "quiet");
+        Assert.True(code == 0, $"dotnet build {library}: {output}");
+        return Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(project)!, "bin"), library + ".dll", SearchOption.AllDirectories).Single();
+    }
+
     public WinFormsDesignerTarget Target(string form) =>
         new(Path.Combine(App, form), Path.Combine(App, "WinFormsPackageApp.csproj"), AppDll, AppDll, WinFormsHostFixture.DesignerHost);
 
@@ -111,6 +120,15 @@ public sealed class WinFormsDesignerPackageHostTests(WinFormsPackageHostFixture 
         Assert.Null(grid.Error);
         Assert.Equal(("contosoGrid1", "Contoso.WinForms.ContosoGrid", true), (grid.Created!.Name, grid.Created.Type, grid.Created.IsControl));
         Assert.Contains(grid.Render.Components, c => c.Name == "contosoGrid1" && c.Parent == "MainForm" && c.Width == 240 && c.Height == 150);
+
+        // #460: a control of an assembly chosen in Choose Toolbox Items, which the app doesn't reference (not in its
+        // output): without its path the type isn't found; with it, the host loads the assembly from there.
+        var extras = await fixture.BuildLibraryAsync("Contoso.WinForms.Extras");
+        var missing = await Assert.ThrowsAsync<Codalus.Workbench.Previewer.PreviewerException>(() => host.CreateAsync(new DesignerCreateParams("Contoso.WinForms.Extras.ContosoGauge", "contosoGauge1", null, root.ClientX + 20, root.ClientY + 200), Ct));
+        Assert.Contains("wasn't found", missing.Message, StringComparison.Ordinal);
+        var gauge = await host.CreateAsync(new DesignerCreateParams("Contoso.WinForms.Extras.ContosoGauge", "contosoGauge1", null, root.ClientX + 20, root.ClientY + 200) { Assembly = extras }, Ct);
+        Assert.Null(gauge.Error);
+        Assert.Equal(("contosoGauge1", "Contoso.WinForms.Extras.ContosoGauge", true), (gauge.Created!.Name, gauge.Created.Type, gauge.Created.IsControl));
     }
 
     /// <summary>The package's types as the compiler names them (the C# host's compilation, in the IDE); the rest as the syntactic reader does.</summary>
@@ -133,6 +151,15 @@ public sealed class WinFormsPackageLanguageFixture : LanguageFixture
     protected override (string Sample, string Solution, int Projects) Sample => (WinFormsPackages.Sample, "WinFormsPackages.slnx", 1);
 
     protected override void Prepare() => WinFormsPackages.PackAsync(Fixture).GetAwaiter().GetResult();
+
+    /// <summary>Builds one of the fixture's libraries the app doesn't reference (<c>src/</c>), and gives its assembly's path.</summary>
+    public async Task<string> BuildLibraryAsync(string library)
+    {
+        var project = File("src", library, library + ".csproj");
+        var (code, output) = await WinFormsHostFixture.DotnetAsync("build", project, "-nologo", "-v", "quiet");
+        Assert.True(code == 0, $"dotnet build {library}: {output}");
+        return Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(project)!, "bin"), library + ".dll", SearchOption.AllDirectories).Single();
+    }
 
     /// <summary>The design-time build after the restore: the packages' assemblies on the compiler's command line.</summary>
     protected override async Task ReadyAsync()
@@ -165,11 +192,43 @@ public sealed class WinFormsToolboxPackageTests(WinFormsPackageLanguageFixture p
         var toolbox = await packages.Client.WinFormsToolboxAsync(packages.File("WinFormsPackageApp", "WinFormsPackageApp.csproj"), TestContext.Current.CancellationToken);
         Assert.Equal(
             [
-                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoButton", true, "A button in the form's skin."),
-                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoClock", false, "Ticks while the form is open."),
-                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoTextEdit", true, null),
-                ("Contoso.WinForms.Grid", "Contoso.WinForms.ContosoGrid", true, "Shows rows and columns."),
+                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoButton", true, "A button in the form's skin.", null),
+                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoClock", false, "Ticks while the form is open.", null),
+                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoDateEdit", true, null, "Contoso: Editors"),
+                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoSpinEdit", true, null, "Contoso: Editors"),
+                ("Contoso.WinForms.Controls", "Contoso.WinForms.ContosoTextEdit", true, null, null),
+                ("Contoso.WinForms.Grid", "Contoso.WinForms.ContosoGrid", true, "Shows rows and columns.", null),
             ],
-            toolbox!.Items.Select(i => (i.Project, i.Type, i.IsControl, i.Description)));
+            toolbox!.Items.Select(i => (i.Project, i.Type, i.IsControl, i.Description, i.Tab)));
+
+        // #460: the picture [ToolboxBitmap] names, as the library embeds it (a 16-pixel .bmp); none for the others.
+        var spin = Assert.Single(toolbox.Items, i => i.Name == "ContosoSpinEdit");
+        var bitmap = Convert.FromBase64String(Assert.IsType<string>(spin.Bitmap));
+        Assert.Equal("BM", System.Text.Encoding.ASCII.GetString(bitmap, 0, 2));
+        Assert.Equal((16, 16), (BitConverter.ToInt32(bitmap, 18), BitConverter.ToInt32(bitmap, 22)));
+        Assert.All(toolbox.Items.Where(i => i.Name != "ContosoSpinEdit"), i => Assert.Null(i.Bitmap));
+    }
+
+    /// <summary>
+    /// #460: an assembly chosen in Choose Toolbox Items that the project doesn't reference lists its items after the
+    /// references', grouped by its name and marked with its path (a drop adds the reference); one the project already
+    /// references (a package's) isn't listed twice, and a path that isn't an assembly lists nothing.
+    /// </summary>
+    [Fact]
+    public async Task The_toolbox_lists_a_chosen_assemblys_controls_after_the_references()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The fixture's packages are packed and restored on Windows only.");
+        var ct = TestContext.Current.CancellationToken;
+        var extras = await packages.BuildLibraryAsync("Contoso.WinForms.Extras");
+        var referenced = Directory.EnumerateFiles(packages.File(".packages", "contoso.winforms.grid"), "Contoso.WinForms.Grid.dll", SearchOption.AllDirectories).First();
+        var notAssembly = packages.File("WinFormsPackageApp", "Program.cs");
+
+        var toolbox = await packages.Client.WinFormsToolboxAsync(packages.File("WinFormsPackageApp", "WinFormsPackageApp.csproj"), [extras, referenced, notAssembly], ct);
+
+        var chosen = Assert.Single(toolbox!.Items, i => i.Assembly is not null);
+        Assert.Equal(("Contoso.WinForms.Extras", "Contoso.WinForms.Extras.ContosoGauge", true, "Shows a value on a dial.", extras),
+            (chosen.Project, chosen.Type, chosen.IsControl, chosen.Description, chosen.Assembly));
+        Assert.Same(chosen, toolbox.Items[^1]);
+        Assert.Single(toolbox.Items, i => i.Type == "Contoso.WinForms.ContosoGrid");
     }
 }

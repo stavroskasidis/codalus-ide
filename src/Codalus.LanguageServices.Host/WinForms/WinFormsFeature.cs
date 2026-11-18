@@ -541,9 +541,10 @@ internal static class WinFormsFeature
     /// The components of a project and of the projects it references, then (#454) those of the assemblies it references
     /// (its packages', a control library's), for the Toolbox: <c>[ToolboxItem(false)]</c>, <c>[DesignTimeVisible(false)]</c>
     /// (their own or a base type's, as Windows Forms reads them) and forms left out. A referenced assembly's items are
-    /// grouped by the package it comes from (<see cref="ToolboxReferences"/>), after the projects'.
+    /// grouped by the package it comes from (<see cref="ToolboxReferences"/>), after the projects', then (#460) those of the
+    /// <paramref name="chosen"/> assemblies (Choose Toolbox Items') the project doesn't reference.
     /// </summary>
-    public static async Task<WinFormsToolboxResult> ToolboxAsync(Solution solution, string projectPath, CancellationToken cancellationToken)
+    public static async Task<WinFormsToolboxResult> ToolboxAsync(Solution solution, string projectPath, CancellationToken cancellationToken, IReadOnlyList<string>? chosen = null)
     {
         var project = solution.Projects.FirstOrDefault(p => p.FilePath is { } path && Paths.Comparer.Equals(path, Path.GetFullPath(projectPath)) && p.Language == LanguageNames.CSharp);
         if (project is null)
@@ -577,7 +578,12 @@ internal static class WinFormsFeature
         }
 
         var sorted = items.OrderBy(i => i.Project, StringComparer.OrdinalIgnoreCase).ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase);
-        return new WinFormsToolboxResult([.. sorted, .. ownCompilation is null ? [] : ToolboxReferences.Items(project, ownCompilation, cancellationToken)]);
+        return new WinFormsToolboxResult(
+        [
+            .. sorted,
+            .. ownCompilation is null ? [] : ToolboxReferences.Items(project, ownCompilation, cancellationToken),
+            .. ownCompilation is null ? [] : ToolboxReferences.Chosen(ownCompilation, chosen ?? [], cancellationToken),
+        ]);
     }
 
     /// <summary>
@@ -593,14 +599,19 @@ internal static class WinFormsFeature
             || !Visible(type, internalToo)
             || !InheritsFrom(type, ComponentType) || InheritsFrom(type, FormType)
             || !type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public)
-            || Inherited(type, "ToolboxItemAttribute") is { ConstructorArguments: [{ Value: false }] }
+            || Inherited(type, "ToolboxItemAttribute") is { } toolboxItem && Hides(toolboxItem)
             || Inherited(type, "DesignTimeVisibleAttribute") is { ConstructorArguments: [{ Value: false }] })
         {
             return null;
         }
 
         var description = type.GetAttributes().FirstOrDefault(a => a.AttributeClass?.Name is "DescriptionAttribute")?.ConstructorArguments.FirstOrDefault().Value as string;
-        return new WinFormsToolboxItem(SemanticDesignerTypeResolver.Name(type), type.Name, group, InheritsFrom(type, ControlType)) { Description = description };
+        var tab = InheritedByName(type, "ToolboxTabNameAttribute")?.ConstructorArguments.FirstOrDefault(a => a.Value is string).Value as string;
+        return new WinFormsToolboxItem(SemanticDesignerTypeResolver.Name(type), type.Name, group, InheritsFrom(type, ControlType))
+        {
+            Description = description,
+            Tab = string.IsNullOrWhiteSpace(tab) ? null : tab.Trim(),
+        };
 
         static bool Visible(INamedTypeSymbol type, bool internalToo)
         {
@@ -615,8 +626,24 @@ internal static class WinFormsFeature
             return true;
         }
 
-        // The nearest of the type and its base types that has the attribute (an inherited one, as TypeDescriptor reads it).
+        // The nearest of the type and its base types that has the attribute, or one derived from it (an inherited one, as
+        // TypeDescriptor reads it): a control library marks its controls with its own ToolboxItemAttribute (a DevExpress
+        // editor's [DXToolboxItem] over its base's [ToolboxItem(false)]).
         static AttributeData? Inherited(INamedTypeSymbol type, string attribute)
+        {
+            for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                if (current.GetAttributes().FirstOrDefault(a => DerivesFrom(a.AttributeClass, attribute)) is { } found)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        // A control library's own attribute (DevExpress's ToolboxTabNameAttribute), by its name in any namespace.
+        static AttributeData? InheritedByName(INamedTypeSymbol type, string attribute)
         {
             for (INamedTypeSymbol? current = type; current is not null; current = current.BaseType)
             {
@@ -628,6 +655,30 @@ internal static class WinFormsFeature
 
             return null;
         }
+
+        static bool DerivesFrom(INamedTypeSymbol? type, string name)
+        {
+            for (; type is not null; type = type.BaseType)
+            {
+                if (type.Name == name && type.ContainingNamespace?.ToDisplayString() == "System.ComponentModel")
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // Whether a [ToolboxItem] (or an attribute derived from it) leaves its type out. Its own: given false. A derived
+        // one's constructor can't be run from metadata: given false, or a kind named Hidden or None (DevExpress's
+        // DXToolboxItemKind.Hidden), as the libraries' constructors pass them on to ToolboxItemAttribute's.
+        static bool Hides(AttributeData attribute) => attribute.ConstructorArguments.Any(a => a switch
+        {
+            { Kind: TypedConstantKind.Primitive, Value: false } => true,
+            { Kind: TypedConstantKind.Enum, Type: INamedTypeSymbol enumType } => enumType.GetMembers().OfType<IFieldSymbol>()
+                .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, a.Value))?.Name is "Hidden" or "None",
+            _ => false,
+        });
     }
 
     private static IEnumerable<INamedTypeSymbol> Types(INamespaceSymbol ns)

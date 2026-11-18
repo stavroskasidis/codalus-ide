@@ -1054,6 +1054,48 @@
     <Setter Property="Foreground" Value="{DynamicResource Shell.Selection.Inactive.Foreground}" />
   </Style>
   <!--
+    The Toolbox's groups as the classic IDE draws them (#460): a plain header, its chevron on the left (right while
+    closed, down while open), no bar; Shell.Toolbar.Hover under the pointer, the theme's text in every state, a focus
+    edge from the keyboard. The header is the group's toggle, as Expander's own is.
+  -->
+  <Style Selector=":is(UserControl).toolbox Expander">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <DockPanel>
+          <ToggleButton x:Name="PART_Toggle" DockPanel.Dock="Top" Classes="toolboxGroup" IsChecked="{TemplateBinding IsExpanded, Mode=TwoWay}"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="4,3"
+                        AutomationProperties.Name="{TemplateBinding Header}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <controls:Icon x:Name="PART_Chevron" Kind="chevron-right" Width="12" Height="12" VerticalAlignment="Center" />
+              <ContentPresenter Content="{TemplateBinding Header}" FontWeight="SemiBold" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <ContentPresenter x:Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}" IsVisible="{TemplateBinding IsExpanded}" />
+        </DockPanel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector=":is(UserControl).toolbox Expander:expanded /template/ controls|Icon#PART_Chevron">
+    <Setter Property="Kind" Value="chevron-down" />
+  </Style>
+  <Style Selector="ToggleButton.toolboxGroup">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="ToggleButton.toolboxGroup /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolboxGroup:checked /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <Style Selector="ToggleButton.toolboxGroup:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolboxGroup:pressed /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolboxGroup:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter, ToggleButton.toolboxGroup:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Hover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
+  </Style>
+  <!--
     A split button (the control set): the default button's look with its arrow; in a toolbar (the Hot Reload button and
     its menu's arrow) flat like the buttons beside it. Its two parts are Buttons in its template that Fluent styles
     itself, so every state is restated on their presenters: the hover color and border under the pointer or pressed or

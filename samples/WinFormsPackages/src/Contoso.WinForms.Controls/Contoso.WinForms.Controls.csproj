@@ -7,4 +7,8 @@
     <Authors>Contoso</Authors>
     <Description>A stand-in for a third-party control library delivered as NuGet packages: a base form and controls.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- A Toolbox picture, named as ContosoSpinEdit's [ToolboxBitmap(typeof(ToolboxIconsRoot), "ToolboxIcons.SpinEdit.bmp")] finds it. -->
+    <EmbeddedResource Include="ToolboxIcons\SpinEdit.bmp" LogicalName="Contoso.WinForms.ToolboxIcons.SpinEdit.bmp" />
+  </ItemGroup>
 </Project>

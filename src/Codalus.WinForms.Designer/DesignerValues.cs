@@ -226,8 +226,12 @@ internal sealed class DesignerTypes
     /// its controls have none. Such a <see cref="DesignerAttribute"/> is replaced, for <paramref name="type"/> and the
     /// types deriving from it, by the nearest base type's of the same kind that is there (<c>Form</c>'s for a form,
     /// <c>Control</c>'s for a control), so it's designed as what it derives from. The framework's own types are left
-    /// alone: their designers are always there.
+    /// alone: their designers are always there. A vendor's design-time assembly that is there but built for the
+    /// classic IDE's out-of-process designer (DevExpress's, against <c>Microsoft.DotNet.DesignTools.Server</c>) doesn't
+    /// load either, and gets the same fallback.
     /// </summary>
+    // TODO(issue): #461, a 1.x study of an MIT compatibility layer for the classic IDE's designer-server API, so a
+    // vendor's own designers (DevExpress's Grid Designer, its smart tags) load here.
     private void CoverMissingDesigners(Type type)
     {
         if (!_covered.Add(type) || !typeof(IComponent).IsAssignableFrom(type) || s_framework.Contains(type.Assembly))
@@ -305,6 +309,26 @@ internal sealed class DesignerTypes
 
     /// <summary>A type's full C# name (nested types with dots).</summary>
     public static string NameOf(Type type) => (type.FullName ?? type.Name).Replace('+', '.');
+
+    /// <summary>
+    /// <paramref name="type"/>'s instance property <paramref name="name"/>, its most derived declaration (not an
+    /// indexer), as <c>TypeDescriptor</c> takes it; null when it has none. <c>Type.GetProperty(name)</c> throws when a
+    /// derived type hides a base type's property with another type: <c>CheckedListBox.Items</c> hides
+    /// <c>ListBox.Items</c>, and a CheckedListBox on the form failed every later change ("Ambiguous match found").
+    /// </summary>
+    public static System.Reflection.PropertyInfo? Property(Type type, string name, bool nonPublic = false)
+    {
+        var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | (nonPublic ? System.Reflection.BindingFlags.NonPublic : 0);
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetProperties(flags | System.Reflection.BindingFlags.DeclaredOnly).FirstOrDefault(p => p.Name == name && p.GetIndexParameters().Length == 0) is { } property)
+            {
+                return property;
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>

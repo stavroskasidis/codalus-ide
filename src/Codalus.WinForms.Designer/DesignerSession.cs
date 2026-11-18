@@ -381,7 +381,7 @@ internal sealed partial class DesignerSession : IDisposable
         var owner = target;
         foreach (var part in parts[..^1])
         {
-            owner = (TypeDescriptor.GetProperties(owner)[part] is { } descriptor ? descriptor.GetValue(owner) : owner.GetType().GetProperty(part)?.GetValue(owner))
+            owner = (TypeDescriptor.GetProperties(owner)[part] is { } descriptor ? descriptor.GetValue(owner) : DesignerTypes.Property(owner.GetType(), part)?.GetValue(owner))
                 ?? throw new InvalidOperationException($"{part} of {path} is null.");
         }
 
@@ -397,7 +397,7 @@ internal sealed partial class DesignerSession : IDisposable
             return;
         }
 
-        var property = owner.GetType().GetProperty(member, BindingFlags.Public | BindingFlags.Instance) ?? throw new InvalidOperationException($"{DesignerTypes.NameOf(owner.GetType())} has no property {member}.");
+        var property = DesignerTypes.Property(owner.GetType(), member) ?? throw new InvalidOperationException($"{DesignerTypes.NameOf(owner.GetType())} has no property {member}.");
         property.SetValue(owner, _values.Evaluate(value, property.PropertyType));
     }
 
@@ -752,7 +752,7 @@ internal sealed partial class DesignerSession : IDisposable
         var component = dot < 0 ? name : name[..dot];
         var path = dot < 0 ? null : name[(dot + 1)..];
         var owner = Target(component) as Control ?? throw new InvalidOperationException($"{component} isn't a control.");
-        var control = path is null ? owner : owner.GetType().GetProperty(path)?.GetValue(owner) as Control ?? throw new InvalidOperationException($"{name} isn't a control.");
+        var control = path is null ? owner : DesignerTypes.Property(owner.GetType(), path)?.GetValue(owner) as Control ?? throw new InvalidOperationException($"{name} isn't a control.");
         if (path is null && Host.GetDesigner(owner) is not ParentControlDesigner)
         {
             throw new InvalidOperationException($"{name} can't contain controls.");
@@ -821,10 +821,34 @@ internal sealed partial class DesignerSession : IDisposable
     /// text, a split container fills an empty container, the first menu strip becomes the form's main menu);
     /// components that aren't controls go to the tray. What a designer refused comes back as the change's error.
     /// </summary>
+    /// <summary>
+    /// The type of a Toolbox item from an assembly chosen in Choose Toolbox Items (#460) that isn't in the project's
+    /// output yet: the assembly is loaded from its path, and its folder searched for its dependencies.
+    /// </summary>
+    private Type? FromChosenAssembly(DesignerCreateParams parameters)
+    {
+        if (parameters.Assembly is not { } path || !File.Exists(path))
+        {
+            return null;
+        }
+
+        var full = Path.GetFullPath(path);
+        if (Path.GetDirectoryName(full) is { } folder && !_searchFolders.Contains(folder, StringComparer.OrdinalIgnoreCase))
+        {
+            _searchFolders = [.. _searchFolders, folder];
+            _types.SearchIn(_searchFolders);
+        }
+
+        var assembly = AssemblyLoadContext.Default.Assemblies.FirstOrDefault(a => !a.IsDynamic && string.Equals(a.Location, full, StringComparison.OrdinalIgnoreCase))
+            ?? AssemblyLoadContext.Default.LoadFromAssemblyPath(full);
+        _types.Add(assembly);
+        return _types.Find(parameters.Type);
+    }
+
     public DesignerChangeResult Create(DesignerCreateParams parameters)
     {
         var before = Capture();
-        var type = _types.Find(parameters.Type) ?? throw new InvalidOperationException($"The type {parameters.Type} wasn't found (build the project?).");
+        var type = _types.Find(parameters.Type) ?? FromChosenAssembly(parameters) ?? throw new InvalidOperationException($"The type {parameters.Type} wasn't found (build the project?).");
         if (Host.Container.Components[parameters.Name] is not null)
         {
             throw new InvalidOperationException($"The form already has a component named {parameters.Name}.");
