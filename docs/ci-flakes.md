@@ -274,6 +274,22 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   iOS only on a Mac, and the test built the catalogue from the registries of the OS it ran on, so `en.json`,
   regenerated on Linux, lacked them. Fixed (e54a1861): their titles go through `Localizer.Get`, as other OS-specific
   titles do, so the test finds them in the code on every OS.
+- **`EnvironmentShellTests.Installing_the_runtime_from_an_update_starts_the_hosts_again_then_checks_the_update` on
+  the Mac** (local validation of the release candidate, `develop` at 9314aaaf, 2026-11-18): "Timed out after 180 s:
+  the install, the hosts started again and the update checked". Not a flake: the test wasn't hermetic. It described
+  the machine's .NET roots to the environment check but not the machine Install .NET's options are for
+  (`DescribeDotnetMachine`), so `DotnetFacts` read the real one. On a Mac whose `dotnet` is in
+  `/usr/local/share/dotnet` (not under `$HOME`), the option that fits is Microsoft's `.pkg` in the terminal, which
+  `InstallToolAsync` runs in a real terminal, not through the test's runner: it ran `curl` of the `.pkg` and
+  `sudo installer`, and sudo waited for a password until the limit. CI passed only because setup-dotnet installs under
+  `$HOME`, which makes dotnet-install, run through the runner, the one that fits; a Windows machine without winget (the
+  download page, opened in the real browser) or a Linux one with a distribution's .NET could hit the same. Fixed: the
+  test describes its machine, and asserts the option it installs runs through its runner; and no test can start an
+  install in the terminal any more: `ShellHost.TerminalInstallStandIn`, which `ShellFixture` sets for every shell, takes
+  every install meant for the terminal (the `.pkg`, a distribution's package or the snap under sudo, a workload, the
+  Android SDK under sudo), records it in `ShellFixture.TerminalInstalls`, starts nothing and fails (exit code 97). The
+  one test that wants the real terminal clears it and runs `exit 3`
+  (`EnvironmentShellTests.A_test_never_starts_an_install_in_the_terminal` checks the guard).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
 - **The English catalogue on macOS, PR #387's merge with `develop`** (43729011051): `LocalizationCatalogTests` found
   `en.json` without `command.ios.openSimulator`, `command.ios.openXcode` and `menu.menuBar/tools/ios`. `develop`'s, on
