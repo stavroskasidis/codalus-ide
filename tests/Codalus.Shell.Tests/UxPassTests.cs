@@ -411,6 +411,33 @@ public class UxPassTests
             describe: () => $"commands run: [{string.Join(", ", executed)}]; focus: {f.Window.FocusManager?.GetFocusedElement()}, focusedView {f.Shell.Workbench.Context.GetValue("focusedView")}, editorTextFocus {f.Shell.Workbench.Context.GetValue("editorTextFocus")}; completion window open: {editor.CompletionWindow is not null}; toasts: {f.Shell.Notifications.Toasts.Count}");
     }
 
+    [AvaloniaFact]
+    public async Task A_key_pressed_in_a_fixtures_window_reaches_it_though_another_tests_window_took_the_focus()
+    {
+        // Avalonia has one keyboard focus for every window, and tests share the UI thread: another test's window that
+        // focused an element of its own between two presses took the next key (the Ctrl+Shift+Space above, in a local
+        // run of seven Shell test classes).
+        await using var f = ShellFixture.Create();
+        var file = Path.Combine(f.UserData, "notes.txt");
+        File.WriteAllText(file, "notes\n");
+        var document = await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        document!.Controller!.Editor.TextArea.Focus();
+        ShellFixture.Pump();
+        var executed = new List<string>();
+        f.Shell.Workbench.Commands.Executed += (_, e) => executed.Add(e.CommandId);
+
+        // Another test's shell, whose window focuses a box of its own (the Find box of its toolbar's search) meanwhile.
+        await using var other = ShellFixture.Create();
+        var box = other.Window.GetVisualDescendants().OfType<TextBox>().First(t => t.IsEffectivelyVisible);
+        box.Focus();
+        ShellFixture.Pump();
+        Assert.True(box.IsFocused);
+        f.Press(Key.Space, RawInputModifiers.Control | RawInputModifiers.Shift);
+        Assert.Contains("editor.action.triggerParameterHints", executed);
+        Assert.True(document.Controller.Editor.TextArea.IsKeyboardFocusWithin);
+    }
+
     // ------------------------------------------------------------------ file icons, the navigation bar, outlining
 
     [AvaloniaFact]

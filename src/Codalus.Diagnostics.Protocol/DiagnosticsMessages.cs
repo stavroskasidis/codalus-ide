@@ -445,7 +445,15 @@ public sealed record HeapSnapshotResult(string Path, long Bytes);
 public sealed record HeapOpenParams(string Path);
 
 /// <summary>An opened snapshot: its objects, their bytes, the types and the roots.</summary>
-public sealed record HeapSummary(string Snapshot, string Path, int Objects, long Bytes, int Types, int Roots);
+public sealed record HeapSummary(string Snapshot, string Path, int Objects, long Bytes, int Types, int Roots)
+{
+    /// <summary>
+    /// How the snapshot's events fit together: the GCs whose heap walks it holds, repeated object addresses, the edges
+    /// expected and received, root addresses that are no object of it, and lost events. A path that stops at "not
+    /// reached from a root" for objects a static keeps (Linux CI, run 40949955263) is one of these.
+    /// </summary>
+    public string? Integrity { get; init; }
+}
 
 public sealed record HeapIdParams(string Snapshot);
 

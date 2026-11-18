@@ -709,6 +709,46 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_request_that_holds_the_dispatch_loop_before_its_first_await_is_reported_with_the_messages_behind_it()
+    {
+        // A handler runs on the dispatch loop until its first await: Windows CI's EditorTests had a completion resolve
+        // running 10 s as the one request in progress, and the signature help asked after it never showed (run
+        // 41600182224). The reports say whether messages waited behind it.
+        using var release = new ManualResetEventSlim();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reports = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _b.Slow += (_, message) => reports.Enqueue(message);
+        _b.OnRequest("hold", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, ct) =>
+        {
+            entered.TrySetResult();
+            release.Wait(s_timeout, ct);
+            return Task.FromResult(new Pong(p.Text));
+        });
+        _b.OnRequest("echo", TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, (p, _) => Task.FromResult(new Pong(p.Text)));
+        _a.Start();
+        _b.Start();
+
+        var held = _a.InvokeAsync("hold", new Ping("held"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        await entered.Task.WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+        var behind = _a.InvokeAsync("echo", new Ping("behind"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!_b.Describe().Contains("1 message(s) queued", StringComparison.Ordinal) && clock.Elapsed < s_timeout)
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        _b.ReportSlow(TimeSpan.Zero);
+        Assert.True(reports.Any(r => r.StartsWith("Request hold (", StringComparison.Ordinal) && r.EndsWith("1 request(s) in progress, 1 message(s) wait to be dispatched.", StringComparison.Ordinal)), string.Join(" | ", reports) + " / " + _b.Describe());
+
+        await Task.Delay(JsonRpcConnection.SlowNotification + TimeSpan.FromMilliseconds(200), TestContext.Current.CancellationToken);
+        Assert.False(behind.IsCompleted);
+        release.Set();
+        Assert.Equal("held", (await held).Text);
+        Assert.Equal("behind", (await behind).Text);
+        Assert.Contains(reports, r => r.StartsWith("Request hold ran ", StringComparison.Ordinal) && r.Contains("ms before its first await; the messages after it waited", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Requests_cancelled_at_any_point_leave_the_stream_intact()
     {
         var failures = new System.Collections.Concurrent.ConcurrentQueue<Exception>();

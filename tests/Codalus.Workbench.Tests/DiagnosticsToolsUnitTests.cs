@@ -190,6 +190,37 @@ public sealed class DiagnosticsToolsUnitTests
     }
 
     [Fact]
+    public void The_heap_graph_says_how_its_events_fit_together()
+    {
+        // One walk: its nodes, its edges, its root. "Not reached from a root" for orders a static keeps (Linux CI, run
+        // 40949955263) is a second walk, repeated addresses, edges out of step with their nodes, a root at no object, or
+        // lost events: the integrity says which.
+        var builder = new HeapGraph.Builder();
+        builder.Type(1, "Cache", []);
+        builder.Type(3, "Order", []);
+        builder.Walk("GC 4 (gen 2, Induced)");
+        builder.Node(0x100, 24, 1, 2);
+        builder.Node(0x1000, 40, 3, 0);
+        builder.Node(0x1010, 40, 3, 0);
+        builder.Edge(0x1000);
+        builder.Edge(0x1010);
+        builder.Root(0x100, 2);
+        var whole = builder.Build().Integrity;
+        Assert.Contains("1 heap walk(s): GC 4 (gen 2, Induced) from node 0", whole, StringComparison.Ordinal);
+        Assert.Contains("0 repeated addresses; 2 edges expected, 2 received; 1 root events, 0 not at an object, 0 objects unreached", whole, StringComparison.Ordinal);
+
+        // A second walk of the same heap, its Cache moved, one edge short, and a root at an address no node has.
+        builder.Walk("GC 5 (gen 0, AllocSmall)");
+        builder.Node(0x200, 24, 1, 2);
+        builder.Node(0x1000, 40, 3, 0);
+        builder.Edge(0x1000);
+        builder.Root(0x300, 2);
+        var mixed = builder.Build().Integrity;
+        Assert.Contains("2 heap walk(s): GC 4 (gen 2, Induced) from node 0, GC 5 (gen 0, AllocSmall) from node 3", mixed, StringComparison.Ordinal);
+        Assert.Contains("1 repeated addresses; 4 edges expected, 3 received; 2 root events, 1 not at an object, 2 objects unreached", mixed, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Profiles_export_to_speedscope_and_chromium()
     {
         var folder = Path.Combine(Path.GetTempPath(), "codalus-export-" + Guid.NewGuid().ToString("N"));

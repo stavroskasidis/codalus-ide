@@ -150,7 +150,7 @@ internal sealed class DiagnosticsServer : IAsyncDisposable
 
         var id = Guid.NewGuid().ToString("N");
         _snapshots[id] = graph;
-        return new HeapSummary(id, path, graph.ObjectCount, graph.Bytes, graph.TypeCount, graph.RootCount);
+        return new HeapSummary(id, path, graph.ObjectCount, graph.Bytes, graph.TypeCount, graph.RootCount) { Integrity = graph.Integrity };
     }
 
     private OpenedTrace Trace(string id) =>

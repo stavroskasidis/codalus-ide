@@ -82,13 +82,22 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_process is not { IsRunning: true } || (lost is not null && ReferenceEquals(_process.Connection, lost)))
+            // A host that isn't running is restarting (a crash), or gave up: StartAsync waits for the restart under way, or
+            // starts it again. Dropping it for a new one, as this did, started a second host while the first one's restart
+            // ran, and that restart then failed on its disposed supervisor. A transform that lost its connection can see it
+            // before the supervisor does, which notices on its own read loop: wait for that first, so the restart is the one
+            // the transform runs on again.
+            if (lost is not null && _process is { } current)
             {
-                if (_process is { } stale)
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                while (Holds(current, lost) && waited.Elapsed < TimeSpan.FromSeconds(10))
                 {
-                    await stale.DisposeAsync().ConfigureAwait(false);
+                    await Task.Delay(20, cancellationToken).ConfigureAwait(false);
                 }
+            }
 
+            if (_process is null)
+            {
                 var info = launch() ?? throw new InvalidOperationException("The T4 host (codalus-t4host) was not found.");
                 var process = new SupervisedProcess("T4 host", info, s_policy)
                 {
@@ -100,14 +109,27 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
                 };
                 process.Log += (_, line) => Log?.Invoke(this, line);
                 _process = process;
-                await process.StartAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            await _process.StartAsync(cancellationToken).ConfigureAwait(false);
             return _process.Connection;
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>Whether the supervisor still has <paramref name="lost"/> as its connection (one it dropped throws).</summary>
+    private static bool Holds(SupervisedProcess process, JsonRpcConnection lost)
+    {
+        try
+        {
+            return ReferenceEquals(process.Connection, lost);
+        }
+        catch (JsonRpcConnectionLostException)
+        {
+            return false;
         }
     }
 

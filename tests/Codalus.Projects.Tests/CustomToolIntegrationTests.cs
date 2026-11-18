@@ -147,6 +147,43 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_template_sent_while_the_host_restarts_after_a_crash_waits_for_that_restart()
+    {
+        // The service dropped a host that wasn't running for a new one, so a template sent during the supervisor's restart
+        // (its backoff, or its start) started a second host, and the first one's restart then failed on its disposed
+        // supervisor: "[T4 host] restart failed: Cannot access a disposed object" in this class's output.
+        var launches = 0;
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await using var templates = new TextTemplatingService(() =>
+        {
+            Interlocked.Increment(ref launches);
+            return ProcessLaunchInfo.FromPath(T4HostPath);
+        });
+        templates.Log += (_, line) => log.Enqueue(line);
+        var template = Path.Combine(ItemsDir, "Greeting.tt");
+        Assert.Equal("one", (await templates.TransformAsync(new T4TransformParams(template, "one", null), Timeout())).Output?.Trim());
+
+        using (var host = System.Diagnostics.Process.GetProcessById(templates.ProcessId!.Value))
+        {
+            host.Kill();
+            await host.WaitForExitAsync(Timeout());
+        }
+
+        // Sent as soon as the supervisor saw the crash: its restart waits out its backoff (250 ms) first.
+        var seen = System.Diagnostics.Stopwatch.StartNew();
+        while (templates.IsRunning && seen.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(templates.IsRunning, "The supervisor didn't see the host's end in 30 s.");
+        Assert.Equal("two", (await templates.TransformAsync(new T4TransformParams(template, "two", null), Timeout())).Output?.Trim());
+        await Task.Delay(1000, TestContext.Current.CancellationToken); // a restart that would fail does by then
+        Assert.Equal(1, launches);
+        Assert.DoesNotContain(log, line => line.Contains("restart failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Custom_tools_regenerate_the_Items_project_files_which_then_build()
     {
         var output = new OutputService();
