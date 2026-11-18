@@ -13,12 +13,12 @@
         <ComboBox x:Name="ProfilePicker" MinWidth="150" ItemsSource="{Binding Profiles}" AutomationProperties.Name="{l:T terminal.terminalProfile}" ToolTip.Tip="{l:T terminal.newTerminalWithThisProfile}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:TerminalProfileChoice">
-              <TextBlock Text="{Binding Name}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
         <Button Classes="toolbar" Command="{Binding NewCommand}" ToolTip.Tip="{l:T terminal.newTerminal}" AutomationProperties.Name="{l:T terminal.newTerminal2}">
-          <TextBlock Text="+" FontWeight="Bold" />
+          <TextBlock VerticalAlignment="Center" Text="+" FontWeight="Bold" />
         </Button>
         <Button Classes="toolbar" Command="{Binding SplitCommand}" ToolTip.Tip="{l:T terminal.splitTerminal}" AutomationProperties.Name="{l:T terminal.splitTerminal2}">
           <controls:Icon Kind="layout" />

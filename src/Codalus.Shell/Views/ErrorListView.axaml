@@ -19,19 +19,19 @@
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowErrors}" AutomationProperties.Name="{Binding ErrorsLabel}" ToolTip.Tip="{Binding ErrorsLabel}">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <controls:Icon Kind="error" Classes="error" />
-          <TextBlock Text="{Binding ErrorsLabel}" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding ErrorsLabel}" />
         </StackPanel>
       </ToggleButton>
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowWarnings}" AutomationProperties.Name="{Binding WarningsLabel}" ToolTip.Tip="{Binding WarningsLabel}">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <controls:Icon Kind="warning" Classes="warning" />
-          <TextBlock Text="{Binding WarningsLabel}" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding WarningsLabel}" />
         </StackPanel>
       </ToggleButton>
       <ToggleButton Classes="toolbar" IsChecked="{Binding ShowMessages}" AutomationProperties.Name="{Binding MessagesLabel}" ToolTip.Tip="{Binding MessagesLabel}">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <controls:Icon Kind="info" />
-          <TextBlock Text="{Binding MessagesLabel}" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding MessagesLabel}" />
         </StackPanel>
       </ToggleButton>
       <ComboBox SelectedIndex="{Binding GroupBy}" MinWidth="110" AutomationProperties.Name="{l:T errorList.groupBy}" ToolTip.Tip="{l:T errorList.groupBy}">
@@ -71,17 +71,17 @@
             <DataTemplate x:DataType="vm:ErrorListGroup">
               <StackPanel Orientation="Horizontal" Spacing="4" Background="Transparent" AutomationProperties.Name="{Binding AccessibleName}">
                 <controls:Icon Kind="{Binding Chevron}" />
-                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding Header}" FontWeight="SemiBold" />
               </StackPanel>
             </DataTemplate>
             <DataTemplate x:DataType="vm:ErrorListRow">
               <Grid ColumnDefinitions="28,90,*,140,200,130" AutomationProperties.Name="{Binding AccessibleName}">
                 <controls:Icon Kind="{Binding Icon}" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" />
-                <TextBlock Grid.Column="1" Text="{Binding Code}" />
-                <TextBlock Grid.Column="2" Text="{Binding Description}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
-                <TextBlock Grid.Column="3" Text="{Binding Project}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Project}" />
-                <TextBlock Grid.Column="4" Text="{Binding Location}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
-                <TextBlock Grid.Column="5" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" Classes="muted" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="1" Text="{Binding Code}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="2" Text="{Binding Description}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Description}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="3" Text="{Binding Project}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Project}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="4" Text="{Binding Location}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Path}" />
+                <TextBlock VerticalAlignment="Center" Grid.Column="5" Text="{Binding Source}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Source}" Classes="muted" />
               </Grid>
             </DataTemplate>
           </ListBox.DataTemplates>

@@ -8,10 +8,10 @@
   <DockPanel>
     <controls:ToolbarPanel DockPanel.Dock="Top">
       <Button Classes="toolbar" Command="{Binding SolutionCommand}" ToolTip.Tip="{l:T codeMetrics.calculateCodeMetricsForSolution}" AutomationProperties.Name="{l:T codeMetrics.calculateCodeMetricsForSolution}">
-        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="solution" /><TextBlock Text="{l:T codeMetrics.solution}" /></StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="solution" /><TextBlock VerticalAlignment="Center" Text="{l:T codeMetrics.solution}" /></StackPanel>
       </Button>
       <Button Classes="toolbar" Command="{Binding ProjectCommand}" ToolTip.Tip="{l:T codeMetrics.calculateCodeMetricsForTheActive}" AutomationProperties.Name="{l:T codeMetrics.calculateCodeMetricsForProject}">
-        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="project" /><TextBlock Text="{l:T codeMetrics.project}" /></StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="4"><controls:Icon Kind="project" /><TextBlock VerticalAlignment="Center" Text="{l:T codeMetrics.project}" /></StackPanel>
       </Button>
       <Button Classes="toolbar" Command="{Binding CopyCommand}" ToolTip.Tip="{l:T codeMetrics.copyTheResultsAsTabSeparated}" AutomationProperties.Name="{l:T codeMetrics.copyResults}">
         <controls:Icon Kind="file-data" />

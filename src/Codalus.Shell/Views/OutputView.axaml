@@ -16,7 +16,7 @@
                 AutomationProperties.Name="{l:T output.outputChannel}">
         <ComboBox.ItemTemplate>
           <DataTemplate x:DataType="output:OutputChannel">
-            <TextBlock Text="{Binding Name}" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding Name}" />
           </DataTemplate>
         </ComboBox.ItemTemplate>
       </ComboBox>

@@ -141,9 +141,9 @@
                     <controls:Icon Kind="{Binding Icon}"
                                    Classes.passed="{Binding Style.IsPassed}" Classes.failed="{Binding Style.IsFailed}" Classes.skipped="{Binding Style.IsSkipped}"
                                    Classes.none="{Binding Style.IsNone}" />
-                    <TextBlock Text="{Binding Outcome}" MinWidth="60" />
-                    <TextBlock Classes="muted" Text="{Binding When}" />
-                    <TextBlock Classes="muted" Text="{Binding Duration}" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding Outcome}" MinWidth="60" />
+                    <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding When}" />
+                    <TextBlock VerticalAlignment="Center" Classes="muted" Text="{Binding Duration}" />
                   </StackPanel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>

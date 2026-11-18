@@ -27,9 +27,9 @@
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <controls:Icon Kind="compare" />
-          <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
-          <TextBlock Text="·" Classes="muted" />
-          <TextBlock Text="{Binding CountText}" Classes="muted" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+          <TextBlock VerticalAlignment="Center" Text="·" Classes="muted" />
+          <TextBlock VerticalAlignment="Center" Text="{Binding CountText}" Classes="muted" />
         </StackPanel>
       </DockPanel>
     </Border>
