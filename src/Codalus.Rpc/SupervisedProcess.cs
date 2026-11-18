@@ -419,8 +419,13 @@ public sealed class SupervisedProcess : IAsyncDisposable
         catch (Exception ex) when (ex is JsonRpcConnectionLostException or JsonRpcRemoteException or InvalidOperationException
                                        or System.ComponentModel.Win32Exception or IOException or ObjectDisposedException)
         {
-            // The disconnect handler of the new connection decides about further restarts.
-            Log?.Invoke(this, $"[{Name}] restart failed: {ex.Message}");
+            // The disconnect handler of the new connection decides about further restarts. Disposed meanwhile (its owner
+            // stopped it, or dropped it for a new one, as the T4 service did while it restarted: "restart failed: Cannot
+            // access a disposed object" in CustomToolIntegrationTests' output), it didn't fail: it was stopped.
+            if (!_disposed)
+            {
+                Log?.Invoke(this, $"[{Name}] restart failed: {ex.Message}");
+            }
         }
     }
 

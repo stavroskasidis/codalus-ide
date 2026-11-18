@@ -66,13 +66,11 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_process is not { IsRunning: true })
+            // A host that isn't running is restarting (a crash), or gave up: StartAsync waits for the restart under way, or
+            // starts it again. Dropping it for a new one, as this did, started a second host while the first one's restart
+            // ran, and that restart then failed on its disposed supervisor.
+            if (_process is null)
             {
-                if (_process is { } stale)
-                {
-                    await stale.DisposeAsync().ConfigureAwait(false);
-                }
-
                 var info = launch() ?? throw new InvalidOperationException("The T4 host (codalus-t4host) was not found.");
                 var process = new SupervisedProcess("T4 host", info, s_policy)
                 {
@@ -84,9 +82,9 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
                 };
                 process.Log += (_, line) => Log?.Invoke(this, line);
                 _process = process;
-                await process.StartAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            await _process.StartAsync(cancellationToken).ConfigureAwait(false);
             return _process.Connection;
         }
         finally
