@@ -72,7 +72,7 @@
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="{Binding Header}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             <Border Classes="badge" IsVisible="{Binding HasMatches}">
-              <TextBlock Text="{Binding MatchCount}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding MatchCount}" />
             </Border>
             <Button Classes="subtle" Width="16" Height="16" MinWidth="16" MinHeight="16" Padding="0" VerticalAlignment="Center" Command="{Binding CloseCommand}"
                     ToolTip.Tip="{l:T findResults.closePage}" AutomationProperties.Name="{l:T findResults.closePage}">

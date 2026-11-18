@@ -87,7 +87,7 @@
             <Ellipse Classes="dot" />
             <StackPanel Orientation="Horizontal" ToolTip.Tip="{l:T httpResponse.size}">
               <controls:Icon Classes="meta" Kind="download" />
-              <TextBlock Classes="meta" Text="{Binding Size}" />
+              <TextBlock VerticalAlignment="Center" Classes="meta" Text="{Binding Size}" />
             </StackPanel>
           </StackPanel>
           <controls:ToolbarPanel x:Name="ResponseTools" Grid.Column="2" Margin="8,0,0,0" HorizontalAlignment="Right" VerticalAlignment="Center">

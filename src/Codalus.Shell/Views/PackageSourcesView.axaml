@@ -23,16 +23,16 @@
       <DockPanel>
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="2" Margin="0,0,0,4">
           <Button Classes="toolbar" Command="{Binding AddCommand}" ToolTip.Tip="{l:T packageSources.addSource}" AutomationProperties.Name="{l:T packageSources.addSource2}">
-            <TextBlock Text="+" FontWeight="Bold" />
+            <TextBlock VerticalAlignment="Center" Text="+" FontWeight="Bold" />
           </Button>
           <Button Classes="toolbar" Command="{Binding RemoveCommand}" ToolTip.Tip="{l:T packageSources.removeSource}" AutomationProperties.Name="{l:T packageSources.removeSource2}">
             <controls:Icon Kind="trash" />
           </Button>
           <Button Classes="toolbar" Command="{Binding MoveUpCommand}" ToolTip.Tip="{l:T packageSources.moveUp}" AutomationProperties.Name="{l:T packageSources.moveUp2}">
-            <TextBlock Text="▲" FontSize="10" />
+            <TextBlock VerticalAlignment="Center" Text="▲" FontSize="10" />
           </Button>
           <Button Classes="toolbar" Command="{Binding MoveDownCommand}" ToolTip.Tip="{l:T packageSources.moveDown}" AutomationProperties.Name="{l:T packageSources.moveDown2}">
-            <TextBlock Text="▼" FontSize="10" />
+            <TextBlock VerticalAlignment="Center" Text="▼" FontSize="10" />
           </Button>
         </StackPanel>
         <ListBox ItemsSource="{Binding Sources}" SelectedItem="{Binding Selected}" AutomationProperties.Name="{l:T packageSources.packageSources2}">

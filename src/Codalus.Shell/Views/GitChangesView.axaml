@@ -321,14 +321,14 @@
           <Button Classes="link" Tag="hosting.showChecks" Click="OnCommand" ToolTip.Tip="{Binding CiTooltip}" AutomationProperties.Name="{Binding CiText}">
             <StackPanel Orientation="Horizontal" Spacing="4">
               <controls:Icon Kind="{Binding CiIcon}" Classes.passed="{Binding IsCiPassed}" Classes.failed="{Binding IsCiFailed}" Classes.running="{Binding IsCiPending}" />
-              <TextBlock Text="{Binding CiText}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding CiText}" />
             </StackPanel>
           </Button>
         </WrapPanel>
         <Button Classes="link" Tag="git.pullRequests" Click="OnCommand" IsVisible="{Binding HasPullRequest}" ToolTip.Tip="{l:T gitChanges.theCurrentBranchSPullRequest}" AutomationProperties.Name="{Binding PullRequestText}">
           <StackPanel Orientation="Horizontal" Spacing="4">
             <controls:Icon Kind="pull-request" />
-            <TextBlock Text="{Binding PullRequestText}" TextTrimming="CharacterEllipsis" />
+            <TextBlock VerticalAlignment="Center" Text="{Binding PullRequestText}" TextTrimming="CharacterEllipsis" />
           </StackPanel>
         </Button>
 
@@ -357,8 +357,8 @@
                   <DataTemplate x:DataType="vm:CommitCompletion">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                       <controls:Icon Kind="issue" />
-                      <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
-                      <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock VerticalAlignment="Center" Text="{Binding Reference}" FontWeight="SemiBold" />
+                      <TextBlock VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                       <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" VerticalAlignment="Center" />
                     </StackPanel>
                   </DataTemplate>
@@ -400,7 +400,7 @@
           <ToggleButton x:Name="RelatedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.relatedItems}">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <controls:Icon Classes="chevron" Kind="chevron-right" />
-              <TextBlock Text="{l:T gitChanges.relatedItems}" FontWeight="SemiBold" />
+              <TextBlock VerticalAlignment="Center" Text="{l:T gitChanges.relatedItems}" FontWeight="SemiBold" />
             </StackPanel>
           </ToggleButton>
           <StackPanel IsVisible="{Binding #RelatedToggle.IsChecked}">
@@ -410,8 +410,8 @@
                 <DataTemplate x:DataType="vm:RelatedItem">
                   <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,2">
                     <controls:Icon Kind="issue" />
-                    <TextBlock Text="{Binding Reference}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding Reference}" FontWeight="SemiBold" />
+                    <TextBlock VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
                   </StackPanel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -425,7 +425,7 @@
             <ToggleButton x:Name="ConflictsToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.mergeConflicts}">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <controls:Icon Classes="chevron" Kind="chevron-right" />
-                <TextBlock Text="{Binding ConflictsHeader}" FontWeight="SemiBold" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding ConflictsHeader}" FontWeight="SemiBold" />
               </StackPanel>
             </ToggleButton>
             <StackPanel IsVisible="{Binding #ConflictsToggle.IsChecked}">
@@ -442,7 +442,7 @@
               <ToggleButton x:Name="StagedToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.stagedChanges}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <controls:Icon Classes="chevron" Kind="chevron-right" />
-                  <TextBlock Text="{Binding StagedHeader}" FontWeight="SemiBold" />
+                  <TextBlock VerticalAlignment="Center" Text="{Binding StagedHeader}" FontWeight="SemiBold" />
                 </StackPanel>
               </ToggleButton>
             </DockPanel>
@@ -489,7 +489,7 @@
             <ToggleButton x:Name="ChangesToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.changes}">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <controls:Icon Classes="chevron" Kind="chevron-right" />
-                <TextBlock Text="{Binding ChangesHeader}" FontWeight="SemiBold" />
+                <TextBlock VerticalAlignment="Center" Text="{Binding ChangesHeader}" FontWeight="SemiBold" />
               </StackPanel>
             </ToggleButton>
           </DockPanel>
@@ -522,7 +522,7 @@
           <ToggleButton x:Name="StashesToggle" Classes="section" IsChecked="True" AutomationProperties.Name="{l:T gitChanges.stashes}">
             <StackPanel Orientation="Horizontal" Spacing="6">
               <controls:Icon Classes="chevron" Kind="chevron-right" />
-              <TextBlock Text="{Binding StashesHeader}" FontWeight="SemiBold" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding StashesHeader}" FontWeight="SemiBold" />
             </StackPanel>
           </ToggleButton>
           <StackPanel IsVisible="{Binding #StashesToggle.IsChecked}">

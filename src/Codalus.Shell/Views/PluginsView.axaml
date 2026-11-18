@@ -20,7 +20,7 @@
           <StackPanel Spacing="2" Margin="2,4">
             <StackPanel Orientation="Horizontal" Spacing="8">
               <controls:Icon Kind="extensions" VerticalAlignment="Center" />
-              <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+              <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding Name}" />
               <TextBlock Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Text="{Binding State}" VerticalAlignment="Center" />
               <Button Classes="link" Content="{Binding ToggleTitle}" Command="{Binding ToggleCommand}" IsVisible="{Binding CanToggle}"
                       AutomationProperties.Name="{Binding ToggleTitle}" VerticalAlignment="Center" />
