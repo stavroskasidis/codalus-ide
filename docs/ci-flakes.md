@@ -290,6 +290,13 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   Android SDK under sudo), records it in `ShellFixture.TerminalInstalls`, starts nothing and fails (exit code 97). The
   one test that wants the real terminal clears it and runs `exit 3`
   (`EnvironmentShellTests.A_test_never_starts_an_install_in_the_terminal` checks the guard).
+- **`Leaky` left running after the memory test failed on the Mac** (the same validation): the test failed before its
+  Stop Collection, and the program it had launched to profile outlived the test's shell, re-parented to launchd. A
+  program launched to be profiled stopped only with Stop Collection (`FinishProfilingAsync`); disposing the shell
+  disposed the diagnostics windows and the host, not it, so a user closing the IDE while collecting left it the same
+  way. Fixed: disposing the profiling stops it as Stop Collection does (its process tree, `ProcessTree.Kill`), and the
+  test ends its collection in a `finally`
+  (`ProfilerToolsShellTests.A_program_launched_to_be_profiled_stops_when_the_ide_closes_during_the_collection`).
 - **`finish`** (40307688648): merging master into develop conflicted beyond `VERSION`; it says so and stops.
 - **The English catalogue on macOS, PR #387's merge with `develop`** (43729011051): `LocalizationCatalogTests` found
   `en.json` without `command.ios.openSimulator`, `command.ios.openXcode` and `menu.menuBar/tools/ios`. `develop`'s, on

@@ -137,18 +137,26 @@ public sealed class ProfilerToolsShellTests
     public async Task Memory_usage_takes_snapshots_diffs_them_and_inspects_a_full_dump()
     {
         await using var f = ShellFixture.Create();
-        await OpenDiagnosticsAsync(f, "Leaky", "0");
+        await OpenDiagnosticsAsync(f, "Leaky", "0"); // Leaky runs until it's stopped
         var hub = Hub(f, ProfilerTools.Memory);
         var run = await hub.StartAsync();
         Assert.NotNull(run);
-        Assert.True(hub.CanSnapshot);
-        await Task.Delay(1000, TestContext.Current.CancellationToken);
-        await SnapshotAsync(f, hub, "heap-1.nettrace");
-        await Task.Delay(2000, TestContext.Current.CancellationToken);
-        await SnapshotAsync(f, hub, "heap-2.nettrace");
-        Assert.Equal("full.dmp", await hub.CreateDumpAsync());
-        Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
-        await hub.StopAsync();
+        try
+        {
+            Assert.True(hub.CanSnapshot);
+            await Task.Delay(1000, TestContext.Current.CancellationToken);
+            await SnapshotAsync(f, hub, "heap-1.nettrace");
+            await Task.Delay(2000, TestContext.Current.CancellationToken);
+            await SnapshotAsync(f, hub, "heap-2.nettrace");
+            Assert.Equal("full.dmp", await hub.CreateDumpAsync());
+            Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The collection ends, and Leaky with it, whatever failed above.
+            await hub.StopAsync();
+        }
+
         await ShellFixture.PumpUntil(() => !hub.IsCollecting, seconds: 120);
 
         await ShellFixture.PumpUntil(() => Document<ProfilingReportViewModel>(f) is { HeapTypes.Count: > 0 } r && r.Snapshots.Count == 2, seconds: 180);
@@ -178,6 +186,47 @@ public sealed class ProfilerToolsShellTests
         Assert.True(report.HasDump);
         await report.InspectDumpAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<DumpDocument>().Any(), seconds: 120);
+    }
+
+    /// <summary>
+    /// A program launched to be profiled stops when the IDE closes during its collection, as Stop Collection stops it.
+    /// It was left running, re-parented to launchd, after the memory test failed before its Stop (the Mac's validation of
+    /// the release candidate); a user closing the IDE while collecting left it the same way. Memory Usage alone: no trace
+    /// or counters whose end would stop the collection by itself.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_program_launched_to_be_profiled_stops_when_the_ide_closes_during_the_collection()
+    {
+        var f = ShellFixture.Create();
+        var disposed = false;
+        System.Diagnostics.Process? program = null;
+        try
+        {
+            await OpenDiagnosticsAsync(f, "Leaky", "0"); // Leaky runs until it's stopped
+            var hub = Hub(f, ProfilerTools.Memory);
+            var run = await hub.StartAsync();
+            Assert.NotNull(run);
+            program = System.Diagnostics.Process.GetProcessById(run.ProcessId);
+            Assert.False(program.HasExited);
+
+            await f.DisposeAsync(); // no Stop Collection
+            disposed = true;
+            Assert.True(program.WaitForExit(TimeSpan.FromSeconds(30)), $"The profiled program (process {run.ProcessId}) still runs after the IDE closed.");
+        }
+        finally
+        {
+            if (!disposed)
+            {
+                await f.DisposeAsync();
+            }
+
+            if (program is { HasExited: false })
+            {
+                Codalus.Platform.ProcessTree.Kill(program); // not left for the tests after this one
+            }
+
+            program?.Dispose();
+        }
     }
 
     [AvaloniaFact]
