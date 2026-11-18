@@ -166,6 +166,50 @@ public sealed class WinFormsDesignerHostTests(WinFormsHostFixture fixture)
         Assert.Equal(render.Frame.Width, again.Frame!.Width);
     }
 
+    /// <summary>
+    /// Every item of the Toolbox's framework categories (the shell's <c>ToolboxViewModel.Framework</c>) is created on a
+    /// form without an error. A CheckedListBox failed: "Ambiguous match found for 'System.Windows.Forms.CheckedListBox
+    /// ObjectCollection Items'" (its <c>Items</c> hides ListBox's), seen in the Windows Forms showcase's recording.
+    /// </summary>
+    [Fact]
+    public async Task Every_framework_toolbox_item_is_created_without_an_error()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var (host, render, _) = await LoadAsync("OrderForm.cs");
+        await using var _ = host;
+        var root = render.Components[0];
+        string[] types =
+        [
+            "Button", "CheckBox", "CheckedListBox", "ComboBox", "DateTimePicker", "Label", "LinkLabel", "ListBox", "ListView", "MaskedTextBox", "MonthCalendar",
+            "NotifyIcon", "NumericUpDown", "PictureBox", "ProgressBar", "RadioButton", "RichTextBox", "TextBox", "ToolTip", "TrackBar", "TreeView", "WebBrowser",
+            "FlowLayoutPanel", "GroupBox", "Panel", "SplitContainer", "TabControl", "TableLayoutPanel",
+            "ContextMenuStrip", "MenuStrip", "StatusStrip", "ToolStrip", "ToolStripContainer",
+            "BindingNavigator", "BindingSource", "DataGridView",
+            "System.ComponentModel.BackgroundWorker", "ErrorProvider", "System.IO.FileSystemWatcher", "HelpProvider", "ImageList", "System.Diagnostics.Process", "Timer",
+            "PageSetupDialog", "PrintDialog", "System.Drawing.Printing.PrintDocument", "PrintPreviewControl", "PrintPreviewDialog",
+            "ColorDialog", "FolderBrowserDialog", "FontDialog", "OpenFileDialog", "SaveFileDialog",
+        ];
+        var failed = new List<string>();
+        for (var i = 0; i < types.Length; i++)
+        {
+            var type = types[i].Contains('.', StringComparison.Ordinal) ? types[i] : "System.Windows.Forms." + types[i];
+            try
+            {
+                var created = await host.CreateAsync(new DesignerCreateParams(type, "item" + i, null, root.ClientX + 8, root.ClientY + 8) { AtDefaultLocation = true }, Ct);
+                if (created.Error is { } error)
+                {
+                    failed.Add($"{types[i]}: {error}");
+                }
+            }
+            catch (Codalus.Workbench.Previewer.PreviewerException ex)
+            {
+                failed.Add($"{types[i]}: {ex.Message}");
+            }
+        }
+
+        Assert.True(failed.Count == 0, string.Join("\n", failed));
+    }
+
     [Fact]
     public async Task A_toolbox_create_and_property_edits_come_back_as_code()
     {

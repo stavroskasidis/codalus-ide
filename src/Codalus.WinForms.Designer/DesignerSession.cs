@@ -381,7 +381,7 @@ internal sealed partial class DesignerSession : IDisposable
         var owner = target;
         foreach (var part in parts[..^1])
         {
-            owner = (TypeDescriptor.GetProperties(owner)[part] is { } descriptor ? descriptor.GetValue(owner) : owner.GetType().GetProperty(part)?.GetValue(owner))
+            owner = (TypeDescriptor.GetProperties(owner)[part] is { } descriptor ? descriptor.GetValue(owner) : DesignerTypes.Property(owner.GetType(), part)?.GetValue(owner))
                 ?? throw new InvalidOperationException($"{part} of {path} is null.");
         }
 
@@ -397,7 +397,7 @@ internal sealed partial class DesignerSession : IDisposable
             return;
         }
 
-        var property = owner.GetType().GetProperty(member, BindingFlags.Public | BindingFlags.Instance) ?? throw new InvalidOperationException($"{DesignerTypes.NameOf(owner.GetType())} has no property {member}.");
+        var property = DesignerTypes.Property(owner.GetType(), member) ?? throw new InvalidOperationException($"{DesignerTypes.NameOf(owner.GetType())} has no property {member}.");
         property.SetValue(owner, _values.Evaluate(value, property.PropertyType));
     }
 
@@ -752,7 +752,7 @@ internal sealed partial class DesignerSession : IDisposable
         var component = dot < 0 ? name : name[..dot];
         var path = dot < 0 ? null : name[(dot + 1)..];
         var owner = Target(component) as Control ?? throw new InvalidOperationException($"{component} isn't a control.");
-        var control = path is null ? owner : owner.GetType().GetProperty(path)?.GetValue(owner) as Control ?? throw new InvalidOperationException($"{name} isn't a control.");
+        var control = path is null ? owner : DesignerTypes.Property(owner.GetType(), path)?.GetValue(owner) as Control ?? throw new InvalidOperationException($"{name} isn't a control.");
         if (path is null && Host.GetDesigner(owner) is not ParentControlDesigner)
         {
             throw new InvalidOperationException($"{name} can't contain controls.");

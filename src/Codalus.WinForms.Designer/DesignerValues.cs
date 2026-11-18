@@ -309,6 +309,26 @@ internal sealed class DesignerTypes
 
     /// <summary>A type's full C# name (nested types with dots).</summary>
     public static string NameOf(Type type) => (type.FullName ?? type.Name).Replace('+', '.');
+
+    /// <summary>
+    /// <paramref name="type"/>'s instance property <paramref name="name"/>, its most derived declaration (not an
+    /// indexer), as <c>TypeDescriptor</c> takes it; null when it has none. <c>Type.GetProperty(name)</c> throws when a
+    /// derived type hides a base type's property with another type: <c>CheckedListBox.Items</c> hides
+    /// <c>ListBox.Items</c>, and a CheckedListBox on the form failed every later change ("Ambiguous match found").
+    /// </summary>
+    public static System.Reflection.PropertyInfo? Property(Type type, string name, bool nonPublic = false)
+    {
+        var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | (nonPublic ? System.Reflection.BindingFlags.NonPublic : 0);
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.GetProperties(flags | System.Reflection.BindingFlags.DeclaredOnly).FirstOrDefault(p => p.Name == name && p.GetIndexParameters().Length == 0) is { } property)
+            {
+                return property;
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>
