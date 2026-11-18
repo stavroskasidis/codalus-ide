@@ -97,6 +97,36 @@ internal sealed class ConflictBlockRenderer(MergeEditorViewModel viewModel, Merg
                 drawingContext.DrawRectangle(null, untaken, rect);
             }
         }
+
+        if (pane != MergePane.Result)
+        {
+            DrawChangedWords(textView, drawingContext, document, pane == MergePane.Current ? MergeSide.Current : MergeSide.Incoming);
+        }
+    }
+
+    /// <summary>The words a source pane's block changed from the other side's, boxed as the diff view boxes them.</summary>
+    private void DrawChangedWords(TextView textView, DrawingContext drawingContext, TextDocument document, MergeSide side)
+    {
+        var brush = MergeEditorView.Brush(textView, "Shell.Diff.Removed.Word");
+        var pen = MergeEditorView.Brush(textView, "Shell.Diff.Removed.WordBorder") is { } border ? new Pen(border, 1) : null;
+        foreach (var line in textView.VisualLines)
+        {
+            var documentLine = line.FirstDocumentLine;
+            foreach (var (start, length) in viewModel.ChangedWordsAt(side, documentLine.LineNumber - 1))
+            {
+                if (start >= documentLine.Length || documentLine.Offset + start >= document.TextLength)
+                {
+                    continue;
+                }
+
+                var segment = new TextSegment { StartOffset = documentLine.Offset + start, Length = Math.Min(length, documentLine.Length - start) };
+                foreach (var box in BackgroundGeometryBuilder.GetRectsForSegment(textView, segment))
+                {
+                    var word = new Rect(Math.Floor(box.X) + 0.5, Math.Floor(box.Y) + 0.5, Math.Max(1, Math.Round(box.Width) - 1), Math.Max(1, Math.Round(box.Height) - 1));
+                    drawingContext.DrawRectangle(brush, pen, word);
+                }
+            }
+        }
     }
 }
 
@@ -326,7 +356,13 @@ public sealed class MergeEditorView : UserControl, IPaneView
         // The toolbar: previous and next conflict and the count; Accept Merge and the gear menu at the right end.
         _summary = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0) };
         AutomationProperties.SetLiveSetting(_summary, AutomationLiveSetting.Polite);
-        _accept = new Button { Content = Localizer.Get("mergeEditor.acceptMerge", "Accept Merge"), Margin = new Thickness(4, 0) };
+        if (viewModel.SummaryTip is { } summaryTip)
+        {
+            ToolTip.SetTip(_summary, summaryTip);
+            AutomationProperties.SetHelpText(_summary, summaryTip);
+        }
+
+        _accept =new Button { Content = Localizer.Get("mergeEditor.acceptMerge", "Accept Merge"), Margin = new Thickness(4, 0) };
         _accept.Classes.AddRange(["accent", "iconText", "compact"]);
         ButtonIcon.SetKind(_accept, "check");
         ToolTip.SetTip(_accept, WithShortcut(Localizer.Get("mergeEditor.acceptMergeTip", "Save the result and mark the file resolved"), "git.mergeEditor.acceptMerge"));
@@ -411,6 +447,9 @@ public sealed class MergeEditorView : UserControl, IPaneView
 
     /// <summary>The toolbar's count (tests).</summary>
     public string SummaryText => _summary.Text ?? string.Empty;
+
+    /// <summary>The count's tooltip (tests): what git found when the conflicts are the re-merge's.</summary>
+    public string? SummaryTipText => ToolTip.GetTip(_summary) as string;
 
     public bool CanAcceptMerge => _accept.IsEnabled;
 

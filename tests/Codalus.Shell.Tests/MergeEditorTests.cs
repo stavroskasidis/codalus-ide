@@ -63,6 +63,76 @@ public sealed class MergeEditorTests
     }
 
     [AvaloniaFact]
+    public async Task The_line_by_line_re_merge_replaces_gits_conflicts_when_they_differ_and_the_count_says_so()
+    {
+        // git put both changes in one conflict; the re-merge finds two, with the unchanged line between them merged.
+        const string Git = "a\n<<<<<<< HEAD\nB1\nc\nD1\n=======\nX1\nc\nY1\n>>>>>>> feature\ne\n";
+        const string Base = "a\nb1\nc\nd1\ne\n", Ours = "a\nB1\nc\nD1\ne\n", Theirs = "a\nX1\nc\nY1\ne\n";
+        var remerged = Workbench.Git.ThreeWayMerge.Remerge(Base, Ours, Theirs, Git);
+        var vm = new MergeEditorViewModel("a.txt", Git, Ours, Theirs, Base, _ => Task.CompletedTask, remerged: remerged);
+        Assert.Equal(2, vm.Conflicts.Count);
+        Assert.Equal((1, Git), (vm.GitConflictCount, vm.InitialResult));
+        Assert.Equal("Conflicts recomputed with a line-by-line merge (git found 1)", vm.SummaryTip);
+        Assert.Equal(Base, vm.Result.Text);
+        Assert.Equal(["B1\n", "D1\n"], vm.Conflicts.Select(b => vm.CurrentText.Substring(b.Current.Start, b.Current.Length)));
+        Assert.Equal("HEAD", vm.CurrentName);
+
+        // The same conflicts as git's: git's file as it is, and no tooltip.
+        var same = new MergeEditorViewModel("a.txt", Merged2, Ours2, Theirs2, Base2, _ => Task.CompletedTask, remerged: Workbench.Git.ThreeWayMerge.Remerge(Base2, Ours2, Theirs2, Merged2));
+        Assert.Equal((2, (int?)null, (string?)null), (same.Conflicts.Count, same.GitConflictCount, same.SummaryTip));
+
+        // The toolbar's count carries the tooltip.
+        await using var f = ShellFixture.Create();
+        f.Shell.Layout.OpenDocument(new MergeEditorDocument(vm, f.Shell.EditorFont), focus: true);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<MergeEditorView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<MergeEditorView>().Single();
+        Assert.Equal(("2 Conflicts (2 Remaining)", vm.SummaryTip), (view.SummaryText, view.SummaryTipText));
+    }
+
+    [AvaloniaFact]
+    public void Each_source_pane_marks_the_words_its_block_changed_from_the_other_sides()
+    {
+        var vm = ViewModel(
+            "a\n<<<<<<< HEAD\n<Button Icon=\"arrow-up\" Rounded=\"Large\" />\n=======\n<Button Icon=\"paper-plane\" Rounded=\"Large\" />\n>>>>>>> master\nz\n",
+            ours: "a\n<Button Icon=\"arrow-up\" Rounded=\"Large\" />\nz\n",
+            theirs: "a\n<Button Icon=\"paper-plane\" Rounded=\"Large\" />\nz\n",
+            @base: "a\n<Button Icon=\"send\" Rounded=\"Large\" />\nz\n");
+
+        static string Words(string line, IReadOnlyList<(int Start, int Length)> ranges) => string.Join("|", ranges.Select(r => line.Substring(r.Start, r.Length)));
+        // As the diff view marks them: the hyphen both have stays unmarked.
+        Assert.Equal("arrow|up", Words("<Button Icon=\"arrow-up\" Rounded=\"Large\" />", vm.ChangedWordsAt(MergeSide.Current, 1)));
+        Assert.Equal("paper|plane", Words("<Button Icon=\"paper-plane\" Rounded=\"Large\" />", vm.ChangedWordsAt(MergeSide.Incoming, 1)));
+        Assert.Empty(vm.ChangedWordsAt(MergeSide.Current, 0));
+        Assert.Empty(vm.ChangedWordsAt(MergeSide.Incoming, 2));
+    }
+
+    [AvaloniaFact]
+    public void A_conflict_whose_current_side_is_empty_shows_the_base_lines_the_current_side_deleted()
+    {
+        // The current branch replaced x1 and x2 with N; git's histogram diff kept N out of the conflict, so the
+        // conflict's current side is empty and its incoming side is the incoming branch's edit of the old lines.
+        var vm = ViewModel(
+            "a\nN\n<<<<<<< HEAD\n=======\nx1\nX2\n>>>>>>> master\nz\n",
+            ours: "a\nN\nz\n",
+            theirs: "a\nx1\nX2\nz\n",
+            @base: "a\nx1\nx2\nz\n");
+
+        var block = Assert.Single(vm.Conflicts);
+        Assert.Equal("a\nN\nx1\nx2\nz\n", vm.Result.Text);
+        Assert.Equal("x1\nx2\n", vm.Result.GetText(block.Result.Start, block.Result.Length));
+        Assert.Equal(0, block.Current.Length);
+        Assert.Equal("x1\nX2\n", vm.IncomingText.Substring(block.Incoming.Start, block.Incoming.Length));
+
+        // The mirror image: the incoming side deleted the lines the current side changed.
+        var mirror = ViewModel(
+            "a\nN\n<<<<<<< HEAD\nx1\nX2\n=======\n>>>>>>> master\nz\n",
+            ours: "a\nx1\nX2\nz\n",
+            theirs: "a\nN\nz\n",
+            @base: "a\nx1\nx2\nz\n");
+        Assert.Equal("a\nN\nx1\nx2\nz\n", mirror.Result.Text);
+    }
+
+    [AvaloniaFact]
     public void Checking_a_side_takes_its_block_checking_both_takes_both_and_unchecking_takes_it_out()
     {
         var vm = ViewModel();

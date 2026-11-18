@@ -1972,6 +1972,7 @@
   "mergeEditor.options": "Merge Editor Options",
   "mergeEditor.position": "Ln: {0}   Ch: {1}",
   "mergeEditor.previousConflict": "Previous Conflict",
+  "mergeEditor.remergedTip": "Conflicts recomputed with a line-by-line merge (git found {0})",
   "mergeEditor.resetAll": "Reset All Conflicts",
   "mergeEditor.resultTitle": "Result: {0}",
   "mergeEditor.takeAllCurrent": "Take All Current",
