@@ -742,6 +742,9 @@
       </FocusAdornerTemplate>
     </Setter>
   </Style>
+  <!-- TODO(issue): High contrast's row under the pointer and a read-only field are dashed in the design
+       (docs/design/controls.md); Avalonia's borders draw no dashes, so they are solid (an inset shadow here). Moved to
+       1.x at M65 (M34h's open item, D57). -->
   <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource Shell.Row.Hover}" />
     <Setter Property="Foreground" Value="{DynamicResource Shell.Foreground}" />
