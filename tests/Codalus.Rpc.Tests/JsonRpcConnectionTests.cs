@@ -420,6 +420,33 @@ public sealed class JsonRpcConnectionTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task When_dispatched_after_the_end_waits_for_the_notifications_read_before_it()
+    {
+        // The end of the input fails a pending request at once, ahead of the notifications read before the end. A caller
+        // that then waits for them (an agent's last words before it crashed) got none: the channel the end completed
+        // refused the marker and the wait returned at once (macOS CI, run 44259758111).
+        var handled = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        _a.OnNotification("note", TestJsonContext.Default.Ping, p =>
+        {
+            Thread.Sleep(100);
+            handled.Enqueue(p.Text);
+        });
+        _a.Start();
+        var pending = _a.InvokeAsync("echo", new Ping("x"), TestJsonContext.Default.Ping, TestJsonContext.Default.Pong, Timeout());
+        var input = _bToA.Writer.AsStream();
+        for (var i = 1; i <= 3; i++)
+        {
+            await WriteFrameAsync(input, $$$"""{"jsonrpc":"2.0","method":"note","params":{"text":"{{{i}}}"}}""");
+        }
+
+        await _bToA.Writer.CompleteAsync();
+        await Assert.ThrowsAsync<JsonRpcConnectionLostException>(() => pending);
+        await _a.WhenDispatchedAsync().WaitAsync(s_timeout, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["1", "2", "3"], handled);
+    }
+
+    [Fact]
     public async Task A_message_the_dispatcher_cannot_read_is_reported_and_later_messages_still_arrive()
     {
         var failures = new List<Exception>();
