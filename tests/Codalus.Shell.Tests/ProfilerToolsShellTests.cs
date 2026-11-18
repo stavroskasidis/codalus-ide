@@ -148,7 +148,10 @@ public sealed class ProfilerToolsShellTests
             await SnapshotAsync(f, hub, "heap-1.nettrace");
             await Task.Delay(2000, TestContext.Current.CancellationToken);
             await SnapshotAsync(f, hub, "heap-2.nettrace");
-            Assert.Equal("full.dmp", await hub.CreateDumpAsync());
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var dump = await hub.CreateDumpAsync();
+            Assert.True(dump == "full.dmp", $"The dump is '{dump}', not full.dmp, after {started.Elapsed.TotalSeconds:0} s. Status: {hub.Status}; "
+                + $"notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}");
             Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
         }
         finally
@@ -226,6 +229,41 @@ public sealed class ProfilerToolsShellTests
             }
 
             program?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The profiler's full dump that doesn't come says why, as the debugger's Create Dump does: in the notification and in
+    /// the Performance Profiler's status. On macOS, createdump waits on the system's password prompt (developer tools
+    /// access) the first time in a while, and the dump only returned null (the Mac's validation of the release
+    /// candidate). Here a stand-in for the companion host that never finishes, then one that fails.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_full_dump_that_times_out_or_fails_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.ProfilingDumpTimeout = TimeSpan.FromSeconds(1);
+        f.Shell.WriteProfilingDump = (_, _, cancellationToken) => Task.Delay(Timeout.Infinite, cancellationToken); // createdump waiting on the prompt
+        var run = await f.Shell.StartProfilingAsync(new ProfilerRequest([ProfilerTools.Memory], Launch: false, Environment.ProcessId), "testhost");
+        Assert.NotNull(run);
+        try
+        {
+            var hub = f.Shell.OpenProfiler(); // follows the collection in progress
+            Assert.True(hub.CanSnapshot);
+            Assert.Null(await hub.CreateDumpAsync());
+            const string Expected = "The dump could not be written: The dump wasn't written within 1 s. On macOS, check for a password prompt from the system (developer tools access) and approve it.";
+            Assert.Equal(Expected, hub.Status);
+            Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message == Expected);
+            Assert.Null(run.Dump);
+
+            // A failure the companion host reports: its reason.
+            f.Shell.WriteProfilingDump = (_, _, _) => Task.FromException(new InvalidOperationException("createdump exited with code 1."));
+            Assert.Null(await hub.CreateDumpAsync());
+            Assert.Equal("The dump could not be written: createdump exited with code 1.", hub.Status);
+        }
+        finally
+        {
+            await f.Shell.StopProfilingAsync();
         }
     }
 

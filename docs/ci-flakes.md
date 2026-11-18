@@ -290,6 +290,15 @@ about 45 failed jobs, 30 distinct failures, of which only a handful were the pul
   Android SDK under sudo), records it in `ShellFixture.TerminalInstalls`, starts nothing and fails (exit code 97). The
   one test that wants the real terminal clears it and runs `exit 3`
   (`EnvironmentShellTests.A_test_never_starts_an_install_in_the_terminal` checks the guard).
+- **`ProfilerToolsShellTests.Memory_usage_takes_snapshots_diffs_them_and_inspects_a_full_dump` on the Mac** (local
+  validation of the release candidate, `develop` at 9314aaaf, 2026-11-18): the full dump returned null, and the test
+  said only that. Not a flake: the runtime's createdump needs macOS' developer tools access
+  (`system.privilege.taskport`), whose password prompt, the first time in a 10-hour window, holds every dump until it's
+  answered; it wasn't. The debugger's Create Dump says so on a timeout, but the profiler's full dump showed it only in a
+  toast, and the Performance Profiler's status said "The dump could not be written." Fixed: the reason is the status
+  too, a timeout of the profiler's own wait says what the debugger's says (`DumpAdvice`, shared with the companion
+  host), and the test's assertion prints the status and the notifications
+  (`ProfilerToolsShellTests.A_full_dump_that_times_out_or_fails_says_why`).
 - **`Leaky` left running after the memory test failed on the Mac** (the same validation): the test failed before its
   Stop Collection, and the program it had launched to profile outlived the test's shell, re-parented to launchd. A
   program launched to be profiled stopped only with Stop Collection (`FinishProfilingAsync`); disposing the shell
