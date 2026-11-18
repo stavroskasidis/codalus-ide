@@ -523,6 +523,17 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_crash_right_after_many_updates_keeps_every_one_of_them()
+    {
+        // The turn ended on the lost connection before the updates read ahead of it were handled, so the agent's last
+        // words were cut short or lost ("Starting…" came back empty, macOS CI, run 44259758111).
+        await ConfigureAsync();
+        var turn = await AskAsync("crash-chatty");
+        Assert.Equal(new string('w', 400), turn.Answer);
+        Assert.Contains("The agent 'stand-in' stopped.", turn.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_agent_that_needs_a_sign_in_shows_its_ways_and_runs_the_chosen_one()
     {
         await ConfigureAsync("ACP_FAKE_AUTH=1");

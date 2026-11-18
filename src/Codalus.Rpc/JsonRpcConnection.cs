@@ -416,11 +416,14 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
 
         var dispatched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        // A channel completed by the end of the read loop refuses the marker: nothing is left to dispatch then. One
-        // written before that is still read by the dispatch loop, which drains the channel before it ends.
+        // A channel completed by the end of the read loop refuses the marker, but what was read before the end can still
+        // be queued: the dispatch loop drains the channel before it ends, so that is the wait then. Returning at once let
+        // a turn the end failed finish without the agent's last words (macOS CI, run 44259758111). A marker written
+        // before the end is read by the dispatch loop like any message.
         if (!_inbox.Writer.TryWrite(new Inbound(null, dispatched)))
         {
-            return Task.CompletedTask;
+            return _dispatchLoop.WaitAsync(_shutdown.Token)
+                .ContinueWith(static _ => { }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
 
         try

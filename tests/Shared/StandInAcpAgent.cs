@@ -652,6 +652,18 @@ public static class StandInAcpAgent
                     await ChunkAsync("agent_message_chunk", "Permission: " + answered).ConfigureAwait(false);
                     return "cancelled";
 
+                case "crash-chatty":
+                    // Many last words, then an exit at once: the IDE reads the end of the connection long before it has
+                    // handled them all.
+                    for (var i = 0; i < 400; i++)
+                    {
+                        await ChunkAsync("agent_message_chunk", "w").ConfigureAwait(false);
+                    }
+
+                    await Console.Out.FlushAsync().ConfigureAwait(false);
+                    Environment.Exit(3);
+                    return "end_turn";
+
                 case "crash":
                     await ChunkAsync("agent_message_chunk", "Starting…").ConfigureAwait(false);
                     await Console.Error.WriteLineAsync("the stand-in agent crashed on purpose").ConfigureAwait(false);

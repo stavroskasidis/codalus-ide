@@ -464,6 +464,14 @@ public sealed class AcpClient : IAsyncDisposable
             // Claude's adapter creates a session signed out and asks for sign-in only here (ADR 0083).
             throw new AcpAuthRequiredException(ex.Message, [.. Info?.AuthMethods ?? []]);
         }
+        catch (AcpException)
+        {
+            // A failed turn too: the end of the connection fails the prompt as soon as it's read, ahead of the updates
+            // read before it, and the turn ended without the agent's last words ("Starting…" came back empty, macOS CI,
+            // run 44259758111).
+            await connection.WhenDispatchedAsync().ConfigureAwait(false);
+            throw;
+        }
 
         await connection.WhenDispatchedAsync().ConfigureAwait(false);
         return response ?? new AcpPromptResponse();
