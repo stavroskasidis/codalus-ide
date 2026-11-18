@@ -1,10 +1,10 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-11",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-18",
   "protocolVersion": 1,
   "agentInfo": {
     "name": "@agentclientprotocol/codex-acp",
     "title": "Codex",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "agentCapabilities": {
     "auth": {
@@ -24,7 +24,6 @@
       "fork": {},
       "title": {},
       "additionalDirectories": {},
-      "subagents": {},
       "systemPrompt": {}
     },
     "mcpCapabilities": {
