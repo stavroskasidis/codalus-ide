@@ -243,21 +243,16 @@ internal static class DotnetProcess
     /// they serve: the shell asks for some without a cancellation (the Entity Framework window's <c>dbcontext info</c>),
     /// and a <c>dotnet ef</c> left behind outlived the host, adopted by launchd on macOS for hours.
     /// </summary>
+    /// <remarks>It waits for them to end, which reaps them (<see cref="ChildProcesses.KillAndReap"/>).</remarks>
     public static void KillAll()
     {
-        foreach (var process in s_running.Keys)
+        var running = s_running.Keys.ToList();
+        foreach (var process in running)
         {
-            try
-            {
-                ProcessTree.Kill(process);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or AggregateException)
-            {
-                // Already gone.
-            }
-
             s_running.TryRemove(process, out _);
         }
+
+        ChildProcesses.KillAndReap(running, TimeSpan.FromSeconds(5));
     }
 
     /// <summary>

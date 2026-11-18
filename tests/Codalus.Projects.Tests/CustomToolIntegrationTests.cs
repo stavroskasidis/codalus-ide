@@ -131,12 +131,19 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         Assert.Null(result.Output);
         Assert.Single(result.Diagnostics, d => !d.IsWarning);
 
-        // A host that dies is started again for the next template.
+        // A host that dies is started again for the next template, even one sent before its connection noticed: the test
+        // waited 500 ms after the kill, which a loaded machine outlasted ("ok" expected, null: the template got "The T4
+        // host exited while running the template."); at once after the kill it failed every time.
         var pid = _templates.ProcessId!.Value;
         System.Diagnostics.Process.GetProcessById(pid).Kill();
-        await Task.Delay(500, TestContext.Current.CancellationToken);
         result = await _templates.TransformAsync(new T4TransformParams(template, "ok", null), Timeout());
-        Assert.Equal("ok", result.Output?.Trim());
+        Assert.True(result.Output?.Trim() == "ok", string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+        Assert.NotEqual(pid, _templates.ProcessId);
+
+        // A template that ends its host is run once more, on a new host, and then reported.
+        result = await _templates.TransformAsync(new T4TransformParams(template, "<# System.Environment.Exit(3); #>", null), Timeout());
+        Assert.Null(result.Output);
+        Assert.Equal("The T4 host exited while running the template.", Assert.Single(result.Diagnostics).Message);
     }
 
     [Fact]
