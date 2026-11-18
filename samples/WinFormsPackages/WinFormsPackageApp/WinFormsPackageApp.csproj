@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Brings Contoso.WinForms.Controls with it, as a vendor's packages depend on each other. -->
+    <PackageReference Include="Contoso.WinForms.Grid" Version="1.0.0" />
+  </ItemGroup>
+</Project>

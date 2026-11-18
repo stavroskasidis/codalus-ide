@@ -654,10 +654,16 @@ public sealed record WinFormsEditResult(WorkspaceEdit Edit, DesignerModel? Model
     public Location? Handler { get; init; }
 }
 
-/// <summary><c>codalus/winforms/toolbox</c>: the components a project and the projects it references declare, for the Toolbox.</summary>
+/// <summary>
+/// <c>codalus/winforms/toolbox</c>: the components a project and the projects it references declare, and (#454) those
+/// of the assemblies it references (its packages'), for the Toolbox.
+/// </summary>
 public sealed record WinFormsToolboxParams(string Project);
 
-/// <summary>A component for the Toolbox: its full type name, its display name, and the project that declares it.</summary>
+/// <summary>
+/// A component for the Toolbox: its full type name, its display name, and its group: the project that declares it, else
+/// the package its assembly comes from (the assembly's name outside a package).
+/// </summary>
 public sealed record WinFormsToolboxItem(string Type, string Name, string Project, bool IsControl)
 {
     public string? Description { get; init; }
