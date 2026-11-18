@@ -79,6 +79,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
     private static readonly AsyncLocal<object?> s_handling = new();
     private long _reportedNotification;
     private long _nextWrite;
+    private int _queued;
     private Timer? _watchdog;
 
     /// <summary>A request handled for longer than this is reported once through <see cref="Slow"/>.</summary>
@@ -194,7 +195,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(started, now);
             if (elapsed > threshold && _reportedSlow.TryAdd(key, true))
             {
-                Slow?.Invoke(this, $"Request {method} ({key}) has been running for {elapsed.TotalSeconds:0} s; {_running.Count} request(s) in progress.");
+                Slow?.Invoke(this, $"Request {method} ({key}) has been running for {elapsed.TotalSeconds:0} s; {_running.Count} request(s) in progress, {QueuedMessages} message(s) wait to be dispatched.");
             }
         }
 
@@ -216,7 +217,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private int QueuedMessages => _inbox.Reader.CanCount ? _inbox.Reader.Count : -1;
+    /// <summary>
+    /// Messages read and not yet taken by the dispatch loop, counted here: the single-reader channel can't count them,
+    /// and every report said -1.
+    /// </summary>
+    private int QueuedMessages => Volatile.Read(ref _queued);
 
     /// <summary>
     /// What the connection is waiting for, for diagnosing a peer that stopped answering: requests sent and not answered
@@ -806,6 +811,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
                 if (!TryCompleteResponse(payload))
                 {
+                    Interlocked.Increment(ref _queued);
                     await _inbox.Writer.WriteAsync(new Inbound(payload, null), _shutdown.Token).ConfigureAwait(false);
                 }
             }
@@ -881,6 +887,8 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 continue;
             }
 
+            Interlocked.Decrement(ref _queued);
+
             // Nothing one message does may stop the loop: the read loop would go on queueing everything after it,
             // and the peer would wait for answers forever without the connection ever being reported lost.
             try
@@ -906,8 +914,16 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         var parameters = root.TryGetProperty("params", out var p) ? p : default;
         if (root.TryGetProperty("id", out var id))
         {
-            // Started in order; completes concurrently.
+            // Started in order; completes concurrently. A handler runs on this loop until it first awaits something
+            // unfinished, and every message after it (another request, its own cancellation) waits until then: said, as
+            // a slow notification is. Windows CI's EditorTests had a completion resolve running 10 s as the one request
+            // in progress while the signature help asked after it never showed (run 41600182224).
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             _ = HandleRequestAsync(id.Clone(), method, parameters);
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(started) is var held && held > SlowNotification)
+            {
+                Slow?.Invoke(this, $"Request {method} ran {held.TotalMilliseconds:0} ms before its first await; the messages after it waited ({QueuedMessages} queued now).");
+            }
         }
         else if (method == "$/cancelRequest" || method == CancelNotification?.Method)
         {
