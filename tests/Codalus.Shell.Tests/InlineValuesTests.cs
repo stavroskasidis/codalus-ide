@@ -44,6 +44,36 @@ public sealed class InlineValuesTests
         Assert.DoesNotContain(controller.InlineValueLines, l => l.Line > loop);
         Assert.StartsWith("total = 0", InlineValuesRenderer.Text(controller.InlineValueLines.Single(l => l.Line == loop)), StringComparison.Ordinal);
 
+        // A refresh that a newer one cancelled, whose answer comes after the newer one drew, leaves the newer one's values:
+        // it cleared them, and under load the smoke test's debug.depth then waited 30 s for args's value (WSL, 2026-11-19).
+        var held = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var answers = 0;
+        controller.InlineValuesAnswered = async _ =>
+        {
+            if (Interlocked.Increment(ref answers) == 1)
+            {
+                await held.Task;
+            }
+        };
+        try
+        {
+            f.Shell.Debugger.SelectFrame(f.Shell.Debugger.SelectedFrame!);
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref answers) == 1);
+            var superseded = controller.InlineValuesLoaded;
+            f.Shell.Debugger.SelectFrame(f.Shell.Debugger.SelectedFrame!);
+            await ShellFixture.PumpUntil(() => Volatile.Read(ref answers) == 2 && !ReferenceEquals(controller.InlineValuesLoaded, superseded));
+            await controller.InlineValuesLoaded;
+            Assert.Contains(controller.InlineValueLines, l => l.Line == loop);
+            held.SetResult();
+            await superseded;
+            Assert.True(controller.InlineValueLines.Any(l => l.Line == loop), "The superseded refresh cleared the newer one's values: " + controller.InlineValuesOutcome);
+        }
+        finally
+        {
+            held.TrySetResult();
+            controller.InlineValuesAnswered = null;
+        }
+
         // The next iteration: total changed, numbers didn't.
         await f.Shell.Debugger.ContinueAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Debugger is { State: DebugState.Stopped } && controller.InlineValueLines.Any(l => l.Line == loop && l.Values.Any(v => v.Name == "total" && v.Value == "1")), seconds: 60);

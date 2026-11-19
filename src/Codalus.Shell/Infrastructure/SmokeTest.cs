@@ -1596,8 +1596,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
 
         // Inline values (M62): the lines above the stop show their variables' values, args among them.
+        // Under heavy load nothing was drawn in 30 s, 8 times in 175 runs (WSL, 2026-11-19): a superseded refresh wiped
+        // the newer one's values (CodeEditorController.LoadInlineValuesAsync). The failure says how the last refreshes went.
         await WaitAsync(() => shell.ActiveEditor?.Controller?.InlineValueLines.Any(l => l.Line == argsLine && l.Values.Any(v => v.Name == "args")) == true,
-            "inline values show args after its line").ConfigureAwait(true);
+            () => $"inline values show args after its line (the editor's last refresh: {shell.ActiveEditor?.Controller?.InlineValuesOutcome ?? "no editor"}; "
+                  + $"drawn: {string.Join(", ", shell.ActiveEditor?.Controller?.InlineValueLines.Select(l => $"{l.Line}: {string.Join(" ", l.Values.Select(v => v.Name))}") ?? [])})").ConfigureAwait(true);
 
         // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
         shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
