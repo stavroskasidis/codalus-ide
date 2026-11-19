@@ -1571,7 +1571,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Debugger.Breakpoints.Clear();
         await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
-        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
+        // Once under heavy load it didn't (WSL, 2026-11-19), and the failure didn't say what the Debug Console had instead.
+        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit:\n" + Tail(shell.DebugLog.GetText(), 1500));
     }
 
     /// <summary>M14: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows.</summary>
