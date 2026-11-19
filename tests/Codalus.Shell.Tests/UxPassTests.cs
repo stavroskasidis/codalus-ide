@@ -391,7 +391,10 @@ public class UxPassTests
         Assert.True(Equals(f.Shell.Workbench.Context.GetValue("editorTextFocus"), true), $"the editor has the keyboard focus: {f.Shell.Workbench.Context.GetValue("focusedView")}, {f.Window.FocusManager?.GetFocusedElement()}, {editor.Editor.TextArea.IsFocused}, {PaneHost.Of(editor.Editor.TextArea)?.Dockable}");
         f.Press(Key.Space, RawInputModifiers.Control);
         Assert.Contains("editor.action.triggerSuggest", executed);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        // Under the suite's load on the Mac the list never came, or came without Reporter, in 60 s (the 1.0 validation,
+        // 2026-11-19; passed alone): the failure says which, with the editor's own account of each request.
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60,
+            describe: () => DescribeCompletion(f, editor));
         Assert.Equal("Reporter", editor.CompletionWindow!.CompletionList.SelectedItem?.Text); // the typed prefix's best match
         Assert.Equal(text, editor.Model.Text.Text); // no space typed
         f.Press(Key.Escape);
@@ -399,7 +402,8 @@ public class UxPassTests
         // After "Con": the shortest of the equal matches, Console (not ConcurrentExclusiveSchedulerPair).
         editor.Editor.CaretOffset = text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Con".Length;
         f.Press(Key.Space, RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60,
+            describe: () => DescribeCompletion(f, editor));
         Assert.Equal("Console", editor.CompletionWindow!.CompletionList.SelectedItem!.Text);
         f.Press(Key.Escape);
 
@@ -409,6 +413,17 @@ public class UxPassTests
         await ShellFixture.PumpUntil(
             () => executed.Contains("editor.action.triggerParameterHints"),
             describe: () => $"commands run: [{string.Join(", ", executed)}]; focus: {f.Window.FocusManager?.GetFocusedElement()}, focusedView {f.Shell.Workbench.Context.GetValue("focusedView")}, editorTextFocus {f.Shell.Workbench.Context.GetValue("editorTextFocus")}; completion window open: {editor.CompletionWindow is not null}; toasts: {f.Shell.Notifications.Toasts.Count}");
+    }
+
+    /// <summary>The completion window's state, the C# service's, and the editor's log of its completion requests.</summary>
+    private static string DescribeCompletion(ShellFixture f, Codalus.Shell.Editor.CodeEditorController editor)
+    {
+        var window = editor.CompletionWindow is { } w
+            ? $"open, {w.CompletionList.CompletionData.Count} items, selected {w.CompletionList.SelectedItem?.Text ?? "none"}, the first: {string.Join(", ", w.CompletionList.CompletionData.Take(10).Select(d => d.Text))}"
+            : "not open";
+        var status = f.Shell.Languages.Status(ShellHost.CSharpLanguageId);
+        var log = f.Shell.LanguageLog.GetText().Split('\n').Where(l => l.Contains("[editor]", StringComparison.Ordinal) || l.Contains("omplet", StringComparison.Ordinal)).TakeLast(15);
+        return $"completion window: {window}; the C# service: {status?.State} with {status?.Projects} projects; caret {editor.Editor.CaretOffset}; the editor's log:\n{string.Join("\n", log)}";
     }
 
     [AvaloniaFact]

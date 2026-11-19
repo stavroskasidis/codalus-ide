@@ -368,6 +368,9 @@ public sealed class DiffInsights : IDisposable
 
     /// <summary>How many of the next resolves fail as a busy service's do (tests).</summary>
     internal int FailingResolvesForTests { get; set; }
+    /// <summary>Whether a one-based line's lenses are among those resolved now: near the lines the diff shows (tests).</summary>
+    internal bool IsNearShown(int line) => line >= _shown.First - 5 && line <= _shown.Last + 5;
+
     /// <summary>The last failure of a lens's resolve (tests' failure messages).</summary>
     internal string? LastResolveFailure { get; private set; }
 
