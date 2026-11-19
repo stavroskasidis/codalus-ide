@@ -14,6 +14,10 @@ namespace Codalus.Workbench.Tests;
 /// </summary>
 public sealed class WslDotnetTests
 {
+    private static readonly string[] s_toolFolders = ["/bin/", "/usr/bin/"];
+
+    private static readonly string[] s_probeTools = ["readlink", "dirname"];
+
     private const string Ubuntu = """
         home=/home/me
         os=ubuntu debian
@@ -175,14 +179,22 @@ public sealed class WslDotnetTests
             await File.WriteAllTextAsync(dotnet, "#!/bin/sh\n[ \"$1\" = --list-runtimes ] && echo \"Microsoft.NETCore.App 8.0.11 [$HOME/.dotnet/shared/Microsoft.NETCore.App]\"\n", TestContext.Current.CancellationToken);
             File.SetUnixFileMode(dotnet, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
-            var withoutPath = WslDotnet.Parse(await ProbeAsync(home, "/usr/bin:/bin"));
+            // The PATH holds only the tools the probe uses: a runner's own dotnet (/usr/bin/dotnet on GitHub's Ubuntu
+            // images) would be the shell's (Linux CI, run 44517642464).
+            var tools = Directory.CreateDirectory(Path.Combine(home, "tools")).FullName;
+            foreach (var tool in s_probeTools)
+            {
+                File.CreateSymbolicLink(Path.Combine(tools, tool), s_toolFolders.Select(folder => folder + tool).First(File.Exists));
+            }
+
+            var withoutPath = WslDotnet.Parse(await ProbeAsync(home, tools));
             Assert.Equal((home, (string?)null), (withoutPath.Home, withoutPath.Shell));
             Assert.Equal([dotnet], withoutPath.Installs.Select(i => i.Path));
             Assert.Equal(["8.0.11"], withoutPath.Installs[0].Versions(FrameworkReference.NetCoreApp).Select(v => v.Text));
 
             var bin = Directory.CreateDirectory(Path.Combine(home, "bin")).FullName;
             File.CreateSymbolicLink(Path.Combine(bin, "dotnet"), dotnet);
-            var onPath = WslDotnet.Parse(await ProbeAsync(home, bin + ":/usr/bin:/bin"));
+            var onPath = WslDotnet.Parse(await ProbeAsync(home, bin + ":" + tools));
             Assert.Equal(Path.Combine(bin, "dotnet"), onPath.Shell);
             Assert.Equal([Path.Combine(bin, "dotnet")], onPath.Installs.Select(i => i.Path));
             Assert.Equal(dotnetDir, onPath.Installs[0].Root);
@@ -198,7 +210,7 @@ public sealed class WslDotnetTests
     {
         // The login shell reads the profile files, which may set their own PATH: here a plain shell, with the PATH set.
         var script = WslDotnet.ProbeScript;
-        var start = new ProcessStartInfo("sh", ["-c", script]) { RedirectStandardOutput = true, UseShellExecute = false };
+        var start = new ProcessStartInfo(s_toolFolders.Select(folder => folder + "sh").First(File.Exists), ["-c", script]) { RedirectStandardOutput = true, UseShellExecute = false };
         start.Environment["HOME"] = home;
         start.Environment["PATH"] = path;
         using var process = Process.Start(start)!;
