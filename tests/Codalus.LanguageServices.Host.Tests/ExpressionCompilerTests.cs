@@ -116,8 +116,12 @@ public sealed class ExpressionCompilerTests
 
         private int Line(string marker) => Array.FindIndex(_source.Split('\n'), l => l.Contains("[" + marker + "]", StringComparison.Ordinal)) + 1;
 
+        public Func<Solution> CurrentSolution => () => _workspace.CurrentSolution;
+
+        public CompileExpressionParams Parameters(string expression, string marker = "here") => new(expression, _path, Line(marker), 0, "/out/Shop.dll");
+
         public Task<CompileExpressionResult> CompileAsync(string expression, string marker = "here") =>
-            Feature.CompileAsync(new CompileExpressionParams(expression, _path, Line(marker), 0, "/out/Shop.dll"), TestContext.Current.CancellationToken);
+            Feature.CompileAsync(Parameters(expression, marker), TestContext.Current.CancellationToken);
 
         /// <summary>Compiles, loads and calls, with <paramref name="frame"/> as the frame's <c>this</c> and variables; a parameter like <c>this.Name</c> is read from <c>this</c>.</summary>
         public async Task<object?> EvaluateAsync(string expression, Dictionary<string, object?> frame, string marker = "here", Type[]? typeArguments = null)
@@ -300,6 +304,66 @@ public sealed class ExpressionCompilerTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// A file whose project hasn't loaded is in Miscellaneous Files, without the project's references, global usings or
+    /// options: an expression is never compiled there. The smoke test's lambda was, on Linux CI, and its Count wasn't
+    /// found (CS1061: no implicit 'using System.Linq'; run 44574066272, docs/ci-flakes.md). While the solution loads it
+    /// says to try again; otherwise that the file isn't in a loaded project.
+    /// </summary>
+    [Fact]
+    public async Task An_expression_is_never_compiled_in_miscellaneous_files()
+    {
+        using var workspace = new WorkspaceManager();
+        var source = Path.Combine(Path.GetTempPath(), "codalus-expressions-misc", "Features.cs");
+        workspace.Open(source, """
+            namespace Debuggee;
+
+            public static class Features
+            {
+                public static int Measure(int count)
+                {
+                    return count; // [here]
+                }
+            }
+            """, 1);
+        Assert.Contains(workspace.CurrentSolution.GetDocumentIdsWithFilePath(source), id => id.ProjectId == workspace.MiscellaneousProjectId);
+        var feature = new ExpressionCompilerFeature(() => workspace.CurrentSolution, workspace.DescribeProject, workspace.MiscellaneousProjectId,
+            project => workspace.Loading || workspace.IsIncomplete(project));
+        var expression = new CompileExpressionParams("new[] { 1, 2, 3 }.Count(n => n > count - 2)", source, 7, 0, "/out/Debuggee.dll");
+
+        workspace.SetLoading(true);
+        var loading = Assert.Single((await feature.CompileAsync(expression, TestContext.Current.CancellationToken)).Errors);
+        Assert.StartsWith(ExpressionCompilerFeature.StillLoadingMessage, loading, StringComparison.Ordinal);
+        Assert.Contains("Only Miscellaneous Files has it", loading, StringComparison.Ordinal);
+
+        workspace.SetLoading(false);
+        Assert.Equal("The frame's source file isn't in a loaded project, so the expression can't be compiled.",
+            Assert.Single((await feature.CompileAsync(expression, TestContext.Current.CancellationToken)).Errors));
+    }
+
+    /// <summary>
+    /// Errors against a project whose inputs are still coming (the solution loading, or a referenced project not loaded
+    /// yet) may be the inputs', not the expression's: the answer says to try again, with the compiler's words. Once loaded,
+    /// they're the expression's.
+    /// </summary>
+    [Fact]
+    public async Task Errors_while_the_solution_loads_say_to_try_again()
+    {
+        using var program = new Program(Shop, LanguageNames.CSharp);
+        var loading = true;
+        var feature = new ExpressionCompilerFeature(program.CurrentSolution, stillLoading: _ => loading);
+        var expression = program.Parameters("nothere + 1");
+
+        var error = Assert.Single((await feature.CompileAsync(expression, TestContext.Current.CancellationToken)).Errors);
+        Assert.StartsWith(ExpressionCompilerFeature.StillLoadingMessage, error, StringComparison.Ordinal);
+        Assert.Contains("CS0103", error, StringComparison.Ordinal);
+
+        // An expression that compiles is used meanwhile; the same errors once loaded are the expression's.
+        Assert.Empty((await feature.CompileAsync(program.Parameters("factor + 1"), TestContext.Current.CancellationToken)).Errors);
+        loading = false;
+        Assert.StartsWith("CS0103", Assert.Single((await feature.CompileAsync(expression, TestContext.Current.CancellationToken)).Errors), StringComparison.Ordinal);
     }
 
     [Fact]

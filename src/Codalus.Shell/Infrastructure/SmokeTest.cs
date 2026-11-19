@@ -1860,16 +1860,26 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
 
             // A lambda: the C# language host compiles it, and the program runs it.
-            // What the C# host was sent comes with a failure: once, on Linux CI, the lambda's Count wasn't found (CS1061;
-            // run 44574066272, docs/ci-flakes.md).
-            Codalus.Debugging.EvaluateResponse counted;
-            try
+            // The C# host may not have the project yet, a moment after the open: it says so, and the expression is asked
+            // again. Once, on Linux CI, it compiled in Miscellaneous Files instead, whose copy of the file has no implicit
+            // usings (CS1061 for the lambda's Count; run 44574066272, docs/ci-flakes.md); what the host was sent comes with
+            // a failure.
+            Codalus.Debugging.EvaluateResponse? counted = null;
+            var asked = System.Diagnostics.Stopwatch.StartNew();
+            while (counted is null)
             {
-                counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
-            }
-            catch (Codalus.Debugging.DapException ex)
-            {
-                throw new SmokeFailure($"An expression with a lambda didn't evaluate: {ex.Message}\nThe projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}");
+                try
+                {
+                    counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex) when (ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal) && asked.Elapsed < TimeSpan.FromSeconds(120))
+                {
+                    await Task.Delay(500).ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex)
+                {
+                    throw new SmokeFailure($"An expression with a lambda didn't evaluate: {ex.Message}\nThe projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}");
+                }
             }
 
             Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
