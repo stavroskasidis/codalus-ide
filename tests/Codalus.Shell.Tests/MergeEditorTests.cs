@@ -104,6 +104,55 @@ public sealed class MergeEditorTests
         Assert.Equal("paper|plane", Words("<Button Icon=\"paper-plane\" Rounded=\"Large\" />", vm.ChangedWordsAt(MergeSide.Incoming, 1)));
         Assert.Empty(vm.ChangedWordsAt(MergeSide.Current, 0));
         Assert.Empty(vm.ChangedWordsAt(MergeSide.Incoming, 2));
+
+        // The current side re-indented the block and changed one value: its lines still pair with the incoming side's,
+        // and only the values are marked, on both sides.
+        const string Mine = "a\n        <Button Icon=\"send\"\n                Title=\"@Resources.ChatSend\" />\nz\n";
+        const string Theirs = "a\n    <Button Icon=\"send\"\n            Title=\"@SendText\" />\nz\n";
+        var indented = ViewModel(
+            "a\n<<<<<<< HEAD\n        <Button Icon=\"send\"\n                Title=\"@Resources.ChatSend\" />\n=======\n    <Button Icon=\"send\"\n            Title=\"@SendText\" />\n>>>>>>> master\nz\n",
+            ours: Mine,
+            theirs: Theirs,
+            @base: "a\n    <Button Icon=\"send\"\n            Title=\"@Resources.ChatSend\" />\nz\n");
+        Assert.Empty(indented.ChangedWordsAt(MergeSide.Current, 1));
+        Assert.Equal("Resources.ChatSend", Words(Mine.Split('\n')[2], indented.ChangedWordsAt(MergeSide.Current, 2)));
+        Assert.Equal("SendText", Words(Theirs.Split('\n')[2], indented.ChangedWordsAt(MergeSide.Incoming, 2)));
+    }
+
+    [Fact]
+    public void The_base_text_takes_the_indentation_a_side_re_indented_it_to()
+    {
+        // The current side re-indented the line and the incoming side changed it: the base's line, level with the
+        // current side's code around it.
+        Assert.Equal(
+            "                Title=\"Send\"\n",
+            MergeEditorViewModel.Reindent("        Title=\"Send\"\n", "                Title=\"Send\"\n", "        Title=\"@SendText\"\n"));
+
+        // A line no side still has moves as its nearest line did; a blank line stays as it is.
+        Assert.Equal(
+            "        a\n\n        b\n",
+            MergeEditorViewModel.Reindent("    a\n\n    b\n", "        a\n\n        B\n", "    a\n\n    c\n"));
+
+        // The incoming side re-indented it (the current one changed it): the incoming side's indentation.
+        Assert.Equal("    y\n", MergeEditorViewModel.Reindent("  y\n", "  Y\n", "    y\n"));
+
+        // Neither re-indented: the base as it is.
+        Assert.Equal("  old\r\n", MergeEditorViewModel.Reindent("  old\r\n", "  mine\r\n", "  theirs\r\n"));
+    }
+
+    [AvaloniaFact]
+    public void A_re_merged_conflict_shows_its_base_line_level_with_the_re_indented_code_around_it()
+    {
+        // As in ThreeWayMergeTests: the current side wrapped the button (re-indenting it) and changed its icon; the
+        // incoming side changed its title. The one-line conflict's base, in the result, is indented as the result is.
+        const string Base = "<div class=\"toolbar\">\n    <Button Icon=\"send\"\n            Theme=\"Primary\"\n            Title=\"Send\"\n            OnClick=\"SendAsync\" />\n</div>\n";
+        const string Ours = "<div class=\"toolbar\">\n    <div class=\"slot\">\n        <Button Icon=\"arrow-up\"\n                Theme=\"Primary\"\n                Title=\"Send\"\n                OnClick=\"SendAsync\" />\n    </div>\n</div>\n";
+        const string Theirs = "<div class=\"toolbar\">\n    <Button Icon=\"send\"\n            Theme=\"Primary\"\n            Title=\"@SendText\"\n            OnClick=\"SendAsync\" />\n</div>\n";
+        const string Git = "<<<<<<< HEAD\n" + Ours + "=======\n" + Theirs + ">>>>>>> master\n";
+        var vm = new MergeEditorViewModel("a.razor", Git, Ours, Theirs, Base, _ => Task.CompletedTask, remerged: Workbench.Git.ThreeWayMerge.Remerge(Base, Ours, Theirs, Git));
+        var block = Assert.Single(vm.Conflicts);
+        Assert.Equal("                Title=\"Send\"\n", vm.Result.GetText(block.Result.Start, block.Result.Length));
+        Assert.Equal(Ours, vm.Result.Text);
     }
 
     [AvaloniaFact]
@@ -464,6 +513,18 @@ public sealed class MergeEditorTests
         Assert.Equal(4, layouts[2].RowsAbove(4));
         Assert.Equal(layouts[0].RowsAbove(layouts[0].LineCount), layouts[1].RowsAbove(layouts[1].LineCount));
         Assert.Equal((1, 0.5), layouts[1].LineAtRow(3.5));
+    }
+
+    [Fact]
+    public void Panes_line_up_lines_another_pane_re_indented()
+    {
+        // The current pane and the result wrapped a and b in braces, re-indenting them; the incoming pane has them as they
+        // were. Compared without whitespace they're the same lines: the incoming pane's filler goes opposite the braces,
+        // not opposite all four lines after its own.
+        string[] wrapped = ["{", "    a", "    b", "}"];
+        var layouts = MergeAlignment.Align([new(wrapped, []), new(["a", "b"], []), new(wrapped, [])]);
+        Assert.Equal("1 0 1", string.Join(' ', layouts[1].Before));
+        Assert.Equal("0 0 0 0 0", string.Join(' ', layouts[0].Before));
     }
 
     private static (string Local, string Remote, string Base, string Merged) Files(ShellFixture f, string ours, string theirs, string @base, string merged)

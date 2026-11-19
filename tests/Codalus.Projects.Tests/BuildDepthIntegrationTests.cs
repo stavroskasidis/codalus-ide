@@ -89,7 +89,7 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
 
     private async Task<BuildResultInfo> BuildAsync(string? project = null, string target = BuildTargets.Build)
     {
-        var result = await _builds.BuildAsync(target, project, Timeout());
+        var result = await _builds.BuildAsync(target, project, BuildLimit.Token());
         Assert.True(result.Succeeded, _builds.Channel.GetText());
         return result;
     }
@@ -261,14 +261,14 @@ public sealed class BuildDepthIntegrationTests : IAsyncLifetime
     public async Task Batch_builds_build_each_configuration_and_skip_up_to_date_ones()
     {
         _options = new BuildOptions();
-        var batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], Timeout());
+        var batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], BuildLimit.Token(builds: 2));
         Assert.True(batch.Succeeded, _builds.Channel.GetText());
         Assert.Equal(2, batch.Entries.Length);
         Assert.True(File.Exists(HelloDll));
         Assert.True(File.Exists(Path.Combine(Fixture, "src", "Hello", "bin", "Release", "net11.0", "Hello.dll")));
         Assert.Contains("Batch build: 2 succeeded, 0 failed", _builds.Channel.GetText(), StringComparison.OrdinalIgnoreCase);
 
-        batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], Timeout());
+        batch = await _builds.BatchBuildAsync(BuildTargets.Build, [new BatchBuildEntry(HelloProject, "Debug", "AnyCPU"), new BatchBuildEntry(HelloProject, "Release", "AnyCPU")], BuildLimit.Token(builds: 2));
         Assert.True(batch.Succeeded);
         Assert.All(batch.Entries, e => Assert.True(e.Skipped, _builds.Channel.GetText()));
         Assert.Same(batch, _builds.LastBatch);

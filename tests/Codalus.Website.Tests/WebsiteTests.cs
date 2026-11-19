@@ -112,6 +112,21 @@ public sealed class WebsiteTests : IDisposable
     }
 
     [Fact]
+    public async Task The_home_and_download_pages_say_1_0_link_the_1x_promise_and_get_past_smartscreen()
+    {
+        var home = await Get(Options(stable: "v1.0.0"), "");
+        Assert.Contains("now 1.0", home, StringComparison.Ordinal);
+        Assert.Contains("href=\"docs/compatibility/\"", home, StringComparison.Ordinal);
+
+        var download = await Get(Options(stable: "v1.0.0"), "download/");
+        Assert.Contains("Install Codalus IDE 1.0", download, StringComparison.Ordinal);
+        Assert.Contains("href=\"docs/compatibility/\"", download, StringComparison.Ordinal);
+        Assert.Contains("href=\"docs/whats-new/\"", download, StringComparison.Ordinal);
+        // Until Windows signing lands in a 1.0.x update (M65), the page says how to get past SmartScreen.
+        Assert.Contains("More info, then Run anyway", download, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_linux_downloads_recommend_each_distributions_package_and_the_appimage_for_the_others()
     {
         var html = await Get(Options(stable: "v0.2.0"), "download/");
@@ -450,7 +465,7 @@ public sealed class WebsiteTests : IDisposable
         Directory.CreateDirectory(guide);
         File.WriteAllText(Path.Combine(guide, "README.md"), "# User guide\n\nThe guide.\n\n" + readmeBody + "\n");
         File.WriteAllText(Path.Combine(guide, "getting-started.md"), "# Installing and first start\n\n## Prerequisites\n\n## First start\n\n### The first-run setup\n");
-        // The guide's pages and headings the Home page's hero, app models and AI features link to.
+        // The guide's pages and headings the Home and Download pages' heroes, app models and AI features link to.
         foreach (var (page, body) in new[]
         {
             ("editing.md", "# Editing and navigating code\n"),
@@ -463,6 +478,8 @@ public sealed class WebsiteTests : IDisposable
             ("net-framework.md", "# .NET Framework\n"),
             ("remote.md", "# Remote development\n"),
             ("ai.md", "# AI assistance\n\n## AI Chat\n\n## The IDE's tools\n\n## Codalus as an MCP server\n\n### Connecting one\n\n## AI Console\n"),
+            ("compatibility.md", "# Compatibility: what 1.x keeps stable\n"),
+            ("whats-new.md", "# What's new in 1.0\n"),
         })
         {
             File.WriteAllText(Path.Combine(guide, page), body);

@@ -114,6 +114,9 @@ public sealed class ProfilingRun
     /// <summary>The full dump written, if any (a file name in the session folder).</summary>
     public string? Dump { get; set; }
 
+    /// <summary>Why the last full dump wasn't written (a timeout says to look for macOS' password prompt), or null.</summary>
+    public string? DumpError { get; set; }
+
     /// <summary>The compose service collected from (M63b), through its diagnostic port: <see cref="ProcessId"/> is 0.</summary>
     public string? ComposeService { get; init; }
 
@@ -504,14 +507,16 @@ public sealed class PerformanceProfilerViewModel : ObservableObject, ILoadable, 
     /// <summary>Writes a full dump of the program being profiled, to inspect its objects (Memory Usage).</summary>
     public async Task<string?> CreateDumpAsync()
     {
-        if (_run is not { CreateDump: { } dump })
+        if (_run is not { CreateDump: { } dump } run)
         {
             return null;
         }
 
         Status = "Writing a full dump…";
         var file = await dump().ConfigureAwait(true);
-        Status = file is null ? "The dump could not be written." : "Full dump written; the report opens it.";
+        Status = file is not null ? "Full dump written; the report opens it."
+            : run.DumpError is { } why ? Localizer.Format("msg.profiling.theDumpCouldNotBeWritten", "The dump could not be written: {0}", why)
+            : "The dump could not be written.";
         Changed();
         return file;
     }

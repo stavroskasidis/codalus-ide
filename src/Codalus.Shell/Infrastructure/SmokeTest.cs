@@ -2245,7 +2245,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             {
                 if (Stopwatch.GetTimestamp() > deadline)
                 {
-                    throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}. The Scaffolding output:\n{Log()}\nThe build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}");
+                    throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}. The Scaffolding output:\n{Log()}\nThe build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}{BuildWaitDiagnostics()}");
                 }
 
                 await Task.Delay(100).ConfigureAwait(true);
@@ -2254,6 +2254,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return await task.ConfigureAwait(true);
         }
 
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=web.scaffolding skips it, and the trust prompt held the step (macOS, 2026-11-19)
         await shell.OpenSolutionAsync(Path.Combine(target, "Scaffolding.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Scaffolding solution is open", 300).ConfigureAwait(true);
         var restore = await Bounded(shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None), "dotnet tool restore of dotnet-aspnet-codegenerator", 240).ConfigureAwait(true);
@@ -4619,13 +4620,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var error = ex is SmokeFailure ? ex.Message
                 : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {(limit ?? s_stepLimit).TotalMinutes:0} minutes."
                 : ex.ToString();
+            if (shell.Builds.IsBuilding && !error.Contains(BuildWaitHeading, StringComparison.Ordinal))
+            {
+                // A build still runs: whatever waited on it (a build's own wait, the step's limit) says what it was doing.
+                error += BuildWaitDiagnostics();
+            }
+
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png", keepToasts: true); // the toasts may say why
             if (!_logsShown)
             {
                 // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
                 _logsShown = true;
-                foreach (var channel in shell.Workbench.Output.Channels.Where(c => c.Name is "Language Services" or "Build Host" or "Log"))
+                foreach (var channel in FailureLogs(shell.Workbench.Output))
                 {
                     Console.Out.WriteLine($"  --- {channel.Name} (the end) ---");
                     Console.Out.WriteLine(Tail(channel.GetText(), 4000));
@@ -4702,34 +4709,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return;
         }
 
-        static string Run(string program, params string[] arguments)
-        {
-            try
-            {
-                var start = new ProcessStartInfo(program) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-                foreach (var argument in arguments)
-                {
-                    start.ArgumentList.Add(argument);
-                }
-
-                using var process = Process.Start(start)!;
-                var output = process.StandardOutput.ReadToEndAsync();
-                var error = process.StandardError.ReadToEndAsync();
-                if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
-                {
-                    // The tool alone (ps and dotnet-stack start nothing): ending a process tree lists the system's
-                    // processes, which is what blocks when ps does (the macOS runner, blazor.wasmDebug).
-                    process.Kill();
-                    return "(timed out)";
-                }
-
-                return output.GetAwaiter().GetResult() + error.GetAwaiter().GetResult();
-            }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
-            {
-                return $"({program}: {ex.Message})";
-            }
-        }
+        static string Run(string program, params string[] arguments) => RunTool(program, TimeSpan.FromSeconds(60), arguments);
 
         Console.Out.WriteLine("  --- Processes (by CPU) ---");
         Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
@@ -5068,6 +5048,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         foreach (var toast in shell.Notifications.Toasts)
         {
             Console.Out.WriteLine($"  (a toast hidden for {picture}: {toast.Model.Severity}: {toast.Message})");
+
+            // An error's toast has only the exception's message: its stack is in the IDE's log, which the run doesn't keep.
+            if (toast.Model.Severity == Workbench.Notifications.NotificationSeverity.Error && UnhandledBehind(shell.Workbench.Log.GetText(), toast.Message) is { } behind)
+            {
+                Console.Out.WriteLine("  (the exception behind it)\n" + behind);
+            }
         }
 
         shell.Notifications.HideToasts();

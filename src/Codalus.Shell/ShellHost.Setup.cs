@@ -492,6 +492,28 @@ public sealed partial class ShellHost
             return;
         }
 
+        if (await PickAndRunInstallAsync(tool, plans, confirm, run, choose).ConfigureAwait(true) is not { } ran)
+        {
+            return;
+        }
+
+        var (plan, code) = ran;
+
+        if (code != 0)
+        {
+            Workbench.Notifications.Error(Localizer.Format("msg.setup.installFailed", "Installing {0} failed (exit code {1}). The Environment Setup output has the details.", tool.Title, code));
+            return;
+        }
+
+        await AfterInstallAsync(tool, plan, then).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The user picks a way to install (<see cref="ChooseInstallAsync"/>), or agrees to the only one, and it runs: the way
+    /// and its exit code. Null when nothing ran to wait for: cancelled, a page opened, or an install left to the terminal.
+    /// </summary>
+    private async Task<(InstallPlan Plan, int Code)?> PickAndRunInstallAsync(ToolStatus tool, IReadOnlyList<InstallPlan> plans, Func<InstallPlan, Task<bool>>? confirm, ProcessRunner? run, Func<IReadOnlyList<InstallPlan>, Task<InstallPlan?>>? choose)
+    {
         var plan = choose is not null ? await choose(plans).ConfigureAwait(true)
             : confirm is not null ? (await confirm(plans[0]).ConfigureAwait(true) ? plans[0] : null)
             : plans.Count > 1 ? await ChooseInstallAsync(tool, plans).ConfigureAwait(true)
@@ -506,7 +528,7 @@ public sealed partial class ShellHost
                 }).ConfigureAwait(true) ? plans[0] : null;
         if (plan is null)
         {
-            return;
+            return null;
         }
 
         SetupLog.AppendLine($"[{DateTime.Now:T}] {plan.Summary}: {plan.Command}");
@@ -523,7 +545,7 @@ public sealed partial class ShellHost
                     OpenExternalUrl(new Uri(plan.Command));
                 }
 
-                return;
+                return null;
             case InstallKind.Terminal when tool.Id is "dotnet" or "dotnet-runtime":
                 // Microsoft's .pkg, the distribution's package, the snap: sudo asks in the terminal. When it ends, the
                 // IDE checks again and moves to the new .NET as after an install it runs itself.
@@ -533,7 +555,7 @@ public sealed partial class ShellHost
             case InstallKind.Terminal:
                 RunInstallInTerminal(plan);
                 Workbench.Notifications.Info(Localizer.Get("msg.setup.terminalStarted", "The install runs in the terminal. When it's done, check the environment again (Help → Check Environment)."));
-                return;
+                return null;
             default:
                 StatusBar.ShowMessage(Localizer.Format("msg.setup.installing", "Installing {0}…", tool.Title), TimeSpan.FromSeconds(10));
                 Workbench.Output.Show(SetupLog);
@@ -546,13 +568,7 @@ public sealed partial class ShellHost
                 break;
         }
 
-        if (code != 0)
-        {
-            Workbench.Notifications.Error(Localizer.Format("msg.setup.installFailed", "Installing {0} failed (exit code {1}). The Environment Setup output has the details.", tool.Title, code));
-            return;
-        }
-
-        await AfterInstallAsync(tool, plan, then).ConfigureAwait(true);
+        return (plan, code);
     }
 
     /// <summary>
@@ -640,12 +656,35 @@ public sealed partial class ShellHost
     /// Runs an install's command line in the terminal, in <paramref name="workingDirectory"/> (the user's home when null):
     /// a project's own install runs in its folder, so the SDK its <c>global.json</c> picks is the one it changes.
     /// </summary>
-    private Codalus.Workbench.Terminal.TerminalSession RunInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
+    private void RunInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
+    {
+        if (TerminalInstallStandIn is { } standIn)
+        {
+            SetupLog.AppendLine($"[{DateTime.Now:T}] The terminal's install went to a stand-in (exit code {standIn(plan)}).");
+            return;
+        }
+
+        StartInstallInTerminal(plan, workingDirectory);
+    }
+
+    /// <summary>
+    /// Tests: what runs an install meant for the terminal (Microsoft's <c>.pkg</c> under sudo, a distribution's package, a
+    /// workload, the Android SDK under sudo) in place of the terminal, its result the exit code. <c>ShellFixture</c> sets
+    /// one that runs nothing, so no test can start a real install, whatever its machine has (a <c>dotnet</c> outside the
+    /// home made Microsoft's <c>.pkg</c> the plan, and a test ran <c>curl</c> and <c>sudo installer</c>, sudo waiting for a
+    /// password). A test that wants the real terminal, with a harmless command, sets it to null.
+    /// </summary>
+    internal Func<InstallPlan, int>? TerminalInstallStandIn { get; set; }
+
+    private Codalus.Workbench.Terminal.TerminalSession StartInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
     {
         // The command's exit code is the terminal's (Unix): the one awaiting it tells a failed install from a done one.
-        var (program, arguments) = Workbench.Platform == PlatformKind.Windows
-            ? ("cmd.exe", (IReadOnlyList<string>)["/c", plan.Command + " & echo. & pause"])
-            : ("bash", ["-c", plan.Command + "; status=$?; echo; read -r -p 'Done. Press Enter to close. '; exit $status"]);
+        var unix = plan.Command + "; status=$?; echo; read -r -p 'Done. Press Enter to close. '; exit $status";
+        var (program, arguments) = plan.Wsl is { } distribution
+            ? (WslProgram, (IReadOnlyList<string>)[.. distribution.Length == 0 ? [] : new[] { "-d", distribution }, "--cd", "~", "--exec", "bash", "-c", unix]) // in the distribution (M14c)
+            : Workbench.Platform == PlatformKind.Windows
+                ? ("cmd.exe", ["/c", plan.Command + " & echo. & pause"])
+                : ("bash", ["-c", unix]);
         var session = Terminals.Run(plan.Summary, program, arguments, workingDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
         Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
         TerminalWindow.Show(session);
@@ -658,8 +697,15 @@ public sealed partial class ShellHost
     /// </summary>
     private async Task<int> RunInstallInTerminalAsync(InstallPlan plan)
     {
+        if (TerminalInstallStandIn is { } standIn)
+        {
+            var result = standIn(plan);
+            SetupLog.AppendLine($"[{DateTime.Now:T}] The terminal's install went to a stand-in (exit code {result}).");
+            return result;
+        }
+
         var ended = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var session = RunInstallInTerminal(plan);
+        var session = StartInstallInTerminal(plan);
         session.Exited += (_, code) => ended.TrySetResult(Workbench.Platform == PlatformKind.Windows ? 0 : code);
         if (session.ExitCode is { } already)
         {

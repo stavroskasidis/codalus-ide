@@ -465,6 +465,55 @@ public class IntelliSensePopupTests
         }
     }
 
+    /// <summary>
+    /// The completion list closed the moment it opened (EditingDepthTests' snippet test, macOS CI run 44030324314, and 4 of
+    /// 30 runs under load on Windows): typing on the editor's last line scrolled it to the bottom edge, CodeLens rows that
+    /// arrived above it pushed it below that edge, and then the scroll viewer set the horizontal offset back to 0. That
+    /// sideways scroll found the caret's line out of view and closed the popups, as if the user had scrolled it away.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Popups_close_when_a_scroll_up_or_down_takes_the_caret_line_away_not_on_a_sideways_one()
+    {
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(f.UserData, "long.txt");
+        var lines = Enumerable.Range(1, 120).Select(i => i % 10 == 0 ? $"line {i} " + new string('x', 400) : $"line {i}");
+        await File.WriteAllTextAsync(path, string.Join("\n", lines), TestContext.Current.CancellationToken);
+        var document = await f.Shell.OpenFileAsync(path);
+        Assert.NotNull(document);
+        await ShellFixture.PumpUntil(() => document.Controller is not null);
+        var editor = document.Controller!;
+        var view = editor.Editor.TextArea.TextView;
+        var scroll = editor.Editor.GetVisualDescendants().OfType<ScrollViewer>().First();
+
+        // The caret on a line below the view, typed into: the editor scrolls it to the bottom edge, and the list opens.
+        editor.Editor.CaretOffset = editor.Model.Text.GetLineByNumber(60).EndOffset;
+        editor.Editor.TextArea.Focus();
+        editor.Editor.TextArea.PerformTextInput("W");
+        ShellFixture.Pump();
+        var item = new CompletionItem("WriteLine") { Kind = CompletionItemKind.Method };
+        editor.OpenCompletion(editor.Editor.CaretOffset - 1, [editor.NewCompletionData(item, Task.FromResult)]);
+        ShellFixture.Pump();
+        Assert.True(editor.IsCompletionOpen);
+        Assert.True(IntelliSenseLayout.IsCaretLineVisible(editor.Editor.TextArea));
+
+        // The line leaves the view without a scroll (here the view gets shorter, as rows arriving above push it down),
+        // then the text scrolls sideways: the list stays, placed again.
+        var y = view.VerticalOffset;
+        f.Window.Height -= 120;
+        ShellFixture.Pump();
+        Assert.False(IntelliSenseLayout.IsCaretLineVisible(editor.Editor.TextArea));
+        Assert.Equal(y, view.VerticalOffset, 0.5);
+        scroll.Offset = new Vector(40, scroll.Offset.Y);
+        ShellFixture.Pump();
+        Assert.True(view.HorizontalOffset > 0, $"the text scrolled sideways to {view.HorizontalOffset}");
+        Assert.True(editor.IsCompletionOpen, "a sideways scroll closed the completion list");
+
+        // A scroll up that leaves the line out of view closes it, as before.
+        scroll.Offset = new Vector(scroll.Offset.X, scroll.Offset.Y - (5 * view.DefaultLineHeight));
+        ShellFixture.Pump();
+        Assert.False(editor.IsCompletionOpen);
+    }
+
     [AvaloniaFact]
     public void Popups_close_when_their_editor_leaves_its_window_and_never_place_against_another_one()
     {

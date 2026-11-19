@@ -113,7 +113,7 @@ A **Blazor Web App with WebAssembly components** (its launch profile has `inspec
 - If the debugger can't attach to the server, only the page is debugged, with Hot Reload, and a notification says so. Turn off `debug.hotReload` to debug the server from its start.
 - A Blazor Web App made by the .NET 11 template has no `inspectUri`: .NET 11 expects the IDE to start the WebAssembly debugging proxy, which Codalus IDE doesn't do yet. Its page opens under the browser debugger for scripts, but breakpoints in its WebAssembly components don't bind yet. Add the `inspectUri` line and `app.UseWebAssemblyDebugging()` from the .NET 10 template to debug them.
 
-**Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser.
+**Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser. The Start button's drop-down sets it (**Script Debugging**) and the browser (**Web Browser**, `debug.browser`) too.
 
 Without Chrome, Edge or Chromium, the server is debugged alone.
 

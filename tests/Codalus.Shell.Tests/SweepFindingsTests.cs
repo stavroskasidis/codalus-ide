@@ -374,11 +374,15 @@ public sealed class SweepFindingsTests
     }
 
     [Fact]
-    public void No_ui_string_says_Visual_Studio()
+    public void Only_the_coming_from_choice_and_the_vssettings_import_say_Visual_Studio()
     {
-        // The product's own name only (UI rules): the WCF note named the classic IDE ("as ... does").
+        // The product's own name only (UI rules): the WCF note named the classic IDE ("as ... does"). The one place the UI
+        // names it is where users look for their old IDE by name (the maintainer's, for 1.0): the first-run setup's
+        // "I'm coming from" and the .vssettings import.
         var catalog = JsonNode.Parse(File.ReadAllText(Path.Combine(ShellFixture.RepoRoot, "src", "Codalus.Shell", "Localization", "en.json")))!.AsObject();
-        Assert.Empty(catalog.Where(p => p.Value!.GetValue<string>().Contains("Visual Studio", StringComparison.OrdinalIgnoreCase)).Select(p => p.Key));
+        Assert.Equal(
+            ["command.workbench.importVsSettings", "msg.firstRun.originClassic", "msg.firstRun.pickVsSettings", "msg.firstRun.vsSettingsFiles", "setupWindow.fontsColorsEditorOptionsAndShortcuts", "setupWindow.fromAVssettingsFile"],
+            catalog.Where(p => p.Value!.GetValue<string>().Contains("Visual Studio", StringComparison.OrdinalIgnoreCase)).Select(p => p.Key).Order(StringComparer.Ordinal));
     }
 
     private static void Git(string folder, params string[] arguments)
@@ -393,7 +397,7 @@ public sealed class SweepFindingsTests
         process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error}");
     }
 
     /// <summary>The window, with Save As answering <paramref name="path"/> instead of a native dialog.</summary>

@@ -63,7 +63,7 @@ public sealed class AiSurfacesTests
         var error = process.StandardError.ReadToEndAsync();
         process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error.GetAwaiter().GetResult()}");
     }
 
     /// <summary>

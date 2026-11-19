@@ -24,7 +24,7 @@ if [ -z "$current" ]; then
   echo "error: no Microsoft.NETCore.App $major runtime is installed (dotnet --list-runtimes)." >&2
   exit 1
 fi
-versions=("$current" 10.0.13 8.0.31 6.0.36 5.0.17 3.1.32)
+versions=("$current" 10.0.15 8.0.34 6.0.36 5.0.17 3.1.32)
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

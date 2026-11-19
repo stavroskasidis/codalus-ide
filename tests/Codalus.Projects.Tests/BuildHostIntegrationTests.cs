@@ -90,12 +90,12 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
     private ProjectInfo Project(string path) => _service.Projects[path];
 
-    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null)
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan? timeout = null, Func<string>? describe = null)
     {
         var started = System.Diagnostics.Stopwatch.StartNew(); // monotonic: immune to the machine sleeping
         while (!condition())
         {
-            Assert.True(started.Elapsed < (timeout ?? s_timeout), "Timed out.");
+            Assert.True(started.Elapsed < (timeout ?? s_timeout), describe is null ? "Timed out." : "Timed out: " + describe());
             await Task.Delay(25, TestContext.Current.CancellationToken);
         }
     }
@@ -908,7 +908,18 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
         Define("AFTER");
         File.SetLastWriteTimeUtc(shared, written.AddSeconds(2)); // a date of its own, however coarse the file system's
         File.WriteAllText(b, Csproj($"""<Import Project="{shared}" />"""));
-        await WaitUntilAsync(() => Defines(b, "BEFORE") && _service.DesignTimeProgress is { Completed: true });
+        // What B got, and the host's log: whether its evaluation read the new file (AFTER: the old one wasn't in MSBuild's
+        // cache any more) or didn't run again (Windows, a loaded local run of the module, 2026-11-19: "Timed out." alone).
+        await WaitUntilAsync(
+            () => Defines(b, "BEFORE") && _service.DesignTimeProgress is { Completed: true },
+            describe: () =>
+            {
+                var defines = _service.CompilerInputs.TryGetValue(b, out var inputs) ? string.Join(' ', inputs.Arguments.Where(x => x.StartsWith("/define:", StringComparison.Ordinal))) : "no compiler inputs";
+                lock (log)
+                {
+                    return $"B's {defines}; design-time progress {_service.DesignTimeProgress}; the host's log:\n{string.Join('\n', log.TakeLast(30))}";
+                }
+            });
         lock (log)
         {
             Assert.Contains(log, l => l.Contains("with imports MSBuild had cached before they changed on disk", StringComparison.Ordinal) && l.Contains(shared, StringComparison.Ordinal));

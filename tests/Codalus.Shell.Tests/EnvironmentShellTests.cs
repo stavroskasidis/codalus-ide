@@ -170,6 +170,7 @@ public sealed class EnvironmentShellTests
 
         await using var f = ShellFixture.Create();
         f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/u") { ShellDotnet = "/usr/local/bin/dotnet", ShellRoot = "/usr/local/share/dotnet" };
+        f.Shell.TerminalInstallStandIn = null; // the real terminal, with the harmless command below
         var missing = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
 
         // The .pkg's way, with a command that fails at once in place of curl and sudo: the terminal ends, and its code is the install's.
@@ -177,6 +178,27 @@ public sealed class EnvironmentShellTests
         await Within(f, failed, 60, "the terminal's install");
         Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains("failed (exit code 3)", StringComparison.Ordinal));
         Assert.Contains("exit code 3", f.Shell.Workbench.Output.Channels.Single(c => c.Id == "codalus.setup").GetText(), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// No test installs for real, whatever its machine has: an install meant for the terminal (here Microsoft's
+    /// <c>.pkg</c> under sudo, the one that fits a Mac whose <c>dotnet</c> is in <c>/usr/local/share/dotnet</c>) goes to
+    /// <c>ShellFixture</c>'s stand-in, which starts no terminal and fails. A test once ran <c>curl</c> and
+    /// <c>sudo installer</c> for real on such a Mac, sudo waiting for a password until the test's limit.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_test_never_starts_an_install_in_the_terminal()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(Codalus.Platform.PlatformKind.MacOS, "/Users/u") { ShellDotnet = "/usr/local/bin/dotnet", ShellRoot = "/usr/local/share/dotnet", Arm64 = true };
+        var missing = new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects");
+        var terminals = f.Shell.Terminals.Sessions.Count;
+
+        await Within(f, f.Shell.InstallToolAsync(missing, _ => Task.FromResult(true)), 60, "the install");
+
+        Assert.Equal("pkg", Assert.Single(f.TerminalInstalls).Option);
+        Assert.Equal(terminals, f.Shell.Terminals.Sessions.Count);
+        Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message.Contains($"failed (exit code {ShellFixture.TerminalInstallExitCode})", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -449,6 +471,13 @@ public sealed class EnvironmentShellTests
                 DirectoryExists = folder => N(folder) == "/fake/root",
             });
             var runtime = new ToolStatus("dotnet-runtime", ".NET runtime for Codalus IDE", true, ToolState.Missing, "helpers") { WantedVersion = "99.0.0", WantedChannel = "99.0", Found = "none" };
+
+            // Its install options described too, so the one that fits is one the runner below runs (winget;
+            // dotnet-install into the terminal's own root in the home), not whatever this machine's real .NET makes it:
+            // a dotnet in /usr/local/share/dotnet made it Microsoft's .pkg, in the terminal, under sudo.
+            var platform = f.Shell.Workbench.Platform;
+            f.Shell.DescribeDotnetMachine = () => new DotnetInstallFacts(platform, "/fake/home") { HasWinget = true, ShellDotnet = "/fake/home/.dotnet/dotnet", ShellRoot = "/fake/home/.dotnet" };
+            Assert.Equal(InstallKind.Run, (await f.Shell.InstallOptionsAsync(runtime, TestContext.Current.CancellationToken))[0].Kind);
             var then = 0;
             await Within(f, f.Shell.InstallToolAsync(runtime, _ => Task.FromResult(true), (_, _, _, _) => Task.FromResult((0, "installed\n")), () =>
             {
@@ -457,6 +486,7 @@ public sealed class EnvironmentShellTests
             }), 180, "the install, the hosts started again and the update checked");
 
             Assert.Equal(1, then);
+            Assert.Empty(f.TerminalInstalls);
             Assert.Contains("[setup] Starting the helper processes again.", f.Shell.Workbench.Log.GetText(), StringComparison.Ordinal);
         }
         finally

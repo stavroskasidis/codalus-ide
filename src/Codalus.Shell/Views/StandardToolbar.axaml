@@ -53,13 +53,14 @@
         <ProgressBar IsIndeterminate="True" Width="56" Height="4" MinHeight="4" MinWidth="56" VerticalAlignment="Center" />
         <TextBlock Text="{Binding LaunchStatus}" VerticalAlignment="Center" MaxWidth="260" TextTrimming="CharacterEllipsis" />
       </StackPanel>
-      <Button x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
-              Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.startDebugging}" AutomationProperties.Name="{l:T standardToolbar.startDebugging}">
+      <!-- Start, and in its drop-down the startup project's launch profiles (StandardToolbar.axaml.cs fills it). -->
+      <SplitButton x:Name="StartButton" Classes="toolbar start" Command="{Binding StartCommand}" IsVisible="{Binding CanStart}"
+                   Tag="debug.start" ToolTip.Tip="{l:T standardToolbar.startDebugging}" AutomationProperties.Name="{l:T standardToolbar.startDebugging}">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <controls:Icon Kind="play" Classes="start" />
           <TextBlock Text="{Binding StartLabel}" VerticalAlignment="Center" />
         </StackPanel>
-      </Button>
+      </SplitButton>
       <Button Classes="toolbar" Command="{Binding StartWithoutDebuggingCommand}" IsVisible="{Binding CanStart}"
               Tag="run.startWithoutDebugging" ToolTip.Tip="{l:T standardToolbar.startWithoutDebugging}" AutomationProperties.Name="{l:T standardToolbar.startWithoutDebugging}">
         <controls:Icon Kind="play-outline" Classes="start" />

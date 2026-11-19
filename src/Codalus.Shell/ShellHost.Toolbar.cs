@@ -51,6 +51,7 @@ public sealed partial class ShellHost
                 _ => Workbench.Keybindings.GetBinding(id),
             })?.ToLabel(Workbench.Platform),
         };
+        InitializeLaunchMenu();
     }
 
     private ShellDocument? _titleDocument;
@@ -120,6 +121,7 @@ public sealed partial class ShellHost
         if (Solutions?.Solution is not { } solution)
         {
             Toolbar.SetStartup([], null, null);
+            ClearLaunchMenu();
             return;
         }
 
@@ -128,6 +130,7 @@ public sealed partial class ShellHost
         if (solution.IsFolder && Codalus.Workbench.Projects.FolderConfiguration.ReadLaunch(solution.Directory).Configurations is { Count: > 0 } configurations)
         {
             Toolbar.SetStartup([.. configurations.Select(c => new StartupProjectChoice(c.Name, LaunchChoicePrefix + c.Name))], LaunchChoicePrefix + CurrentOf(configurations)!.Name, null);
+            ClearLaunchMenu();
             return;
         }
 
@@ -137,5 +140,6 @@ public sealed partial class ShellHost
             startup,
             startup is null ? null : Runs.ChosenProfile(startup));
         UpdateToolbarDevice();
+        RefreshLaunchMenu();
     }
 }

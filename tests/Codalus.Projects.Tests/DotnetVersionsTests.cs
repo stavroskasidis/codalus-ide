@@ -92,7 +92,7 @@ public sealed class DotnetVersionsTests : IAsyncLifetime
         // unfinished, and its output said nothing of what they were doing (PR #281's run 41580245030, docs/ci-flakes.md).
         var binlog = Path.Combine(_root, "build.binlog");
         var builds = new BuildService(_solutions, _output) { Options = () => new BuildOptions { UpToDateCheck = false, BinaryLog = binlog } };
-        var result = await builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         if (!result.Succeeded)
         {
             Assert.Fail(builds.Channel.GetText() + Environment.NewLine + KeepBinaryLog(binlog));

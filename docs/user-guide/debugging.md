@@ -69,7 +69,17 @@ A launch profile with `"commandName": "WSL2"` runs your project in a WSL distrib
 }
 ```
 
-Leave `distributionName` empty for the default distribution. The project builds on Windows, and the distribution's `dotnet` runs the build output through `/mnt/…`, so .NET must be installed in the distribution. Ctrl+F5 runs it, and F5 debugs it with the debugger inside the distribution. Breakpoints work as usual.
+Leave `distributionName` empty for the default distribution. The project builds on Windows, and the distribution's `dotnet` runs the build output through `/mnt/…`. Ctrl+F5 runs it, and F5 debugs it with the debugger inside the distribution. Breakpoints work as usual.
+
+**.NET in the distribution.** Before each start, Codalus IDE looks for a `dotnet` there that has the runtimes your app needs (its `runtimeconfig.json`): the one on the distribution's `PATH` first, then the one in `~/.dotnet`. When neither has them, the start stops and a notification says what's missing, with **Install .NET SDK** for your app's version. It offers the same ways as on Linux, the one that fits picked already:
+
+- the distribution's own `dotnet-sdk-X.Y` package (when apt, dnf or zypper has it), in the terminal, where `sudo` asks for your password;
+- dotnet-install into `~/.dotnet`, with no password. Codalus IDE runs your app on it even though it isn't on the distribution's `PATH`, so typing `dotnet` in a WSL shell won't find it;
+- the .NET download page.
+
+When the install is done and the runtimes are there, the run or the debug session starts again. Your Windows .NET doesn't change.
+
+**Static web assets.** In the Development environment, ASP.NET Core reads the static web assets manifest the build wrote next to your app (`App.staticwebassets.runtime.json`), whose folders are Windows paths that Linux refuses ("The path must be absolute"). Codalus IDE gives the app a copy with the same folders under `/mnt/…`, through `ASPNETCORE_STATICWEBASSETS`; a profile that sets that variable itself keeps its own.
 
 ### Analyzers and source generators
 
