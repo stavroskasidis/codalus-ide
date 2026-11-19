@@ -93,7 +93,7 @@ public sealed class CodeLensDetailsTests
         using var process = Process.Start(start)!;
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error}");
     }
 
     [AvaloniaFact]
