@@ -455,8 +455,17 @@ public sealed class RunService : IDisposable
     public async Task<LaunchPlan> LaunchPlanAsync(RunInfo info, LaunchProfile? profile, CancellationToken cancellationToken)
     {
         var plan = await PlanAsync(info, profile, cancellationToken).ConfigureAwait(false);
-        return profile is not { CommandName: LaunchProfile.RoslynComponent } && ProgramPlan is { } hook ? hook(info, plan) : plan;
+        plan = profile is not { CommandName: LaunchProfile.RoslynComponent } && ProgramPlan is { } hook ? hook(info, plan) : plan;
+        return plan.Wsl is not null && PrepareWsl is { } prepare ? await prepare(info, plan, cancellationToken).ConfigureAwait(false) : plan;
     }
+
+    /// <summary>
+    /// Readies the plan of a <c>WSL2</c> profile's run in its distribution, once per start (<see cref="LaunchPlanAsync(RunInfo, LaunchProfile?, CancellationToken)"/>):
+    /// the shell picks the distribution's <c>dotnet</c> that has the app's frameworks (<see cref="WslDotnet"/>), offering to
+    /// install .NET there when none has, and points ASP.NET Core at static web assets WSL can read. It throws
+    /// <see cref="RunNotStartedException"/> when the program can't start there, having told the user why.
+    /// </summary>
+    public Func<RunInfo, LaunchPlan, CancellationToken, Task<LaunchPlan>>? PrepareWsl { get; set; }
 
     /// <summary>
     /// Changes the plan of a project's program that is about to start, run or debugged alike (M19b: an Avalonia or WPF

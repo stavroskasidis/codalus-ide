@@ -231,7 +231,7 @@ public sealed partial class ShellHost
             return;
         }
 
-        if (BeginLaunch(argument) is not { } launch)
+        if (BeginLaunch(argument, debug: true) is not { } launch)
         {
             return;
         }
@@ -397,6 +397,10 @@ public sealed partial class ShellHost
             _pendingBrowserUrl = plan.BrowserUrl;
             await Debugger.LaunchAsync([debugLaunch], CancellationToken.None).ConfigureAwait(true);
             OpenBrowserLater();
+        }
+        catch (RunNotStartedException)
+        {
+            // Said already, with what to do (.NET to install in WSL).
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonRpcRemoteException or JsonRpcConnectionLostException or OperationCanceledException or IOException)
         {
