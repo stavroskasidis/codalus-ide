@@ -630,20 +630,13 @@ public sealed class LanguageService : IAsyncDisposable
     /// <summary>How long design-time build results gather before they go to the language host together (M34b).</summary>
     internal static readonly TimeSpan BatchDelay = TimeSpan.FromMilliseconds(150);
 
-    private readonly ConcurrentDictionary<string, PendingInputs> _pendingInputs = new(SolutionService.PathComparer);
+    private readonly ConcurrentDictionary<string, CompilerInputsInfo> _pendingInputs = new(SolutionService.PathComparer);
     private readonly SemaphoreSlim _flushGate = new(1, 1);
     private int _flushScheduled;
     private bool? _sentLoading;
 
-    /// <summary>Changes when another solution opens or the solution closes: inputs gathered before belong to the one before.</summary>
-    private int _solutionEpoch;
-    private string? _solutionPath;
-
     /// <summary>The solution changed: the next flush drops the projects it no longer has.</summary>
     private int _removeProjects;
-
-    /// <summary>A design-time build's result waiting for the next flush, and the solution it came from.</summary>
-    private readonly record struct PendingInputs(CompilerInputsInfo Inputs, int Epoch);
 
     /// <summary>Flushes and removals run while holding it, one at a time (tests hold it to delay them, as a busy machine does).</summary>
     internal SemaphoreSlim FlushGate => _flushGate;
@@ -692,9 +685,8 @@ public sealed class LanguageService : IAsyncDisposable
             return;
         }
 
-        var epoch = Volatile.Read(ref _solutionEpoch);
-        Record($"inputs {Path.GetFileName(inputs.Path)}: {inputs.State}, {References(inputs.Arguments)} references (solution {epoch})");
-        _pendingInputs[inputs.Path] = new PendingInputs(inputs, epoch);
+        Record($"inputs {Path.GetFileName(inputs.Path)}: {inputs.State}, {References(inputs.Arguments)} references");
+        _pendingInputs[inputs.Path] = inputs;
         ScheduleFlush();
     }
 
@@ -770,19 +762,24 @@ public sealed class LanguageService : IAsyncDisposable
             }
         }
 
-        var epoch = Volatile.Read(ref _solutionEpoch);
+        // Only what is still the open solution's result for its project: the solution service forgets the results of a
+        // solution as it closes, and of the next before it opens (a build host's restart too), so one gathered for a
+        // closed solution, or replaced since, goes no further. Not decided by when the solution changed: that event comes
+        // after the open request's answer, and on a busy machine the new solution's first results came before it, were
+        // taken for the closed one's and dropped, and the language host never had the project (the smoke test's
+        // debug.codalus, Linux CI, run 44574066272: its lambda compiled in Miscellaneous Files, CS1061).
         var batch = new List<CompilerInputsInfo>();
         foreach (var path in _pendingInputs.Keys)
         {
             if (_pendingInputs.TryRemove(path, out var pending))
             {
-                if (pending.Epoch == epoch)
+                if (_solutions.CompilerInputs.TryGetValue(path, out var current) && ReferenceEquals(current, pending))
                 {
-                    batch.Add(pending.Inputs);
+                    batch.Add(pending);
                 }
                 else
                 {
-                    Record($"flush: dropped {Path.GetFileName(path)}'s inputs of solution {pending.Epoch} (now {epoch})");
+                    Record($"flush: dropped {Path.GetFileName(path)}'s inputs, no longer the solution's");
                 }
             }
         }
@@ -857,16 +854,10 @@ public sealed class LanguageService : IAsyncDisposable
 
     /// <summary>
     /// The solution opened, closed or changed: the next flush removes the projects it no longer has, in order with the
-    /// updates, and drops what was gathered for another solution.
+    /// updates.
     /// </summary>
     private void OnSolutionChanged(object? sender, EventArgs e)
     {
-        var path = _solutions.Solution?.Path;
-        if (!string.Equals(Interlocked.Exchange(ref _solutionPath, path), path, StringComparison.Ordinal))
-        {
-            Interlocked.Increment(ref _solutionEpoch);
-        }
-
         Volatile.Write(ref _removeProjects, 1);
         ScheduleFlush();
     }
