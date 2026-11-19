@@ -447,7 +447,7 @@ public sealed class SetupViewModel : ObservableObject
         ];
         Origins =
         [
-            new("classic", Localizer.Get("msg.firstRun.originClassic", "The classic IDE"), Localizer.Get("msg.firstRun.originClassicDescription", "The Default keys, which are its own, and the importer for its exported settings (a .vssettings file) marked."), SelectOrigin),
+            new("classic", Localizer.Get("msg.firstRun.originClassic", "Visual Studio"), Localizer.Get("msg.firstRun.originClassicDescription", "The Default keys, which are its own, and the importer for its exported settings (a .vssettings file) marked."), SelectOrigin),
             new("vscode", Localizer.Get("msg.firstRun.originVsCode", "VS Code"), Localizer.Get("msg.firstRun.originVsCodeDescription", "VS Code's keys, and the importer for its settings and key bindings marked."), SelectOrigin),
             new("rider", Localizer.Get("msg.firstRun.originRider", "Rider or ReSharper"), Localizer.Get("msg.firstRun.originRiderDescription", "The Default keys with ReSharper's on top."), SelectOrigin),
             new("other", Localizer.Get("msg.firstRun.originOther", "Somewhere else"), Localizer.Get("msg.firstRun.originOtherDescription", "Nothing is preselected: every step starts from the defaults."), SelectOrigin),
@@ -755,7 +755,7 @@ public sealed class SetupViewModel : ObservableObject
 
     // ------------------------------------------------------------------ welcome
 
-    /// <summary>"I'm coming from": the classic IDE, VS Code, Rider or ReSharper, somewhere else. None is chosen at first.</summary>
+    /// <summary>"I'm coming from": the classic IDE (the one place its name shows, ProductNameTests), VS Code, Rider or ReSharper, somewhere else. None is chosen at first.</summary>
     public IReadOnlyList<SetupChoice> Origins { get; }
 
     /// <summary>Where the user comes from (<c>classic</c>, <c>vscode</c>, <c>rider</c>, <c>other</c>), or null: not said.</summary>
@@ -912,7 +912,7 @@ public sealed class SetupViewModel : ObservableObject
     /// <summary>Imports a <c>.vssettings</c> file (<paramref name="path"/>, or asked for).</summary>
     public async Task ImportVsSettingsAsync(string? path)
     {
-        path ??= await PickFileAsync(Localizer.Get("msg.firstRun.pickVsSettings", "Import a .vssettings File"), Localizer.Get("msg.firstRun.vsSettingsFiles", "Exported IDE settings"), ["*.vssettings"]).ConfigureAwait(true);
+        path ??= await PickFileAsync(Localizer.Get("msg.firstRun.pickVsSettings", "Import Visual Studio Settings"), Localizer.Get("msg.firstRun.vsSettingsFiles", "Visual Studio settings"), ["*.vssettings"]).ConfigureAwait(true);
         if (path is not null)
         {
             await RunSettingsAsync(() => _shell.ImportVsSettingsAsync(path, confirm: false)).ConfigureAwait(true);

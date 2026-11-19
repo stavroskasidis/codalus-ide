@@ -62,7 +62,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task<string?> ImportVsSettingsAsync(string? path = null, bool confirm = true)
     {
-        path ??= Window is { } window ? await window.PickFileAsync("Import a .vssettings File", "Exported IDE settings", ["*.vssettings"]).ConfigureAwait(true) : null;
+        path ??= Window is { } window ? await window.PickFileAsync("Import Visual Studio Settings", "Visual Studio settings", ["*.vssettings"]).ConfigureAwait(true) : null;
         if (path is null)
         {
             return null;
