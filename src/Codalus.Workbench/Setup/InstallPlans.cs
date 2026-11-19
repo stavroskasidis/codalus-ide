@@ -38,6 +38,12 @@ public sealed record InstallPlan(string ToolId, InstallKind Kind, string Summary
 
     /// <summary>The option that fits this machine: the one picked unless the user picks another.</summary>
     public bool Recommended { get; init; }
+
+    /// <summary>
+    /// The WSL distribution it installs into (empty: the default one), from Windows (<see cref="Build.WslDotnet.InstallOptions"/>);
+    /// null: this machine. In the terminal, <see cref="Command"/> runs there through <c>wsl.exe</c>.
+    /// </summary>
+    public string? Wsl { get; init; }
 }
 
 /// <summary>

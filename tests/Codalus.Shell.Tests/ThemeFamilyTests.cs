@@ -562,7 +562,7 @@ public partial class ThemeFamilyTests
 
         double Gutter() => f.Window.GetVisualDescendants().OfType<Dock.Controls.ProportionalStackPanel.ProportionalStackPanelSplitter>().First(s => s.IsEffectivelyVisible).Thickness;
         bool Dot() => f.Window.GetVisualDescendants().OfType<Ellipse>().Single(e => e.Classes.Contains("statusDot")).IsVisible;
-        IBrush? Start() => f.Window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "StartButton").Background;
+        IBrush? Start() => f.Window.GetVisualDescendants().OfType<SplitButton>().Single(b => b.Name == "StartButton").Background; // its drop-down holds the launch profiles
 
         await Use("harbor.light");
         Assert.Equal(6, Gutter());

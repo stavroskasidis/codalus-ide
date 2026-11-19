@@ -337,6 +337,74 @@ public sealed class ToolbarViewModel : ObservableObject
         OnPropertyChanged(nameof(HotReloadCommand));
     }
 
+    // ------------------------------------------------------------------ the Start drop-down: launch profiles
+
+    private LaunchMenu? _launchMenu;
+
+    /// <summary>
+    /// The Start button's drop-down for the startup project: its launch profiles and, for a web app, the debugging
+    /// browser and script debugging. Null when there's nothing to choose (no startup project, several, a folder's
+    /// launch configurations).
+    /// </summary>
+    public LaunchMenu? LaunchMenu => _launchMenu;
+
+    /// <summary>The drop-down's choices changed: the view rebuilds it (also while it's open).</summary>
+    public event EventHandler? LaunchMenuChanged;
+
+    /// <summary>The drop-down opens: the shell reads the launch settings again, as the file may have changed.</summary>
+    public Action? LaunchMenuOpening { get; set; }
+
+    /// <summary>Makes a launch profile (the parameter, its name) the startup project's.</summary>
+    public Action<string>? SelectLaunchProfile { get; set; }
+
+    /// <summary>Sets <c>debug.browser</c> to the parameter (<c>auto</c>, <c>chrome</c>, <c>edge</c>, <c>chromium</c>).</summary>
+    public Action<string>? SelectBrowser { get; set; }
+
+    /// <summary>Sets <c>debug.javaScript</c>.</summary>
+    public Action<bool>? SelectScriptDebugging { get; set; }
+
+    /// <summary>Opens the startup project's properties on its Debug page.</summary>
+    public Action? OpenDebugProperties { get; set; }
+
+    public ICommand SelectLaunchProfileCommand => field ??= new RelayCommand(p =>
+    {
+        if (p is string name)
+        {
+            SelectLaunchProfile?.Invoke(name);
+        }
+    });
+
+    public ICommand SelectBrowserCommand => field ??= new RelayCommand(p =>
+    {
+        if (p is string browser)
+        {
+            SelectBrowser?.Invoke(browser);
+        }
+    });
+
+    public ICommand SelectScriptDebuggingCommand => field ??= new RelayCommand(p =>
+    {
+        if (p is bool enabled)
+        {
+            SelectScriptDebugging?.Invoke(enabled);
+        }
+    });
+
+    public ICommand DebugPropertiesCommand => field ??= new RelayCommand(() => OpenDebugProperties?.Invoke());
+
+    /// <summary>The drop-down's choices; unchanged ones raise nothing, so an open menu isn't rebuilt for nothing.</summary>
+    public void SetLaunchMenu(LaunchMenu? menu)
+    {
+        if (LaunchMenu.Same(_launchMenu, menu))
+        {
+            return;
+        }
+
+        _launchMenu = menu;
+        OnPropertyChanged(nameof(LaunchMenu));
+        LaunchMenuChanged?.Invoke(this, EventArgs.Empty);
+    }
+
     private void Select(string configuration, string? platform)
     {
         var pair = _pairs.FirstOrDefault(p => p.Configuration == configuration && p.Platform == platform);
@@ -366,6 +434,33 @@ public sealed class ToolbarViewModel : ObservableObject
         }
     }
 }
+
+/// <summary>The Start drop-down's choices for <see cref="ProjectName"/> (see <see cref="ToolbarViewModel.LaunchMenu"/>).</summary>
+/// <param name="Current">The profile a Start uses: the chosen one, else the first that runs.</param>
+/// <param name="Web">The browser choices, for a project whose profiles have a page; else null.</param>
+public sealed record LaunchMenu(string ProjectName, IReadOnlyList<LaunchProfileChoice> Profiles, string? Current, WebLaunchChoices? Web)
+{
+    public static bool Same(LaunchMenu? a, LaunchMenu? b) =>
+        ReferenceEquals(a, b)
+        || (a is not null && b is not null
+            && a.ProjectName == b.ProjectName && a.Current == b.Current
+            && a.Profiles.SequenceEqual(b.Profiles)
+            && (ReferenceEquals(a.Web, b.Web) || (a.Web is not null && b.Web is not null
+                && a.Web with { Browsers = [] } == b.Web with { Browsers = [] }
+                && a.Web.Browsers.SequenceEqual(b.Web.Browsers))));
+}
+
+/// <summary>A launch profile; <paramref name="Unsupported"/> says why it can't run in Codalus IDE (null: it runs).</summary>
+public sealed record LaunchProfileChoice(string Name, string? Unsupported = null);
+
+/// <summary>
+/// The debugging browser (<c>debug.browser</c>: its value, the browser it finds, the choices) and script debugging
+/// (<c>debug.javaScript</c>).
+/// </summary>
+public sealed record WebLaunchChoices(string Browser, string? BrowserName, IReadOnlyList<BrowserChoice> Browsers, bool ScriptDebugging);
+
+/// <summary>A <c>debug.browser</c> value; <paramref name="Installed"/> is false for a browser this machine doesn't have.</summary>
+public sealed record BrowserChoice(string Setting, string Label, bool Installed);
 
 /// <summary>A command the user put on a toolbar (M23b).</summary>
 public sealed record ToolbarCommandItem(string Command, string Title, System.Windows.Input.ICommand Run);

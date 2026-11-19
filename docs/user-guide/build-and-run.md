@@ -69,7 +69,13 @@ A `.resx` file opens in the **resource editor**, a table of its resources:
 **Debug → Start Without Debugging** (`Ctrl+F5`) builds the startup project, then starts it:
 
 - **The startup project** is the first executable project in the solution, unless you chose another with **Set as Startup Project** (Solution Explorer) or Debug → Select Startup Project. Your choice is remembered per solution.
-- **Launch profiles** come from `Properties/launchSettings.json`. Pick one with the status bar's startup item, or with Debug → Select Launch Profile. `Project` and `Executable` profiles are supported:
+- **Launch profiles** come from `Properties/launchSettings.json`. Pick one from the arrow beside the toolbar's Start button, or with Debug → Select Launch Profile. The choice is saved with the solution. The Start button's drop-down, as in the classic IDE:
+  - **Start**, with the startup project and its profile;
+  - the startup project's **launch profiles**, the one Start uses checked. A profile Codalus can't run (`IISExpress`) is listed dimmed, and its tooltip says why;
+  - for a web app (a profile with an `applicationUrl`): **Web Browser**, the browser `F5` debugs the page in (the `debug.browser` setting: Automatic, Chrome, Edge or Chromium; a browser that isn't installed is dimmed), and **Script Debugging** (the `debug.javaScript` setting, [JavaScript debugging](web.md#debugging-the-server-and-the-page-together));
+  - ***Project* Debug Properties**, which opens Project Properties on its Debug page, where you edit the profiles.
+
+  The drop-down reads `launchSettings.json` again each time it opens, so profiles you add in the editor show at once. `Project` and `Executable` profiles are supported:
   - command-line arguments
   - working directory
   - environment variables

@@ -67,6 +67,8 @@ DAP's `runInTerminal` is implemented as well, for adapters that send it:
 - the distribution's `dotnet` (found by its login shell) runs `exec /mnt/…/App.dll`, from the Linux path of the working directory, with the profile's arguments and environment;
 - Ctrl+F5 runs `wsl.exe -d … --cd … --exec sh -lc 'exec env … dotnet exec …'`;
 - F5 launches it under netcoredbg in the distribution, as a remote launch (`DebugLaunch.Remote`).
+- *Added in 1.x:* before each start, `RunService.PrepareWsl` probes the distribution (`WslDotnet`): of the login shell's `dotnet` and `~/.dotnet`'s, the first whose runtimes resolve the app's `runtimeconfig.json` by the host's roll-forward rules runs it. When none does, the start stops (`RunNotStartedException`, no second message) and a notification offers Install .NET SDK for the app's channel: Linux's choices (`InstallPlans.DotnetOptions`, measured against the distribution's `dotnet`, packages and home) run through `wsl.exe`, the package in the terminal, dotnet-install into `~/.dotnet`. The IDE's own .NET doesn't change. Once a probe finds the runtimes, the start runs again (F5 or Ctrl+F5, the project alone).
+- *Added in 1.x:* a web app's `*.staticwebassets.runtime.json` lists Windows content roots, which ASP.NET Core's `PhysicalFileProvider` refuses on Linux in Development. The run gets a copy with the roots under `/mnt/…` in the IDE's cache, through `ASPNETCORE_STATICWEBASSETS` (the `staticWebAssets` key), unless the profile sets it.
 
 The Windows paths of the PDB need no mapping (above). `WslLaunch.ToLinuxPath` assumes the default automount root (`/mnt/`). Other roots and `\\wsl$` paths are handled, but a custom `automount.root` isn't read from `wsl.conf`.
 
