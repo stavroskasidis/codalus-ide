@@ -2,6 +2,8 @@
 
 Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linux.
 
+**New in 1.0:** [what's new since 0.1, what 1.x keeps stable, the known limits, and Windows signing](whats-new.md).
+
 1. [Installing and first start](getting-started.md)
 2. [Solutions and projects: the Properties window, Show All Files, items and templates, opening a folder, external tools](solutions.md)
 3. [NuGet packages and .NET tools](packages.md)
