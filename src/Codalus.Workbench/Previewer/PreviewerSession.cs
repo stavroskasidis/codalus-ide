@@ -61,6 +61,9 @@ public sealed class PreviewerSession : IAsyncDisposable
     // An update's answer comes in well under a second once the designer runs (a cold first load takes a few).
     private static readonly TimeSpan s_resendAfter = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long a render may take before the session asks the designer to send what it holds (<see cref="FlushHeldFrameSoon"/>).</summary>
+    private static readonly TimeSpan s_heldFrameAfter = TimeSpan.FromSeconds(1);
+
     private readonly Process _process;
     private readonly TcpListener _listener;
     private readonly TcpListener _agentListener;
@@ -68,6 +71,9 @@ public sealed class PreviewerSession : IAsyncDisposable
     private readonly string _agentToken;
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _sendGate = new(1, 1);
+
+    /// <summary>The frames received so far (<see cref="FlushHeldFrameSoon"/>).</summary>
+    private long _framesReceived;
     private readonly SemaphoreSlim _updateGate = new(1, 1);
     private readonly Lock _gate = new();
     private readonly TaskCompletionSource _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -374,6 +380,7 @@ public sealed class PreviewerSession : IAsyncDisposable
                     case FrameMessage frame:
                         var preview = new PreviewFrame(frame.SequenceId, frame.Format, frame.Data, frame.Width, frame.Height, frame.Stride, frame.DpiX > 0 ? frame.DpiX / 96 : _scale);
                         LastFrame = preview;
+                        Interlocked.Increment(ref _framesReceived);
                         await SendAsync(new FrameReceivedMessage(frame.SequenceId), _stop.Token).ConfigureAwait(false);
                         lock (_gate)
                         {
@@ -493,7 +500,9 @@ public sealed class PreviewerSession : IAsyncDisposable
 
             try
             {
-                // Loaded: the frame follows at once (a render), so a long wait means nothing changed on screen.
+                // Loaded: the frame follows at once (a render), so a long wait means nothing changed on screen, or the
+                // frame waits in the designer's queue.
+                FlushHeldFrameSoon();
                 using var frameTimeout = CancellationTokenSource.CreateLinkedTokenSource(timeoutSource.Token);
                 frameTimeout.CancelAfter(TimeSpan.FromSeconds(10));
                 var shown = await frame.Task.WaitAsync(frameTimeout.Token).ConfigureAwait(false);
@@ -522,6 +531,35 @@ public sealed class PreviewerSession : IAsyncDisposable
     {
         _scale = scale;
         await SendAsync(new ClientRenderInfoMessage(96 * scale, 96 * scale), cancellationToken).ConfigureAwait(false);
+        FlushHeldFrameSoon();
+    }
+
+    /// <summary>
+    /// After something that makes the designer render (an update, the scale, the theme), asks it for an answer if no frame
+    /// came within a second. Avalonia's designer queues what it sends for a worker that can miss its wake-up
+    /// (<c>TransportConnectionWrapper</c>: the worker finds the queue empty, a send comes before it waits again, and the
+    /// message stays queued until the designer sends anything else), and after a render nothing else comes: the 2× frame
+    /// after Scale never arrived and the preview kept showing the 1× one (XamlShellTests on Windows under load,
+    /// 2026-11-19). A viewport measure, of the size the last frame shows, changes nothing and is answered at once, and the
+    /// answer sends what waited before it.
+    /// </summary>
+    private void FlushHeldFrameSoon()
+    {
+        var frames = Interlocked.Read(ref _framesReceived);
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(s_heldFrameAfter, _stop.Token).ConfigureAwait(false);
+                if (Interlocked.Read(ref _framesReceived) == frames && LastFrame is { Scale: > 0 } last && !HasExited)
+                {
+                    await SendAsync(new MeasureViewportMessage(last.Width / last.Scale, last.Height / last.Scale), _stop.Token).ConfigureAwait(false);
+                }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or IOException or SocketException or InvalidOperationException)
+            {
+            }
+        }, CancellationToken.None);
     }
 
     /// <summary>The space the preview has in the tool window (device-independent pixels).</summary>
@@ -614,6 +652,7 @@ public sealed class PreviewerSession : IAsyncDisposable
         }
 
         await agent.RequestAsync(["theme", variant], TimeSpan.FromSeconds(15), cancellationToken).ConfigureAwait(false);
+        FlushHeldFrameSoon();
         return true;
     }
 
