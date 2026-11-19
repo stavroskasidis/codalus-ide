@@ -53,6 +53,17 @@ public sealed class DiffInsightsTests
             seconds: 90,
             describe: () => $"row '{view.LensRowAbove(DiffPaneSide.New, shapeLine)}', lens lines {string.Join(", ", document.ViewModel.Insights?.LensLines ?? [])}");
         Assert.Equal(string.Empty, view.LensRowAbove(DiffPaneSide.Old, shapeLine));
+
+        // A resolve that fails (the service busy) is asked again though nothing scrolls: Radius's row stayed blank once
+        // (WSL validation, 2026-11-19). The file is shorter than what the diff shows, so every lens is resolved.
+        var insights = document.ViewModel.Insights!;
+        bool AllResolved() => insights.LensLines.All(l => !insights.LensState(l).Contains("unresolved", StringComparison.Ordinal));
+        insights.FailingResolvesForTests = 3;
+        insights.Refresh();
+        await ShellFixture.PumpUntil(
+            () => insights.LastResolveFailure is not null && AllResolved(),
+            seconds: 60,
+            describe: () => $"last failure {insights.LastResolveFailure ?? "none"}; lenses {string.Join("; ", insights.LensLines.Select(l => $"{l}: {insights.LensState(l)}"))}");
         var textView = view.EditorOf(DiffPaneSide.New).TextArea.TextView;
         var oldView = view.EditorOf(DiffPaneSide.Old).TextArea.TextView;
         view.EditorOf(DiffPaneSide.New).ScrollToHome(); // the diff opened at its first change, in Circle
@@ -89,7 +100,10 @@ public sealed class DiffInsightsTests
         // A changed declaration's row is drawn with its line: Radius's on the added line's fill, blank opposite on the removed one's.
         var radiusLine = Line(right, "public double Radius");
         view.ShowRow(document.ViewModel.NextChange(-1, 1)!.Value); // the change, in Circle
-        await ShellFixture.PumpUntil(() => view.LensRowAbove(DiffPaneSide.New, radiusLine) is { Length: > 0 }, seconds: 60);
+        await ShellFixture.PumpUntil(
+            () => view.LensRowAbove(DiffPaneSide.New, radiusLine) is { Length: > 0 },
+            seconds: 60,
+            describe: () => $"row '{view.LensRowAbove(DiffPaneSide.New, radiusLine)}' above line {radiusLine}, its lenses {document.ViewModel.Insights?.LensState(radiusLine)}, lens lines {string.Join(", ", document.ViewModel.Insights?.LensLines ?? [])}, last resolve failure {document.ViewModel.Insights?.LastResolveFailure ?? "none"}");
         NavigationDepthTests.Screenshot(f, "diff-codelens");
 
         // Inline: the rows above the working tree's declarations.
