@@ -454,9 +454,9 @@ jobs:
       matrix:
         os: ${{ fromJSON(needs.gate.outputs.smoke-matrix) }}
     runs-on: ${{ matrix.os }}
-    # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40: at 60, a slow runner ran out
-    # of time in the middle of a passing smoke test (#111, run 39668401109).
-    timeout-minutes: 90
+    # The publish takes 10 to 31 minutes on a macOS runner and the smoke test up to its own 40 (55 on macOS): at 60, a slow
+    # runner ran out of time in the middle of a passing smoke test (#111, run 39668401109).
+    timeout-minutes: ${{ matrix.os == 'macos-latest' && 105 || 90 }}
     steps:
       - uses: actions/checkout@v7
       - id: setup
@@ -486,8 +486,11 @@ jobs:
           path: artifacts/smoke-live
       - name: End-to-end smoke test of the published app
         shell: bash
-        # The command sweep (shell.commandSweep) takes up to 25 of these.
-        timeout-minutes: 40
+        # The command sweep (shell.commandSweep) takes about 13 of these. On macOS the whole test took 37 to 38 minutes on
+        # passing runs (2,230 to 2,296 s, 2026-11-16 to 11-18), so a runner 10% slower ran out of 40 in the sweep's last
+        # commands with every step passing (run 44480129188: the steps that restore and build 1.3 to 3 times as long);
+        # macOS gets 55, as its test shards get 60 where the others get 40. A hang still stops here.
+        timeout-minutes: ${{ matrix.os == 'macos-latest' && 55 || 40 }}
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
         run: |
