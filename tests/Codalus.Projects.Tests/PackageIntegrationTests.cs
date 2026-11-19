@@ -608,7 +608,7 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
             }
         };
 
-        var result = await _service.BuildAsync(BuildTargets.Pack, Plain, Timeout());
+        var result = await _service.BuildAsync(BuildTargets.Pack, Plain, BuildLimit.Token());
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, output));
         var package = Path.Combine(Fixture, "src", "Plain", "bin", "Debug", "Plain.1.0.0.nupkg");
         Assert.True(File.Exists(package), string.Join(Environment.NewLine, output));

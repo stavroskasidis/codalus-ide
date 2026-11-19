@@ -271,7 +271,7 @@ public sealed class ProjectManagementIntegrationTests : IAsyncLifetime
         var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
         _service.BuildOutput += (_, line) => output.Enqueue(line);
         _service.BuildDiagnostic += (_, d) => output.Enqueue($"{d.Severity} {d.Code}: {d.Message} ({d.File})");
-        var build = await _service.BuildAsync(BuildTargets.Build, null, Timeout());
+        var build = await _service.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(build.Succeeded, "The build failed:\n" + string.Join("\n", output.TakeLast(60)));
         Assert.True(Directory.Exists(Path.Combine(Fixture, "src", "App", "bin")));
         // Not built: no assembly. (bin/ itself may exist: a design-time build from before the unload creates the output
