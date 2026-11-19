@@ -393,7 +393,7 @@ public sealed class SweepFindingsTests
         process.StandardOutput.ReadToEnd();
         var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error}");
     }
 
     /// <summary>The window, with Save As answering <paramref name="path"/> instead of a native dialog.</summary>
