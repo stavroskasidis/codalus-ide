@@ -73,6 +73,7 @@ public sealed partial class XamlLanguageTests
     {
         var codeBehind = avalonia.File("AvaloniaApp", "Views", "TodoItemView.axaml.cs");
         await FreshAsync(codeBehind);
+        await FreshAsync(MainWindow); // the rename reaches <views:TodoItemView />, and the golden file has its line on disk
         var edit = await RenameAtAsync(codeBehind, "class TodoItemView", "class Todo".Length, "TaskView", "TodoItemView");
         XamlGolden.Check("avalonia-rename-x-class-from-csharp", Render(edit));
     }
