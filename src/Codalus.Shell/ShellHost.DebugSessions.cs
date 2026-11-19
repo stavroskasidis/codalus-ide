@@ -196,6 +196,10 @@ public sealed partial class ShellHost
                     }
                 }
             }
+            catch (RunNotStartedException)
+            {
+                // Said already, with what to do (.NET to install in WSL): the other projects start.
+            }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
             {
                 Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.couldNotStart", "Could not start {0}: {1}", name, ex.Message));
@@ -238,8 +242,8 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// The debug launch of a <c>WSL2</c> profile's plan: netcoredbg in the distribution (copied there on first use),
-    /// launching the distribution's <c>dotnet</c> on the build output through <c>/mnt</c>. Null when the user declined
-    /// or something is missing (it was reported).
+    /// launching the distribution's <c>dotnet</c> (<see cref="PrepareWslAsync"/>'s) on the build output through
+    /// <c>/mnt</c>. Null when the user declined or something is missing (it was reported).
     /// </summary>
     private async Task<DebugLaunch?> WslLaunchAsync(string name, LaunchPlan plan)
     {
@@ -251,14 +255,8 @@ public sealed partial class ShellHost
             return null;
         }
 
-        var dotnet = (await RemoteShell.RunAsync(target, "exec sh -lc 'command -v dotnet'", CancellationToken.None).ConfigureAwait(true)).Output.Trim();
-        if (!dotnet.StartsWith('/'))
-        {
-            Workbench.Notifications.Error(Localizer.Format("msg.debugSessions.netIsntInstalledInDotnetIsnt", ".NET isn't installed in {0}: 'dotnet' isn't on its PATH. Install the runtime there to run {1} in WSL.", target.Display, name));
-            return null;
-        }
-
-        var arguments = new LaunchArguments(dotnet, [.. wsl.Arguments], wsl.WorkingDirectory, new Dictionary<string, string>(plan.Environment));
+        // The distribution's dotnet that has the app's frameworks, picked as the plan was made (PrepareWslAsync).
+        var arguments = new LaunchArguments(wsl.Program, [.. wsl.Arguments], wsl.WorkingDirectory, new Dictionary<string, string>(plan.Environment));
         var map = new SourceMap(SourceFileMap(), SolutionFiles());
         UseRemoteCompanion(RemoteShell.Companion(target, debugger));
         return new DebugLaunch(name, plan) { Remote = new RemoteLaunch(RemoteShell.Adapter(target, debugger), arguments, map, target.Display) };
