@@ -1,6 +1,7 @@
 using System.Net;
 using Avalonia.Remote.Protocol;
 using Avalonia.Remote.Protocol.Designer;
+using Avalonia.Remote.Protocol.Viewport;
 
 // A stand-in for Avalonia's designer host (started as PreviewerSession starts Avalonia.Designer.HostApp): it connects
 // over Avalonia's own transport and answers each update with its XAML and how many times it has had it ("…#2") as the
@@ -9,35 +10,96 @@ using Avalonia.Remote.Protocol.Designer;
 // Avalonia's designer can (its sender misses a wake-up, and the answer waits until it sends anything else), and takes
 // two seconds to load it again, so its second answer comes after the session has sent its next update. Updates are
 // answered in order, as the designer loads them on its UI thread.
+// XAML containing "<!--frame-->" loads without an error and sends its frame. XAML containing "<!--held frame-->" loads
+// without an error too, and from then on each frame it renders (for that update, and for each new render scale) waits
+// the same way until it sends anything else: the answer to a viewport measure.
 var transport = args[Array.IndexOf(args, "--transport") + 1];
 var sessionId = args[Array.IndexOf(args, "--session-id") + 1];
 var port = new Uri(transport).Port;
 
 var gate = new object();
 var seen = new Dictionary<string, int>(StringComparer.Ordinal);
-UpdateXamlResultMessage? held = null;
+object? held = null;
+var holdFrames = false;
+var scale = 1.0;
+long sequence = 0;
 var closed = new TaskCompletionSource();
 var connection = await new BsonTcpTransport().Connect(IPAddress.Loopback, port);
 connection.OnException += (_, _) => closed.TrySetResult();
-connection.OnMessage += (sender, message) =>
+
+FrameMessage Frame() => new()
 {
-    if (message is not UpdateXamlMessage update)
+    SequenceId = ++sequence,
+    Format = PixelFormat.Rgba8888,
+    Width = (int)(100 * scale),
+    Height = (int)(50 * scale),
+    Stride = (int)(100 * scale) * 4,
+    Data = new byte[(int)(100 * scale) * 4 * (int)(50 * scale)],
+    DpiX = 96 * scale,
+    DpiY = 96 * scale,
+};
+
+// What the designer sends goes after what waited in its queue.
+void Send(object message)
+{
+    if (held is not null)
     {
-        return;
+        _ = connection.Send(held);
+        held = null;
     }
 
+    _ = connection.Send(message);
+}
+
+connection.OnMessage += (sender, message) =>
+{
     lock (gate)
     {
+        switch (message)
+        {
+            case MeasureViewportMessage measure:
+                Send(new MeasureViewportMessage { Width = measure.Width, Height = measure.Height });
+                return;
+            case ClientRenderInfoMessage render:
+                scale = render.DpiX / 96;
+                if (holdFrames)
+                {
+                    held = Frame();
+                }
+
+                return;
+            case UpdateXamlMessage update:
+                break;
+            default:
+                return;
+        }
+
         if (held is not null)
         {
             _ = connection.Send(held);
             held = null;
         }
 
-        var times = seen[update.Xaml] = seen.GetValueOrDefault(update.Xaml) + 1;
-        var answer = new UpdateXamlResultMessage { Error = $"{update.Xaml}#{times}" };
+        var xaml = ((UpdateXamlMessage)message).Xaml;
+        var times = seen[xaml] = seen.GetValueOrDefault(xaml) + 1;
+        if (xaml.Contains("<!--frame-->", StringComparison.Ordinal))
+        {
+            Send(new UpdateXamlResultMessage());
+            Send(Frame());
+            return;
+        }
+
+        if (xaml.Contains("<!--held frame-->", StringComparison.Ordinal))
+        {
+            holdFrames = true;
+            Send(new UpdateXamlResultMessage());
+            held = Frame();
+            return;
+        }
+
+        var answer = new UpdateXamlResultMessage { Error = $"{xaml}#{times}" };
         var again = times > 1;
-        if (!again && update.Xaml.Contains("<!--held-->", StringComparison.Ordinal))
+        if (!again && xaml.Contains("<!--held-->", StringComparison.Ordinal))
         {
             held = answer;
             return;
@@ -48,7 +110,7 @@ connection.OnMessage += (sender, message) =>
             Thread.Sleep(2000);
         }
 
-        _ = connection.Send(answer);
+        Send(answer);
     }
 };
 connection.Start();
