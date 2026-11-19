@@ -113,7 +113,7 @@ public sealed class FirstRunSetupTests
         Assert.Equal("Get Started", model.NextTitle);
         Assert.Equal("Use the defaults", model.SkipTitle);
         Assert.False(model.CanGoBack);
-        Assert.Equal(["The classic IDE", "VS Code", "Rider or ReSharper", "Somewhere else"], model.Origins.Select(o => o.Title));
+        Assert.Equal(["Visual Studio", "VS Code", "Rider or ReSharper", "Somewhere else"], model.Origins.Select(o => o.Title));
         Assert.Null(model.SelectedOrigin);
         Assert.All(model.Steps, s => Assert.False(s.IsCurrent));
         Assert.Equal(["Appearance", "Keyboard", "Your settings", "Tools", "AI"], model.Steps.Select(s => s.Title));
@@ -693,7 +693,7 @@ public sealed class FirstRunSetupTests
 
         // The welcome page in the window: the logo, the four origins as cards with names, Get Started focused.
         var origins = window.FindControl<ItemsControl>("OriginList")!.GetVisualDescendants().OfType<ToggleButton>().ToList();
-        Assert.Equal(["The classic IDE", "VS Code", "Rider or ReSharper", "Somewhere else"], origins.Select(AutomationProperties.GetName));
+        Assert.Equal(["Visual Studio", "VS Code", "Rider or ReSharper", "Somewhere else"], origins.Select(AutomationProperties.GetName));
         Assert.All(origins, o => Assert.True(o.IsEffectivelyVisible && o.IsChecked == false));
         Assert.Equal("Get Started", window.FindControl<Button>("NextButton")!.Content);
         Assert.Equal("Use the defaults", window.FindControl<Button>("SkipButton")!.Content);
