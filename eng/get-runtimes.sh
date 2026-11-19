@@ -17,7 +17,7 @@ repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 destination="${1:-$repo/.work/dotnet-compat}"
 
 # Microsoft.NETCore.App: net10.0 ... netcoreapp2.0, newest first (net11.0 comes with the SDK; M30b).
-runtimes=(10.0.13 9.0.20 8.0.31 7.0.20 6.0.36 5.0.17 3.1.32 3.0.3 2.2.8 2.1.30 2.0.9)
+runtimes=(10.0.15 9.0.23 8.0.34 7.0.20 6.0.36 5.0.17 3.1.32 3.0.3 2.2.8 2.1.30 2.0.9)
 # Microsoft.AspNetCore.App: the ASP.NET Core 3.1 and 2.1 fixtures.
 aspnetcore=(3.1.32 2.1.30)
 # SDKs that samples/TargetFrameworks/Sdks pins in global.json (ADR 0030): the oldest that builds out of process (6.0),

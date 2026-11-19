@@ -1,5 +1,5 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-18",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-19",
   "protocolVersion": 1,
   "agentCapabilities": {
     "_meta": {
@@ -43,16 +43,19 @@
   "agentInfo": {
     "name": "@agentclientprotocol/claude-agent-acp",
     "title": "Claude Agent",
-    "version": "0.108.0"
+    "version": "0.108.1"
   },
   "authMethods": [
     {
-      "description": "Run `claude /login` in the terminal",
-      "name": "Log in with Claude",
-      "id": "claude-login",
+      "description": "Use Claude subscription ",
+      "name": "Claude Subscription",
+      "id": "claude-ai-login",
       "type": "terminal",
       "args": [
-        "--cli"
+        "--cli",
+        "auth",
+        "login",
+        "--claudeai"
       ]
     },
     {
