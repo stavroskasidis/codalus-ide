@@ -6,8 +6,11 @@ using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.ViewModels;
 
-/// <summary>A row of the branch drop-down: a group's header (Local branches, a remote) or a branch.</summary>
-public sealed class GitBranchRow : ObservableObject
+/// <summary>
+/// A row of the branch drop-down: a group's header in the list view (a remote, Common branches, a repository), a folder
+/// of branch names or a group in the tree view (it expands and collapses), or a branch.
+/// </summary>
+public sealed class GitBranchRow : ObservableObject, ITreeRow
 {
     private string _busy = string.Empty;
 
@@ -16,16 +19,34 @@ public sealed class GitBranchRow : ObservableObject
         Key = key;
     }
 
-    /// <summary>A header row: "Local branches", or a remote's name; with all repositories shown, a repository's (indented under All branches).</summary>
+    /// <summary>A header row (the list view): a remote's name, Common branches, or a repository's name and branch.</summary>
     public static GitBranchRow Header(string text, string? key = null, int depth = 0) => new(key ?? "h:" + text) { HeaderText = text, IsHeader = true, Depth = depth };
 
     /// <summary>
-    /// A branch row; <paramref name="name"/> is what it shows (a remote branch without its remote). With all repositories
-    /// shown (ADR 0085), a row of Common branches (<paramref name="isCommon"/>) or of one <paramref name="repository"/>.
+    /// A folder of the tree view: a part of the branches' names before a <c>/</c> (<c>feature</c>), or a group (Common
+    /// branches, a repository, a remote) with its <paramref name="icon"/>; <paramref name="count"/> branches under it.
+    /// </summary>
+    public static GitBranchRow Folder(string key, string name, int depth, bool expanded, int count, IReadOnlyList<int>? highlights = null, string? icon = null) =>
+        new(key)
+        {
+            Name = name,
+            IsFolder = true,
+            IsExpanded = expanded,
+            Count = count,
+            Highlights = highlights,
+            GroupIcon = icon,
+            Depth = depth,
+            InTree = true,
+        };
+
+    /// <summary>
+    /// A branch row; <paramref name="name"/> is what it shows (a remote branch without its remote; in the tree view, the
+    /// part after its folders). With all repositories shown (ADR 0085), a row of Common branches (<paramref name="isCommon"/>)
+    /// or of one <paramref name="repository"/>.
     /// </summary>
     public static GitBranchRow ForBranch(
         GitBranchDetails branch, string name, bool isCurrent, IReadOnlyList<int>? highlights = null, string detail = "", string track = "", string trackName = "", string busy = "",
-        GitService? repository = null, bool isCommon = false, int depth = 0) =>
+        GitService? repository = null, bool isCommon = false, int depth = 0, bool inTree = false) =>
         new((isCommon ? "c:" : string.Empty) + (repository is { Root: { } root } ? root + ":" : string.Empty) + (branch.IsRemote ? "r:" : "l:") + branch.Name)
         {
             Branch = branch,
@@ -39,6 +60,7 @@ public sealed class GitBranchRow : ObservableObject
             Repository = repository,
             IsCommon = isCommon,
             Depth = depth,
+            InTree = inTree,
         };
 
     /// <summary>The repository the branch is in, with all repositories shown (ADR 0085); null otherwise and on Common branches.</summary>
@@ -47,24 +69,48 @@ public sealed class GitBranchRow : ObservableObject
     /// <summary>A branch every repository has (Common branches): its actions run in each.</summary>
     public bool IsCommon { get; private init; }
 
-    /// <summary>How far it's indented: under All branches, a repository's header (1) and its branches (2).</summary>
+    /// <summary>How far it's indented: its level in the tree, or in the list its place under a header.</summary>
     public int Depth { get; private init; }
 
     public Avalonia.Thickness Indent => new(Depth * TreeMetrics.IndentPerLevel, 0, 0, 0);
 
-    /// <summary>Identifies the row across reloads: <c>l:main</c>, <c>r:origin/main</c>, <c>h:…</c>.</summary>
+    /// <summary>Identifies the row across reloads: <c>l:main</c>, <c>r:origin/main</c>, <c>h:…</c>, a folder's <c>L:f:feature/</c>.</summary>
     public string Key { get; }
 
     public bool IsHeader { get; private init; }
 
-    public bool IsBranch => !IsHeader;
+    /// <summary>A folder or a group of the tree view: it expands and collapses.</summary>
+    public bool IsFolder { get; private init; }
+
+    public bool IsBranch => Branch is not null;
+
+    /// <summary>A branch or a folder: the selection and the keys move over these, never a header.</summary>
+    public bool IsSelectable => !IsHeader;
+
+    /// <summary>A row of the tree view: a branch keeps a folder's chevron's place, so its name lines up with theirs.</summary>
+    public bool InTree { get; private init; }
+
+    public bool HasChildren => IsFolder;
+
+    public bool IsExpanded { get; private init; }
+
+    public string? Chevron => IsFolder ? (IsExpanded ? "chevron-down" : "chevron-right") : null;
+
+    /// <summary>A group's own icon (Common branches, a repository, a remote), null for a folder of names.</summary>
+    public string? GroupIcon { get; private init; }
+
+    public string FolderIcon => GroupIcon ?? (IsExpanded ? "folder-open" : "folder");
+
+    /// <summary>The branches under a folder (those the search shows).</summary>
+    public int Count { get; private init; }
+
+    public string CountText => Count.ToString(CultureInfo.CurrentCulture);
 
     public string HeaderText { get; private init; } = string.Empty;
 
     public GitBranchDetails? Branch { get; private init; }
 
     public string Name { get; private init; } = string.Empty;
-
     /// <summary>The checked-out branch: the check before its name (none with a detached HEAD, B14).</summary>
     public bool IsCurrent { get; private init; }
 
@@ -110,7 +156,9 @@ public sealed class GitBranchRow : ObservableObject
     public string TrackName { get; private init; } = string.Empty;
 
     /// <summary>The row's name for screen readers: the branch (and remote), current, detail, chips, worktree, busy.</summary>
-    public string AccessibleName => IsHeader ? HeaderText : string.Join(", ", new[]
+    public string AccessibleName => IsHeader ? HeaderText : IsFolder
+        ? Localizer.Format(Count == 1 ? "msg.gitBranches.folderOneBranch" : "msg.gitBranches.folderBranches", Count == 1 ? "{0}, 1 branch" : "{0}, {1} branches", Name, Count)
+        : string.Join(", ", new[]
     {
         Branch is { IsRemote: true, Remote: { } remote } ? Localizer.Format("msg.gitBranches.onRemote", "{0} on {1}", Name, remote) : Name,
         IsCurrent ? Localizer.Get("msg.gitBranches.currentBranch", "current branch") : string.Empty,
@@ -122,14 +170,38 @@ public sealed class GitBranchRow : ObservableObject
 }
 
 /// <summary>
-/// The Git Changes window's branch drop-down (#23, D38: B1-B26): the branches, current first, then by name, remote
-/// branches under their remote's header without its prefix (question 4), filtered as the search box is typed; its first
-/// open's loading state, git's error with Try Again, no match with the footer's New Branch 'x'…, the banners (detached,
-/// an operation in progress, where a branch is checked out, what Update found) and the rows Update is running on. The
-/// list is kept between opens, so later opens show it at once while it reloads.
+/// The Git Changes window's branch drop-down (#23, D38: B1-B26): the branches on two tabs, Local and Remote, each with
+/// its count of the branches the search shows; every open starts on Local. The tree view (the default, remembered in
+/// <c>git.branchPicker.view</c>) puts the branches in folders by their names' <c>/</c> parts, folders before branches;
+/// folders start collapsed but for the current branch's path, and what is expanded is remembered while the IDE runs,
+/// for each repository and tab; a search keeps the folders, hides those with no match and expands the paths to the
+/// matches, and clearing it puts back what was expanded. The list view has the current branch first, then the others by
+/// name. Remote branches show without their remote's prefix (question 4), under their remote's group only when there are
+/// several remotes. Also its first open's loading state, git's error with Try Again, no match with the footer's New
+/// Branch 'x'…, the banners (detached, an operation in progress, where a branch is checked out, what Update found) and
+/// the rows Update is running on. The list is kept between opens, so later opens show it at once while it reloads.
 /// </summary>
-public sealed class GitBranchPickerViewModel : ObservableObject
+public sealed class GitBranchPickerViewModel : ObservableObject, ITreeRowsOwner
 {
+    /// <summary>The <c>git.branchPicker.view</c> setting's values.</summary>
+    public const string ViewTree = "tree";
+
+    public const string ViewList = "list";
+
+    private bool _isRemoteTab;
+    private bool _isTreeView = true;
+    private bool _revealCurrent;
+    private int _localMatches;
+    private int _remoteMatches;
+    private bool _noRemotes;
+    private bool _matchesNowhere;
+
+    // What the user expanded or collapsed, by repository and folder (kept while the IDE runs); and during a search, what
+    // they changed in its tree (dropped as the search changes, so clearing it puts back the folders as they were).
+    private readonly Dictionary<string, bool> _expanded = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _searchExpanded = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Node> _nodes = new(StringComparer.Ordinal);
+
     private readonly GitService _git;
     private IReadOnlyList<GitBranchDetails>? _branches;
     private bool _hasRemote;
@@ -220,7 +292,19 @@ public sealed class GitBranchPickerViewModel : ObservableObject
             {
                 if (value)
                 {
-                    Query = string.Empty;
+                    if (ReadView?.Invoke() is { } view)
+                    {
+                        LoadView(view);
+                    }
+
+                    _isRemoteTab = false;
+                    _revealCurrent = true;
+                    OnPropertyChanged(nameof(IsRemoteTab));
+                    OnPropertyChanged(nameof(TabIndex));
+                    _searchExpanded.Clear();
+                    _query = string.Empty;
+                    OnPropertyChanged(nameof(Query));
+                    Rebuild();
                     ClearBanner();
                     _ = LoadAsync();
                 }
@@ -241,10 +325,103 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         {
             if (SetField(ref _query, value ?? string.Empty))
             {
+                _searchExpanded.Clear();
                 Rebuild();
             }
         }
     }
+
+    /// <summary>The Remote tab is shown (the remote branches); else the Local tab. Every open starts on Local.</summary>
+    public bool IsRemoteTab
+    {
+        get => _isRemoteTab;
+        set
+        {
+            if (SetField(ref _isRemoteTab, value))
+            {
+                OnPropertyChanged(nameof(TabIndex));
+                _selected = null;
+                Rebuild();
+            }
+        }
+    }
+
+    /// <summary>The tab strip's selection: 0 Local, 1 Remote.</summary>
+    public int TabIndex
+    {
+        get => _isRemoteTab ? 1 : 0;
+        set => IsRemoteTab = value == 1;
+    }
+
+    /// <summary>The branches in folders (the default), or a list; the toggle beside the search box switches, and the shell saves it.</summary>
+    public bool IsTreeView
+    {
+        get => _isTreeView;
+        set
+        {
+            if (SetField(ref _isTreeView, value))
+            {
+                OnPropertyChanged(nameof(IsListView));
+                OnPropertyChanged(nameof(ViewToggleTip));
+                Rebuild();
+                SaveView?.Invoke(value ? ViewTree : ViewList);
+            }
+        }
+    }
+
+    /// <summary>The toggle beside the search box: checked in the list view.</summary>
+    public bool IsListView
+    {
+        get => !_isTreeView;
+        set => IsTreeView = !value;
+    }
+
+    public string ViewToggleTip => _isTreeView
+        ? Localizer.Get("msg.gitBranches.showAsList", "Show as List")
+        : Localizer.Get("msg.gitBranches.showAsTree", "Show as Tree");
+
+    /// <summary>Reads the view from the settings as the drop-down opens (an edit of settings.json shows at the next open); set by the shell.</summary>
+    public Func<string>? ReadView { get; set; }
+
+    /// <summary>Saves the view (<see cref="ViewTree"/> or <see cref="ViewList"/>) when the toggle changes it; set by the shell.</summary>
+    public Action<string>? SaveView { get; set; }
+
+    /// <summary>Sets the view from the settings, without saving it back.</summary>
+    public void LoadView(string view)
+    {
+        var tree = view != ViewList;
+        if (tree != _isTreeView)
+        {
+            _isTreeView = tree;
+            OnPropertyChanged(nameof(IsTreeView));
+            OnPropertyChanged(nameof(IsListView));
+            OnPropertyChanged(nameof(ViewToggleTip));
+            Rebuild();
+        }
+    }
+
+    /// <summary>The Local tab's count: the local branches the search shows.</summary>
+    public string LocalCount => _localMatches.ToString(CultureInfo.CurrentCulture);
+
+    public string RemoteCount => _remoteMatches.ToString(CultureInfo.CurrentCulture);
+
+    /// <summary>The tabs' names for screen readers: "Local branches, 3".</summary>
+    public string LocalTabName => Localizer.Format("msg.gitBranches.localTabName", "Local branches, {0}", _localMatches);
+
+    public string RemoteTabName => Localizer.Format("msg.gitBranches.remoteTabName", "Remote branches, {0}", _remoteMatches);
+
+    /// <summary>The Remote tab of a repository without a remote (B17): it says so.</summary>
+    public bool IsNoRemotes => _noRemotes;
+
+    public string NoRemotesText => IsAllRepositories
+        ? Localizer.Get("msg.gitBranches.noRepositoryHasRemote", "None of the repositories has a remote.")
+        : Localizer.Get("msg.gitBranches.noRemote", "This repository has no remote.");
+
+    /// <summary>
+    /// Raised once the rows have the current branch after an open, with its row: the view scrolls it into sight (in the
+    /// tree view it can be under many folders).
+    /// </summary>
+    public event Action<GitBranchRow>? RevealRequested;
 
     /// <summary>The first read runs and nothing is cached: an indeterminate bar under the search box (B4).</summary>
     public bool IsLoading
@@ -286,7 +463,7 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     public GitBranchRow? Selected
     {
         get => _selected;
-        set => SetField(ref _selected, value is { IsHeader: true } ? _selected : value);
+        set => SetField(ref _selected, value is { IsSelectable: false } ? _selected : value);
     }
 
     /// <summary>"2 of 7": the branches shown of all.</summary>
@@ -295,17 +472,19 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     /// <summary>No branch matches the search (B3).</summary>
     public bool IsEmpty { get; private set; }
 
-    public string EmptyText => Localizer.Format("msg.gitBranches.noBranchesMatch", "No branches match “{0}”.", _query.Trim());
+    public string EmptyText => _isRemoteTab
+        ? Localizer.Format("msg.gitBranches.noRemoteBranchesMatch", "No remote branches match “{0}”.", _query.Trim())
+        : Localizer.Format("msg.gitBranches.noLocalBranchesMatch", "No local branches match “{0}”.", _query.Trim());
 
-    /// <summary>The footer: New Branch…, or New Branch 'zzz'… when nothing matches (B3). None in an empty repository (B16).</summary>
-    public string FooterText => IsEmpty && _query.Trim().Length > 0
-        ? Localizer.Format("msg.gitBranches.newBranchNamed", "New Branch '{0}'…", _query.Trim())
+    /// <summary>The footer: New Branch…, or New Branch 'zzz'… when no branch on either tab matches (B3). None in an empty repository (B16).</summary>
+    public string FooterText => FooterName is { } name
+        ? Localizer.Format("msg.gitBranches.newBranchNamed", "New Branch '{0}'…", name)
         : Localizer.Get("msg.gitBranches.newBranch", "New Branch…");
 
     public bool HasFooter => _git.Status is not { Branch: not null, Head: null };
 
-    /// <summary>The name the footer's New Branch fills in (the search, when nothing matches).</summary>
-    public string? FooterName => IsEmpty && _query.Trim().Length > 0 ? _query.Trim() : null;
+    /// <summary>The name the footer's New Branch fills in (the search, when no branch on either tab matches).</summary>
+    public string? FooterName => _matchesNowhere && _query.Trim().Length > 0 ? _query.Trim() : null;
 
     /// <summary>The banner under the search box: a message for a moment (B13, B25, B26), else HEAD detached (B14) or an operation in progress (B15).</summary>
     public string? Banner => _banner ?? StandingBanner;
@@ -456,6 +635,7 @@ public sealed class GitBranchPickerViewModel : ObservableObject
             {
                 IsLoading = false;
                 Rebuild();
+                _revealCurrent = false;
                 NotifyBanner();
                 OnPropertyChanged(nameof(HasFooter));
             }
@@ -463,8 +643,49 @@ public sealed class GitBranchPickerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The rows for the search: Local branches (the current first, then by name; an empty repository's branch, which git
-    /// doesn't list, with "No commits yet"), then each remote's branches without its prefix, by name.
+    /// A group of the rows being built (Common branches, a repository, a remote: a folder of the tree view, a header of the
+    /// list view) or, in the tree view, a folder of branch names; the branches under it; their count and whether one is
+    /// the current branch (its folders start expanded).
+    /// </summary>
+    private sealed class Node(string key, string name, string? icon, bool isGroup, Node? parent)
+    {
+        public string Key { get; } = key;
+
+        public string Name { get; } = name;
+
+        public string? Icon { get; } = icon;
+
+        public bool IsGroup { get; } = isGroup;
+
+        public Node? Parent { get; } = parent;
+
+        public List<Node> Children { get; } = [];
+
+        public Dictionary<string, Node> Folders { get; } = new(StringComparer.Ordinal);
+
+        public List<Leaf> Leaves { get; } = [];
+
+        public int Count { get; set; }
+
+        public bool HasCurrent { get; set; }
+
+        public Node Group(string key, string name, string icon)
+        {
+            var group = new Node(key, name, icon, isGroup: true, this);
+            Children.Add(group);
+            return group;
+        }
+    }
+
+    /// <summary>A branch to show: first the current one in the list view (<paramref name="First"/>), then by name; its row at a name and a depth.</summary>
+    private sealed record Leaf(string Name, bool First, Func<string, int, GitBranchRow> Make);
+
+    /// <summary>
+    /// The rows of the tab for the search. Local: (an empty repository's branch, which git doesn't list, with "No commits
+    /// yet") the local branches; Remote: the remote branches without their remote's prefix, under their remote's group
+    /// when there are several. With all repositories shown (ADR 0085), Local has Common branches (the local branches every
+    /// repository has, checked when every repository is on it) and then each repository's under its name and current
+    /// branch; Remote has each repository's remote branches. In the tree view the branches are in folders.
     /// </summary>
     private void Rebuild()
     {
@@ -472,76 +693,154 @@ public sealed class GitBranchPickerViewModel : ObservableObject
         var query = _query.Trim();
         var status = _git.Status;
         var all = _branches ?? [];
-        var locals = all.Where(b => !b.IsRemote).ToList();
-        var remotes = _hasRemote ? all.Where(b => b.IsRemote).ToList() : [];
-        var unborn = status is { Branch: { } name, Head: null } && locals.All(b => b.Name != name)
-            ? new GitBranchDetails("refs/heads/" + name, name, IsRemote: false, IsCurrent: true)
-            : null;
-        if (unborn is not null)
-        {
-            locals.Insert(0, unborn);
-        }
+        var tab = _isRemoteTab ? "R" : "L";
+        var root = new Node(tab, string.Empty, null, isGroup: true, null);
+        var localMatches = 0;
+        var remoteMatches = 0;
+        int total;
+        bool anyRemote;
 
         bool Matches(string name) => query.Length == 0 || name.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+        if (_repositories is { } repositories)
+        {
+            anyRemote = repositories.Any(r => r.HasRemote);
+            total = repositories.Sum(r => r.Branches.Count(b => !b.IsRemote || r.HasRemote));
+            var common = GitService.CommonBranches([.. repositories.Select(r => r.Branches)]).Where(Matches).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
+            if (!_isRemoteTab && common.Count > 0)
+            {
+                var group = root.Group("L:common", Localizer.Get("msg.gitBranches.commonBranches", "Common branches"), "branch");
+                foreach (var name in common)
+                {
+                    var each = CommonBranchIn(name);
+                    var current = each.All(e => e.Branch.IsCurrent && e.Git.Status?.Branch is not null);
+
+                    // A copy of the first repository's: a row's branch identifies the row (RowOf).
+                    var branch = each[0].Branch with { };
+                    Place(group, name, current, (shown, depth) => GitBranchRow.ForBranch(branch, shown, current, Highlights(shown), isCommon: true, depth: depth, inTree: _isTreeView));
+                }
+            }
+
+            foreach (var repository in repositories)
+            {
+                var git = repository.Git;
+                var on = git.Status?.Branch;
+                var locals = repository.Branches.Where(b => !b.IsRemote && Matches(b.Name)).ToList();
+                var remotes = repository.HasRemote ? repository.Branches.Where(b => b.IsRemote && Matches(b.ShortName)).ToList() : [];
+                localMatches += locals.Count;
+                remoteMatches += remotes.Count;
+                var shown = _isRemoteTab ? remotes : locals;
+                if (shown.Count == 0)
+                {
+                    continue;
+                }
+
+                var group = root.Group(tab + ":repo:" + git.Root, $"{git.Name} ({on ?? Localizer.Get("msg.gitBranches.detached", "detached")})", "repository");
+                if (_isRemoteTab)
+                {
+                    PlaceRemotes(group, repository.Branches, remotes, git);
+                }
+                else
+                {
+                    foreach (var b in locals)
+                    {
+                        var current = b.IsCurrent && on is not null;
+                        Place(group, b.Name, current, (name, depth) => GitBranchRow.ForBranch(b, name, current, Highlights(name), repository: git, depth: depth, inTree: _isTreeView));
+                    }
+                }
+            }
+        }
+        else
+        {
+            var locals = all.Where(b => !b.IsRemote).ToList();
+            var remotes = _hasRemote ? all.Where(b => b.IsRemote).ToList() : [];
+            var unborn = status is { Branch: { } name, Head: null } && locals.All(b => b.Name != name)
+                ? new GitBranchDetails("refs/heads/" + name, name, IsRemote: false, IsCurrent: true)
+                : null;
+            if (unborn is not null)
+            {
+                locals.Insert(0, unborn);
+            }
+
+            anyRemote = _hasRemote;
+            total = locals.Count + remotes.Count;
+            var shownLocals = locals.Where(b => Matches(b.Name)).ToList();
+            var shownRemotes = remotes.Where(b => Matches(b.ShortName)).ToList();
+            localMatches = shownLocals.Count;
+            remoteMatches = shownRemotes.Count;
+            if (_branches is not null || unborn is not null)
+            {
+                if (_isRemoteTab)
+                {
+                    PlaceRemotes(root, all, shownRemotes, null);
+                }
+                else
+                {
+                    foreach (var b in shownLocals)
+                    {
+                        var current = b.IsCurrent && status?.Branch is not null;
+                        var isUnborn = b == unborn;
+                        Place(root, b.Name, current, (name, depth) => LocalRow(b, isUnborn, name, current, depth));
+                    }
+                }
+            }
+        }
+
+        _nodes.Clear();
+        var rows = new List<GitBranchRow>();
+        Emit(root, 0, rows, query.Length > 0);
+
+        var loaded = !_isLoading && _error is null && _branches is not null;
+        _localMatches = localMatches;
+        _remoteMatches = remoteMatches;
+        _noRemotes = loaded && _isRemoteTab && !anyRemote;
+        _matchesNowhere = loaded && localMatches + remoteMatches == 0;
+        CountText = Localizer.Format("msg.gitBranches.countOfTotal", "{0} of {1}", localMatches + remoteMatches, total);
+        IsEmpty = loaded && !_noRemotes && query.Length > 0 && (_isRemoteTab ? remoteMatches : localMatches) == 0;
+        Rows.Clear();
+        foreach (var row in rows)
+        {
+            Rows.Add(row);
+        }
+
+        _selected = Rows.FirstOrDefault(r => r.Key == selectedKey);
+        foreach (var property in new[]
+        {
+            nameof(Selected), nameof(CountText), nameof(IsEmpty), nameof(EmptyText), nameof(FooterText), nameof(FooterName), nameof(LocalCount), nameof(RemoteCount),
+            nameof(LocalTabName), nameof(RemoteTabName), nameof(IsNoRemotes), nameof(NoRemotesText),
+        })
+        {
+            OnPropertyChanged(property);
+        }
+
+        if (_revealCurrent && Rows.FirstOrDefault(r => r.IsCurrent) is { } currentRow)
+        {
+            RevealRequested?.Invoke(currentRow);
+        }
+
         IReadOnlyList<int>? Highlights(string name)
         {
             var at = query.Length == 0 ? -1 : name.IndexOf(query, StringComparison.OrdinalIgnoreCase);
             return at < 0 ? null : [.. Enumerable.Range(at, query.Length)];
         }
 
-        var rows = new List<GitBranchRow>();
-        if (_repositories is { } repositories)
+        // A remote's branches (those the search shows of all of them): under the remote's group when there are several.
+        void PlaceRemotes(Node parent, IReadOnlyList<GitBranchDetails> branches, List<GitBranchDetails> shown, GitService? repository)
         {
-            RebuildAll(repositories, rows, Matches, Highlights);
-            Show(rows, rows.Count(r => r.IsBranch && !r.IsCommon), repositories.Sum(r => r.Branches.Count(b => !b.IsRemote || r.HasRemote)));
-            return;
-        }
-
-        var shownLocals = locals.Where(b => Matches(b.Name))
-            .OrderByDescending(b => b.IsCurrent && status?.Branch is not null)
-            .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-        if (_branches is not null || unborn is not null)
-        {
-            if (shownLocals.Count > 0)
+            var several = branches.Where(b => b.IsRemote).Select(b => b.Remote ?? string.Empty).Distinct(StringComparer.Ordinal).Count() > 1;
+            var head = (repository ?? _git).Status?.Branch;
+            var upstream = head is null ? null : branches.FirstOrDefault(b => !b.IsRemote && b.Name == head)?.Upstream;
+            foreach (var group in shown.GroupBy(b => b.Remote ?? string.Empty).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
             {
-                rows.Add(GitBranchRow.Header(Localizer.Get("msg.gitBranches.localBranches", "Local branches")));
-                rows.AddRange(shownLocals.Select(b => LocalRow(b, b == unborn)));
-            }
-
-            foreach (var group in remotes.GroupBy(b => b.Remote ?? string.Empty).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
-            {
-                var shown = group.Where(b => Matches(b.ShortName)).OrderBy(b => b.ShortName, StringComparer.OrdinalIgnoreCase).ToList();
-                if (shown.Count == 0)
+                var under = several ? parent.Group(parent.Key + ":remote:" + group.Key, group.Key, "cloud") : parent;
+                foreach (var b in group)
                 {
-                    continue;
+                    Place(under, b.ShortName, b.Name == upstream, (name, depth) => GitBranchRow.ForBranch(b, name, isCurrent: false, Highlights(name), repository: repository, depth: depth, inTree: _isTreeView), first: false);
                 }
-
-                rows.Add(GitBranchRow.Header(group.Key));
-                rows.AddRange(shown.Select(b => GitBranchRow.ForBranch(b, b.ShortName, isCurrent: false, Highlights(b.ShortName))));
             }
         }
 
-        Show(rows, rows.Count(r => r.IsBranch), locals.Count + remotes.Count);
-
-        void Show(List<GitBranchRow> shown, int count, int total)
-        {
-            CountText = Localizer.Format("msg.gitBranches.countOfTotal", "{0} of {1}", count, total);
-            IsEmpty = !_isLoading && _error is null && count == 0 && query.Length > 0;
-            Rows.Clear();
-            foreach (var row in shown)
-            {
-                Rows.Add(row);
-            }
-
-            _selected = Rows.FirstOrDefault(r => r.Key == selectedKey);
-            foreach (var property in new[] { nameof(Selected), nameof(CountText), nameof(IsEmpty), nameof(EmptyText), nameof(FooterText), nameof(FooterName) })
-            {
-                OnPropertyChanged(property);
-            }
-        }
-
-        GitBranchRow LocalRow(GitBranchDetails b, bool isUnborn)
+        GitBranchRow LocalRow(GitBranchDetails b, bool isUnborn, string name, bool current, int depth)
         {
             var track = !_hasRemote || b.Upstream is null || b.UpstreamGone ? string.Empty
                 : string.Join(' ', new[] { b.Ahead > 0 ? "↑" + b.Ahead.ToString(CultureInfo.CurrentCulture) : string.Empty, b.Behind > 0 ? "↓" + b.Behind.ToString(CultureInfo.CurrentCulture) : string.Empty }.Where(t => t.Length > 0));
@@ -552,69 +851,145 @@ public sealed class GitBranchPickerViewModel : ObservableObject
             }.Where(p => p.Length > 0);
             return GitBranchRow.ForBranch(
                 b,
-                b.Name,
-                b.IsCurrent && status?.Branch is not null,
-                Highlights(b.Name),
+                name,
+                current,
+                Highlights(name),
                 detail: isUnborn ? Localizer.Get("msg.gitBranches.noCommitsYet", "No commits yet") : string.Empty,
                 track: track,
                 trackName: track.Length > 0 ? $"{string.Join(", ", parts)} ({b.Upstream})" : string.Empty,
-                busy: _busy.Contains(b.Name) ? Localizer.Get("msg.gitBranches.updating", "Updating…") : string.Empty);
+                busy: _busy.Contains(b.Name) ? Localizer.Get("msg.gitBranches.updating", "Updating…") : string.Empty,
+                depth: depth,
+                inTree: _isTreeView);
+        }
+
+        // The rows of a node's groups, folders and branches: groups in the order they came, then folders by name, then
+        // branches (the current one first in the list view) by name. In the list view a group is a header over its
+        // branches; in the tree view a group or a folder is a row that expands, its rows under it only when it's expanded.
+        void Emit(Node node, int depth, List<GitBranchRow> into, bool searching)
+        {
+            foreach (var child in node.Children.Where(c => c.IsGroup).Concat(node.Children.Where(c => !c.IsGroup).OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)))
+            {
+                _nodes[child.Key] = child;
+                if (!_isTreeView)
+                {
+                    into.Add(GitBranchRow.Header(child.Name, "h:" + child.Key, depth));
+                    Emit(child, depth + 1, into, searching);
+                    continue;
+                }
+
+                var expanded = searching
+                    ? !_searchExpanded.TryGetValue(child.Key, out var e) || e
+                    : _expanded.TryGetValue(StateKey(child.Key), out var kept) ? kept : child.IsGroup || child.HasCurrent;
+                into.Add(GitBranchRow.Folder(child.Key, child.Name, depth, expanded, child.Count, child.IsGroup ? null : Highlights(child.Name), child.Icon));
+                if (expanded)
+                {
+                    Emit(child, depth + 1, into, searching);
+                }
+            }
+
+            foreach (var leaf in node.Leaves.OrderByDescending(l => !_isTreeView && l.First).ThenBy(l => l.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                into.Add(leaf.Make(leaf.Name, depth));
+            }
         }
     }
 
     /// <summary>
-    /// The rows with all repositories shown (ADR 0085): Common branches (the local branches every repository has, checked
-    /// when every repository is on it), then All branches: each repository's header with its current branch, its local
-    /// branches (current first) and, when it has a remote, its remote branches with their remote's name.
+    /// Puts a branch under <paramref name="group"/> (<paramref name="isCurrent"/>: its folders start expanded; with <paramref name="first"/>, the list view shows it first): in the tree view under the folders its name's <c>/</c> parts make
+    /// (<c>feature/x</c>: folder feature, branch x), in the list view with its whole name. Every node above it counts it.
     /// </summary>
-    private void RebuildAll(IReadOnlyList<RepositoryBranches> repositories, List<GitBranchRow> rows, Func<string, bool> matches, Func<string, IReadOnlyList<int>?> highlights)
+    private void Place(Node group, string name, bool isCurrent, Func<string, int, GitBranchRow> make, bool first = true)
     {
-        var common = GitService.CommonBranches([.. repositories.Select(r => r.Branches)]).Where(matches).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        if (common.Count > 0)
+        var node = group;
+        var leaf = name;
+        if (_isTreeView)
         {
-            rows.Add(GitBranchRow.Header(Localizer.Get("msg.gitBranches.commonBranches", "Common branches")));
-            foreach (var name in common)
+            var parts = name.Split('/');
+            for (var i = 0; i < parts.Length - 1; i++)
             {
-                var each = CommonBranchIn(name);
-                var current = each.All(e => e.Branch.IsCurrent && e.Git.Status?.Branch is not null);
+                if (parts[i].Length == 0)
+                {
+                    continue;
+                }
 
-                // A copy of the first repository's: a row's branch identifies the row (RowOf).
-                rows.Add(GitBranchRow.ForBranch(each[0].Branch with { }, name, current, highlights(name), isCommon: true));
+                if (!node.Folders.TryGetValue(parts[i], out var folder))
+                {
+                    folder = new Node(node.Key + "|" + parts[i], parts[i], null, isGroup: false, node);
+                    node.Folders[parts[i]] = folder;
+                    node.Children.Add(folder);
+                }
+
+                node = folder;
             }
+
+            leaf = parts[^1];
         }
 
-        rows.Add(GitBranchRow.Header(Localizer.Get("msg.gitBranches.allBranches", "All branches"), "h:all"));
-        foreach (var repository in repositories)
+        node.Leaves.Add(new Leaf(leaf, first && isCurrent, make));
+        for (var up = node; up is not null; up = up.Parent)
         {
-            var git = repository.Git;
-            var status = git.Status;
-            var locals = repository.Branches.Where(b => !b.IsRemote && matches(b.Name))
-                .OrderByDescending(b => b.IsCurrent && status?.Branch is not null)
-                .ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase);
-            var remotes = repository.HasRemote ? repository.Branches.Where(b => b.IsRemote && matches(b.Name)).OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase) : Enumerable.Empty<GitBranchDetails>();
-            var shown = locals.Concat(remotes).ToList();
-            if (shown.Count == 0)
-            {
-                continue;
-            }
-
-            var on = status?.Branch ?? Localizer.Get("msg.gitBranches.detached", "detached");
-            rows.Add(GitBranchRow.Header($"{git.Name} ({on})", "h:" + git.Root, depth: 1));
-            rows.AddRange(shown.Select(b => GitBranchRow.ForBranch(b, b.Name, !b.IsRemote && b.IsCurrent && status?.Branch is not null, highlights(b.Name), repository: git, depth: 2)));
+            up.Count++;
+            up.HasCurrent |= isCurrent;
         }
     }
 
-    /// <summary>The selection moves down (+1) or up (-1) over the branch rows, skipping headers (the keyboard, B2).</summary>
-    public void MoveSelection(int direction)
+    /// <summary>Where an expanded or collapsed folder is remembered: by repository, and in the key by tab and group.</summary>
+    private string StateKey(string key) => (_git.Root ?? string.Empty) + "\n" + key;
+
+    private void Remember(string key, bool expanded)
     {
-        var branches = Rows.Where(r => r.IsBranch).ToList();
-        if (branches.Count == 0)
+        if (_query.Trim().Length > 0)
+        {
+            _searchExpanded[key] = expanded;
+        }
+        else
+        {
+            _expanded[StateKey(key)] = expanded;
+        }
+    }
+
+    /// <summary>Expands or collapses a folder of the tree view (its chevron, a click, Left and Right).</summary>
+    public void SetExpanded(ITreeRow row, bool expanded)
+    {
+        if (row is GitBranchRow { IsFolder: true } folder)
+        {
+            Remember(folder.Key, expanded);
+            Rebuild();
+        }
+    }
+
+    /// <summary>A folder and every folder under it (Ctrl+Left, Ctrl+Right).</summary>
+    public void SetExpandedUnder(ITreeRow row, bool expanded)
+    {
+        if (row is not GitBranchRow { IsFolder: true } folder || !_nodes.TryGetValue(folder.Key, out var node))
         {
             return;
         }
 
-        var index = _selected is null ? -1 : branches.IndexOf(_selected);
-        Selected = index < 0 ? (direction > 0 ? branches[0] : branches[^1]) : branches[Math.Clamp(index + direction, 0, branches.Count - 1)];
+        void Visit(Node n)
+        {
+            Remember(n.Key, expanded);
+            foreach (var child in n.Children)
+            {
+                Visit(child);
+            }
+        }
+
+        Visit(node);
+        Rebuild();
+    }
+
+    /// <summary>The selection moves down (+1) or up (-1) over the branch and folder rows, skipping headers (the keyboard, B2).</summary>
+    public void MoveSelection(int direction)
+    {
+        var selectable = Rows.Where(r => r.IsSelectable).ToList();
+        if (selectable.Count == 0)
+        {
+            return;
+        }
+
+        var index = _selected is null ? -1 : selectable.IndexOf(_selected);
+        Selected = index < 0 ? (direction > 0 ? selectable[0] : selectable[^1]) : selectable[Math.Clamp(index + direction, 0, selectable.Count - 1)];
     }
 
     /// <summary>The local branch with a remote branch's name, which Checkout on the remote row switches to (question 7).</summary>

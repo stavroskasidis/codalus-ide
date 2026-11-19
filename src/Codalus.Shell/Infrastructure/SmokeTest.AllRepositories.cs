@@ -56,7 +56,7 @@ internal sealed partial class SmokeTest
         var button = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "BranchButton");
         button.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
         await WaitAsync(() => shell.GitBranches.IsOpen && shell.GitBranches.IsAllRepositories && shell.GitBranches.Rows.Any(r => r.IsCommon && r.IsCurrent), "the drop-down lists the common branches, the current one checked").ConfigureAwait(true);
-        Check(shell.GitBranches.Rows.Any(r => r.IsHeader && r.HeaderText == $"Library ({current})"), "each repository's branches are under its name and branch");
+        Check(shell.GitBranches.Rows.Any(r => (r.IsFolder ? r.Name : r.HeaderText) == $"Library ({current})"), "each repository's branches are under its name and branch");
         var popup = view.GetVisualDescendants().OfType<Popup>().Single(p => p.Name == "BranchPopup");
         await WaitAsync(() => popup.IsOpen, "the drop-down is shown").ConfigureAwait(true);
         await RenderedAsync().ConfigureAwait(true);
