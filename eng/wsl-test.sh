@@ -5,6 +5,11 @@
 #   wsl -d Ubuntu -- env CODALUS_WSL_DIR=/home/<user>/codalus-m33 bash eng/wsl-test.sh --smoke
 # It mirrors the repository into the Linux filesystem (~/codalus by default, CODALUS_WSL_DIR overrides) so the
 # Linux build never shares bin/ and obj/ with the Windows one, then runs eng/validate.sh there (same arguments).
+# A built mirror is about 7.5 GB, and the distro's disk (ext4.vhdx) is a file on a Windows drive that grows with each
+# one: on 2026-11-18, 15 mirrors left by worktrees filled C:, and the distro's disk went read-only in the middle of a
+# run. So a worktree's own mirror (CODALUS_WSL_DIR) is removed when its run passes (kept when it fails, for the
+# investigation), and the run won't start with less than 20 GB free on that drive. Space freed inside the distro goes
+# back to Windows only from a sparse disk (`wsl --manage Ubuntu --set-sparse true`).
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/telemetry-optout.sh" # the tools' telemetry opt-outs (M59)
 
@@ -21,6 +26,34 @@ src_files() {
     "$windows_git" -C "$(wslpath -w "$src")" ls-files "$@"
   fi
 }
+
+# The free space of the Windows drive that holds this distro's disk (its BasePath in the registry), before the run can
+# grow it. Read through Windows' PowerShell and fsutil, so before the Windows PATH is dropped below.
+host_disk_check() {
+  local min_gb=20 prefix='\\?\' base drive avail sparse
+  base="$(powershell.exe -NoProfile -NonInteractive -Command \
+    "(Get-ChildItem 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss' | Get-ItemProperty | Where-Object DistributionName -eq '${WSL_DISTRO_NAME:-}').BasePath" \
+    2> /dev/null | tr -d '\r')" || true
+  base="${base#"$prefix"}"   # \\?\C:\... -> C:\...
+  drive="$(printf '%s' "${base:0:1}" | tr 'A-Z' 'a-z')"
+  # Not found (no PowerShell, another WSL layout): nothing to check against.
+  { [ "${base:1:1}" = ":" ] && [ -d "/mnt/$drive" ]; } || return 0
+  avail="$(df -BG --output=avail "/mnt/$drive" 2> /dev/null | tail -1 | tr -dc '0-9')" || true
+  [ -n "$avail" ] || return 0
+  sparse="$(fsutil.exe sparse queryflag "$base\\ext4.vhdx" 2> /dev/null | tr -d '\r')" || true
+  case "$sparse" in
+    *"NOT set"*) echo "warning: $base\\ext4.vhdx isn't sparse, so space freed in the distro stays taken on ${drive^^}:" \
+      "(wsl --manage ${WSL_DISTRO_NAME:-Ubuntu} --set-sparse true)" >&2 ;;
+  esac
+  echo "== ${drive^^}: has $avail GB free (this distro's disk is in $base)"
+  if [ "$avail" -lt "$min_gb" ]; then
+    echo "error: ${drive^^}: has $avail GB free, under the $min_gb GB a run needs; this distro's disk is in $base." >&2
+    echo "The mirrors in $HOME (a worktree's own is removed when its run passes; remove the ones no longer needed):" >&2
+    du -sh "$HOME"/codalus* 2> /dev/null | sort -rh >&2 || true
+    exit 1
+  fi
+}
+host_disk_check
 
 # WSL appends the Windows PATH; keep Windows' dotnet.exe and git.exe out of the Linux build.
 export PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd:)"
@@ -49,4 +82,11 @@ display=""
 # shellcheck source=wsl-display.sh
 source "$dst/eng/wsl-display.sh" $display --browser
 
-exec bash "$dst/eng/validate.sh" "$@"
+status=0
+bash "$dst/eng/validate.sh" "$@" || status=$?
+# A worktree's own mirror goes once its run passes; a failed run's stays for the investigation.
+if [ "$status" -eq 0 ] && [ "$dst" != "$HOME/codalus" ] && [ "$dst" != "$HOME" ] && [ "$dst" != "/" ]; then
+  echo "== passed: removing $dst (this worktree's own mirror, CODALUS_WSL_DIR)"
+  rm -rf -- "$dst"
+fi
+exit "$status"
