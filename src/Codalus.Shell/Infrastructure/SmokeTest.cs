@@ -4976,6 +4976,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             Check(!shell.Debugger.UsesCodalusAdapter, "the setting chooses netcoredbg");
+            // Every step under it, not only the first: without it the compound steps waited out their 7- and 10-minute
+            // limits for a stop that couldn't come (a local Windows run without eng/get-netcoredbg.sh, 2026-11-19).
+            Check(DebugAdapterLocator.Resolve() is not null, $"netcoredbg is installed (debugger/ next to the shell, or {DebugAdapterLocator.EnvironmentVariable})");
             await step().ConfigureAwait(true);
         }
         finally
