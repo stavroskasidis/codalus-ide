@@ -1878,7 +1878,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
                 }
                 catch (Codalus.Debugging.DapException ex)
                 {
-                    throw new SmokeFailure($"An expression with a lambda didn't evaluate: {ex.Message}\nThe projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}");
+                    throw new SmokeFailure($"An expression with a lambda didn't evaluate after {asked.Elapsed.TotalSeconds:0} s: {ex.Message}\n"
+                                           + $"The C# host: {shell.Languages.Status(ShellHost.CSharpLanguageId)}; {string.Join("; ", shell.Languages.Describe())}\n"
+                                           + $"The projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}\n"
+                                           + $"Output 'Language Services':\n{Tail(shell.LanguageLog.GetText(), 6000)}");
                 }
             }
 
