@@ -1,5 +1,5 @@
 # Scratch branch `stress` only, never merged: the open docs/ci-flakes.md rows' tests, by group (M65, 2026-11-19).
-# <group> <test project> <filter kind: method or class> <full name>
+# <group> <test project> method <full name, or Class.* for a class> (one kind: xunit v3 ANDs --filter-class with --filter-method)
 # Windows: the web rows (187, 252, 255, 257).
 web Codalus.Shell.Tests method Codalus.Shell.Tests.WebTests.Endpoints_http_files_and_the_running_app
 web Codalus.Shell.Tests method Codalus.Shell.Tests.CompoundDebugTests.Debug_a_web_page_opens_an_html_file_in_the_browser_and_stops_in_its_script
@@ -9,16 +9,16 @@ web Codalus.Shell.Tests method Codalus.Shell.Tests.BlazorWebAppHotReloadDebugTes
 win-shell Codalus.Shell.Tests method Codalus.Shell.Tests.ProjectSystemDepthTests.The_properties_window_edits_a_files_build_action_and_metadata
 win-shell Codalus.Shell.Tests method Codalus.Shell.Tests.SymbolBrowserTests.The_object_browser_shows_a_projects_assemblies_down_to_library_members
 win-shell Codalus.Shell.Tests method Codalus.Shell.Tests.IconThemeTests.The_setting_offers_a_plugins_icon_theme_and_switches_the_file_icons
-win-shell Codalus.Shell.Tests class Codalus.Shell.Tests.DiffDocumentTests
-win-shell Codalus.Shell.Tests class Codalus.Shell.Tests.DiffInsightsTests
+win-shell Codalus.Shell.Tests method Codalus.Shell.Tests.DiffDocumentTests.*
+win-shell Codalus.Shell.Tests method Codalus.Shell.Tests.DiffInsightsTests.*
 # Windows, the other projects (15, 19, 53, 65, 101, 105, 113, 114, 116).
-win-others Codalus.Workbench.Tests class Codalus.Workbench.Tests.XamlPreviewerTests
+win-others Codalus.Workbench.Tests method Codalus.Workbench.Tests.XamlPreviewerTests.*
 win-others Codalus.Workbench.Tests method Codalus.Workbench.Tests.IdeToolsTests.The_agent_attaches_to_a_browser_it_did_not_start_and_waits_for_a_server_that_starts_late
 win-others Codalus.Workbench.Tests method Codalus.Workbench.Tests.EnvironmentCheckTests.A_cancelled_run_ends_its_program
 win-others Codalus.Projects.Tests method Codalus.Projects.Tests.ComposeProjectTests.A_dcproj_loads_its_compose_files_and_the_solution_builds_without_it
 win-others Codalus.Projects.Tests method Codalus.Projects.Tests.ProjectManagementIntegrationTests.Setting_properties_writes_the_minimal_change
 win-others Codalus.Projects.Tests method Codalus.Projects.Tests.DotnetVersionsTests.A_net11_solution_opens_builds_and_runs_with_the_net11_sdk
-win-others Codalus.LanguageServices.Host.Tests class Codalus.LanguageServices.Host.Tests.WinUIXamlTests
+win-others Codalus.LanguageServices.Host.Tests method Codalus.LanguageServices.Host.Tests.WinUIXamlTests.*
 win-others Codalus.Debugging.Tests method Codalus.Debugging.Tests.RuntimeAsyncDebuggingTests.An_exception_thrown_after_an_await_stops_with_the_throwing_frame_on_top
 win-others Codalus.Debugging.Tests method Codalus.Debugging.Tests.ClrDebuggerTests.A_launch_stops_on_the_first_line_and_at_breakpoints_evaluates_steps_and_ends_with_its_exit_code
 win-others Codalus.Debugging.Tests method Codalus.Debugging.Tests.NetFxDebuggerTests.Breakpoints_stacks_variables_evaluation_steps_async_exceptions_and_the_end_on_the_desktop_clr
