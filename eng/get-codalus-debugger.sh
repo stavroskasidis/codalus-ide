@@ -25,9 +25,11 @@ host_rid() {
 [ "$#" -gt 0 ] || set -- "$(host_rid)"
 version="$(tr -d '[:space:]' < VERSION)"
 # The sources the bundle is built from: another commit or an uncommitted change to them (its files, and what changed in
-# them, new files too) is another bundle.
+# them, new files too) is another bundle. The index's blobs count too: eng/wsl-test.sh's mirror has no commit, only
+# every file added, so neither HEAD nor a diff against it changed with an edit there, and a stale bundle was taken as up
+# to date (an adapter fix that the WSL container test didn't run, 2026-11-19).
 paths=(src/Codalus.Debugging.Host src/Codalus.Debugging src/Codalus.Debugging.StartupHook src/Codalus.Rpc src/ThirdParty Directory.Packages.props)
-sources="$(git rev-parse HEAD 2> /dev/null || echo none)$(git status --porcelain -- "${paths[@]}" 2> /dev/null || true)$(git diff HEAD -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -o --exclude-standard -z -- "${paths[@]}" 2> /dev/null | xargs -0 cat 2> /dev/null | sha256sum | cut -c1-16)"
+sources="$(git rev-parse HEAD 2> /dev/null || echo none)$(git status --porcelain -- "${paths[@]}" 2> /dev/null || true)$(git diff HEAD -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -s -- "${paths[@]}" 2> /dev/null | sha256sum | cut -c1-16)$(git ls-files -o --exclude-standard -z -- "${paths[@]}" 2> /dev/null | xargs -0 cat 2> /dev/null | sha256sum | cut -c1-16)"
 id="$version-$(printf '%s' "$sources" | sha256sum | cut -c1-12)"
 
 for rid in "$@"; do
