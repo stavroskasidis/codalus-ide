@@ -25,6 +25,12 @@ public sealed partial class ShellHost
     private static readonly CounterProvider[] s_sessionCounters = [new(DiagnosticToolsViewModel.Runtime, CounterProviderKinds.EventCounters)];
 
     private ProfilingRun? _profiling;
+
+    /// <summary>
+    /// The program the collection in progress launched (null when it attached to a process or a compose service): it
+    /// stops with the collection, and with the IDE (<see cref="StopProfiledProgramAsync"/>).
+    /// </summary>
+    private RunningProgram? _profiledProgram;
     private bool _reportsWired;
 
     public DiagnosticsService Profiling { get; private set; } = null!;
@@ -295,6 +301,7 @@ public sealed partial class ShellHost
             if (_profiling == r)
             {
                 _profiling = null;
+                Interlocked.CompareExchange(ref _profiledProgram, null, program);
                 Workbench.Context.Set("profilerCollecting", false);
             }
 
@@ -309,6 +316,7 @@ public sealed partial class ShellHost
         };
         created = run;
         _profiling = run;
+        _profiledProgram = program;
         Workbench.Context.Set("profilerCollecting", true);
         if (port is not null)
         {
@@ -322,8 +330,15 @@ public sealed partial class ShellHost
             AccessibleName = $"Profiling {target}: stop collection",
         });
 
-        // The process ending stops the collection by itself.
-        void Exited() => Ui.Post(() => _ = run.StopAsync());
+        // The process ending stops the collection by itself; not once the IDE is closing, which abandons it (and stops
+        // the program it launched: DisposeProfilingAsync).
+        void Exited() => Ui.Post(() =>
+        {
+            if (!_disposeStarted)
+            {
+                _ = run.StopAsync();
+            }
+        });
         if (trace is not null)
         {
             trace.ProcessExited += (_, _) => Exited();
@@ -359,23 +374,47 @@ public sealed partial class ShellHost
         }
     }
 
-    /// <summary>Memory Usage: a full dump of the program being profiled (the debug companion host writes it), into the session folder.</summary>
+    /// <summary>
+    /// How long the profiler's full dump may take: longer than the debug companion host's own limit (3 minutes), whose
+    /// failure says how far the dump got (tests: shorter).
+    /// </summary>
+    internal TimeSpan ProfilingDumpTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>Tests: writes the profiler's full dump (process, path) in place of the debug companion host.</summary>
+    internal Func<int, string, CancellationToken, Task>? WriteProfilingDump { get; set; }
+
+    /// <summary>
+    /// Memory Usage: a full dump of the program being profiled (the debug companion host writes it), into the session
+    /// folder. A failure says why, in the notification and the Performance Profiler's status
+    /// (<see cref="ProfilingRun.DumpError"/>): a dump that doesn't come as the debugger's Create Dump says it
+    /// (<see cref="Codalus.Debugging.Companion.DumpAdvice"/>), with macOS' password prompt, which holds every dump until it's answered.
+    /// </summary>
     private async Task<string?> CreateProfilingDumpAsync(ProfilingRun run, string folder)
     {
         const string File = "full.dmp";
+        string reason;
+        using var timeout = new CancellationTokenSource(ProfilingDumpTimeout);
         try
         {
             StatusBar.ShowMessage(Localizer.Get("msg.profiling.writingAFullDump", "Writing a full dump…"), TimeSpan.FromSeconds(10));
-            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(5));
-            await Companion.CreateDumpAsync(run.ProcessId, Path.Combine(folder, File), "full", timeout.Token).ConfigureAwait(true);
+            var path = Path.Combine(folder, File);
+            await (WriteProfilingDump is { } write
+                ? write(run.ProcessId, path, timeout.Token)
+                : Companion.CreateDumpAsync(run.ProcessId, path, "full", timeout.Token)).ConfigureAwait(true);
             run.Dump = File;
+            run.DumpError = null;
             return File;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            Workbench.Notifications.Error(Localizer.Format("msg.profiling.theDumpCouldNotBeWritten", "The dump could not be written: {0}", ex.Message));
-            return null;
+            // The wait ran out (a cancellation, or the host's "Request cancelled."): the host never said why.
+            reason = timeout.IsCancellationRequested ? Codalus.Debugging.Companion.DumpAdvice.NotWrittenWithin(ProfilingDumpTimeout) : ex.Message;
         }
+
+        run.DumpError = reason;
+        Workbench.Log.AppendLine("[profiler] The full dump could not be written: " + reason);
+        Workbench.Notifications.Error(Localizer.Format("msg.profiling.theDumpCouldNotBeWritten", "The dump could not be written: {0}", reason));
+        return null;
     }
 
     private static async Task StopQuietlyAsync(TraceRecordingHandle trace)
@@ -441,10 +480,7 @@ public sealed partial class ShellHost
         }
 
         // A program launched to be profiled stops with the collection.
-        if (program is { HasExited: false })
-        {
-            program.Stop();
-        }
+        _ = StopProfiledProgramAsync(program);
 
         if (traceFile is null && countersFile is null && run.Snapshots.Count == 0 && run.Dump is null)
         {
@@ -554,11 +590,24 @@ public sealed partial class ShellHost
             vm => "Compare: " + vm.Session.ProcessName);
     }
 
-    /// <summary>On exit: a collection in progress is abandoned (its folder keeps what was written).</summary>
+    /// <summary>
+    /// A program launched to be profiled ends, with every process it started (<see cref="RunningProgram.StopAsync"/>,
+    /// <c>ProcessTree.Kill</c>): at the end of its collection, and when the IDE closes during it.
+    /// </summary>
+    private static Task StopProfiledProgramAsync(RunningProgram? program) =>
+        program is { HasExited: false } ? program.StopAsync() : Task.CompletedTask;
+
+    /// <summary>
+    /// On exit: a collection in progress is abandoned (its folder keeps what was written), and the program it launched
+    /// stops as Stop Collection stops it: left running, it outlived the IDE (re-parented to launchd or init). A program
+    /// run with Run or Ctrl+F5 isn't one of these.
+    /// </summary>
     private async Task DisposeProfilingAsync()
     {
+        var program = StopProfiledProgramAsync(Interlocked.Exchange(ref _profiledProgram, null));
         DiagnosticTools.Dispose();
         CountersWindow.Dispose();
         await Profiling.DisposeAsync().ConfigureAwait(false);
+        await program.ConfigureAwait(false);
     }
 }

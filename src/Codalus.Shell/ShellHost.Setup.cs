@@ -640,7 +640,27 @@ public sealed partial class ShellHost
     /// Runs an install's command line in the terminal, in <paramref name="workingDirectory"/> (the user's home when null):
     /// a project's own install runs in its folder, so the SDK its <c>global.json</c> picks is the one it changes.
     /// </summary>
-    private Codalus.Workbench.Terminal.TerminalSession RunInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
+    private void RunInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
+    {
+        if (TerminalInstallStandIn is { } standIn)
+        {
+            SetupLog.AppendLine($"[{DateTime.Now:T}] The terminal's install went to a stand-in (exit code {standIn(plan)}).");
+            return;
+        }
+
+        StartInstallInTerminal(plan, workingDirectory);
+    }
+
+    /// <summary>
+    /// Tests: what runs an install meant for the terminal (Microsoft's <c>.pkg</c> under sudo, a distribution's package, a
+    /// workload, the Android SDK under sudo) in place of the terminal, its result the exit code. <c>ShellFixture</c> sets
+    /// one that runs nothing, so no test can start a real install, whatever its machine has (a <c>dotnet</c> outside the
+    /// home made Microsoft's <c>.pkg</c> the plan, and a test ran <c>curl</c> and <c>sudo installer</c>, sudo waiting for a
+    /// password). A test that wants the real terminal, with a harmless command, sets it to null.
+    /// </summary>
+    internal Func<InstallPlan, int>? TerminalInstallStandIn { get; set; }
+
+    private Codalus.Workbench.Terminal.TerminalSession StartInstallInTerminal(InstallPlan plan, string? workingDirectory = null)
     {
         // The command's exit code is the terminal's (Unix): the one awaiting it tells a failed install from a done one.
         var (program, arguments) = Workbench.Platform == PlatformKind.Windows
@@ -658,8 +678,15 @@ public sealed partial class ShellHost
     /// </summary>
     private async Task<int> RunInstallInTerminalAsync(InstallPlan plan)
     {
+        if (TerminalInstallStandIn is { } standIn)
+        {
+            var result = standIn(plan);
+            SetupLog.AppendLine($"[{DateTime.Now:T}] The terminal's install went to a stand-in (exit code {result}).");
+            return result;
+        }
+
         var ended = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var session = RunInstallInTerminal(plan);
+        var session = StartInstallInTerminal(plan);
         session.Exited += (_, code) => ended.TrySetResult(Workbench.Platform == PlatformKind.Windows ? 0 : code);
         if (session.ExitCode is { } already)
         {

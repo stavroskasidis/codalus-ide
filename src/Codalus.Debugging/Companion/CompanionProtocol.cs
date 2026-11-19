@@ -96,6 +96,21 @@ public sealed record CreateDumpParams(int ProcessId, string Path, string Kind);
 
 public sealed record CreateDumpResult(string Path, long Size);
 
+/// <summary>
+/// What a dump that doesn't come says, wherever it was asked for (Debug → Create Dump, the profiler's full dump): on
+/// macOS the runtime's createdump needs the system's developer tools access (<c>system.privilege.taskport</c>), and the
+/// first time in a while its password prompt holds every dump until it's answered.
+/// </summary>
+public static class DumpAdvice
+{
+    public const string MacOSPrompt = "On macOS, check for a password prompt from the system (developer tools access) and approve it.";
+
+    /// <summary>A dump not written within <paramref name="timeout"/>, with how far it got when that's known.</summary>
+    public static string NotWrittenWithin(TimeSpan timeout, string? progress = null) => string.Create(
+        System.Globalization.CultureInfo.InvariantCulture,
+        $"The dump wasn't written within {timeout.TotalSeconds:0} s{(progress is null ? string.Empty : $" ({progress})")}. {MacOSPrompt}");
+}
+
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(TypeDisplayParams))]
 [JsonSerializable(typeof(TypeDisplayResult))]
