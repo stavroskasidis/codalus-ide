@@ -1587,8 +1587,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
         Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
 
+        // Waited for, not read once the call returns: the stop's own refresh of the window is posted when the debugger
+        // raises the stop, just after its state says stopped, and under load it ran once the window was shown and the call
+        // had asked, so the call's answer gave way to that newer one, a moment later. Read at once, QuickWatch was empty
+        // (WSL, 2026-11-19).
         await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
-        Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
+        await WaitAsync(() => shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"",
+            () => "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value ?? "nothing")).ConfigureAwait(true);
 
         // Run to Cursor while paused, with a PerfTip at the new line.
         await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
