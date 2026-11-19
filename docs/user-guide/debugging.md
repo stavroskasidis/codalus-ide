@@ -256,7 +256,7 @@ If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set t
 The debugger reads most expressions itself, at once: names, members, indexers, method calls (generic ones too), operators, `?:`, `??`, casts, `new`, and its own names (`$exception`, `$ReturnValue`, object IDs like `$1`). What it doesn't read, it has the C# language service compile against the place you're stopped at and runs the result in your program: **lambdas and LINQ** (`orders.Where(o => o.Total > 100).Count()`), extension methods, collection and object initializers, pattern matching, string interpolation, and the rest of C#. Private members can be used, as everywhere in the debugger.
 
 - In **Visual Basic** code, expressions are Visual Basic (`names.Where(Function(n) n.Length > 3).Count()`, `If(x Is Nothing, 0, x.Length)`).
-- Compiling needs the program's project loaded in the solution. Attached to a program whose project isn't open, the debugger's own reader still works.
+- Compiling needs the program's project loaded in the solution. Attached to a program whose project isn't open, the debugger's own reader still works. Right after you open a solution, while its projects are still loading, such an expression says so: ask again in a moment, and it's compiled then.
 - A compiled expression is a small assembly loaded into your program; it stays until the program ends, and the Modules window leaves it out.
 - F# expressions aren't compiled: F# code reads C#'s subset.
 

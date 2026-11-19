@@ -25,8 +25,14 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <c>IgnoresAccessChecksTo</c> every assembly it references, which the runtime honors.
 /// </para>
 /// </summary>
-internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
+/// <param name="describeProject">What the workspace was sent for a project file and holds of it, for the "still loading" error (<see cref="WorkspaceManager.DescribeProject"/>).</param>
+/// <param name="miscellaneous">The Miscellaneous Files project, which an expression is never compiled in (<see cref="WorkspaceManager.MiscellaneousProjectId"/>).</param>
+/// <param name="stillLoading">Whether a project's inputs may still change: the solution is loading, or the project references one that isn't loaded yet (<see cref="WorkspaceManager.Loading"/>, <see cref="WorkspaceManager.IsIncomplete"/>).</param>
+internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution, Func<string?, string?>? describeProject = null, ProjectId? miscellaneous = null, Func<ProjectId, bool>? stillLoading = null)
 {
+    /// <summary>The start of every answer that says to try again once the project has loaded (the debugger's tests wait it out).</summary>
+    public const string StillLoadingMessage = "The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment.";
+
     public const string TypeName = "__CodalusExpression";
     public const string MethodName = "Evaluate";
     private const string This = "__this";
@@ -35,7 +41,17 @@ internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
     public async Task<CompileExpressionResult> CompileAsync(CompileExpressionParams parameters, CancellationToken cancellationToken)
     {
         var solution = currentSolution();
-        var documents = solution.GetDocumentIdsWithFilePath(parameters.SourcePath).Select(solution.GetDocument).OfType<Document>().ToList();
+        var all = solution.GetDocumentIdsWithFilePath(parameters.SourcePath).Select(solution.GetDocument).OfType<Document>().ToList();
+
+        // Never in Miscellaneous Files: it has the file while its project hasn't loaded, without the project's references,
+        // global usings or options, and the expression's errors were that project's. A lambda's Count wasn't found
+        // (CS1061: no implicit 'using System.Linq'; the smoke test's debug.codalus, Linux CI, run 44574066272).
+        var documents = all.Where(d => d.Project.Id != miscellaneous).ToList();
+        if (documents.Count == 0 && all.Count > 0 && stillLoading?.Invoke(all[0].Project.Id) == true)
+        {
+            return Failed(StillLoadingMessage + " (Only Miscellaneous Files has it, and the solution is still loading.)");
+        }
+
         var module = parameters.ModulePath is { Length: > 0 } path ? Path.GetFileNameWithoutExtension(path) : null;
         var document = documents.FirstOrDefault(d => module is not null && string.Equals(d.Project.AssemblyName, module, StringComparison.OrdinalIgnoreCase)
                            && (parameters.ModulePath is null || d.Project.OutputFilePath is null || SameFolder(d.Project.OutputFilePath, parameters.ModulePath)))
@@ -56,18 +72,29 @@ internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
         {
             var project = document.Project;
             var missing = project.MetadataReferences.OfType<PortableExecutableReference>().Count(r => r.FilePath is { } file && !File.Exists(file));
-            return Failed("The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment. "
-                + $"({project.Name}: {project.MetadataReferences.Count} references{(missing > 0 ? $", {missing} of them missing" : string.Empty)}; {documents.Count} of the loaded projects have the file.)");
+            var sent = describeProject?.Invoke(project.FilePath) is { } described ? $"; {described}" : string.Empty;
+            return Failed(StillLoadingMessage + " "
+                + $"({project.Name}: {project.MetadataReferences.Count} references{(missing > 0 ? $", {missing} of them missing" : string.Empty)}; {documents.Count} of the loaded projects have the file{sent}.)");
         }
 
         try
         {
-            return document.Project.Language switch
+            var result = document.Project.Language switch
             {
                 LanguageNames.CSharp => await CSharpAsync(document, parameters, cancellationToken).ConfigureAwait(false),
                 LanguageNames.VisualBasic => await VisualBasicExpressionCompiler.CompileAsync(document, parameters, Interlocked.Increment(ref _count), cancellationToken).ConfigureAwait(false),
                 _ => Failed($"{document.Project.Language} expressions can't be compiled here."),
             };
+
+            // Errors against inputs that are still coming may be theirs, not the expression's: said as such, so the
+            // expression is asked again rather than reported wrong.
+            if (result.Errors.Length > 0 && stillLoading?.Invoke(document.Project.Id) == true)
+            {
+                var sent = describeProject?.Invoke(document.Project.FilePath) is { } described ? $"; {described}" : string.Empty;
+                return Failed(StillLoadingMessage + $" ({document.Project.Name}: the solution is still loading{sent}; the compiler said: {string.Join(" ", result.Errors)})");
+            }
+
+            return result;
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException)
         {

@@ -18,9 +18,12 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
 
     private Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(params SourceBreakpoint[] breakpoints) => StartAsync(null, breakpoints);
 
-    private async Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(string[]? clientViews, params SourceBreakpoint[] breakpoints)
+    private async Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(string[]? clientViews, params SourceBreakpoint[] breakpoints) =>
+        await StartAsync(clientViews, null, breakpoints);
+
+    private async Task<(DebugAdapter Adapter, EventLog Events)> StartAsync(string[]? clientViews, Func<CompileExpressionArguments, CancellationToken, Task<CompileExpressionResponse>>? compiler, params SourceBreakpoint[] breakpoints)
     {
-        var adapter = await DebugAdapter.StartAsync(DebuggeeFixture.CodalusAdapter(), Ct);
+        var adapter = await DebugAdapter.StartAsync(DebuggeeFixture.CodalusAdapter(), Ct, compiler: compiler);
         try
         {
             var events = new EventLog(adapter);
@@ -449,5 +452,30 @@ public sealed class ClrDebuggerFeatureTests(DebuggeeFixture fixture) : IClassFix
         // And the program ends by itself: the thread it joins wasn't left frozen.
         await adapter.ContinueAsync(thread, Ct);
         Assert.Equal(15, (await events.NextAsync(DapEvents.Exited)).Body.GetProperty("exitCode").GetInt32());
+    }
+
+    /// <summary>
+    /// An expression the IDE couldn't compile yet is asked for again: the answer that its project is still loading says to
+    /// try again in a moment, and the adapter kept it for the rest of the session, so every later try got it back
+    /// (DebugCodalusTests' Visual Basic expression, two minutes of tries under load in WSL: its message said what the
+    /// language host had at the first one; docs/ci-flakes.md).
+    /// </summary>
+    [Fact]
+    public async Task An_expression_that_didnt_compile_is_compiled_again_when_asked_again()
+    {
+        var asked = 0;
+        Task<CompileExpressionResponse> Compile(CompileExpressionArguments request, CancellationToken ct) =>
+            Task.FromResult(new CompileExpressionResponse(Errors: [Interlocked.Increment(ref asked) == 1
+                ? "The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment."
+                : "CS0103: the answer of the second try."]));
+        var (adapter, events) = await StartAsync(null, Compile, new SourceBreakpoint(Line("features-loop")));
+        await using var _ = adapter;
+        var top = await TopAsync(adapter, await events.StoppedAsync());
+
+        // A lambda: the adapter's own evaluator doesn't read it, so the IDE is asked to compile it.
+        const string expression = "new[] { 1, 2, 3 }.Count(n => n > i)";
+        Assert.Contains("still loading", (await Assert.ThrowsAsync<DapException>(() => adapter.EvaluateAsync(expression, top.Id, "watch", Ct))).Message, StringComparison.Ordinal);
+        Assert.Contains("the answer of the second try", (await Assert.ThrowsAsync<DapException>(() => adapter.EvaluateAsync(expression, top.Id, "watch", Ct))).Message, StringComparison.Ordinal);
+        Assert.Equal(2, asked);
     }
 }

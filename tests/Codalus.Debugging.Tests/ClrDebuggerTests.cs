@@ -82,6 +82,49 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         }
     }
 
+    /// <summary>
+    /// In a container or on another machine the program's sources are the client's, not where the debugger runs: its
+    /// frames still name their document and line, which the client maps. Asked of the debugger's own disk, every frame
+    /// in a rootless podman container had none, and the editor never showed the stop (ContainerShellTests under WSL,
+    /// docs/ci-flakes.md). Locally a document that isn't on disk stays out, as before.
+    /// </summary>
+    [Fact]
+    public async Task Frames_name_their_document_and_line_when_the_sources_are_the_clients_though_not_on_the_debuggers_disk()
+    {
+        var line = Line("loop");
+        var away = fixture.Program + ".away";
+        File.Move(fixture.Program, away);
+        try
+        {
+            foreach (var sourcesOnClient in new[] { true, false })
+            {
+                await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr") { SourcesOnClient = sourcesOnClient }, s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.SetBreakpointsAsync(fixture.Program, [new SourceBreakpoint(line)], Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+                var stop = await events.StoppedAsync();
+                var top = (await adapter.StackTraceAsync(stop.ThreadId!.Value, 1, Ct)).StackFrames[0];
+                if (sourcesOnClient)
+                {
+                    Assert.Equal((Path.GetFileName(fixture.Program), line), (Path.GetFileName(top.Source?.Path), top.Line));
+                    Assert.Equal(fixture.Program, top.Source!.Path, ignoreCase: OperatingSystem.IsWindows());
+                }
+                else
+                {
+                    Assert.Equal((null, 0), (top.Source?.Path, top.Line));
+                }
+
+                await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            }
+        }
+        finally
+        {
+            File.Move(away, fixture.Program);
+        }
+    }
+
     [Fact]
     public async Task A_launch_stops_on_the_first_line_and_at_breakpoints_evaluates_steps_and_ends_with_its_exit_code()
     {

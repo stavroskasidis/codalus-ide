@@ -760,6 +760,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         _shell.Workbench.Context.Set("focusedView", view);
         _shell.Workbench.Context.Set("editorTextFocus", view == "textFile");
 
+        // A text box has the keyboard (a tool window's search box…): its keys edit its text, not the view's items (#483, #484).
+        _shell.Workbench.Context.Set("inputFocus", source is TextBox);
+
         // A property grid has the keyboard (the Properties window's, or the collection editor's in a designer): F4 opens its drop-down (#68).
         _shell.Workbench.Context.Set("propertyGridFocus", source?.FindAncestorOfType<PropertyGridView>(includeSelf: true) is not null);
         _shell.Notifications.SuppressToasts = view == BuiltIns.NotificationsWindow;

@@ -253,10 +253,11 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>
     /// The Codalus debugger's launch on another machine: the program, its arguments and environment as they are there.
-    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally.
+    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally. The
+    /// sources are this machine's (<see cref="NetFxDebugArguments.SourcesOnClient"/>).
     /// </summary>
     private NetFxDebugArguments RemoteCoreClrArguments(LaunchArguments arguments) =>
-        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes);
+        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes) { SourcesOnClient = true };
 
     /// <summary>
     /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
@@ -1090,7 +1091,7 @@ public sealed class DebugService : IAsyncDisposable
             await StartAsync(
                 ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
                 adapter => remote.Adapter.IsCodalus
-                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId) with { SourcesOnClient = true }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                     : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
                 [process],

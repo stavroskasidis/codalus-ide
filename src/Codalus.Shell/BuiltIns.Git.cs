@@ -48,6 +48,9 @@ internal static partial class BuiltIns
     /// <summary>Whether Solution Explorer shows the classic IDE's source control glyphs over its files' icons (#357).</summary>
     public const string ExplorerGlyphsSetting = "git.solutionExplorer.showGlyphs";
 
+    /// <summary>The Git Changes window's branch drop-down: its branches in folders by their names' <c>/</c> parts (the default), or a list.</summary>
+    public const string BranchPickerViewSetting = "git.branchPicker.view";
+
     public static IReadOnlyList<SettingDescriptor> GitSettings()
     {
         var shell = ContributionSource.Shell;
@@ -120,6 +123,16 @@ internal static partial class BuiltIns
                 Description = "Mark each file, project and solution in Solution Explorer with its state in Git, as the classic IDE does: a lock when it is committed and unchanged, a check mark when it is changed, a plus when it is new, and an exclamation mark when it has a conflict.",
                 Scope = SettingScope.User,
                 Order = 27,
+            },
+            SettingDescriptor.Create(BranchPickerViewSetting, "\"tree\"", SettingType.String, shell) with
+            {
+                Title = "Branch Drop-Down View",
+                Category = "Source Control",
+                Description = "How the Git Changes window's branch drop-down shows the branches: in folders by the parts of their names (feature/sign-in under feature), or as a list. The toggle beside its search box changes it too.",
+                Enum = [GitBranchPickerViewModel.ViewTree, GitBranchPickerViewModel.ViewList],
+                EnumDescriptions = ["In folders by the parts of their names before each /", "A list, the current branch first"],
+                Scope = SettingScope.User,
+                Order = 28,
             },
         ];
     }

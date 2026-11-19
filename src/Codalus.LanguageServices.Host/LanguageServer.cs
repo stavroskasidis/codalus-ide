@@ -37,12 +37,16 @@ internal sealed class LanguageServer : IAsyncDisposable
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
         _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
-        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution);
+        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution, _workspace.DescribeProject, _workspace.MiscellaneousProjectId,
+            project => _workspace.Loading || _workspace.IsIncomplete(project));
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
         _workspace.Log += (_, message) => Log(MessageType.Warning, message);
         _connection.Slow += (_, message) => Log(MessageType.Warning, message);
+        // A notification that fails (a projects/update among them) left the workspace as it was without a word: said
+        // now, in the Language Services channel.
+        _connection.HandlerFailed += (_, ex) => Log(MessageType.Error, "A notification failed: " + ex);
         _workspace.FileReloaded += (_, _) => _diagnostics.ScheduleBackground();
     }
 
