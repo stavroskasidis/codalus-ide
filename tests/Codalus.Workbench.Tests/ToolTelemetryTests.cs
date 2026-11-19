@@ -126,6 +126,7 @@ public sealed class ToolTelemetryTests
         ["Codalus.Remote.Server/ServerDaemon.cs"] = "the server's own daemon, which starts terminals",
         ["Codalus.Remote.Server/ServerPorts.cs"] = "lsof, to list ports",
         ["Codalus.Shell/Infrastructure/SmokeTest.CommandSweep.cs"] = "git, for the smoke test's fixture",
+        ["Codalus.Shell/Infrastructure/SmokeTest.Diagnostics.cs"] = "ps and dotnet-stack, for a failed step's diagnostics; CI sets the variables for the run",
         ["Codalus.Shell/Infrastructure/SmokeTest.Headless.cs"] = "this app, headless, as an agent starts it; CI sets the variables for the run",
         ["Codalus.Shell/Infrastructure/SmokeTest.cs"] = "the smoke test's programs and git; CI sets the variables for the run",
         ["Codalus.Shell/Infrastructure/Updates.cs"] = "gh, for a token",
