@@ -57,6 +57,8 @@ A command given a path (stage, discard, the diff, the merge editor, Add to .giti
 
 The footer's New Branch… creates a branch in every repository. With all shown, Git → Switch Branch and the status bar's branch item open this drop-down.
 
+Amended 2026-11-19 (the maintainer's request for the drop-down's tabs and tree): the drop-down has Local and Remote tabs. With all shown, **Local** has Common branches, then each repository under "Name (branch)" with its local branches; **Remote** has each repository with a remote and its remote branches (under each remote's name when it has several). There is no All branches heading: in the tree view (the default) Common branches and each repository are groups that expand and collapse, their branches in folders by their names' `/` parts; in the list view they are headers.
+
 ## Consequences
 
 - One message and one click commit a change that spans repositories. Every repository's changes are always in sight.

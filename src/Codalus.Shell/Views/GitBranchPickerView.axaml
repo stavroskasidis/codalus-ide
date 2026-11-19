@@ -3,18 +3,19 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Codalus.Shell.ViewModels"
              xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:views="using:Codalus.Shell.Views"
              x:Class="Codalus.Shell.Views.GitBranchPickerView"
              x:DataType="vm:GitBranchPickerViewModel">
   <UserControl.Styles>
-    <!-- Rows of 22 px (Shell.Size.Row); a header is muted and semibold, and never selected. -->
+    <!-- Rows of 22 px (Shell.Size.Row); a header is muted and semibold, and never selected; a folder and a branch are. -->
     <Style Selector="ListBox#List ListBoxItem" x:DataType="vm:GitBranchRow">
       <Setter Property="MinHeight" Value="{DynamicResource Shell.Size.Row}" />
       <Setter Property="Height" Value="{DynamicResource Shell.Size.Row}" />
       <Setter Property="Padding" Value="8,0,6,0" />
       <Setter Property="HorizontalContentAlignment" Value="Stretch" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="Focusable" Value="{Binding IsBranch}" />
-      <Setter Property="IsHitTestVisible" Value="{Binding IsBranch}" />
+      <Setter Property="Focusable" Value="{Binding IsSelectable}" />
+      <Setter Property="IsHitTestVisible" Value="{Binding IsSelectable}" />
       <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
     </Style>
     <!-- ⋯ keeps its 20 px in every row, so the chips line up; it shows on the row under the pointer or selected (question 6). -->
@@ -27,14 +28,36 @@
   </UserControl.Styles>
   <Border x:Name="Frame" Classes="overlay" Width="340" MaxHeight="420" Padding="0" ClipToBounds="True" AutomationProperties.Name="{l:T gitBranches.branches}">
     <DockPanel>
-      <!-- The search box has the focus (B1); the count of the branches shown in it. -->
-      <Border DockPanel.Dock="Top" Padding="6,6,6,4">
+      <!-- The search box has the focus (B1); the count of the branches shown in it. Beside it, the list view's toggle
+           (off: the tree view, the default; git.branchPicker.view keeps it). -->
+      <DockPanel DockPanel.Dock="Top" Margin="6,6,6,2">
+        <ToggleButton x:Name="ViewToggle" DockPanel.Dock="Right" Classes="toolbar icon" controls:ButtonIcon.Kind="list" IsChecked="{Binding IsListView}" Margin="4,0,0,0"
+                      VerticalAlignment="Center" ToolTip.Tip="{Binding ViewToggleTip}" AutomationProperties.Name="{l:T gitBranches.listView}" />
         <TextBox x:Name="Search" Text="{Binding Query}" PlaceholderText="{l:T gitBranches.searchBranches}" AutomationProperties.Name="{l:T gitBranches.searchBranches}">
           <TextBox.InnerRightContent>
             <TextBlock Classes="muted small" Text="{Binding CountText}" VerticalAlignment="Center" Margin="0,0,6,0" />
           </TextBox.InnerRightContent>
         </TextBox>
-      </Border>
+      </DockPanel>
+      <!-- The tabs: Local and Remote, each with the count of its branches the search shows; every open starts on Local. -->
+      <TabStrip x:Name="Tabs" DockPanel.Dock="Top" Classes="viewTabs" SelectedIndex="{Binding TabIndex}" Margin="0,0,0,2" AutomationProperties.Name="{l:T gitBranches.branchKind}">
+        <TabStripItem AutomationProperties.Name="{Binding LocalTabName}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T gitBranches.local}" VerticalAlignment="Center" />
+            <Border Classes="chip" VerticalAlignment="Center">
+              <TextBlock Text="{Binding LocalCount}" />
+            </Border>
+          </StackPanel>
+        </TabStripItem>
+        <TabStripItem AutomationProperties.Name="{Binding RemoteTabName}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{l:T gitBranches.remote}" VerticalAlignment="Center" />
+            <Border Classes="chip" VerticalAlignment="Center">
+              <TextBlock Text="{Binding RemoteCount}" />
+            </Border>
+          </StackPanel>
+        </TabStripItem>
+      </TabStrip>
       <!-- The first open (B4): an indeterminate bar under the search box. -->
       <ProgressBar DockPanel.Dock="Top" IsIndeterminate="True" IsVisible="{Binding IsLoading}" Height="2" MinHeight="2" Margin="6,0" />
       <!-- The banner: HEAD detached, an operation in progress, where a branch is checked out, what Update found (B13-B15, B25, B26). -->
@@ -73,15 +96,29 @@
           <TextBlock Classes="muted small" Text="{Binding ErrorDetail}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ErrorDetail}" Margin="22,0,0,0" />
           <Button x:Name="TryAgain" Classes="iconText compact" controls:ButtonIcon.Kind="refresh" Content="{l:T gitBranches.tryAgain}" HorizontalAlignment="Left" Margin="22,0,0,0" />
         </StackPanel>
-        <!-- Nothing matches (B3). -->
+        <!-- Nothing on the tab matches (B3); the Remote tab of a repository without a remote (B17). -->
         <TextBlock Classes="muted" Margin="12,16" TextWrapping="Wrap" Text="{Binding EmptyText}" IsVisible="{Binding IsEmpty}" />
-        <ListBox x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" Padding="0,2"
-                 AutomationProperties.Name="{l:T gitBranches.branches}">
-          <ListBox.ItemTemplate>
+        <TextBlock Classes="muted" Margin="12,16" TextWrapping="Wrap" Text="{Binding NoRemotesText}" IsVisible="{Binding IsNoRemotes}" />
+        <!-- The rows: a flattened tree (M57: a screen reader reads it as one), or the list's headers and branches. -->
+        <views:TreeRowsList x:Name="List" ItemsSource="{Binding Rows}" SelectedItem="{Binding Selected}" Background="Transparent" Padding="0,2"
+                            AutoScrollToSelectedItem="False" ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="{l:T gitBranches.branches}">
+          <views:TreeRowsList.ItemTemplate>
             <DataTemplate x:DataType="vm:GitBranchRow">
               <Panel Margin="{Binding Indent}">
                 <TextBlock Text="{Binding HeaderText}" IsVisible="{Binding IsHeader}" Classes="muted" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <!-- A folder or a group of the tree view: a click (or its chevron, Enter, Right, Left) expands and collapses it. -->
+                <DockPanel IsVisible="{Binding IsFolder}" Background="Transparent">
+                  <Border DockPanel.Dock="Left" Classes="chevron" Width="16" Height="18" Background="Transparent" VerticalAlignment="Center">
+                    <controls:Icon Kind="{Binding Chevron}" Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <controls:Icon DockPanel.Dock="Left" Kind="{Binding FolderIcon}" Margin="0,0,6,0" VerticalAlignment="Center" />
+                  <!-- Lined up with the branches' chips, left of their ⋯'s place. -->
+                  <TextBlock DockPanel.Dock="Right" Classes="muted" Text="{Binding CountText}" Margin="6,0,24,0" VerticalAlignment="Center" />
+                  <controls:HighlightedText Source="{Binding Name}" Highlights="{Binding Highlights}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding Name}" />
+                </DockPanel>
                 <DockPanel IsVisible="{Binding IsBranch}" Background="Transparent">
+                  <!-- In the tree view, a branch keeps the chevron's place, so its check lines up with a folder's icon. -->
+                  <Border DockPanel.Dock="Left" Width="16" IsVisible="{Binding InTree}" />
                   <controls:Icon DockPanel.Dock="Left" Kind="check" Opacity="{Binding CheckOpacity}" Margin="0,0,6,0" VerticalAlignment="Center" />
                   <Button DockPanel.Dock="Right" Classes="toolbar icon rowMore" Width="20" Height="20" MinWidth="20" Padding="0" Margin="4,0,0,0" controls:ButtonIcon.Kind="more"
                           Click="OnMore" ToolTip.Tip="{l:T gitBranches.moreActions}" AutomationProperties.Name="{l:T gitBranches.moreActions}" />
@@ -97,8 +134,8 @@
                 </DockPanel>
               </Panel>
             </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
+          </views:TreeRowsList.ItemTemplate>
+        </views:TreeRowsList>
       </Panel>
     </DockPanel>
   </Border>

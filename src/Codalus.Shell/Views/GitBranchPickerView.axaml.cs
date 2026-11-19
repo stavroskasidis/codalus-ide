@@ -10,15 +10,33 @@ namespace Codalus.Shell.Views;
 
 /// <summary>
 /// The branch drop-down's content (#23, D38: B1-B26): the search box has the focus and Down moves into the list; a click
-/// on a branch or Enter checks it out, as in the classic IDE's drop-down; ⋯ (on the row under the pointer or selected),
-/// right-click, Shift+F10 and the Menu key open its menu over the drop-down, which stays open under it (B7); F2 and Delete
-/// in the list rename and delete (Backspace, Delete and F2 edit the search text in the box); Escape closes it.
+/// on a branch or Enter checks it out, as in the classic IDE's drop-down; a click on a folder, or Enter, expands or
+/// collapses it, Right and Left expand and collapse it (with Ctrl, every folder under it too) and Left on a branch goes to
+/// its folder; ⋯ (on the row under the pointer or selected), right-click, Shift+F10 and the Menu key open a branch's menu
+/// over the drop-down, which stays open under it (B7); F2 and Delete in the list rename and delete (Backspace, Delete and
+/// F2 edit the search text in the box); Escape closes it. As it opens, the current branch is scrolled into view.
 /// </summary>
 public sealed partial class GitBranchPickerView : UserControl
 {
+    private GitBranchPickerViewModel? _attached;
+
     public GitBranchPickerView()
     {
         InitializeComponent();
+        List.ExpandRow = (row, expanded) => ViewModel?.SetExpanded(row, expanded);
+        DataContextChanged += (_, _) =>
+        {
+            if (_attached is not null)
+            {
+                _attached.RevealRequested -= OnRevealRequested;
+            }
+
+            _attached = ViewModel;
+            if (_attached is not null)
+            {
+                _attached.RevealRequested += OnRevealRequested;
+            }
+        };
         Search.AddHandler(KeyDownEvent, OnSearchKeyDown, RoutingStrategies.Tunnel);
         List.AddHandler(KeyDownEvent, OnListKeyDown, RoutingStrategies.Tunnel);
         List.ContextRequested += OnContextRequested;
@@ -58,7 +76,11 @@ public sealed partial class GitBranchPickerView : UserControl
                 _ = vm.Checkout?.Invoke(branch);
                 e.Handled = true;
                 break;
-            case Key.Enter when vm.IsEmpty:
+            case Key.Enter when vm.Selected is { IsFolder: true } folder:
+                vm.SetExpanded(folder, !folder.IsExpanded);
+                e.Handled = true;
+                break;
+            case Key.Enter when vm.IsEmpty && vm.FooterName is not null:
                 _ = vm.NewBranch?.Invoke(vm.FooterName);
                 e.Handled = true;
                 break;
@@ -78,15 +100,30 @@ public sealed partial class GitBranchPickerView : UserControl
 
         var mac = OperatingSystem.IsMacOS();
         var branch = vm.Selected?.Branch;
+        var folder = vm.Selected is { IsFolder: true } f ? f : null;
+        var ctrl = e.KeyModifiers == KeyModifiers.Control;
         switch (e.Key)
         {
             case Key.Enter when branch is not null:
                 _ = vm.Checkout?.Invoke(branch);
                 break;
+            case Key.Enter when folder is not null:
+                Expand(folder, !folder.IsExpanded, under: ctrl);
+                break;
+            case Key.Right when folder is not null && (ctrl || !folder.IsExpanded):
+                Expand(folder, true, under: ctrl);
+                break;
+            case Key.Left when folder is not null && (ctrl || folder.IsExpanded):
+                Expand(folder, false, under: ctrl);
+                break;
+            case Key.Left when vm.Selected is { Depth: > 0 } row && e.KeyModifiers == KeyModifiers.None && ParentOf(vm, row) is { } parent:
+                vm.Selected = parent;
+                FocusSelected();
+                break;
             case Key.Escape:
                 CloseRequested?.Invoke(this, EventArgs.Empty);
                 break;
-            case Key.Up when vm.Rows.FirstOrDefault(r => r.IsBranch) == vm.Selected:
+            case Key.Up when vm.Rows.FirstOrDefault(r => r.IsSelectable) == vm.Selected:
                 Search.Focus();
                 break;
             case Key.Up:
@@ -115,6 +152,50 @@ public sealed partial class GitBranchPickerView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>Expands or collapses a folder (with <paramref name="under"/>, every folder under it), the focus kept on its row.</summary>
+    private void Expand(GitBranchRow folder, bool expanded, bool under)
+    {
+        if (ViewModel is not { } vm)
+        {
+            return;
+        }
+
+        if (under)
+        {
+            vm.SetExpandedUnder(folder, expanded);
+        }
+        else
+        {
+            vm.SetExpanded(folder, expanded);
+        }
+
+        FocusSelected();
+    }
+
+    /// <summary>The folder a row is in: the row above it one level up.</summary>
+    private static GitBranchRow? ParentOf(GitBranchPickerViewModel vm, GitBranchRow row)
+    {
+        for (var i = vm.Rows.IndexOf(row) - 1; i >= 0; i--)
+        {
+            if (vm.Rows[i].Depth < row.Depth)
+            {
+                return vm.Rows[i].IsFolder ? vm.Rows[i] : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>The current branch's row as the drop-down opens: in view (in the tree, it can be under many folders).</summary>
+    private void OnRevealRequested(GitBranchRow row) =>
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ViewModel?.Rows.Contains(row) == true)
+            {
+                List.ScrollIntoView(row);
+            }
+        }, DispatcherPriority.Loaded);
+
     private void FocusSelected()
     {
         if (ViewModel?.Selected is { } row)
@@ -129,13 +210,25 @@ public sealed partial class GitBranchPickerView : UserControl
     private static GitBranchRow? RowAt(object? source) =>
         (source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true)?.DataContext as GitBranchRow;
 
-    /// <summary>A click on a branch checks it out (question 6); not a click on its ⋯.</summary>
+    /// <summary>A click on a branch checks it out (question 6), not a click on its ⋯; on a folder, it expands or collapses it.</summary>
     private void OnTapped(object? sender, TappedEventArgs e)
     {
-        if (RowAt(e.Source) is { Branch: { } branch } && (e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is null && ViewModel is { } vm)
+        if ((e.Source as Visual)?.FindAncestorOfType<Button>(includeSelf: true) is not null || ViewModel is not { } vm)
         {
-            _ = vm.Checkout?.Invoke(branch);
-            e.Handled = true;
+            return;
+        }
+
+        switch (RowAt(e.Source))
+        {
+            case { Branch: { } branch }:
+                _ = vm.Checkout?.Invoke(branch);
+                e.Handled = true;
+                break;
+            case { IsFolder: true } folder:
+                vm.Selected = folder;
+                Expand(folder, !folder.IsExpanded, under: false);
+                e.Handled = true;
+                break;
         }
     }
 
