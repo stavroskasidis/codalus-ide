@@ -288,7 +288,7 @@ public sealed class ExpressionCompilerTests
             workspace.UpdateProjects([data]);
 
             var described = workspace.DescribeProject(project);
-            Assert.Matches(@"^2 design-time build\(s\) received, the last \d+ s ago: 5 arguments, 2 references \(1 on disk now\); the workspace has 1 metadata and 0 project references$", described);
+            Assert.Matches(@"^2 design-time build\(s\) received, the last \d+ s ago: 5 arguments, 2 references \(1 on disk now\); the workspace has 1 metadata and 0 project references; this host has run \d+ s and was sent 2 update\(s\) of projects$", described);
 
             // The still-loading error carries it.
             var shop = workspace.CurrentSolution.Projects.Single(p => p.Name == "Shop");

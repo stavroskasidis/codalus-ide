@@ -274,7 +274,16 @@ public sealed class LanguageService : IAsyncDisposable
 
         var client = new LanguageHostClient(descriptor.DisplayName + " language service", launch, policy: _policy)
         {
-            ProjectsProvider = () => [.. _projects.Values.Where(p => descriptor.TakesProjects(p.Language))],
+            ProjectsProvider = () =>
+            {
+                List<ProjectData> replayed = [.. _projects.Values.Where(p => descriptor.TakesProjects(p.Language))];
+                if (descriptor.ProjectLanguage is not null)
+                {
+                    Record($"{languageId}: restarted, given {Describe(replayed)}");
+                }
+
+                return replayed;
+            },
             LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
             OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(Reopened)],
             InitializationOptions = descriptor.InitializationOptions,
@@ -308,6 +317,11 @@ public sealed class LanguageService : IAsyncDisposable
         client.Log += (_, line) => Log?.Invoke(this, $"[{languageId}] {line}");
         client.Crashed += (_, e) =>
         {
+            if (descriptor.ProjectLanguage is not null)
+            {
+                Record($"{languageId}: crashed (exit code {e.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}, {(e.WillRestart ? "restarts" : "doesn't restart")}): {e.Error?.GetType().Name} {e.Error?.Message}");
+            }
+
             if (!e.WillRestart)
             {
                 Diagnostics.Clear(languageId);
@@ -331,6 +345,11 @@ public sealed class LanguageService : IAsyncDisposable
         var stage = "starting the host";
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         using var watchdog = new Timer(_ => Log?.Invoke(this, $"[{languageId}] Still {stage} after {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0} s."), null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30));
+        if (descriptor.ProjectLanguage is not null)
+        {
+            Record($"{languageId}: starting");
+        }
+
         try
         {
             await client.StartAsync(_lifetime.Token).ConfigureAwait(false);
@@ -344,6 +363,7 @@ public sealed class LanguageService : IAsyncDisposable
             {
                 var projects = _projects.Values.Where(p => descriptor.TakesProjects(p.Language)).ToList();
                 var loading = IsLoading;
+                Record($"{languageId}: started, given {Describe(projects)}{(loading ? " (loading)" : string.Empty)}");
                 if (projects.Count > 0 || loading)
                 {
                     stage = "sending the projects";
@@ -637,6 +657,34 @@ public sealed class LanguageService : IAsyncDisposable
         _solutions.Solution is { Trusted: true }
         && (_solutions.Progress is not { Completed: true } || _solutions.DesignTimeProgress is not { Completed: true } || !_pendingInputs.IsEmpty);
 
+    private readonly ConcurrentQueue<string> _projectHistory = new();
+    private readonly long _created = System.Diagnostics.Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// What happened to the projects on their way to the language hosts, oldest first (failure messages): each design-time
+    /// build's result as it came, what each flush sent or removed and to which host, the hosts' starts, crashes and
+    /// restarts with the projects each was given, each line with the seconds since this service was made. A Visual Basic
+    /// project's workspace once held the inputs from before the restore two minutes after the stop, though the build host
+    /// had sent the ones from after it (DebugCodalusTests under load in WSL, docs/ci-flakes.md).
+    /// </summary>
+    public string ProjectHistory() => string.Join("\n", _projectHistory);
+
+    private void Record(string line)
+    {
+        _projectHistory.Enqueue(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{System.Diagnostics.Stopwatch.GetElapsedTime(_created).TotalSeconds:0.0} s {line}"));
+        while (_projectHistory.Count > 400 && _projectHistory.TryDequeue(out _))
+        {
+        }
+    }
+
+    private static string Describe(IEnumerable<ProjectData> projects) =>
+        string.Join(", ", projects.Select(p => $"{Path.GetFileName(p.Path)} ({References(p.Arguments)} references)"));
+
+    /// <summary>The references of a compiler command line: csc's has an option for each, vbc's one with all of them, comma-separated.</summary>
+    private static int References(IEnumerable<string> arguments) =>
+        arguments.Where(a => a.StartsWith("/reference:", StringComparison.OrdinalIgnoreCase))
+            .Sum(a => a["/reference:".Length..].Split(',', StringSplitOptions.RemoveEmptyEntries).Length);
+
     private void OnCompilerInputs(object? sender, CompilerInputsInfo inputs)
     {
         if (_registry.ForProjectLanguage(inputs.Language) is null)
@@ -644,7 +692,9 @@ public sealed class LanguageService : IAsyncDisposable
             return;
         }
 
-        _pendingInputs[inputs.Path] = new PendingInputs(inputs, Volatile.Read(ref _solutionEpoch));
+        var epoch = Volatile.Read(ref _solutionEpoch);
+        Record($"inputs {Path.GetFileName(inputs.Path)}: {inputs.State}, {References(inputs.Arguments)} references (solution {epoch})");
+        _pendingInputs[inputs.Path] = new PendingInputs(inputs, epoch);
         ScheduleFlush();
     }
 
@@ -724,10 +774,22 @@ public sealed class LanguageService : IAsyncDisposable
         var batch = new List<CompilerInputsInfo>();
         foreach (var path in _pendingInputs.Keys)
         {
-            if (_pendingInputs.TryRemove(path, out var pending) && pending.Epoch == epoch)
+            if (_pendingInputs.TryRemove(path, out var pending))
             {
-                batch.Add(pending.Inputs);
+                if (pending.Epoch == epoch)
+                {
+                    batch.Add(pending.Inputs);
+                }
+                else
+                {
+                    Record($"flush: dropped {Path.GetFileName(path)}'s inputs of solution {pending.Epoch} (now {epoch})");
+                }
             }
+        }
+
+        if (gone.Count > 0)
+        {
+            Record($"flush: the solution no longer has {Describe(gone)}");
         }
 
         var loading = IsLoading;
@@ -759,23 +821,36 @@ public sealed class LanguageService : IAsyncDisposable
                 var isNew = !_clients.ContainsKey(descriptor.LanguageId);
                 if (isNew && updated.Count == 0)
                 {
+                    if (removed.Count > 0)
+                    {
+                        Record($"flush {descriptor.LanguageId}: not started, nothing to remove from it ({string.Join(", ", removed.Select(Path.GetFileName))})");
+                    }
+
                     continue;
                 }
 
                 if (await ClientAsync(descriptor.LanguageId).ConfigureAwait(false) is not { } client || isNew)
                 {
+                    Record($"flush {descriptor.LanguageId}: {(isNew ? "started now, with what it has then" : "no client")}: {Describe(updated)}");
                     continue;
                 }
 
                 if (removed.Count > 0)
                 {
+                    Record($"flush {descriptor.LanguageId}: removes {string.Join(", ", removed.Select(Path.GetFileName))}{(client.IsRunning ? string.Empty : " (not running: dropped)")}");
                     await client.RemoveProjectsAsync(removed, _lifetime.Token).ConfigureAwait(false);
+                }
+
+                if (updated.Count > 0)
+                {
+                    Record($"flush {descriptor.LanguageId}: updates {Describe(updated)}{(client.IsRunning ? string.Empty : " (not running: dropped)")}");
                 }
 
                 await client.UpdateProjectsAsync(updated, _lifetime.Token, loading).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is JsonRpcConnectionLostException or OperationCanceledException or InvalidOperationException)
             {
+                Record($"flush {descriptor.LanguageId}: {ex.GetType().Name}: {ex.Message}");
             }
         }
     }

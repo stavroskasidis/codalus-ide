@@ -221,8 +221,9 @@ internal sealed class WorkspaceManager : IDisposable
             var metadata = project?.MetadataReferences.Count ?? 0;
             var projects = project?.ProjectReferences.Count() ?? 0;
             var ago = (DateTime.UtcNow - entry.Updated).TotalSeconds;
+            var running = (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds;
             return string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                $"{entry.Updates} design-time build(s) received, the last {ago:0} s ago: {arguments} arguments, {references} references ({onDisk} on disk now); the workspace has {metadata} metadata and {projects} project references");
+                $"{entry.Updates} design-time build(s) received, the last {ago:0} s ago: {arguments} arguments, {references} references ({onDisk} on disk now); the workspace has {metadata} metadata and {projects} project references; this host has run {running:0} s and was sent {_updates} update(s) of projects");
         }
     }
 
@@ -273,8 +274,11 @@ internal sealed class WorkspaceManager : IDisposable
 
     // ------------------------------------------------------------------ projects
 
+    private int _updates;
+
     public void UpdateProjects(IReadOnlyList<ProjectData> projects)
     {
+        Interlocked.Increment(ref _updates);
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         TimeSpan parsing = default, applying = default, referencing = default;
 

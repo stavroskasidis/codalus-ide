@@ -1860,7 +1860,18 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
 
             // A lambda: the C# language host compiles it, and the program runs it.
-            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            // What the C# host was sent comes with a failure: once, on Linux CI, the lambda's Count wasn't found (CS1061;
+            // run 44574066272, docs/ci-flakes.md).
+            Codalus.Debugging.EvaluateResponse counted;
+            try
+            {
+                counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            }
+            catch (Codalus.Debugging.DapException ex)
+            {
+                throw new SmokeFailure($"An expression with a lambda didn't evaluate: {ex.Message}\nThe projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}");
+            }
+
             Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
 
             // The machine's side of the stopped frame.

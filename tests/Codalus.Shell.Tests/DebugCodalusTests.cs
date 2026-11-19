@@ -26,11 +26,13 @@ public sealed class DebugCodalusTests
     {
         var projects = string.Join("; ", f.Shell.Solutions.Projects.Keys.Select(path => Path.GetFileName(path) + ": " + (f.Shell.Solutions.CompilerInputs.TryGetValue(path, out var i)
             ? $"{i.State}{(i.Error is { } error ? $" '{error[..Math.Min(error.Length, 300)]}'" : string.Empty)}, {References(i.Arguments)} references, {i.TargetFramework}"
-            : "no compiler inputs")));
+            : "no compiler inputs")
+            + (f.Shell.Languages.Project(path) is { } sent ? $" (the language hosts' {References(sent.Arguments)})" : " (not the language hosts')")));
         var channels = string.Join('\n', f.Shell.Workbench.Output.Channels.Select(c => c.GetText() is var text && text.Length > 3000
             ? $"Output '{c.Name}' (the last 3000 characters):\n{text[^3000..]}"
             : $"Output '{c.Name}':\n{text}"));
-        return $"{ex.Message}\nThe solution's projects: {projects}. The restore {f.Shell.Solutions.RestoreState}.\n{channels}";
+        return $"{ex.Message}\nThe solution's projects: {projects}. The restore {f.Shell.Solutions.RestoreState}.\n"
+               + $"The projects' way to the language hosts:\n{f.Shell.Languages.ProjectHistory()}\nThe language hosts: {string.Join("; ", f.Shell.Languages.Describe())}\n{channels}";
     }
 
     /// <summary>
