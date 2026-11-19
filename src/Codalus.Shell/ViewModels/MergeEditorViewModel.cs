@@ -703,6 +703,7 @@ public sealed class MergeEditorViewModel : ObservableObject
                 @base = string.Empty;
             }
 
+            @base = Reindent(@base, conflict.Ours, conflict.Theirs);
             var block = new MergeConflictBlock(this, i, conflict, @base, currentRanges[i], incomingRanges[i]) { ResultStart = display.Length, ResultLength = @base.Length };
             _blocks.Add(block);
             display.Append(@base);
@@ -711,6 +712,91 @@ public sealed class MergeEditorViewModel : ObservableObject
 
         display.Append(result, previous, result.Length - previous);
         return (display.ToString(), current, incoming);
+    }
+
+    /// <summary>
+    /// A conflict's base text in the indentation of the code around it (ADR 0020, 2026-11-18): when a side re-indented
+    /// a base line (its line is the same without whitespace), the line takes that side's indentation, the current side's
+    /// first, as the merge takes a re-indent; a line neither side still has moves as its nearest such line did. So the
+    /// base's lines sit level with the lines around them when a branch moved the block into a new element.
+    /// </summary>
+    internal static string Reindent(string @base, string ours, string theirs)
+    {
+        if (@base.Length == 0)
+        {
+            return @base;
+        }
+
+        var lines = SplitKeepingEnds(@base);
+        var toOurs = IndentPairs(lines, SplitKeepingEnds(ours));
+        var toTheirs = IndentPairs(lines, SplitKeepingEnds(theirs));
+        var indents = new string?[lines.Count];
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var own = Indent(lines[i]);
+            indents[i] = toOurs[i] is { } o && o != own ? o
+                : toTheirs[i] is { } t && t != own ? t
+                : toOurs[i] is not null || toTheirs[i] is not null ? own
+                : null;
+        }
+
+        var text = new StringBuilder(@base.Length);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            var own = Indent(line);
+            var indent = indents[i] ?? Shifted(i, own);
+            text.Append(line.Trim().Length == 0 ? line : indent + line[own.Length..]);
+        }
+
+        return text.ToString();
+
+        // A line no side still has: the change in indentation of the nearest line one has, above it, else below it.
+        string Shifted(int i, string own)
+        {
+            for (var step = -1; step <= 1; step += 2)
+            {
+                for (var j = i + step; j >= 0 && j < lines.Count; j += step)
+                {
+                    if (indents[j] is { } moved)
+                    {
+                        var was = Indent(lines[j]);
+                        return own.StartsWith(was, StringComparison.Ordinal) ? moved + own[was.Length..] : own;
+                    }
+                }
+            }
+
+            return own;
+        }
+    }
+
+    /// <summary>For each base line, the indentation of the side's line that is the same without whitespace, or null.</summary>
+    private static string?[] IndentPairs(List<string> @base, List<string> side)
+    {
+        var pairs = new string?[@base.Count];
+        foreach (var op in LineDiff.Diff([.. @base.Select(KeyOf)], [.. side.Select(KeyOf)]))
+        {
+            if (op.Kind == ' ' && KeyOf(@base[op.OldIndex]).Length > 0)
+            {
+                pairs[op.OldIndex] = Indent(side[op.NewIndex]);
+            }
+        }
+
+        return pairs;
+
+        static string KeyOf(string line) => LineDiff.WithoutWhitespace(line);
+    }
+
+    /// <summary>A line's leading spaces and tabs.</summary>
+    private static string Indent(string line)
+    {
+        var length = 0;
+        while (length < line.Length && line[length] is ' ' or '\t')
+        {
+            length++;
+        }
+
+        return line[..length];
     }
 
     /// <summary>The base lines both sides' blocks map to (from the first one's start to the last one's end), or null.</summary>
@@ -1010,8 +1096,9 @@ public sealed class MergeEditorViewModel : ObservableObject
     // ------------------------------------------------------------------ changed words
 
     /// <summary>
-    /// The changed words of a source pane's 0-based line (as the diff view marks them: a character diff widened to whole
-    /// words), where the line is in a conflict's block and paired with a line of the other side's block; none elsewhere.
+    /// The changed words of a source pane's 0-based line (<see cref="WordDiff.TokenRanges"/>: whole tokens, whitespace left
+    /// out, so a re-indent marks nothing), where the line is in a conflict's block and paired with a line of the other
+    /// side's block (lines compared without their whitespace); none elsewhere.
     /// </summary>
     public IReadOnlyList<(int Start, int Length)> ChangedWordsAt(MergeSide side, int line) =>
         _changedWords[(int)side].TryGetValue(line, out var ranges) ? ranges : [];
@@ -1032,9 +1119,9 @@ public sealed class MergeEditorViewModel : ObservableObject
 
             var found = starts.BinarySearch(block.RangeIn(side).Start);
             var first = found >= 0 ? found : ~found - 1;
-            foreach (var row in DiffRows.Align(LineDiff.Diff(theirs, mine)))
+            foreach (var row in DiffRows.Align(LineDiff.Diff([.. theirs.Select(LineDiff.WithoutWhitespace)], [.. mine.Select(LineDiff.WithoutWhitespace)])))
             {
-                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.Ranges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
+                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.TokenRanges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
                 {
                     words[first + n - 1] = ranges;
                 }
