@@ -132,8 +132,17 @@ public sealed class XamlPreviewerTests(AvaloniaFixture avalonia, ITestOutputHelp
         var xaml = await File.ReadAllTextAsync(MainWindow, Ct);
         var started = Stopwatch.StartNew();
         await using var session = await StartAsync();
+        var sessionStart = started.Elapsed;
         var first = await session.UpdateXamlAsync(xaml, avalonia.AppDll, "/Views/MainWindow.axaml", s_timeout, Ct);
         var firstFrame = started.Elapsed;
+
+        // Where a first frame's time went: the session's start (the previewer host started and connected) and the first
+        // update's answer (the app's assemblies loaded, the XAML loaded, laid out and rendered); with the session's recent
+        // output, so a slow first frame says which (a 26.6 s build and an 18 s first frame on a loaded Mac: docs/ci-flakes.md).
+        static string Timing(TimeSpan start, PreviewUpdateResult update, TimeSpan total) =>
+            $"start to first frame {total.TotalMilliseconds:0} ms: the session's start {start.TotalMilliseconds:0} ms, the first update's answer {update.Elapsed.TotalMilliseconds:0} ms";
+        var timings = Timing(sessionStart, first, firstFrame);
+        var recentOutput = session.RecentOutput;
         Assert.True(first.Succeeded, first.Error + "\n" + session.RecentOutput);
         var frame = Assert.IsType<PreviewFrame>(first.Frame);
         Assert.Equal((480, 360), (frame.Width, frame.Height)); // d:DesignWidth and d:DesignHeight
@@ -192,8 +201,11 @@ public sealed class XamlPreviewerTests(AvaloniaFixture avalonia, ITestOutputHelp
                 // A loaded machine (the whole suite in parallel): the better of two sessions, as the profiler's overhead budget.
                 var restarted = Stopwatch.StartNew();
                 await using var second = await StartAsync();
+                var secondStart = restarted.Elapsed;
                 var shown = await second.UpdateXamlAsync(xaml, avalonia.AppDll, "/Views/MainWindow.axaml", s_timeout, Ct);
                 var secondFirst = restarted.Elapsed;
+                timings += "; again: " + Timing(secondStart, shown, secondFirst);
+                recentOutput = second.RecentOutput;
                 Assert.True(shown.Succeeded, shown.Error);
                 var (_, secondP95) = await EditsAsync(second, shown.Frame!);
                 output.WriteLine($"Again: start to first frame {secondFirst.TotalMilliseconds:0} ms, edit to frame p95 {secondP95:0} ms");
@@ -206,7 +218,7 @@ public sealed class XamlPreviewerTests(AvaloniaFixture avalonia, ITestOutputHelp
             // is a regression guard at five times the budget, and the numbers are reported (as M18a's overhead budget).
             output.WriteLine($"[budget] edit to preview p95 {p95:0} ms (budget 300 ms), designer start to first frame {firstFrame.TotalMilliseconds:0} ms (budget 3 s)");
             Assert.True(p95 <= 5 * 300, $"Edit to preview p95 was {p95:0} ms (budget 300 ms; five times that on a loaded machine).");
-            Assert.True(firstFrame <= TimeSpan.FromSeconds(5 * 3), $"The designer took {firstFrame.TotalMilliseconds:0} ms to its first frame (budget 3 s; five times that on a loaded machine).");
+            Assert.True(firstFrame <= TimeSpan.FromSeconds(5 * 3), $"The designer took {firstFrame.TotalMilliseconds:0} ms to its first frame (budget 3 s; five times that on a loaded machine). Build {avalonia.BuildTime.TotalMilliseconds:0} ms; {timings}.{Environment.NewLine}{recentOutput}");
         }
         // An error: the loader's message and its position, and the previous frame stays.
         var broken = xaml.Replace("<ListBox x:Name", "<ListBox Orientation=\"Sideways\" x:Name", StringComparison.Ordinal);
