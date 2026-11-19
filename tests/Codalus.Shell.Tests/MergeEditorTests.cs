@@ -466,6 +466,18 @@ public sealed class MergeEditorTests
         Assert.Equal((1, 0.5), layouts[1].LineAtRow(3.5));
     }
 
+    [Fact]
+    public void Panes_line_up_lines_another_pane_re_indented()
+    {
+        // The current pane and the result wrapped a and b in braces, re-indenting them; the incoming pane has them as they
+        // were. Compared without whitespace they're the same lines: the incoming pane's filler goes opposite the braces,
+        // not opposite all four lines after its own.
+        string[] wrapped = ["{", "    a", "    b", "}"];
+        var layouts = MergeAlignment.Align([new(wrapped, []), new(["a", "b"], []), new(wrapped, [])]);
+        Assert.Equal("1 0 1", string.Join(' ', layouts[1].Before));
+        Assert.Equal("0 0 0 0 0", string.Join(' ', layouts[0].Before));
+    }
+
     private static (string Local, string Remote, string Base, string Merged) Files(ShellFixture f, string ours, string theirs, string @base, string merged)
     {
         string Write(string name, string text)

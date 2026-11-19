@@ -130,27 +130,12 @@ public static class ThreeWayMerge
         return [.. lines];
     }
 
-    /// <summary>A line without its whitespace, which the alignment compares.</summary>
-    private static string Key(string line)
-    {
-        var key = new StringBuilder(line.Length);
-        foreach (var c in line)
-        {
-            if (!char.IsWhiteSpace(c))
-            {
-                key.Append(c);
-            }
-        }
-
-        return key.ToString();
-    }
-
     /// <summary>Each base line's line in <paramref name="side"/> where the two are alike but for whitespace, or -1.</summary>
     private static int[] Matches(string[] @base, string[] side)
     {
         var matches = new int[@base.Length];
         Array.Fill(matches, -1);
-        foreach (var op in LineDiff.Diff([.. @base.Select(Key)], [.. side.Select(Key)]))
+        foreach (var op in LineDiff.Diff([.. @base.Select(LineDiff.WithoutWhitespace)], [.. side.Select(LineDiff.WithoutWhitespace)]))
         {
             if (op.Kind == ' ')
             {
