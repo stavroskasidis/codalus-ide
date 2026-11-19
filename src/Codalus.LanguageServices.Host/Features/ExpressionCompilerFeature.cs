@@ -25,7 +25,8 @@ namespace Codalus.LanguageServices.Host.Features;
 /// <c>IgnoresAccessChecksTo</c> every assembly it references, which the runtime honors.
 /// </para>
 /// </summary>
-internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
+/// <param name="describeProject">What the workspace was sent for a project file and holds of it, for the "still loading" error (<see cref="WorkspaceManager.DescribeProject"/>).</param>
+internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution, Func<string?, string?>? describeProject = null)
 {
     public const string TypeName = "__CodalusExpression";
     public const string MethodName = "Evaluate";
@@ -56,8 +57,9 @@ internal sealed class ExpressionCompilerFeature(Func<Solution> currentSolution)
         {
             var project = document.Project;
             var missing = project.MetadataReferences.OfType<PortableExecutableReference>().Count(r => r.FilePath is { } file && !File.Exists(file));
+            var sent = describeProject?.Invoke(project.FilePath) is { } described ? $"; {described}" : string.Empty;
             return Failed("The frame's source file isn't in a loaded project yet: its project's references are still loading. Try the expression again in a moment. "
-                + $"({project.Name}: {project.MetadataReferences.Count} references{(missing > 0 ? $", {missing} of them missing" : string.Empty)}; {documents.Count} of the loaded projects have the file.)");
+                + $"({project.Name}: {project.MetadataReferences.Count} references{(missing > 0 ? $", {missing} of them missing" : string.Empty)}; {documents.Count} of the loaded projects have the file{sent}.)");
         }
 
         try

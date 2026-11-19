@@ -262,6 +262,46 @@ public sealed class ExpressionCompilerTests
         Assert.Contains("(Shop: 0 references; 1 of the loaded projects have the file.)", error, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// What the workspace was sent for a project and holds of it, for the "still loading" error: a Visual Basic project
+    /// had no references in the workspace two minutes after the stop while the build host's inputs for it had 169
+    /// (DebugCodalusTests under load in WSL, docs/ci-flakes.md), and nothing said whether they never came, came without
+    /// them, or came and weren't loaded.
+    /// </summary>
+    [Fact]
+    public async Task A_project_is_described_by_the_design_time_builds_it_was_sent_and_the_references_it_holds()
+    {
+        var root = Directory.CreateTempSubdirectory("codalus-describe-").FullName;
+        try
+        {
+            using var workspace = new WorkspaceManager();
+            var project = Path.Combine(root, "Shop", "Shop.csproj");
+            var source = Path.Combine(root, "Shop", "Cart.cs");
+            Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+            File.WriteAllText(source, "class Cart { }");
+            var core = typeof(object).Assembly.Location;
+            var missing = Path.Combine(root, "Missing.dll");
+            var data = new ProjectData(project, "Shop", "C#", "net10.0", ["/target:library", $"/out:{Path.Combine(root, "Shop.dll")}", $"/reference:{core}", $"/reference:{missing}", source], Path.Combine(root, "Shop.dll"), null, []);
+            Assert.Null(workspace.DescribeProject(project));
+
+            workspace.UpdateProjects([data]);
+            workspace.UpdateProjects([data]);
+
+            var described = workspace.DescribeProject(project);
+            Assert.Matches(@"^2 design-time build\(s\) received, the last \d+ s ago: 5 arguments, 2 references \(1 on disk now\); the workspace has 1 metadata and 0 project references$", described);
+
+            // The still-loading error carries it.
+            var shop = workspace.CurrentSolution.Projects.Single(p => p.Name == "Shop");
+            var feature = new ExpressionCompilerFeature(() => workspace.CurrentSolution.RemoveMetadataReference(shop.Id, shop.MetadataReferences[0]), workspace.DescribeProject);
+            var result = await feature.CompileAsync(new CompileExpressionParams("1", source, 1, 0, null), TestContext.Current.CancellationToken);
+            Assert.Contains("1 of the loaded projects have the file; 2 design-time build(s) received", Assert.Single(result.Errors), StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void The_compiler_options_that_ignore_accessibility_are_still_there()
     {

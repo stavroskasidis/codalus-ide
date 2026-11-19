@@ -192,6 +192,40 @@ internal sealed class WorkspaceManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// What this host was sent for a project and what of it it holds (failure messages): how many design-time builds
+    /// reached it, the last one's arguments and references, how many of those are on disk now, and the metadata and
+    /// project references applied. A Visual Basic project's workspace once had no references two minutes after the
+    /// stop while the build host's inputs for it had 169 (DebugCodalusTests under load in WSL, docs/ci-flakes.md): this
+    /// says whether the inputs with them never came, came without them, or came and weren't loaded. Null for a
+    /// project that isn't loaded.
+    /// </summary>
+    public string? DescribeProject(string? projectPath)
+    {
+        if (projectPath is null)
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            if (!_projects.TryGetValue(Path.GetFullPath(projectPath), out var entry) || entry.Parsed is not { } parsed)
+            {
+                return null;
+            }
+
+            var arguments = parsed.Data.Arguments.Length;
+            var references = parsed.References.Count;
+            var onDisk = parsed.References.Count(r => File.Exists(r.Path));
+            var project = _workspace.CurrentSolution.GetProject(entry.Id);
+            var metadata = project?.MetadataReferences.Count ?? 0;
+            var projects = project?.ProjectReferences.Count() ?? 0;
+            var ago = (DateTime.UtcNow - entry.Updated).TotalSeconds;
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"{entry.Updates} design-time build(s) received, the last {ago:0} s ago: {arguments} arguments, {references} references ({onDisk} on disk now); the workspace has {metadata} metadata and {projects} project references");
+        }
+    }
+
     private int _generation;
 
     /// <summary>Changes whenever projects are added, updated or removed, or closed files change on disk (not for edits of open documents).</summary>
@@ -228,6 +262,11 @@ internal sealed class WorkspaceManager : IDisposable
         public IReadOnlyList<MetadataReference> AppliedMetadata { get; set; } = [];
 
         public IReadOnlyList<ProjectReference> AppliedProjects { get; set; } = [];
+
+        /// <summary>How many design-time builds of it this host was sent, and when the last came (<see cref="DescribeProject"/>).</summary>
+        public int Updates { get; set; }
+
+        public DateTime Updated { get; set; }
     }
 
     private sealed record OpenDocument(int Version, SourceText Text, DocumentId? MiscId);
@@ -270,6 +309,8 @@ internal sealed class WorkspaceManager : IDisposable
                 step = System.Diagnostics.Stopwatch.GetTimestamp();
                 solution = Apply(solution, entry, parsed);
                 entry.Parsed = parsed;
+                entry.Updates++;
+                entry.Updated = DateTime.UtcNow;
                 Watch(Path.GetDirectoryName(path)!);
                 applying += System.Diagnostics.Stopwatch.GetElapsedTime(step);
             }
