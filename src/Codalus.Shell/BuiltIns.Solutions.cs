@@ -12,19 +12,22 @@ namespace Codalus.Shell;
 /// <summary>Solution and Solution Explorer commands, menus and key bindings.</summary>
 internal static partial class BuiltIns
 {
-    /// <summary>Key bindings that act on the Solution Explorer only apply while it has focus.</summary>
+    /// <summary>
+    /// Key bindings that act on the Solution Explorer only apply while it has focus, and not while its search box has it
+    /// (<c>inputFocus</c>): there Delete, Ctrl+C, Ctrl+V, Ctrl+X and F2 are the text's (#483, #484).
+    /// </summary>
     public const string SolutionKeybindings = """
         [
           { "key": "primary+shift+o", "command": "workbench.openSolution" },
           { "key": "ctrl+;", "command": "explorer.search", "when": "solutionOpen" },
           { "key": "primary+[ s", "command": "explorer.syncWithActiveDocument", "when": "solutionOpen" },
           { "key": "primary+k primary+r", "command": "workbench.openRecent" },
-          { "key": "f2", "command": "explorer.rename", "when": "focusedView == solutionExplorer" },
-          { "key": "delete", "command": "explorer.delete", "when": "focusedView == solutionExplorer" },
-          { "mac": "cmd+backspace", "command": "explorer.delete", "when": "focusedView == solutionExplorer" },
-          { "key": "primary+x", "command": "explorer.cut", "when": "focusedView == solutionExplorer" },
-          { "key": "primary+c", "command": "explorer.copy", "when": "focusedView == solutionExplorer" },
-          { "key": "primary+v", "command": "explorer.paste", "when": "focusedView == solutionExplorer" }
+          { "key": "f2", "command": "explorer.rename", "when": "focusedView == solutionExplorer && !inputFocus" },
+          { "key": "delete", "command": "explorer.delete", "when": "focusedView == solutionExplorer && !inputFocus" },
+          { "mac": "cmd+backspace", "command": "explorer.delete", "when": "focusedView == solutionExplorer && !inputFocus" },
+          { "key": "primary+x", "command": "explorer.cut", "when": "focusedView == solutionExplorer && !inputFocus" },
+          { "key": "primary+c", "command": "explorer.copy", "when": "focusedView == solutionExplorer && !inputFocus" },
+          { "key": "primary+v", "command": "explorer.paste", "when": "focusedView == solutionExplorer && !inputFocus" }
         ]
         """;
 
