@@ -170,7 +170,9 @@ public sealed class WslDotnetTests
             return;
         }
 
-        var home = Directory.CreateTempSubdirectory("codalus-wsl-probe-").FullName;
+        // Resolved: macOS's temp folder is under /var, a link to /private/var, and the probe reports an install's root
+        // with readlink -f (the 1.0 validation on the Mac, 2026-11-19).
+        var home = Codalus.Platform.RealPath.Resolve(Directory.CreateTempSubdirectory("codalus-wsl-probe-").FullName);
         try
         {
             // A stand-in dotnet in ~/.dotnet, and the same one linked from a folder on PATH: listed once, as the shell's.

@@ -55,15 +55,18 @@ public sealed class DiffInsightsTests
         Assert.Equal(string.Empty, view.LensRowAbove(DiffPaneSide.Old, shapeLine));
 
         // A resolve that fails (the service busy) is asked again though nothing scrolls: Radius's row stayed blank once
-        // (WSL validation, 2026-11-19). The file is shorter than what the diff shows, so every lens is resolved.
+        // (WSL validation, 2026-11-19). Only the lenses near the lines the diff shows are resolved: the file with its lens
+        // rows is taller than the pane, and once the lines below line 24 were never shown (the 1.0 validation in WSL,
+        // 2026-11-19), so the check is of those near the shown lines, IShape's among them.
         var insights = document.ViewModel.Insights!;
-        bool AllResolved() => insights.LensLines.All(l => !insights.LensState(l).Contains("unresolved", StringComparison.Ordinal));
+        Assert.True(insights.IsNearShown(shapeLine), $"IShape's line {shapeLine} is near the lines the diff shows");
+        bool AllResolved() => insights.LensLines.Where(insights.IsNearShown).All(l => !insights.LensState(l).Contains("unresolved", StringComparison.Ordinal));
         insights.FailingResolvesForTests = 3;
         insights.Refresh();
         await ShellFixture.PumpUntil(
             () => insights.LastResolveFailure is not null && AllResolved(),
             seconds: 60,
-            describe: () => $"last failure {insights.LastResolveFailure ?? "none"}; lenses {string.Join("; ", insights.LensLines.Select(l => $"{l}: {insights.LensState(l)}"))}");
+            describe: () => $"last failure {insights.LastResolveFailure ?? "none"}; lenses {string.Join("; ", insights.LensLines.Select(l => $"{l}{(insights.IsNearShown(l) ? "" : " (not near the shown lines)")}: {insights.LensState(l)}"))}");
         var textView = view.EditorOf(DiffPaneSide.New).TextArea.TextView;
         var oldView = view.EditorOf(DiffPaneSide.Old).TextArea.TextView;
         view.EditorOf(DiffPaneSide.New).ScrollToHome(); // the diff opened at its first change, in Circle

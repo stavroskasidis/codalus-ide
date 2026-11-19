@@ -1571,7 +1571,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Debugger.Breakpoints.Clear();
         await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
-        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
+        // Once under heavy load it didn't (WSL, 2026-11-19), and the failure didn't say what the Debug Console had instead.
+        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit:\n" + Tail(shell.DebugLog.GetText(), 1500));
     }
 
     /// <summary>M14: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows.</summary>
@@ -1587,8 +1588,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
         Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
 
+        // Waited for, not read once the call returns: the stop's own refresh of the window is posted when the debugger
+        // raises the stop, just after its state says stopped, and under load it ran once the window was shown and the call
+        // had asked, so the call's answer gave way to that newer one, a moment later. Read at once, QuickWatch was empty
+        // (WSL, 2026-11-19).
         await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
-        Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
+        await WaitAsync(() => shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"",
+            () => "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value ?? "nothing")).ConfigureAwait(true);
 
         // Run to Cursor while paused, with a PerfTip at the new line.
         await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
@@ -1596,8 +1602,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
 
         // Inline values (M62): the lines above the stop show their variables' values, args among them.
+        // Under heavy load nothing was drawn in 30 s, 8 times in 175 runs (WSL, 2026-11-19): a superseded refresh wiped
+        // the newer one's values (CodeEditorController.LoadInlineValuesAsync). The failure says how the last refreshes went.
         await WaitAsync(() => shell.ActiveEditor?.Controller?.InlineValueLines.Any(l => l.Line == argsLine && l.Values.Any(v => v.Name == "args")) == true,
-            "inline values show args after its line").ConfigureAwait(true);
+            () => $"inline values show args after its line (the editor's last refresh: {shell.ActiveEditor?.Controller?.InlineValuesOutcome ?? "no editor"}; "
+                  + $"drawn: {string.Join(", ", shell.ActiveEditor?.Controller?.InlineValueLines.Select(l => $"{l.Line}: {string.Join(" ", l.Values.Select(v => v.Name))}") ?? [])})").ConfigureAwait(true);
 
         // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
         shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
@@ -1851,7 +1860,31 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
 
             // A lambda: the C# language host compiles it, and the program runs it.
-            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            // The C# host may not have the project yet, a moment after the open: it says so, and the expression is asked
+            // again. Once, on Linux CI, it compiled in Miscellaneous Files instead, whose copy of the file has no implicit
+            // usings (CS1061 for the lambda's Count; run 44574066272, docs/ci-flakes.md); what the host was sent comes with
+            // a failure.
+            Codalus.Debugging.EvaluateResponse? counted = null;
+            var asked = System.Diagnostics.Stopwatch.StartNew();
+            while (counted is null)
+            {
+                try
+                {
+                    counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex) when (ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal) && asked.Elapsed < TimeSpan.FromSeconds(120))
+                {
+                    await Task.Delay(500).ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex)
+                {
+                    throw new SmokeFailure($"An expression with a lambda didn't evaluate after {asked.Elapsed.TotalSeconds:0} s: {ex.Message}\n"
+                                           + $"The C# host: {shell.Languages.Status(ShellHost.CSharpLanguageId)}; {string.Join("; ", shell.Languages.Describe())}\n"
+                                           + $"The projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}\n"
+                                           + $"Output 'Language Services':\n{Tail(shell.LanguageLog.GetText(), 6000)}");
+                }
+            }
+
             Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
 
             // The machine's side of the stopped frame.
@@ -4976,6 +5009,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             Check(!shell.Debugger.UsesCodalusAdapter, "the setting chooses netcoredbg");
+            // Every step under it, not only the first: without it the compound steps waited out their 7- and 10-minute
+            // limits for a stop that couldn't come (a local Windows run without eng/get-netcoredbg.sh, 2026-11-19).
+            Check(DebugAdapterLocator.Resolve() is not null, $"netcoredbg is installed (debugger/ next to the shell, or {DebugAdapterLocator.EnvironmentVariable})");
             await step().ConfigureAwait(true);
         }
         finally
