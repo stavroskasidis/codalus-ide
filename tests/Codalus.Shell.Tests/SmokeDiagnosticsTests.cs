@@ -48,6 +48,19 @@ public sealed class SmokeDiagnosticsTests
     }
 
     [Fact]
+    public void A_failed_step_prints_the_ides_own_log_by_its_id()
+    {
+        // The channels as the shell names them: the IDE's log is "Codalus IDE", which matching by the name "Log" missed.
+        var workbench = new Codalus.Workbench.Output.OutputService();
+        workbench.GetOrCreate("codalus.debug", "Debug");
+        var log = workbench.GetOrCreate("codalus.log", "Codalus IDE");
+        var build = workbench.GetOrCreate("codalus.buildhost", "Build Host");
+        var languages = workbench.GetOrCreate("codalus.languages", "Language Services");
+
+        Assert.Equal([languages, build, log], SmokeTest.FailureLogs(workbench));
+    }
+
+    [Fact]
     public void The_child_processes_are_listed_with_their_command_lines()
     {
         // A child of this process that waits: it's listed with how it was started (its image name on Windows).

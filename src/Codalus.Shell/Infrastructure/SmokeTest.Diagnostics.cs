@@ -12,6 +12,17 @@ namespace Codalus.Shell.Infrastructure;
 /// </summary>
 internal sealed partial class SmokeTest
 {
+    /// <summary>
+    /// The channels a run's first failed step prints, by id: the language services', the build host's, and the IDE's own
+    /// log (where <c>App.OnUnhandledException</c> writes <c>[unhandled]</c> with the stack). They were matched by their
+    /// names, and the IDE's log is named "Codalus IDE", not "Log", so a failed step never printed it.
+    /// </summary>
+    internal static readonly string[] FailureLogIds = ["codalus.languages", "codalus.buildhost", "codalus.log"];
+
+    /// <summary>The <see cref="FailureLogIds"/> channels <paramref name="output"/> has, in that order.</summary>
+    internal static IEnumerable<Workbench.Output.OutputChannel> FailureLogs(Workbench.Output.OutputService output) =>
+        FailureLogIds.Select(id => output.Channels.FirstOrDefault(c => c.Id == id)).OfType<Workbench.Output.OutputChannel>();
+
     /// <summary>The heading of <see cref="BuildWaitDiagnostics"/>: a failure that has it already isn't given it twice.</summary>
     private const string BuildWaitHeading = "--- The Build Host log (the end) ---";
 

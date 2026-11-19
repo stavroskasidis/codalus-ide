@@ -4622,7 +4622,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             {
                 // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
                 _logsShown = true;
-                foreach (var channel in shell.Workbench.Output.Channels.Where(c => c.Name is "Language Services" or "Build Host" or "Log"))
+                foreach (var channel in FailureLogs(shell.Workbench.Output))
                 {
                     Console.Out.WriteLine($"  --- {channel.Name} (the end) ---");
                     Console.Out.WriteLine(Tail(channel.GetText(), 4000));
