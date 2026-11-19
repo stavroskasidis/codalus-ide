@@ -83,7 +83,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
   - Settings that are also ours come over with their values, including the two color settings and the ones in language blocks (`"[markdown]": { … }`). Its built-in themes become ours.
   - Key bindings whose commands exist here come over too.
   - You confirm first. The Codalus IDE log (Help → Show Logs) lists each skipped setting and why.
-- **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
+- **From the classic IDE** (Tools → Import Visual Studio Settings (.vssettings)): a file exported with that IDE's Import and Export Settings.
   - The text editor's font and size, and its colors for syntax and editor elements. Colors are added to yours; "automatic" colors stay with the theme.
   - Tab size, tabs or spaces, word wrap and line numbers (All Languages, else C#).
   - Your own keyboard shortcuts, for commands with an equivalent here.
