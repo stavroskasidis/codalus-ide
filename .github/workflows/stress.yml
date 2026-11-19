@@ -1,0 +1,84 @@
+# Scratch branch `stress` only, never merged (M65, 2026-11-19): the open docs/ci-flakes.md rows' tests in loops under
+# heavy load on the runners they failed on (eng/stress.sh, eng/stress-groups.txt). Each group runs in several jobs, so
+# its tests reach 50+ passes.
+name: stress
+
+on:
+  push:
+    branches: [stress]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  AVALONIA_TELEMETRY_OPTOUT: "1"
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: "1"
+  DOTNET_SVCUTIL_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  stress:
+    name: stress (${{ matrix.group }}, ${{ matrix.slot }})
+    strategy:
+      fail-fast: false
+      # Leaves runners for pull requests' CI.
+      max-parallel: 12
+      matrix:
+        include:
+          - { os: windows-latest, group: web, slot: 1, iterations: 10 }
+          - { os: windows-latest, group: web, slot: 2, iterations: 10 }
+          - { os: windows-latest, group: web, slot: 3, iterations: 10 }
+          - { os: windows-latest, group: web, slot: 4, iterations: 10 }
+          - { os: windows-latest, group: web, slot: 5, iterations: 10 }
+          - { os: windows-latest, group: win-shell, slot: 1, iterations: 10 }
+          - { os: windows-latest, group: win-shell, slot: 2, iterations: 10 }
+          - { os: windows-latest, group: win-shell, slot: 3, iterations: 10 }
+          - { os: windows-latest, group: win-shell, slot: 4, iterations: 10 }
+          - { os: windows-latest, group: win-shell, slot: 5, iterations: 10 }
+          - { os: windows-latest, group: win-others, slot: 1, iterations: 10 }
+          - { os: windows-latest, group: win-others, slot: 2, iterations: 10 }
+          - { os: windows-latest, group: win-others, slot: 3, iterations: 10 }
+          - { os: windows-latest, group: win-others, slot: 4, iterations: 10 }
+          - { os: windows-latest, group: win-others, slot: 5, iterations: 10 }
+          - { os: windows-latest, group: win-codalus, slot: 1, iterations: 26 }
+          - { os: windows-latest, group: win-codalus, slot: 2, iterations: 26 }
+          - { os: ubuntu-latest, group: linux, slot: 1, iterations: 10 }
+          - { os: ubuntu-latest, group: linux, slot: 2, iterations: 10 }
+          - { os: ubuntu-latest, group: linux, slot: 3, iterations: 10 }
+          - { os: ubuntu-latest, group: linux, slot: 4, iterations: 10 }
+          - { os: ubuntu-latest, group: linux, slot: 5, iterations: 10 }
+          - { os: ubuntu-24.04-arm, group: arm-codalus, slot: 1, iterations: 10 }
+          - { os: ubuntu-24.04-arm, group: arm-codalus, slot: 2, iterations: 10 }
+          - { os: ubuntu-24.04-arm, group: arm-codalus, slot: 3, iterations: 10 }
+          - { os: ubuntu-24.04-arm, group: arm-codalus, slot: 4, iterations: 10 }
+          - { os: ubuntu-24.04-arm, group: arm-codalus, slot: 5, iterations: 10 }
+          - { os: macos-latest, group: macos, slot: 1, iterations: 17 }
+          - { os: macos-latest, group: macos, slot: 2, iterations: 17 }
+          - { os: macos-latest, group: macos, slot: 3, iterations: 17 }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          extra-sdks: true
+          nuget-cache: true
+          netcoredbg: true
+          devtools: true
+          display: true
+          downloads: true
+          browser: true
+      - run: dotnet restore Codalus.slnx
+      - run: dotnet build Codalus.slnx -c Release --no-restore
+      - run: dotnet tool install -g dotnet-stack || true
+      - name: Stress
+        shell: bash
+        timeout-minutes: 300
+        run: bash eng/stress.sh ${{ matrix.group }} ${{ matrix.iterations }}
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stress-${{ matrix.group }}-${{ matrix.slot }}
+          path: artifacts/stress
+          if-no-files-found: ignore
