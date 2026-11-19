@@ -1974,6 +1974,58 @@ internal sealed partial class SmokeTest
         [LibraryImport("libc", EntryPoint = "gettid")]
         private static partial int GetTid();
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ProcessMemoryCounters
+        {
+            public uint Cb;
+            public uint PageFaultCount;
+            public nuint PeakWorkingSetSize;
+            public nuint WorkingSetSize;
+            public nuint QuotaPeakPagedPoolUsage;
+            public nuint QuotaPagedPoolUsage;
+            public nuint QuotaPeakNonPagedPoolUsage;
+            public nuint QuotaNonPagedPoolUsage;
+            public nuint PagefileUsage;
+            public nuint PeakPagefileUsage;
+        }
+
+        [LibraryImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetProcessMemoryInfo(nint process, out ProcessMemoryCounters counters, uint size);
+
+        [LibraryImport("kernel32.dll")]
+        private static partial nint GetCurrentProcess();
+
+        /// <summary>
+        /// Page faults so far: the process's, soft and hard together, on Windows; the UI thread's major ones (a page read
+        /// from disk) on Linux; null elsewhere. A stall the UI thread spent waiting, with thousands of faults in it, is code
+        /// or data paged back in from disk: the 1.0 validation's Windows sweep (2026-11-20) stalled nine commands for 516 to
+        /// 1105 ms, most on their first run, the UI thread running 0 to 16 ms of each, at a memory load of 81%.
+        /// </summary>
+        private long? PageFaults()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return GetProcessMemoryInfo(GetCurrentProcess(), out var counters, (uint)Marshal.SizeOf<ProcessMemoryCounters>()) ? counters.PageFaultCount : null;
+            }
+
+            if (OperatingSystem.IsLinux() && _uiThreadId is > 0 and var id)
+            {
+                try
+                {
+                    // majflt, the 12th field.
+                    var stat = File.ReadAllText($"/proc/self/task/{id}/stat");
+                    return long.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[9], CultureInfo.InvariantCulture);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>The UI thread's processor time so far, in ms (Windows, Linux; null elsewhere or when it can't be read).</summary>
         private double? UiThreadCpuMilliseconds()
         {
@@ -2144,6 +2196,7 @@ internal sealed partial class SmokeTest
                 var start = Stopwatch.GetTimestamp();
                 var gcBefore = GC.GetTotalPauseDuration();
                 var cpuBefore = UiThreadCpuMilliseconds();
+                var faultsBefore = PageFaults();
                 var machineBefore = MachineTimes();
                 long answered = 0;
                 Task probe;
@@ -2186,7 +2239,7 @@ internal sealed partial class SmokeTest
 
                 var ticks = Interlocked.Read(ref answered) - start;
                 var gcPause = GC.GetTotalPauseDuration() - gcBefore;
-                var (cpuAfter, machineAfter) = samples > 0 ? (UiThreadCpuMilliseconds(), MachineTimes()) : (null, null);
+                var (cpuAfter, machineAfter, faultsAfter) = samples > 0 ? (UiThreadCpuMilliseconds(), MachineTimes(), PageFaults()) : (null, null, null);
                 lock (_gate)
                 {
                     _probes++;
@@ -2199,6 +2252,7 @@ internal sealed partial class SmokeTest
                         _maxCpu = cpuBefore is { } a && cpuAfter is { } b
                             ? $"the UI thread ran {b - a:0} ms of it"
                               + (machineBefore is { } m && machineAfter is { } n && n.Total > m.Total ? $", the machine's cores were {100.0 * (n.Busy - m.Busy) / (n.Total - m.Total):0}% busy" : string.Empty)
+                              + (faultsBefore is { } f && faultsAfter is { } g ? (OperatingSystem.IsWindows() ? $", {g - f} page fault(s) in the process" : $", {g - f} major page fault(s) on the UI thread") : string.Empty)
                             : null;
                     }
                 }
