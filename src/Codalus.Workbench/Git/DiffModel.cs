@@ -395,6 +395,92 @@ public static class WordDiff
 
         return ranges;
     }
+
+    /// <summary>
+    /// The changed tokens of a pair of lines, for the merge editor's blocks: each line split into words and single other
+    /// characters, whitespace left out, and the tokens compared whole. A re-indent changes nothing, and a value that
+    /// shares only scattered letters with the other side's (<c>@SendText</c>, <c>@wsResources.Send</c>) is marked
+    /// whole on both sides, where a character diff would match the letters and mark only the longer side. Changed tokens
+    /// with nothing but whitespace between them are one range.
+    /// </summary>
+    public static (IReadOnlyList<(int Start, int Length)> Old, IReadOnlyList<(int Start, int Length)> New) TokenRanges(string oldLine, string newLine)
+    {
+        if (oldLine == newLine || oldLine.Length > MaxLineLength || newLine.Length > MaxLineLength)
+        {
+            return ([], []);
+        }
+
+        var oldTokens = Tokens(oldLine);
+        var newTokens = Tokens(newLine);
+        var oldChanged = new bool[oldTokens.Count];
+        var newChanged = new bool[newTokens.Count];
+        foreach (var op in LineDiff.Diff([.. oldTokens.Select(t => oldLine.Substring(t.Start, t.Length))], [.. newTokens.Select(t => newLine.Substring(t.Start, t.Length))]))
+        {
+            if (op.Kind == '-')
+            {
+                oldChanged[op.OldIndex] = true;
+            }
+            else if (op.Kind == '+')
+            {
+                newChanged[op.NewIndex] = true;
+            }
+        }
+
+        return (Join(oldLine, oldTokens, oldChanged), Join(newLine, newTokens, newChanged));
+    }
+
+    /// <summary>A line's tokens: runs of letters, digits and underscores, and each other character that isn't whitespace.</summary>
+    private static List<(int Start, int Length)> Tokens(string line)
+    {
+        var tokens = new List<(int Start, int Length)>();
+        for (var i = 0; i < line.Length;)
+        {
+            if (char.IsWhiteSpace(line[i]))
+            {
+                i++;
+                continue;
+            }
+
+            var start = i++;
+            if (IsWord(line[start]))
+            {
+                while (i < line.Length && IsWord(line[i]))
+                {
+                    i++;
+                }
+            }
+
+            tokens.Add((start, i - start));
+        }
+
+        return tokens;
+    }
+
+    /// <summary>The changed tokens' ranges, those with only whitespace between them joined.</summary>
+    private static List<(int Start, int Length)> Join(string line, List<(int Start, int Length)> tokens, bool[] changed)
+    {
+        var ranges = new List<(int Start, int Length)>();
+        for (var t = 0; t < tokens.Count; t++)
+        {
+            if (!changed[t])
+            {
+                continue;
+            }
+
+            var (start, length) = tokens[t];
+            if (ranges.Count > 0 && t > 0 && changed[t - 1])
+            {
+                var (previousStart, _) = ranges[^1];
+                ranges[^1] = (previousStart, start + length - previousStart);
+            }
+            else
+            {
+                ranges.Add((start, length));
+            }
+        }
+
+        return ranges;
+    }
 }
 
 /// <summary>

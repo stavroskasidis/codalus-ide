@@ -30,6 +30,36 @@ public static class LineDiff
         return text.EndsWith('\n') ? lines[..^1] : lines;
     }
 
+    /// <summary>
+    /// A line without its whitespace: what the merge editor compares to line up versions whatever their indentation
+    /// (a branch that re-indented a block still has its lines).
+    /// </summary>
+    public static string WithoutWhitespace(string line)
+    {
+        var i = 0;
+        while (i < line.Length && !char.IsWhiteSpace(line[i]))
+        {
+            i++;
+        }
+
+        if (i == line.Length)
+        {
+            return line;
+        }
+
+        var key = new System.Text.StringBuilder(line.Length);
+        key.Append(line, 0, i);
+        for (; i < line.Length; i++)
+        {
+            if (!char.IsWhiteSpace(line[i]))
+            {
+                key.Append(line[i]);
+            }
+        }
+
+        return key.ToString();
+    }
+
     /// <summary>The edit script from <paramref name="oldLines"/> to <paramref name="newLines"/>: ' ' (same), '-' and '+'.</summary>
     public static IReadOnlyList<DiffOp> Diff(IReadOnlyList<string> oldLines, IReadOnlyList<string> newLines)
     {
