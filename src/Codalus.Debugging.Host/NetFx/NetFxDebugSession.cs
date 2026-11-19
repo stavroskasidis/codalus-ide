@@ -3649,9 +3649,17 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         // The same expression at the same place is the same method: a watch compiles once.
         var key = string.Join('\n', expression.Trim(), info.Mvid.ToString("N"), frame.MethodToken.ToString(CultureInfo.InvariantCulture), frame.CodeVersion.ToString(CultureInfo.InvariantCulture),
             point.StartLine.ToString(CultureInfo.InvariantCulture), point.StartColumn.ToString(CultureInfo.InvariantCulture));
+        // Only what compiled is kept. A failure can be the moment's: the project still loading, which says to try again,
+        // or a load into the program that timed out. Kept, it came back for every later try of the session: the Visual
+        // Basic expression of DebugCodalusTests got its first answer, that the project was still loading, for two minutes
+        // after the project had loaded (the 1.0 validation in WSL, docs/ci-flakes.md).
         if (!_compiledExpressions.TryGetValue(key, out var compiled))
         {
-            _compiledExpressions[key] = compiled = Compile(frame, expression, module, point, reason);
+            compiled = Compile(frame, expression, module, point, reason);
+            if (compiled.Error is null && compiled.Module is not null)
+            {
+                _compiledExpressions[key] = compiled;
+            }
         }
 
         if (compiled.Error is { } error || compiled.Module is not { } assembly)
