@@ -18,6 +18,9 @@ public sealed partial class CodeEditorController
     private Window? _popupWindow;
     private bool _popupEventsAttached;
 
+    /// <summary>The text view's vertical offset when the popups were last placed (<see cref="OnPopupViewScrolled"/>).</summary>
+    private double _popupScrollY;
+
     /// <summary>Whether the completion list or signature help is open.</summary>
     public bool IsIntelliSenseOpen => _completion is not null || _signature is not null;
 
@@ -92,6 +95,7 @@ public sealed partial class CodeEditorController
         {
             _popupEventsAttached = true;
             var view = Editor.TextArea.TextView;
+            _popupScrollY = view.VerticalOffset;
             view.ScrollOffsetChanged += OnPopupViewScrolled;
             Editor.TextArea.LostFocus += OnPopupFocusLost;
             Editor.TextArea.DocumentChanged += OnPopupDocumentChanged;
@@ -128,8 +132,15 @@ public sealed partial class CodeEditorController
 
     private void OnPopupViewScrolled(object? sender, EventArgs e)
     {
-        // Placed again while the caret's line is in view; closed once it scrolls out.
-        if (IntelliSenseLayout.IsCaretLineVisible(Editor.TextArea))
+        // Placed again while the caret's line is in view; closed once a scroll up or down takes it out. A scroll that
+        // didn't move the text up or down (sideways: the scroll viewer setting the horizontal offset the text view had
+        // asked for back to 0) leaves them open: the line may be out of view for another reason, CodeLens rows that
+        // arrived above it pushing it below the bottom edge, and closing them then shut the completion list the moment it
+        // opened (macOS CI, run 44030324314; reproduced on Windows, 4 of 30 runs under load).
+        var y = Editor.TextArea.TextView.VerticalOffset;
+        var vertical = Math.Abs(y - _popupScrollY) > 0.5;
+        _popupScrollY = y;
+        if (!vertical || IntelliSenseLayout.IsCaretLineVisible(Editor.TextArea))
         {
             LayoutPopups();
         }
