@@ -1158,6 +1158,17 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="Transparent" />
   </Style>
+  <!-- The Start split button (its drop-down holds the launch profiles): filled as the Start button above. -->
+  <Style Selector="SplitButton.toolbar.start">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Start}" />
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Start.Foreground}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar.start /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Shell.Toolbar.Start}" />
+  </Style>
+  <Style Selector="SplitButton.toolbar.start controls|Icon.start">
+    <Setter Property="Foreground" Value="{DynamicResource Shell.Toolbar.Start.Icon}" />
+  </Style>
   <Style Selector="SplitButton.toolbar:pointerover /template/ Button /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="BorderBrush" Value="{DynamicResource Shell.Toolbar.Hover.Border}" />
   </Style>

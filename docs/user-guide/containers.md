@@ -15,7 +15,7 @@ Right-click a project → **Add Docker Support** (also on the Project menu). It 
 
 ## Running and debugging in a container
 
-Choose the **Container (Dockerfile)** launch profile (the toolbar's profile box or Project Properties), then press `Ctrl+F5` or `F5`.
+Choose the **Container (Dockerfile)** launch profile (the drop-down beside the toolbar's Start button, or Project Properties), then press `Ctrl+F5` or `F5`.
 
 - **Fast mode** (the default, the **Containers → Fast Mode** setting): only the Dockerfile's `base` stage is built. Your Debug build's output is mounted into the container at `/app`, so rebuilding needs no image build; its static web assets (`wwwroot`, Razor class libraries' files) are mounted read-only too. `Ctrl+F5` starts the app in the container, with its output in the Output window's **Run** channel. `F5` copies the Linux debugger into the container and starts the app under it: breakpoints, stepping and every debugger window work as for a local program.
 - With fast mode off, the whole Dockerfile is built and the image's entry point runs; `F5` attaches to the app once it has started.
