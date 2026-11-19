@@ -102,6 +102,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     private bool _attached;
     private bool _justMyCode = true;
     private bool _stepFiltering = true;
+    private bool _sourcesOnClient;
     private bool _breakOnThrown;
     private bool _breakOnUnhandled = true;
     private string[] _thrownTypes = [];
@@ -746,6 +747,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
 
         _justMyCode = arguments.JustMyCode;
         _stepFiltering = arguments.EnableStepFiltering;
+        _sourcesOnClient = arguments.SourcesOnClient;
         _clientViews = new HashSet<string>(arguments.ClientViews ?? [], StringComparer.Ordinal);
         if (arguments.Symbols is { } symbols && (symbols.SearchPaths.Count > 0 || symbols.Servers.Count > 0))
         {
@@ -2578,7 +2580,10 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                 var name = info?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}]";
                 var point = info is null ? null : ShownAt(module, info, frame);
                 var file = point?.Document;
-                var hasSource = file is { Length: > 0 } && File.Exists(file);
+                // In a container or on another machine the sources are the client's (its build's paths, which it maps):
+                // asked of this machine, every frame had none and the editor never showed the stop (a rootless podman
+                // container in WSL, ContainerShellTests; CI passed only because its shard had no bundle, so netcoredbg ran).
+                var hasSource = file is { Length: > 0 } && (_sourcesOnClient || File.Exists(file));
                 var userCode = info is { HasSymbols: true, IsOptimized: false } && !info.IsNonUserCode(frame.MethodToken);
                 result.Add(new StackFrame(
                     id,

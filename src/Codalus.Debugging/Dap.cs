@@ -170,6 +170,13 @@ public sealed record NetFxDebugArguments(
     /// names): the Codalus debugger lists their own members, without their <c>[DebuggerTypeProxy]</c>'s view (M58).
     /// </summary>
     public string[]? ClientViews { get; init; } = ClientViews;
+
+    /// <summary>
+    /// The program's sources are on the client's machine, not on the debugger's: the Codalus debugger runs on another
+    /// machine or in a container (M58b), whose paths the client maps. A frame then gets its PDB's document and line
+    /// whether or not that file is where the debugger runs; locally a document that isn't on disk is left out.
+    /// </summary>
+    public bool SourcesOnClient { get; init; }
 }
 
 /// <summary>netcoredbg's <c>launch</c> arguments.</summary>
