@@ -2245,6 +2245,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return await task.ConfigureAwait(true);
         }
 
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=web.scaffolding skips it, and the trust prompt held the step (macOS, 2026-11-19)
         await shell.OpenSolutionAsync(Path.Combine(target, "Scaffolding.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Scaffolding solution is open", 300).ConfigureAwait(true);
         var restore = await Bounded(shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None), "dotnet tool restore of dotnet-aspnet-codegenerator", 240).ConfigureAwait(true);
