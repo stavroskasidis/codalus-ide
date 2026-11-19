@@ -97,6 +97,14 @@ internal sealed class ShellFixture : IAsyncDisposable
         Shell.OsIntegration = new Codalus.Workbench.Setup.LinuxOsIntegration(
             Codalus.Workbench.Setup.OsLauncher.Current(userData), Path.Combine(userData, "os", "data"), Path.Combine(userData, "os", "config"),
             (_, _, _, _) => Task.FromResult((0, string.Empty)), _ => null);
+
+        // Nothing installs for real: an install meant for the terminal (Microsoft's .pkg or a package under sudo, a
+        // workload, the Android SDK) is recorded and fails, whatever plan this machine's real .NET makes the one that fits.
+        Shell.TerminalInstallStandIn = plan =>
+        {
+            TerminalInstalls.Add(plan);
+            return TerminalInstallExitCode;
+        };
         Window = new MainWindow(Shell);
         s_windows.Add(Window);
         Window.Closed += (_, _) =>
@@ -135,6 +143,12 @@ internal sealed class ShellFixture : IAsyncDisposable
     }
 
     private bool _closed;
+
+    /// <summary>The exit code of the fixture's stand-in for an install in the terminal (<see cref="TerminalInstalls"/>).</summary>
+    public const int TerminalInstallExitCode = 97;
+
+    /// <summary>The installs meant for the terminal that the shell asked for: none of them ran.</summary>
+    public List<Codalus.Workbench.Setup.InstallPlan> TerminalInstalls { get; } = [];
 
     public string UserData { get; }
 

@@ -105,7 +105,7 @@ Each host variable takes the path of the host's apphost or its `.dll` (run with 
 | `CODALUS_FIXTURE_HANG` | `1` makes the `Hangs` tests of `samples/Testing` sleep for 10 minutes. `DotNetTestRunControlTests` sets it in a test run's environment to test cancelling. `samples/Testing/tests/XunitV3Tests/CalculatorTests.cs` |
 | `CODALUS_M26A_TEST` | A value a test sets to check `${env:…}` expansion in `.codalus/tasks.json` and `launch.json`. `tests/Codalus.Workbench.Tests/ProjectSystemDepthTests.cs` |
 | `CODALUS_REMOTE_TEST` | A variable a test passes in a remote pseudo-terminal's environment; nothing reads it. `tests/Codalus.Workbench.Tests/RemoteServerTests.cs` |
-| `CODALUS_WSL_DIR` | The Linux folder that `eng/wsl-test.sh` mirrors the working tree into (default `~/codalus`). Give each git worktree its own. `eng/wsl-test.sh` |
+| `CODALUS_WSL_DIR` | The Linux folder that `eng/wsl-test.sh` mirrors the working tree into (default `~/codalus`). Give each git worktree its own; a worktree's own mirror is removed when its run passes (kept when it fails). `eng/wsl-test.sh` |
 
 ## Packaging and releases
 

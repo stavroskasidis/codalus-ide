@@ -298,8 +298,7 @@ internal sealed partial class SolutionSession
         }
 
         xml.Append("</Solution>\n");
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(file, xml.ToString());
+        GeneratedSolutionFile.Write(file, xml.ToString());
         return file;
     }
 

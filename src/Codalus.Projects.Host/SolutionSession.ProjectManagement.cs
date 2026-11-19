@@ -469,7 +469,6 @@ internal sealed partial class SolutionSession
     /// <summary>A <c>.slnf</c> file: the solution path relative to the filter and the projects relative to the solution.</summary>
     private void WriteFilter(string filter, IReadOnlyList<string> projects)
     {
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(filter)!);
         var document = new JsonObject
         {
             ["solution"] = new JsonObject
@@ -478,7 +477,7 @@ internal sealed partial class SolutionSession
                 ["projects"] = new JsonArray([.. projects.Select(p => (JsonNode)System.IO.Path.GetRelativePath(SolutionDirectory, p).Replace('/', '\\'))]),
             },
         };
-        File.WriteAllText(filter, document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        GeneratedSolutionFile.Write(filter, document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + "\n");
     }
 
     /// <summary>Reads a <c>.slnf</c>: the solution it filters (absolute) and its projects (relative to the solution).</summary>

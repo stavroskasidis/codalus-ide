@@ -8,13 +8,13 @@
     <div class="intro-split rise">
         <section class="page-intro">
             <p class="eyebrow">Download@(Releases.Offered is { } offered ? $" · {offered}" : "")</p>
-            <h1 class="display display-l">Install Codalus IDE</h1>
-            <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included.</p>
+            <h1 class="display display-l">Install Codalus IDE 1.0</h1>
+            <p class="lead">Free and open source. The installers update themselves from signed feeds, and the debugger is included. Updates within 1.x keep your settings, the command line and your user data working (<a href="docs/compatibility/">what 1.x keeps stable</a>); <a href="docs/whats-new/">what's new in 1.0</a>.</p>
         </section>
         <section class="requirements" aria-labelledby="prereq">
             <p id="prereq">Before you install</p>
             <ul>
-                <li><a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a><span>RC 3 or later, or newer</span></li>
+                <li><a href="https://dotnet.microsoft.com/download/dotnet/11.0">.NET 11 SDK</a><span>11.0.100 or newer</span></li>
                 <li><a href="https://git-scm.com/downloads">git</a><span>2.30 or newer, on the PATH</span></li>
             </ul>
             <p>Codalus runs its helper processes on .NET 11, and builds your solutions with any SDK from 2.1.200 on. When that runtime is missing, Codalus says so and offers to install it, and it doesn't download an update whose runtime isn't installed. <a href="docs/getting-started/#prerequisites">Details</a></p>
@@ -49,7 +49,7 @@
             <DownloadFile Kind="Portable zip" Suffix="win-x64.zip">Unzip anywhere and run codalus.exe. It doesn't update itself.</DownloadFile>
             <div class="os-foot">
                 <strong>First start: “Windows protected your PC”</strong>
-                <span>The installers aren't code-signed yet. Choose More info, then Run anyway. Windows asks only once.</span>
+                <span>The Windows installers aren't code-signed yet: signing follows in a 1.0.x update. Until then, choose More info, then Run anyway. Windows asks only once.</span>
             </div>
         </div>
 
@@ -60,8 +60,8 @@
             </DownloadFile>
             <DownloadFile Kind="App bundle" Suffix="osx-arm64.app.zip">The app on its own: unzip it and move it where you like.</DownloadFile>
             <div class="os-foot">
-                <strong>First start: “Apple could not verify…”</strong>
-                <span>The installers aren't code-signed yet. Close the message, open System Settings → Privacy &amp; Security, choose Open Anyway next to Codalus IDE, then open it again.</span>
+                <strong>Signed and notarized</strong>
+                <span>The installer package and the app are signed with a Developer ID and notarized, so they open without Gatekeeper's warning.</span>
             </div>
         </div>
 

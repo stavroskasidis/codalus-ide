@@ -294,6 +294,6 @@ There's no WinUI previewer (Microsoft has none either), and XAML Hot Reload isn'
 - XAML Hot Reload for WinUI 3, and for WPF resource dictionaries without an `x:Class`.
 - A WinUI 3 previewer, WinUI templates in New Project, and building WinUI apps on Linux and macOS.
 - The WPF previewer and the Live Visual Tree on Linux and macOS (through a Windows machine), and for WPF on .NET Framework.
-- The Windows Forms designer on Linux and macOS (through a Windows machine), and its later parts (snap lines, tab order, smart tags, menus and tool strips, localizable forms).
+- The Windows Forms designer on Linux and macOS (through a Windows machine).
 - Running and debugging these apps from Linux and macOS through a Windows machine.
 - WPF and Windows Forms on .NET Framework.

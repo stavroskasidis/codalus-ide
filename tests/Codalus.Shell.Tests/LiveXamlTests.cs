@@ -112,15 +112,41 @@ public sealed class LiveXamlTests
         window.Close();
     }
 
-    [AvaloniaFact]
-    public async Task Failed_bindings_come_with_their_element_and_its_ancestors()
+    /// <param name="othersFirst">
+    /// The list already full of other windows' failures, as in a run of the whole project (2026-11-19, the 1.0 release
+    /// candidate's Windows run): the test took them and found none of its own.
+    /// </param>
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Failed_bindings_come_with_their_element_and_its_ancestors(bool othersFirst)
     {
+        if (othersFirst)
+        {
+            for (var i = 0; i < 600; i++)
+            {
+                LiveBindings.Line($"[Binding]An error occurred binding 'Text' to 'Other{i}' at 'Other{i}': 'Value is null.' (TextBlock #{1_000_000 + i})");
+            }
+        }
+
         var events = new List<string>();
         LiveBindings.Install(line => { lock (events) { events.Add(line); } });
         LiveBindings.Hook();
         Assert.True(LiveBindings.Hooked, "Avalonia's logger isn't hooked.");
 
-        var text = new TextBlock { Name = "Status" };
+        // The hook is the process's: in a run of the whole project, other tests' windows have failed bindings too, and
+        // nothing takes them. Taken now, they can neither be the event this test waits for nor fill the list to its
+        // MaxFailures, past which this test's own failures were dropped.
+        LiveBindings.Take([]);
+        lock (events)
+        {
+            events.Clear();
+        }
+
+        // A failure is reported once per element name, property and path for the process's life: a name of this run's
+        // own, or the theory's second case (or a repeat) would find its failure already seen.
+        var name = "Status" + Guid.NewGuid().ToString("N")[..8];
+        var text = new TextBlock { Name = name };
         text.Bind(TextBlock.TextProperty, new Binding("Missing"));
         var other = new TextBlock();
         other.Bind(TextBlock.TextProperty, new Binding("AlsoMissing"));
@@ -143,12 +169,23 @@ public sealed class LiveXamlTests
         }
 
         Assert.True(Told(), "No event for the failed binding.");
+
+        // Taken until both of this test's failures came: another test's failure can be the event, before them.
         var agent = new LiveAgent(_ => { }, () => [window]);
-        var records = (await Task.Run(() => agent.Handle(["1", "bindings"]))).Split(LiveAgent.Record).Select(r => r.Split(LiveAgent.Field)).ToList();
+        var records = new List<string[]>();
+        bool Has(string path) => records.Any(r => r.Length > 1 && r[1] == path);
+        for (var i = 0; i < 100 && !(Has("Missing") && Has("AlsoMissing")); i++)
+        {
+            var taken = await Task.Run(() => agent.Handle([(i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture), "bindings"]));
+            records.AddRange(taken.Split(LiveAgent.Record).Where(r => r.Length > 0).Select(r => r.Split(LiveAgent.Field)));
+            await Task.Delay(20);
+            Pump();
+        }
+
         var failure = Assert.Single(records, r => r[1] == "Missing");
         Assert.Equal("Text", failure[0]);
         Assert.True(typeof(TextBlock).FullName == failure[3], string.Join(" | ", failure));
-        Assert.Equal("Status", failure[4]);
+        Assert.Equal(name, failure[4]);
         Assert.StartsWith(typeof(StackPanel).FullName + "|" + typeof(LiveReloadView).FullName + "|", failure[5], StringComparison.Ordinal);
         Assert.Contains(typeof(Window).FullName!, failure[5], StringComparison.Ordinal);
         Assert.Contains("Missing", failure[2], StringComparison.Ordinal);
@@ -158,7 +195,7 @@ public sealed class LiveXamlTests
         Assert.True(typeof(TextBlock).FullName == unnamed[3] && unnamed[4].Length == 0 && unnamed[5].Contains(typeof(LiveReloadView).FullName!, StringComparison.Ordinal), string.Join(" | ", unnamed));
 
         // Taken: the next request has only new ones.
-        Assert.DoesNotContain("Missing", await Task.Run(() => agent.Handle(["2", "bindings"])), StringComparison.Ordinal);
+        Assert.DoesNotContain("Missing", await Task.Run(() => agent.Handle(["101", "bindings"])), StringComparison.Ordinal);
         window.Close();
     }
 

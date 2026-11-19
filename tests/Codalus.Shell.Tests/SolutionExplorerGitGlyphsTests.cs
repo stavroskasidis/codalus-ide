@@ -144,7 +144,7 @@ public sealed class SolutionExplorerGitGlyphsTests
         var error = process.StandardError.ReadToEndAsync();
         process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error.GetAwaiter().GetResult()}");
     }
 
     private static ExplorerRowViewModel? Row(SolutionExplorerViewModel explorer, string id) => explorer.Rows.FirstOrDefault(r => r.Id == id);
