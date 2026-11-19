@@ -7,7 +7,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
     <AvaloniaVersion>12.1.6</AvaloniaVersion>
-    <RoslynVersion>5.12.0-1.26529.118</RoslynVersion>
+    <RoslynVersion>5.12.0</RoslynVersion>
     <!-- Coverlet is bundled with the .NET test plugin (ADR 0011), not referenced: see its project file. -->
     <CoverletVersion>10.1.0</CoverletVersion>
     <!-- The last collector for test hosts before .NET 8 (netstandard2.0), bundled next to the current one (M33, ADR 0030). -->
