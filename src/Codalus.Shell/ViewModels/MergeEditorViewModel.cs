@@ -1010,8 +1010,9 @@ public sealed class MergeEditorViewModel : ObservableObject
     // ------------------------------------------------------------------ changed words
 
     /// <summary>
-    /// The changed words of a source pane's 0-based line (as the diff view marks them: a character diff widened to whole
-    /// words), where the line is in a conflict's block and paired with a line of the other side's block; none elsewhere.
+    /// The changed words of a source pane's 0-based line (<see cref="WordDiff.TokenRanges"/>: whole tokens, whitespace left
+    /// out, so a re-indent marks nothing), where the line is in a conflict's block and paired with a line of the other
+    /// side's block (lines compared without their whitespace); none elsewhere.
     /// </summary>
     public IReadOnlyList<(int Start, int Length)> ChangedWordsAt(MergeSide side, int line) =>
         _changedWords[(int)side].TryGetValue(line, out var ranges) ? ranges : [];
@@ -1032,9 +1033,9 @@ public sealed class MergeEditorViewModel : ObservableObject
 
             var found = starts.BinarySearch(block.RangeIn(side).Start);
             var first = found >= 0 ? found : ~found - 1;
-            foreach (var row in DiffRows.Align(LineDiff.Diff(theirs, mine)))
+            foreach (var row in DiffRows.Align(LineDiff.Diff([.. theirs.Select(LineDiff.WithoutWhitespace)], [.. mine.Select(LineDiff.WithoutWhitespace)])))
             {
-                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.Ranges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
+                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.TokenRanges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
                 {
                     words[first + n - 1] = ranges;
                 }

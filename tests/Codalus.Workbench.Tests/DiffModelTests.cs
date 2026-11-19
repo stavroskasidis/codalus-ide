@@ -72,6 +72,28 @@ public sealed class DiffModelTests
     }
 
     [Fact]
+    public void Changed_tokens_are_marked_whole_on_both_lines_and_a_re_indent_marks_nothing()
+    {
+        static string Marked(string line, IReadOnlyList<(int Start, int Length)> ranges) => string.Join("|", ranges.Select(r => line.Substring(r.Start, r.Length)));
+
+        // A character diff matches every letter of @SendText in the longer value, so it marks only the new line; whole
+        // tokens mark the value on both. The re-indent itself isn't marked.
+        const string Old = "        Title=\"@SendText\"";
+        const string New = "                Title=\"@Resources.ChatSend\"";
+        var (old, now) = WordDiff.TokenRanges(Old, New);
+        Assert.Equal(("SendText", "Resources.ChatSend"), (Marked(Old, old), Marked(New, now)));
+
+        // Only indentation differs: nothing.
+        (old, now) = WordDiff.TokenRanges("    Icon=\"send\"", "            Icon=\"send\"");
+        Assert.Empty(old);
+        Assert.Empty(now);
+
+        // Tokens with an unchanged one between them are separate ranges.
+        (old, now) = WordDiff.TokenRanges("Icon=\"paper-plane\"", "Icon=\"arrow-up\"");
+        Assert.Equal(("paper|plane", "arrow|up"), (Marked("Icon=\"paper-plane\"", old), Marked("Icon=\"arrow-up\"", now)));
+    }
+
+    [Fact]
     public void A_change_is_a_run_of_changed_rows_and_each_side_numbers_its_own_lines()
     {
         // Two edits three lines apart: one git hunk at git's three lines of context, two changes here.

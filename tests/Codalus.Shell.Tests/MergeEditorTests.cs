@@ -104,6 +104,19 @@ public sealed class MergeEditorTests
         Assert.Equal("paper|plane", Words("<Button Icon=\"paper-plane\" Rounded=\"Large\" />", vm.ChangedWordsAt(MergeSide.Incoming, 1)));
         Assert.Empty(vm.ChangedWordsAt(MergeSide.Current, 0));
         Assert.Empty(vm.ChangedWordsAt(MergeSide.Incoming, 2));
+
+        // The current side re-indented the block and changed one value: its lines still pair with the incoming side's,
+        // and only the values are marked, on both sides.
+        const string Mine = "a\n        <Button Icon=\"send\"\n                Title=\"@Resources.ChatSend\" />\nz\n";
+        const string Theirs = "a\n    <Button Icon=\"send\"\n            Title=\"@SendText\" />\nz\n";
+        var indented = ViewModel(
+            "a\n<<<<<<< HEAD\n        <Button Icon=\"send\"\n                Title=\"@Resources.ChatSend\" />\n=======\n    <Button Icon=\"send\"\n            Title=\"@SendText\" />\n>>>>>>> master\nz\n",
+            ours: Mine,
+            theirs: Theirs,
+            @base: "a\n    <Button Icon=\"send\"\n            Title=\"@Resources.ChatSend\" />\nz\n");
+        Assert.Empty(indented.ChangedWordsAt(MergeSide.Current, 1));
+        Assert.Equal("Resources.ChatSend", Words(Mine.Split('\n')[2], indented.ChangedWordsAt(MergeSide.Current, 2)));
+        Assert.Equal("SendText", Words(Theirs.Split('\n')[2], indented.ChangedWordsAt(MergeSide.Incoming, 2)));
     }
 
     [AvaloniaFact]
