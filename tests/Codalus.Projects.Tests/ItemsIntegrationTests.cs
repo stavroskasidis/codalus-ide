@@ -356,7 +356,7 @@ public sealed class ItemsIntegrationTests : IAsyncLifetime
         // A build of both, through a generated solution.
         var output = new System.Collections.Concurrent.ConcurrentQueue<string>();
         _service.BuildOutput += (_, line) => output.Enqueue(line);
-        var build = await _service.BuildAsync(BuildTargets.Build, null, Timeout());
+        var build = await _service.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(build.Succeeded, string.Join("\n", output.TakeLast(40)));
         Assert.True(File.Exists(Path.Combine(folder, ".codalus", "state", "folder", "folder.slnx"))); // where Git doesn't show it
         Assert.False(File.Exists(Path.Combine(folder, ".codalus", "folder.slnx")));

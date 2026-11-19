@@ -91,7 +91,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Building_the_solution_restores_compiles_and_reports_errors_in_the_error_list()
     {
-        var result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await _builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         var output = _builds.Channel.GetText();
         Assert.True(result.Succeeded, output);
         Assert.Equal(0, result.Errors);
@@ -102,7 +102,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         // A compile error: structured, with the file and position, and in the output in MSBuild's format.
         var greeter = Path.Combine(Fixture, "src", "Greetings", "Greeter.cs");
         File.WriteAllText(greeter, "namespace Greetings;\n\npublic static class Greeter\n{\n    public static string Greet(string name) => missing;\n}\n");
-        result = await _builds.BuildAsync(BuildTargets.Build, HelloProject, Timeout());
+        result = await _builds.BuildAsync(BuildTargets.Build, HelloProject, BuildLimit.Token());
         Assert.False(result.Succeeded);
         Assert.False(result.Canceled);
         var error = Assert.Single(_builds.Diagnostics, d => d.Code == "CS0103");
@@ -114,7 +114,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         Assert.Contains("error CS0103", _builds.Channel.GetText(), StringComparison.Ordinal);
 
         // Clean removes the outputs (and starts with no diagnostics).
-        result = await _builds.BuildAsync(BuildTargets.Clean, null, Timeout());
+        result = await _builds.BuildAsync(BuildTargets.Clean, null, BuildLimit.Token());
         Assert.True(result.Succeeded, _builds.Channel.GetText());
         Assert.Empty(_builds.Diagnostics);
         Assert.False(File.Exists(Path.Combine(HelloOutput, "Hello.dll")));
@@ -126,7 +126,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(Timeout());
         var build = _builds.BuildAsync(BuildTargets.Rebuild, null, cancellation.Token);
         Assert.True(_builds.IsBuilding);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _builds.BuildAsync(BuildTargets.Build, null, Timeout()));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token()));
 
         await Task.Delay(300, TestContext.Current.CancellationToken);
         cancellation.Cancel();
@@ -136,14 +136,14 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
         Assert.False(_builds.IsBuilding);
 
         // The host is still usable afterwards.
-        result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        result = await _builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(result.Succeeded, _builds.Channel.GetText());
     }
 
     [Fact]
     public async Task Run_info_and_launch_profiles_start_the_built_program()
     {
-        Assert.True((await _builds.BuildAsync(BuildTargets.Build, HelloProject, Timeout())).Succeeded, _builds.Channel.GetText());
+        Assert.True((await _builds.BuildAsync(BuildTargets.Build, HelloProject, BuildLimit.Token())).Succeeded, _builds.Channel.GetText());
         var opened = new List<Uri>();
         using var runs = new RunService(_solutions, _output, opened.Add);
         Assert.Equal(HelloProject, runs.StartupProject); // the first executable project, not the first project
@@ -182,7 +182,7 @@ public sealed class BuildIntegrationTests : IAsyncLifetime
     public async Task Untrusted_solutions_do_not_build()
     {
         await _solutions.OpenAsync(Solution, trusted: false, restore: false, Timeout());
-        var result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await _builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.False(result.Succeeded);
         Assert.Contains("trusted", _builds.Channel.GetText(), StringComparison.Ordinal);
         await Assert.ThrowsAsync<JsonRpcRemoteException>(() => _solutions.GetRunInfoAsync(HelloProject, Timeout()));

@@ -229,7 +229,7 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         Assert.Contains("<DependentUpon>Strings.resx</DependentUpon>", project, StringComparison.Ordinal);
 
         // Everything generated compiles.
-        var result = await builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(result.Succeeded, builds.Channel.GetText());
     }
 
