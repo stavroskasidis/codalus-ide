@@ -1,8 +1,11 @@
 using System.Diagnostics;
 using Avalonia.Controls;
+using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
 using Codalus.Shell.Controls;
 using Codalus.Shell.ViewModels;
+using Codalus.Shell.Views;
 using Codalus.Workbench.Git;
 using Codalus.Workbench.Projects;
 using Codalus.Workbench.Settings;
@@ -10,7 +13,7 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// Solution Explorer's source control glyphs (#357), the classic IDE's, over each row's icon: a lock on a committed and
+/// Solution Explorer's source control glyphs (#357), the classic IDE's, left of each row's icon: a lock on a committed and
 /// unchanged file, a check mark on a changed one, a plus on a new one and an exclamation mark on a conflict. A project
 /// row has its project file's, the solution row its solution file's; folders and what isn't in git have none.
 /// </summary>
@@ -73,10 +76,10 @@ public sealed class SolutionExplorerGitGlyphsTests
 
     /// <summary>
     /// Each glyph is a filled shape compiled at build time, in the classic IDE's colors (a blue lock, a red check mark, a
-    /// green plus, red for a conflict), drawn 9 px at the icon's bottom left with a 1 px outline in the row's background.
+    /// green plus, red for a conflict), drawn on its own at 12 px in the column left of the row's icon.
     /// </summary>
     [AvaloniaFact]
-    public void The_glyphs_are_filled_shapes_in_their_colors_at_the_icons_bottom_left()
+    public void The_glyphs_are_filled_shapes_in_their_colors()
     {
         foreach (var (kind, color) in new[] { ("git-unchanged", CommandIcons.Blue), ("git-modified", CommandIcons.Red), ("git-added", CommandIcons.Green), ("git-conflict", CommandIcons.Red) })
         {
@@ -85,9 +88,8 @@ public sealed class SolutionExplorerGitGlyphsTests
             Assert.Equal(color, CommandIcons.ColorOf(kind));
         }
 
-        // A white "file" with the red check mark at its bottom left, outlined in black: red only in the bottom left
-        // quarter, and black around it.
-        var icon = new Icon { Kind = "file", Width = 16, Height = 16, Foreground = Avalonia.Media.Brushes.White, Badge = "git-modified", BadgePlacement = Avalonia.Layout.HorizontalAlignment.Left, BadgeOutline = Avalonia.Media.Brushes.Black };
+        // The check mark on its own, as the row draws it: red, a solid mark (not a hairline), and nothing else.
+        var icon = new Icon { Kind = "git-modified", Width = 12, Height = 12 };
         var window = new Window { Width = 40, Height = 40, Background = Avalonia.Media.Brushes.White, Content = new Panel { HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Top, Children = { icon } } };
         window.Show();
         try
@@ -103,26 +105,31 @@ public sealed class SolutionExplorerGitGlyphsTests
             }
 
             var scale = frame.PixelSize.Width / window.Bounds.Width;
-            int redLeft = 0, redElsewhere = 0, black = 0;
+            // Solid red where the mark is, its antialiased edge pink on the white, and nothing in another hue.
+            int red = 0, other = 0;
             for (var y = 0; y < (int)(16 * scale); y++)
             {
                 for (var x = 0; x < (int)(16 * scale); x++)
                 {
                     var c = Pixel(x, y);
+                    if (c is { R: > 245, G: > 245, B: > 245 })
+                    {
+                        continue;
+                    }
+
                     if (c.R > 150 && c.G < 110 && c.B < 110)
                     {
-                        _ = x < 8 * scale && y >= 7 * scale ? redLeft++ : redElsewhere++;
+                        red++;
                     }
-                    else if (c.R < 40 && c.G < 40 && c.B < 40)
+                    else if (c.G > c.R || c.B > c.R)
                     {
-                        black++;
+                        other++;
                     }
                 }
             }
 
-            Assert.True(redLeft > 12 * scale * scale, $"red at the bottom left: {redLeft}");
-            Assert.Equal(0, redElsewhere);
-            Assert.True(black > 0, "no outline");
+            Assert.True(red >= 8 * scale * scale, $"red: {red}");
+            Assert.Equal(0, other);
         }
         finally
         {
@@ -149,10 +156,37 @@ public sealed class SolutionExplorerGitGlyphsTests
 
     private static ExplorerRowViewModel? Row(SolutionExplorerViewModel explorer, string id) => explorer.Rows.FirstOrDefault(r => r.Id == id);
 
+    /// <summary>With <c>CODALUS_UI_SNAPSHOTS</c>, the window in Harbor Light, Classic Dark and Harbor High contrast, saved there.</summary>
+    private static void Snapshots(Window window, string name)
+    {
+        if (Environment.GetEnvironmentVariable("CODALUS_UI_SNAPSHOTS") is not { Length: > 0 } folder)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(folder);
+        var before = window.RequestedThemeVariant;
+        foreach (var variant in new[] { Codalus.Shell.Theming.ThemeService.HarborLight, Avalonia.Styling.ThemeVariant.Dark, Codalus.Shell.Theming.ThemeService.HarborHighContrast })
+        {
+            window.RequestedThemeVariant = variant;
+            for (var i = 0; i < 3; i++)
+            {
+                ShellFixture.Pump();
+            }
+
+            using var frame = Avalonia.Headless.HeadlessWindowExtensions.CaptureRenderedFrame(window);
+            frame?.Save(Path.Combine(folder, $"{name}-{variant.Key}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+        }
+
+        window.RequestedThemeVariant = before;
+        ShellFixture.Pump();
+    }
+
     /// <summary>
     /// A folder in a repository, in the folder view: the committed README has the lock, a changed guide the check mark, a
-    /// new page the plus, the ignored output none. An edit the status then reads turns the README's lock into a check mark;
-    /// with the setting off every glyph goes, and with it on again they come back. On a plain folder: nothing evaluates.
+    /// new page the plus, the ignored output none, and every row keeps the glyph column. An edit the status then reads turns
+    /// the README's lock into a check mark; with the setting off every glyph and the column go, and with it on again they
+    /// come back.
     /// </summary>
     [AvaloniaFact]
     public async Task The_folder_views_rows_show_their_files_state_and_follow_the_status()
@@ -172,6 +206,8 @@ public sealed class SolutionExplorerGitGlyphsTests
         await File.WriteAllTextAsync(readme, "# Readme\n", ct);
         await File.WriteAllTextAsync(guide, "# Guide\n", ct);
         await File.WriteAllTextAsync(Path.Combine(folder, ".gitignore"), "*.log\n", ct);
+        Directory.CreateDirectory(Path.Combine(folder, "docs"));
+        await File.WriteAllTextAsync(Path.Combine(folder, "docs", "notes.md"), "# Notes\n", ct);
         Git(folder, "add", ".");
         Git(folder, "commit", "-q", "-m", "initial");
         await File.AppendAllTextAsync(guide, "More.\n", ct);
@@ -189,6 +225,31 @@ public sealed class SolutionExplorerGitGlyphsTests
         Assert.Equal("git-added", Row(explorer, "f:" + page)!.GitGlyph);
         Assert.Null(Row(explorer, "f:" + output)?.GitGlyph);
         Assert.Null(explorer.Rows.First(r => r.Node.Kind == ExplorerNodeKind.Solution).GitGlyph);
+        Assert.True(explorer.ShowsGitGlyphs);
+
+        // In the view, as the classic IDE's: the glyph in its own column left of the icon, and a folder's icon (no glyph)
+        // lined up with its sibling files'.
+        var window = new Window { Width = 320, Height = 260, Content = new SolutionExplorerView { DataContext = explorer } };
+        window.Show();
+        try
+        {
+            ShellFixture.RenderFrame(window);
+            var list = window.GetVisualDescendants().OfType<ListBox>().Single();
+            double Left(Icon icon) => icon.TranslatePoint(default, window)!.Value.X;
+            var readmeIcons = list.GetVisualDescendants().OfType<ListBoxItem>().Single(i => i.DataContext is ExplorerRowViewModel { Id: var id } && id == "f:" + readme).GetVisualDescendants().OfType<Icon>().Where(i => i.IsEffectivelyVisible).ToArray();
+            var glyph = readmeIcons.Single(i => i.Kind == "git-unchanged");
+            var fileIcon = readmeIcons.Single(i => i.Kind is { } kind && !kind.StartsWith("git-", StringComparison.Ordinal) && !kind.StartsWith("chevron", StringComparison.Ordinal) && i.Bounds.Width > 12);
+            Assert.True(Left(glyph) + glyph.Bounds.Width <= Left(fileIcon) + 1, $"glyph at {Left(glyph)}, icon at {Left(fileIcon)}");
+            Assert.True(glyph.Bounds.Width == 12 && glyph.Bounds.Height == 12, $"glyph {glyph.Bounds}");
+            var docsIcons = list.GetVisualDescendants().OfType<ListBoxItem>().Single(i => i.DataContext is ExplorerRowViewModel { Node.Kind: ExplorerNodeKind.Folder, Name: "docs" }).GetVisualDescendants().OfType<Icon>().Where(i => i.IsEffectivelyVisible).ToArray();
+            var docsIcon = docsIcons.Single(i => i.Bounds.Width > 12);
+            Assert.Equal(Left(fileIcon), Left(docsIcon), 1);
+            Snapshots(window, "solution-explorer-git-glyphs");
+        }
+        finally
+        {
+            window.Close();
+        }
 
         // An edit, read by the status: the README's lock becomes a check mark.
         await File.AppendAllTextAsync(readme, "Edited.\n", ct);
@@ -197,8 +258,9 @@ public sealed class SolutionExplorerGitGlyphsTests
 
         // The setting off: no glyph; on again: back.
         await f.Shell.Workbench.Settings.SetAsync(BuiltIns.ExplorerGlyphsSetting, false, SettingScope.User, ct);
-        await ShellFixture.PumpUntil(() => explorer.Rows.All(r => r.GitGlyph is null), seconds: 60, describe: Describe);
+        await ShellFixture.PumpUntil(() => explorer.Rows.All(r => r.GitGlyph is null) && !explorer.ShowsGitGlyphs, seconds: 60, describe: Describe);
         await f.Shell.Workbench.Settings.SetAsync(BuiltIns.ExplorerGlyphsSetting, true, SettingScope.User, ct);
         await ShellFixture.PumpUntil(() => Row(explorer, "f:" + readme)?.GitState == GitFileState.Modified && Row(explorer, "f:" + guide)?.GitState == GitFileState.Modified, seconds: 60, describe: Describe);
+        Assert.True(explorer.ShowsGitGlyphs);
     }
 }
