@@ -489,10 +489,13 @@ jobs:
         # The command sweep (shell.commandSweep) takes about 13 of these. On macOS the whole test took 37 to 38 minutes on
         # passing runs (2,230 to 2,296 s, 2026-11-16 to 11-18), so a runner 10% slower ran out of 40 in the sweep's last
         # commands with every step passing (run 44480129188: the steps that restore and build 1.3 to 3 times as long);
-        # macOS gets 55, as its test shards get 60 where the others get 40. A hang still stops here.
+        # macOS gets 55, as its test shards get 60 where the others get 40. A hang still stops here. The app's own
+        # watchdog sits inside it, so the app reports before the step ends: at 40 it stopped a passing macOS smoke at 40
+        # minutes anyway (dry run 44763395108).
         timeout-minutes: ${{ matrix.os == 'macos-latest' && 55 || 40 }}
         env:
           CODALUS_NETCOREDBG: ${{ github.workspace }}/.work/netcoredbg
+          CODALUS_SMOKE_MINUTES: ${{ matrix.os == 'macos-latest' && 52 || 40 }}
         run: |
           live=artifacts/smoke-live/smoke
           mkdir -p "$live"

@@ -34,12 +34,21 @@ namespace Codalus.Shell.Infrastructure;
 internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
-    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(40); // the command sweep's 25 at most, with the rest
+    private static readonly TimeSpan s_watchdog = Watchdog(Environment.GetEnvironmentVariable("CODALUS_SMOKE_MINUTES"));
     private static readonly string[] s_commands = ["workbench.showCommandPalette", "build.buildSolution", "debug.start", "git.commit"];
     private static readonly string[] s_themes = ["blue", "light", "highContrast", "dark"];
 
     /// <summary>The themes the M29 step photographs.</summary>
     private static readonly string[] s_chromeThemes = ["blue", "light", "dark"];
+
+    /// <summary>
+    /// How long the whole smoke test may take before it reports itself failed and exits: <c>CODALUS_SMOKE_MINUTES</c>
+    /// minutes, 40 without it (the command sweep's 25 at most, with the rest). CI's step sets it inside its own limit,
+    /// 52 of macOS' 55: with the watchdog at 40 there, the step's 55 never applied, and `develop`'s dry run 44763395108
+    /// stopped at 40 minutes in the sweep's last scenario with every step passing.
+    /// </summary>
+    internal static TimeSpan Watchdog(string? minutes) =>
+        TimeSpan.FromMinutes(int.TryParse(minutes, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : 40);
 
     private readonly List<StepResult> _results = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();

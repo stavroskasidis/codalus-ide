@@ -5,7 +5,8 @@ namespace Codalus.Shell.Tests;
 
 /// <summary>
 /// What the smoke adds to a failure that doesn't reproduce (the Mac's smoke of the release candidate, 2026-11-18): the
-/// exception behind an error toast it hid before a picture, and the IDE's child processes when a build wait timed out.
+/// exception behind an error toast it hid before a picture, and the IDE's child processes when a build wait timed out;
+/// and how long it may run.
 /// </summary>
 public sealed class SmokeDiagnosticsTests
 {
@@ -20,6 +21,19 @@ public sealed class SmokeDiagnosticsTests
         [diagnostics] something after it
 
         """;
+
+    [Fact]
+    public void The_watchdog_takes_its_minutes_from_the_environment_and_is_40_without_them()
+    {
+        // CI's macOS smoke step has 55 minutes and sets 52; a watchdog fixed at 40 stopped a passing smoke there anyway
+        // (dry run 44763395108, 2026-11-20).
+        Assert.Equal(TimeSpan.FromMinutes(52), SmokeTest.Watchdog("52"));
+        Assert.Equal(TimeSpan.FromMinutes(40), SmokeTest.Watchdog(null));
+        Assert.Equal(TimeSpan.FromMinutes(40), SmokeTest.Watchdog(""));
+        Assert.Equal(TimeSpan.FromMinutes(40), SmokeTest.Watchdog("0"));
+        Assert.Equal(TimeSpan.FromMinutes(40), SmokeTest.Watchdog("-5"));
+        Assert.Equal(TimeSpan.FromMinutes(40), SmokeTest.Watchdog("soon"));
+    }
 
     [Fact]
     public void An_error_toast_from_an_unhandled_exception_is_given_its_logged_stack()
