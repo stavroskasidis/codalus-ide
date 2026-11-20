@@ -2054,6 +2054,33 @@ internal sealed partial class SmokeTest
             return null;
         }
 
+        /// <summary>
+        /// The UI thread's state in the kernel (Linux): <c>R</c> running or runnable, <c>S</c> asleep in a wait, <c>D</c> in
+        /// an uninterruptible one, with the kernel function it waits in. The 1.0 validation's WSL smoke (2026-11-20) stalled
+        /// two menu items' first runs for 764 and 1077 ms with the UI thread running 0 ms of them on an idle machine and no
+        /// page read from disk: a wait, and this names it (the X server's socket, a lock, a pipe). Null off Linux.
+        /// </summary>
+        private string? KernelState()
+        {
+            if (!OperatingSystem.IsLinux() || _uiThreadId is not (> 0 and var id))
+            {
+                return null;
+            }
+
+            try
+            {
+                var task = $"/proc/self/task/{id}/";
+                var stat = File.ReadAllText(task + "stat");
+                var state = stat.LastIndexOf(')') is var end and >= 0 && end + 2 < stat.Length ? stat[end + 2].ToString() : "?";
+                var wchan = File.ReadAllText(task + "wchan").Trim();
+                return state != "R" && wchan is { Length: > 0 } and not "0" ? $"{state} in {wchan}" : state;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
         /// <summary>The machine's processor time so far, busy and in all (any unit; Windows, Linux; null elsewhere).</summary>
         private static (long Busy, long Total)? MachineTimes()
         {
@@ -2215,6 +2242,7 @@ internal sealed partial class SmokeTest
                 }
 
                 Dictionary<string, int>? jobs = null;
+                Dictionary<string, int>? kernel = null;
                 var samples = 0;
                 try
                 {
@@ -2228,6 +2256,12 @@ internal sealed partial class SmokeTest
                         jobs ??= new(StringComparer.Ordinal);
                         var job = Ui.RunningJob is { } posted ? "the job posted at " + posted : "no posted job";
                         jobs[job] = jobs.GetValueOrDefault(job) + 1;
+                        if (KernelState() is { } state)
+                        {
+                            kernel ??= new(StringComparer.Ordinal);
+                            kernel[state] = kernel.GetValueOrDefault(state) + 1;
+                        }
+
                         samples++;
                         Interlocked.Increment(ref _samplesTaken);
                     }
@@ -2249,6 +2283,11 @@ internal sealed partial class SmokeTest
                         _maxTicks = ticks;
                         _maxGcPause = gcPause;
                         _maxJob = jobs?.MaxBy(j => j.Value) is { } most ? $"{most.Key} ({most.Value} of {samples} samples)" : null;
+                        if (kernel is { Count: > 0 })
+                        {
+                            _maxJob += "; in the kernel " + string.Join(", ", kernel.OrderByDescending(k => k.Value).Take(3).Select(k => $"{k.Key} {k.Value}×"));
+                        }
+
                         _maxCpu = cpuBefore is { } a && cpuAfter is { } b
                             ? $"the UI thread ran {b - a:0} ms of it"
                               + (machineBefore is { } m && machineAfter is { } n && n.Total > m.Total ? $", the machine's cores were {100.0 * (n.Busy - m.Busy) / (n.Total - m.Total):0}% busy" : string.Empty)
