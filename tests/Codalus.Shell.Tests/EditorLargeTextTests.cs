@@ -685,6 +685,52 @@ public sealed class EditorLargeTextTests
         Assert.Equal("a\nb\nc\n", document.Text.Text);
     }
 
+    [AvaloniaTheory]
+    [InlineData("using App;\n\nConsole.WriteLine(1);\nConsole.WriteLine(2);\nreturn;\n", "using App;\r\n\r\nConsole.WriteLine(1);\r\nConsole.WriteLine(2);\r\nreturn;\r\n")]
+    [InlineData("using App;\r\n\r\nConsole.WriteLine(1);\r\nConsole.WriteLine(2);\r\nreturn;\r\n", "using App;\n\nConsole.WriteLine(1);\nConsole.WriteLine(2);\nreturn;\n")]
+    [InlineData("using App;\n\nConsole.WriteLine(1);\nConsole.WriteLine(2);\nreturn;", "using App;\r\n\r\nConsole.WriteLine(1);\r\nConsole.WriteLine(2);\r\nreturn;")]
+    public async Task A_reload_of_new_line_endings_keeps_each_breakpoint_on_its_line(string before, string after)
+    {
+        // A git checkout under core.autocrlf (the Windows smoke's command sweep, 2026-11-20) rewrote a file open in the
+        // editor with CRLF: the reload replaced everything from line 1's end on, and every breakpoint in it, an anchor at
+        // its line's start as DebugMargin makes them, ended on line 1 and never bound.
+        var files = new HeldFile(before);
+        var root = Path.Combine(Path.GetTempPath(), "codalus-reload-" + Guid.NewGuid().ToString("N"));
+        using var mount = FileSystems.Mount(root, files);
+        var path = Path.Combine(root, "Program.cs");
+        using var document = await CodeDocument.OpenAsync(path, TestContext.Current.CancellationToken);
+        var anchors = Enumerable.Range(1, document.Text.LineCount).Select(line =>
+        {
+            var anchor = document.Text.CreateAnchor(document.Text.GetLineByNumber(line).Offset);
+            (anchor.MovementType, anchor.SurviveDeletion) = (AnchorMovementType.BeforeInsertion, true);
+            return (Line: line, Anchor: anchor);
+        }).ToList();
+
+        files.Write(after);
+        await document.ReloadAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(after, document.Text.Text);
+        Assert.Equal(anchors.Select(a => a.Line), anchors.Select(a => a.Anchor.Line));
+    }
+
+    [Theory]
+    [InlineData("a\nb\nc\n", "a\nX\nc\n", "2,1,X")] // one line's text: the one edit
+    [InlineData("a\nb\nc\n", "a\r\nb\r\nc\r\n", "1,1,\r\n|3,1,\r\n|5,0,\r")] // each line break, so the lines stay
+    [InlineData("a\nb\nc\n", "a\r\nX\r\nc\r\n", "1,1,\r\n|2,2,X\r\n|5,0,\r")] // and a line that changed between them
+    [InlineData("a\nb\nc", "a\nb\nc\nd", "5,0,\nd")]
+    [InlineData("a\nb\nc\n", "a\nc\n", "2,2,")]
+    public void A_reloads_edits_keep_the_lines_whose_text_stayed(string before, string after, string expected)
+    {
+        var edits = CodeDocument.Edits(before, after);
+        Assert.Equal(expected, string.Join("|", edits.Select(e => $"{e.Offset},{e.Length},{e.Text}")));
+        var text = before;
+        foreach (var (offset, length, inserted) in Enumerable.Reverse(edits))
+        {
+            text = text[..offset] + inserted + text[(offset + length)..];
+        }
+
+        Assert.Equal(after, text);
+    }
+
     [Theory]
     [InlineData("a\r\nb\r\n", "a\nb\n", 1, 5, "\nb\n")] // ends after the "\r\n", not between
     [InlineData("a\nb", "a\r\nb", 1, 0, "\r")] // an insertion before a "\n" splits nothing

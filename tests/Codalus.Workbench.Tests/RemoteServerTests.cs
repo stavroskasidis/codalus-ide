@@ -150,6 +150,8 @@ public sealed class RemoteServerTests
 
         var reconnected = new TaskCompletionSource<TimeSpan>(TaskCreationOptions.RunContinuationsAsynchronously);
         var disconnected = false;
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        connection.Log += (_, line) => log.Enqueue(line);
         connection.Reconnected += (_, down) => reconnected.TrySetResult(down);
         connection.Disconnected += (_, _) => disconnected = true;
 
@@ -157,7 +159,7 @@ public sealed class RemoteServerTests
         connection.DropLink();
         await process.Input.WriteAsync("during\n"u8.ToArray(), Timeout());
         var down = await reconnected.Task.WaitAsync(Timeout());
-        Assert.True(down < TimeSpan.FromSeconds(5), $"Reconnecting took {down}.");
+        Assert.True(down < TimeSpan.FromSeconds(5), $"Reconnecting took {down} (a loaded Windows PC, the 1.0 validation: 8.3 s); the connection's log:\n{string.Join("\n", log)}");
         Assert.Equal("during\n", await ReadLineAsync(process.Output));
         _ = await connection.ListPortsAsync(Timeout());
         Assert.False(process.Exited.IsCompleted);

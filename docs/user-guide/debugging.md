@@ -120,7 +120,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
   - **Temporary**: removed once it stops the program. Debug → Insert Temporary Breakpoint (`Shift+Alt+F9`, `T`) adds one on the caret's line.
 - **Function breakpoints**: Debug → New Function Breakpoint breaks when a method is entered: `Method`, `Type.Method` or `Namespace.Type.Method`, with an optional condition.
 - **The Breakpoints window** (`Ctrl+Alt+B`) lists source and function breakpoints with their labels and settings. Search by location, condition or label; enable or disable the ones shown; double-click to open; `Delete` to remove; right-click to edit labels. **Export** and **Import** save breakpoints to a JSON file and read them back.
-- **Edits**: breakpoints follow your edits to the file, and are saved with the solution.
+- **Edits**: breakpoints follow your edits to the file, and changes made to it outside the IDE (a checkout, a pull, a formatter, other line endings), and are saved with the solution.
 - **XAML breakpoints**: in an Avalonia `.axaml` file (or a WPF `.xaml` file on Windows), a breakpoint stops at an element's creation or an attribute's set, through the app's live agent, not the debugger: see [XAML breakpoints](avalonia.md#xaml-breakpoints). The Live Property Explorer's **Break When Value Changes** is the data breakpoint of a XAML property, and `debug.breakOnFailedBinding` stops at a failed binding.
 - **Who counts the hits**: under [the Codalus debugger](#the-codalus-debugger) the debugger itself applies hit counts, filters, dependencies and logpoints, so the program doesn't stop for a hit that doesn't count and a logpoint in a loop costs little. Under netcoredbg, Codalus IDE stops the program at each hit and continues it.
 
