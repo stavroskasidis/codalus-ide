@@ -31,10 +31,11 @@ if [ "$(uname -s)" = Linux ]; then
   export CODALUS_CREDENTIAL_STORE="${CODALUS_CREDENTIAL_STORE:-memory}"
 fi
 
-# Runs "$@" and stops it after $smoke_limit seconds. The app's own watchdog (40 minutes) starts only once it's up: an
-# X server that took the connection and never answered (a hung WSLg) held it before its window, for hours. A loop, not
-# timeout(1): macOS has none, and Git Bash's is Windows' timeout.exe.
-smoke_limit=$((50 * 60))
+# Runs "$@" and stops it after $smoke_limit seconds. The app's own watchdog (CODALUS_SMOKE_MINUTES, 40 without it)
+# starts only once it's up: an X server that took the connection and never answered (a hung WSLg) held it before its
+# window, for hours. Ten minutes over the watchdog, so the app reports first. A loop, not timeout(1): macOS has none,
+# and Git Bash's is Windows' timeout.exe.
+smoke_limit=$(((${CODALUS_SMOKE_MINUTES:-40} + 10) * 60))
 run_bounded() {
   "$@" &
   local pid=$! waited=0 status=0
