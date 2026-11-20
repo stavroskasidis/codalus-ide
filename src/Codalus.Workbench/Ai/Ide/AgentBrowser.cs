@@ -26,6 +26,8 @@ public sealed class AgentBrowser : IAsyncDisposable
     private readonly List<string> _console = [];
     private readonly SemaphoreSlim _send = new(1, 1);
     private readonly object _gate = new();
+    private readonly Queue<string> _events = new();
+    private long _lastMessage;
     private int _nextId;
     private Task? _receive;
 
@@ -352,7 +354,7 @@ public sealed class AgentBrowser : IAsyncDisposable
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            throw new IdeToolException($"The browser didn't answer {method}.");
+            throw new IdeToolException($"The browser didn't answer {method} ({Said()}).");
         }
         finally
         {
@@ -400,10 +402,47 @@ public sealed class AgentBrowser : IAsyncDisposable
         }
     }
 
+    /// <summary>The longest list of the browser's last events a timeout names.</summary>
+    private const int MaxEvents = 8;
+
+    /// <summary>
+    /// What the browser did while a command waited for its answer, for the timeout's message: when it last said anything,
+    /// its last events, and whether its process and the socket are still up. The 1.0 validation's Windows run
+    /// (2026-11-20) had a headless browser that answered Runtime, Log and Page.enable and then not the first
+    /// Page.navigate, a data: URL, for 60 s, and the message said nothing more.
+    /// </summary>
+    private string Said()
+    {
+        string events;
+        long last;
+        lock (_gate)
+        {
+            events = _events.Count == 0 ? "none" : string.Join(", ", _events);
+            last = _lastMessage;
+        }
+
+        var since = last == 0 ? "never said anything" : string.Create(CultureInfo.InvariantCulture, $"last said something {Stopwatch.GetElapsedTime(last).TotalSeconds:0.0} s ago");
+        var process = _process is null ? "someone else's" : _process.HasExited ? string.Create(CultureInfo.InvariantCulture, $"exited with code {_process.ExitCode}") : "running";
+        return $"it {since}; its last events: {events}; its process {process}; the socket {_socket.State}";
+    }
+
     private void Handle(byte[] bytes)
     {
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
+        Volatile.Write(ref _lastMessage, Stopwatch.GetTimestamp());
+        if (root.TryGetProperty("method", out var eventName) && eventName.GetString() is { } name)
+        {
+            lock (_gate)
+            {
+                _events.Enqueue(name);
+                if (_events.Count > MaxEvents)
+                {
+                    _events.Dequeue();
+                }
+            }
+        }
+
         if (root.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var id))
         {
             TaskCompletionSource<JsonElement>? tcs;
