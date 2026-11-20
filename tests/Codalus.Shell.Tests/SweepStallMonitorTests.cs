@@ -115,7 +115,7 @@ public sealed class SweepStallMonitorTests
                 return;
             }
 
-            var match = System.Text.RegularExpressions.Regex.Match(stall.CpuOfMax ?? string.Empty, @"^the UI thread ran (\d+) ms of it, the machine's cores were (\d+)% busy$");
+            var match = System.Text.RegularExpressions.Regex.Match(stall.CpuOfMax ?? string.Empty, @"^the UI thread ran (\d+) ms of it, the machine's cores were (\d+)% busy, \d+ (page fault\(s\) in the process|major page fault\(s\) on the UI thread)$");
             Assert.True(match.Success, $"The stall of {stall.MaxMilliseconds:0} ms said: {stall.CpuOfMax ?? "nothing"}.");
             var ran = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
             var busy = int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
