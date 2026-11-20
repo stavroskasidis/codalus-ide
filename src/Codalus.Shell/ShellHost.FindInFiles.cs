@@ -25,8 +25,15 @@ public sealed partial class ShellHost
             FindResults,
             () => Window is { } window ? window.PickFolderAsync(Localizer.Get("msg.findInFiles.lookInFolder", "Look in Folder")) : Task.FromResult<string?>(null),
             ReplaceAllInFilesAsync,
-            ReplaceInFileAsync);
+            ReplaceInFileAsync)
+        {
+            Scopes = () => Solutions.Solution is { IsFolder: true } ? FindScopes.ForFolder(CurrentDirectory()) : FindScopes.All,
+        };
     }
+
+    /// <summary>The active document's folder (Look in's current directory), or null without one on disk.</summary>
+    private string? CurrentDirectory() =>
+        ActiveEditor?.Model is { IsReadOnly: false, Path: { } path } && Path.IsPathRooted(path) ? Path.GetDirectoryName(path) : null;
 
     /// <summary>Ctrl+Shift+F: Find and Replace on Find in Files, with the editor's selection to find.</summary>
     public void FindInFiles() => FindReplace.Open(SelectedTextToFind(), replace: false);
@@ -42,19 +49,21 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// The files a search looks in: its scope's, with its file types applied (except to the current document), and their
-    /// open texts, gathered off the UI thread (<see cref="GatherAsync"/>).
+    /// open texts, gathered off the UI thread (<see cref="GatherAsync"/>). In folder mode the entire workspace is the
+    /// folder's files on disk (the loaded projects', if any, are among them).
     /// </summary>
     private Task<FilesToSearch> FilesToSearchAsync(FindInFilesOptions options, CancellationToken cancellationToken)
     {
         var filter = new FileTypeFilter(options.FileTypes);
         var root = Solutions.Solution?.Directory;
+        var folderMode = Solutions.Solution?.IsFolder == true;
         switch (options.LookIn)
         {
-            case FindScopes.EntireSolution:
-                return GatherAsync(SearchableFiles(), path => filter.Matches(path, root), mustExist: true, cancellationToken);
+            case FindScopes.EntireSolution or FindScopes.EntireWorkspace:
+                return GatherAsync(folderMode ? FolderFiles(root!, filter, root) : SearchableFiles(), path => filter.Matches(path, root), mustExist: !folderMode, cancellationToken);
 
             case FindScopes.CurrentProject:
-                return GatherAsync(CurrentProjectFiles(), path => filter.Matches(path, root), mustExist: true, cancellationToken);
+                return GatherAsync(CurrentProjectFiles(filter, folderMode ? root : null), path => filter.Matches(path, root), mustExist: true, cancellationToken);
 
             case FindScopes.CurrentDocument:
                 var document = ActiveEditor is { } editor && !editor.Model.IsReadOnly ? editor.Model.Path : null;
@@ -65,28 +74,99 @@ public sealed partial class ShellHost
                 return GatherAsync(() => open, path => filter.Matches(path, root), mustExist: false, cancellationToken);
 
             default:
-                var folder = options.LookIn;
+                // A folder that was browsed to, or the current directory: the folder and its subfolders.
+                var folder = FindScopes.IsCurrentDirectory(options.LookIn, out var current) ? current : options.LookIn;
                 if (!Directory.Exists(folder))
                 {
                     throw new DirectoryNotFoundException($"The folder '{folder}' doesn't exist.");
                 }
 
-                return GatherAsync(
-                    () => Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint }),
-                    path => filter.Matches(path, folder),
-                    mustExist: false,
-                    cancellationToken);
+                return GatherAsync(FolderFiles(folder, filter, folder), path => filter.Matches(path, folder), mustExist: false, cancellationToken);
         }
     }
 
-    /// <summary>The active document's project's files (its items and the project file), listed when called (off the UI thread), or none.</summary>
-    private Func<IEnumerable<string>> CurrentProjectFiles()
+    /// <summary>
+    /// The files in <paramref name="folder"/> and its subfolders, listed when called (off the UI thread), without going
+    /// into the folders <paramref name="filter"/> leaves out whole (<c>bin</c>, <c>obj</c>, <c>.git</c> with the default
+    /// file types), or into links.
+    /// </summary>
+    private static Func<IEnumerable<string>> FolderFiles(string folder, FileTypeFilter filter, string? root) => () => WalkFolder(folder, filter, root);
+
+    private static IEnumerable<string> WalkFolder(string folder, FileTypeFilter filter, string? root)
+    {
+        var options = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        var pending = new Stack<string>();
+        pending.Push(folder);
+        while (pending.TryPop(out var directory))
+        {
+            List<string> files, directories;
+            try
+            {
+                files = [.. Directory.EnumerateFiles(directory, "*", options)];
+                directories = [.. Directory.EnumerateDirectories(directory, "*", options)];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                continue; // gone, or not readable
+            }
+
+            foreach (var file in files)
+            {
+                yield return file;
+            }
+
+            foreach (var child in directories)
+            {
+                if (!filter.ExcludesFolder(child, root))
+                {
+                    pending.Push(child);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The active document's project's files (its items and the project file), listed when called (off the UI thread), or
+    /// none. In folder mode (<paramref name="workspace"/>), a document no loaded project has is in the project whose file
+    /// is nearest above it in the folder, as in the classic IDE's Open Folder: that project's folder is searched.
+    /// </summary>
+    private Func<IEnumerable<string>> CurrentProjectFiles(FileTypeFilter filter, string? workspace)
     {
         var path = ActiveEditor?.Model.Path;
         var projects = Solutions.Projects.Values;
-        return () => ProjectListing(projects, path) is { } project
-            ? project.Items.Where(i => i.Kind != "Folder").Select(i => i.Path).Prepend(project.Path)
-            : [];
+        return () =>
+        {
+            if (ProjectListing(projects, path) is { } project)
+            {
+                return project.Items.Where(i => i.Kind != "Folder").Select(i => i.Path).Prepend(project.Path);
+            }
+
+            return workspace is not null && path is not null && NearestProjectFolder(path, workspace) is { } folder
+                ? WalkFolder(folder, filter, workspace)
+                : [];
+        };
+    }
+
+    /// <summary>The folder of the project file nearest above <paramref name="path"/>, up to <paramref name="workspace"/>, or null.</summary>
+    private static string? NearestProjectFolder(string path, string workspace)
+    {
+        var top = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspace));
+        for (var folder = Path.GetDirectoryName(Path.GetFullPath(path)); folder is not null && Codalus.Workbench.FileSystem.FileSystems.IsUnder(folder, top); folder = Path.GetDirectoryName(folder))
+        {
+            try
+            {
+                if (Directory.EnumerateFiles(folder, "*proj").Any(SolutionTree.IsProjectFile))
+                {
+                    return folder;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The first of <paramref name="projects"/> that is <paramref name="path"/> or lists it.</summary>
