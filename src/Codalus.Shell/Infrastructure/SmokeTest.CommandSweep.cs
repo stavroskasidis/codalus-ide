@@ -46,6 +46,33 @@ internal sealed partial class SmokeTest
     private const string SweepOnlyVariable = "CODALUS_SWEEP_ONLY";
 
     /// <summary>
+    /// Where the UI thread slept in a stall, on Linux (<see cref="SweepStallMonitor.StackOfMax"/>), and every thread's
+    /// state and stack then in <c>sweep-stall-&lt;n&gt;.txt</c> in the logs: the lock it waited on is the one another
+    /// thread held. Empty when there's none.
+    /// </summary>
+    private string SweepStallStacks(string commandId, string entry)
+    {
+        if (_sweepStall?.StackOfMax is not { } stack)
+        {
+            return string.Empty;
+        }
+
+        var file = $"sweep-stall-{Interlocked.Increment(ref _sweepStallDumps).ToString(CultureInfo.InvariantCulture)}.txt";
+        try
+        {
+            File.WriteAllText(Path.Combine(shell.Paths.Logs, file), $"{commandId} [{entry}]\n{_sweepStall.ThreadsOfMax}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            file = $"none written ({ex.Message})";
+        }
+
+        return $"; the UI thread 300 ms in: {stack}; every thread's in {file}";
+    }
+
+    private int _sweepStallDumps;
+
+    /// <summary>
     /// The longest the UI thread may stall in a command: 500 ms on a developer's machine. CI's hosted runners render in
     /// software with no GPU (Xvfb on Linux), and only a command's first run there went past 500 ms: a cold first open of
     /// its view or window (templates, styles, first layout and text shaping), 521 ms on Linux and 824 ms on macOS, while
@@ -1108,7 +1135,7 @@ internal sealed partial class SmokeTest
         var stallLimit = SweepStallLimit(firstRun);
         if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run{(gc is null ? string.Empty : ": " + gc)}; it ran {_sweepStall.JobOfMax ?? "unsampled"}{(_sweepStall.CpuOfMax is { } cpu ? "; " + cpu : string.Empty)})";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run{(gc is null ? string.Empty : ": " + gc)}; it ran {_sweepStall.JobOfMax ?? "unsampled"}{(_sweepStall.CpuOfMax is { } cpu ? "; " + cpu : string.Empty)}{SweepStallStacks(command.Id, entry)})";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
@@ -1916,6 +1943,8 @@ internal sealed partial class SmokeTest
         private TimeSpan _maxGcPause;
         private string? _maxJob;
         private string? _maxCpu;
+        private string? _maxStack;
+        private string? _maxThreads;
         private int _probes;
         private int _probesSent;
         private int _probesAnswered;
@@ -2165,6 +2194,33 @@ internal sealed partial class SmokeTest
             }
         }
 
+        /// <summary>
+        /// Where the UI thread was asleep 300 ms into the longest wait, on Linux (<see cref="ThreadStack.Scan(int, int, int)"/>):
+        /// its system call and the code addresses on its stack; null for a shorter wait, a running thread or elsewhere.
+        /// </summary>
+        public string? StackOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxStack;
+                }
+            }
+        }
+
+        /// <summary>Every thread's state and stack at the same moment as <see cref="StackOfMax"/> (<see cref="ThreadStack.AllThreads"/>).</summary>
+        public string? ThreadsOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxThreads;
+                }
+            }
+        }
+
         /// <summary>The probes the UI thread answered since the last <see cref="Reset"/>: none means the monitor saw nothing, not a quick UI thread.</summary>
         public int Probes
         {
@@ -2213,6 +2269,8 @@ internal sealed partial class SmokeTest
                 _maxGcPause = TimeSpan.Zero;
                 _maxJob = null;
                 _maxCpu = null;
+                _maxStack = null;
+                _maxThreads = null;
             }
         }
 
@@ -2243,6 +2301,7 @@ internal sealed partial class SmokeTest
 
                 Dictionary<string, int>? jobs = null;
                 Dictionary<string, int>? kernel = null;
+                string? stack = null, threads = null;
                 var samples = 0;
                 try
                 {
@@ -2260,6 +2319,12 @@ internal sealed partial class SmokeTest
                         {
                             kernel ??= new(StringComparer.Ordinal);
                             kernel[state] = kernel.GetValueOrDefault(state) + 1;
+                            if (samples == 2 && state[0] is 'S' or 'D' && _uiThreadId is > 0 and var id)
+                            {
+                                // 300 ms into the wait, asleep: where, and what every other thread does then (ThreadStack).
+                                stack = ThreadStack.Scan(id);
+                                threads = ThreadStack.AllThreads();
+                            }
                         }
 
                         samples++;
@@ -2288,6 +2353,8 @@ internal sealed partial class SmokeTest
                             _maxJob += "; in the kernel " + string.Join(", ", kernel.OrderByDescending(k => k.Value).Take(3).Select(k => $"{k.Key} {k.Value}×"));
                         }
 
+                        _maxStack = stack;
+                        _maxThreads = threads;
                         _maxCpu = cpuBefore is { } a && cpuAfter is { } b
                             ? $"the UI thread ran {b - a:0} ms of it"
                               + (machineBefore is { } m && machineAfter is { } n && n.Total > m.Total ? $", the machine's cores were {100.0 * (n.Busy - m.Busy) / (n.Total - m.Total):0}% busy" : string.Empty)
