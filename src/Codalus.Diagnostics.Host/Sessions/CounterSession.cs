@@ -16,7 +16,12 @@ namespace Codalus.Diagnostics.Host.Sessions;
 internal sealed class CounterSession : IAsyncDisposable
 {
     private const string MetricsProvider = "System.Diagnostics.Metrics";
-    private static readonly TimeSpan s_flushInterval = TimeSpan.FromMilliseconds(250);
+    /// <summary>
+    /// How often the values read so far go to the shell. Tests set <c>CODALUS_TEST_COUNTERS_FLUSH_MS</c> to hold them all
+    /// until the session's end, as a loaded machine whose host reads the stream late does.
+    /// </summary>
+    private static readonly TimeSpan s_flushInterval = TimeSpan.FromMilliseconds(
+        int.TryParse(Environment.GetEnvironmentVariable("CODALUS_TEST_COUNTERS_FLUSH_MS"), NumberStyles.None, CultureInfo.InvariantCulture, out var ms) && ms > 0 ? ms : 250);
 
     private readonly CountersStartParams _parameters;
     private readonly Func<CountersUpdate, Task> _publish;
