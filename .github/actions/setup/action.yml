@@ -174,8 +174,24 @@ runs:
       run: |
         command -v Xvfb > /dev/null || { sudo apt-get update && sudo apt-get install -y --no-install-recommends xvfb; }
         Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp > "$RUNNER_TEMP/xvfb.log" 2>&1 &
-        for _ in $(seq 50); do [ -S /tmp/.X11-unix/X99 ] && break; sleep 0.2; done
-        [ -S /tmp/.X11-unix/X99 ] || { cat "$RUNNER_TEMP/xvfb.log"; echo "::error::Xvfb didn't start"; exit 1; }
+        xvfb=$!
+        for _ in $(seq 50); do [ -S /tmp/.X11-unix/X99 ] && break; kill -0 "$xvfb" 2> /dev/null || break; sleep 0.2; done
+        if [ ! -S /tmp/.X11-unix/X99 ]; then
+          # It opens its socket in 0.2 s; in dry run 44732648931 (ubuntu-26.04 20261116.202.1) not in 10 s, with nothing
+          # in its log. Whether it's alive, where it waits, its children (xkbcomp) and the machine say why next time.
+          {
+            echo "Xvfb's log:"; cat "$RUNNER_TEMP/xvfb.log"
+            if kill -0 "$xvfb" 2> /dev/null; then
+              echo "Xvfb ($xvfb) is still running:"; ps -o pid=,stat=,wchan:32=,etime=,time=,args= -p "$xvfb"
+              sudo cat "/proc/$xvfb/stack"; echo "its children:"; ps -o pid=,stat=,wchan:32=,etime=,args= --ppid "$xvfb"
+            else
+              code=0; wait "$xvfb" || code=$?; echo "Xvfb exited with $code$([ "$code" -gt 128 ] && echo ", signal $((code - 128))")"
+            fi
+            echo "other X servers:"; pgrep -a -f 'Xvfb|Xorg|Xwayland'
+            ls -la /tmp/.X11-unix /tmp/.X99-lock; uptime; free -m; df -h /tmp; sudo dmesg | tail -20
+          } || true
+          echo "::error::Xvfb didn't start"; exit 1
+        fi
         echo "DISPLAY=:99" >> "$GITHUB_ENV"
     - name: Display (1920x1080 on Windows)
       # The runner's screen is 1024x768, which shrinks the smoke test's 1280x800 window, and the website's pictures from
