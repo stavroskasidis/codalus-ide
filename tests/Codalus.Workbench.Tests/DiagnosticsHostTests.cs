@@ -213,6 +213,32 @@ public sealed class DiagnosticsHostTests(DiagnosticsFixture fixture) : IClassFix
     }
 
     [Fact]
+    public async Task Stopping_counters_keeps_the_values_the_host_sends_with_its_end()
+    {
+        // A host that sends nothing before the session's end, as one that reads the stream late on a loaded machine: the
+        // profiler's stop as the program ended dropped every value and event (the 1.0 validation's WSL smoke, 2026-11-20).
+        await using var late = new DiagnosticsService(() => ProcessLaunchInfo.FromPath(DiagnosticsFixture.HostPath) with
+        {
+            Environment = new Dictionary<string, string> { ["CODALUS_TEST_COUNTERS_FLUSH_MS"] = "3600000" },
+        });
+        var process = await fixture.StartAsync(0);
+        try
+        {
+            var monitor = await late.StartCountersAsync(process.Id, [new("System.Runtime", CounterProviderKinds.EventCounters, ["cpu-usage", "gen-0-gc-count"])], 1, runtimeEvents: true, Timeout());
+            await Task.Delay(TimeSpan.FromSeconds(3), TestContext.Current.CancellationToken);
+            Assert.Empty(monitor.Series); // held by the host
+
+            await monitor.StopAsync(Timeout());
+            Assert.False(monitor.IsRunning);
+            Assert.True(monitor.Find("System.Runtime", "cpu-usage") is { Points.Count: > 0 }, "No values came with the stop: " + string.Join(", ", monitor.Series.Select(s => s.Key)));
+        }
+        finally
+        {
+            Kill(process);
+        }
+    }
+
+    [Fact]
     public async Task A_cpu_trace_of_a_running_process_and_its_views()
     {
         var process = await fixture.StartAsync(0);
