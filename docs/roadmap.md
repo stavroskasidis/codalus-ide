@@ -2921,7 +2921,7 @@ D57 records the maintainer's answers to that day's questions.
 
 Then `release/1.0.0` is cut from `develop` and released through the usual pipeline (`docs/release/releasing.md`).
 
-**Status.** Planned 2026-11-15.
+**Status.** Planned 2026-11-15. Everything but the release gate done 2026-11-20, the validation pass on every platform included ([checkpoint](../checkpoints/m65.md)); M49's check on the Mac by hand is the maintainer's. Next: the five dispatched dry-run nightlies, then `release/1.0.0`.
 
 ---
 
