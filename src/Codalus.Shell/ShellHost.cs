@@ -1237,6 +1237,12 @@ public sealed partial class ShellHost : IAsyncDisposable
     {
         _disposeStarted = true;
         StopTimers();
+
+        // The programs Start ran end with the IDE, and the shutdown waits for that with the hosts: started first, as ending
+        // a tree takes a while (ProcessTree.Kill). Only the workbench's disposal, last, ended them, without waiting, and
+        // the process could exit first: a dotnet watch started just before the close outlived the IDE with its server
+        // and the port it held (Windows, a stress run of BlazorWebAppHotReloadDebugTests on develop ec86e826, 2026-11-21).
+        var programs = Runs is { } runs ? runs.StopAllAsync() : Task.CompletedTask;
         Interlocked.Exchange(ref _syncDebounce, null)?.Cancel(); // a change's sync, due in 5 s: it held the shell, then synced a closed window
         _proposedApi?.Dispose(); // its debounce of edited documents (500 ms) held the shell, then told the plugins
         CloseEditors();
@@ -1289,6 +1295,7 @@ public sealed partial class ShellHost : IAsyncDisposable
             Solutions.DisposeAsync().AsTask(),
             DisposePluginsAsync(),
             EnvironmentProbeEndedAsync(),
+            programs,
             ShutdownWork?.Invoke() ?? Task.CompletedTask).ConfigureAwait(false);
         if (Remote is { } remote)
         {
