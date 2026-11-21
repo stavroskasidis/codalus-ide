@@ -115,6 +115,18 @@ internal sealed partial class DesignerSession
                     state.Collections[(name, info.Property)] = items;
                 }
             }
+
+            // #461: a control library's own collections, when every item is a component the code names (else the code
+            // couldn't say them all, and stays as it is).
+            foreach (var (info, collection) in LibraryCollectionsOf(component))
+            {
+                if (!state.Collections.ContainsKey((name, info.Property))
+                    && ((IEnumerable)collection).Cast<object?>().All(i => i is IComponent item && NameOf(item) is { Length: > 0 })
+                    && CollectionStateOf(info, collection) is { } items)
+                {
+                    state.Collections[(name, info.Property)] = items;
+                }
+            }
         }
 
         void Walk(Control parent)

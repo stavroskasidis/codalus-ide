@@ -29,6 +29,7 @@ partial class BoardForm
     private void InitializeComponent()
     {
         board1 = new Contoso.WinForms.Board.ContosoBoard();
+        boardColumn1 = new Contoso.WinForms.Board.ContosoBoardColumn();
         card1 = new Contoso.WinForms.Board.ContosoCard();
         brokenPanel1 = new Contoso.WinForms.Board.ContosoBrokenPanel();
         board1.SuspendLayout();
@@ -36,12 +37,17 @@ partial class BoardForm
         //
         // board1
         //
+        board1.Columns.AddRange(new Contoso.WinForms.Board.ContosoBoardColumn[] { boardColumn1 });
         board1.Controls.Add(card1);
         board1.Location = new Point(12, 12);
         board1.Name = "board1";
         board1.Size = new Size(300, 200);
         board1.TabIndex = 0;
         board1.Title = "Sprint";
+        //
+        // boardColumn1
+        //
+        boardColumn1.Caption = "Backlog";
         //
         // card1
         //
@@ -76,6 +82,7 @@ partial class BoardForm
     #endregion
 
     private Contoso.WinForms.Board.ContosoBoard board1;
+    private Contoso.WinForms.Board.ContosoBoardColumn boardColumn1;
     private Contoso.WinForms.Board.ContosoCard card1;
     private Contoso.WinForms.Board.ContosoBrokenPanel brokenPanel1;
 }

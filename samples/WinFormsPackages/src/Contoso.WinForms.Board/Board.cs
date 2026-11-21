@@ -10,8 +10,21 @@ public class ContosoBoard : Panel
     [DefaultValue("")]
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>The board's columns, components of the form, which the code adds with <c>Columns.AddRange</c> (as a DevExpress grid view's are).</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
-    public Collection<ContosoBoardColumn> Columns { get; } = [];
+    public ContosoBoardColumnCollection Columns { get; } = [];
+}
+
+/// <summary>A board's columns.</summary>
+public class ContosoBoardColumnCollection : Collection<ContosoBoardColumn>
+{
+    public void AddRange(ContosoBoardColumn[] columns)
+    {
+        foreach (var column in columns)
+        {
+            Add(column);
+        }
+    }
 }
 
 /// <summary>A card, whose designer is named as the library's older design assembly named it: the routing assembly routes the name.</summary>

@@ -1240,8 +1240,8 @@ internal sealed partial class DesignerSession : IDisposable
                 }
             }
 
-            // A strip's items, a menu item's drop-down's, a list view's columns, a grid's columns.
-            foreach (var (_, collection) in CollectionsOf(component))
+            // A strip's items, a menu item's drop-down's, a list view's columns, a grid's columns, a control library's own (#461).
+            foreach (var (_, collection) in CollectionsOf(component).Concat(LibraryCollectionsOf(component)))
             {
                 foreach (var item in ((IEnumerable)collection).Cast<object>().ToList())
                 {
@@ -1268,6 +1268,29 @@ internal sealed partial class DesignerSession : IDisposable
             if (component.Site is not null)
             {
                 Host.DestroyComponent(component);
+            }
+        }
+
+        // #461: a control library's collection that still holds a deleted component (its designer didn't take it out)
+        // drops it, so the code no longer names it.
+        foreach (var owner in Host.Container.Components.Cast<IComponent>().ToList())
+        {
+            foreach (var (_, collection) in LibraryCollectionsOf(owner))
+            {
+                if (collection is IList { IsReadOnly: false, IsFixedSize: false } list)
+                {
+                    foreach (var component in removed.Where(list.Contains))
+                    {
+                        try
+                        {
+                            list.Remove(component);
+                        }
+                        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException)
+                        {
+                            Console.Error.WriteLine($"[designer] {NameOf(owner)}'s collection kept the deleted {component.GetType().Name}: {ex.Message}");
+                        }
+                    }
+                }
             }
         }
 

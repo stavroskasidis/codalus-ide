@@ -17,9 +17,6 @@ namespace Codalus.WinForms.Designer;
 internal sealed partial class DesignerSession
 {
     /// <summary>The collections a component has editors for (the most derived declaration of each property).</summary>
-    // TODO(issue): #461, ADR 0106: a control library's own collections (a DevExpress GridView's Columns, a GridControl's
-    // ViewCollection), which its designers fill, aren't written: only Windows Forms' own (DesignerCollections.All) are.
-    // Write any [DesignerSerializationVisibility(Content)] collection of components that has Add or AddRange.
     private IEnumerable<(DesignerCollectionInfo Info, object Collection)> CollectionsOf(object component)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -45,6 +42,110 @@ internal sealed partial class DesignerSession
                 yield return (info, collection);
             }
         }
+    }
+
+    private static readonly Dictionary<Type, (string Method, Type Element)?> s_collectionMethods = [];
+
+    /// <summary>
+    /// A control library's own collections of components (#461, ADR 0106: a DevExpress <c>GridView</c>'s <c>Columns</c>,
+    /// a <c>GridControl</c>'s <c>ViewCollection</c>), which its designers fill, so the code says what they hold: a
+    /// property of a type outside Windows Forms, <c>[DesignerSerializationVisibility(Content)]</c>, whose collection has a
+    /// public <c>AddRange(T[])</c> (else <c>Add(T)</c>) of a component type, written as the classic IDE's collection
+    /// serializer writes it. Not given editors (the Properties window's are Windows Forms' collections'); Windows Forms'
+    /// own collections are <see cref="CollectionsOf"/>'s.
+    /// </summary>
+    private static IEnumerable<(DesignerCollectionInfo Info, object Collection)> LibraryCollectionsOf(object component)
+    {
+        if (component.GetType().Assembly == typeof(Control).Assembly)
+        {
+            yield break;
+        }
+
+        PropertyDescriptorCollection properties;
+        try
+        {
+            properties = TypeDescriptor.GetProperties(component);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            yield break;
+        }
+
+        foreach (PropertyDescriptor property in properties)
+        {
+            if (property.SerializationVisibility != DesignerSerializationVisibility.Content || IsFramework(property.ComponentType)
+                || property.PropertyType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(property.PropertyType))
+            {
+                continue;
+            }
+
+            object? collection;
+            try
+            {
+                collection = property.GetValue(component);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                continue;
+            }
+
+            if (collection is not null && CollectionMethod(collection.GetType()) is var (method, element))
+            {
+                var elementName = DesignerTypes.NameOf(element);
+                yield return (new DesignerCollectionInfo(DesignerTypes.NameOf(property.ComponentType), property.Name, DesignerCollections.Components, method, elementName, [elementName]), collection);
+            }
+        }
+    }
+
+    /// <summary>Whether <paramref name="type"/> is the framework's (Windows Forms' and .NET's own types, whose collections the designer knows).</summary>
+    private static bool IsFramework(Type type) =>
+        type.Assembly == typeof(Control).Assembly || type.Assembly == typeof(Component).Assembly || type.Assembly == typeof(object).Assembly
+        || type.Assembly.GetName().Name is { } name && (name.StartsWith("System.", StringComparison.Ordinal) || name == "System");
+
+    /// <summary>How a collection type's items are written: <c>AddRange(T[])</c> with the most derived component type <c>T</c>, else <c>Add(T)</c>; null when it has neither.</summary>
+    private static (string Method, Type Element)? CollectionMethod(Type type)
+    {
+        lock (s_collectionMethods)
+        {
+            if (s_collectionMethods.TryGetValue(type, out var known))
+            {
+                return known;
+            }
+        }
+
+        (string, Type)? found = null;
+        var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        Type? Element(System.Reflection.MethodInfo method, bool array) =>
+            method.GetParameters() is [{ ParameterType: var parameter }] && (array ? parameter.IsArray && parameter.GetArrayRank() == 1 ? parameter.GetElementType() : null : parameter) is { } element
+            && typeof(IComponent).IsAssignableFrom(element) ? element : null;
+        foreach (var (name, array) in new[] { ("AddRange", true), ("Add", false) })
+        {
+            var element = methods.Where(m => m.Name == name).Select(m => Element(m, array)).OfType<Type>()
+                .OrderByDescending(t => Depth(t)).FirstOrDefault();
+            if (element is not null)
+            {
+                found = (name, element);
+                break;
+            }
+        }
+
+        lock (s_collectionMethods)
+        {
+            s_collectionMethods[type] = found;
+        }
+
+        return found;
+    }
+
+    private static int Depth(Type type)
+    {
+        var depth = 0;
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            depth++;
+        }
+
+        return depth;
     }
 
     private string[]? CollectionKeys(object component)

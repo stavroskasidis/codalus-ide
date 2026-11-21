@@ -124,12 +124,22 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
         var created = await host.CreateAsync(new DesignerCreateParams("Contoso.WinForms.Board.ContosoBoard", "board2", null, root.ClientX + 20, root.ClientY + 220), Ct);
         Assert.Null(created.Error);
         Assert.Contains(created.Created!.Properties, p => p.Name == "Title" && p.Value.Value == "New board");
-        Assert.Contains(created.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+        var firstColumn = Assert.Single(created.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+        var newBoard = Assert.Single(created.Collections, c => c is { Component: "board2", Property: "Columns" });
+        Assert.Equal(("AddRange", "Contoso.WinForms.Board.ContosoBoardColumn"), (newBoard.Method, newBoard.ElementType));
+        Assert.Equal([firstColumn.Name], newBoard.Items.Select(i => i.Value));
 
-        // The smart tag's link runs the vendor's method.
+        // The smart tag's link runs the vendor's method, and the library's own collection says the new column after the code's (#461).
         var column = await host.InvokeActionAsync(new DesignerInvokeActionParams("board1", "AddColumn"), Ct);
         Assert.Null(column.Error);
-        Assert.Contains(column.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+        var added = Assert.Single(column.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+        var columns = Assert.Single(column.Collections, c => c is { Component: "board1", Property: "Columns" });
+        Assert.Equal(["boardColumn1", added.Name], columns.Items.Select(i => i.Value));
+
+        // Deleting the column takes it out of the collection too.
+        var deleted = await host.DeleteAsync(new DesignerComponentsParams([added.Name]), Ct);
+        Assert.Contains(added.Name, deleted.Removed);
+        Assert.Equal(["boardColumn1"], Assert.Single(deleted.Collections, c => c is { Component: "board1", Property: "Columns" }).Items.Select(i => i.Value));
 
         // The vendor's dialog shows (it closes itself here), and what it changed comes back as code.
         var settings = Assert.Single(board.Verbs, v => v.DisplayName == "Board Settings...");

@@ -203,7 +203,7 @@ A control library can ship its own designers with its packages, as DevExpress's 
 
 - A dialog a library's designer opens shows over the IDE. The designer waits until you close it, and what it changed is written as code, one undo step.
 - What a library's designer would do with the mouse on the form (dragging inside a grid's columns, a layout's customization handles) isn't there: the designer moves, sizes and selects as it does for every control. A library's own root designer (a form that is its own document, such as a ribbon form's designer) isn't used: the form is designed as the Windows Forms form it derives from.
-- Not yet: what a library's designer adds to its own collections (a grid's columns, a layout's items) is created on the form but not added to the collection in the code ([#461](https://github.com/stavroskasidis/codalus-ide/issues/461)).
+- What a library's designer puts in the library's own collections (a grid's views and columns) is written as the classic IDE writes it (`gridView1.Columns.AddRange(new GridColumn[] { … })`); deleting an item takes it out. Those collections have no editor in the Properties window: edit them with the library's own designer (its smart tag or its dialog).
 - A library's designer that fails is dropped for that control, which is designed as what it derives from, and the **Windows Forms Designer** output says why. To design every library's controls as what they derive from, turn off **Control libraries' designers** (`windowsForms.designer.vendorDesigners`) in Settings; it applies to forms opened afterwards.
 
 **Right-click the Toolbox** for its menu, as the classic IDE's:
