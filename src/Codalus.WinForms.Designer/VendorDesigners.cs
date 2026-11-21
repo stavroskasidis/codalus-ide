@@ -71,6 +71,46 @@ internal static class VendorDesigners
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Activate(IReadOnlyList<string> folders) => VendorDesignerCatalog.Activate(folders);
 
+    private static HostWindow? s_window;
+
+    /// <summary>A control library's dialogs run their modal loop on <paramref name="window"/> (#461, <c>VendorModal</c>).</summary>
+    public static void Attach(HostWindow window)
+    {
+        if (s_active && Interlocked.Exchange(ref s_window, window) is null)
+        {
+            Subscribe(window);
+        }
+    }
+
+    /// <summary>
+    /// After an action, the request a control library's designer waits for from the classic IDE's process before it
+    /// shows its dialog (#461, <c>VendorModal</c>), sent as that process would; the dialog runs in it, on this thread.
+    /// </summary>
+    public static void Continue(System.ComponentModel.Design.IDesignerHost host)
+    {
+        if (s_active)
+        {
+            ContinueCore(host);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ContinueCore(System.ComponentModel.Design.IDesignerHost host)
+    {
+        if (VendorModal.TakeContinuation() is { } endpoint && VendorDesignerCatalog.Current is { } catalog)
+        {
+            Console.Error.WriteLine($"[designer] Asking the control library's designer to continue ({endpoint}), as the classic IDE does.");
+            _ = catalog.Send(endpoint, host);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Subscribe(HostWindow window)
+    {
+        VendorModal.Started += window.BeginVendorModal;
+        VendorModal.Stopped += window.EndVendorModal;
+    }
+
     // ------------------------------------------------------------------ --check-vendor-designers
 
     /// <summary>

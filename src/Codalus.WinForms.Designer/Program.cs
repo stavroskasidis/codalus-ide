@@ -96,6 +96,73 @@ internal static class Program
     }
 }
 
+/// <summary>Win32 calls the host's window makes for a control library's dialog (#461).</summary>
+internal static class NativeMethods
+{
+    public const int GwlpHwndParent = -8;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    public static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    public static extern bool GetWindowRect(IntPtr window, out WindowRect rect);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr window);
+
+    private delegate bool EnumWindowsProc(IntPtr window, IntPtr parameter);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static extern bool IsWindowVisible(IntPtr window);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr window, [System.Runtime.InteropServices.Out] char[] text, int length);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr window, [System.Runtime.InteropServices.Out] char[] text, int length);
+
+    /// <summary>The process's visible top-level windows, for the log (a dialog that doesn't show where expected).</summary>
+    public static void LogThreadWindows()
+    {
+        var self = (uint)Environment.ProcessId;
+        var lines = new List<string>();
+        EnumWindows((window, parameter) =>
+        {
+            if (GetWindowThreadProcessId(window, out var process) != 0 && process == self && IsWindowVisible(window))
+            {
+                var text = new char[256];
+                var type = new char[256];
+                var textLength = GetWindowText(window, text, text.Length);
+                var typeLength = GetClassName(window, type, type.Length);
+                _ = GetWindowRect(window, out var rect);
+                lines.Add($"'{new string(text, 0, Math.Max(0, textLength))}' {new string(type, 0, Math.Max(0, typeLength))} at {rect.Left},{rect.Top} {rect.Right - rect.Left}x{rect.Bottom - rect.Top}");
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        Console.Error.WriteLine("[designer] The host's visible windows: " + string.Join("; ", lines));
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    public struct WindowRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+}
+
 /// <summary>
 /// The host's hidden window: the design surface's view lives in it, off screen (shown, so its controls have handles and
 /// lay out as in an app), and it marshals the protocol's requests to the UI thread.
@@ -130,25 +197,15 @@ internal sealed class HostWindow : Form
 
     public HostWindow()
     {
-        Application.EnterThreadModal += (_, _) => Interlocked.Increment(ref _modal);
-        Application.LeaveThreadModal += (_, _) =>
+        Application.EnterThreadModal += (_, _) =>
         {
-            if (Interlocked.Decrement(ref _modal) == 0)
-            {
-                Interlocked.Exchange(ref _dialogClosed, System.Diagnostics.Stopwatch.GetTimestamp());
-                List<Action> waiting;
-                lock (_gate)
-                {
-                    waiting = [.. _deferred];
-                    _deferred.Clear();
-                }
+            Interlocked.Increment(ref _modal);
+            Console.Error.WriteLine("[designer] A modal loop started on the UI thread: requests wait until it ends.");
 
-                foreach (var work in waiting)
-                {
-                    BeginInvoke(work);
-                }
-            }
+            // The dialog's window exists once its loop runs: over the IDE, not where the hidden window would put it.
+            BeginInvoke(PlaceDialogs);
         };
+        Application.LeaveThreadModal += (_, _) => LeaveModal();
 
         ShowInTaskbar = false;
         FormBorderStyle = FormBorderStyle.None;
@@ -161,6 +218,129 @@ internal sealed class HostWindow : Form
     }
 
     public ApplicationContext Context { get; }
+
+    private int _vendorModal;
+    private readonly HashSet<Form> _placed = [];
+
+    /// <summary>The IDE's main window (an HWND; 0: none), over which a control library's dialogs show (#461).</summary>
+    public long DialogOwner { get; set; }
+
+    /// <summary>The top-level dialogs open on this thread (not the form being designed, which is inside this window).</summary>
+    private List<Form> Dialogs() =>
+        [.. Application.OpenForms.Cast<Form>().Where(f => !ReferenceEquals(f, this) && f.TopLevel && f.Site is null && f.Visible && !f.IsDisposed)];
+
+    private void PlaceDialogs()
+    {
+        _placed.RemoveWhere(f => f.IsDisposed);
+        foreach (var dialog in Dialogs().Where(_placed.Add))
+        {
+            Place(dialog, DialogOwner);
+        }
+    }
+
+    /// <summary>A control library's designer started its dialog's modal loop (#461, <c>VendorModal</c>): a dialog is open from now on.</summary>
+    public void BeginVendorModal()
+    {
+        Interlocked.Increment(ref _vendorModal);
+        Interlocked.Increment(ref _modal);
+    }
+
+    /// <summary>The library's dialog closed (its designer stopped the loop, or no window of it is left).</summary>
+    public void EndVendorModal()
+    {
+        if (Interlocked.Decrement(ref _vendorModal) < 0)
+        {
+            Interlocked.Increment(ref _vendorModal);
+            return;
+        }
+
+        LeaveModal();
+    }
+
+    private void LeaveModal()
+    {
+        if (Interlocked.Decrement(ref _modal) == 0)
+        {
+            Interlocked.Exchange(ref _dialogClosed, System.Diagnostics.Stopwatch.GetTimestamp());
+            List<Action> waiting;
+            lock (_gate)
+            {
+                waiting = [.. _deferred];
+                _deferred.Clear();
+            }
+
+            foreach (var work in waiting)
+            {
+                BeginInvoke(work);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The request that opened a control library's dialog waits here until it closes (#461): the vendor's designer shows
+    /// it as an ordinary window and returns, so the host runs the modal loop the classic IDE would, with the dialog over
+    /// the IDE (<paramref name="owner"/>, its main window), and the change the request answers with is what the dialog did.
+    /// A dialog that closes without its designer saying so ends the wait too.
+    /// </summary>
+    public void WaitForVendorDialog()
+    {
+        if (Volatile.Read(ref _vendorModal) == 0)
+        {
+            return;
+        }
+
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var lastSeen = started;
+        var seen = false;
+        while (Volatile.Read(ref _vendorModal) > 0 && !IsDisposed)
+        {
+            var dialogs = Dialogs();
+            PlaceDialogs();
+            seen |= dialogs.Count > 0;
+
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (dialogs.Count > 0)
+            {
+                lastSeen = now;
+            }
+            else if (System.Diagnostics.Stopwatch.GetElapsedTime(lastSeen, now) > TimeSpan.FromSeconds(seen ? 1 : 10))
+            {
+                if (!seen)
+                {
+                    NativeMethods.LogThreadWindows();
+                }
+
+                Console.Error.WriteLine(seen ? "[designer] The control library's dialog closed without its designer saying so." : "[designer] The control library's designer said it shows a dialog, but none showed.");
+                EndVendorModal();
+                break;
+            }
+
+            Application.DoEvents();
+            Thread.Sleep(15);
+        }
+    }
+
+    /// <summary>A library's dialog over the IDE: owned by its window, centered on it, in front.</summary>
+    private void Place(Form dialog, long owner)
+    {
+        Console.Error.WriteLine($"[designer] A dialog is open: {dialog.Text} ({dialog.GetType().FullName}).");
+        if (owner == 0)
+        {
+            dialog.Activate();
+            return;
+        }
+
+        var ide = new IntPtr(owner);
+        _ = NativeMethods.SetWindowLongPtr(dialog.Handle, NativeMethods.GwlpHwndParent, ide);
+        if (NativeMethods.GetWindowRect(ide, out var frame))
+        {
+            var bounds = Rectangle.FromLTRB(frame.Left, frame.Top, frame.Right, frame.Bottom);
+            dialog.Location = new Point(bounds.Left + Math.Max(0, (bounds.Width - dialog.Width) / 2), bounds.Top + Math.Max(0, (bounds.Height - dialog.Height) / 2));
+        }
+
+        dialog.Activate();
+        _ = NativeMethods.SetForegroundWindow(dialog.Handle);
+    }
 
     protected override bool ShowWithoutActivation => true;
 

@@ -27,7 +27,21 @@ public class BoardDesigner : ParentControlDesigner
     public override DesignerVerbCollection Verbs => new([
         new DesignerVerb("Add Column", (_, _) => AddColumn("Column")),
         new DesignerVerb("Board Settings...", (_, _) => ShowSettings()),
+        new DesignerVerb("Board Designer...", (_, _) => StartBoardDesigner()),
     ]);
+
+    /// <summary>The board whose designer dialog the IDE's side is to continue (<c>ContinueHandler</c>).</summary>
+    public static ContosoBoard? Pending { get; private set; }
+
+    /// <summary>
+    /// The library's big dialog, as DevExpress runs its Grid Designer: the designer tells the IDE's process to run a modal
+    /// loop and returns; the dialog shows when that process asks the server to continue (the routing assembly's handler).
+    /// </summary>
+    private void StartBoardDesigner()
+    {
+        Pending = Board;
+        GetService<Microsoft.DotNet.DesignTools.Services.INotificationService>()?.SendNotification("MessageLoopNotification/StartModalMessageLoopWithDialog", new NoData());
+    }
 
     protected override void PreFilterProperties(IDictionary properties)
     {
@@ -69,14 +83,21 @@ public sealed class BoardActions(BoardDesigner designer) : DesignerActionList(de
     ];
 }
 
+/// <summary>A notification with no data.</summary>
+public sealed class NoData : Microsoft.DotNet.DesignTools.Protocol.Notifications.NotificationData
+{
+}
+
 /// <summary>The board's settings dialog: it shows, sets the board's title, and closes itself.</summary>
 public sealed class BoardSettingsForm : Form
 {
     private readonly ContosoBoard _board;
+    private readonly string _title;
 
-    public BoardSettingsForm(ContosoBoard board)
+    public BoardSettingsForm(ContosoBoard board, string title = "From the dialog")
     {
         _board = board;
+        _title = title;
         Text = "Board Settings";
         StartPosition = FormStartPosition.CenterParent;
         Size = new Size(300, 200);
@@ -90,7 +111,7 @@ public sealed class BoardSettingsForm : Form
         timer.Tick += (_, _) =>
         {
             timer.Dispose();
-            TypeDescriptor.GetProperties(_board)["Title"]!.SetValue(_board, "From the dialog");
+            TypeDescriptor.GetProperties(_board)["Title"]!.SetValue(_board, _title);
             DialogResult = DialogResult.OK;
         };
         timer.Start();

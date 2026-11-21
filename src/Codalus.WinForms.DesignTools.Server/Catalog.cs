@@ -29,6 +29,7 @@ internal sealed class VendorDesignerCatalog
     private readonly Dictionary<string, string> _assemblies = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, Type?> _designers = new(StringComparer.Ordinal);
     private Dictionary<string, Type>? _routes;
+    private Dictionary<string, (string File, string Type)>? _handlers;
 
     private VendorDesignerCatalog(string[] folders)
     {
@@ -181,6 +182,94 @@ internal sealed class VendorDesignerCatalog
             Volatile.Write(ref _routes, found);
             return found;
         }
+    }
+
+    /// <summary>
+    /// Sends the designer protocol's request <paramref name="endpoint"/> to the vendor's handler for it, as the classic
+    /// IDE's process would (#461: DevExpress's dialogs show when its client asks the server to continue), with a request
+    /// of no data, the handler's services those of <paramref name="host"/>; false when no handler declares it.
+    /// </summary>
+    public bool Send(string endpoint, IDesignerHost host)
+    {
+        lock (_designers)
+        {
+            _handlers ??= _folders.SelectMany(f => Directory.EnumerateFiles(f, "*.dll")).SelectMany(file => RequestHandlers(file).Select(h => (h.Endpoint, (file, h.Type))))
+                .GroupBy(h => h.Endpoint, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
+        }
+
+        if (!_handlers.TryGetValue(endpoint, out var found))
+        {
+            VendorLog.Write($"No control library's designer handles {endpoint}.");
+            return false;
+        }
+
+        try
+        {
+            var type = Load(AssemblyName.GetAssemblyName(found.File))?.GetType(found.Type, throwOnError: true)!;
+            var handlerBase = type;
+            while (handlerBase is not null && !(handlerBase.IsGenericType && handlerBase.GetGenericTypeDefinition() == typeof(Microsoft.DotNet.DesignTools.Protocol.Endpoints.RequestHandler<,>)))
+            {
+                handlerBase = handlerBase.BaseType;
+            }
+
+            if (handlerBase is null)
+            {
+                VendorLog.Write($"{found.Type} handles {endpoint} but isn't a request handler.");
+                return false;
+            }
+
+            var request = Activator.CreateInstance(handlerBase.GetGenericArguments()[0], nonPublic: true);
+            var handler = Activator.CreateInstance(type, nonPublic: true)!;
+            handlerBase.GetProperty("ServiceProvider")!.SetValue(handler, VendorServices.For(host).Host);
+            handlerBase.GetMethod("HandleRequest")!.Invoke(handler, [request]);
+            return true;
+        }
+        catch (Exception ex) when (VendorLog.Survivable(ex))
+        {
+            VendorLog.Write($"{found.Type} failed on {endpoint}: {VendorLog.Describe(ex)}");
+            return false;
+        }
+    }
+
+    /// <summary>The endpoints <paramref name="file"/>'s <c>[ExportRequestHandler(name)]</c> types handle, read from its metadata.</summary>
+    private static List<(string Endpoint, string Type)> RequestHandlers(string file)
+    {
+        var handlers = new List<(string, string)>();
+        try
+        {
+            using var pe = new PEReader(File.OpenRead(file));
+            if (!pe.HasMetadata)
+            {
+                return handlers;
+            }
+
+            var reader = pe.GetMetadataReader();
+            foreach (var handle in reader.TypeDefinitions)
+            {
+                var type = reader.GetTypeDefinition(handle);
+                foreach (var attributeHandle in type.GetCustomAttributes())
+                {
+                    var attribute = reader.GetCustomAttribute(attributeHandle);
+                    if (attribute.Constructor.Kind == HandleKind.MemberReference
+                        && reader.GetMemberReference((MemberReferenceHandle)attribute.Constructor).Parent is { Kind: HandleKind.TypeReference } parent
+                        && reader.GetString(reader.GetTypeReference((TypeReferenceHandle)parent).Name) == nameof(Microsoft.DotNet.DesignTools.Protocol.Endpoints.ExportRequestHandlerAttribute))
+                    {
+                        var blob = reader.GetBlobReader(attribute.Value);
+                        if (blob.ReadUInt16() == 1 && blob.ReadSerializedString() is { Length: > 0 } endpoint)
+                        {
+                            var ns = reader.GetString(type.Namespace);
+                            handlers.Add((endpoint, ns.Length == 0 ? reader.GetString(type.Name) : ns + "." + reader.GetString(type.Name)));
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)
+        {
+            // Not an assembly, or held: no handlers from it.
+        }
+
+        return handlers;
     }
 
     /// <summary>The types of <paramref name="file"/> marked <c>[ExportTypeRoutingDefinitionProvider]</c>, read from its metadata without loading it.</summary>

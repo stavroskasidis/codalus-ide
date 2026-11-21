@@ -264,7 +264,13 @@ internal sealed class VendorServices
 
     private sealed class LoggedNotifications : INotificationService
     {
-        public void SendNotification(string name, NotificationData data) => VendorLog.Once($"A control library's designer sent the notification {name} to the classic IDE's process, which Codalus doesn't have (ADR 0106).");
+        public void SendNotification(string name, NotificationData data)
+        {
+            if (!VendorModal.Handle(name, data))
+            {
+                VendorLog.Once($"A control library's designer sent the notification {name} to the classic IDE's process, which Codalus doesn't have (ADR 0106).");
+            }
+        }
 
         public void SendObjectNotification(string name, object target, NotificationData data) => SendNotification(name, data);
     }
@@ -291,6 +297,83 @@ internal sealed class VendorServices
         public void ShowError(string message) => Inner?.ShowError(message);
 
         public void ShowMessage(string message) => Inner?.ShowMessage(message);
+    }
+}
+
+/// <summary>
+/// A control library's dialog run as the classic IDE's designer runs it (#461): the vendor's designer shows its dialog
+/// as an ordinary window and tells the IDE's process to run a modal message loop around it (DevExpress's
+/// <c>MessageLoopNotification/StartModalMessageLoop…</c> and <c>…/StopModalMessageLoop</c>). Codalus has no such process,
+/// so the host runs that loop itself: <see cref="Started"/> and <see cref="Stopped"/> are the notifications.
+/// </summary>
+internal static class VendorModal
+{
+    /// <summary>
+    /// What the classic IDE's side answers a vendor's start notification with: the request that makes the vendor's
+    /// designer show its dialog (DevExpress's server shows it only when its client asks it to continue).
+    /// </summary>
+    private static readonly Dictionary<string, string> s_continueWith = new(StringComparer.Ordinal)
+    {
+        ["MessageLoopNotification/StartModalMessageLoopWithDialog"] = "UITypeEditorEndpoint/ContinueStartModalDialog",
+    };
+
+    private static string? s_pending;
+
+    public static event Action? Started;
+
+    public static event Action? Stopped;
+
+    /// <summary>The request the host sends once the action that started the loop returns, taken once; null for none.</summary>
+    public static string? TakeContinuation() => Interlocked.Exchange(ref s_pending, null);
+
+    /// <summary>Raises the event a notification named <paramref name="name"/> stands for; false when it's not one.</summary>
+    public static bool Handle(string name, NotificationData? data = null)
+    {
+        var last = name[(name.LastIndexOf('/') + 1)..];
+        if (last.StartsWith("StartModalMessageLoop", StringComparison.Ordinal))
+        {
+            VendorLog.Write($"A control library's designer shows a dialog ({name}{Describe(data)}): the designer waits until it closes.");
+            if (s_continueWith.TryGetValue(name, out var continuation))
+            {
+                Volatile.Write(ref s_pending, continuation);
+            }
+
+            Started?.Invoke();
+            return true;
+        }
+
+        if (last.StartsWith("StopModalMessageLoop", StringComparison.Ordinal))
+        {
+            Stopped?.Invoke();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A notification's data in words (its public properties and fields), for the log.</summary>
+    private static string Describe(NotificationData? data)
+    {
+        if (data is null)
+        {
+            return string.Empty;
+        }
+
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var values = data.GetType().GetProperties(flags).Where(p => p.GetIndexParameters().Length == 0).Select(p => (p.Name, Get: (Func<object?>)(() => p.GetValue(data))))
+            .Concat(data.GetType().GetFields(flags).Select(f => (f.Name, Get: (Func<object?>)(() => f.GetValue(data)))))
+            .Select(v =>
+            {
+                try
+                {
+                    return $"{v.Name}={v.Get()}";
+                }
+                catch (Exception ex) when (VendorLog.Survivable(ex))
+                {
+                    return $"{v.Name}=?";
+                }
+            });
+        return $", {data.GetType().Name} {{{string.Join(", ", values)}}}";
     }
 }
 

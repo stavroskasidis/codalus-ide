@@ -147,6 +147,13 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
         Assert.Null(dialog.Error);
         Assert.Contains(dialog.Changes, c => c is { Component: "board1", Property: "Title" } && c.Value!.Value == "From the dialog");
 
+        // A dialog run as DevExpress's Grid Designer is: the designer only tells the classic IDE's process to run a modal
+        // loop; the host asks the library's handler to continue, as that process would, and the dialog shows there.
+        var big = Assert.Single(board.Verbs, v => v.DisplayName == "Board Designer...");
+        var designed = await host.InvokeActionAsync(new DesignerInvokeActionParams("board1", big.Member), Ct);
+        Assert.Null(designed.Error);
+        Assert.Contains(designed.Changes, c => c is { Component: "board1", Property: "Title" } && c.Value!.Value == "From the board designer");
+
         // The panel whose designer throws is designed as a Panel, and the output says why.
         Assert.Contains(render.Components, c => c is { Name: "brokenPanel1", IsContainer: true });
         lock (log)
@@ -154,6 +161,7 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
             Assert.Contains(log, l => l.Contains("BoardDesigner", StringComparison.Ordinal) && l.Contains("is designed with", StringComparison.Ordinal));
             Assert.Contains(log, l => l.Contains("BrokenDesigner.Initialize failed", StringComparison.Ordinal) && l.Contains("designed as its base type", StringComparison.Ordinal));
             Assert.Contains(log, l => l.Contains("A control library's dialog is open: Board Settings", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("Asking the control library's designer to continue (UITypeEditorEndpoint/ContinueStartModalDialog)", StringComparison.Ordinal));
         }
     }
 

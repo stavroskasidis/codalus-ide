@@ -106,7 +106,9 @@ internal sealed partial class DesignerSession : IDisposable
 
         // #461, ADR 0106: control libraries' own designers, from the design folders of the app's packages.
         VendorDesigners.Use(parameters.DesignFolders);
+        VendorDesigners.Attach(_window);
         _ui.DialogOwner = parameters.DialogOwner;
+        _window.DialogOwner = parameters.DialogOwner;
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {
@@ -886,6 +888,8 @@ internal sealed partial class DesignerSession : IDisposable
         try
         {
             ToolInvoker.Create(designer, tool, screen.X, screen.Y, size.Width, size.Height, hasLocation: !parameters.AtDefaultLocation, hasSize);
+            VendorDesigners.Continue(Host);
+            _window.WaitForVendorDialog();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {

@@ -267,6 +267,9 @@ internal sealed partial class DesignerSession
             return new DesignerChangeResult([], Render()) { Error = $"{parameters.Component} has no action {parameters.Member}." };
         }
 
+        // #461: a control library's dialog the action opened, which its designer left running.
+        VendorDesigners.Continue(Host);
+        _window.WaitForVendorDialog();
         return Result(before);
     }
 

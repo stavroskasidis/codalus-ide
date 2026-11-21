@@ -48,6 +48,7 @@ internal sealed class DesignerUIService(IWin32Window owner) : IUIService
     {
         if (form is null || !VendorDesigners.IsVendorCode(form.GetType()))
         {
+            Console.Error.WriteLine($"[designer] A dialog was refused (the hidden designer shows none): {form?.Text} ({form?.GetType().FullName}, from {form?.GetType().Assembly.Location}).");
             return DialogResult.Cancel;
         }
 
