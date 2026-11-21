@@ -129,6 +129,8 @@ public sealed class DebugHotReloadTests
         var question = f.Shell.Workbench.Notifications.Items.Single(n => n.Actions.Contains("Continue with the Old Code"));
         Assert.Contains("Restart", question.Actions);
         await ShellFixture.PumpUntil(() => f.Shell.ErrorList.Rows.Any(r => r.Source == ErrorListViewModel.HotReloadSource && r.Code.StartsWith("ENC", StringComparison.Ordinal)), seconds: 30);
+        // The Debug Console says where each rude edit is.
+        Assert.Matches($@"need a restart: ENC\d+ [^\n]*\({System.Text.RegularExpressions.Regex.Escape(program)}, line \d+\)", f.Shell.DebugLog.GetText());
         f.Shell.Workbench.Notifications.Choose(question, "Continue with the Old Code");
         await ShellFixture.PumpUntil(() => f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).Single(i => i.Id == "codalus.hotReload").Text.Contains("restart needed", StringComparison.Ordinal));
         Assert.Equal(DebugState.Running, f.Shell.Debugger.State);
