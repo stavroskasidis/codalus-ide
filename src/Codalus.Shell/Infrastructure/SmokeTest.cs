@@ -3993,6 +3993,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server under dotnet watch stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            // Not any stop: the server's start failing ("address already in use") stopped at its exception, which this
+            // took for the breakpoint, and the step went on to time out 3 minutes later (Linux CI, dry run 44952519485).
+            Check(shell.Debugger.CurrentStop is { Reason: "breakpoint" }, $"the first stop is the breakpoint's, not {shell.Debugger.CurrentStop?.Reason}: {shell.Debugger.CurrentStop?.Description} ({Log()})");
             Check(shell.Debugger.IsCompound && shell.HotReloadProgram is not null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which dotnet watch runs: " + Thread());
             var server = shell.Debugger.ProcessId;
             var watch = shell.HotReloadProgram!;
