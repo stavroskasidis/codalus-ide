@@ -66,6 +66,9 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
     /// <summary>The designer/click requests that came, in the frame's coordinates.</summary>
     public List<DesignerClickParams> Clicks { get; } = [];
 
+    /// <summary>What a click a designer takes changes, when not the default (its control's Text): a library's level tree, say.</summary>
+    public Func<string, DesignerRenderResult, DesignerChangeResult>? ClickChange { get; set; }
+
     public event EventHandler<string>? Log;
 
     public event EventHandler? Restarted;
@@ -1246,6 +1249,11 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         if (taker is null)
         {
             return Task.FromResult(new DesignerChangeResult([], Render()));
+        }
+
+        if (ClickChange is { } change)
+        {
+            return Task.FromResult(change(taker.Name, Render()) with { Handled = true });
         }
 
         _controls[taker.Name] = _controls[taker.Name] with { Text = "Clicked" };

@@ -3,6 +3,8 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using Codalus.LanguageServices.Protocol;
+using Codalus.Workbench.WinForms;
 using static Codalus.Shell.Tests.WinFormsDesignerTestHost;
 
 namespace Codalus.Shell.Tests;
@@ -58,6 +60,26 @@ public sealed class WinFormsDesignerClickShellTests
         Assert.Single(host.Clicks);
         Assert.DoesNotContain("expressRadioButton.Click +=", Code(designer), StringComparison.Ordinal);
 
+        // A click whose change is a library's objects that aren't components (DevExpress's Add level: a GridLevelNode)
+        // writes them as locals: declared at the top, their properties set before the collection's AddRange.
+        host.ClickChange = (taker, render) => new DesignerChangeResult([], render)
+        {
+            Collections =
+            [
+                new DesignerCollectionChange(taker, "Lanes.Nodes", "AddRange", "Contoso.Lane", [DesignerValue.ReferenceTo("lane1")])
+                {
+                    Locals = [new DesignerLocal("lane1", DesignerValue.NewOf("Contoso.Lane"))],
+                    Statements = [new DesignerStatement { Kind = DesignerStatementKinds.Assign, Target = "lane1", Member = "Title", Value = DesignerValue.String("Level1") }],
+                },
+            ],
+        };
+        await Task.Delay(600, TestContext.Current.CancellationToken); // past the double-click time
+        f.Window.MouseDown(At("expressRadioButton"), MouseButton.Left);
+        f.Window.MouseUp(At("expressRadioButton"), MouseButton.Left);
+        await ShellFixture.PumpUntil(() => Code(designer).Contains("Lanes.Nodes.AddRange", StringComparison.Ordinal), seconds: 30, () => Code(designer));
+        var code = Code(designer).ReplaceLineEndings("\n");
+        Assert.Contains("            Contoso.Lane lane1 = new Contoso.Lane();\n", code, StringComparison.Ordinal);
+        Assert.Contains("            lane1.Title = \"Level1\";\n            expressRadioButton.Lanes.Nodes.AddRange(new Contoso.Lane[] { lane1 });\n", code, StringComparison.Ordinal);
     }
 
     /// <summary>Points equal to the pixel (the surface's transform rounds).</summary>

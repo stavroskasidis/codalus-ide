@@ -225,6 +225,113 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
     }
 
     [Fact]
+    public async Task A_librarys_objects_that_arent_components_are_written_as_locals_and_read_back()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var target = fixture.Target();
+        var code = await File.ReadAllTextAsync(Path.Combine(fixture.App, "BoardForm.Designer.cs"), Ct);
+        await using var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, Read(code).Model, "WinFormsVendorApp.BoardForm"), Ct);
+        Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+        var verbs = (await host.ActionsAsync(new DesignerComponentsParams(["board1"]), Ct)).Verbs;
+        async Task<DesignerChangeResult> Verb(string text)
+        {
+            var result = await host.InvokeActionAsync(new DesignerInvokeActionParams("board1", Assert.Single(verbs, v => v.DisplayName == text).Member), Ct);
+            Assert.Null(result.Error);
+            return result;
+        }
+
+        static string Lines(string text, string start, string end) =>
+            string.Join("\n", text.ReplaceLineEndings("\n").Split('\n').SkipWhile(l => !l.Contains(start, StringComparison.Ordinal)).TakeWhile(l => !l.Contains(end, StringComparison.Ordinal)).Select(l => l.Trim()));
+
+        // The lane the code declares is read (an unrelated change leaves the lanes as they are); a new lane, an object
+        // that isn't a component, is a local named as the classic IDE names it, its properties set before the board's
+        // Lanes.Nodes.AddRange, which lists both.
+        Assert.DoesNotContain((await Verb("Board Settings...")).Collections, c => c.Property == "Lanes.Nodes");
+        var added = await Verb("Add Lane");
+        var lanes = Assert.Single(added.Collections, c => c is { Component: "board1", Property: "Lanes.Nodes" });
+        Assert.Equal(("AddRange", "Contoso.WinForms.Board.ContosoLane"), (lanes.Method, lanes.ElementType));
+        Assert.Equal(["contosoLane1", "contosoLane2"], lanes.Items.Select(i => i.Value));
+        Assert.Equal(["contosoLane1", "contosoLane2"], lanes.Locals.Select(l => l.Name));
+        code = Apply(code, added);
+        Assert.Equal(
+            """
+            contosoLane1.Column = boardColumn1;
+            contosoLane1.Title = "Doing";
+            contosoLane2.Column = boardColumn1;
+            contosoLane2.Title = "Lane 2";
+            board1.Lanes.Nodes.AddRange(new Contoso.WinForms.Board.ContosoLane[] { contosoLane1, contosoLane2 });
+            """.ReplaceLineEndings("\n"),
+            Lines(code, "contosoLane1.Column", "board1.Location"));
+        Assert.Contains("Contoso.WinForms.Board.ContosoLane contosoLane2 = new Contoso.WinForms.Board.ContosoLane();", code, StringComparison.Ordinal);
+
+        // A lane in a lane: its own collection, the child set up before its parent's Nodes.AddRange.
+        code = Apply(code, await Verb("Add Sub-lane"));
+        Assert.Equal(
+            """
+            contosoLane3.Title = "Sub-lane";
+            contosoLane1.Column = boardColumn1;
+            contosoLane1.Nodes.AddRange(new Contoso.WinForms.Board.ContosoLane[] { contosoLane3 });
+            contosoLane1.Title = "Doing";
+            contosoLane2.Column = boardColumn1;
+            contosoLane2.Title = "Lane 2";
+            board1.Lanes.Nodes.AddRange(new Contoso.WinForms.Board.ContosoLane[] { contosoLane1, contosoLane2 });
+            """.ReplaceLineEndings("\n"),
+            Lines(code, "contosoLane3.Title", "board1.Location"));
+
+        // The code written loads in a new host, with no change to write until one is made.
+        await using (var again = await WinFormsDesignerProcess.StartAsync(target, Ct))
+        {
+            var reloaded = await again.LoadAsync(WinFormsDesignerService.LoadParams(target, Read(code).Model, "WinFormsVendorApp.BoardForm"), Ct);
+            Assert.True(reloaded.Errors.Length == 0, string.Join("\n", reloaded.Errors));
+            var settings = Assert.Single((await again.ActionsAsync(new DesignerComponentsParams(["board1"]), Ct)).Verbs, v => v.DisplayName == "Board Settings...");
+            Assert.DoesNotContain((await again.InvokeActionAsync(new DesignerInvokeActionParams("board1", settings.Member), Ct)).Collections, c => c.Property == "Lanes.Nodes");
+        }
+
+        // The lanes removed: their locals and statements go.
+        var cleared = await Verb("Remove Lanes");
+        Assert.Contains("contosoLane3", cleared.Removed);
+        code = Apply(code, cleared);
+        Assert.DoesNotContain("contosoLane", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Lanes.Nodes", code, StringComparison.Ordinal);
+    }
+
+    private static DesignerSource Read(string code) =>
+        DesignerReader.Read(CSharpSyntaxTree.ParseText(code), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings, new BoardTypes());
+
+    /// <summary>A change's collections and removals written as the designer document writes them (WinFormsDesignerDocument.EditsFor).</summary>
+    private static string Apply(string code, DesignerChangeResult result)
+    {
+        var source = Read(code);
+        var edits = new List<DesignerEdit>();
+        var created = new HashSet<string>(StringComparer.Ordinal);
+        bool Known(string name) => created.Contains(name) || source.Model.Components.Any(c => c.Name == name);
+        foreach (var collection in result.Collections)
+        {
+            foreach (var local in collection.Locals)
+            {
+                if (Known(local.Name))
+                {
+                    edits.Add(new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = local.Name });
+                }
+
+                edits.Add(new DesignerEdit { Kind = DesignerEditKinds.AddLocal, Component = local.Name, Value = local.Value });
+                created.Add(local.Name);
+            }
+
+            edits.Add(new DesignerEdit
+            {
+                Kind = DesignerEditKinds.SetCollection, Component = collection.Component, Property = collection.Property, Method = collection.Method, Type = collection.ElementType,
+                Items = collection.Items, Statements = collection.Statements.Length == 0 ? null : collection.Statements,
+            });
+        }
+
+        edits.AddRange(result.Removed.Where(n => Known(n) && !created.Contains(n)).Select(n => new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = n }));
+        var writer = new DesignerWriter(t => DesignerReader.Read(CSharpSyntaxTree.ParseText(t), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings, new BoardTypes()));
+        return writer.Apply(Microsoft.CodeAnalysis.Text.SourceText.From(code), edits).ToString();
+    }
+
+    [Fact]
     public async Task With_the_setting_off_a_control_librarys_controls_are_designed_as_their_base_types()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");

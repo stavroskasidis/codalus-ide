@@ -47,12 +47,15 @@ internal sealed partial class DesignerSession
     private static readonly Dictionary<Type, (string Method, Type Element)?> s_collectionMethods = [];
 
     /// <summary>
-    /// A control library's own collections of components (#461, ADR 0106: a DevExpress <c>GridView</c>'s <c>Columns</c>,
-    /// a <c>GridControl</c>'s <c>ViewCollection</c>), which its designers fill, so the code says what they hold: a
-    /// property of a type outside Windows Forms, <c>[DesignerSerializationVisibility(Content)]</c>, whose collection has a
-    /// public <c>AddRange(T[])</c> (else <c>Add(T)</c>) of a component type, written as the classic IDE's collection
-    /// serializer writes it. Not given editors (the Properties window's are Windows Forms' collections'); Windows Forms'
-    /// own collections are <see cref="CollectionsOf"/>'s.
+    /// A control library's own collections (#461, ADR 0106), which its designers fill, so the code says what they hold:
+    /// a property of a type outside Windows Forms, <c>[DesignerSerializationVisibility(Content)]</c>, whose collection has
+    /// a public <c>AddRange(T[])</c> (else <c>Add(T)</c>), written as the classic IDE's collection serializer writes it.
+    /// Of a component type (a DevExpress <c>GridView</c>'s <c>Columns</c>, a <c>GridControl</c>'s <c>ViewCollection</c>),
+    /// the items are the components; of another class (<see cref="DesignerCollections.Locals"/>: a <c>GridControl</c>'s
+    /// <c>LevelTree.Nodes</c>, whose <c>GridLevelNode</c>s aren't components), they're locals (<see cref="LibraryLocals"/>).
+    /// A content property that isn't a collection (<c>LevelTree</c>) is looked into, one level down. Not given editors
+    /// (the Properties window's are Windows Forms' collections'); Windows Forms' own collections are
+    /// <see cref="CollectionsOf"/>'s.
     /// </summary>
     private static IEnumerable<(DesignerCollectionInfo Info, object Collection)> LibraryCollectionsOf(object component)
     {
@@ -61,10 +64,18 @@ internal sealed partial class DesignerSession
             yield break;
         }
 
+        foreach (var found in LibraryCollectionsOf(component, string.Empty, DesignerTypes.NameOf(component.GetType()), 0))
+        {
+            yield return found;
+        }
+    }
+
+    private static IEnumerable<(DesignerCollectionInfo Info, object Collection)> LibraryCollectionsOf(object owner, string prefix, string ownerType, int depth)
+    {
         PropertyDescriptorCollection properties;
         try
         {
-            properties = TypeDescriptor.GetProperties(component);
+            properties = TypeDescriptor.GetProperties(owner);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -73,26 +84,44 @@ internal sealed partial class DesignerSession
 
         foreach (PropertyDescriptor property in properties)
         {
-            if (property.SerializationVisibility != DesignerSerializationVisibility.Content || IsFramework(property.ComponentType)
-                || property.PropertyType == typeof(string) || !typeof(IEnumerable).IsAssignableFrom(property.PropertyType))
+            if (property.SerializationVisibility != DesignerSerializationVisibility.Content || IsFramework(property.ComponentType) || property.PropertyType == typeof(string))
             {
                 continue;
             }
 
-            object? collection;
+            object? value;
             try
             {
-                collection = property.GetValue(component);
+                value = property.GetValue(owner);
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
                 continue;
             }
 
-            if (collection is not null && CollectionMethod(collection.GetType()) is var (method, element))
+            if (value is null)
+            {
+                continue;
+            }
+
+            if (value is not IEnumerable)
+            {
+                if (depth == 0 && !IsFramework(value.GetType()))
+                {
+                    foreach (var found in LibraryCollectionsOf(value, prefix + property.Name + ".", ownerType, depth + 1))
+                    {
+                        yield return found;
+                    }
+                }
+
+                continue;
+            }
+
+            if (CollectionMethod(value.GetType()) is var (method, element))
             {
                 var elementName = DesignerTypes.NameOf(element);
-                yield return (new DesignerCollectionInfo(DesignerTypes.NameOf(property.ComponentType), property.Name, DesignerCollections.Components, method, elementName, [elementName]), collection);
+                var kind = typeof(IComponent).IsAssignableFrom(element) ? DesignerCollections.Components : DesignerCollections.Locals;
+                yield return (new DesignerCollectionInfo(depth == 0 ? DesignerTypes.NameOf(property.ComponentType) : ownerType, prefix + property.Name, kind, method, elementName, [elementName]), value);
             }
         }
     }
@@ -102,7 +131,11 @@ internal sealed partial class DesignerSession
         type.Assembly == typeof(Control).Assembly || type.Assembly == typeof(Component).Assembly || type.Assembly == typeof(object).Assembly
         || type.Assembly.GetName().Name is { } name && (name.StartsWith("System.", StringComparison.Ordinal) || name == "System");
 
-    /// <summary>How a collection type's items are written: <c>AddRange(T[])</c> with the most derived component type <c>T</c>, else <c>Add(T)</c>; null when it has neither.</summary>
+    /// <summary>
+    /// How a collection type's items are written: <c>AddRange(T[])</c> with the most derived component type <c>T</c>,
+    /// else <c>Add(T)</c>; else the same of a library's class the code can declare as a local (#461: not a component, a
+    /// framework type or abstract); null when it has neither.
+    /// </summary>
     private static (string Method, Type Element)? CollectionMethod(Type type)
     {
         lock (s_collectionMethods)
@@ -115,16 +148,24 @@ internal sealed partial class DesignerSession
 
         (string, Type)? found = null;
         var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-        Type? Element(System.Reflection.MethodInfo method, bool array) =>
+        Type? Element(System.Reflection.MethodInfo method, bool array, bool components) =>
             method.GetParameters() is [{ ParameterType: var parameter }] && (array ? parameter.IsArray && parameter.GetArrayRank() == 1 ? parameter.GetElementType() : null : parameter) is { } element
-            && typeof(IComponent).IsAssignableFrom(element) ? element : null;
-        foreach (var (name, array) in new[] { ("AddRange", true), ("Add", false) })
+            && (components ? typeof(IComponent).IsAssignableFrom(element) : IsLocalType(element)) ? element : null;
+        foreach (var components in new[] { true, false })
         {
-            var element = methods.Where(m => m.Name == name).Select(m => Element(m, array)).OfType<Type>()
-                .OrderByDescending(t => Depth(t)).FirstOrDefault();
-            if (element is not null)
+            foreach (var (name, array) in new[] { ("AddRange", true), ("Add", false) })
             {
-                found = (name, element);
+                var element = methods.Where(m => m.Name == name).Select(m => Element(m, array, components)).OfType<Type>()
+                    .OrderByDescending(t => Depth(t)).FirstOrDefault();
+                if (element is not null)
+                {
+                    found = (name, element);
+                    break;
+                }
+            }
+
+            if (found is not null)
+            {
                 break;
             }
         }
@@ -136,6 +177,10 @@ internal sealed partial class DesignerSession
 
         return found;
     }
+
+    /// <summary>A library's class whose objects the code declares as locals (#461: DevExpress's <c>GridLevelNode</c>).</summary>
+    private static bool IsLocalType(Type type) =>
+        type.IsClass && !type.IsAbstract && !type.IsArray && !typeof(IComponent).IsAssignableFrom(type) && !IsFramework(type);
 
     private static int Depth(Type type)
     {

@@ -29,6 +29,9 @@ public class BoardDesigner : ParentControlDesigner
         new DesignerVerb("Add Column", (_, _) => AddColumn("Column")),
         new DesignerVerb("Board Settings...", (_, _) => ShowSettings()),
         new DesignerVerb("Board Designer...", (_, _) => StartBoardDesigner()),
+        new DesignerVerb("Add Lane", (_, _) => Board.Lanes.Nodes.Add(new ContosoLane { Title = "Lane " + (Board.Lanes.Nodes.Count + 1), Column = Board.Columns.FirstOrDefault() })),
+        new DesignerVerb("Add Sub-lane", (_, _) => Board.Lanes.Nodes[0].Nodes.Add(new ContosoLane { Title = "Sub-lane" })),
+        new DesignerVerb("Remove Lanes", (_, _) => Board.Lanes.Nodes.Clear()),
     ]);
 
     /// <summary>The board whose designer dialog the IDE's side is to continue (<c>ContinueHandler</c>).</summary>

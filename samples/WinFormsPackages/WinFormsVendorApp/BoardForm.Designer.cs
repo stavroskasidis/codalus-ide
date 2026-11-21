@@ -28,6 +28,7 @@ partial class BoardForm
     /// </summary>
     private void InitializeComponent()
     {
+        Contoso.WinForms.Board.ContosoLane contosoLane1 = new Contoso.WinForms.Board.ContosoLane();
         board1 = new Contoso.WinForms.Board.ContosoBoard();
         boardColumn1 = new Contoso.WinForms.Board.ContosoBoardColumn();
         card1 = new Contoso.WinForms.Board.ContosoCard();
@@ -39,6 +40,9 @@ partial class BoardForm
         //
         board1.Columns.AddRange(new Contoso.WinForms.Board.ContosoBoardColumn[] { boardColumn1 });
         board1.Controls.Add(card1);
+        contosoLane1.Column = boardColumn1;
+        contosoLane1.Title = "Doing";
+        board1.Lanes.Nodes.AddRange(new Contoso.WinForms.Board.ContosoLane[] { contosoLane1 });
         board1.Location = new Point(12, 12);
         board1.Name = "board1";
         board1.Size = new Size(300, 200);

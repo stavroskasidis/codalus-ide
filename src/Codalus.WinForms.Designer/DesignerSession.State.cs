@@ -27,7 +27,16 @@ internal sealed partial class DesignerSession
         public string Key => Path is null ? Component : Component + "." + Path;
     }
 
-    private sealed record CollectionState(DesignerCollectionInfo Info, DesignerValue[] Items, DesignerLocal[] Locals);
+    /// <summary>
+    /// A collection as the code says it: its items, the locals they are, and (#461, a library's locals) the statements
+    /// that set the locals up; <see cref="Rewrite"/>: a change writes all its locals again, with their statements.
+    /// </summary>
+    private sealed record CollectionState(DesignerCollectionInfo Info, DesignerValue[] Items, DesignerLocal[] Locals)
+    {
+        public DesignerStatement[] Statements { get; init; } = [];
+
+        public bool Rewrite { get; init; }
+    }
 
     private sealed class SurfaceState
     {
@@ -116,12 +125,23 @@ internal sealed partial class DesignerSession
                 }
             }
 
-            // #461: a control library's own collections, when every item is a component the code names (else the code
-            // couldn't say them all, and stays as it is).
+            // #461: a control library's own collections, when every item is a component the code names, or an object it
+            // can declare as a local with all it holds (else the code couldn't say them all, and stays as it is).
             foreach (var (info, collection) in LibraryCollectionsOf(component))
             {
-                if (!state.Collections.ContainsKey((name, info.Property))
-                    && ((IEnumerable)collection).Cast<object?>().All(i => i is IComponent item && NameOf(item) is { Length: > 0 })
+                if (state.Collections.ContainsKey((name, info.Property)))
+                {
+                    continue;
+                }
+
+                if (info.Kind == DesignerCollections.Locals)
+                {
+                    if (LibraryLocals(info, collection) is { } locals)
+                    {
+                        state.Collections[(name, info.Property)] = locals;
+                    }
+                }
+                else if (((IEnumerable)collection).Cast<object?>().All(i => i is IComponent item && NameOf(item) is { Length: > 0 })
                     && CollectionStateOf(info, collection) is { } items)
                 {
                     state.Collections[(name, info.Property)] = items;
@@ -592,12 +612,18 @@ internal sealed partial class DesignerSession
             before.Collections.TryGetValue(key, out var old);
             var oldItems = old?.Items ?? [];
             var newLocals = collection.Locals.Where(l => old?.Locals.FirstOrDefault(o => o.Name == l.Name) is not { } previous || !previous.Value.SameAs(l.Value)).ToArray();
-            if (oldItems.Length == collection.Items.Length && oldItems.Zip(collection.Items).All(p => p.First.SameAs(p.Second)) && newLocals.Length == 0)
+            var oldStatements = old?.Statements ?? [];
+            if (oldItems.Length == collection.Items.Length && oldItems.Zip(collection.Items).All(p => p.First.SameAs(p.Second)) && newLocals.Length == 0
+                && oldStatements.Length == collection.Statements.Length && oldStatements.Zip(collection.Statements).All(p => SameStatement(p.First, p.Second)))
             {
                 continue;
             }
 
-            collections.Add(new DesignerCollectionChange(key.Component, key.Property, collection.Info.Method, collection.Info.ElementType, collection.Items) { Locals = newLocals });
+            collections.Add(new DesignerCollectionChange(key.Component, key.Property, collection.Info.Method, collection.Info.ElementType, collection.Items)
+            {
+                Locals = collection.Rewrite ? collection.Locals : newLocals,
+                Statements = collection.Statements,
+            });
             removedLocals.AddRange(old?.Locals.Select(l => l.Name).Where(n => collection.Locals.All(l => l.Name != n)) ?? []);
         }
 

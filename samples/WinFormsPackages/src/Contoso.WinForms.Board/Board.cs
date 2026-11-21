@@ -13,6 +13,47 @@ public class ContosoBoard : Panel
     /// <summary>The board's columns, components of the form, which the code adds with <c>Columns.AddRange</c> (as a DevExpress grid view's are).</summary>
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
     public ContosoBoardColumnCollection Columns { get; } = [];
+
+    /// <summary>
+    /// The board's lanes, a tree of objects that aren't components: the code declares each as a local and fills
+    /// <c>Lanes.Nodes</c> with them, as the classic IDE writes a DevExpress grid's levels (<c>LevelTree.Nodes</c>).
+    /// </summary>
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+    [Browsable(false)]
+    public ContosoLaneTree Lanes { get; } = new();
+}
+
+/// <summary>A board's lanes' root.</summary>
+public class ContosoLaneTree
+{
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+    public ContosoLaneCollection Nodes { get; } = [];
+}
+
+/// <summary>A lane: a title, the column it shows, and lanes of its own.</summary>
+public class ContosoLane
+{
+    [DefaultValue("")]
+    public string Title { get; set; } = string.Empty;
+
+    [DefaultValue(null)]
+    public ContosoBoardColumn? Column { get; set; }
+
+    [DesignerSerializationVisibility(DesignerSerializationVisibility.Content)]
+    [Browsable(false)]
+    public ContosoLaneCollection Nodes { get; } = [];
+}
+
+/// <summary>Lanes.</summary>
+public class ContosoLaneCollection : Collection<ContosoLane>
+{
+    public void AddRange(ContosoLane[] lanes)
+    {
+        foreach (var lane in lanes)
+        {
+            Add(lane);
+        }
+    }
 }
 
 /// <summary>A board's columns.</summary>

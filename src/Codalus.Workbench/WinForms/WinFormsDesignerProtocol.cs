@@ -268,6 +268,14 @@ public sealed record DesignerChildOrder(string Parent, string[] Children);
 public sealed record DesignerCollectionChange(string Component, string Property, string Method, string? ElementType, DesignerValue[] Items)
 {
     public DesignerLocal[] Locals { get; init; } = [];
+
+    /// <summary>
+    /// #461: the statements that set up <see cref="Locals"/>, written just before the collection's statement: a control
+    /// library's objects declared as locals (DevExpress's grid levels, <c>GridLevelNode</c>), their properties and their
+    /// own collections, children before their parents. With them, <see cref="Locals"/> are all the collection's
+    /// locals, written again.
+    /// </summary>
+    public DesignerStatement[] Statements { get; init; } = [];
 }
 
 /// <summary>A local object a collection holds (<c>ListViewItem listViewItem1 = new ListViewItem("Hammer")</c>).</summary>
