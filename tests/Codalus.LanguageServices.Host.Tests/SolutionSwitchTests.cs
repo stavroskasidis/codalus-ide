@@ -16,6 +16,42 @@ namespace Codalus.LanguageServices.Host.Tests;
 /// </summary>
 public sealed class SolutionSwitchTests
 {
+    /// <summary>
+    /// Saves <paramref name="path"/> as an editor does, waiting while another process reads it. Lib's change has the build
+    /// host evaluate the folder's projects again, and on Windows a write can't open Tool.csproj while that reads it:
+    /// "The process cannot access the file '…\Tool.csproj' because it is being used by another process" (Windows CI,
+    /// develop's dry run 44922234897, with the runner's CPU queue at 57). The wait is logged, so a run says when it waited.
+    /// </summary>
+    private static async Task SaveAsync(string path, string text, Action<string> log, CancellationToken ct)
+    {
+        var waited = Stopwatch.StartNew();
+        var tries = 0;
+        while (true)
+        {
+            try
+            {
+                await File.WriteAllTextAsync(path, text, ct);
+                if (tries > 0)
+                {
+                    log($"saved {Path.GetFileName(path)} after {waited.ElapsedMilliseconds} ms open in another process");
+                }
+
+                return;
+            }
+            catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xFFFF) is 32 or 33)
+            {
+                // ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION: another process has it open.
+                if (waited.Elapsed > TimeSpan.FromSeconds(10))
+                {
+                    throw new IOException($"{path} was open in another process for {waited.ElapsedMilliseconds} ms ({tries} tries).", ex);
+                }
+
+                tries++;
+                await Task.Delay(100, ct);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(false)] // the results arrive while the folder closes: its build host finishes the build before it stops
     [InlineData(true)] // they arrived just before the close, and wait for the next flush
@@ -90,7 +126,7 @@ public sealed class SolutionSwitchTests
             Log("changing Lib and Tool");
             foreach (var project in new[] { lib, tool })
             {
-                await File.WriteAllTextAsync(project, (await File.ReadAllTextAsync(project, ct)).Replace("</Project>", $"<!-- {Guid.NewGuid():N} -->\n</Project>", StringComparison.Ordinal), ct);
+                await SaveAsync(project, (await File.ReadAllTextAsync(project, ct)).Replace("</Project>", $"<!-- {Guid.NewGuid():N} -->\n</Project>", StringComparison.Ordinal), Log, ct);
             }
 
             string Describe() => $"C# {languages.Status("csharp")}; design-time builds: {string.Join(", ", solutions.CompilerInputs.Keys.Select(Path.GetFileName))}\n" + string.Join('\n', log);
