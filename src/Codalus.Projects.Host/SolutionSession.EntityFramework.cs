@@ -351,8 +351,61 @@ internal sealed partial class SolutionSession
     {
         var (directory, arguments) = EfArguments(target, connection, command);
         var run = await Ef.RunAsync(directory, arguments, cancellationToken).ConfigureAwait(false);
+        if (!run.Succeeded && run.Errors.Any(e => e.StartsWith("Build failed", StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(run.Failure + Environment.NewLine + await WhyTheBuildFailedAsync(directory, arguments, cancellationToken).ConfigureAwait(false));
+        }
+
         Check(run);
         return run;
+    }
+
+    /// <summary>
+    /// What dotnet ef's build reported, which it doesn't say: "Build failed. Use --verbose to see errors." Its verbose
+    /// output may hold the connection string, which is never echoed, so the startup project is built again as dotnet ef
+    /// built it: its errors, or, when it builds now, that something changed the project during dotnet ef's own build
+    /// (macOS CI, EntityFrameworkIntegrationTests' bundle right after a scaffold into the same project, PR #507's run
+    /// 44952891931).
+    /// </summary>
+    private async Task<string> WhyTheBuildFailedAsync(string directory, List<string> efArguments, CancellationToken cancellationToken)
+    {
+        string? Value(string option) => efArguments.IndexOf(option) is var at and >= 0 && at + 1 < efArguments.Count ? efArguments[at + 1] : null;
+        var build = new List<string> { "build", Value("--startup-project") ?? directory, "--nologo", "-v:q", "-clp:NoSummary" };
+        foreach (var option in (string[])["--configuration", "--framework"])
+        {
+            if (Value(option) is { } value)
+            {
+                build.AddRange([option, value]);
+            }
+        }
+
+        var psi = DotnetProcess.StartInfo(_dotnet, directory, build);
+        DotnetProcess.NoLingeringBuildProcesses(psi);
+        psi.StandardOutputEncoding = Encoding.UTF8;
+        psi.StandardErrorEncoding = Encoding.UTF8;
+        string why;
+        await EfTool.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var process = DotnetProcess.Start(psi) ?? throw new InvalidOperationException("dotnet did not start.");
+            var stdout = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderr = process.StandardError.ReadToEndAsync(cancellationToken);
+            await DotnetProcess.WaitOrKillAsync(process, cancellationToken).ConfigureAwait(false);
+            var text = await stdout.ConfigureAwait(false) + await stderr.ConfigureAwait(false);
+            var errors = text.Split('\n').Select(l => l.Trim()).Where(l => l.Contains(": error ", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).Take(20).ToList();
+            why = process.ExitCode == 0
+                ? "Built again right after, the startup project builds: what failed was dotnet ef's own build (a migrations bundle builds one), or something changed the project while dotnet ef built it."
+                : errors.Count > 0
+                    ? "Built again, it reports:" + Environment.NewLine + string.Join(Environment.NewLine, errors)
+                    : $"Built again, dotnet build exits with {process.ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)}: " + (text.Length > 2000 ? text[^2000..] : text).Trim();
+        }
+        finally
+        {
+            EfTool.Gate.Release();
+        }
+
+        await _events.EfOutputAsync(new EfOutputParams("error", why)).ConfigureAwait(false);
+        return why;
     }
 
     private static void Check(EfRun run)
