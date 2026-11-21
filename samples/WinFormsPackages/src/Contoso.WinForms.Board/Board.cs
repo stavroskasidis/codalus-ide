@@ -27,10 +27,36 @@ public class ContosoBoardColumnCollection : Collection<ContosoBoardColumn>
     }
 }
 
-/// <summary>A card, whose designer is named as the library's older design assembly named it: the routing assembly routes the name.</summary>
+/// <summary>
+/// A card, whose designer is named as the library's older design assembly named it: the routing assembly routes the name.
+/// In design mode a click on its right half (its designer's hit test lets that click through, as the classic IDE's
+/// surface does for a control's live area) opens a menu whose item pins it, as DevExpress's level designer opens its
+/// Change view menu; with no one to pick it, the item picks itself.
+/// </summary>
 [Designer("Contoso.Legacy.Design.CardDesigner, Contoso.Legacy.Design")]
 public class ContosoCard : Label
 {
+    [DefaultValue(false)]
+    public bool Pinned { get; set; }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (DesignMode && e.Button == MouseButtons.Left)
+        {
+            var menu = new ContextMenuStrip();
+            var pin = menu.Items.Add("Pin", null, (_, _) => TypeDescriptor.GetProperties(this)[nameof(Pinned)]!.SetValue(this, !Pinned));
+            var timer = new System.Windows.Forms.Timer { Interval = 300 };
+            timer.Tick += (_, _) =>
+            {
+                timer.Dispose();
+                pin.PerformClick();
+                menu.Close();
+            };
+            menu.Show(this, e.Location);
+            timer.Start();
+        }
+    }
 }
 
 /// <summary>A board's column: a component with a designer of its own.</summary>

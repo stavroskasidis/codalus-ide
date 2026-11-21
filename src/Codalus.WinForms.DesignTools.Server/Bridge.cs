@@ -301,6 +301,129 @@ internal sealed class VendorServices
 }
 
 /// <summary>
+/// The classic IDE's adorner window's mouse, for control libraries' glyphs (#461). The surface draws none of them, but a
+/// library's designer gives the glyphs it would (DevExpress's grid: its level designer's panel, Add level, Retrieve
+/// Details, Run Designer), and their behaviors take the mouse: a click at a point of the screen goes, as the classic
+/// IDE's behavior service sends it, to the first glyph whose hit test answers there and whose behavior takes the press.
+/// </summary>
+internal static class VendorGlyphs
+{
+    private static readonly ConditionalWeakTable<Type, StrongBox<bool>> s_takers = [];
+
+    /// <summary>
+    /// A library's designer that may take clicks: it overrides the replacement <c>ControlDesigner</c>'s
+    /// <c>GetGlyphs</c> or <c>GetHitTest</c>.
+    /// </summary>
+    public static bool MayTakeClicks(IDesigner? designer) =>
+        designer is IVendorAdapter { Vendor: ControlDesigner vendor } && s_takers.GetValue(vendor.GetType(), Overrides).Value;
+
+    private static StrongBox<bool> Overrides(Type type)
+    {
+        const System.Reflection.BindingFlags Instance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var glyphs = type.GetMethod(nameof(ControlDesigner.GetGlyphs), Instance, [typeof(GlyphSelectionType)])?.DeclaringType;
+        var hitTest = type.GetMethod("GetHitTest", Instance, [typeof(Point)])?.DeclaringType;
+        return new StrongBox<bool>((glyphs is not null && glyphs != typeof(ControlDesigner)) || (hitTest is not null && hitTest != typeof(ControlDesigner)));
+    }
+
+    /// <summary>
+    /// A left click at <paramref name="screen"/> for the glyphs of the behavior service's adorners and of
+    /// <paramref name="designers"/> (the surface's, the front ones first): the glyph's behavior gets a move there, the
+    /// press and the release, in adorner window coordinates. False when no glyph took it.
+    /// </summary>
+    public static bool Click(IDesignerHost host, IEnumerable<IDesigner> designers, Point screen)
+    {
+        var services = VendorServices.For(host);
+        var behaviors = services.TryGet(typeof(BehaviorService), out var service) ? service as BehaviorService : null;
+        var point = behaviors?.ScreenToAdornerWindow(screen) ?? screen;
+        foreach (var glyph in Glyphs(host, behaviors, designers))
+        {
+            Cursor? cursor;
+            try
+            {
+                cursor = glyph.GetHitTest(point);
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{glyph.GetType().FullName}.GetHitTest failed: {VendorLog.Describe(ex)}");
+                continue;
+            }
+
+            if (cursor is null || glyph.Behavior is not { } behavior)
+            {
+                continue;
+            }
+
+            try
+            {
+                _ = behavior.OnMouseMove(glyph, MouseButtons.None, point);
+                if (!behavior.OnMouseDown(glyph, MouseButtons.Left, point))
+                {
+                    continue;
+                }
+
+                VendorLog.Write($"A click at {screen.X},{screen.Y} goes to {glyph.GetType().FullName} ({behavior.GetType().FullName}), as the classic IDE's adorner window sends it.");
+                _ = behavior.OnMouseUp(glyph, MouseButtons.Left, point);
+
+                // The pointer is the IDE's, not here: the control drawn again shows no hover (DevExpress's grid draws its view's name).
+                _ = behavior.OnMouseLeave(glyph);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{behavior.GetType().FullName} failed on a click: {VendorLog.Describe(ex)}");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The adorners' glyphs, then each library designer's for its component's selection.</summary>
+    private static IEnumerable<Glyph> Glyphs(IDesignerHost host, BehaviorService? behaviors, IEnumerable<IDesigner> designers)
+    {
+        if (behaviors is not null)
+        {
+            foreach (var adorner in behaviors.Adorners.Where(a => a.Enabled).ToList())
+            {
+                foreach (var glyph in adorner.Glyphs.ToList())
+                {
+                    yield return glyph;
+                }
+            }
+        }
+
+        var selection = host.GetService(typeof(ISelectionService)) as ISelectionService;
+        foreach (var designer in designers)
+        {
+            if (designer is not IVendorAdapter { Vendor: ControlDesigner vendor } || !MayTakeClicks(designer))
+            {
+                continue;
+            }
+
+            var component = designer.Component;
+            var type = selection is null || !selection.GetComponentSelected(component) ? GlyphSelectionType.NotSelected
+                : ReferenceEquals(selection.PrimarySelection, component) ? GlyphSelectionType.SelectedPrimary
+                : GlyphSelectionType.Selected;
+            GlyphCollection glyphs;
+            try
+            {
+                glyphs = vendor.GetGlyphs(type);
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{vendor.GetType().FullName}.GetGlyphs failed: {VendorLog.Describe(ex)}");
+                continue;
+            }
+
+            foreach (var glyph in glyphs.ToList())
+            {
+                yield return glyph;
+            }
+        }
+    }
+}
+
+/// <summary>
 /// A control library's dialog run as the classic IDE's designer runs it (#461): the vendor's designer shows its dialog
 /// as an ordinary window and tells the IDE's process to run a modal message loop around it (DevExpress's
 /// <c>MessageLoopNotification/StartModalMessageLoop…</c> and <c>…/StopModalMessageLoop</c>). Codalus has no such process,

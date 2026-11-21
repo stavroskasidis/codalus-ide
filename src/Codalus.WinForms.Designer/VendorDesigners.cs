@@ -104,6 +104,109 @@ internal static class VendorDesigners
         }
     }
 
+    private static readonly MethodInfo s_getHitTest = typeof(System.Windows.Forms.Design.ControlDesigner).GetMethod("GetHitTest", BindingFlags.Instance | BindingFlags.NonPublic, [typeof(Point)])
+        ?? throw new MissingMethodException(nameof(System.Windows.Forms.Design.ControlDesigner), "GetHitTest");
+
+    /// <summary>
+    /// The designer may take clicks itself (#461): a control library's designer, behind its adapter, with glyphs of its
+    /// own or a hit test (DevExpress's grid, for its level designer's buttons). Windows Forms' own designers' glyphs and
+    /// hit tests (a tab control's tabs) stay the surface's.
+    /// </summary>
+    public static bool TakesClicks(System.ComponentModel.Design.IDesigner? designer) => s_active && designer is not null && TakesClicksCore(designer);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool TakesClicksCore(System.ComponentModel.Design.IDesigner designer) => VendorGlyphs.MayTakeClicks(designer);
+
+    /// <summary>A click for the library designers' glyphs, the front ones first (<c>VendorGlyphs.Click</c>); false when none took it.</summary>
+    public static bool ClickGlyphs(System.ComponentModel.Design.IDesignerHost host, IEnumerable<System.ComponentModel.Design.IDesigner> designers, Point screen) =>
+        s_active && ClickGlyphsCore(host, designers, screen);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool ClickGlyphsCore(System.ComponentModel.Design.IDesignerHost host, IEnumerable<System.ComponentModel.Design.IDesigner> designers, Point screen) =>
+        VendorGlyphs.Click(host, designers, screen);
+
+    /// <summary>The designer's <c>GetHitTest</c> at a point of the screen (its adapter asks the library's designer); false when it throws.</summary>
+    public static bool HitTest(System.Windows.Forms.Design.ControlDesigner designer, Point screen)
+    {
+        try
+        {
+            return s_getHitTest.Invoke(designer, [screen]) is true;
+        }
+        catch (TargetInvocationException ex)
+        {
+            Console.Error.WriteLine($"[designer] {designer.GetType().Name}.GetHitTest failed: {ex.InnerException?.Message}");
+            return false;
+        }
+    }
+
+    private const int WmNcHitTest = 0x0084;
+    private const int WmMouseMove = 0x0200;
+    private const int WmLButtonDown = 0x0201;
+    private const int WmLButtonUp = 0x0202;
+    private const int MkLButton = 0x0001;
+
+    /// <summary>
+    /// A left click at a point of the screen, as the classic IDE's surface lets it through to a control: the hit test
+    /// first (Windows Forms' <c>ControlDesigner</c> asks its <c>GetHitTest</c> then, and passes the mouse messages that
+    /// follow to the control when it says yes), then a move, a press and a release, to the control's window, or to the
+    /// window of a part of it (a child no designer sited) under the point.
+    /// </summary>
+    public static void SendClick(Control control, Point screen)
+    {
+        var target = control;
+        while (target.GetChildAtPoint(target.PointToClient(screen), GetChildAtPointSkip.Invisible) is { Site: null } part)
+        {
+            target = part;
+        }
+
+        Console.Error.WriteLine($"[designer] A click at {screen.X},{screen.Y} goes to {control.Site?.Name ?? control.Name} ({target.GetType().Name}): its designer takes it.");
+        var handle = target.Handle;
+        var client = target.PointToClient(screen);
+        _ = NativeMethods.SendMessage(handle, WmNcHitTest, IntPtr.Zero, Coordinates(screen));
+        _ = NativeMethods.SendMessage(handle, WmMouseMove, IntPtr.Zero, Coordinates(client));
+        _ = NativeMethods.SendMessage(handle, WmNcHitTest, IntPtr.Zero, Coordinates(screen));
+        _ = NativeMethods.SendMessage(handle, WmLButtonDown, new IntPtr(MkLButton), Coordinates(client));
+        _ = NativeMethods.SendMessage(handle, WmNcHitTest, IntPtr.Zero, Coordinates(screen));
+        _ = NativeMethods.SendMessage(handle, WmLButtonUp, IntPtr.Zero, Coordinates(client));
+    }
+
+    private static readonly MethodInfo s_onMouseMove = typeof(Control).GetMethod("OnMouseMove", BindingFlags.Instance | BindingFlags.NonPublic, [typeof(MouseEventArgs)])
+        ?? throw new MissingMethodException(nameof(Control), "OnMouseMove");
+
+    private static readonly MethodInfo s_onMouseLeave = typeof(Control).GetMethod("OnMouseLeave", BindingFlags.Instance | BindingFlags.NonPublic, [typeof(EventArgs)])
+        ?? throw new MissingMethodException(nameof(Control), "OnMouseLeave");
+
+    /// <summary>
+    /// The pointer leaves the control under the click and its parts (the controls of <paramref name="path"/>, root first,
+    /// from the deepest up to the first a designer sited): a move off them, then the leave, raised on the controls as
+    /// DevExpress's own behaviors raise them (the surface's designer takes a mouse message to a part's window). Else a
+    /// part keeps its hover in the next frame (DevExpress's level designer's link stays underlined).
+    /// </summary>
+    public static void Leave(IReadOnlyList<Control> path)
+    {
+        for (var i = path.Count - 1; i > 0; i--)
+        {
+            var control = path[i];
+            try
+            {
+                _ = s_onMouseMove.Invoke(control, [new MouseEventArgs(MouseButtons.None, 0, -1, -1, 0)]);
+                _ = s_onMouseLeave.Invoke(control, [EventArgs.Empty]);
+            }
+            catch (TargetInvocationException ex)
+            {
+                Console.Error.WriteLine($"[designer] {control.GetType().Name}'s mouse leave failed: {ex.InnerException?.Message}");
+            }
+
+            if (control.Site is not null)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>A point as a mouse message's <c>lParam</c>: x in the low word, y in the high one, each signed.</summary>
+    private static IntPtr Coordinates(Point point) => new((point.Y << 16) | (point.X & 0xFFFF));
+
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void Subscribe(HostWindow window)
     {

@@ -72,6 +72,7 @@ internal static class Program
         connection.OnRequest(WinFormsDesignerMethods.SetCollection, json.DesignerSetCollectionParams, json.DesignerChangeResult, (p, _) => window.Run(WinFormsDesignerMethods.SetCollection, () => session.SetCollection(p)));
         connection.OnRequest(WinFormsDesignerMethods.Actions, json.DesignerComponentsParams, json.DesignerActionsResult, (p, _) => window.Run(WinFormsDesignerMethods.Actions, () => session.Actions(p)));
         connection.OnRequest(WinFormsDesignerMethods.InvokeAction, json.DesignerInvokeActionParams, json.DesignerChangeResult, (p, _) => window.Run(WinFormsDesignerMethods.InvokeAction, () => session.InvokeAction(p)));
+        connection.OnRequest(WinFormsDesignerMethods.Click, json.DesignerClickParams, json.DesignerChangeResult, (p, _) => window.Run(WinFormsDesignerMethods.Click, () => session.Click(p)));
         connection.OnRequest(WinFormsDesignerMethods.Select, async (p, _) =>
         {
             var selection = p.Deserialize(json.DesignerComponentsParams) ?? new DesignerComponentsParams([]);
@@ -100,6 +101,65 @@ internal static class Program
 internal static class NativeMethods
 {
     public const int GwlpHwndParent = -8;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    public static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+
+    /// <summary><paramref name="window"/>'s rectangle in physical pixels, as a per-monitor-aware thread sees it (this host is unaware of DPI).</summary>
+    public static bool GetPhysicalWindowRect(IntPtr window, out WindowRect rect)
+    {
+        var previous = SetThreadDpiAwarenessContext(new IntPtr(-4)); // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        try
+        {
+            return GetWindowRect(window, out rect);
+        }
+        finally
+        {
+            if (previous != IntPtr.Zero)
+            {
+                _ = SetThreadDpiAwarenessContext(previous);
+            }
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    public static extern bool GetCursorPos(out Point point);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int key);
+
+    /// <summary>A mouse button is down, anywhere on the screen.</summary>
+    public static bool MouseButtonDown() => (GetAsyncKeyState(0x01) & 0x8000) != 0 || (GetAsyncKeyState(0x02) & 0x8000) != 0 || (GetAsyncKeyState(0x04) & 0x8000) != 0;
+
+    public const uint SwpNoSize = 0x0001;
+    public const uint SwpNoZOrder = 0x0004;
+    public const uint SwpNoActivate = 0x0010;
+
+    /// <summary>The process's visible top-level windows.</summary>
+    public static HashSet<IntPtr> VisibleWindows()
+    {
+        var self = (uint)Environment.ProcessId;
+        var windows = new HashSet<IntPtr>();
+        EnumWindows((window, parameter) =>
+        {
+            if (GetWindowThreadProcessId(window, out var process) != 0 && process == self && IsWindowVisible(window))
+            {
+                windows.Add(window);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+        return windows;
+    }
+
 
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     public static extern IntPtr SetWindowLongPtr(IntPtr window, int index, IntPtr value);
@@ -317,6 +377,66 @@ internal sealed class HostWindow : Form
 
             Application.DoEvents();
             Thread.Sleep(15);
+        }
+    }
+
+    /// <summary>
+    /// The windows a click opened (#461: DevExpress's Change view menu, a <c>DXPopupMenu</c>, which shows at the hidden
+    /// grid's place on the screen, pushed onto a monitor's edge by Windows, and returns): moved to where the click was in
+    /// the IDE (<paramref name="at"/>: the first one's top-left there, the others with it), and waited for, as a dialog
+    /// is (the requests that come meanwhile wait, the shell's request keeps waiting), so the change the click answers
+    /// with is what its menu's item did. A mouse press outside them closes a menu, as a click elsewhere would in the app.
+    /// </summary>
+    public void WaitForPopups(HashSet<IntPtr> before, Point? at)
+    {
+        List<IntPtr> New() => [.. NativeMethods.VisibleWindows().Where(w => !before.Contains(w) && w != Handle)];
+        var opened = New();
+        if (opened.Count == 0)
+        {
+            return;
+        }
+
+        Size? by = null;
+        foreach (var window in opened)
+        {
+            _ = NativeMethods.GetWindowRect(window, out var rect);
+            if (at is { } target)
+            {
+                by ??= new Size(target.X - rect.Left, target.Y - rect.Top);
+                _ = NativeMethods.SetWindowPos(window, IntPtr.Zero, rect.Left + by.Value.Width, rect.Top + by.Value.Height, 0, 0, NativeMethods.SwpNoSize | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate);
+            }
+
+            Console.Error.WriteLine($"[designer] A window the click opened is open{(by is { } moved ? $", moved to {rect.Left + moved.Width},{rect.Top + moved.Height}" : string.Empty)}: requests wait until it closes.");
+        }
+
+        Interlocked.Increment(ref _modal);
+        try
+        {
+            var pressed = NativeMethods.MouseButtonDown();
+            while (!IsDisposed && New() is { Count: > 0 } open)
+            {
+                // A press outside them (in the IDE): a menu closes, as a click elsewhere closes it in an app. The host
+                // doesn't take the foreground for it: a menu closes when the focus moves.
+                var down = NativeMethods.MouseButtonDown();
+                if (down && !pressed && NativeMethods.GetCursorPos(out var cursor) && !open.Any(w => NativeMethods.GetWindowRect(w, out var r) && Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom).Contains(cursor)))
+                {
+                    foreach (var window in open)
+                    {
+                        if (FromHandle(window) is ToolStripDropDown menu)
+                        {
+                            menu.Close(ToolStripDropDownCloseReason.AppClicked);
+                        }
+                    }
+                }
+
+                pressed = down;
+                Application.DoEvents();
+                Thread.Sleep(15);
+            }
+        }
+        finally
+        {
+            LeaveModal();
         }
     }
 

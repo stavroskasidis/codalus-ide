@@ -4,6 +4,7 @@ using DesignerVerb = System.ComponentModel.Design.DesignerVerb;
 using DesignerVerbCollection = System.ComponentModel.Design.DesignerVerbCollection;
 using Microsoft.DotNet.DesignTools.Designers;
 using Microsoft.DotNet.DesignTools.Designers.Actions;
+using Microsoft.DotNet.DesignTools.Designers.Behaviors;
 
 namespace Contoso.WinForms.Board.Design;
 
@@ -43,6 +44,22 @@ public class BoardDesigner : ParentControlDesigner
         GetService<Microsoft.DotNet.DesignTools.Services.INotificationService>()?.SendNotification("MessageLoopNotification/StartModalMessageLoopWithDialog", new NoData());
     }
 
+    /// <summary>
+    /// While the board is the primary selection, its design-time "Add column" button in its bottom-right corner, as
+    /// DevExpress's grid has its level designer's buttons: a glyph whose behavior takes the click.
+    /// </summary>
+    public override GlyphCollection GetGlyphs(GlyphSelectionType selectionType)
+    {
+        var glyphs = base.GetGlyphs(selectionType);
+        if (selectionType == GlyphSelectionType.SelectedPrimary && BehaviorService is { } behaviors)
+        {
+            var board = behaviors.ControlRectInAdornerWindow(Board);
+            glyphs.Add(new AddColumnGlyph(this, new Rectangle(board.Right - 90, board.Bottom - 30, 80, 24)));
+        }
+
+        return glyphs;
+    }
+
     protected override void PreFilterProperties(IDictionary properties)
     {
         base.PreFilterProperties(properties);
@@ -61,6 +78,38 @@ public class BoardDesigner : ParentControlDesigner
     {
         using var form = new BoardSettingsForm(Board);
         _ = GetService<System.Windows.Forms.Design.IUIService>()?.ShowDialog(form);
+    }
+}
+
+/// <summary>The board's design-time "Add column" button.</summary>
+public sealed class AddColumnGlyph(BoardDesigner designer, Rectangle bounds) : Glyph(new AddColumnBehavior(designer))
+{
+    public override Rectangle Bounds => bounds;
+
+    public override Cursor? GetHitTest(Point p) => bounds.Contains(p) ? Cursors.Hand : null;
+}
+
+/// <summary>A press and a release on the button add a column.</summary>
+public sealed class AddColumnBehavior(BoardDesigner designer) : Behavior
+{
+    private bool _pressed;
+
+    public override bool OnMouseDown(Glyph? g, MouseButtons button, Point mouseLoc)
+    {
+        _pressed = button == MouseButtons.Left;
+        return _pressed;
+    }
+
+    public override bool OnMouseUp(Glyph? g, MouseButtons button, Point mouseLoc)
+    {
+        if (!_pressed)
+        {
+            return false;
+        }
+
+        _pressed = false;
+        designer.AddColumn("From the button");
+        return true;
     }
 }
 
@@ -124,6 +173,9 @@ public class CardDesigner : ControlDesigner
     public override SelectionRules SelectionRules => SelectionRules.Visible | SelectionRules.Moveable;
 
     public override DesignerActionListCollection ActionLists => [new CardActions(Component)];
+
+    /// <summary>The card's right half is live: a click there goes to the card, which pins itself.</summary>
+    protected override bool GetHitTest(Point point) => Control.PointToClient(point).X >= Control.Width / 2;
 }
 
 /// <summary>The card's smart tag: a line of text.</summary>

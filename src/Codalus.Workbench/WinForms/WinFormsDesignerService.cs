@@ -45,6 +45,9 @@ public interface IWinFormsDesignerHost : IAsyncDisposable
     /// <summary>Runs a designer action, or sets an action's property (M41b).</summary>
     Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken);
 
+    /// <summary>A click given to the control whose designer takes it (#461: a control library's design-time buttons).</summary>
+    Task<DesignerChangeResult> ClickAsync(DesignerClickParams parameters, CancellationToken cancellationToken);
+
     /// <summary>Whether a build replaced what the host loaded since it started (#66): it must start again to show it.</summary>
     Task<bool> IsOutdatedAsync(CancellationToken cancellationToken);
 
@@ -856,6 +859,13 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     {
         AllowHostForeground();
         return InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
+    }
+
+    public Task<DesignerChangeResult> ClickAsync(DesignerClickParams parameters, CancellationToken cancellationToken)
+    {
+        // A design-time button may open the library's dialog (DevExpress's Run Designer).
+        AllowHostForeground();
+        return InvokeAsync(WinFormsDesignerMethods.Click, parameters, s_json.DesignerClickParams, s_json.DesignerChangeResult, cancellationToken);
     }
 
     public Task<bool> IsOutdatedAsync(CancellationToken cancellationToken) =>

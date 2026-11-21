@@ -586,6 +586,7 @@ internal sealed partial class DesignerSession : IDisposable
                 Text = isPart ? null : control.Text,
                 InTray = control is ToolStrip and not ToolStripDropDown,
                 Locked = isPart ? null : LockedValue(control),
+                TakesClicks = !isPart && VendorDesigners.TakesClicks(Host.GetDesigner(control)),
             };
         }
 

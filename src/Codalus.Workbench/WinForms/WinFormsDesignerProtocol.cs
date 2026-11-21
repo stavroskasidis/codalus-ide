@@ -53,6 +53,12 @@ public static class WinFormsDesignerMethods
     public const string InvokeAction = "designer/invokeAction";
 
     /// <summary>
+    /// A click on a control whose designer takes it (#461: <see cref="DesignerComponentView.TakesClicks"/>, a control
+    /// library's design-time buttons): <see cref="DesignerClickParams"/> → <see cref="DesignerChangeResult"/>.
+    /// </summary>
+    public const string Click = "designer/click";
+
+    /// <summary>
     /// Answered from the host's UI thread once its window's message loop runs: → <see cref="DesignerStatus"/>. The shell's
     /// start waits for it, so a cold start (the runtime, Windows Forms and the app's assemblies loaded for the first time
     /// on a busy machine) has its own limit and a request's limit counts only the request's work.
@@ -188,6 +194,12 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
     /// the classic IDE does. A host older than #67 sends none.
     /// </summary>
     public bool? Locked { get; init; }
+
+    /// <summary>
+    /// Its designer takes some clicks itself (#461: a control library's designer overrides <c>GetHitTest</c>, as
+    /// DevExpress's grid does for its design-time buttons): the surface sends a click on it with <c>designer/click</c>.
+    /// </summary>
+    public bool TakesClicks { get; init; }
 }
 
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>
@@ -294,6 +306,9 @@ public sealed record DesignerChangeResult(DesignerPropertyChange[] Changes, Desi
 
     /// <summary>Components that start or stop getting their properties from the resources.</summary>
     public DesignerLocalized[] Localized { get; init; } = [];
+
+    /// <summary><c>designer/click</c> (#461): a control's designer took the click; false when none did, and nothing ran.</summary>
+    public bool Handled { get; init; }
 }
 
 /// <summary>
@@ -458,6 +473,18 @@ public sealed record DesignerActionsResult(DesignerActionItem[] Items)
     /// inherited read-only component, or from a host older than #67.
     /// </summary>
     public DesignerActionItem[] Verbs { get; init; } = [];
+}
+
+/// <summary>A click at a point of the frame (#461), given to the control there when its designer takes it.</summary>
+public sealed record DesignerClickParams(double X, double Y)
+{
+    /// <summary>
+    /// Where the click was on the screen, in physical pixels (the IDE's surface): a popup the click opens (DevExpress's
+    /// Change view menu) shows there, not where the host's hidden window is. Null: the popup stays where it opened.
+    /// </summary>
+    public int? ScreenX { get; init; }
+
+    public int? ScreenY { get; init; }
 }
 
 /// <summary>A smart tag's method to run, or its property to set to <see cref="Text"/> (through the property's converter).</summary>
@@ -669,6 +696,7 @@ public sealed record DesignerEventsResult(DesignerEventInfo[] Events, string? De
 [JsonSerializable(typeof(DesignerSetCollectionParams))]
 [JsonSerializable(typeof(DesignerActionsResult))]
 [JsonSerializable(typeof(DesignerInvokeActionParams))]
+[JsonSerializable(typeof(DesignerClickParams))]
 [JsonSerializable(typeof(DesignerStatus))]
 [JsonSerializable(typeof(System.Text.Json.JsonElement))]
 public sealed partial class WinFormsDesignerJsonContext : JsonSerializerContext;

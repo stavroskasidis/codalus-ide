@@ -166,6 +166,65 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
     }
 
     [Fact]
+    public async Task A_click_goes_to_a_control_librarys_design_time_button_and_live_area()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var target = fixture.Target();
+        await using var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        var log = new List<string>();
+        host.Log += (_, line) =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+
+        var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, await ModelAsync(), "WinFormsVendorApp.BoardForm"), Ct);
+        Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+        var board = render.Components.Single(c => c.Name == "board1");
+        var card = render.Components.Single(c => c.Name == "card1");
+
+        // The library's designers take clicks (they have glyphs or a hit test); Windows Forms' own don't, here.
+        Assert.True(board.TakesClicks);
+        Assert.True(card.TakesClicks);
+        Assert.False(render.Components[0].TakesClicks);
+        Assert.False(render.Components.Single(c => c.Name == "brokenPanel1").TakesClicks);
+
+        // The board's "Add column" button is a glyph while the board is the primary selection, as DevExpress's grid's
+        // level designer is: not selected, the click goes nowhere and nothing changes.
+        var button = new DesignerClickParams(board.X + board.Width - 50, board.Y + board.Height - 18);
+        var unselected = await host.ClickAsync(button, Ct);
+        Assert.False(unselected.Handled);
+        Assert.Empty(unselected.Added);
+
+        await host.SelectAsync(new DesignerComponentsParams(["board1"]), Ct);
+        var clicked = await host.ClickAsync(button, Ct);
+        Assert.True(clicked.Handled);
+        var added = Assert.Single(clicked.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+        Assert.Contains(added.Properties, p => p.Name == "Caption" && p.Value.Value == "From the button");
+        Assert.Equal(["boardColumn1", added.Name], Assert.Single(clicked.Collections, c => c is { Component: "board1", Property: "Columns" }).Items.Select(i => i.Value));
+
+        // The board's empty area isn't its button: not handled.
+        Assert.False((await host.ClickAsync(new DesignerClickParams(board.X + 150, board.Y + 100), Ct)).Handled);
+
+        // The card's right half is live (its designer's hit test): the click goes to the card, whose menu shows where the
+        // click was on the screen and pins it; the click answers once the menu closes, with what its item changed. The
+        // card's left half isn't live.
+        Assert.False((await host.ClickAsync(new DesignerClickParams(card.X + 2, card.Y + card.Height / 2), Ct)).Handled);
+        var pinned = await host.ClickAsync(new DesignerClickParams(card.X + card.Width - 3, card.Y + card.Height / 2) { ScreenX = 200, ScreenY = 150 }, Ct);
+        Assert.True(pinned.Handled);
+        Assert.Contains(pinned.Changes, c => c is { Component: "card1", Property: "Pinned" } && c.Value!.Value == "true");
+
+        lock (log)
+        {
+            Assert.Contains(log, l => l.Contains("goes to Contoso.WinForms.Board.Design.AddColumnGlyph", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("goes to card1", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("A window the click opened is open, moved to 200,150", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public async Task With_the_setting_off_a_control_librarys_controls_are_designed_as_their_base_types()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
@@ -178,6 +237,7 @@ public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fi
         Assert.DoesNotContain(board.Verbs, v => v.DisplayName == "Board Settings...");
         var properties = await host.PropertiesAsync(new DesignerComponentsParams(["board1"]), Ct);
         Assert.Contains(properties.Properties, p => p.Name == "BackgroundImage");
+        Assert.DoesNotContain(render.Components, c => c.TakesClicks);
     }
 
     [Fact]
