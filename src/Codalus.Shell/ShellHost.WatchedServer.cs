@@ -291,7 +291,8 @@ public sealed partial class ShellHost
             WatchedServer.AppNameOf(plan),
             Uri.TryCreate(page.Url, UriKind.Absolute, out var address) ? address : null)
         {
-            Observed = seen => Volatile.Write(ref shell._watchedServerWait, seen),
+            // With the time it changed: a wait that stopped looking reads differently from one still looking.
+            Observed = seen => Volatile.Write(ref shell._watchedServerWait, DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + " " + seen),
         };
 
         public Task<int?> WaitForAppAsync(int? previousPid, int listeningBefore, CancellationToken cancellationToken) =>
@@ -304,6 +305,8 @@ public sealed partial class ShellHost
             {
                 if (shell.Debugger.IsActive)
                 {
+                    // Said, not silent: a follow that never attached left no trace of why (Windows CI, dry run 44865016075).
+                    shell.DebugLog.AppendLine($"The debugger couldn't attach to {name} (process {processId.ToString(CultureInfo.InvariantCulture)}): a debug session ({shell.Debugger.State}) still runs.");
                     return;
                 }
 
