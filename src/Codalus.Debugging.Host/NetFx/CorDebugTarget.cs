@@ -194,6 +194,20 @@ internal sealed class CorDebugTarget : IClrProcess
     private readonly List<string> _evalCallbacks = [];
     private long _evalStarted;
     private volatile bool _exited;
+    private int _exiting;
+    private CoreClr.LaunchedProgram? _launched;
+
+    /// <summary>
+    /// How long the session waits for the runtime's <c>ExitProcess</c> once the launcher has said the program ended,
+    /// before it ends without it (<see cref="FollowLauncherAsync"/>).
+    /// </summary>
+    internal static readonly TimeSpan ExitProcessGrace = TimeSpan.FromSeconds(10);
+
+    /// <summary>
+    /// <c>CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS=1</c> (tests only): the runtime's <c>ExitProcess</c> is logged and
+    /// dropped, as on Linux CI (run 44879237998), so a test can see the session end without it.
+    /// </summary>
+    private static readonly bool s_dropExitProcess = Environment.GetEnvironmentVariable("CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS") == "1";
 
     public CorDebugTarget(CorDebug corDebug, string version, bool justMyCode)
     {
@@ -227,7 +241,44 @@ internal sealed class CorDebugTarget : IClrProcess
     /// A CoreCLR program the launcher started (ADR 0086): its exit code comes from the launcher, which is its parent, and
     /// a detach tells the launcher to leave it running.
     /// </summary>
-    public CoreClr.LaunchedProgram? Launched { get; set; }
+    public CoreClr.LaunchedProgram? Launched
+    {
+        get => _launched;
+        set
+        {
+            _launched = value;
+            if (value is not null)
+            {
+                _ = FollowLauncherAsync(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The session ends when the program does, even when the runtime's <c>ExitProcess</c> never comes. On Linux CI (the
+    /// nightly, run 44879237998, <c>RuntimeAsyncDebuggingTests</c>) a program wrote its last line and returned from
+    /// <c>Main</c>, and no <c>ExitProcess</c> reached the adapter (its log ends with the output): the session never
+    /// said <c>exited</c>, and the IDE would have shown a program running that wasn't. The launcher, the program's
+    /// parent, knows when it ended; <see cref="ExitProcessGrace"/> after that, the session ends without the runtime.
+    /// </summary>
+    private async Task FollowLauncherAsync(CoreClr.LaunchedProgram launched)
+    {
+        var code = await launched.Exited.ConfigureAwait(false);
+        if (_exited)
+        {
+            return;
+        }
+
+        Continuing?.Invoke($"[clr] the launcher says the program ended{(code is { } c ? " with exit code " + c.ToString(CultureInfo.InvariantCulture) : string.Empty)}");
+        await Task.Delay(ExitProcessGrace).ConfigureAwait(false);
+        if (_exited)
+        {
+            return;
+        }
+
+        Continuing?.Invoke($"[clr] no ExitProcess from the runtime {ExitProcessGrace.TotalSeconds.ToString(CultureInfo.InvariantCulture)} s after the program ended: the session ends without it");
+        Exit();
+    }
 
     private CorDebugProcess Process => !_exited && _process is { } process ? process : throw new ClrException("The process isn't running.");
 
@@ -455,7 +506,13 @@ internal sealed class CorDebugTarget : IClrProcess
                 _eval?.TrySetResult(false);
                 return;
             case ExitProcessCorDebugManagedCallbackEventArgs:
-                Exit();
+                // Said in the log: whether it came, and when, next to the launcher's word (FollowLauncherAsync).
+                Continuing?.Invoke(s_dropExitProcess ? "[clr] ExitProcess (dropped: CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS)" : "[clr] ExitProcess");
+                if (!s_dropExitProcess)
+                {
+                    Exit();
+                }
+
                 return;
         }
 
@@ -537,7 +594,8 @@ internal sealed class CorDebugTarget : IClrProcess
 
     private void Exit()
     {
-        if (_exited)
+        // Once: from the runtime's ExitProcess or from the launcher's word, whichever is first.
+        if (_exited || Interlocked.Exchange(ref _exiting, 1) == 1)
         {
             return;
         }

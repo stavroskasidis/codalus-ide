@@ -194,6 +194,43 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         Assert.Contains("done", events.Output, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The session ends when the program does, though the runtime's <c>ExitProcess</c> never reaches the adapter: on
+    /// Linux CI (the nightly, run 44879237998) a program wrote its last line and returned from Main, no ExitProcess came,
+    /// and the session never said "exited". The launcher's word ends it, with the program's exit code and its output.
+    /// </summary>
+    [Fact]
+    public async Task The_session_ends_with_the_program_though_the_runtimes_exit_callback_never_comes()
+    {
+        var logs = Directory.CreateTempSubdirectory("codalus-clr-dap-").FullName;
+        try
+        {
+            var environment = new Dictionary<string, string> { ["CODALUS_CLR_DEBUGGER_LOG"] = logs, ["CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS"] = "1" };
+            await using (var adapter = await DebugAdapter.StartAsync(Adapter() with { Environment = environment }, Ct))
+            {
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr"), s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+
+                var exited = await events.NextAsync(DapEvents.Exited);
+                Assert.Equal(15, exited.Body.GetProperty("exitCode").GetInt32());
+                await events.NextAsync(DapEvents.Terminated);
+                Assert.Contains("done", events.Output, StringComparison.Ordinal);
+            }
+
+            // The log says the callback came and was dropped, and that the launcher's word ended the session.
+            var log = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(logs, "clr-dap-*.log")), Ct);
+            Assert.True(log.Contains("[clr] ExitProcess (dropped", StringComparison.Ordinal)
+                && log.Contains("[clr] the launcher says the program ended with exit code 15", StringComparison.Ordinal)
+                && log.Contains("the session ends without it", StringComparison.Ordinal), "The adapter's log:\n" + log);
+        }
+        finally
+        {
+            Directory.Delete(logs, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task The_launch_gives_the_program_its_arguments_environment_and_working_directory()
     {
