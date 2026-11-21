@@ -10,7 +10,7 @@ inputs:
     description: The artifact's name, one per job of a run (a number is added for each upload)
     required: true
   path:
-    description: The folder with a folder of results per shard (console.txt, memory.txt, load.txt, disk.txt)
+    description: The folder with a folder of results per shard (console.txt, memory.txt, load.txt, disk.txt, running-<pid>.txt)
     default: artifacts/test-results
   interval:
     description: Seconds between uploads
