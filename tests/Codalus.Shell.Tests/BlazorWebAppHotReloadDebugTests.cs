@@ -79,7 +79,15 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // What the status bar says of the last edit: the page's edit was never applied on macOS CI (run 41621106416; TODO(issue):
         // what the browser refresh server sent and got back for each edit).
         + $"; the status bar: '{f.Shell.Workbench.StatusBar.GetItems(Workbench.StatusBar.StatusBarAlignment.Left).SingleOrDefault(i => i.Id == "codalus.hotReload")?.Text}'.\n"
-        + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText());
+        + "Debug Console:\n" + f.Shell.DebugLog.GetText() + "\nRun output:\n" + (f.Shell.HotReloadProgram?.Channel?.GetText() ?? f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Name.StartsWith("Run: ", StringComparison.Ordinal))?.GetText())
+        // What F5 waited for before dotnet watch started: under load, a first stop that timed out at 600 s had dotnet watch
+        // started only 10 s before it (Windows, a stress run on develop ec86e826, 2026-11-21), and nothing said whether
+        // the build before it or the build host's answers took the time. The processes say how long each has run.
+        + "\nBuild output (the end):\n" + Tail(f.Shell.Builds.Channel.GetText(), 2000)
+        + "\nBuild Host log (the end):\n" + Tail(f.Shell.Workbench.Output.Channels.FirstOrDefault(c => c.Id == "codalus.buildhost")?.GetText() ?? "(no Build Host channel)", 3000)
+        + "\nThe IDE's child processes:\n" + Infrastructure.SmokeTest.ChildProcesses();
+
+    private static string Tail(string text, int length) => text.Length <= length ? text : text[^length..];
 
     /// <summary>
     /// A failure's diagnostics on the standard error at once: on macOS CI the session never followed dotnet watch's

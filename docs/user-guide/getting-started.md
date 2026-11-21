@@ -150,7 +150,7 @@ File → Start Window brings it back. Environment → On Startup (`workbench.sta
 
 **Several files at once** (Open with on a selection of files, files dropped on the window, or several `codalus <file>` within a moment) open as tabs behind the active one, and only the last becomes active.
 
-**Closing the IDE** hides its windows at once, and the helper processes shut down in parallel in the background, for up to 3 seconds. A `codalus` started meanwhile opens a window of its own.
+**Closing the IDE** hides its windows at once, and the helper processes shut down in parallel in the background, for up to 3 seconds. The programs you started (Start, Start Without Debugging, Start with Hot Reload) end with it, with the processes they started, first in that time. A `codalus` started meanwhile opens a window of its own.
 
 The Start page has the common actions, recent solutions and a tip that runs what it describes. (Get Started, the theme, keyboard scheme and imports that were at its top, is the first-run setup since 0.3: Help → Set Up Codalus IDE opens it.)
 
