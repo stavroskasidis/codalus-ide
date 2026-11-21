@@ -3978,7 +3978,15 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         int Line(string marker) => Array.FindIndex(File.ReadAllLines(counter), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
         string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
-        string Log() => "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
+        // What the follow saw, before the logs: on Windows CI (dry run 44865016075) the next server served and no attach was
+        // tried, and neither log said whether the wait never found it or the attach was skipped.
+        string Log() => $"Debugger: {shell.Debugger.State}{(shell.Debugger.IsActive ? " (active)" : string.Empty)}; dotnet watch's session: "
+            + $"{shell.WatchedServerDebugSession?.State.ToString() ?? "none"} (server {shell.WatchedServerDebugSession?.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"})"
+            + "; Hot Reload: " + (shell.HotReloadProgram?.HotReload is { } hr
+                ? FormattableString.Invariant($"{hr.State}, restarts {hr.Restarts}, \"Now listening on\" {hr.ListeningCount}, the agent's process {hr.AppProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}")
+                : "none")
+            + $"; the wait for the server saw: {shell.WatchedServerWait ?? "nothing"}\n"
+            + "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
         var original = File.ReadAllText(counter);
         shell.Debugger.Breakpoints.Toggle(counter, Line("initialized"));
         shell.Run("debug.start");
