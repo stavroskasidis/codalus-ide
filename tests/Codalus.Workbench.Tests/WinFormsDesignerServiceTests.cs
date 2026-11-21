@@ -316,6 +316,52 @@ public sealed class WinFormsDesignerServiceTests
     }
 
     [Fact]
+    public async Task A_request_waits_as_long_as_the_host_shows_a_control_librarys_dialog()
+    {
+        // #461: a control library's designer opened a dialog (the Grid Designer) on the host's UI thread; the request that
+        // opened it waits however long the user keeps it open, past its limit, while designer/status says a dialog is open.
+        await using var fake = new FakeDesignerHost(ready: true, answerLoad: true, dialog: TimeSpan.FromSeconds(3));
+        var host = await WinFormsDesignerProcess.StartAsync(fake.Launch, s_short with { Start = s_answered.Start, Status = s_answered.Status }, TestContext.Current.CancellationToken);
+        await using var _ = host;
+        var model = new DesignerModel { ClassName = "Form1", Namespace = "Demo", BaseType = "System.Windows.Forms.Form" };
+        var render = await host.LoadAsync(new DesignerLoadParams(model, "/app/App.dll", "Demo.Form1", []), TestContext.Current.CancellationToken);
+        Assert.Empty(render.Errors);
+    }
+
+    [Fact]
+    public void An_apps_assets_file_gives_its_packages_design_folders()
+    {
+        // #461: a control library's package keeps its designers in lib/<tfm>/Design/WinForms/Server, the framework's folder
+        // as restore chose it (net8.0-windows7.0, or net8.0-windows as DevExpress names it); a package without one gives none.
+        var root = Path.Combine(Path.GetTempPath(), "packages") + Path.DirectorySeparatorChar;
+        var assets = System.Text.Json.JsonElement.Parse($$"""
+            {
+              "targets": {
+                "net10.0-windows7.0": {
+                  "Contoso.Grid/2.0.0": { "type": "package", "runtime": { "lib/net8.0-windows7.0/Contoso.Grid.dll": {} } },
+                  "Contoso.Charts/2.0.0": { "type": "package", "compile": { "lib/net8.0-windows7.0/Contoso.Charts.dll": {} } },
+                  "Contoso.Plain/1.0.0": { "type": "package", "runtime": { "lib/net8.0/Contoso.Plain.dll": {} } },
+                  "Contoso.Meta/2.0.0": { "type": "package", "runtime": { "lib/net8.0/_._": {} } },
+                  "App.Core/1.0.0": { "type": "project", "runtime": { "bin/placeholder/App.Core.dll": {} } }
+                }
+              },
+              "libraries": {
+                "Contoso.Grid/2.0.0": { "type": "package", "path": "contoso.grid/2.0.0" },
+                "Contoso.Charts/2.0.0": { "type": "package", "path": "contoso.charts/2.0.0" },
+                "Contoso.Plain/1.0.0": { "type": "package", "path": "contoso.plain/1.0.0" },
+                "Contoso.Meta/2.0.0": { "type": "package", "path": "contoso.meta/2.0.0" },
+                "App.Core/1.0.0": { "type": "project", "path": "../App.Core/App.Core.csproj" }
+              },
+              "packageFolders": { {{System.Text.Json.JsonSerializer.Serialize(root)}}: {} }
+            }
+            """);
+        string Server(string package, string framework) => Path.Combine(root, package, "lib", framework, "Design", "WinForms", "Server");
+        var there = new HashSet<string>(StringComparer.Ordinal) { Server(Path.Combine("contoso.grid", "2.0.0"), "net8.0-windows7.0"), Server(Path.Combine("contoso.charts", "2.0.0"), "net8.0-windows") };
+        Assert.Equal([.. there], WinFormsDesignFolders.Read(assets, there.Contains));
+        Assert.Empty(WinFormsDesignFolders.Read(System.Text.Json.JsonElement.Parse("[]"), _ => true));
+    }
+
+    [Fact]
     public void A_limit_that_fires_late_says_this_process_was_too_busy_to_read_the_answer()
     {
         // Windows CI: a load's 60 s limit fired 34 s late, so the test's own thread pool was busy (every read of the
@@ -597,8 +643,11 @@ public sealed class WinFormsDesignerServiceTests
         private readonly TaskCompletionSource<int?> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly bool _ready;
         private int _readyRequests;
+        private volatile bool _dialogOpen;
+        private long _dialogClosed;
 
-        public FakeDesignerHost(bool ready, bool answerLoad = false)
+        /// <param name="dialog">How long a load shows a control library's dialog first (#461), saying so in designer/status.</param>
+        public FakeDesignerHost(bool ready, bool answerLoad = false, TimeSpan? dialog = null)
         {
             _ready = ready;
             _hostInput = new System.IO.Pipes.AnonymousPipeClientStream(System.IO.Pipes.PipeDirection.In, _toHost.ClientSafePipeHandle);
@@ -616,11 +665,23 @@ public sealed class WinFormsDesignerServiceTests
                 return new DesignerStatus("message loop running for 0.1 s; UI thread: idle.");
             });
             _connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) =>
-                Task.FromResult(new DesignerStatus(_ready ? "UI thread: designer/load for 1.0 s (running line 12 of the designer file)." : "its window's message loop hasn't started.")));
+                Task.FromResult(new DesignerStatus(_ready ? "UI thread: designer/load for 1.0 s (running line 12 of the designer file)." : "its window's message loop hasn't started.")
+                {
+                    DialogOpen = _dialogOpen,
+                    SinceDialog = Interlocked.Read(ref _dialogClosed) is var closed and not 0 ? System.Diagnostics.Stopwatch.GetElapsedTime(closed).TotalSeconds : null,
+                }));
             _connection.OnRequest(WinFormsDesignerMethods.Load, json.DesignerLoadParams, json.DesignerRenderResult, async (load, ct) =>
             {
                 ErrorLine?.Invoke("[designer] loading App.dll");
                 LastLoad = load;
+                if (dialog is { } open)
+                {
+                    _dialogOpen = true;
+                    await Task.Delay(open, ct);
+                    Interlocked.Exchange(ref _dialogClosed, System.Diagnostics.Stopwatch.GetTimestamp());
+                    _dialogOpen = false;
+                }
+
                 if (!answerLoad)
                 {
                     await Task.Delay(Timeout.Infinite, ct);

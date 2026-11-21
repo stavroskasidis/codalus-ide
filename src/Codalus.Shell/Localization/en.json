@@ -4892,6 +4892,8 @@
   "setting.web.prettier.enum.auto": "When the project uses Prettier",
   "setting.web.prettier.enum.off": "Never; the language servers format",
   "setting.web.prettier.title": "Prettier",
+  "setting.windowsForms.designer.vendorDesigners.description": "A control library's own designers (DevExpress's smart tags, verbs and dialogs such as the Grid Designer) design its controls. Off, its controls are designed as the Windows Forms controls they derive from. Applies to forms opened from now on.",
+  "setting.windowsForms.designer.vendorDesigners.title": "Control libraries' designers",
   "setting.windowsForms.openInDesigner.description": "A form's or user control's code file opens in the Windows Forms designer (on Windows); View Code (F7) shows the code. Off, it opens as code and View Designer (Shift+F7) shows the designer.",
   "setting.windowsForms.openInDesigner.title": "Open Forms in the Designer",
   "setting.windowsForms.toolbox.assemblies.description": "Assemblies added to the Toolbox with Choose Toolbox Items (paths). Their controls are listed for every project; dropping one on a form adds the reference to the project.",

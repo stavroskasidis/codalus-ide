@@ -17,6 +17,9 @@ public sealed partial class ShellHost
 {
     public const string OpenFormsInDesignerSetting = "windowsForms.openInDesigner";
 
+    /// <summary>Control libraries' own designers (#461, ADR 0106): their smart tags, verbs and dialogs; off, their controls are designed as their base types.</summary>
+    public const string VendorDesignersSetting = "windowsForms.designer.vendorDesigners";
+
     private readonly Dictionary<CodeDocument, int> _heldModels = [];
     private IDesignerPropertySource? _propertySource;
     private bool _toldWindowsOnly;
@@ -57,6 +60,8 @@ public sealed partial class ShellHost
         {
             StartupProject = () => Runs.StartupProject,
             IsBuilding = () => Builds.IsBuilding,
+            VendorDesigners = () => Workbench.Settings.GetBoolean(VendorDesignersSetting, true),
+            DialogOwner = () => (long)(Window?.NativeHandle ?? IntPtr.Zero),
         };
 
         if (OperatingSystem.IsWindows())

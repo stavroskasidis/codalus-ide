@@ -1,0 +1,73 @@
+# 0106. Control libraries' own designers in the Windows Forms designer
+
+- **Status:** accepted (2026-11-21; the maintainer's answers of 2026-11-21: every decision below marked as theirs is); for 1.x, merged after 1.0
+- **Date:** 2026-11-21
+- **Deciders:** maintainer
+- **Builds on:** [ADR 0073](0073-windows-forms-designer.md) (the Windows Forms designer; its [1.0: control libraries from packages](0073-windows-forms-designer.md#10-control-libraries-from-packages), #454 and #460)
+- **Issue:** #461
+
+## Context
+
+1.0 designs a vendor's controls with the base Windows Forms designers: placed, moved, sized, their properties, events and collections, without the vendor's own designers (ADR 0073, #454's fallback; a written limit in the user guide). Those designers are much of what a control library is at design time: a DevExpress `GridControl` dropped on a form creates its `GridView` in its designer's `InitializeNewComponent`, its smart tag and its **Run Designer** verb open the Grid Designer, a layout control's verbs customize its layout.
+
+### How the vendors build them (the study, DevExpress 26.1.6)
+
+- **Where they are.** The packages ship them under `lib/<tfm>/Design/WinForms/Server/`: a routing assembly per package (`DevExpress.Design.Routing.Win.Grid.v26.1.dll`) and, in `lib/` below it, the design assemblies (22 in DevExpress 26.1, `DevExpress.XtraGrid.v26.1.Design.dll`…). `Design/WinForms/` itself has the parts that run in the classic IDE's own process (`DevExpress.Design.RemoteClient.v26.1.dll`). This is the layout Microsoft's Windows Forms designer SDK asks of control libraries for the classic IDE's out-of-process designer.
+- **What they're built against.** `Microsoft.DotNet.DesignTools.Server` 1.6.0.0 (Microsoft's public key token `31bf3856ad364e35`, 44 of the 45 server assemblies), `Microsoft.WinForms.Utilities.Shared` (23) and `Microsoft.DotNet.DesignTools.Protocol` (4): the classic IDE's designer server's API, a proprietary runtime that ships only with that IDE. Metadata only (`System.Reflection.Metadata`, nothing loaded or decompiled), they use 60 of its types and about 220 of its members: designers (`ComponentDesigner`, `ControlDesigner`, `ParentControlDesigner`, `ScrollableControlDesigner`, `DocumentDesigner`), designer actions (`DesignerActionList` and its items, `DesignerActionService`, `DesignerActionUIService`), behaviors and glyphs (`BehaviorService`, `Adorner`, `Glyph`, `ComponentGlyph`, `ControlBodyGlyph`, `SnapLine`), CodeDOM serializers (`CodeDomSerializer`, `CollectionCodeDomSerializer`, `TypeCodeDomSerializer`), the undo engine, `CollectionEditor`, `NonNullCollection<T>`, type routing (`TypeRoutingDefinitionProvider`, `RerouteDesigner<T>(string)`) and, in DevExpress's protocol assemblies only, the server's channel to the classic IDE's process (`Endpoint<,>`, `RequestHandler<,>`, `IDataPipeReader`).
+- **Their shape.** The server's designers are a hierarchy of their own beside `System.Windows.Forms.Design`'s, not subclasses of them: its `ComponentDesigner` derives from `DisposableObject` and implements only `System.ComponentModel.Design`'s interfaces (`IDesigner`, `ITreeDesigner`, `IDesignerFilter`, `IComponentInitializer`; `IRootDesigner` for `DocumentDesigner`). Their members mirror `System.Windows.Forms.Design`'s (open source, MIT, dotnet/winforms), with a few of their own (`GetService<T>()`, `Host`, `AssociatedComponents` as an `IReadOnlyCollection<IComponent>`).
+- **How a control finds its designer.** A control names its designer as the .NET Framework designer did (`[Designer("DevExpress.XtraGrid.Design.GridControlDesigner, DevExpress.XtraGrid.v26.1.Design")]`); each routing assembly's `[ExportTypeRoutingDefinitionProvider]` (MEF, `System.Composition`) maps about 390 such names to the server's types.
+- **Type identity isn't in the way.** A design assembly loaded into an `AssemblyLoadContext` whose resolver answers `Microsoft.DotNet.DesignTools.Server` with an unsigned assembly of that name binds to it: .NET compares the simple name, not the public key token. The experiment (DevExpress's grid routing assembly against a stand-in) failed only on the first type the stand-in didn't have.
+- **Rider does this.** JetBrains Rider 2026.2 ships its own `Microsoft.DotNet.DesignTools.Server`, `Microsoft.DotNet.DesignTools.Protocol` and `Microsoft.WinForms.Utilities.Shared` (version 777.0.0.0, signed with JetBrains's key, described as "a replacement for the public APIs of another assembly", with no third-party executable code), the same parallel hierarchy, and DevExpress supports it since 25.2: its design code checks `VendorDetectorHelper.IsRider` (the `RESHARPER_FRONT_PRODUCT_CODE` variable) in eight of its design assemblies.
+
+### How Codalus's designer differs from the classic IDE's
+
+The host doesn't serialize through CodeDOM: it runs `InitializeComponent`'s statements itself and writes code from the difference between the surface's state before and after a change (ADR 0073). The shell draws the selection, moves and sizes itself, and the host only draws frames. So a vendor's CodeDOM serializers, behaviors, glyphs and adorners have nothing to act on. What a vendor's designer does that Codalus uses is: `Initialize` and `InitializeNewComponent` (a control's defaults when it's dropped), `PreFilterProperties` and the other filters (the Properties window), `ActionLists` (the smart tag), `Verbs` (the context menu and the smart tag), `ParentControlDesigner`'s containment, snap lines, and the dialogs its verbs and actions open.
+
+## Decision
+
+**The Windows Forms designer host loads a control library's own designers, built for the classic IDE's designer server, through MIT replacements of that server's API.**
+
+### Replacement assemblies, as Rider's
+
+The maintainer's decision: Codalus ships its own `Microsoft.DotNet.DesignTools.Server`, `Microsoft.DotNet.DesignTools.Protocol` and `Microsoft.WinForms.Utilities.Shared` (`src/Codalus.WinForms.DesignTools.*`), MIT, unsigned, version 100.0.0.0 (above any the API's own, so every reference binds), each with a file description saying it replaces another assembly's public API for interoperability and contains no third-party code. Their API is what the vendors' assemblies reference (read from their metadata, as above), and their behavior is Codalus's own code over `System.Windows.Forms.Design`. They ship in the designer host's folder (`winformsdesigner/designtools/`), outside its deps.json, and load only through its resolver, only when a vendor's design assembly asks for them.
+
+### Adapters, so the surface sees its own designers
+
+Single inheritance rules out subclassing `System.Windows.Forms.Design`: a vendor's control designer derives from the replacement's `ControlDesigner`, which must derive from the replacement's `ComponentDesigner` (the vendors call its members on it and cast to it), so it can't also be Windows Forms' `ControlDesigner`. Each vendor designer is wrapped instead: the host's `TypeDescriptionProvider` (#454's) gives the vendor's component a Codalus adapter, a real `System.Windows.Forms.Design` designer of the matching kind (`ComponentDesigner`, `ControlDesigner`, `ParentControlDesigner`, `ScrollableControlDesigner`, `DocumentDesigner`), which creates the vendor's designer and forwards to it. The replacement's base classes do what Windows Forms' would by calling back into the adapter's base class, so a vendor designer that doesn't override a member gets Windows Forms' behavior, and the surface, the Toolbox's creation, the Properties window and the host's own code (which ask `is ParentControlDesigner`, `SnapLines`) see an ordinary designer. Designer action lists and items are the replacement's classes deriving from `System.ComponentModel.Design`'s, so a vendor's smart tag goes through the host's existing smart-tag code unchanged.
+
+### What it covers
+
+- A vendor designer's `Initialize`, `InitializeNewComponent`, the property, event and attribute filters, `ActionLists`, `Verbs`, `DoDefaultAction`, `AssociatedComponents`, `SelectionRules`, `SnapLines`, `CanParent` and `CanBeParentedTo`.
+- The services they ask for: the replacement's `DesignerActionService` and `DesignerActionUIService` (a refresh comes back as a new smart tag), `BehaviorService` (adorners are kept, not drawn), `UndoEngine` (`Enabled`, `UndoInProgress`), `INotificationService` and `IUIService` (logged), and `IRequestSender` (a request to the classic IDE's process, which Codalus doesn't have, is answered with nothing and logged).
+- Discovery: the shell passes the design folders of the project's packages (`lib/<tfm>/Design/WinForms/Server`, from its `project.assets.json`) in `designer/load`; the host reads their routing assemblies' providers and finds the designer a control names by its routed type, else by its name in those folders.
+- What the vendors find by name, by reflection, in the server's internals: DevExpress's `ComponentCacheHelper` looks up `Microsoft.DotNet.DesignTools.Serialization.ComponentCache` and its `RemoveEntry` (to drop a component's cached code when it changes) and refuses to run without them; the replacement has that type, as Windows Forms' own serialization engine does, and Codalus has no such cache to drop. A vendor's reflection on a server member the replacement lacks fails in the vendor's code, which the adapters guard like any other failure.
+- Not covered: behaviors and glyphs acting on the mouse, adorners drawn on the frame, and CodeDOM serializers (Codalus writes the code; a vendor's serializer would change how it's written: a later decision with its evidence), and DevExpress's own client-side endpoints beyond the answers above.
+- Not yet: the collections a vendor's designer fills (a DevExpress `GridView`'s `Columns`, a `GridControl`'s `ViewCollection`). The host writes the collections Windows Forms' own designers edit (`DesignerCollections.All`, M41b); a vendor's are created on the surface (DevExpress's **Add Column** adds a `GridColumn` component) but not added to their collection in the code. Writing any `[DesignerSerializationVisibility(Content)]` collection with an `Add`/`AddRange` changes how every form's code is written, so it's a change of its own (`TODO(issue)` in `DesignerSession.Collections.cs`).
+
+### Dialogs show natively
+
+The maintainer's decision: a dialog a vendor's designer opens (the Grid Designer, a layout's customization) shows as a real window over the IDE, owned by the IDE's main window (the shell passes its handle), not refused as the hidden host refuses dialogs today. The surface is busy until it closes: the host answers no other request meanwhile (they wait), and what the dialog changed becomes code through the state difference, as one change.
+
+### Codalus doesn't pretend to be Rider
+
+The maintainer's decision: the host doesn't set `RESHARPER_FRONT_PRODUCT_CODE`. DevExpress's designers take their classic-IDE paths, and what those ask of the classic IDE's process is answered as above.
+
+### A setting, on by default, and the fallback per control
+
+The maintainer's decision: `windowsForms.designer.vendorDesigners` (default `true`). Off, or for a control whose vendor designer fails to load or throws while it initializes, the control is designed as its base type is (#454), and the Windows Forms Designer output says why.
+
+### Tested with a stand-in
+
+The tests can't use a vendor's packages. `samples/WinFormsPackages` gains a stand-in library whose package ships a routing assembly and a design assembly built against the replacements, in the vendors' layout. A tool reads a folder of design assemblies and lists what they reference that the replacements don't have (the CI runs it on the stand-in; the maintainer runs it on a vendor's packages before a vendor's new version is called supported).
+
+## Evidence
+
+- **DevExpress 26.1.6**: the check (`--check-vendor-designers`) loads all 46 server assemblies of its 20 packages' design folders against the replacements with no gap: every type and member they reference resolves and every override binds. On a DevExpress template's app (an `XtraForm` with a `GridControl`), through the real host and protocol: the form loads with no error; 326 routed designer names; `GridControl` is designed with `GridControlDesigner` and `GridView` with `GridViewComponentDesigner`; the grid's smart tag is DevExpress's (**Data Source Wizard**, **Choose Data Source**, **Run Designer**, **Show level designer**, **Add split container**, the view's actions, **Show Group Panel**, **Add Column**) and its verbs (**Run Designer**, **About**, **Learn More Online**); a grid dropped from the Toolbox gets its view from `InitializeNewComponent`; **Add Column** creates a `GridColumn`. With the setting off the same form loads with no smart tag or verbs (#454's fallback). The dialogs (**Run Designer**) are to be checked by the maintainer in the IDE.
+- **The stand-in** (`samples/WinFormsPackages`, `Contoso.WinForms.Board`): `WinFormsDesignerVendorHostTests` on Windows.
+
+## Consequences
+
+- A vendor's controls get their own defaults, smart tags, verbs and dialogs. What a vendor's designer uses that the replacement doesn't do yet fails for that control alone, which falls back to its base type's designer, and the output says which member was missing.
+- The replacements follow the vendors: a vendor's new version may reference API the replacement doesn't have yet. The tool says what; a release note says which versions were checked.
+- Codalus ships three assemblies named after Microsoft's, as Rider does, for interoperability; none of Microsoft's code is in them.
+- Proven on Windows by `WinFormsDesignerVendorHostTests` (the stand-in's package, built against the replacements, through the real host: its designer's defaults on a drop, its smart tag's property and method, its verbs, its property filter, a designer routed by name, a dialog it shows through the UI service, closed by itself, and its change as code, a designer that throws designed as its base type, the setting off, and the check finding no gap), on every OS by `WinFormsDesignerServiceTests` (a request waits past its limit while the host says a dialog is open; an assets file's design folders, `net8.0-windows7.0` or `net8.0-windows`).

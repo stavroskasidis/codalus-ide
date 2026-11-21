@@ -22,7 +22,12 @@ internal static class Program
             return 3;
         }
 
-        _ = args;
+        // #461: what a folder of control libraries' design assemblies needs of the replacements (eng and the tests run it).
+        if (args is ["--check-vendor-designers", .. var check])
+        {
+            return VendorDesigners.Check(check);
+        }
+
         HostWindow.MainEntered = System.Diagnostics.Stopwatch.GetTimestamp();
         var stdin = Console.OpenStandardInput();
         var stdout = Console.OpenStandardOutput();
@@ -38,7 +43,7 @@ internal static class Program
         using var window = new HostWindow();
         using var session = new DesignerSession(window);
         window.Phase = () => session.Phase;
-        AssemblyLoadContext.Default.Resolving += (context, name) => session.ResolveAssembly(context, name);
+        AssemblyLoadContext.Default.Resolving += (context, name) => VendorDesigners.Resolve(context, name) ?? session.ResolveAssembly(context, name);
 
         var connection = new JsonRpcConnection(stdin, stdout);
         connection.Slow += (_, message) => Console.Error.WriteLine($"[designer] {message} {window.Describe()}");
@@ -85,7 +90,7 @@ internal static class Program
         }));
 
         // Off the UI thread: what it's doing when a request takes too long.
-        connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) => Task.FromResult(new DesignerStatus(window.Describe())));
+        connection.OnRequest(WinFormsDesignerMethods.Status, json.JsonElement, json.DesignerStatus, (_, _) => Task.FromResult(new DesignerStatus(window.Describe()) { DialogOpen = window.DialogOpen, SinceDialog = window.SinceDialog?.TotalSeconds }));
         connection.OnRequest("shutdown", (_, _) => Task.FromResult<JsonElement?>(null));
         connection.OnNotification("exit", json.JsonElement, _ => window.BeginInvoke(Application.ExitThread));
     }
@@ -110,8 +115,41 @@ internal sealed class HostWindow : Form
     /// <summary>Where the UI thread's work is (the session's phase), for <see cref="Describe"/>.</summary>
     public Func<string?> Phase { get; set; } = () => null;
 
+    private readonly List<Action> _deferred = [];
+    private int _modal;
+    private long _dialogClosed;
+
+    /// <summary>
+    /// A dialog is open on the UI thread (#461: a control library's designer showed one). Its message loop would run the
+    /// requests posted meanwhile inside it, on a surface in the middle of the dialog's change: they wait until it closes.
+    /// </summary>
+    public bool DialogOpen => Volatile.Read(ref _modal) > 0;
+
+    /// <summary>How long ago the last dialog closed (null: none has), for the shell's wait on the request that opened it.</summary>
+    public TimeSpan? SinceDialog => Interlocked.Read(ref _dialogClosed) is var closed and not 0 ? System.Diagnostics.Stopwatch.GetElapsedTime(closed) : null;
+
     public HostWindow()
     {
+        Application.EnterThreadModal += (_, _) => Interlocked.Increment(ref _modal);
+        Application.LeaveThreadModal += (_, _) =>
+        {
+            if (Interlocked.Decrement(ref _modal) == 0)
+            {
+                Interlocked.Exchange(ref _dialogClosed, System.Diagnostics.Stopwatch.GetTimestamp());
+                List<Action> waiting;
+                lock (_gate)
+                {
+                    waiting = [.. _deferred];
+                    _deferred.Clear();
+                }
+
+                foreach (var work in waiting)
+                {
+                    BeginInvoke(work);
+                }
+            }
+        };
+
         ShowInTaskbar = false;
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.Manual;
@@ -145,8 +183,19 @@ internal sealed class HostWindow : Form
 
         try
         {
-            BeginInvoke(() =>
+            Action run = null!;
+            run = () =>
             {
+                if (DialogOpen)
+                {
+                    lock (_gate)
+                    {
+                        _deferred.Add(run);
+                    }
+
+                    return;
+                }
+
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 lock (_gate)
                 {
@@ -176,7 +225,8 @@ internal sealed class HostWindow : Form
                         Console.Error.WriteLine($"[designer] {what} took {took.TotalSeconds:0.0} s on the UI thread.");
                     }
                 }
-            });
+            };
+            BeginInvoke(run);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
         {
@@ -216,6 +266,10 @@ internal sealed class HostWindow : Form
 
         var shown = Interlocked.Read(ref _shown);
         parts.Add(shown == 0 ? "its window's message loop hasn't started" : $"message loop running for {Seconds(shown)}");
+        if (DialogOpen)
+        {
+            parts.Add("a dialog is open (a control library's): the requests wait until it closes");
+        }
         lock (_gate)
         {
             parts.Add(_current is var (what, started)

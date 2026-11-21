@@ -17,6 +17,9 @@ namespace Codalus.WinForms.Designer;
 internal sealed partial class DesignerSession
 {
     /// <summary>The collections a component has editors for (the most derived declaration of each property).</summary>
+    // TODO(issue): #461, ADR 0106: a control library's own collections (a DevExpress GridView's Columns, a GridControl's
+    // ViewCollection), which its designers fill, aren't written: only Windows Forms' own (DesignerCollections.All) are.
+    // Write any [DesignerSerializationVisibility(Content)] collection of components that has Add or AddRange.
     private IEnumerable<(DesignerCollectionInfo Info, object Collection)> CollectionsOf(object component)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);

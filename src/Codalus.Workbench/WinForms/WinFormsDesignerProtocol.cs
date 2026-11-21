@@ -67,7 +67,17 @@ public static class WinFormsDesignerMethods
 }
 
 /// <summary>The host's state in words (<see cref="WinFormsDesignerMethods.Ready"/>, <see cref="WinFormsDesignerMethods.Status"/>): its uptime, its window's message loop, the UI thread's work and what waits for it.</summary>
-public sealed record DesignerStatus(string State);
+public sealed record DesignerStatus(string State)
+{
+    /// <summary>
+    /// A dialog is open on the host's UI thread (#461: a control library's designer showed one, the Grid Designer say):
+    /// the request that opened it, and every one after it, wait until the user closes it, however long that takes.
+    /// </summary>
+    public bool DialogOpen { get; init; }
+
+    /// <summary>Seconds since the last such dialog closed (null: none has): the request it opened is finishing its change.</summary>
+    public double? SinceDialog { get; init; }
+}
 
 /// <summary>
 /// What to load: the C# host's model, the project's build output (its types, and its compiled resources for
@@ -86,6 +96,15 @@ public sealed record DesignerLoadParams(DesignerModel Model, string ProjectAssem
 
     /// <summary>The form is localizable: its localizable properties are written to the <c>.resx</c> of <see cref="Culture"/>.</summary>
     public bool Localizable { get; init; }
+
+    /// <summary>
+    /// The design folders of the project's packages (#461, ADR 0106: <c>lib/&lt;tfm&gt;/Design/WinForms/Server</c>), whose
+    /// control libraries' own designers the host loads; empty when there are none or <c>windowsForms.designer.vendorDesigners</c> is off.
+    /// </summary>
+    public string[] DesignFolders { get; init; } = [];
+
+    /// <summary>The IDE's main window (a Windows <c>HWND</c>; 0 for none), which owns the dialogs a control library's designer shows (#461).</summary>
+    public long DialogOwner { get; init; }
 }
 
 /// <summary>A <c>.resx</c> file's text and its culture (empty: the default resources).</summary>

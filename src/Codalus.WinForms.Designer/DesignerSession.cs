@@ -103,6 +103,10 @@ internal sealed partial class DesignerSession : IDisposable
         var errors = new List<string>();
         _searchFolders = [.. parameters.SearchFolders.Append(Path.GetDirectoryName(parameters.ProjectAssembly)!).Distinct(StringComparer.OrdinalIgnoreCase)];
         _types.SearchIn(_searchFolders);
+
+        // #461, ADR 0106: control libraries' own designers, from the design folders of the app's packages.
+        VendorDesigners.Use(parameters.DesignFolders);
+        _ui.DialogOwner = parameters.DialogOwner;
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {

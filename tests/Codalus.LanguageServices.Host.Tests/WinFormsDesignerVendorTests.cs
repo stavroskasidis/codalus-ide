@@ -1,0 +1,192 @@
+using Codalus.LanguageServices.Host.WinForms;
+using Codalus.LanguageServices.Protocol;
+using Codalus.Workbench.WinForms;
+using Microsoft.CodeAnalysis.CSharp;
+
+namespace Codalus.LanguageServices.Host.Tests;
+
+/// <summary>
+/// samples/WinFormsPackages's <c>Contoso.WinForms.Board</c> (#461, ADR 0106): a control library whose package ships its own
+/// designers for the classic IDE's designer server (a routing assembly and a design assembly under
+/// <c>lib/net11.0-windows/Design/WinForms/Server</c>), built against Codalus's replacements of that server's API, packed
+/// into the fixture's feed, and the app that uses it built once, on Windows only (D31; elsewhere this does nothing).
+/// </summary>
+public sealed class WinFormsVendorHostFixture : IAsyncLifetime
+{
+    private readonly string _root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-winforms-vendor-" + Guid.NewGuid().ToString("N"));
+
+    public string App => Path.Combine(_root, WinFormsPackages.Sample, "WinFormsVendorApp");
+
+    public string AppDll { get; private set; } = string.Empty;
+
+    /// <summary>The replacements' folder next to the designer host.</summary>
+    public static string DesignTools => Path.Combine(Path.GetDirectoryName(WinFormsHostFixture.DesignerHost)!, "designtools");
+
+    /// <summary>The app's packages' design folders, as the IDE reads them from its assets file.</summary>
+    public IReadOnlyList<string> DesignFolders { get; private set; } = [];
+
+    public async ValueTask InitializeAsync()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        Assert.True(File.Exists(WinFormsHostFixture.DesignerHost), "Build the solution first: " + WinFormsHostFixture.DesignerHost);
+        var fixture = RepoPaths.CopyFixture(WinFormsPackages.Sample, _root);
+        var (code, output) = await WinFormsHostFixture.DotnetAsync("build", Path.Combine(fixture, "src", "Contoso.WinForms.Board.Design.Routing", "Contoso.WinForms.Board.Design.Routing.csproj"), "-c", "Release", "-p:CodalusDesignTools=" + DesignTools, "-nologo", "-v", "quiet");
+        Assert.True(code == 0, "dotnet build the design assemblies: " + output);
+        (code, output) = await WinFormsHostFixture.DotnetAsync("pack", Path.Combine(fixture, "src", "Contoso.WinForms.Board", "Contoso.WinForms.Board.csproj"), "-o", Path.Combine(fixture, "feed"), "-nologo", "-v", "quiet");
+        Assert.True(code == 0, "dotnet pack Contoso.WinForms.Board: " + output);
+        (code, output) = await WinFormsHostFixture.DotnetAsync("build", Path.Combine(App, "WinFormsVendorApp.csproj"), "-nologo", "-v", "quiet");
+        Assert.True(code == 0, output);
+        AppDll = Directory.EnumerateFiles(Path.Combine(App, "bin"), "WinFormsVendorApp.dll", SearchOption.AllDirectories).Single();
+        DesignFolders = WinFormsDesignFolders.Read(Path.Combine(App, "obj", "project.assets.json"));
+    }
+
+    public WinFormsDesignerTarget Target(bool vendorDesigners = true) =>
+        new(Path.Combine(App, "BoardForm.cs"), Path.Combine(App, "WinFormsVendorApp.csproj"), AppDll, AppDll, WinFormsHostFixture.DesignerHost) { DesignFolders = vendorDesigners ? DesignFolders : [] };
+
+    public ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (Directory.Exists(_root))
+            {
+                Directory.Delete(_root, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>
+/// #461, Windows only: a control library's own designers, built for the classic IDE's designer server, design its controls
+/// in the designer host, through the same process and protocol as the IDE: the vendor's defaults when a control is
+/// dropped, its smart tag and verbs, its property filter, a designer routed by name, a component's designer, a dialog it
+/// shows (which closes itself here) and what it changed as code; a designer that throws, and the setting off, give the
+/// base types' designers (#454).
+/// </summary>
+public sealed class WinFormsDesignerVendorHostTests(WinFormsVendorHostFixture fixture) : IClassFixture<WinFormsVendorHostFixture>
+{
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
+
+    [Fact]
+    public void The_app_reads_its_packages_design_folder()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var folder = Assert.Single(fixture.DesignFolders);
+        Assert.EndsWith(Path.Combine("lib", "net11.0-windows", "Design", "WinForms", "Server"), folder, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(folder, "lib", "Contoso.WinForms.Board.Design.dll")));
+    }
+
+    [Fact]
+    public async Task A_control_librarys_own_designers_design_its_controls()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var target = fixture.Target();
+        await using var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        var log = new List<string>();
+        host.Log += (_, line) =>
+        {
+            lock (log)
+            {
+                log.Add(line);
+            }
+        };
+
+        var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, await ModelAsync(), "WinFormsVendorApp.BoardForm"), Ct);
+        Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+        var root = render.Components[0];
+        Assert.Equal(("board1", true), (render.Components.Single(c => c.Name == "board1").Name, render.Components.Single(c => c.Name == "board1").IsContainer));
+
+        // The board's smart tag and verbs are its designer's.
+        var board = await host.ActionsAsync(new DesignerComponentsParams(["board1"]), Ct);
+        Assert.Contains(board.Items, i => i is { Kind: DesignerActionKinds.Header, DisplayName: "Board" });
+        Assert.Contains(board.Items, i => i is { Kind: DesignerActionKinds.Property, Member: "Title", Value: "Sprint" });
+        Assert.Contains(board.Items, i => i is { Kind: DesignerActionKinds.Method, Member: "AddColumn", DisplayName: "Add Column" });
+        Assert.Contains(board.Verbs, v => v.DisplayName == "Board Settings...");
+
+        // The routed card designer's smart tag.
+        var card = await host.ActionsAsync(new DesignerComponentsParams(["card1"]), Ct);
+        Assert.Contains(card.Items, i => i is { Kind: DesignerActionKinds.Text, DisplayName: "A card of the board" });
+
+        // The vendor's property filter: the board has no BackgroundImage in the Properties window.
+        var properties = await host.PropertiesAsync(new DesignerComponentsParams(["board1"]), Ct);
+        Assert.DoesNotContain(properties.Properties, p => p.Name == "BackgroundImage");
+        Assert.Contains(properties.Properties, p => p.Name == "Title");
+
+        // Dropped from the Toolbox, a board gets the vendor's defaults: a title and a column the designer creates.
+        var created = await host.CreateAsync(new DesignerCreateParams("Contoso.WinForms.Board.ContosoBoard", "board2", null, root.ClientX + 20, root.ClientY + 220), Ct);
+        Assert.Null(created.Error);
+        Assert.Contains(created.Created!.Properties, p => p.Name == "Title" && p.Value.Value == "New board");
+        Assert.Contains(created.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+
+        // The smart tag's link runs the vendor's method.
+        var column = await host.InvokeActionAsync(new DesignerInvokeActionParams("board1", "AddColumn"), Ct);
+        Assert.Null(column.Error);
+        Assert.Contains(column.Added, a => a.Type == "Contoso.WinForms.Board.ContosoBoardColumn");
+
+        // The vendor's dialog shows (it closes itself here), and what it changed comes back as code.
+        var settings = Assert.Single(board.Verbs, v => v.DisplayName == "Board Settings...");
+        var dialog = await host.InvokeActionAsync(new DesignerInvokeActionParams("board1", settings.Member), Ct);
+        Assert.Null(dialog.Error);
+        Assert.Contains(dialog.Changes, c => c is { Component: "board1", Property: "Title" } && c.Value!.Value == "From the dialog");
+
+        // The panel whose designer throws is designed as a Panel, and the output says why.
+        Assert.Contains(render.Components, c => c is { Name: "brokenPanel1", IsContainer: true });
+        lock (log)
+        {
+            Assert.Contains(log, l => l.Contains("BoardDesigner", StringComparison.Ordinal) && l.Contains("is designed with", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("BrokenDesigner.Initialize failed", StringComparison.Ordinal) && l.Contains("designed as its base type", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("A control library's dialog is open: Board Settings", StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task With_the_setting_off_a_control_librarys_controls_are_designed_as_their_base_types()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var target = fixture.Target(vendorDesigners: false);
+        await using var host = await WinFormsDesignerProcess.StartAsync(target, Ct);
+        var render = await host.LoadAsync(WinFormsDesignerService.LoadParams(target, await ModelAsync(), "WinFormsVendorApp.BoardForm"), Ct);
+        Assert.True(render.Errors.Length == 0, string.Join("\n", render.Errors));
+        var board = await host.ActionsAsync(new DesignerComponentsParams(["board1"]), Ct);
+        Assert.DoesNotContain(board.Items, i => i.Member == "AddColumn");
+        Assert.DoesNotContain(board.Verbs, v => v.DisplayName == "Board Settings...");
+        var properties = await host.PropertiesAsync(new DesignerComponentsParams(["board1"]), Ct);
+        Assert.Contains(properties.Properties, p => p.Name == "BackgroundImage");
+    }
+
+    [Fact]
+    public async Task The_check_finds_nothing_the_libraries_design_assemblies_need_that_the_replacements_lack()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "The Windows Forms designer runs on Windows only (D31).");
+        var folder = Assert.Single(fixture.DesignFolders);
+        var (code, output) = await WinFormsHostFixture.DotnetAsync("exec", "--runtimeconfig", Path.ChangeExtension(fixture.AppDll, ".runtimeconfig.json"), WinFormsHostFixture.DesignerHost,
+            "--check-vendor-designers", "--search", Path.GetDirectoryName(fixture.AppDll)!, folder);
+        Assert.True(code == 0, output);
+        Assert.Contains("2 design assemblies checked: 0 gap(s).", output, StringComparison.Ordinal);
+    }
+
+    private async Task<DesignerModel> ModelAsync()
+    {
+        var text = await File.ReadAllTextAsync(Path.Combine(fixture.App, "BoardForm.Designer.cs"), Ct);
+        return DesignerReader.Read(CSharpSyntaxTree.ParseText(text, cancellationToken: Ct), "System.Windows.Forms.Form", DesignerReader.WindowsFormsImplicitUsings, new BoardTypes()).Model;
+    }
+
+    /// <summary>The library's types as the compiler names them (the C# host's compilation, in the IDE); the rest as the syntactic reader does.</summary>
+    private sealed class BoardTypes : IDesignerTypeResolver
+    {
+        private readonly SyntacticDesignerTypeResolver _syntactic = new("WinFormsVendorApp");
+
+        public string? FullName(Microsoft.CodeAnalysis.SyntaxNode node) =>
+            node.ToString() is var text && text.StartsWith("Contoso.", StringComparison.Ordinal) ? text : _syntactic.FullName(node);
+
+        public bool? IsEnum(string fullName) => _syntactic.IsEnum(fullName);
+    }
+}

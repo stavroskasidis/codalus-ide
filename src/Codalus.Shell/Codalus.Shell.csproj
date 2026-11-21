@@ -220,15 +220,19 @@
   <Target Name="CodalusWinFormsDesignerFiles">
     <ItemGroup>
       <_CodalusWinFormsDesignerFiles Include="$(MSBuildThisFileDirectory)..\Codalus.WinForms.Designer\bin\$(Configuration)\net8.0-windows\codalus-winformsdesigner.*" />
+      <!-- #461, ADR 0106: the replacements control libraries' designers load against, in the host's designtools/. -->
+      <_CodalusWinFormsDesignTools Include="$(MSBuildThisFileDirectory)..\Codalus.WinForms.Designer\bin\$(Configuration)\net8.0-windows\designtools\*.dll" />
     </ItemGroup>
   </Target>
 
   <Target Name="CodalusCopyWinFormsDesigner" AfterTargets="Build" DependsOnTargets="CodalusWinFormsDesignerFiles" Condition="'$(DesignTimeBuild)' != 'true' And '$(OS)' == 'Windows_NT'">
     <Copy SourceFiles="@(_CodalusWinFormsDesignerFiles)" DestinationFolder="$(OutDir)winformsdesigner" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusWinFormsDesignTools)" DestinationFolder="$(OutDir)winformsdesigner\designtools" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="CodalusPublishWinFormsDesigner" AfterTargets="Publish" DependsOnTargets="CodalusWinFormsDesignerFiles" Condition="$(RuntimeIdentifier.StartsWith('win'))">
     <Copy SourceFiles="@(_CodalusWinFormsDesignerFiles)" DestinationFolder="$(PublishDir)winformsdesigner" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_CodalusWinFormsDesignTools)" DestinationFolder="$(PublishDir)winformsdesigner\designtools" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="CodalusBundleForBuild" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
