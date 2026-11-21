@@ -10,5 +10,7 @@
     <PackageReference Remove="Microsoft.Testing.Extensions.HangDump" />
     <Using Remove="Xunit" />
     <ProjectReference Include="..\..\src\Codalus.Rpc\Codalus.Rpc.csproj" />
+    <!-- When a program it starts started, as DebugStartAgainTests reads it. -->
+    <Compile Include="..\Shared\ProcessStamp.cs" Link="Shared\ProcessStamp.cs" />
   </ItemGroup>
 </Project>
