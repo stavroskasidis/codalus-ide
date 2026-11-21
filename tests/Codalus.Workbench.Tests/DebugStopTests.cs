@@ -36,8 +36,9 @@ public sealed class DebugStopTests
         var plan = new Codalus.Workbench.Build.LaunchPlan("dotnet", string.Empty, AppContext.BaseDirectory, new Dictionary<string, string>(), null) { ArgumentList = ["exec", "program.dll"] };
         await StopAsync(program => new DebugLaunch("Server", plan with { Environment = Options(program) }), (program, output) =>
         {
-            // Not a wait: Stop returns once the program has ended.
-            Assert.True(program.HasExited, "The program still runs after Stop.");
+            // Not a wait: Stop returns once the program has ended, gone or (Linux) a zombie: this test's child, which .NET
+            // reaps on a thread of its own, so HasExited could still read false (WSL, the third of three rounds).
+            Assert.False(WatchedServer.IsRunning(program.Id), "The program still runs after Stop.");
             Assert.Contains($"The program (process {program.Id.ToString(CultureInfo.InvariantCulture)}) was still running 5 s after the debugger ended it", output, StringComparison.Ordinal);
         });
     }
