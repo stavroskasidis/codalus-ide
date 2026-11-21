@@ -68,6 +68,11 @@ public sealed class BlazorWebAppHotReloadDebugTests
         // The client comes first in the solution: the server is the default startup project (task #90).
         Assert.Equal(Path.Combine(folder, "BlazorHosted", "BlazorHosted.csproj"), f.Shell.Runs.StartupProject);
         await f.Shell.Workbench.Settings.SetAsync(ShellHost.DebugHotReloadSetting, true, Workbench.Settings.SettingScope.User, CancellationToken.None);
+
+        // Built before F5, which then finds it up to date: the first stop's wait is the launch's, not the build's too. Under
+        // load F5's build took 9 min 29 s of that wait's 600 s, and dotnet watch started 10 s before it ran out (Windows, a
+        // stress run with 18 of 20 cores busy, on develop ec86e826, 2026-11-21; the build output said so).
+        Assert.True(await f.Shell.BuildAsync(Codalus.Projects.Protocol.BuildTargets.Build, null), f.Shell.Builds.Channel.GetText());
         return (f, folder, Path.Combine(folder, "BlazorHosted.Client", "Pages", "Counter.razor"));
     }
 
