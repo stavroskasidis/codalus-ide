@@ -10,15 +10,41 @@ internal sealed class PostgresEngine : DbEngine
 
     public override string Id => DataEngines.PostgreSql;
 
+    /// <summary>
+    /// Keywords of older Npgsql versions that Npgsql 11 refuses (it removed multiplexing). A project still on Npgsql 10 or
+    /// earlier can have them in its connection strings, which the IDE finds; they only tuned that app's pooling.
+    /// </summary>
+    private static readonly string[] s_removedKeywords = ["Multiplexing", "WriteCoalescingBufferThresholdBytes"];
+
     public override DbConnection Create(string connectionString, string? database)
     {
-        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+        var builder = new NpgsqlConnectionStringBuilder(WithoutRemovedKeywords(connectionString));
         if (database is { Length: > 0 })
         {
             builder.Database = database;
         }
 
         return new NpgsqlConnection(builder.ConnectionString);
+    }
+
+    /// <summary><paramref name="connectionString"/> without <see cref="s_removedKeywords"/> (spelled with or without spaces).</summary>
+    internal static string WithoutRemovedKeywords(string connectionString)
+    {
+        var parsed = new DbConnectionStringBuilder { ConnectionString = connectionString };
+        var removed = parsed.Keys.Cast<string>()
+            .Where(key => s_removedKeywords.Contains(key.Replace(" ", "", StringComparison.Ordinal), StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (removed.Count == 0)
+        {
+            return connectionString;
+        }
+
+        foreach (var key in removed)
+        {
+            parsed.Remove(key);
+        }
+
+        return parsed.ConnectionString;
     }
 
     public override string Quote(string identifier) => "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
