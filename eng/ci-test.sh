@@ -91,7 +91,18 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
         # left nothing on its CPU (dry run 44944708088).
         load="$(sysctl -n vm.loadavg | tr -d '{}' | awk '{ print $1, $2, $3 }')"
         top="$(ps -axo rss=,pid=,ppid=,args= | sort -nr)"
-        echo "$now free=$free% swap: $swap load: $load" >> "$results/memory.txt"
+        # A runner lost with its load rising from 39 to 79 in its last minute, on three cores, its memory 70% free
+        # (stress run 44992968217, shell-2) couldn't say whether the tests started that many threads or the VM was
+        # starved: so each sample counts the processes (by program, from the same ps) and top's threads and CPU split.
+        # top reads every task as %cpu does, so it gets 6 seconds and is ended after that ("top: no answer").
+        counts="$(echo "$top" | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); c[n]++ } END { for (n in c) print c[n], n }' | sort -nr | head -5 | tr '\n' ' ')"
+        top -l 2 -n 0 -s 1 > "$results/.top" 2>/dev/null &
+        topper=$!
+        for _ in 1 2 3 4 5 6; do kill -0 "$topper" 2>/dev/null || break; sleep 1; done
+        kill -KILL "$topper" 2>/dev/null && cpu="top: no answer" \
+          || cpu="$(awk '/^Processes:/ { p = $0 } /^CPU usage:/ { c = $0 } END { print p "; " c }' "$results/.top" | tr -s ' ')"
+        echo "$now free=$free% swap: $swap load: $load processes=$(echo "$top" | wc -l | tr -d ' ')" >> "$results/memory.txt"
+        echo "  $cpu; most: $counts" >> "$results/memory.txt"
         echo "$top" | head -6 | cut -c1-200 >> "$results/memory.txt"
         used="$(echo "$swap" | awk '{ for (i = 1; i < NF; i++) if ($i == "used") print $(i + 2) }')"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
@@ -113,7 +124,9 @@ elif [[ "${CI:-}" == "true" && "$(uname)" == "Linux" ]]; then
         memory="$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } /^SwapTotal:/ { st = $2 } /^SwapFree:/ { sf = $2 }
           END { printf "free=%d%% available=%dM swap=%dM", a * 100 / t, a / 1024, (st - sf) / 1024 }' /proc/meminfo)"
         top="$(ps -eo rss=,pid=,ppid=,args= --sort=-rss | head -6)"
-        echo "$now $memory" >> "$results/memory.txt"
+        # With the load and the processes and threads, as on macOS (stress run 44992968217).
+        load="$(cut -d' ' -f1-4 /proc/loadavg)"
+        echo "$now $memory load: $load processes=$(ps -e --no-headers | wc -l | tr -d ' ') threads=$(ps -eL --no-headers | wc -l | tr -d ' ')" >> "$results/memory.txt"
         echo "$top" | cut -c1-200 >> "$results/memory.txt"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
         echo "[memory] $now $memory processes=$(ps -e --no-headers | wc -l | tr -d ' ') largest:$largest"
