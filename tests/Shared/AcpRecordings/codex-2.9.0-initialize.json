@@ -1,14 +1,15 @@
 {
-  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-20",
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-22",
   "protocolVersion": 1,
   "agentInfo": {
     "name": "@agentclientprotocol/codex-acp",
     "title": "Codex",
-    "version": "2.8.0"
+    "version": "2.9.0"
   },
   "agentCapabilities": {
     "auth": {
-      "logout": {}
+      "logout": {},
+      "status": {}
     },
     "providers": {},
     "loadSession": true,

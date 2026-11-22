@@ -558,9 +558,9 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
         Assert.Equal("There is no agent 'evil' in your settings (ai.agents).", turn.Error);
         Assert.False(File.Exists(_log));
 
-        using var parsed = JsonDocument.Parse("""{"pi":{"command":"npx","args":["pi-acp@0.0.34"],"env":{"K":"V"}},"broken":{"args":[]}}""");
+        using var parsed = JsonDocument.Parse("""{"pi":{"command":"npx","args":["pi-acp@0.0.35"],"env":{"K":"V"}},"broken":{"args":[]}}""");
         var pi = Assert.Single(AcpAgents.Parse(parsed.RootElement));
-        Assert.Equal(("pi", "npx", "pi-acp@0.0.34", "V"), (pi.Key, pi.Value.Command, pi.Value.Args.Single(), pi.Value.Env["K"]));
+        Assert.Equal(("pi", "npx", "pi-acp@0.0.35", "V"), (pi.Key, pi.Value.Command, pi.Value.Args.Single(), pi.Value.Env["K"]));
     }
 
     [Fact]
