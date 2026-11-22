@@ -109,7 +109,9 @@ public sealed class NetFrameworkTestingTests : IAsyncLifetime
         Assert.True(build.Succeeded, builds.Channel.GetText());
 
         await _plugins.ActivateByEventAsync("onTestProjects", timeout);
-        await WaitUntilAsync(() => _tests.Read(roots => roots.Count) == 3, timeout);
+        // The projects show before their sources are read (#513): their tests too, before a test looks one up (Windows,
+        // develop's dry run 45023677779).
+        await WaitUntilAsync(() => _tests.Read(roots => roots.Count == 3 && roots.All(r => r.Children.Count > 0)), timeout);
     }
 
     public async ValueTask DisposeAsync()

@@ -14,6 +14,9 @@ src/Codalus.Rpc/
 # The debugger: the adapters, the debug host, the startup hook and the workbench's sessions
 src/Codalus.Debugging
 src/Codalus.Workbench/Debugging/
+# The test plugin: VSTest and Microsoft.Testing.Platform hosts, debugging tests, and .NET Framework tests on Windows only
+# (#513 changed it on Linux CI alone and broke a Windows-only test, develop's dry run 45023677779)
+src/Plugins/Codalus.Plugins.DotNetTest/
 # MSBuild and the build host
 src/Codalus.Projects.Host/
 # Rendering, single instance, installation and updates
