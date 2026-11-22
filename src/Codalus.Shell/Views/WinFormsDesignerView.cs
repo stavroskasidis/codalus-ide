@@ -1863,6 +1863,10 @@ public sealed class DesignerSurface : Control
             case Mode.Band when _moved && _bandContainer is { } container:
                 _document.SelectInRectangle(DesignerRect.Between(pressed.X, pressed.Y, point.X, point.Y), container, add: (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift)) != 0);
                 break;
+            case Mode.Move or Mode.Band when !_moved && _document.TakesClickAt(pressed.X, pressed.Y):
+                // #461: a control library's design-time button (DevExpress's grid's Run Designer) gets the click.
+                _ = _document.ClickControlAsync(pressed.X, pressed.Y, this.PointToScreen(pressed));
+                break;
         }
 
         InvalidateVisual();

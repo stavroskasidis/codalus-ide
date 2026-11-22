@@ -103,6 +103,12 @@ internal sealed partial class DesignerSession : IDisposable
         var errors = new List<string>();
         _searchFolders = [.. parameters.SearchFolders.Append(Path.GetDirectoryName(parameters.ProjectAssembly)!).Distinct(StringComparer.OrdinalIgnoreCase)];
         _types.SearchIn(_searchFolders);
+
+        // #461, ADR 0106: control libraries' own designers, from the design folders of the app's packages.
+        VendorDesigners.Use(parameters.DesignFolders);
+        VendorDesigners.Attach(_window);
+        _ui.DialogOwner = parameters.DialogOwner;
+        _window.DialogOwner = parameters.DialogOwner;
         Assembly? project = null;
         if (File.Exists(parameters.ProjectAssembly))
         {
@@ -580,6 +586,7 @@ internal sealed partial class DesignerSession : IDisposable
                 Text = isPart ? null : control.Text,
                 InTray = control is ToolStrip and not ToolStripDropDown,
                 Locked = isPart ? null : LockedValue(control),
+                TakesClicks = !isPart && VendorDesigners.TakesClicks(Host.GetDesigner(control)),
             };
         }
 
@@ -882,6 +889,8 @@ internal sealed partial class DesignerSession : IDisposable
         try
         {
             ToolInvoker.Create(designer, tool, screen.X, screen.Y, size.Width, size.Height, hasLocation: !parameters.AtDefaultLocation, hasSize);
+            VendorDesigners.Continue(Host);
+            _window.WaitForVendorDialog();
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -1236,8 +1245,8 @@ internal sealed partial class DesignerSession : IDisposable
                 }
             }
 
-            // A strip's items, a menu item's drop-down's, a list view's columns, a grid's columns.
-            foreach (var (_, collection) in CollectionsOf(component))
+            // A strip's items, a menu item's drop-down's, a list view's columns, a grid's columns, a control library's own (#461).
+            foreach (var (_, collection) in CollectionsOf(component).Concat(LibraryCollectionsOf(component)))
             {
                 foreach (var item in ((IEnumerable)collection).Cast<object>().ToList())
                 {
@@ -1264,6 +1273,29 @@ internal sealed partial class DesignerSession : IDisposable
             if (component.Site is not null)
             {
                 Host.DestroyComponent(component);
+            }
+        }
+
+        // #461: a control library's collection that still holds a deleted component (its designer didn't take it out)
+        // drops it, so the code no longer names it.
+        foreach (var owner in Host.Container.Components.Cast<IComponent>().ToList())
+        {
+            foreach (var (_, collection) in LibraryCollectionsOf(owner))
+            {
+                if (collection is IList { IsReadOnly: false, IsFixedSize: false } list)
+                {
+                    foreach (var component in removed.Where(list.Contains))
+                    {
+                        try
+                        {
+                            list.Remove(component);
+                        }
+                        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException or ArgumentException)
+                        {
+                            Console.Error.WriteLine($"[designer] {NameOf(owner)}'s collection kept the deleted {component.GetType().Name}: {ex.Message}");
+                        }
+                    }
+                }
             }
         }
 

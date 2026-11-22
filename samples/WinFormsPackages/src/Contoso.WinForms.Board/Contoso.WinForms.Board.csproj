@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <IsPackable>true</IsPackable>
+    <Version>1.0.0</Version>
+    <Authors>Contoso</Authors>
+    <Description>A stand-in for a control library whose package ships its own designers for the classic IDE's designer server (#461): lib/net11.0-windows/Design/WinForms/Server.</Description>
+    <!-- The design assemblies (README.md): built first by Contoso.WinForms.Board.Design.Routing, against Codalus's replacements of the designer server's API. -->
+    <CodalusBoardDesign>$(MSBuildThisFileDirectory)..\Contoso.WinForms.Board.Design.Routing\bin\Release\net11.0-windows\</CodalusBoardDesign>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The vendors' layout: the routing assembly in Server/, the design assemblies in Server/lib/. -->
+    <None Include="$(CodalusBoardDesign)Contoso.WinForms.Board.Design.Routing.dll" Pack="true" PackagePath="lib/net11.0-windows/Design/WinForms/Server" Visible="false" Condition="Exists('$(CodalusBoardDesign)Contoso.WinForms.Board.Design.Routing.dll')" />
+    <None Include="$(CodalusBoardDesign)Contoso.WinForms.Board.Design.dll" Pack="true" PackagePath="lib/net11.0-windows/Design/WinForms/Server/lib" Visible="false" Condition="Exists('$(CodalusBoardDesign)Contoso.WinForms.Board.Design.dll')" />
+  </ItemGroup>
+</Project>

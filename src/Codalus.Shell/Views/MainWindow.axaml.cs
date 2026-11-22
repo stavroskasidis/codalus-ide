@@ -322,6 +322,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void OnOpened(object? sender, EventArgs e)
     {
         RememberNormalBounds();
+        NativeHandle = OperatingSystem.IsWindows() && TryGetPlatformHandle() is { HandleDescriptor: "HWND" } native ? native.Handle : IntPtr.Zero;
 
         // A requestAnimationFrame callback runs at the start of a frame; the second one proves the first frame
         // was produced. "interactive" additionally waits for the UI thread to go idle.
@@ -503,6 +504,9 @@ public sealed partial class MainWindow : Window, IShellWindow
             }
         }
     }
+
+    /// <summary>The window's HWND on Windows, taken on the UI thread when it opens (read from any thread: a control library's dialogs' owner, #461).</summary>
+    public IntPtr NativeHandle { get; private set; }
 
     public void BringToFront()
     {

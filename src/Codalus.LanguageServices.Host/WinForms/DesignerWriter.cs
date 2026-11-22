@@ -746,7 +746,9 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
 
     /// <summary>
     /// A collection's statements written again: <c>AddRange(new T[] { … })</c>, one <c>Add</c> per item, or one
-    /// <c>SetKeyName</c> per image, where the collection's statements were (else where the property sorts).
+    /// <c>SetKeyName</c> per image, where the collection's statements were (else where the property sorts), after
+    /// <see cref="DesignerEdit.Statements"/> (#461: its locals' properties and collections, as the classic IDE writes a
+    /// DevExpress grid's levels before <c>LevelTree.Nodes.AddRange</c>).
     /// </summary>
     private static void SetCollection(DesignerSource source, List<TextChange> changes, DesignerEdit edit)
     {
@@ -766,7 +768,8 @@ internal sealed class DesignerWriter(Func<SourceText, DesignerSource> read, Desi
             _ => throw new ArgumentException($"Unknown collection method {method}.", nameof(edit)),
         };
         var generator = Generator(source);
-        var code = string.Concat(statements.Select(s => generator.Statement(s)));
+        var prelude = statements.Count == 0 ? [] : edit.Statements ?? [];
+        var code = string.Concat(prelude.Concat(statements).Select(s => generator.Statement(s)));
         if (existing.Count > 0)
         {
             changes.Add(new TextChange(existing[0].Lines, code));

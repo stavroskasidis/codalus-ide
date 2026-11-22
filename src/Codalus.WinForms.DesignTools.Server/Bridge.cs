@@ -1,0 +1,586 @@
+using System.Collections;
+using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.ComponentModel.Design;
+using System.Drawing;
+using System.Runtime.CompilerServices;
+using System.Windows.Forms;
+using Microsoft.DotNet.DesignTools.Designers;
+using Microsoft.DotNet.DesignTools.Designers.Behaviors;
+using Microsoft.DotNet.DesignTools.Protocol.Endpoints;
+using Microsoft.DotNet.DesignTools.Protocol.Notifications;
+using Microsoft.DotNet.DesignTools.Services;
+using UndoEngine = Microsoft.DotNet.DesignTools.Undo.UndoEngine;
+using ComponentDesigner = Microsoft.DotNet.DesignTools.Designers.ComponentDesigner;
+using Swf = System.ComponentModel.Design;
+using SwfBehavior = System.Windows.Forms.Design.Behavior;
+using SwfDesign = System.Windows.Forms.Design;
+
+// Codalus's bridge between a control library's designers (built on the replacement's designers) and Windows Forms'
+// design surface (#461, ADR 0106): what an adapter gives the vendor's designer (its base class's behavior), the services a
+// vendor's designer asks for, and the designer host it sees.
+
+namespace Codalus.WinForms.DesignTools;
+
+/// <summary>What a vendor's designer gets from the Windows Forms designer that gives it to the surface: its base class's behavior.</summary>
+internal interface IVendorAdapter
+{
+    /// <summary>The vendor's designer, or null when it failed (the adapter is then its base designer alone).</summary>
+    ComponentDesigner? Vendor { get; }
+
+    IReadOnlyCollection<IComponent> BaseAssociatedComponents { get; }
+
+    DesignerVerbCollection BaseVerbs { get; }
+
+    InheritanceAttribute BaseInheritanceAttribute { get; }
+
+    IComponent? BaseParentComponent { get; }
+
+    ICollection BaseChildren { get; }
+
+    IDesigner? BaseParent { get; }
+
+    object? BaseGetService(Type serviceType);
+
+    void BaseInitializeNewComponent(IDictionary? defaultValues);
+
+    void BaseInitializeExistingComponent(IDictionary? defaultValues);
+
+    void BaseDoDefaultAction();
+
+    void BasePreFilterAttributes(IDictionary attributes);
+
+    void BasePreFilterEvents(IDictionary events);
+
+    void BasePreFilterProperties(IDictionary properties);
+
+    void BasePostFilterAttributes(IDictionary attributes);
+
+    void BasePostFilterEvents(IDictionary events);
+
+    void BasePostFilterProperties(IDictionary properties);
+}
+
+/// <summary>What a vendor's control designer gets from Windows Forms' <c>ControlDesigner</c>.</summary>
+internal interface IControlAdapter : IVendorAdapter
+{
+    bool AutoResizeHandles { get; set; }
+
+    bool BaseParticipatesWithSnapLines { get; }
+
+    SwfDesign.SelectionRules BaseSelectionRules { get; }
+
+    IList<SnapLine> BaseSnapLines { get; }
+
+    bool BaseEnableDragRect { get; }
+
+    bool BaseCanBeParentedTo(IDesigner parentDesigner);
+
+    bool BaseGetHitTest(Point point);
+
+    bool BaseEnableDesignMode(Control child, string name);
+
+    void BaseUnhookChildControls(Control firstChild);
+
+    void BaseDefWndProc(ref Message m);
+
+    void BaseWndProc(ref Message m);
+
+    void BaseOnCreateHandle();
+
+    void BaseOnPaintAdornments(PaintEventArgs pe);
+
+    void BaseOnDragDrop(DragEventArgs de);
+
+    void BaseOnDragEnter(DragEventArgs de);
+
+    void BaseOnDragLeave(EventArgs e);
+
+    void BaseOnDragOver(DragEventArgs de);
+
+    void BaseOnGiveFeedback(GiveFeedbackEventArgs e);
+}
+
+/// <summary>What a vendor's container designer gets from Windows Forms' <c>ParentControlDesigner</c>.</summary>
+internal interface IParentAdapter : IControlAdapter
+{
+    bool BaseAllowControlLasso { get; }
+
+    bool BaseAllowGenericDragBox { get; }
+
+    bool BaseAllowSetChildIndexOnDrop { get; }
+
+    bool BaseDrawGrid { get; set; }
+
+    Size GridSize { get; set; }
+
+    bool BaseCanParent(Control control);
+
+    Control? BaseGetParentForComponent(IComponent component);
+
+    void BaseOnDragComplete(DragEventArgs de);
+}
+
+/// <summary>The host's log (the IDE's Windows Forms Designer output).</summary>
+internal static class VendorLog
+{
+    private static readonly ConcurrentDictionary<string, bool> s_once = new(StringComparer.Ordinal);
+
+    public static void Write(string message) => Console.Error.WriteLine("[designer] " + message);
+
+    /// <summary>Writes <paramref name="message"/> the first time only.</summary>
+    public static void Once(string message)
+    {
+        if (s_once.TryAdd(message, true))
+        {
+            Write(message);
+        }
+    }
+
+    public static string Describe(Exception ex)
+    {
+        var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+        return $"{cause.GetType().Name}: {cause.Message}";
+    }
+
+    /// <summary>Whether an exception is one the designer survives (a vendor's designer failing), not the process's end.</summary>
+    public static bool Survivable(Exception ex) => ex is not (OutOfMemoryException or StackOverflowException or AccessViolationException);
+}
+
+/// <summary>The vendor's designer type each component type is designed with (the catalog registers them as it finds them).</summary>
+internal static class VendorDesignerRegistry
+{
+    private static readonly ConcurrentDictionary<Type, Type> s_designers = new();
+
+    public static void Register(Type componentType, Type designerType) => s_designers[componentType] = designerType;
+
+    public static void Clear() => s_designers.Clear();
+
+    /// <summary>A new vendor designer for <paramref name="component"/>, or null (none registered, or its constructor failed: said in the log).</summary>
+    public static ComponentDesigner? Create(IComponent component)
+    {
+        for (var type = component.GetType(); type is not null; type = type.BaseType)
+        {
+            if (!s_designers.TryGetValue(type, out var designerType))
+            {
+                continue;
+            }
+
+            try
+            {
+                return (ComponentDesigner?)Activator.CreateInstance(designerType);
+            }
+            catch (Exception ex) when (VendorLog.Survivable(ex))
+            {
+                VendorLog.Write($"{designerType.FullName} couldn't be created for {component.GetType().FullName}: {VendorLog.Describe(ex)}. It's designed as its base type.");
+                return null;
+            }
+        }
+
+        return null;
+    }
+}
+
+/// <summary>
+/// The services a vendor's designer asks for, one set per designer host: the replacement's (designer actions, behaviors,
+/// undo, notifications, the UI, requests to the classic IDE's process) over Windows Forms' own, and a designer host that
+/// gives the vendor's designers rather than the surface's adapters.
+/// </summary>
+internal sealed class VendorServices
+{
+    private static readonly ConditionalWeakTable<IDesignerHost, VendorServices> s_byHost = new();
+    private readonly IDesignerHost _inner;
+    private readonly Dictionary<Type, object> _services = [];
+
+    private VendorServices(IDesignerHost inner)
+    {
+        _inner = inner;
+        Host = new VendorDesignerHost(inner, this);
+    }
+
+    public VendorDesignerHost Host { get; }
+
+    public static VendorServices For(IDesignerHost host) => host is VendorDesignerHost vendor ? vendor.Services : s_byHost.GetValue(host, h => new VendorServices(h));
+
+    /// <summary>
+    /// The service <paramref name="serviceType"/> for a vendor's designer of <paramref name="component"/>: the
+    /// replacement's own, the vendor's designer host, else <paramref name="fallback"/> (the site's).
+    /// </summary>
+    public static object? Get(IComponent? component, Type serviceType, Func<object?> fallback)
+    {
+        if (component?.Site?.GetService(typeof(IDesignerHost)) is IDesignerHost host)
+        {
+            var services = For(host);
+            if (services.TryGet(serviceType, out var service))
+            {
+                return service;
+            }
+        }
+
+        return fallback();
+    }
+
+    public bool TryGet(Type serviceType, out object? service)
+    {
+        if (serviceType == typeof(IDesignerHost))
+        {
+            service = Host;
+            return true;
+        }
+
+        lock (_services)
+        {
+            if (_services.TryGetValue(serviceType, out var existing))
+            {
+                service = existing;
+                return true;
+            }
+
+            object? created = serviceType == typeof(Microsoft.DotNet.DesignTools.Designers.Actions.DesignerActionService) ? (object)new Microsoft.DotNet.DesignTools.Designers.Actions.DesignerActionService(_inner.GetService(typeof(Swf.DesignerActionService)) as Swf.DesignerActionService)
+                : serviceType == typeof(Microsoft.DotNet.DesignTools.Designers.Actions.DesignerActionUIService) ? new Microsoft.DotNet.DesignTools.Designers.Actions.DesignerActionUIService(_inner.GetService(typeof(Swf.DesignerActionUIService)) as Swf.DesignerActionUIService)
+                : serviceType == typeof(BehaviorService) ? new BehaviorService(_inner.GetService(typeof(SwfBehavior.BehaviorService)) as SwfBehavior.BehaviorService)
+                : serviceType == typeof(UndoEngine) ? new UndoEngine()
+                : serviceType == typeof(INotificationService) ? new LoggedNotifications()
+                : serviceType == typeof(Microsoft.DotNet.DesignTools.Services.IUIService) ? new UIService(_inner)
+                : serviceType == typeof(IRequestSender) ? new NoClient()
+                : null;
+            if (created is null)
+            {
+                service = null;
+                return false;
+            }
+
+            _services[serviceType] = created;
+            service = created;
+            return true;
+        }
+    }
+
+    /// <summary>A vendor's designer for the surface's <paramref name="designer"/> (an adapter's), else the designer itself.</summary>
+    public static IDesigner? Unwrap(IDesigner? designer) => designer is IVendorAdapter { Vendor: { } vendor } ? vendor : designer;
+
+    /// <summary>The surface's designer for a vendor's <paramref name="designer"/> (its adapter), else the designer itself.</summary>
+    public static IDesigner? Wrap(IDesigner? designer) => designer is ComponentDesigner { Adapter: IDesigner adapter } ? adapter : designer;
+
+    private sealed class LoggedNotifications : INotificationService
+    {
+        public void SendNotification(string name, NotificationData data)
+        {
+            if (!VendorModal.Handle(name, data))
+            {
+                VendorLog.Once($"A control library's designer sent the notification {name} to the classic IDE's process, which Codalus doesn't have (ADR 0106).");
+            }
+        }
+
+        public void SendObjectNotification(string name, object target, NotificationData data) => SendNotification(name, data);
+    }
+
+    private sealed class NoClient : IRequestSender
+    {
+        public TResponse SendRequest<TRequest, TResponse>(string endpointName, TRequest request)
+            where TRequest : Request
+            where TResponse : Response
+        {
+            VendorLog.Once($"A control library's designer asked the classic IDE's process for {endpointName}, which Codalus doesn't have: it gets no answer (ADR 0106).");
+            return default!;
+        }
+    }
+
+    private sealed class UIService(IServiceProvider services) : Microsoft.DotNet.DesignTools.Services.IUIService
+    {
+        private SwfDesign.IUIService? Inner => services.GetService(typeof(SwfDesign.IUIService)) as SwfDesign.IUIService;
+
+        public IWin32Window? GetDialogOwnerWindow() => Inner?.GetDialogOwnerWindow();
+
+        public DialogResult ShowDialog(Form form) => Inner?.ShowDialog(form) ?? DialogResult.Cancel;
+
+        public void ShowError(string message) => Inner?.ShowError(message);
+
+        public void ShowMessage(string message) => Inner?.ShowMessage(message);
+    }
+}
+
+/// <summary>
+/// The classic IDE's adorner window's mouse, for control libraries' glyphs (#461). The surface draws none of them, but a
+/// library's designer gives the glyphs it would (DevExpress's grid: its level designer's panel, Add level, Retrieve
+/// Details, Run Designer), and their behaviors take the mouse: a click at a point of the screen goes, as the classic
+/// IDE's behavior service sends it, to the first glyph whose hit test answers there and whose behavior takes the press.
+/// </summary>
+internal static class VendorGlyphs
+{
+    private static readonly ConditionalWeakTable<Type, StrongBox<bool>> s_takers = [];
+
+    /// <summary>
+    /// A library's designer that may take clicks: it overrides the replacement <c>ControlDesigner</c>'s
+    /// <c>GetGlyphs</c> or <c>GetHitTest</c>.
+    /// </summary>
+    public static bool MayTakeClicks(IDesigner? designer) =>
+        designer is IVendorAdapter { Vendor: ControlDesigner vendor } && s_takers.GetValue(vendor.GetType(), Overrides).Value;
+
+    private static StrongBox<bool> Overrides(Type type)
+    {
+        const System.Reflection.BindingFlags Instance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var glyphs = type.GetMethod(nameof(ControlDesigner.GetGlyphs), Instance, [typeof(GlyphSelectionType)])?.DeclaringType;
+        var hitTest = type.GetMethod("GetHitTest", Instance, [typeof(Point)])?.DeclaringType;
+        return new StrongBox<bool>((glyphs is not null && glyphs != typeof(ControlDesigner)) || (hitTest is not null && hitTest != typeof(ControlDesigner)));
+    }
+
+    /// <summary>
+    /// A left click at <paramref name="screen"/> for the glyphs of the behavior service's adorners and of
+    /// <paramref name="designers"/> (the surface's, the front ones first): the glyph's behavior gets a move there, the
+    /// press and the release, in adorner window coordinates. False when no glyph took it.
+    /// </summary>
+    public static bool Click(IDesignerHost host, IEnumerable<IDesigner> designers, Point screen)
+    {
+        var services = VendorServices.For(host);
+        var behaviors = services.TryGet(typeof(BehaviorService), out var service) ? service as BehaviorService : null;
+        var point = behaviors?.ScreenToAdornerWindow(screen) ?? screen;
+        foreach (var glyph in Glyphs(host, behaviors, designers))
+        {
+            Cursor? cursor;
+            try
+            {
+                cursor = glyph.GetHitTest(point);
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{glyph.GetType().FullName}.GetHitTest failed: {VendorLog.Describe(ex)}");
+                continue;
+            }
+
+            if (cursor is null || glyph.Behavior is not { } behavior)
+            {
+                continue;
+            }
+
+            try
+            {
+                _ = behavior.OnMouseMove(glyph, MouseButtons.None, point);
+                if (!behavior.OnMouseDown(glyph, MouseButtons.Left, point))
+                {
+                    continue;
+                }
+
+                VendorLog.Write($"A click at {screen.X},{screen.Y} goes to {glyph.GetType().FullName} ({behavior.GetType().FullName}), as the classic IDE's adorner window sends it.");
+                _ = behavior.OnMouseUp(glyph, MouseButtons.Left, point);
+
+                // The pointer is the IDE's, not here: the control drawn again shows no hover (DevExpress's grid draws its view's name).
+                _ = behavior.OnMouseLeave(glyph);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{behavior.GetType().FullName} failed on a click: {VendorLog.Describe(ex)}");
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The adorners' glyphs, then each library designer's for its component's selection.</summary>
+    private static IEnumerable<Glyph> Glyphs(IDesignerHost host, BehaviorService? behaviors, IEnumerable<IDesigner> designers)
+    {
+        if (behaviors is not null)
+        {
+            foreach (var adorner in behaviors.Adorners.Where(a => a.Enabled).ToList())
+            {
+                foreach (var glyph in adorner.Glyphs.ToList())
+                {
+                    yield return glyph;
+                }
+            }
+        }
+
+        var selection = host.GetService(typeof(ISelectionService)) as ISelectionService;
+        foreach (var designer in designers)
+        {
+            if (designer is not IVendorAdapter { Vendor: ControlDesigner vendor } || !MayTakeClicks(designer))
+            {
+                continue;
+            }
+
+            var component = designer.Component;
+            var type = selection is null || !selection.GetComponentSelected(component) ? GlyphSelectionType.NotSelected
+                : ReferenceEquals(selection.PrimarySelection, component) ? GlyphSelectionType.SelectedPrimary
+                : GlyphSelectionType.Selected;
+            GlyphCollection glyphs;
+            try
+            {
+                glyphs = vendor.GetGlyphs(type);
+            }
+            catch (Exception ex)
+            {
+                VendorLog.Write($"{vendor.GetType().FullName}.GetGlyphs failed: {VendorLog.Describe(ex)}");
+                continue;
+            }
+
+            foreach (var glyph in glyphs.ToList())
+            {
+                yield return glyph;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// A control library's dialog run as the classic IDE's designer runs it (#461): the vendor's designer shows its dialog
+/// as an ordinary window and tells the IDE's process to run a modal message loop around it (DevExpress's
+/// <c>MessageLoopNotification/StartModalMessageLoop…</c> and <c>…/StopModalMessageLoop</c>). Codalus has no such process,
+/// so the host runs that loop itself: <see cref="Started"/> and <see cref="Stopped"/> are the notifications.
+/// </summary>
+internal static class VendorModal
+{
+    /// <summary>
+    /// What the classic IDE's side answers a vendor's start notification with: the request that makes the vendor's
+    /// designer show its dialog (DevExpress's server shows it only when its client asks it to continue).
+    /// </summary>
+    private static readonly Dictionary<string, string> s_continueWith = new(StringComparer.Ordinal)
+    {
+        ["MessageLoopNotification/StartModalMessageLoopWithDialog"] = "UITypeEditorEndpoint/ContinueStartModalDialog",
+    };
+
+    private static string? s_pending;
+
+    public static event Action? Started;
+
+    public static event Action? Stopped;
+
+    /// <summary>The request the host sends once the action that started the loop returns, taken once; null for none.</summary>
+    public static string? TakeContinuation() => Interlocked.Exchange(ref s_pending, null);
+
+    /// <summary>Raises the event a notification named <paramref name="name"/> stands for; false when it's not one.</summary>
+    public static bool Handle(string name, NotificationData? data = null)
+    {
+        var last = name[(name.LastIndexOf('/') + 1)..];
+        if (last.StartsWith("StartModalMessageLoop", StringComparison.Ordinal))
+        {
+            VendorLog.Write($"A control library's designer shows a dialog ({name}{Describe(data)}): the designer waits until it closes.");
+            if (s_continueWith.TryGetValue(name, out var continuation))
+            {
+                Volatile.Write(ref s_pending, continuation);
+            }
+
+            Started?.Invoke();
+            return true;
+        }
+
+        if (last.StartsWith("StopModalMessageLoop", StringComparison.Ordinal))
+        {
+            Stopped?.Invoke();
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A notification's data in words (its public properties and fields), for the log.</summary>
+    private static string Describe(NotificationData? data)
+    {
+        if (data is null)
+        {
+            return string.Empty;
+        }
+
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var values = data.GetType().GetProperties(flags).Where(p => p.GetIndexParameters().Length == 0).Select(p => (p.Name, Get: (Func<object?>)(() => p.GetValue(data))))
+            .Concat(data.GetType().GetFields(flags).Select(f => (f.Name, Get: (Func<object?>)(() => f.GetValue(data)))))
+            .Select(v =>
+            {
+                try
+                {
+                    return $"{v.Name}={v.Get()}";
+                }
+                catch (Exception ex) when (VendorLog.Survivable(ex))
+                {
+                    return $"{v.Name}=?";
+                }
+            });
+        return $", {data.GetType().Name} {{{string.Join(", ", values)}}}";
+    }
+}
+
+/// <summary>
+/// The designer host as a vendor's designer sees it: Windows Forms' own, but <see cref="GetDesigner"/> gives the vendor's
+/// designers (a vendor's code casts what it gets to its own designer types), and its services are the vendor's.
+/// </summary>
+internal sealed class VendorDesignerHost(IDesignerHost inner, VendorServices services) : IDesignerHost, IComponentChangeService
+{
+    internal VendorServices Services => services;
+
+    private IComponentChangeService? Changes => inner.GetService(typeof(IComponentChangeService)) as IComponentChangeService;
+
+    public IContainer Container => inner.Container;
+
+    public bool InTransaction => inner.InTransaction;
+
+    public bool Loading => inner.Loading;
+
+    public IComponent RootComponent => inner.RootComponent;
+
+    public string RootComponentClassName => inner.RootComponentClassName;
+
+    public string TransactionDescription => inner.TransactionDescription;
+
+    public event EventHandler? Activated { add => inner.Activated += value; remove => inner.Activated -= value; }
+
+    public event EventHandler? Deactivated { add => inner.Deactivated += value; remove => inner.Deactivated -= value; }
+
+    public event EventHandler? LoadComplete { add => inner.LoadComplete += value; remove => inner.LoadComplete -= value; }
+
+    public event DesignerTransactionCloseEventHandler? TransactionClosed { add => inner.TransactionClosed += value; remove => inner.TransactionClosed -= value; }
+
+    public event DesignerTransactionCloseEventHandler? TransactionClosing { add => inner.TransactionClosing += value; remove => inner.TransactionClosing -= value; }
+
+    public event EventHandler? TransactionOpened { add => inner.TransactionOpened += value; remove => inner.TransactionOpened -= value; }
+
+    public event EventHandler? TransactionOpening { add => inner.TransactionOpening += value; remove => inner.TransactionOpening -= value; }
+
+    public event ComponentEventHandler? ComponentAdded { add => Changes!.ComponentAdded += value; remove => Changes!.ComponentAdded -= value; }
+
+    public event ComponentEventHandler? ComponentAdding { add => Changes!.ComponentAdding += value; remove => Changes!.ComponentAdding -= value; }
+
+    public event ComponentChangedEventHandler? ComponentChanged { add => Changes!.ComponentChanged += value; remove => Changes!.ComponentChanged -= value; }
+
+    public event ComponentChangingEventHandler? ComponentChanging { add => Changes!.ComponentChanging += value; remove => Changes!.ComponentChanging -= value; }
+
+    public event ComponentEventHandler? ComponentRemoved { add => Changes!.ComponentRemoved += value; remove => Changes!.ComponentRemoved -= value; }
+
+    public event ComponentEventHandler? ComponentRemoving { add => Changes!.ComponentRemoving += value; remove => Changes!.ComponentRemoving -= value; }
+
+    public event ComponentRenameEventHandler? ComponentRename { add => Changes!.ComponentRename += value; remove => Changes!.ComponentRename -= value; }
+
+    public void Activate() => inner.Activate();
+
+    public IComponent CreateComponent(Type componentClass) => inner.CreateComponent(componentClass);
+
+    public IComponent CreateComponent(Type componentClass, string name) => inner.CreateComponent(componentClass, name);
+
+    public DesignerTransaction CreateTransaction() => inner.CreateTransaction();
+
+    public DesignerTransaction CreateTransaction(string description) => inner.CreateTransaction(description);
+
+    public void DestroyComponent(IComponent component) => inner.DestroyComponent(component);
+
+    public IDesigner? GetDesigner(IComponent component) => VendorServices.Unwrap(inner.GetDesigner(component));
+
+    public Type? GetType(string typeName) => inner.GetType(typeName);
+
+    public object? GetService(Type serviceType) => services.TryGet(serviceType, out var service) ? service : inner.GetService(serviceType);
+
+    public void AddService(Type serviceType, object serviceInstance) => inner.AddService(serviceType, serviceInstance);
+
+    public void AddService(Type serviceType, object serviceInstance, bool promote) => inner.AddService(serviceType, serviceInstance, promote);
+
+    public void AddService(Type serviceType, ServiceCreatorCallback callback) => inner.AddService(serviceType, callback);
+
+    public void AddService(Type serviceType, ServiceCreatorCallback callback, bool promote) => inner.AddService(serviceType, callback, promote);
+
+    public void RemoveService(Type serviceType) => inner.RemoveService(serviceType);
+
+    public void RemoveService(Type serviceType, bool promote) => inner.RemoveService(serviceType, promote);
+
+    public void OnComponentChanged(object component, MemberDescriptor? member, object? oldValue, object? newValue) => Changes?.OnComponentChanged(component, member, oldValue, newValue);
+
+    public void OnComponentChanging(object component, MemberDescriptor? member) => Changes?.OnComponentChanging(component, member);
+}

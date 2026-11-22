@@ -22,6 +22,9 @@
     <Project Path="src/Codalus.Previewer.Agent/Codalus.Previewer.Agent.csproj" />
     <Project Path="src/Codalus.Previewer.Wpf/Codalus.Previewer.Wpf.csproj" />
     <Project Path="src/Codalus.WinForms.Designer/Codalus.WinForms.Designer.csproj" />
+    <Project Path="src/Codalus.WinForms.DesignTools.Protocol/Codalus.WinForms.DesignTools.Protocol.csproj" />
+    <Project Path="src/Codalus.WinForms.DesignTools.Server/Codalus.WinForms.DesignTools.Server.csproj" />
+    <Project Path="src/Codalus.WinForms.DesignTools.Shared/Codalus.WinForms.DesignTools.Shared.csproj" />
     <Project Path="src/Codalus.Diagnostics.BenchEvents/Codalus.Diagnostics.BenchEvents.csproj" />
     <Project Path="src/Codalus.Diagnostics.Host/Codalus.Diagnostics.Host.csproj" />
     <Project Path="src/Codalus.Diagnostics.Protocol/Codalus.Diagnostics.Protocol.csproj" />

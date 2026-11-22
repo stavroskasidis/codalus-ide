@@ -45,6 +45,9 @@ public interface IWinFormsDesignerHost : IAsyncDisposable
     /// <summary>Runs a designer action, or sets an action's property (M41b).</summary>
     Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken);
 
+    /// <summary>A click given to the control whose designer takes it (#461: a control library's design-time buttons).</summary>
+    Task<DesignerChangeResult> ClickAsync(DesignerClickParams parameters, CancellationToken cancellationToken);
+
     /// <summary>Whether a build replaced what the host loaded since it started (#66): it must start again to show it.</summary>
     Task<bool> IsOutdatedAsync(CancellationToken cancellationToken);
 
@@ -64,6 +67,12 @@ public sealed record WinFormsDesignerTarget(string CodeFile, string Project, str
 {
     /// <summary>The projects whose sources the designer's build output comes from.</summary>
     public string? HostProject { get; init; }
+
+    /// <summary>The design folders of the app's packages whose control libraries' own designers the host loads (#461, ADR 0106); empty: none, or the setting is off.</summary>
+    public IReadOnlyList<string> DesignFolders { get; init; } = [];
+
+    /// <summary>The IDE's main window, which owns a control library's dialogs (#461; 0: none).</summary>
+    public long DialogOwner { get; init; }
 }
 
 /// <summary>
@@ -82,7 +91,7 @@ public sealed class WinFormsDesignerService
     public const string WindowsOnlyMessage =
         "The Windows Forms designer runs on Windows only: Windows Forms draws only there. On this OS the form opens as code, which edits, completes and builds.";
 
-    private static readonly string[] s_properties = ["TargetPath", "OutputType"];
+    private static readonly string[] s_properties = ["TargetPath", "OutputType", "ProjectAssetsFile"];
 
     private readonly SolutionService _solutions;
     private readonly Func<string, bool> _isTrusted;
@@ -112,6 +121,12 @@ public sealed class WinFormsDesignerService
 
     /// <summary>Whether a build is running (#66): the designer waits for it before it checks the output or builds.</summary>
     public Func<bool> IsBuilding { get; init; } = () => false;
+
+    /// <summary>Whether control libraries' own designers load (#461, ADR 0106; <c>windowsForms.designer.vendorDesigners</c>).</summary>
+    public Func<bool> VendorDesigners { get; init; } = () => true;
+
+    /// <summary>The IDE's main window (an <c>HWND</c> on Windows; 0 for none), which owns a control library's dialogs (#461).</summary>
+    public Func<long> DialogOwner { get; init; } = () => 0;
 
     /// <summary>Starts a designer host for a target (tests give a fake one).</summary>
     public Func<WinFormsDesignerTarget, CancellationToken, Task<IWinFormsDesignerHost>> HostFactory { get; init; } = WinFormsDesignerProcess.StartAsync;
@@ -203,13 +218,20 @@ public sealed class WinFormsDesignerService
         var ownerProperties = await _properties(owner.Path, s_properties, cancellationToken).ConfigureAwait(false);
         var assembly = ownerProperties.GetValueOrDefault("TargetPath") is { Length: > 0 } target ? target : throw new PreviewerException($"{owner.Name} has no TargetPath.");
         string? hostAssembly = null;
+        var assets = ownerProperties.GetValueOrDefault("ProjectAssetsFile");
         if (host is not null)
         {
             var hostProperties = host == owner ? ownerProperties : await _properties(host.Path, s_properties, cancellationToken).ConfigureAwait(false);
             hostAssembly = hostProperties.GetValueOrDefault("TargetPath") is { Length: > 0 } hostTarget ? Path.GetFullPath(hostTarget) : null;
+            assets = hostProperties.GetValueOrDefault("ProjectAssetsFile") is { Length: > 0 } hostAssets ? hostAssets : assets;
         }
 
-        return new WinFormsDesignerTarget(codeFile, owner.Path, Path.GetFullPath(assembly), hostAssembly, Path.GetFullPath(designer)) { HostProject = host?.Path };
+        return new WinFormsDesignerTarget(codeFile, owner.Path, Path.GetFullPath(assembly), hostAssembly, Path.GetFullPath(designer))
+        {
+            HostProject = host?.Path,
+            DesignFolders = VendorDesigners() && assets is { Length: > 0 } ? WinFormsDesignFolders.Read(assets) : [],
+            DialogOwner = DialogOwner(),
+        };
     }
 
     private static bool IsExecutable(ProjectInfo project) =>
@@ -383,7 +405,11 @@ public sealed class WinFormsDesignerService
 
     /// <summary>The load request for a model read by the C# host.</summary>
     public static DesignerLoadParams LoadParams(WinFormsDesignerTarget target, Codalus.LanguageServices.Protocol.DesignerModel model, string? classFullName) =>
-        new(model, target.ProjectAssembly, classFullName, [.. new[] { Path.GetDirectoryName(target.ProjectAssembly), target.HostAssembly is null ? null : Path.GetDirectoryName(target.HostAssembly) }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)]);
+        new(model, target.ProjectAssembly, classFullName, [.. new[] { Path.GetDirectoryName(target.ProjectAssembly), target.HostAssembly is null ? null : Path.GetDirectoryName(target.HostAssembly) }.OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)])
+        {
+            DesignFolders = [.. target.DesignFolders],
+            DialogOwner = target.DialogOwner,
+        };
 }
 
 /// <summary>How long the shell waits for the designer host (<see cref="WinFormsDesignerProcess"/>; tests shorten them).</summary>
@@ -645,23 +671,73 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     private async Task<TResult> InvokeAsync<TParams, TResult>(string method, TParams parameters, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TParams> paramsInfo, System.Text.Json.Serialization.Metadata.JsonTypeInfo<TResult> resultInfo, CancellationToken cancellationToken, TimeSpan? limit = null)
     {
         var allowed = limit ?? _timeouts.Request;
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(allowed);
+        using var call = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         JsonRpcConnection? connection = null;
         var asked = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             connection = _process.Connection;
-            return await connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, timeout.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            var here = DescribeHere(connection, asked, allowed);
-            throw new PreviewerException($"The designer didn't answer {method} in {allowed.TotalSeconds:0} seconds: {await DiagnoseAsync(connection, here).ConfigureAwait(false)}");
+            var answer = connection.InvokeAsync(method, parameters, paramsInfo, resultInfo, call.Token);
+            while (true)
+            {
+                if (await Task.WhenAny(answer, Task.Delay(allowed, cancellationToken)).ConfigureAwait(false) == answer || cancellationToken.IsCancellationRequested)
+                {
+                    return await answer.ConfigureAwait(false);
+                }
+
+                // #461: a control library's dialog is open on the host's UI thread (or just closed: the request finishes its
+                // change); the request waits for the user to close it, then its limit counts again.
+                if (await DialogAsync(connection, allowed).ConfigureAwait(false) || answer.IsCompleted)
+                {
+                    continue;
+                }
+
+                call.Cancel();
+                try
+                {
+                    await answer.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                var here = DescribeHere(connection, asked, allowed);
+                throw new PreviewerException($"The designer didn't answer {method} in {allowed.TotalSeconds:0} seconds: {await DiagnoseAsync(connection, here).ConfigureAwait(false)}");
+            }
         }
         catch (JsonRpcRemoteException ex)
         {
             throw new PreviewerException(ex.Message, ex);
+        }
+    }
+
+    /// <summary>
+    /// Whether the host says a dialog is open on its UI thread (#461), or one closed less than <paramref name="allowed"/>
+    /// ago (a limit that fired late, on a busy thread pool, may ask after the user closed it); false when it doesn't answer.
+    /// </summary>
+    private async Task<bool> DialogAsync(JsonRpcConnection connection, TimeSpan allowed)
+    {
+        using var timeout = new CancellationTokenSource(_timeouts.Status);
+        try
+        {
+            var status = await connection.InvokeAsync(WinFormsDesignerMethods.Status, s_noParams, s_json.JsonElement, s_json.DesignerStatus, timeout.Token).ConfigureAwait(false);
+            return status is { DialogOpen: true } || status?.SinceDialog < allowed.TotalSeconds;
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or JsonRpcConnectionLostException or JsonRpcRemoteException or IOException or ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Lets the host bring a control library's dialog to the foreground (#461): Windows gives the foreground only to the
+    /// process that has it, which is this one while the user acts in the designer.
+    /// </summary>
+    private void AllowHostForeground()
+    {
+        if (OperatingSystem.IsWindows() && _process.ProcessId is { } id)
+        {
+            Codalus.Platform.WindowsForeground.AllowSetForeground(id);
         }
     }
 
@@ -743,8 +819,11 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     public Task<DesignerRenderResult> RenderAsync(CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.Render, new DesignerComponentsParams([]), s_json.DesignerComponentsParams, s_json.DesignerRenderResult, cancellationToken);
 
-    public Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters, CancellationToken cancellationToken) =>
-        InvokeAsync(WinFormsDesignerMethods.Create, parameters, s_json.DesignerCreateParams, s_json.DesignerChangeResult, cancellationToken);
+    public Task<DesignerChangeResult> CreateAsync(DesignerCreateParams parameters, CancellationToken cancellationToken)
+    {
+        AllowHostForeground();
+        return InvokeAsync(WinFormsDesignerMethods.Create, parameters, s_json.DesignerCreateParams, s_json.DesignerChangeResult, cancellationToken);
+    }
 
     public Task<DesignerChangeResult> SetPropertiesAsync(DesignerSetPropertiesParams parameters, CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.SetProperties, parameters, s_json.DesignerSetPropertiesParams, s_json.DesignerChangeResult, cancellationToken);
@@ -776,8 +855,18 @@ public sealed class WinFormsDesignerProcess : IWinFormsDesignerHost
     public Task<DesignerActionsResult> ActionsAsync(DesignerComponentsParams parameters, CancellationToken cancellationToken) =>
         InvokeAsync(WinFormsDesignerMethods.Actions, parameters, s_json.DesignerComponentsParams, s_json.DesignerActionsResult, cancellationToken);
 
-    public Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken) =>
-        InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
+    public Task<DesignerChangeResult> InvokeActionAsync(DesignerInvokeActionParams parameters, CancellationToken cancellationToken)
+    {
+        AllowHostForeground();
+        return InvokeAsync(WinFormsDesignerMethods.InvokeAction, parameters, s_json.DesignerInvokeActionParams, s_json.DesignerChangeResult, cancellationToken);
+    }
+
+    public Task<DesignerChangeResult> ClickAsync(DesignerClickParams parameters, CancellationToken cancellationToken)
+    {
+        // A design-time button may open the library's dialog (DevExpress's Run Designer).
+        AllowHostForeground();
+        return InvokeAsync(WinFormsDesignerMethods.Click, parameters, s_json.DesignerClickParams, s_json.DesignerChangeResult, cancellationToken);
+    }
 
     public Task<bool> IsOutdatedAsync(CancellationToken cancellationToken) =>
         _copy is { } copy ? Task.Run(copy.IsOutdated, cancellationToken) : Task.FromResult(false);

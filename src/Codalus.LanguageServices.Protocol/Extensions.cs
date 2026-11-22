@@ -622,6 +622,13 @@ public sealed record DesignerEdit
 
     public DesignerValue[]? Items { get; init; }
 
+    /// <summary>
+    /// #461: what <see cref="DesignerEditKinds.SetCollection"/> writes just before the collection's statement: the
+    /// properties of the locals its items are, and their own collections (a DevExpress <c>GridLevelNode</c>'s
+    /// <c>RelationName</c> and <c>Nodes.AddRange</c>), as the classic IDE writes them in the owner's section.
+    /// </summary>
+    public DesignerStatement[]? Statements { get; init; }
+
     /// <summary>A <c>.resx</c> key.</summary>
     public string? Key { get; init; }
 

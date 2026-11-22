@@ -1241,6 +1241,7 @@ public sealed partial class WinFormsDesignerDocument : ShellDocument, Views.ISav
                 Method = collection.Method,
                 Type = collection.ElementType,
                 Items = collection.Items,
+                Statements = collection.Statements.Length == 0 ? null : collection.Statements,
             });
         }
 

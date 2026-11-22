@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Built against Codalus's replacements of the classic IDE's designer-server API (the tests pass the host's designtools/ folder). -->
+    <CodalusDesignTools Condition="'$(CodalusDesignTools)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\src\Codalus.WinForms.Designer\bin\Debug\net8.0-windows\designtools\</CodalusDesignTools>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.DotNet.DesignTools.Server" HintPath="$([MSBuild]::EnsureTrailingSlash($(CodalusDesignTools)))Microsoft.DotNet.DesignTools.Server.dll" Private="false" />
+    <Reference Include="Microsoft.DotNet.DesignTools.Protocol" HintPath="$([MSBuild]::EnsureTrailingSlash($(CodalusDesignTools)))Microsoft.DotNet.DesignTools.Protocol.dll" Private="false" />
+    <Reference Include="Microsoft.WinForms.Utilities.Shared" HintPath="$([MSBuild]::EnsureTrailingSlash($(CodalusDesignTools)))Microsoft.WinForms.Utilities.Shared.dll" Private="false" />
+    <ProjectReference Include="..\Contoso.WinForms.Board\Contoso.WinForms.Board.csproj" Private="false" />
+  </ItemGroup>
+</Project>

@@ -13,10 +13,14 @@ namespace Codalus.WinForms.Designer;
 /// The design surface's UI service (#66), as the classic IDE gives its designers one: what a designer would show as an
 /// error or a message (a container refusing a tool, a tab control with no page) is collected for the change's
 /// <c>error</c> and written to the Windows Forms Designer output, never a modal message box in the hidden host; a
-/// dialog a designer would open is refused. The styles are the ones designers read without checking for them.
+/// dialog a designer would open is refused, but a control library's own (#461: the Grid Designer), which shows over the
+/// IDE, owned by its window. The styles are the ones designers read without checking for them.
 /// </summary>
 internal sealed class DesignerUIService(IWin32Window owner) : IUIService
 {
+    /// <summary>The IDE's main window (#461), which owns a control library's dialogs; zero: the host's hidden window does.</summary>
+    public long DialogOwner { get; set; }
+
     private readonly Hashtable _styles = new()
     {
         ["DialogFont"] = SystemFonts.MessageBoxFont ?? Control.DefaultFont,
@@ -32,7 +36,7 @@ internal sealed class DesignerUIService(IWin32Window owner) : IUIService
 
     public bool CanShowComponentEditor(object? component) => false;
 
-    public IWin32Window GetDialogOwnerWindow() => owner;
+    public IWin32Window GetDialogOwnerWindow() => DialogOwner != 0 ? new ForeignWindow(new IntPtr(DialogOwner)) : owner;
 
     public void SetUIDirty()
     {
@@ -40,7 +44,23 @@ internal sealed class DesignerUIService(IWin32Window owner) : IUIService
 
     public bool ShowComponentEditor(object? component, IWin32Window? parent) => false;
 
-    public DialogResult ShowDialog(Form? form) => DialogResult.Cancel;
+    public DialogResult ShowDialog(Form? form)
+    {
+        if (form is null || !VendorDesigners.IsVendorCode(form.GetType()))
+        {
+            Console.Error.WriteLine($"[designer] A dialog was refused (the hidden designer shows none): {form?.Text} ({form?.GetType().FullName}, from {form?.GetType().Assembly.Location}).");
+            return DialogResult.Cancel;
+        }
+
+        Console.Error.WriteLine($"[designer] A control library's dialog is open: {form.Text} ({form.GetType().FullName}).");
+        return form.ShowDialog(GetDialogOwnerWindow());
+    }
+
+    /// <summary>Another process's window (the IDE's), as an owner.</summary>
+    private sealed class ForeignWindow(IntPtr handle) : IWin32Window
+    {
+        public IntPtr Handle => handle;
+    }
 
     public void ShowError(string? message) => Add(message);
 

@@ -85,6 +85,10 @@
   <ItemGroup Label="Diagnostics host (M18, ADR 0044)">
     <PackageVersion Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="4.0.2" />
   </ItemGroup>
+  <ItemGroup Label="Windows Forms designer host: control libraries' designers (#461, ADR 0106)">
+    <!-- MEF's attributes, which control libraries' routing types carry (the version Roslyn already brings to the language service host). -->
+    <PackageVersion Include="System.Composition.AttributedModel" Version="10.0.10" />
+  </ItemGroup>
   <ItemGroup Label="T4 host (M26b, ADR 0035)">
     <PackageVersion Include="Mono.TextTemplating" Version="3.0.0" />
     <PackageVersion Include="Mono.TextTemplating.Roslyn" Version="3.0.0" />

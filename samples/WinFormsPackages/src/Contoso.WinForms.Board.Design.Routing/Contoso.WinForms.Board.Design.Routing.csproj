@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <CodalusDesignTools Condition="'$(CodalusDesignTools)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\src\Codalus.WinForms.Designer\bin\Debug\net8.0-windows\designtools\</CodalusDesignTools>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.DotNet.DesignTools.Server" HintPath="$([MSBuild]::EnsureTrailingSlash($(CodalusDesignTools)))Microsoft.DotNet.DesignTools.Server.dll" Private="false" />
+    <Reference Include="Microsoft.DotNet.DesignTools.Protocol" HintPath="$([MSBuild]::EnsureTrailingSlash($(CodalusDesignTools)))Microsoft.DotNet.DesignTools.Protocol.dll" Private="false" />
+    <!-- Copied next to the routing assembly, which the Board package's pack takes it from. -->
+    <ProjectReference Include="..\Contoso.WinForms.Board.Design\Contoso.WinForms.Board.Design.csproj" />
+  </ItemGroup>
+</Project>

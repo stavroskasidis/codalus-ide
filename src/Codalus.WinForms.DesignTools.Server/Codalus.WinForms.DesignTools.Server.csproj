@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\Codalus.WinForms.DesignTools.props" />
+  <PropertyGroup>
+    <AssemblyName>Microsoft.DotNet.DesignTools.Server</AssemblyName>
+    <RootNamespace>Microsoft.DotNet.DesignTools</RootNamespace>
+    <Description>Codalus IDE: the replacement of Microsoft.DotNet.DesignTools.Server's API for control libraries' designers, and the adapters that give them to Windows Forms' design surface (#461, ADR 0106).</Description>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Its output folder is what the designer host ships in designtools/: the three replacements and MEF's attributes. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Control libraries' routing types carry MEF's attributes ([Shared], [Export]); reading their attributes needs the assembly. -->
+    <PackageReference Include="System.Composition.AttributedModel" />
+    <ProjectReference Include="..\Codalus.WinForms.DesignTools.Shared\Codalus.WinForms.DesignTools.Shared.csproj" />
+    <ProjectReference Include="..\Codalus.WinForms.DesignTools.Protocol\Codalus.WinForms.DesignTools.Protocol.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The designer host drives the adapters and the routing (internal: the public API is the replacement's alone). -->
+    <InternalsVisibleTo Include="codalus-winformsdesigner" />
+  </ItemGroup>
+</Project>

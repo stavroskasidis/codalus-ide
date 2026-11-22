@@ -48,6 +48,12 @@ internal static partial class BuiltIns
             Category = "Windows Forms",
             Description = "A form's or user control's code file opens in the Windows Forms designer (on Windows); View Code (F7) shows the code. Off, it opens as code and View Designer (Shift+F7) shows the designer.",
         },
+        SettingDescriptor.Create(ShellHost.VendorDesignersSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Control libraries' designers",
+            Category = "Windows Forms",
+            Description = "A control library's own designers (DevExpress's smart tags, verbs and dialogs such as the Grid Designer) design its controls. Off, its controls are designed as the Windows Forms controls they derive from. Applies to forms opened from now on.",
+        },
         SettingDescriptor.Create(ShellHost.ToolboxAssembliesSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
         {
             Title = "Toolbox: chosen assemblies",

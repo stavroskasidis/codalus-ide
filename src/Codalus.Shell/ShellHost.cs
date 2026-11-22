@@ -50,6 +50,9 @@ public interface IShellWindow
 
     /// <summary>Asks for a folder (null: cancelled).</summary>
     Task<string?> PickFolderAsync(string title);
+
+    /// <summary>The window's native handle (an <c>HWND</c> on Windows), which owns another process's dialogs (#461); zero for none.</summary>
+    IntPtr NativeHandle => IntPtr.Zero;
 }
 
 /// <summary>

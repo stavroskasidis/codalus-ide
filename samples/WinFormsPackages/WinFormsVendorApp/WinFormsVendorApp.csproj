@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- A control library whose package ships its own designers (#461). -->
+    <PackageReference Include="Contoso.WinForms.Board" Version="1.0.0" />
+  </ItemGroup>
+</Project>
