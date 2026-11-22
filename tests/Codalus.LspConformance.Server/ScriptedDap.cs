@@ -168,7 +168,15 @@ internal static class ScriptedDap
                     break;
                 case "configurationDone" when launch is { } running && Option(running, "keepsRunning") == "true":
                     // The program runs until the session ends it (a multi-program session's first one, while others join).
-                    break;
+                    // With processId, netcoredbg's process event names it, and the disconnect leaves that process running,
+                    // as netcoredbg left a Blazor server listening (develop's dry run 44952519485).
+                    await RespondAsync(output, requestSeq, command, null);
+                    if (Option(running, "processId") is { } runningId)
+                    {
+                        await EventAsync(output, "process", new JsonObject { ["name"] = "program", ["systemProcessId"] = int.Parse(runningId, System.Globalization.CultureInfo.InvariantCulture), ["isLocalProcess"] = true, ["startMethod"] = "launch" });
+                    }
+
+                    continue;
                 case "configurationDone":
                     // With processId, netcoredbg's process event names it first; with exitCode, the program exits with it (else 7).
                     await RespondAsync(output, requestSeq, command, null);
@@ -417,8 +425,8 @@ internal static class ScriptedDap
         start.ArgumentList.Add("--program");
         using var program = System.Diagnostics.Process.Start(start)!;
 
-        // With its start time: once it has gone, another process can have its id (DebugStartAgainTests.ProgramLine).
-        File.AppendAllText(programs, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {program.StartTime.ToUniversalTime().Ticks}\n"));
+        // With when it started: once it has gone, another process can have its id (DebugStartAgainTests.ProgramLine).
+        File.AppendAllText(programs, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {Codalus.Tests.ProcessStamp.Of(program)}\n"));
         return program.Id;
     }
 

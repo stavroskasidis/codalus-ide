@@ -11,6 +11,28 @@ public class LaunchSettingsTests
         new(s_project, "net10.0", "Exe", "/app/bin/App.dll", runCommand, runArguments, null, null);
 
     [Fact]
+    public void The_file_is_read_while_an_editor_has_it_open_to_write()
+    {
+        // The IDE's read shares the file for writing: on Windows a read that didn't failed while a save was under way,
+        // and a save failed while the read lasted (Windows CI, PR #508's run 44963672088).
+        var path = Path.Combine(Path.GetTempPath(), "codalus-launch-" + Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(path, """{ "profiles": { "App": { "commandName": "Project" } } }""");
+        try
+        {
+            using (new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+            {
+                var profiles = LaunchSettings.Read(path, out var error);
+                Assert.Null(error);
+                Assert.Equal("App", Assert.Single(profiles).Name);
+            }
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void Profiles_are_read_in_order_with_comments_and_unknown_properties()
     {
         var profiles = LaunchSettings.Parse("""

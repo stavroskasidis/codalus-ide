@@ -116,8 +116,10 @@ public sealed partial class ShellHost
                 var restart = Localizer.Get("action.debugHotReload.restart", "Restart");
                 var keepGoing = Localizer.Get("action.debugHotReload.continue", "Continue with the Old Code");
                 var first = outcome.Diagnostics is [var rude, ..] ? rude.Message : string.Empty;
+                // Each with where it is: a rude edit came with no edit made, and nothing said which file Roslyn saw changed
+                // (macOS CI, the packaged app's smoke test, blazor.compoundDebug, develop's dry run 44955780797).
                 DebugLog.AppendLine(Localizer.Format("msg.debugHotReload.rudeLog", "Hot Reload: the code changes need a restart: {0}",
-                    string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}"))));
+                    string.Join("; ", outcome.Diagnostics.Select(d => $"{d.Id} {d.Message}{Where(d)}"))));
                 if (!ask)
                 {
                     break;
@@ -205,6 +207,12 @@ public sealed partial class ShellHost
             }
         }, TaskScheduler.Default);
     }
+
+    /// <summary>" (file, line n)" for a diagnostic with a location, else nothing.</summary>
+    private static string Where(HotReloadDiagnostic diagnostic) =>
+        diagnostic.Location is { } location
+            ? $" ({DocumentUris.ToPath(location.Uri) ?? location.Uri}, line {(location.Range.Start.Line + 1).ToString(CultureInfo.InvariantCulture)})"
+            : string.Empty;
 
     private static List<ErrorListRow> Rows(IReadOnlyList<HotReloadDiagnostic> diagnostics) =>
     [

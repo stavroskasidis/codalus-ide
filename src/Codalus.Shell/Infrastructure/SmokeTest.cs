@@ -3948,7 +3948,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
             Check(shell.Debugger.IsCompound && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's: " + Thread());
             var first = shell.Debugger.CurrentStop;
-            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+            // Continue applies the edits first, and a rude edit asks before it goes on. Nothing is edited here, yet once
+            // it asked, and the step waited on the question until its 12 minutes ran out (macOS CI, the packaged app's
+            // smoke test, develop's dry run 44955780797): a question now fails the step at once, with what it said.
+            const string keepGoing = "Continue with the Old Code";
+            var resumed = shell.Debugger.ContinueAsync();
+            await WaitAsync(() => resumed.IsCompleted || shell.Workbench.Notifications.Items.Any(n => n.Actions.Contains(keepGoing)), "Continue goes on", 120).ConfigureAwait(true);
+            if (shell.Workbench.Notifications.Items.FirstOrDefault(n => n.Actions.Contains(keepGoing)) is { } asked)
+            {
+                shell.Workbench.Notifications.Choose(asked, keepGoing);
+                Check(false, $"Continue asked about an edit nobody made: {asked.Message} (Debug Console:\n{Tail(shell.DebugLog.GetText(), 2000)})");
+            }
+
+            await resumed.ConfigureAwait(true);
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != first && shell.Debugger.Frames.Count > 0,
                 () => "the page stops at the breakpoint in WebAssembly (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
             Check(Thread().StartsWith("Browser:", StringComparison.Ordinal), "the second stop is the browser's: " + Thread());
@@ -3993,6 +4005,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server under dotnet watch stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            // Not any stop: the server's start failing ("address already in use") stopped at its exception, which this
+            // took for the breakpoint, and the step went on to time out 3 minutes later (Linux CI, dry run 44952519485).
+            Check(shell.Debugger.CurrentStop is { Reason: "breakpoint" }, $"the first stop is the breakpoint's, not {shell.Debugger.CurrentStop?.Reason}: {shell.Debugger.CurrentStop?.Description} ({Log()})");
             Check(shell.Debugger.IsCompound && shell.HotReloadProgram is not null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which dotnet watch runs: " + Thread());
             var server = shell.Debugger.ProcessId;
             var watch = shell.HotReloadProgram!;

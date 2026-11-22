@@ -116,7 +116,7 @@ public static class LaunchSettings
 
         try
         {
-            return Parse(File.ReadAllText(path));
+            return Parse(FileSystem.SharedFile.ReadAllText(path));
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
