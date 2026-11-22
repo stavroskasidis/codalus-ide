@@ -215,7 +215,9 @@ public sealed class PreviewProtocolTests
         Assert.Equal((100, 50, 1.0), (shown.Frame!.Width, shown.Frame.Height, shown.Frame.Scale));
         Assert.True(shown.Elapsed < TimeSpan.FromSeconds(9), $"the frame came after {shown.Elapsed.TotalSeconds:0.0} s");
 
-        // A new render scale's frame: before, it never came.
+        // A new render scale's frame: before, it never came; and when it took longer to render than the session's first ask
+        // (2.5 s in the stand-in), it waited behind that ask's answer and never came either (Windows under load, stress run
+        // 44992968217). The session asks again each second until it comes.
         await session.SetScaleAsync(2, Ct);
         var waited = System.Diagnostics.Stopwatch.StartNew();
         while (session.LastFrame is not { Scale: 2 } && waited.Elapsed < TimeSpan.FromSeconds(30))
