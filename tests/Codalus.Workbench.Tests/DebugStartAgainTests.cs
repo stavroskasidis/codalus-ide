@@ -218,35 +218,25 @@ public sealed class DebugStartAgainTests : IDisposable
     private int[] ProgramIds() => [.. ProgramLines().Select(p => p.Id)];
 
     /// <summary>
-    /// A program's line in the programs file: its id and its start time (UTC ticks), as the scripted adapter writes it
-    /// (<c>ScriptedDap.StartProgram</c>).
+    /// A program's line in the programs file: its id and when it started (<see cref="Codalus.Tests.ProcessStamp"/>), as
+    /// the scripted adapter writes it (<c>ScriptedDap.StartProgram</c>).
     /// </summary>
     internal static string ProgramLine(System.Diagnostics.Process program) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {program.StartTime.ToUniversalTime().Ticks}\n");
+        string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{program.Id} {Codalus.Tests.ProcessStamp.Of(program)}\n");
 
-    private IEnumerable<(int Id, DateTime? Started)> ProgramLines() =>
+    private IEnumerable<(int Id, string? Started)> ProgramLines() =>
         File.Exists(_starts + ".programs")
             ? File.ReadAllLines(_starts + ".programs").Where(l => l.Length > 0).Select(l => l.Split(' ')).Select(p => (
                 int.Parse(p[0], System.Globalization.CultureInfo.InvariantCulture),
-                p.Length > 1 ? new DateTime(long.Parse(p[1], System.Globalization.CultureInfo.InvariantCulture), DateTimeKind.Utc) : (DateTime?)null))
+                p.Length > 1 ? p[1] : null))
             : [];
 
     /// <summary>
     /// Whether <paramref name="process"/>, found by a program's id, is another process that took the id once the
-    /// program had gone: it started at another time. A second's leeway: each process reads a start time from the OS
-    /// its own way (on Linux from the boot time it computes).
+    /// program had gone: it started at another time (<see cref="Codalus.Tests.ProcessStamp"/>).
     /// </summary>
-    internal static bool TookItsId(System.Diagnostics.Process process, DateTime? started)
-    {
-        try
-        {
-            return started is { } time && (process.StartTime.ToUniversalTime() - time).Duration() > TimeSpan.FromSeconds(1);
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
-        {
-            return false;
-        }
-    }
+    internal static bool TookItsId(System.Diagnostics.Process process, string? started) =>
+        started is { } stamp && !Codalus.Tests.ProcessStamp.Matches(process, stamp);
 
     private List<System.Diagnostics.Process> Programs()
     {

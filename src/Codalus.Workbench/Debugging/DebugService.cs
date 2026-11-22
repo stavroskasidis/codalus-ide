@@ -1485,9 +1485,54 @@ public sealed class DebugService : IAsyncDisposable
             await PrepareDetachAsync(adapter).ConfigureAwait(false);
         }
 
+        // Only a program on this machine: behind a path mapping (WSL, a container) its process id is another system's.
+        var launched = !_attached && (adapter is CompoundDebugAdapter compound ? compound.Primary : adapter) is DebugAdapter { Transport: null } ? ProcessId : null;
         await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
         KillTerminalPrograms();
+        if (launched is { } program)
+        {
+            await EndLaunchedProgramAsync(program).ConfigureAwait(false);
+        }
+
         await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stop is done when the program it ended has: the next F5 then finds its port free. netcoredbg answered the
+    /// disconnect with "exited" while the Blazor server it had launched still listened, and the next session's server,
+    /// started 6 s later on the same port, failed with "address already in use" (Linux CI, the smoke test's
+    /// blazor.compoundHotReload.netcoredbg, develop's dry run 44952519485). A program still running a few seconds after
+    /// the debugger ended it is ended with its process tree, and the Debug Console says so.
+    /// </summary>
+    private async Task EndLaunchedProgramAsync(int processId)
+    {
+        if (await EndedWithinAsync(processId, TimeSpan.FromSeconds(5)).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) was still running 5 s after the debugger ended it: it is ended with the processes it started.\n"));
+        KillProgram(processId);
+        if (!await EndedWithinAsync(processId, TimeSpan.FromSeconds(10)).ConfigureAwait(false))
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) is still running.\n"));
+        }
+    }
+
+    private static async Task<bool> EndedWithinAsync(int processId, TimeSpan limit)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (WatchedServer.IsRunning(processId))
+        {
+            if (clock.Elapsed >= limit)
+            {
+                return false;
+            }
+
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     /// <summary>

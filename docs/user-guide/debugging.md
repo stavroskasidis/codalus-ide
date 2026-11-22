@@ -12,7 +12,7 @@ On Windows, **.NET Framework** programs (and their tests) are debugged by Codalu
 | Attach to Process (the .NET and .NET Framework processes are listed first) | `Ctrl+Alt+P` |
 | Reattach to Process (the last one again, by id while it runs, otherwise by name) | `Shift+Alt+P` |
 | Attach to Process on a Remote Machine (over SSH, in a container, in WSL) | Debug menu |
-| Stop (terminates a launched program, detaches from an attached one) | `Shift+F5` |
+| Stop (terminates a launched program and waits until it has ended, detaches from an attached one) | `Shift+F5` |
 | Detach All (an attached program, or one launched in the terminal, keeps running) | Debug menu |
 | Restart | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` (`⌘⌥P` on macOS) |
