@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Avalonia;
 using Avalonia.Controls;
 using Codalus.Platform;
 using Codalus.Shell.ViewModels;
@@ -143,6 +144,7 @@ public sealed partial class ShellHost
 
         var model = new SetupViewModel(this, firstStart);
         var window = _setupWindow = new SetupWindow { DataContext = model };
+        window.Overlays = AddCompanion(window, new Thickness(0, 0, 14, 72)); // above Back and Next
         model.Finished += (_, _) => window.Close();
         window.Closed += (_, _) =>
         {

@@ -24,8 +24,17 @@ public sealed partial class StartWindow : Window
 
     private StartWindowViewModel? Model => DataContext as StartWindowViewModel;
 
+    /// <summary>The main window's notifications and in-window dialogs, drawn over this window while it's open.</summary>
+    internal CompanionOverlays? Overlays { get; set; }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (Overlays is { IsModalOpen: true })
+        {
+            base.OnKeyDown(e); // a dialog over the start window takes the keys: Escape cancels it, not the window
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.S when e.KeyModifiers == KeyModifiers.Alt:
