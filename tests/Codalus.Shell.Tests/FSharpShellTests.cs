@@ -281,7 +281,10 @@ public sealed class FSharpTestingTests
         Assert.Contains(expecto.Children, c => c.Name == "Mono.Cecil");
 
         // The project shows before it's built; running it builds, discovers and runs its tests.
-        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Any(r => r.Label == "FsTests")), seconds: 120);
+        // The project shows before its sources are read (the F# server starts for that read): it waited 120 s on a loaded
+        // Windows runner (stress run 44992968217).
+        await ShellFixture.PumpUntil(() => f.Shell.Tests.Read(roots => roots.Any(r => r.Label == "FsTests")), seconds: 120,
+            describe: () => "the Test Explorer had: " + f.Shell.Tests.Read(roots => string.Join(", ", roots.Select(r => r.Label))));
         var project = f.Shell.Tests.Read(roots => roots.Single(r => r.Label == "FsTests"));
         await f.Shell.RunTestsAsync(Workbench.Testing.TestRunKind.Run, [project.Key]);
         try

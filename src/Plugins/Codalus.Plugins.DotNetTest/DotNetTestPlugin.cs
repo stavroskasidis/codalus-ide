@@ -184,6 +184,14 @@ public sealed class DotNetTestPlugin : ICodalusPlugin, IDisposable
                         owners.Add(tests);
                     }
                 }
+
+                // The projects show before their sources are read, which waits for the language servers: an F# project's
+                // server is started for the read (only to say it can't), and on a loaded Windows runner the Test Explorer
+                // showed nothing for 120 s (stress run 44992968217).
+                if (uris.Count > 0)
+                {
+                    _tree.Update(_projects.Values.ToList());
+                }
             }
 
             var listed = System.Diagnostics.Stopwatch.GetTimestamp();
