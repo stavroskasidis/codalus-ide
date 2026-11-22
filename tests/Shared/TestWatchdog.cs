@@ -32,7 +32,16 @@ internal static class TestWatchdog
 {
     public const string Variable = "CODALUS_TEST_WATCHDOG_MINUTES";
 
+    /// <summary>
+    /// A folder where the watchdog keeps <c>running-&lt;pid&gt;.txt</c>: the tests running now and for how long, rewritten at
+    /// each look (every 15 s by default). A runner that went silent left only its live output, which named the tests
+    /// that had ended, not the ones running then (macOS shell-2, develop's dry run 44944708088): the live output
+    /// (.github/actions/live-output) sends this file too.
+    /// </summary>
+    public const string RunningVariable = "CODALUS_TEST_RUNNING_DIR";
+
     private static readonly TimeSpan s_limit = ReadLimit();
+    private static readonly string? s_runningFile = RunningFile();
     private static readonly ConcurrentDictionary<string, (string Name, long Started)> s_running = new();
     private static readonly Lock s_gate = new();
     private static readonly Lock s_writing = new();
@@ -74,6 +83,56 @@ internal static class TestWatchdog
         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var minutes) ? TimeSpan.FromMinutes(minutes) : TimeSpan.FromMinutes(10);
     }
 
+    private static string? RunningFile()
+    {
+        var folder = Environment.GetEnvironmentVariable(RunningVariable);
+        if (string.IsNullOrEmpty(folder))
+        {
+            return null;
+        }
+
+        var file = Path.Combine(folder, $"running-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}.txt");
+        // A process that has ended runs nothing: its file would name tests that finished long ago.
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            try
+            {
+                File.Delete(file);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        };
+        return file;
+    }
+
+    /// <summary>The tests running now, to <see cref="RunningVariable"/>'s file, replaced whole so a reader never sees half.</summary>
+    private static void WriteRunning(List<string> running)
+    {
+        if (s_runningFile is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var text = new StringBuilder();
+            text.AppendLine(CultureInfo.InvariantCulture, $"{DateTime.UtcNow:HH:mm:ss}Z process {Environment.ProcessId} ({Path.GetFileNameWithoutExtension(Environment.ProcessPath)}): {running.Count} test(s) running; the last to finish: {Volatile.Read(ref s_lastFinished) ?? "none"}");
+            foreach (var line in running)
+            {
+                text.AppendLine("  " + line);
+            }
+
+            var partial = s_runningFile + ".partial";
+            File.WriteAllText(partial, text.ToString());
+            File.Move(partial, s_runningFile, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The next look writes it again.
+        }
+    }
+
     private static void Watch()
     {
         var poll = TimeSpan.FromTicks(Math.Clamp(s_limit.Ticks / 10, TimeSpan.TicksPerSecond, 15 * TimeSpan.TicksPerSecond));
@@ -83,6 +142,8 @@ internal static class TestWatchdog
             Thread.Sleep(poll);
             var now = Stopwatch.GetTimestamp();
             var running = s_running.ToArray().OrderBy(t => t.Value.Started).ToList();
+            var lines = running.Select(t => $"[{Format(Stopwatch.GetElapsedTime(t.Value.Started, now))}] {t.Value.Name}").ToList();
+            WriteRunning(lines);
             string key;
             string subject;
             TimeSpan stuck;
@@ -106,7 +167,7 @@ internal static class TestWatchdog
                 reported = key;
                 try
                 {
-                    Report(subject, running.Select(t => $"[{Format(Stopwatch.GetElapsedTime(t.Value.Started, now))}] {t.Value.Name}").ToList());
+                    Report(subject, lines);
                 }
 #pragma warning disable CA1031 // The watchdog must never be what fails or ends the test run.
                 catch (Exception ex)

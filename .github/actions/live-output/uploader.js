@@ -12,8 +12,10 @@ const root = process.env.LIVE_PATH;
 const state = process.env.LIVE_STATE;
 const interval = Math.max(1, Number(process.env.LIVE_INTERVAL) || 60) * 1000;
 
-// What eng/ci-test.sh writes as a shard runs: every test as it ends (and the watchdog's stacks), and the samples.
+// What eng/ci-test.sh writes as a shard runs: every test as it ends (and the watchdog's stacks), and the samples; and
+// each test process's running-<pid>.txt, the tests running at the watchdog's last look (tests/Shared/TestWatchdog.cs).
 const files = ['console.txt', 'memory.txt', 'load.txt', 'disk.txt'];
+const running = /^running-\d+\.txt$/;
 const tail = 2 * 1024 * 1024; // of each file: where a run was when its runner went silent is at the end
 const days = 7;
 
@@ -33,7 +35,14 @@ function collect() {
   }
 
   for (const shard of shards) {
-    for (const file of files) {
+    let names = files;
+    try {
+      names = files.concat(fs.readdirSync(path.join(root, shard)).filter(file => running.test(file)).sort());
+    } catch {
+      // the shard's folder is being made: the next round has its files
+    }
+
+    for (const file of names) {
       const full = path.join(root, shard, file);
       try {
         const size = fs.statSync(full).size;

@@ -26,6 +26,9 @@ cd "$(dirname "$0")/.."
 # fails instead of being cancelled. HangDump before 2.1 printed nothing: it turned itself off under dotnet test.
 export CODALUS_TEST_WATCHDOG_MINUTES="${CODALUS_TEST_WATCHDOG_MINUTES:-10}"
 results="$PWD/artifacts/test-results/$shard"
+# The tests running now, as the watchdog sees them every 15 s (running-<pid>.txt), which the live output sends off the
+# runner: a runner lost in macOS shell-2 left the tests that had ended, not the ones running (dry run 44944708088).
+export CODALUS_TEST_RUNNING_DIR="$results"
 # On the macOS runner the Shell shards' hang ends the tests without a dump: twice the runner was lost 46 minutes into
 # shell-2 (runs 40255384457 and 40453091722, and the job's timeout in 40241261003), where a hang's 15 minutes after the
 # shard's usual 30 put HangDump dumping the Shell tests' tree (the test process, its hosts and their build nodes) on a
@@ -83,12 +86,16 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
         now="$(date -u +%H:%M:%S)"
         free="$(sysctl -n kern.memorystatus_level)"
         swap="$(sysctl -n vm.swapusage)"
+        # The load average, from the kernel's counters: not ps's %cpu, which reads each process's task information
+        # and blocks while ReportCrash holds a crashed one (TestWatchdog). A runner lost with 62% of its memory free
+        # left nothing on its CPU (dry run 44944708088).
+        load="$(sysctl -n vm.loadavg | tr -d '{}' | awk '{ print $1, $2, $3 }')"
         top="$(ps -axo rss=,pid=,ppid=,args= | sort -nr)"
-        echo "$now free=$free% swap: $swap" >> "$results/memory.txt"
+        echo "$now free=$free% swap: $swap load: $load" >> "$results/memory.txt"
         echo "$top" | head -6 | cut -c1-200 >> "$results/memory.txt"
         used="$(echo "$swap" | awk '{ for (i = 1; i < NF; i++) if ($i == "used") print $(i + 2) }')"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
-        echo "[memory] $now free=$free% swap=$used processes=$(echo "$top" | wc -l | tr -d ' ') largest:$largest"
+        echo "[memory] $now free=$free% swap=$used load=${load// /,} processes=$(echo "$top" | wc -l | tr -d ' ') largest:$largest"
       } 2>/dev/null || true
       sleep 15
     done
