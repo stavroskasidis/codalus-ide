@@ -61,8 +61,11 @@ public sealed class PreviewerSession : IAsyncDisposable
     // An update's answer comes in well under a second once the designer runs (a cold first load takes a few).
     private static readonly TimeSpan s_resendAfter = TimeSpan.FromSeconds(10);
 
-    /// <summary>How long a render may take before the session asks the designer to send what it holds (<see cref="FlushHeldFrameSoon"/>).</summary>
+    /// <summary>How long a render may take before the session asks the designer to send what it holds, and how often it asks again (<see cref="FlushHeldFrameSoon"/>).</summary>
     private static readonly TimeSpan s_heldFrameAfter = TimeSpan.FromSeconds(1);
+
+    /// <summary>How long the session keeps asking for a frame that hasn't come (<see cref="FlushHeldFrameSoon"/>).</summary>
+    private static readonly TimeSpan s_heldFrameFor = TimeSpan.FromSeconds(20);
 
     private readonly Process _process;
     private readonly TcpListener _listener;
@@ -74,6 +77,9 @@ public sealed class PreviewerSession : IAsyncDisposable
 
     /// <summary>The frames received so far (<see cref="FlushHeldFrameSoon"/>).</summary>
     private long _framesReceived;
+
+    /// <summary>The latest <see cref="FlushHeldFrameSoon"/>: an earlier one stops asking.</summary>
+    private long _flushes;
     private readonly SemaphoreSlim _updateGate = new(1, 1);
     private readonly Lock _gate = new();
     private readonly TaskCompletionSource _connected = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -541,18 +547,27 @@ public sealed class PreviewerSession : IAsyncDisposable
     /// message stays queued until the designer sends anything else), and after a render nothing else comes: the 2× frame
     /// after Scale never arrived and the preview kept showing the 1× one (XamlShellTests on Windows under load,
     /// 2026-11-19). A viewport measure, of the size the last frame shows, changes nothing and is answered at once, and the
-    /// answer sends what waited before it.
+    /// answer sends what waited before it. It asks every second until a frame comes, for up to 20 s: a render that takes
+    /// longer than a second under load is queued after the first answer, and then waits there as before (the 2× frame
+    /// again, with one ask after a second, in the stress run 44992968217 on Windows).
     /// </summary>
     private void FlushHeldFrameSoon()
     {
         var frames = Interlocked.Read(ref _framesReceived);
+        var flush = Interlocked.Increment(ref _flushes);
         _ = Task.Run(async () =>
         {
             try
             {
-                await Task.Delay(s_heldFrameAfter, _stop.Token).ConfigureAwait(false);
-                if (Interlocked.Read(ref _framesReceived) == frames && LastFrame is { Scale: > 0 } last && !HasExited)
+                var asking = Stopwatch.StartNew();
+                while (asking.Elapsed < s_heldFrameFor)
                 {
+                    await Task.Delay(s_heldFrameAfter, _stop.Token).ConfigureAwait(false);
+                    if (Interlocked.Read(ref _framesReceived) != frames || Interlocked.Read(ref _flushes) != flush || HasExited || LastFrame is not { Scale: > 0 } last)
+                    {
+                        return;
+                    }
+
                     await SendAsync(new MeasureViewportMessage(last.Width / last.Scale, last.Height / last.Scale), _stop.Token).ConfigureAwait(false);
                 }
             }

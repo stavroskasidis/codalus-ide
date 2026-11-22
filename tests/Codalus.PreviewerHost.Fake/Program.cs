@@ -12,7 +12,8 @@ using Avalonia.Remote.Protocol.Viewport;
 // answered in order, as the designer loads them on its UI thread.
 // XAML containing "<!--frame-->" loads without an error and sends its frame. XAML containing "<!--held frame-->" loads
 // without an error too, and from then on each frame it renders (for that update, and for each new render scale) waits
-// the same way until it sends anything else: the answer to a viewport measure.
+// the same way until it sends anything else: the answer to a viewport measure. A new render scale's frame takes 2.5 s
+// to render first, so an answer sent before then goes ahead of it.
 var transport = args[Array.IndexOf(args, "--transport") + 1];
 var sessionId = args[Array.IndexOf(args, "--session-id") + 1];
 var port = new Uri(transport).Port;
@@ -64,7 +65,15 @@ connection.OnMessage += (sender, message) =>
                 scale = render.DpiX / 96;
                 if (holdFrames)
                 {
-                    held = Frame();
+                    // The render takes longer than the session's first ask, as under load: the first answer goes before
+                    // the frame, which then waits.
+                    _ = Task.Delay(2500).ContinueWith(_ =>
+                    {
+                        lock (gate)
+                        {
+                            held = Frame();
+                        }
+                    }, TaskScheduler.Default);
                 }
 
                 return;
