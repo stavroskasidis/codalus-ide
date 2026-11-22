@@ -1,0 +1,37 @@
+{
+  "_source": "Recorded by eng/record-acp-initialize.sh on 2026-11-22",
+  "protocolVersion": 1,
+  "agentInfo": {
+    "name": "pi-acp",
+    "title": "pi ACP adapter",
+    "version": "0.0.35"
+  },
+  "authMethods": [
+    {
+      "id": "pi_terminal_login",
+      "name": "Launch pi in the terminal",
+      "description": "Start pi in an interactive terminal to configure API keys or login",
+      "type": "terminal",
+      "args": [
+        "--terminal-login"
+      ],
+      "env": {}
+    }
+  ],
+  "agentCapabilities": {
+    "loadSession": true,
+    "mcpCapabilities": {
+      "http": false,
+      "sse": false
+    },
+    "promptCapabilities": {
+      "image": true,
+      "audio": false,
+      "embeddedContext": false
+    },
+    "sessionCapabilities": {
+      "list": {},
+      "delete": {}
+    }
+  }
+}
