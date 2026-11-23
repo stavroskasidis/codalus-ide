@@ -492,6 +492,31 @@ public sealed partial class CodeEditorController : IDisposable
     /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
     internal bool GrammarTokenizing => _textMate is { } installation && Tokenizer(installation) is { IsStopped: false };
 
+    /// <summary>
+    /// Whether the grammar has tokenized every visible line and they were drawn with its colors (benchmarks: unlike
+    /// <see cref="GrammarColored"/>, also true of grammars that color whole lines one color, as diffs').
+    /// </summary>
+    internal bool GrammarVisibleColored()
+    {
+        var view = Editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        if (GrammarScope is null || !view.VisualLinesValid || view.VisualLines.Count == 0
+            || _textMate is not { } installation || Tokenizer(installation) is not { } model)
+        {
+            return false;
+        }
+
+        var last = view.VisualLines[^1].LastDocumentLine.LineNumber - 1;
+        var plain = (Editor.Foreground as Avalonia.Media.ISolidColorBrush)?.Color;
+        return !model.IsLineInvalid(last) && model.GetLineTokens(last) is not null
+            && view.VisualLines.Any(l => l.Elements.Any(e => e.TextRunProperties.ForegroundBrush is Avalonia.Media.ISolidColorBrush brush && brush.Color != plain));
+    }
+
+    /// <summary>Whether the grammar's tokenizer has tokenized the document's last line (benchmarks: the whole file is colored).</summary>
+    internal bool GrammarComplete() =>
+        _textMate is { } installation && Tokenizer(installation) is { } model && model.GetLines().GetNumberOfLines() is var count and > 0
+        && !model.IsLineInvalid(count - 1) && model.GetLineTokens(count - 1) is not null;
+
     /// <summary>The scopes the grammar's tokenizer has for a one-based line's column, null when it has none (tests).</summary>
     internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) =>
         _textMate is { } installation && Tokenizer(installation)?.GetLineTokens(line - 1) is { } tokens
