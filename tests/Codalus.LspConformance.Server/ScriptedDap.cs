@@ -238,6 +238,12 @@ internal static class ScriptedDap
                         break;
                     }
 
+                case "continue" when launch is { } ending && Option(ending, "continueEnds") == "true":
+                    // The program runs to its end (exit code 15) before the adapter answers the continue, which it never
+                    // does: netcoredbg on macOS reported the end first (DebugServiceTests, PR #518's run 45089886744).
+                    await EventAsync(output, "exited", new JsonObject { ["exitCode"] = 15 });
+                    await EventAsync(output, "terminated", new JsonObject());
+                    continue;
                 case "continue":
                     await RespondAsync(output, requestSeq, command, new JsonObject { ["allThreadsContinued"] = true });
                     await EventAsync(output, "continued", new JsonObject { ["threadId"] = message.GetProperty("arguments").GetProperty("threadId").GetInt32(), ["allThreadsContinued"] = true });
