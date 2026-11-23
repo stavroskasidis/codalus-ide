@@ -231,6 +231,13 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private int _folderSearchGeneration;
     private bool _folderSearchLoading;
 
+    // The search's rows (every match with its folders) while they're shown, and the folders collapsed in them: every one
+    // starts expanded, and what the user collapses or expands there is dropped as the search changes, so clearing it puts
+    // the tree back as it was, as in the branch picker. A collapse searched again and showed every folder expanded.
+    private List<(ExplorerNode Node, int Depth)>? _searchRows;
+    private string? _searchRowsFor;
+    private readonly HashSet<string> _searchCollapsed = new(StringComparer.Ordinal);
+
     /// <summary>What the build host knows about a project (its icon: test, web, library…).</summary>
     private ProjectInfo? ProjectInfoOf(string path) => _shell.Solutions?.Projects.GetValueOrDefault(path);
 
@@ -1120,6 +1127,9 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     {
         Interlocked.Increment(ref _filterGeneration);
         _filtering = false;
+        _searchRows = null;
+        _searchRowsFor = null;
+        _searchCollapsed.Clear();
         DropFolderSearch();
     }
 
@@ -1381,7 +1391,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             return;
         }
 
-        if (_filter.Length > 0 && !Rows.Any(r => r.Id == node.Id))
+        if (_filter.Length > 0 && !(_searchRows?.Any(r => r.Node.Id == node.Id) ?? Rows.Any(r => r.Id == node.Id)))
         {
             ClearFilter();
             if (FindByPath(path) is not { } listed)
@@ -1722,8 +1732,20 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
 
         _filtering = false;
+        if (_searchRowsFor != filter)
+        {
+            _searchRowsFor = filter;
+            _searchCollapsed.Clear(); // another search: its rows start expanded (the same one found again keeps them)
+        }
+
+        _searchRows = rows;
+        if (reveal is not null)
+        {
+            ExpandSearchDownTo(reveal);
+        }
+
         var selectedId = _selected?.Id;
-        Rows.Reset(rows.Select(r => new ExplorerRowViewModel(r.Node, r.Depth, true, ProjectInfoOf, GitStateOf)));
+        Rows.Reset(ShownSearchRows().Select(r => new ExplorerRowViewModel(r.Node, r.Depth, !_searchCollapsed.Contains(r.Node.Id), ProjectInfoOf, GitStateOf)));
         MarkStartupProject();
         Selected = selectedId is null ? null : Rows.FirstOrDefault(r => r.Id == selectedId);
         AfterRefresh(reveal);
@@ -1782,6 +1804,40 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         return false;
     }
 
+    /// <summary>The search's rows but those in the folders collapsed in it.</summary>
+    private List<(ExplorerNode Node, int Depth)> ShownSearchRows()
+    {
+        var shown = new List<(ExplorerNode Node, int Depth)>(_searchRows!.Count);
+        var hiddenBelow = int.MaxValue;
+        foreach (var row in _searchRows)
+        {
+            if (row.Depth > hiddenBelow)
+            {
+                continue;
+            }
+
+            hiddenBelow = _searchCollapsed.Contains(row.Node.Id) ? row.Depth : int.MaxValue;
+            shown.Add(row);
+        }
+
+        return shown;
+    }
+
+    /// <summary>The search's folders collapsed above the node with <paramref name="id"/> expand; whether one did.</summary>
+    private bool ExpandSearchDownTo(string id)
+    {
+        var expanded = false;
+        foreach (var ancestor in PathTo(id)?.SkipLast(1) ?? [])
+        {
+            expanded |= _searchCollapsed.Remove(ancestor.Id);
+        }
+
+        return expanded;
+    }
+
+    /// <summary>A row shows expanded: in the search's rows unless collapsed there, else when it's in the expanded ones.</summary>
+    private bool ShowsExpanded(string id) => _searchRows is not null ? !_searchCollapsed.Contains(id) : _expanded.Contains(id);
+
     /// <summary>
     /// Updates <see cref="Rows"/> in place: only the changed middle part is replaced, with one removal and one insertion,
     /// so scrolling is kept. Row by row, each insertion above the selected row made Avalonia queue a scroll to it: the
@@ -1794,7 +1850,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         while (prefix < rows.Count && prefix < Rows.Count && Rows[prefix].Id == rows[prefix].Node.Id && Rows[prefix].Depth == rows[prefix].Depth)
         {
             Rows[prefix].Node = rows[prefix].Node;
-            Rows[prefix].IsExpanded = _expanded.Contains(rows[prefix].Node.Id);
+            Rows[prefix].IsExpanded = ShowsExpanded(rows[prefix].Node.Id);
             prefix++;
         }
 
@@ -1805,12 +1861,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         {
             var row = Rows[Rows.Count - 1 - suffix];
             row.Node = rows[rows.Count - 1 - suffix].Node;
-            row.IsExpanded = _expanded.Contains(row.Id);
+            row.IsExpanded = ShowsExpanded(row.Id);
             suffix++;
         }
 
         Rows.RemoveRange(prefix, Rows.Count - suffix - prefix);
-        Rows.InsertRange(prefix, rows.Skip(prefix).Take(rows.Count - suffix - prefix).Select(r => new ExplorerRowViewModel(r.Node, r.Depth, _expanded.Contains(r.Node.Id), ProjectInfoOf, GitStateOf)).ToList());
+        Rows.InsertRange(prefix, rows.Skip(prefix).Take(rows.Count - suffix - prefix).Select(r => new ExplorerRowViewModel(r.Node, r.Depth, ShowsExpanded(r.Node.Id), ProjectInfoOf, GitStateOf)).ToList());
 
         MarkStartupProject();
         var before = _selected;
@@ -1829,6 +1885,17 @@ public sealed class SolutionExplorerViewModel : ObservableObject
 
     public void SetExpanded(ExplorerRowViewModel row, bool expanded)
     {
+        if (_searchRows is not null)
+        {
+            // The search's rows: only what is shown changes; the tree's own expansion, and its listings, stay as they were.
+            if (row.HasChildren && (expanded ? _searchCollapsed.Remove(row.Id) : _searchCollapsed.Add(row.Id)))
+            {
+                Apply(ShownSearchRows());
+            }
+
+            return;
+        }
+
         if (expanded && row.Node is { Kind: ExplorerNodeKind.File, Path: { } file } && ShowsMembers(row.Node) && !_members.ContainsKey(file))
         {
             _ = LoadMembersAsync(file);
@@ -1856,7 +1923,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
             QueueFolderListings([folder, .. _folders.Keys.Where(f => f.Length > folder.Length && IsInFolder(f, folder) && IsShownFolder(f))]);
         }
 
-        // Only the row's own rows change: the tree isn't built again (a filter shows every match expanded anyway).
+        // Only the row's own rows change: the tree isn't built again (unless a search's matches are still being found).
         if (_filter.Trim().Length > 0 || Rows.IndexOf(row) < 0)
         {
             Refresh();
@@ -1904,11 +1971,22 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         }
     }
 
-    public void Toggle(ExplorerRowViewModel row) => SetExpanded(row, !_expanded.Contains(row.Id));
+    public void Toggle(ExplorerRowViewModel row) => SetExpanded(row, !ShowsExpanded(row.Id));
 
+    /// <summary>
+    /// Collapses every folder, project and solution folder. During a search, those in the search's rows, down to the top
+    /// level: clearing the search puts the tree back as it was.
+    /// </summary>
     public void CollapseAll()
     {
         _syncWhenListed = null;
+        if (_searchRows is { } search)
+        {
+            _searchCollapsed.UnionWith(search.Where(r => r.Depth > 0 && r.Node.Children.Count > 0).Select(r => r.Node.Id));
+            Apply(ShownSearchRows());
+            return;
+        }
+
         _expanded.RemoveWhere(id => id != "solution");
         Refresh();
     }
@@ -1984,7 +2062,12 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         var top = topmost is null ? null : Rows.FirstOrDefault(r => r.Id == topmost.Id);
         if (_filter.Trim().Length > 0)
         {
-            // The filtered rows show every match with its ancestors; the expansion shows when the filter is cleared.
+            // The search's rows: the folders collapsed in them down to the node expand. The tree's own expansion above
+            // shows once the search is cleared.
+            if (_searchRows is not null && ExpandSearchDownTo(id))
+            {
+                Apply(ShownSearchRows());
+            }
         }
         else if (top is { IsExpanded: false })
         {
