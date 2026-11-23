@@ -19,6 +19,7 @@ namespace Codalus.LspConformance.Server;
 /// <item><c>page-closes</c>: the page's session ends at its <c>configurationDone</c>, answering neither that nor its start;</item>
 /// <item><c>page-fails-while-another-attaches</c>: two children; the first to connect fails its <c>initialize</c> once the
 /// second has connected, and the second is answered half a second after that, and attaches.</item>
+/// <item><c>step-unanswered</c>: the page stops at a breakpoint once it has started, and never answers a <c>next</c>.</item>
 /// </list>
 /// </summary>
 internal static class ScriptedJsDebug
@@ -164,7 +165,21 @@ internal static class ScriptedJsDebug
                             await ScriptedDap.RespondAsync(stream, started.Seq, started.Command, null);
                         }
 
+                        if (script.Name == "step-unanswered")
+                        {
+                            await ScriptedDap.EventAsync(stream, "stopped", new JsonObject { ["reason"] = "breakpoint", ["threadId"] = 1 });
+                        }
+
                         break;
+                    case "threads":
+                        await ScriptedDap.RespondAsync(stream, requestSeq, command, new JsonObject { ["threads"] = new JsonArray(new JsonObject { ["id"] = 1, ["name"] = "Page" }) });
+                        break;
+                    case "stackTrace":
+                        var frame = new JsonObject { ["id"] = 1, ["name"] = "add", ["line"] = 2, ["column"] = 3, ["source"] = new JsonObject { ["name"] = "app.js", ["path"] = "/site/app.js" } };
+                        await ScriptedDap.RespondAsync(stream, requestSeq, command, new JsonObject { ["stackFrames"] = new JsonArray(frame), ["totalFrames"] = 1 });
+                        break;
+                    case "next" when script.Name == "step-unanswered":
+                        break; // never answered
                     case "setBreakpoints":
                         await ScriptedDap.RespondAsync(stream, requestSeq, command, new JsonObject { ["breakpoints"] = new JsonArray() });
                         break;
