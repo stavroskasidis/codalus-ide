@@ -154,6 +154,11 @@ public sealed class DapConnection : IAsyncDisposable
         {
             _pending.TryRemove(seq, out _);
             _unanswered.TryRemove(seq, out _);
+
+            // A request that left before its response did (it found the reading stopped, or its write failed) can still
+            // be in the end's list of pending responses, and the end fails it after nothing waits for it: the finalizer
+            // reported an unobserved "The debug adapter exited." (BrowserPageOpenTests on Linux CI, run 44073658524).
+            _ = response.Task.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         }
     }
 

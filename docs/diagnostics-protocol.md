@@ -77,7 +77,7 @@
 | Method | Params | Result | Notes |
 |---|---|---|---|
 | `diag/heap/snapshot` | `{processId, outputPath, diagnosticPort?}` | `{path, bytes}` | A GC heap snapshot (an induced full GC that reports the heap, as dotnet-gcdump takes one), kept as a `.nettrace`. |
-| `diag/heap/open` | `{path}` | `{snapshot, path, objects, bytes, types, roots}` | |
+| `diag/heap/open` | `{path}` | `{snapshot, path, objects, bytes, types, roots, integrity?}` | `integrity`: how the events fit together (the GCs whose heap walks the file holds, repeated addresses, edges expected and received, roots at no object, unreached objects, lost events), for diagnosing a snapshot. |
 | `diag/heap/close` | `{snapshot}` | `{}` | |
 | `diag/heap/types` | `{snapshot, baseline?, search?, offset, count}` | `{objects, bytes, types: [{id, name, count, bytes, countDelta?, bytesDelta?}], more}` | By bytes; with a `baseline` (another open snapshot), the changes by name, the most growth first (gone types have `id` -1). |
 | `diag/heap/roots` | `{snapshot, path, offset, count}` | `{referrers: [{id, name, count, bytes, hasChildren}], more}` | `path`: a type id, then referrer type ids up. The objects whose first-found referrers match it, grouped by the next referrer: a type (`id` ≥ 0), a root kind (`id` < 0: stack, finalizer queue, GC handle…) or unreached (`id` = int.MinValue). |

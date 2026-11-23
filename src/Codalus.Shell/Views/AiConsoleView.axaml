@@ -22,12 +22,12 @@
         <ComboBox x:Name="AgentPicker" MinWidth="130" ItemsSource="{Binding Agents}" PlaceholderText="{l:T aiConsole.newConsoleFor}" AutomationProperties.Name="{l:T aiConsole.agent}" ToolTip.Tip="{l:T aiConsole.newConsoleWithThisAgent}">
           <ComboBox.ItemTemplate>
             <DataTemplate x:DataType="vm:AiConsoleAgentChoice">
-              <TextBlock Text="{Binding DisplayName}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding DisplayName}" />
             </DataTemplate>
           </ComboBox.ItemTemplate>
         </ComboBox>
         <Button x:Name="NewButton" Classes="toolbar" Command="{Binding NewCommand}" ToolTip.Tip="{l:T aiConsole.newConsole}" AutomationProperties.Name="{l:T aiConsole.newConsole}">
-          <TextBlock Text="+" FontWeight="Bold" />
+          <TextBlock VerticalAlignment="Center" Text="+" FontWeight="Bold" />
         </Button>
         <Button x:Name="RestartButton" Classes="toolbar" Command="{Binding RestartCommand}" ToolTip.Tip="{l:T aiConsole.restart}" AutomationProperties.Name="{l:T aiConsole.restart}">
           <controls:Icon Kind="restart" />

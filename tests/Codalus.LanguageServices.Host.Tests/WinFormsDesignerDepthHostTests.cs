@@ -87,7 +87,11 @@ public sealed class WinFormsDesignerDepthHostTests(WinFormsHostFixture fixture) 
                 created.Add(local.Name);
             }
 
-            edits.Add(new DesignerEdit { Kind = DesignerEditKinds.SetCollection, Component = Of(collection.Component), Property = collection.Property, Method = collection.Method, Type = collection.ElementType, Items = collection.Items });
+            edits.Add(new DesignerEdit
+            {
+                Kind = DesignerEditKinds.SetCollection, Component = Of(collection.Component), Property = collection.Property, Method = collection.Method, Type = collection.ElementType, Items = collection.Items,
+                Statements = collection.Statements.Length == 0 ? null : collection.Statements,
+            });
         }
 
         edits.AddRange(result.Removed.Where(n => Known(n) && n.Length > 0 && !created.Contains(n)).Select(n => new DesignerEdit { Kind = DesignerEditKinds.RemoveComponent, Component = n }));

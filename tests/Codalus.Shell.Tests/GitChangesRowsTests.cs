@@ -34,7 +34,7 @@ public sealed class GitChangesRowsTests
         var error = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error.GetAwaiter().GetResult()}");
         return output;
     }
 
@@ -451,12 +451,19 @@ public sealed class GitChangesRowsTests
         Assert.Equal(2191, vm.ChangesRows.Count);
         Assert.False(vm.ChangesRows.Single(r => r.Text == "D010").IsExpanded);
 
-        // The same Git LFS state again (read after every status read) refreshes nothing. A refresh was running here on
-        // Windows (shell-1, run 41549374686), which the same state can't start: the message says what started it.
+        // The same Git LFS state again (read after every status read) starts no refresh. Asserted on the refreshes the
+        // setter started, not on whether one is running: a status read on another thread posts one at any moment (Windows
+        // shell-1, run 41549374686, found one running here: the watcher's read after the File.Delete above, which raises
+        // StatusChanged for a changed file's event that came after the test's own read began, 400 ms or more later). So
+        // one is forced here, from another thread, before the state is set.
+        _ = Task.Run(() => f.Shell.Git.RefreshAsync(TestContext.Current.CancellationToken));
+        Assert.True(SpinWait.SpinUntil(() => vm.IsRefreshing, TimeSpan.FromSeconds(30)), "The status read on another thread posted no refresh.");
         var built = vm.ViewsBuilt;
+        var started = vm.RefreshesStarted;
         var cause = vm.LastRefreshCause;
         vm.Lfs = new GitLfsStatus(false, false, [], [], null);
-        Assert.False(vm.IsRefreshing, $"A refresh is running: the last one asked for by {vm.LastRefreshCause} (before setting the Git LFS state: {cause}); the window's Git LFS state {vm.Lfs}.");
+        Assert.True(started == vm.RefreshesStarted, $"Setting the same Git LFS state started a refresh: {vm.LastRefreshCause} (the last before it: {cause}); the window's Git LFS state {vm.Lfs}.");
         Assert.Equal(built, vm.ViewsBuilt);
+        await ShellFixture.PumpUntil(() => !vm.IsRefreshing);
     }
 }

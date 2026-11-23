@@ -23,7 +23,8 @@ internal static class NetFxAdapter
         var reading = server.RunAsync(stop.Token);
         await Task.WhenAny(reading, session.Ended).ConfigureAwait(false);
 
-        // The session ended (or the client left): let the last events go out, then stop.
+        // The session ended, its exited and terminated written (or the client left): let the last answer (disconnect's)
+        // go out, then stop.
         await Task.Delay(200).ConfigureAwait(false);
         await stop.CancelAsync().ConfigureAwait(false);
         return 0;

@@ -1,0 +1,28 @@
+<Project>
+  <!--
+    The replacements of the classic IDE's designer-server API (#461, ADR 0106): MIT assemblies under the names a control
+    library's design-time assemblies reference (Microsoft.DotNet.DesignTools.Server, Microsoft.DotNet.DesignTools.Protocol,
+    Microsoft.WinForms.Utilities.Shared), so a vendor's own designers load in the Windows Forms designer's host. Their API
+    is what the vendors' assemblies reference; their behavior is Codalus's own code over System.Windows.Forms.Design. None
+    of Microsoft's code is in them. They load only into the designer host, through its resolver (winformsdesigner/designtools/).
+  -->
+  <PropertyGroup>
+    <!-- The designer host's Windows Forms: the oldest supported one, as the host targets it, and the vendors' design assemblies (net8.0-windows). -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- Above any version of the API's own, so every reference a vendor's assembly makes binds (as Rider's replacements do). -->
+    <AssemblyVersion>100.0.0.0</AssemblyVersion>
+    <FileVersion>100.0.0.0</FileVersion>
+    <AssemblyTitle>Codalus IDE: a replacement of another assembly's public API, for interoperability with control libraries' designers (ADR 0106). It contains no third-party code.</AssemblyTitle>
+    <IsTrimmable>false</IsTrimmable>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!--
+      The API's names, shapes and accessibility are the vendors' references, not ours to choose: a namespace named after a
+      type (Designers.Behaviors.Behavior), collection and attribute suffixes, protected members a vendor overrides,
+      virtual members called from constructors, events without EventArgs patterns, nested types.
+    -->
+    <NoWarn>$(NoWarn);CA1002;CA1003;CA1010;CA1012;CA1024;CA1030;CA1033;CA1034;CA1051;CA1062;CA1065;CA1068;CA1070;CA1704;CA1707;CA1708;CA1710;CA1711;CA1716;CA1720;CA1721;CA1724;CA1725;CA1805;CA1812;CA1816;CA1819;CA1822;CA1859;CA1860;CA2214;CA2227;CA1063;CA1001;CA2000;CA1031;CA1305;CA1307;CA1309;CA1310;IDE0060;IDE0290</NoWarn>
+  </PropertyGroup>
+</Project>

@@ -25,6 +25,9 @@ internal static partial class BuiltIns
     /// <summary>The component tray's own context menu, on its background (#67).</summary>
     public const string WinFormsTrayBackgroundMenu = "winforms/trayBackground";
 
+    /// <summary>The Toolbox's context menu (#460, the classic IDE's).</summary>
+    public const string ToolboxMenu = "toolbox/context";
+
     private const string InDesigner = "activeDocumentKind == winformsDesigner";
 
     /// <summary>The classic IDE's keys: F7 View Code, Shift+F7 View Designer (in a form's code; the XAML Previewer keeps Shift+F7 in XAML), Ctrl+Alt+X the Toolbox.</summary>
@@ -44,6 +47,24 @@ internal static partial class BuiltIns
             Title = "Open Forms in the Designer",
             Category = "Windows Forms",
             Description = "A form's or user control's code file opens in the Windows Forms designer (on Windows); View Code (F7) shows the code. Off, it opens as code and View Designer (Shift+F7) shows the designer.",
+        },
+        SettingDescriptor.Create(ShellHost.VendorDesignersSetting, "true", SettingType.Boolean, ContributionSource.Shell) with
+        {
+            Title = "Control libraries' designers",
+            Category = "Windows Forms",
+            Description = "A control library's own designers (DevExpress's smart tags, verbs and dialogs such as the Grid Designer) design its controls. Off, its controls are designed as the Windows Forms controls they derive from. Applies to forms opened from now on.",
+        },
+        SettingDescriptor.Create(ShellHost.ToolboxAssembliesSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Toolbox: chosen assemblies",
+            Category = "Windows Forms",
+            Description = "Assemblies added to the Toolbox with Choose Toolbox Items (paths). Their controls are listed for every project; dropping one on a form adds the reference to the project.",
+        },
+        SettingDescriptor.Create(ShellHost.ToolboxHiddenItemsSetting, "[]", SettingType.StringArray, ContributionSource.Shell) with
+        {
+            Title = "Toolbox: hidden items",
+            Category = "Windows Forms",
+            Description = "Toolbox items unchecked in Choose Toolbox Items, by full type name: the Toolbox leaves them out.",
         },
     ];
 
@@ -66,6 +87,25 @@ internal static partial class BuiltIns
 
         Add("winforms.viewCode", "View Code", () => shell.ViewWinFormsCodeAsync(), "activeDocumentKind == winformsDesigner");
         Add("winforms.viewDesigner", "View Designer", shell.ViewWinFormsDesignerAsync);
+
+        // #460: the Toolbox's context menu, as the classic IDE's, and Tools > Choose Toolbox Items…
+        Add("toolbox.chooseItems", "Choose Toolbox Items…", shell.ChooseToolboxItemsAsync, InDesigner);
+        Add("toolbox.sortAlphabetically", "Sort Items Alphabetically", () =>
+        {
+            shell.Toolbox.SortAlphabetically = !shell.Toolbox.SortAlphabetically;
+            return Task.CompletedTask;
+        });
+        Add("toolbox.showAll", "Show All", () =>
+        {
+            shell.Toolbox.ShowAll = !shell.Toolbox.ShowAll;
+            return Task.CompletedTask;
+        });
+        Add("toolbox.collapseAll", "Collapse All", () =>
+        {
+            shell.Toolbox.CollapseAll();
+            return Task.CompletedTask;
+        });
+        Add("toolbox.refresh", "Refresh Toolbox", shell.RefreshToolboxAsync, InDesigner);
 
         // M41b: the Format menu, Tab Order and the smart tag, on the active designer; #67: enabled as the classic IDE's
         // command set enables them (the context keys of WinFormsDesignerDocument.PublishContext).
@@ -228,5 +268,17 @@ internal static partial class BuiltIns
         rules.Add(Clipboard(WinFormsTrayBackgroundMenu, "winforms.paste", "primary+v"));
         rules.Add(Item(WinFormsTrayBackgroundMenu, "winforms.lineUpIcons", group: "7-tray"));
         menus.Add(rules);
+
+        // #460: the Toolbox's context menu (the classic IDE's entries that fit a Toolbox made from the project's
+        // references), and Choose Toolbox Items in Tools, after the snippets as there.
+        menus.Add(
+        [
+            new MenuItemRule(ToolboxMenu, "toolbox.chooseItems", shell) { Group = "0-items", Order = 0, Title = "Choose Items…" },
+            new MenuItemRule(ToolboxMenu, "toolbox.sortAlphabetically", shell) { Group = "1-view", Order = 1, Checked = WhenClause.Parse("toolboxSortedAlphabetically") },
+            new MenuItemRule(ToolboxMenu, "toolbox.showAll", shell) { Group = "1-view", Order = 2, Checked = WhenClause.Parse("toolboxShowAll") },
+            new MenuItemRule(ToolboxMenu, "toolbox.collapseAll", shell) { Group = "1-view", Order = 3 },
+            new MenuItemRule(ToolboxMenu, "toolbox.refresh", shell) { Group = "2-refresh", Order = 4, Title = "Refresh" },
+            new MenuItemRule(MenuLocations.MenuBar("tools"), "toolbox.chooseItems", shell) { Group = "2-templates", Order = 10 },
+        ]);
     }
 }

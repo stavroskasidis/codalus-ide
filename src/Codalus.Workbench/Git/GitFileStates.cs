@@ -88,6 +88,12 @@ public sealed class GitFileStates : IDisposable
         }
     }
 
+    /// <summary>
+    /// Whether a repository's states are read: the glyphs' setting is on and the workspace is in a repository (or has
+    /// one beside it). Solution Explorer keeps its glyph column while it is (#357). Changes raise <see cref="Changed"/>.
+    /// </summary>
+    public bool HasRepositories => _repositories is { Count: > 0 };
+
     /// <summary>The state of the file at <paramref name="path"/> (a full path).</summary>
     public GitFileState StateOf(string path)
     {

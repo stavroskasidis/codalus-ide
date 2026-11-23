@@ -41,14 +41,14 @@ public sealed class BreakAllTests
         Thread(3, "Main Thread", Frame("[Native Frames]"), Frame("Microsoft.UI.Xaml.Application.Start"), Frame("App.Program.Main", 12)),
     ];
 
-    private static async Task<DebugService> PausedAsync(object[] threads, bool pauseNamesNoThread = false, System.Text.StringBuilder? console = null)
+    private static async Task<DebugService> PausedAsync(object[] threads, bool pauseNamesNoThread = false, System.Text.StringBuilder? console = null, bool continueEnds = false)
     {
         var debug = new DebugService(() => null);
         var stopped = new TaskCompletionSource<StopInfo>(TaskCreationOptions.RunContinuationsAsynchronously);
         debug.Stopped += (_, stop) => stopped.TrySetResult(stop);
         var output = console ?? new System.Text.StringBuilder();
         debug.Output += (_, o) => { lock (output) { output.Append(o.Text); } };
-        var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["threads"] = threads, ["pauseNamesNoThread"] = pauseNamesNoThread });
+        var launch = JsonSerializer.SerializeToElement(new Dictionary<string, object> { ["threads"] = threads, ["pauseNamesNoThread"] = pauseNamesNoThread, ["continueEnds"] = continueEnds });
         await debug.LaunchAdapterAsync("Scripted", new DebugAdapterStartInfo("dotnet", [ScriptedAdapter, "--dap"], AppContext.BaseDirectory), launch, Timeout());
         Assert.Equal(DebugState.Running, debug.State);
 
@@ -159,5 +159,21 @@ public sealed class BreakAllTests
 
         Assert.Equal(3, debug.SelectedThreadId);
         Assert.Equal("App.Program.Main", debug.SelectedFrame?.Name);
+    }
+
+    [Fact]
+    public async Task Continue_ends_quietly_when_the_program_ends_before_the_adapter_answers()
+    {
+        // The session's end cancelled the continue still waiting for its answer, and Continue threw that cancellation to
+        // its caller (the command): netcoredbg on macOS reported a program's end before its answer to the continue that
+        // ran it there (DebugServiceTests.Hit_counts_are_emulated_and_the_program_runs_to_its_exit_code, PR #518's run
+        // 45089886744). The scripted adapter never answers it.
+        await using var debug = await PausedAsync(Program(Thread(1, "<No name>")), continueEnds: true);
+        var ended = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        debug.Ended += (_, code) => ended.TrySetResult(code);
+
+        await debug.ContinueAsync().WaitAsync(Timeout());
+        Assert.Equal(15, await ended.Task.WaitAsync(Timeout()));
+        Assert.Equal(DebugState.Idle, debug.State);
     }
 }

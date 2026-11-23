@@ -92,6 +92,9 @@ public sealed partial class MainWindow : Window, IShellWindow
                 });
             }
         };
+        // The setup and the start window stay above this window (it owns them): while one is open, it draws the
+        // notifications, the palette and the in-window dialogs, which here would be under it.
+        shell.OverlayWindowChanged += (_, _) => ShowOverlaysHere(shell.OverlayWindow is null);
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
@@ -116,6 +119,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         };
         shell.Palette.Opened += (_, _) =>
         {
+            if (shell.OverlayWindow is not null)
+            {
+                return; // the window over this one draws it (CompanionOverlays)
+            }
+
             _focusBeforePalette = FocusManager?.GetFocusedElement();
             Dispatcher.UIThread.Post(Palette.FocusInput, DispatcherPriority.Loaded);
         };
@@ -218,6 +226,14 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// classic IDE, and the second row is ordinary client area. Its empty parts (around the search box, the drag area
     /// under the first row's) drag the window like the first row's, through <see cref="Window.BeginMoveDrag"/>.
     /// </remarks>
+    /// <summary>Shows this window's notifications, palette and in-window dialogs, or hides them while a window over it draws them.</summary>
+    private void ShowOverlaysHere(bool here)
+    {
+        ModalLayers.IsVisible = here;
+        PaletteHost.IsVisible = here;
+        Toasts.IsVisible = here;
+    }
+
     private void SetUpTitleBar()
     {
         if (!OperatingSystem.IsWindows())
@@ -322,6 +338,7 @@ public sealed partial class MainWindow : Window, IShellWindow
     private void OnOpened(object? sender, EventArgs e)
     {
         RememberNormalBounds();
+        NativeHandle = OperatingSystem.IsWindows() && TryGetPlatformHandle() is { HandleDescriptor: "HWND" } native ? native.Handle : IntPtr.Zero;
 
         // A requestAnimationFrame callback runs at the start of a frame; the second one proves the first frame
         // was produced. "interactive" additionally waits for the UI thread to go idle.
@@ -503,6 +520,9 @@ public sealed partial class MainWindow : Window, IShellWindow
             }
         }
     }
+
+    /// <summary>The window's HWND on Windows, taken on the UI thread when it opens (read from any thread: a control library's dialogs' owner, #461).</summary>
+    public IntPtr NativeHandle { get; private set; }
 
     public void BringToFront()
     {
@@ -759,6 +779,9 @@ public sealed partial class MainWindow : Window, IShellWindow
         };
         _shell.Workbench.Context.Set("focusedView", view);
         _shell.Workbench.Context.Set("editorTextFocus", view == "textFile");
+
+        // A text box has the keyboard (a tool window's search box…): its keys edit its text, not the view's items (#483, #484).
+        _shell.Workbench.Context.Set("inputFocus", source is TextBox);
 
         // A property grid has the keyboard (the Properties window's, or the collection editor's in a designer): F4 opens its drop-down (#68).
         _shell.Workbench.Context.Set("propertyGridFocus", source?.FindAncestorOfType<PropertyGridView>(includeSelf: true) is not null);

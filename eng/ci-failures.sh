@@ -40,8 +40,14 @@ gh api --help 2>&1 | grep -q -- --allow-escape-sequences && log_options=(--allow
 # live-<os>-<shard>-<attempt>-<n>, from the job's name "test (<os>, <shard>)".
 live_output() {
   local run="$1" attempt="$2" name="$3" prefix artifact id folder file sample shard
-  [[ "$name" =~ ^test\ \(([^,]+),\ ([^\)]+)\)$ ]] || return 0
-  prefix="live-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-$attempt-"
+  # A smoke job's is live-<os>-smoke-<attempt>-<n>, from "smoke (<os>)".
+  if [[ "$name" =~ ^test\ \(([^,]+),\ ([^\)]+)\)$ ]]; then
+    prefix="live-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-$attempt-"
+  elif [[ "$name" =~ ^smoke\ \(([^\)]+)\)$ ]]; then
+    prefix="live-${BASH_REMATCH[1]}-smoke-$attempt-"
+  else
+    return 0
+  fi
   artifact="$(api "repos/$repo/actions/runs/$run/artifacts?per_page=100" --jq ".artifacts[] | select(.expired | not) | select(.name | startswith(\"$prefix\")) | \"\(.id)\t\(.name)\"" 2> /dev/null | sort -t$'\t' -k2,2 | tail -1)"
   if [[ -z "$artifact" ]]; then
     printf 'live\tno upload named %s<n> is left on the run\n' "$prefix"
@@ -65,6 +71,10 @@ live_output() {
       while IFS= read -r line; do printf 'live\t%s console: %s\n' "$shard" "${line:0:200}"; done
     for sample in "$folder/$shard"/memory.txt "$folder/$shard"/load.txt "$folder/$shard"/disk.txt; do
       [[ -s "$sample" ]] && printf 'live\t%s %s: %s\n' "$shard" "$(basename "$sample" .txt)" "$(grep -E '^[0-9]{2}:[0-9]{2}:[0-9]{2} |^\[disk\]' "$sample" | tail -1 | cut -c1-200)"
+    done
+    # The tests running at the watchdog's last look, per test process (tests/Shared/TestWatchdog.cs).
+    for sample in "$folder/$shard"/running-*.txt; do
+      [[ -s "$sample" ]] && head -6 "$sample" | while IFS= read -r line; do printf 'live\t%s running: %s\n' "$shard" "${line:0:200}"; done
     done
   done
 }

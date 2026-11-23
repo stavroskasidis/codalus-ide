@@ -631,7 +631,7 @@ public sealed class EditorInsights : IDisposable
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
-            RetryAfterFailure(ex, _hintTimer);
+            RetryAfterFailure(ex, _symbolTimer);
         }
     }
 
@@ -838,7 +838,7 @@ public sealed class EditorInsights : IDisposable
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
-            RetryAfterFailure(ex, _lensTimer);
+            RetryAfterFailure(ex, _hintTimer);
         }
     }
 
@@ -936,7 +936,7 @@ public sealed class EditorInsights : IDisposable
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
-            RetryAfterFailure(ex, _symbolTimer);
+            RetryAfterFailure(ex, _lensTimer);
         }
     }
 
@@ -947,7 +947,9 @@ public sealed class EditorInsights : IDisposable
 
     /// <summary>
     /// A request failed (the service restarting, or not ready yet): try again later, a few times, so the editor doesn't
-    /// stay without hints until the next edit. Cancellations are not failures.
+    /// stay without hints until the next edit. Cancellations are not failures. <paramref name="timer"/> is the failed
+    /// request's own: each asked again on another kind's, so symbols an F# server couldn't list while it loaded a project
+    /// never came until an edit (Windows, stress run 45019776994).
     /// </summary>
     private void RetryAfterFailure(Exception ex, DispatcherTimer timer)
     {

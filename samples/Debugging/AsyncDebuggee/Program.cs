@@ -3,7 +3,7 @@ namespace AsyncDebuggee;
 /// <summary>
 /// The async debugging fixture (M61, ADR 0100). Built twice from these files: AsyncDebuggee (state machines) and
 /// AsyncDebuggee.RuntimeAsync (runtime async, .NET 11). An argument picks one scenario (steps, chain, throw, mixed,
-/// race, held); none runs them all but held. Tests find lines by the markers.
+/// race, held, handed); none runs them all but held and handed. Tests find lines by the markers.
 /// </summary>
 public static class Program
 {
@@ -48,6 +48,12 @@ public static class Program
         if (scenario is "held")
         {
             total += await Held.HoldAsync(3); // [main-held]
+        }
+
+        // Not in "all" either: the method resumes only once the debugger lets it (ResumeOnGo.Go).
+        if (scenario is "handed")
+        {
+            total += await Handed.HandAsync(3);
         }
 
         Console.WriteLine($"async total={total}"); // [main-end]

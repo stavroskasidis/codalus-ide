@@ -21,6 +21,8 @@ When `dotnet ef` isn't available, the window offers **Install dotnet-ef**:
 
 The startup project must reference `Microsoft.EntityFrameworkCore.Design`, as for any use of the EF tools.
 
+When `dotnet ef` fails to build the project, it says only "Build failed". Codalus then builds the startup project again and shows the errors that build reports, or says that the project builds, which means the failure was in `dotnet ef`'s own build (a migrations bundle builds one).
+
 ## Migrations
 
 - **Add Migration…** asks for a name (a C# identifier) and opens the new migration.

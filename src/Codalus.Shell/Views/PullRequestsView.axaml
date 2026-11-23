@@ -35,7 +35,7 @@
                 <TextBlock Text="{Binding Reference}" Classes="muted" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                 <Border IsVisible="{Binding IsCurrent}" Background="{DynamicResource Shell.Accent}" CornerRadius="3" Padding="4,0" VerticalAlignment="Center">
-                  <TextBlock Text="{l:T pullRequests.currentBranch}" FontSize="{DynamicResource Shell.FontSize.Small}" Foreground="{DynamicResource Shell.AccentForeground}" />
+                  <TextBlock VerticalAlignment="Center" Text="{l:T pullRequests.currentBranch}" FontSize="{DynamicResource Shell.FontSize.Small}" Foreground="{DynamicResource Shell.AccentForeground}" />
                 </Border>
               </StackPanel>
               <TextBlock Text="{Binding Detail}" Classes="muted" FontSize="{DynamicResource Shell.FontSize.Small}" Margin="22,0,0,0" TextTrimming="CharacterEllipsis" />

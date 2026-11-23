@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <IsPackable>true</IsPackable>
+    <Version>1.0.0</Version>
+    <Authors>Contoso</Authors>
+    <Description>A stand-in for a third-party control library delivered as NuGet packages: a base form and controls.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- A Toolbox picture, named as ContosoSpinEdit's [ToolboxBitmap(typeof(ToolboxIconsRoot), "ToolboxIcons.SpinEdit.bmp")] finds it. -->
+    <EmbeddedResource Include="ToolboxIcons\SpinEdit.bmp" LogicalName="Contoso.WinForms.ToolboxIcons.SpinEdit.bmp" />
+  </ItemGroup>
+</Project>

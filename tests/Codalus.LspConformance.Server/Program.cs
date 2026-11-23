@@ -111,6 +111,11 @@ async Task PublishAsync(string uri)
 // With --initialize-after <file>, initialize is answered only once that file exists: a server still starting, for as
 // long as a test needs one.
 var lspInitializeAfter = Array.IndexOf(args, "--initialize-after") is var gate and >= 0 && gate + 1 < args.Length ? args[gate + 1] : null;
+// With --fail-symbols <n> the server lists document symbols and fails the first n requests for them, as FsAutoComplete
+// does while it loads a project (a request it can't answer yet): the editor asks again by itself.
+var failSymbols = Array.IndexOf(args, "--fail-symbols") is var failAt and >= 0 && failAt + 1 < args.Length
+    ? int.Parse(args[failAt + 1], System.Globalization.CultureInfo.InvariantCulture)
+    : -1;
 connection.OnRequest("initialize", async (_, cancellationToken) =>
 {
     while (lspInitializeAfter is not null && !File.Exists(lspInitializeAfter))
@@ -135,11 +140,29 @@ JsonElement InitializeResult() => Json("""
         "foldingRangeProvider": true,
         "codeActionProvider": { "codeActionKinds": ["quickfix"] },
         "workspaceSymbolProvider": { },
-        "semanticTokensProvider": { "legend": { "tokenTypes": ["property", "string", "comment"], "tokenModifiers": [] }, "full": { "delta": false }, "range": false }
+        "semanticTokensProvider": { "legend": { "tokenTypes": ["property", "string", "comment"], "tokenModifiers": [] }, "full": { "delta": false }, "range": false }SYMBOLS
       },
       "serverInfo": { "name": "conformance", "version": "1.0" }
     }
-    """.Replace("CHANGE", incremental ? "2" : "1", StringComparison.Ordinal));
+    """.Replace("CHANGE", incremental ? "2" : "1", StringComparison.Ordinal)
+    .Replace("SYMBOLS", failSymbols >= 0 ? """, "documentSymbolProvider": true""" : string.Empty, StringComparison.Ordinal));
+var symbolRequests = 0;
+connection.OnRequest("textDocument/documentSymbol", (p, _) =>
+{
+    if (Interlocked.Increment(ref symbolRequests) <= failSymbols)
+    {
+        Log("documentSymbol failed");
+        throw new JsonRpcHandlerException(-32801, "The project is still loading.");
+    }
+
+    Log("documentSymbol");
+    var key = (documents.TryGetValue(Uri(p), out var text) ? text : string.Empty).Split('\n')[0].Split('=')[0].Trim();
+    var symbols = new JsonArray
+    {
+        (JsonNode)new JsonObject { ["name"] = key.Length > 0 ? key : "document", ["kind"] = 7, ["range"] = Range(0, 0, 1), ["selectionRange"] = Range(0, 0, 1) },
+    };
+    return Task.FromResult<JsonElement?>(ToElement(symbols));
+});
 connection.OnNotification("initialized", ConformanceJson.Default.JsonElement, initialized =>
 {
     // Ask the client for settings, as many servers do right after initialization.

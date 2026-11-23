@@ -31,7 +31,7 @@ public sealed class GitChangesMenuTests
         var error = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error.GetAwaiter().GetResult()}");
         return output;
     }
 
@@ -273,23 +273,33 @@ public sealed class GitChangesMenuTests
         await ShellFixture.PumpUntil(() => picker.IsOpen && picker.Rows.Count > 0 && !picker.IsLoading);
         Assert.True(view.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.Popup>().Single(p => p.Name == "BranchPopup").IsOpen);
 
+        // The list view (the tree's is The_branch_drop_down_has_local_and_remote_tabs_and_a_tree_of_folders), on the Local tab.
+        picker.IsTreeView = false;
         string[] Row(GitBranchRow r) => r.IsHeader ? ["#" + r.HeaderText] : [r.Name + (r.IsCurrent ? " ✓" : string.Empty) + (r.HasTrack ? " " + r.Track : string.Empty)];
-        Assert.Equal(
-            ["#Local branches", "main ✓ ↑1", "feature/sign-in ↑1 ↓1", "local-only", "release/0.6 ↓2", "#origin", "feature/sign-in", "fix/null-greeting", "main", "release/0.6"],
-            picker.Rows.SelectMany(Row));
+        Assert.False(picker.IsRemoteTab);
+        Assert.Equal(["main ✓ ↑1", "feature/sign-in ↑1 ↓1", "local-only", "release/0.6 ↓2"], picker.Rows.SelectMany(Row));
         var feature = picker.Rows.Single(r => r.Key == "l:feature/sign-in");
         Assert.Equal("1 outgoing, 1 incoming (origin/feature/sign-in)", feature.TrackName);
         Assert.Equal("feature/sign-in, 1 outgoing, 1 incoming (origin/feature/sign-in)", feature.AccessibleName);
         Assert.Equal("8 of 8", picker.CountText);
+        Assert.Equal(("4", "4", "Local branches, 4"), (picker.LocalCount, picker.RemoteCount, picker.LocalTabName));
 
-        // B2, B3: searching; nothing matches: the footer offers the branch with its name.
+        // The Remote tab: origin's branches without the prefix, and no origin header with one remote.
+        picker.IsRemoteTab = true;
+        Assert.Equal(["feature/sign-in", "fix/null-greeting", "main", "release/0.6"], picker.Rows.SelectMany(Row));
+        picker.IsRemoteTab = false;
+
+        // B2, B3: searching; the tabs count what matches; nothing matches: the footer offers the branch with its name.
         picker.Query = "sign";
-        Assert.Equal(["#Local branches", "feature/sign-in ↑1 ↓1", "#origin", "feature/sign-in"], picker.Rows.SelectMany(Row));
-        Assert.Equal([8, 9, 10, 11], picker.Rows[1].Highlights);
-        Assert.Equal("2 of 8", picker.CountText);
+        Assert.Equal(["feature/sign-in ↑1 ↓1"], picker.Rows.SelectMany(Row));
+        Assert.Equal([8, 9, 10, 11], picker.Rows[0].Highlights);
+        Assert.Equal(("2 of 8", "1", "1"), (picker.CountText, picker.LocalCount, picker.RemoteCount));
+        picker.Query = "null";
+        Assert.True(picker.IsEmpty);
+        Assert.Equal(("No local branches match “null”.", "New Branch…", null, "1"), (picker.EmptyText, picker.FooterText, picker.FooterName, picker.RemoteCount));
         picker.Query = "zzz";
         Assert.True(picker.IsEmpty);
-        Assert.Equal(("No branches match “zzz”.", "New Branch 'zzz'…", "zzz"), (picker.EmptyText, picker.FooterText, picker.FooterName));
+        Assert.Equal(("No local branches match “zzz”.", "New Branch 'zzz'…", "zzz"), (picker.EmptyText, picker.FooterText, picker.FooterName));
         picker.Query = string.Empty;
 
         GitBranchDetails Branch(string fullRef) => picker.Branches.Single(b => b.FullRef == fullRef);
@@ -374,6 +384,78 @@ public sealed class GitChangesMenuTests
         Assert.Contains("Update from 'origin/main'", Menu("refs/heads/main"));
         Assert.False(f.Shell.GitChanges.ShowPublishBranch);
         Assert.StartsWith("HEAD is detached at ", f.Shell.GitChanges.OutgoingIncomingTooltip, StringComparison.Ordinal);
+        picker.IsOpen = false;
+    }
+
+    /// <summary>
+    /// The drop-down's tabs and tree view: every open starts on Local; the tree has folders by the names' <c>/</c> parts,
+    /// folders first, each with its count, collapsed but for the current branch's path; what is expanded is kept across
+    /// opens; a search expands the paths to its matches, hides the rest, and clearing it puts back what was expanded; the
+    /// Remote tab has origin's folders with no origin group; the toggle saves the list view in the user's settings.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task The_branch_drop_down_has_local_and_remote_tabs_and_a_tree_of_folders()
+    {
+        await using var f = ShellFixture.Create();
+        var (folder, _) = BranchRepository(f.UserData);
+        Git(folder, "branch", "feature/deep/one");
+        Git(folder, "switch", "-q", "-c", "release/hotfix/now");
+        await OpenAsync(f, folder);
+        var picker = f.Shell.GitBranches;
+        f.Shell.Layout.ShowToolWindow(GitChangesViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<GitChangesView>().Any());
+        var view = f.Window.GetVisualDescendants().OfType<GitChangesView>().Single();
+        view.GetVisualDescendants().OfType<Avalonia.Controls.Button>().Single(b => b.Name == "BranchButton")
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+        await ShellFixture.PumpUntil(() => picker.IsOpen && picker.Rows.Any(r => r.IsFolder) && !picker.IsLoading);
+        Assert.True(picker.IsTreeView);
+        NavigationDepthTests.Screenshot(f, "branch-drop-down-tree");
+
+        static string Row(GitBranchRow r) => new string(' ', r.Depth * 2) + (r.IsFolder ? (r.IsExpanded ? "v " : "> ") + r.Name + " " + r.Count : r.Name + (r.IsCurrent ? " ✓" : string.Empty));
+        GitBranchRow FolderRow(string name) => picker.Rows.Single(r => r.IsFolder && r.Name == name);
+
+        // Folders first, by name; the current branch's path expanded.
+        Assert.Equal(["> feature 2", "v release 2", "  v hotfix 1", "    now ✓", "  0.6", "local-only", "main"], picker.Rows.Select(Row));
+        Assert.Equal("feature, 2 branches", FolderRow("feature").AccessibleName);
+        Assert.Equal(("6", "4"), (picker.LocalCount, picker.RemoteCount));
+
+        // A folder expands (with Ctrl, every folder under it); its state stays for the next open, which starts on Local.
+        picker.SetExpandedUnder(FolderRow("feature"), expanded: true);
+        Assert.Equal(["v feature 2", "  v deep 1", "    one", "  sign-in"], picker.Rows.Take(4).Select(Row));
+        picker.SetExpanded(FolderRow("release"), expanded: false);
+        picker.IsRemoteTab = true;
+        Assert.Equal(["> feature 1", "> fix 1", "> release 1", "main"], picker.Rows.Select(Row));
+        NavigationDepthTests.Screenshot(f, "branch-drop-down-remote");
+        picker.IsOpen = false;
+        picker.IsOpen = true;
+        Assert.False(picker.IsRemoteTab);
+        Assert.Equal(["v feature 2", "  v deep 1", "    one", "  sign-in", "> release 2", "local-only", "main"], picker.Rows.Select(Row));
+
+        // A search: the paths to its matches expanded, the rest hidden; a folder's name matches too. Cleared, as it was.
+        picker.Query = "now";
+        Assert.Equal(["v release 1", "  v hotfix 1", "    now ✓"], picker.Rows.Select(Row));
+        Assert.Equal([0, 1, 2], picker.Rows[2].Highlights);
+        picker.Query = "hot";
+        Assert.Equal([0, 1, 2], FolderRow("hotfix").Highlights);
+        picker.Query = string.Empty;
+        Assert.Equal(["v feature 2", "  v deep 1", "    one", "  sign-in", "> release 2", "local-only", "main"], picker.Rows.Select(Row));
+
+        // The keys move over folders and branches.
+        picker.Selected = null;
+        picker.MoveSelection(1);
+        Assert.Equal("feature", picker.Selected!.Name);
+        picker.MoveSelection(1);
+        Assert.Equal("deep", picker.Selected!.Name);
+
+        // The list view: the toggle saves it, and the next open reads it.
+        picker.IsTreeView = false;
+        await ShellFixture.PumpUntil(() => f.Shell.Workbench.Settings.GetString("git.branchPicker.view") == "list");
+        NavigationDepthTests.Screenshot(f, "branch-drop-down-list");
+        Assert.Equal(["release/hotfix/now ✓", "feature/deep/one", "feature/sign-in", "local-only", "main", "release/0.6"], picker.Rows.Select(Row));
+        picker.IsOpen = false;
+        await f.Shell.Workbench.Settings.SetAsync("git.branchPicker.view", "tree", Codalus.Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
+        picker.IsOpen = true;
+        Assert.True(picker.IsTreeView);
         picker.IsOpen = false;
     }
 

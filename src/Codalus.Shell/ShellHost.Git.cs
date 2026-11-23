@@ -78,12 +78,27 @@ public sealed partial class ShellHost
                     : InRepositoryAsync(GitBranches.RepositoryOf(branch), () => RunAsync(command, [System.Text.Json.JsonSerializer.SerializeToElement(branch.FullRef, Docking.ShellJsonContext.Default.String)], GitBranchScope(branch)))
                 : Task.CompletedTask,
         };
+        GitBranches.ReadView = () => Workbench.Settings.GetString(BuiltIns.BranchPickerViewSetting, GitBranchPickerViewModel.ViewTree);
+        GitBranches.SaveView = view => _ = SaveBranchPickerViewAsync(view);
         GitChanges.Branches = GitBranches;
         GitChanges.MenuFor = GitChangesMenu;
         GitChangesView.ReportError = ReportGitError;
         DiffView.ReportError = ReportGitError;
         MergeEditorView.ReportError = ReportGitError;
         UpdateGitStatus();
+    }
+
+    /// <summary>The branch drop-down's view, as its toggle left it: in the user's settings.</summary>
+    private async Task SaveBranchPickerViewAsync(string view)
+    {
+        try
+        {
+            await Workbench.Settings.SetAsync(BuiltIns.BranchPickerViewSetting, view, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Workbench.Log.AppendLine($"[git] {BuiltIns.BranchPickerViewSetting} wasn't saved: {ex.Message}");
+        }
     }
 
     private void ReportGitError(Exception ex)

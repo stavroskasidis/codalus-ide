@@ -150,6 +150,8 @@ public sealed class RemoteServerTests
 
         var reconnected = new TaskCompletionSource<TimeSpan>(TaskCreationOptions.RunContinuationsAsynchronously);
         var disconnected = false;
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        connection.Log += (_, line) => log.Enqueue(line);
         connection.Reconnected += (_, down) => reconnected.TrySetResult(down);
         connection.Disconnected += (_, _) => disconnected = true;
 
@@ -157,7 +159,7 @@ public sealed class RemoteServerTests
         connection.DropLink();
         await process.Input.WriteAsync("during\n"u8.ToArray(), Timeout());
         var down = await reconnected.Task.WaitAsync(Timeout());
-        Assert.True(down < TimeSpan.FromSeconds(5), $"Reconnecting took {down}.");
+        Assert.True(down < TimeSpan.FromSeconds(5), $"Reconnecting took {down} (a loaded Windows PC, the 1.0 validation: 8.3 s); the connection's log:\n{string.Join("\n", log)}");
         Assert.Equal("during\n", await ReadLineAsync(process.Output));
         _ = await connection.ListPortsAsync(Timeout());
         Assert.False(process.Exited.IsCompleted);
@@ -505,29 +507,40 @@ public sealed class RemoteServerTests
         var folder = TempFolder();
         await using var connection = await ConnectLocalAsync(TimeSpan.Zero);
         var fs = new RemoteFileSystem(connection, RemotePathMap.Identity);
-        async Task<double> MedianAsync()
+
+        // Measured in alternating rounds (no latency, 50 ms, 150 ms, nine times), as the shell's completion budget is, and
+        // each compared by its fastest sample, not its median. Load only adds time, and adds more to a longer request: a
+        // 150 ms request overlaps more of a burst than a 1 ms one, so the medians went over the budget during whole-suite
+        // runs on the Mac (docs/ci-flakes.md) and, under load that comes and goes on Windows, in 15 of 20 runs measured
+        // one after the other and 15 of 20 in alternating rounds; compared by the fastest, 0 of 20. Every sample pays the
+        // round trips the protocol makes, so one more shows in the fastest too. Each comes with its samples.
+        int[] rtts = [0, 50, 150];
+        var times = rtts.ToDictionary(rtt => rtt, _ => new List<double>());
+        for (var round = 0; round < 9; round++)
         {
-            var times = new List<double>();
-            for (var i = 0; i < 9; i++)
+            foreach (var rtt in rtts)
             {
+                connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
                 var watch = Stopwatch.StartNew();
                 await fs.StatAsync(folder, Timeout());
-                times.Add(watch.Elapsed.TotalMilliseconds);
+                times[rtt].Add(watch.Elapsed.TotalMilliseconds);
             }
-
-            return times.Order().ElementAt(times.Count / 2);
         }
 
-        var local = await MedianAsync();
-        var report = new StringBuilder(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"stat round trip: {local:F1} ms with no latency"));
-        foreach (var rtt in (int[])[50, 150])
+        double Fastest(int rtt) => times[rtt].Min();
+        string Samples(int rtt) => string.Join(", ", times[rtt].Select(t => t.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
+        var local = Fastest(0);
+        var report = new StringBuilder(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"stat round trip: {local:F1} ms with no latency [{Samples(0)}]"));
+        foreach (var rtt in rtts.Skip(1))
         {
-            connection.SimulatedLatency = TimeSpan.FromMilliseconds(rtt);
-            var remote = await MedianAsync();
-            report.Append(System.Globalization.CultureInfo.InvariantCulture, $"; {remote:F1} ms at {rtt} ms");
-            if (Environment.GetEnvironmentVariable("CI") != "true")
+            report.Append(System.Globalization.CultureInfo.InvariantCulture, $"; {Fastest(rtt):F1} ms at {rtt} ms [{Samples(rtt)}]");
+        }
+
+        if (Environment.GetEnvironmentVariable("CI") != "true")
+        {
+            foreach (var rtt in rtts.Skip(1))
             {
-                Assert.True(remote <= local + rtt + 20, $"{remote:F1} ms at {rtt} ms RTT is over the budget of {local + rtt + 20:F1} ms.");
+                Assert.True(Fastest(rtt) <= local + rtt + 20, string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{Fastest(rtt):F1} ms at {rtt} ms RTT is over the budget of {local + rtt + 20:F1} ms ({report})."));
             }
         }
 

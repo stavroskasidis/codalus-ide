@@ -162,6 +162,11 @@ internal sealed class WpfDesigner(string appPath)
     /// compiled resources), never run: no <c>Startup</c>, no <c>StartupUri</c>. Without one, or when its constructor
     /// fails, a plain <c>Application</c>.
     /// </summary>
+    /// <remarks>
+    /// WPF's <c>Application</c> constructor queues the app's start on the dispatcher (<c>OnStartup</c>, its
+    /// <c>Startup</c> handlers, then <c>StartupUri</c>'s window), which runs once <see cref="Dispatcher.Run"/> pumps,
+    /// so <see cref="Application.Run()"/> isn't needed for it (#392). What the constructor posts is aborted.
+    /// </remarks>
     private void CreateApplication()
     {
         Type[] types;
@@ -179,7 +184,7 @@ internal sealed class WpfDesigner(string appPath)
         {
             try
             {
-                var application = (Application)Activator.CreateInstance(appType)!;
+                var application = CreateWithoutStartup(appType);
                 appType.GetMethod("InitializeComponent", BindingFlags.Public | BindingFlags.Instance, Type.EmptyTypes)?.Invoke(application, null);
             }
             catch (Exception ex) when (ex is TargetInvocationException or MissingMethodException or InvalidOperationException)
@@ -188,8 +193,37 @@ internal sealed class WpfDesigner(string appPath)
             }
         }
 
-        var current = Application.Current ?? new Application();
+        var current = Application.Current ?? CreateWithoutStartup(typeof(Application));
         current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+    }
+
+    /// <summary>
+    /// An <c>Application</c> whose constructor's dispatcher operations (the queued start among them) are aborted
+    /// before they run.
+    /// </summary>
+    private Application CreateWithoutStartup(Type appType)
+    {
+        var posted = new List<DispatcherOperation>();
+        DispatcherHookEventHandler onPosted = (_, e) =>
+        {
+            if (e.Operation.Dispatcher == _dispatcher)
+            {
+                posted.Add(e.Operation);
+            }
+        };
+        _dispatcher.Hooks.OperationPosted += onPosted;
+        try
+        {
+            return (Application)Activator.CreateInstance(appType)!;
+        }
+        finally
+        {
+            _dispatcher.Hooks.OperationPosted -= onPosted;
+            foreach (var operation in posted)
+            {
+                operation.Abort();
+            }
+        }
     }
 
     /// <summary>

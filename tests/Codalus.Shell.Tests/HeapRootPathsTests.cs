@@ -1,6 +1,12 @@
 namespace Codalus.Shell.Tests;
 
-/// <summary>The diagnostic of a shell that stays reachable names what holds it.</summary>
+/// <summary>
+/// The diagnostic of a shell that stays reachable names what holds it. Alone, after the parallel tests: on Linux a
+/// snapshot is a core of the whole test host that createdump writes to the runner's disk (1.9 GB in 10 s), then a walk
+/// of its heap, and a test measuring the UI thread at the same time saw a 2.4 s stall in no posted job (Linux CI, run
+/// 44073138183; docs/ci-flakes.md).
+/// </summary>
+[Collection(ProcessSnapshotTests.Name)]
 public class HeapRootPathsTests
 {
     private static List<object>? s_holder;
@@ -71,4 +77,11 @@ public class HeapRootPathsTests
         {
         }
     }
+}
+
+/// <summary>Tests that take a snapshot of this process (a core of it on Linux): alone, after the parallel ones.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class ProcessSnapshotTests
+{
+    public const string Name = "Tests that take a snapshot of this process";
 }

@@ -2,6 +2,8 @@
 
 Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linux.
 
+**New in 1.0:** [what's new since 0.1, what 1.x keeps stable, the known limits, and Windows signing](whats-new.md).
+
 1. [Installing and first start](getting-started.md)
 2. [Solutions and projects: the Properties window, Show All Files, items and templates, opening a folder, external tools](solutions.md)
 3. [NuGet packages and .NET tools](packages.md)
@@ -28,7 +30,8 @@ Codalus IDE is a free, open-source (MIT) IDE for .NET on Windows, macOS and Linu
 24. [WCF: Add Service Reference with dotnet-svcutil, CoreWCF services, the WCF Test Client, and system.serviceModel in configuration files](wcf.md)
 25. [WPF, Windows Forms and WinUI 3: opening and building them on every OS, running, debugging and testing on Windows, WPF and WinUI XAML editing, packaged apps, new projects and items](windows-desktop.md)
 26. [.NET Framework: SDK-style and non-SDK-style projects on every OS, packages.config, the reference assemblies, Convert to SDK-style, running, debugging and tests on Windows](net-framework.md)
-27. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
+27. [Compatibility: what 1.x keeps stable, from settings and the command line to profiles, layouts and Settings Sync](compatibility.md)
+28. [Plugin API reference: every type and member of the plugin API](plugin-api.md)
 
 Writing plugins is covered in [plugins.md](../plugins.md), with the [API reference](plugin-api.md).
 

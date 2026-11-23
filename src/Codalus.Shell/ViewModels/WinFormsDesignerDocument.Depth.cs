@@ -835,6 +835,30 @@ public sealed partial class WinFormsDesignerDocument
         }
     }
 
+    /// <summary>
+    /// A click on the control there, or the one it's in, whose designer takes clicks itself (#461: a control library's
+    /// design-time buttons, DevExpress's grid's Run Designer): the classic IDE lets such a click through to the control.
+    /// </summary>
+    internal bool TakesClickAt(double x, double y)
+    {
+        for (var view = HitTest(x, y); view is not null; view = view.Parent is { } parent ? Find(parent) : null)
+        {
+            if (view.TakesClicks)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gives the click to the control (<see cref="TakesClickAt"/>) in the designer host, with where it was on the screen
+    /// (physical pixels: a menu it opens shows there); what its designer changed is written as code.
+    /// </summary>
+    internal Task ClickControlAsync(double x, double y, Avalonia.PixelPoint? screen = null) =>
+        TakesClickAt(x, y) ? RunAsync(host => host.ClickAsync(new DesignerClickParams(x, y) { ScreenX = screen?.X, ScreenY = screen?.Y }, CancellationToken.None)) : Task.CompletedTask;
+
     // ------------------------------------------------------------------ collection editors (M41b)
 
     /// <summary>The open collection editor, or null.</summary>

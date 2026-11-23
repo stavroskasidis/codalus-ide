@@ -37,6 +37,7 @@ public sealed partial class ShellHost
     {
         Builds = new BuildService(Solutions, Workbench.Output);
         Runs = new RunService(Solutions, Workbench.Output, uri => OpenExternalUrl(uri));
+        Runs.PrepareWsl = PrepareWslAsync; // the WSL launch profile's .NET there (M14c)
         Builds.Started += (_, request) =>
         {
             if (Volatile.Read(ref _launch) is { IsCanceled: true })
@@ -217,7 +218,7 @@ public sealed partial class ShellHost
     /// </summary>
     public async Task StartWithoutDebuggingAsync(string? argument = null, bool hotReload = false)
     {
-        if (BeginLaunch(argument) is not { } launch)
+        if (BeginLaunch(argument, debug: false) is not { } launch)
         {
             return;
         }
@@ -355,6 +356,10 @@ public sealed partial class ShellHost
                 Workbench.Output.Show(channel);
             }
         }
+        catch (RunNotStartedException)
+        {
+            // Said already, with what to do (.NET to install in WSL).
+        }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or JsonRpcRemoteException or JsonRpcConnectionLostException or IOException)
         {
             Workbench.Notifications.Error(Localizer.Format("msg.build.couldNotStart", "Could not start {0}: {1}", Path.GetFileNameWithoutExtension(project), ex.Message));
@@ -382,9 +387,12 @@ public sealed partial class ShellHost
     /// A Start (F5, Ctrl+F5, Hot Reload) from the click until its program runs or its debug session starts: saving, the
     /// build, reading the launch profile. Meanwhile the toolbar shows Stop, which cancels it, and what it's doing.
     /// </summary>
-    private sealed class Launch(ShellHost shell, string status) : IDisposable
+    private sealed class Launch(ShellHost shell, string status, bool debug) : IDisposable
     {
         private readonly CancellationTokenSource _cancel = new();
+
+        /// <summary>F5 (true) or Ctrl+F5: how to start again what couldn't start yet (.NET installed in WSL).</summary>
+        public bool Debug { get; } = debug;
 
         /// <summary>What the toolbar says while it isn't building: "Starting App…".</summary>
         public string Status { get; } = status;
@@ -404,7 +412,7 @@ public sealed partial class ShellHost
     public bool IsLaunching => _launch is not null;
 
     /// <summary>Starts a launch, or null (with a message) while another one is under way.</summary>
-    private Launch? BeginLaunch(string? argument)
+    private Launch? BeginLaunch(string? argument, bool debug)
     {
         if (_launch is not null)
         {
@@ -415,7 +423,7 @@ public sealed partial class ShellHost
         var project = argument is not null ? Path.GetFullPath(argument) : Runs.StartupProject;
         var name = project is not null && (argument is not null || !Runs.MultipleStartup) ? Path.GetFileNameWithoutExtension(project) : null;
         var status = name is null ? Localizer.Get("msg.build.launchStarting", "Starting…") : Localizer.Format("msg.build.launchStartingProject", "Starting {0}…", name);
-        var launch = new Launch(this, status);
+        var launch = new Launch(this, status, debug);
         Volatile.Write(ref _launch, launch);
         Workbench.Context.Set("programStarting", true);
         Toolbar?.SetLaunching(status);

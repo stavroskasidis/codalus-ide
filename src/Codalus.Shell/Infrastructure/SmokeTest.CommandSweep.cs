@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -45,6 +46,33 @@ internal sealed partial class SmokeTest
     private const string SweepOnlyVariable = "CODALUS_SWEEP_ONLY";
 
     /// <summary>
+    /// Where the UI thread slept in a stall, on Linux (<see cref="SweepStallMonitor.StackOfMax"/>), and every thread's
+    /// state and stack then in <c>sweep-stall-&lt;n&gt;.txt</c> in the logs: the lock it waited on is the one another
+    /// thread held. Empty when there's none.
+    /// </summary>
+    private string SweepStallStacks(string commandId, string entry)
+    {
+        if (_sweepStall?.StackOfMax is not { } stack)
+        {
+            return string.Empty;
+        }
+
+        var file = $"sweep-stall-{Interlocked.Increment(ref _sweepStallDumps).ToString(CultureInfo.InvariantCulture)}.txt";
+        try
+        {
+            File.WriteAllText(Path.Combine(shell.Paths.Logs, file), $"{commandId} [{entry}]\n{_sweepStall.ThreadsOfMax}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            file = $"none written ({ex.Message})";
+        }
+
+        return $"; the UI thread 300 ms in: {stack}; every thread's in {file}";
+    }
+
+    private int _sweepStallDumps;
+
+    /// <summary>
     /// The longest the UI thread may stall in a command: 500 ms on a developer's machine. CI's hosted runners render in
     /// software with no GPU (Xvfb on Linux), and only a command's first run there went past 500 ms: a cold first open of
     /// its view or window (templates, styles, first layout and text shaping), 521 ms on Linux and 824 ms on macOS, while
@@ -63,6 +91,17 @@ internal sealed partial class SmokeTest
 
     /// <summary>The commands that have run from an entry point (the next run of each is warm).</summary>
     private readonly HashSet<string> _sweepRan = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// How long each 20 ms wait after a command took until the UI thread ran again, for the report: a sweep that is slow
+    /// with nothing stalling the UI thread has late timers: on the macOS runner each took about 100 ms, 20 on Linux and
+    /// 32 on Windows, so its sweep took three times as long (run 44031325117, docs/ci-flakes.md).
+    /// </summary>
+    private readonly List<double> _sweepWaits = [];
+
+    /// <summary>A 20 ms <c>Task.Delay</c> on the thread pool, and a job posted to the UI thread from it, once per entry point: which of the two is late.</summary>
+    private readonly List<double> _sweepTimers = [];
+    private readonly List<double> _sweepPosts = [];
 
     /// <summary>Commands the sweep never runs, and why: they leave the machine or the app (the report's skips).</summary>
     private static readonly Dictionary<string, string> s_sweepSkips = new(StringComparer.Ordinal)
@@ -1024,12 +1063,29 @@ internal sealed partial class SmokeTest
                 }
             }
 
-            // Close whatever it opened, and give late dialogs a moment.
+            // Close whatever it opened, and give late dialogs a moment. Meanwhile, which half of a late wait is late: a
+            // 20 ms timer on the thread pool, and a job posted to the UI thread from another thread.
+            var timer = Task.Run(static async () =>
+            {
+                var started = Stopwatch.GetTimestamp();
+                await Task.Delay(20).ConfigureAwait(false);
+                return Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            });
+            var post = Task.Run(static () =>
+            {
+                var posted = Stopwatch.GetTimestamp();
+                return Dispatcher.UIThread.InvokeAsync(() => Stopwatch.GetElapsedTime(posted).TotalMilliseconds).GetTask();
+            });
             for (var i = 0; i < 5; i++)
             {
                 CloseSweepOverlays(saw);
+                var waited = Stopwatch.GetTimestamp();
                 await Task.Delay(20).ConfigureAwait(true);
+                _sweepWaits.Add(Stopwatch.GetElapsedTime(waited).TotalMilliseconds);
             }
+
+            _sweepTimers.Add(await timer.ConfigureAwait(true));
+            _sweepPosts.Add(await post.ConfigureAwait(true));
         }
         catch (Exception ex)
         {
@@ -1079,7 +1135,7 @@ internal sealed partial class SmokeTest
         var stallLimit = SweepStallLimit(firstRun);
         if (problem is null && stall > stallLimit.TotalMilliseconds)
         {
-            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run{(gc is null ? string.Empty : ": " + gc)}; it ran {_sweepStall.JobOfMax ?? "unsampled"})";
+            problem = $"the UI thread stalled for {stall:0} ms (over {stallLimit.TotalMilliseconds:0} ms for its {(firstRun ? "first" : "a later")} run; the GC paused {gcPause:0} ms of the run{(gc is null ? string.Empty : ": " + gc)}; it ran {_sweepStall.JobOfMax ?? "unsampled"}{(_sweepStall.CpuOfMax is { } cpu ? "; " + cpu : string.Empty)}{SweepStallStacks(command.Id, entry)})";
         }
 
         var unclosed = await CleanUpSweepAsync(before, saw).ConfigureAwait(true);
@@ -1709,6 +1765,25 @@ internal sealed partial class SmokeTest
         json.WriteString("os", $"{System.Runtime.InteropServices.RuntimeInformation.OSDescription} ({System.Runtime.InteropServices.RuntimeInformation.OSArchitecture})");
         json.WriteNumber("seconds", Math.Round(elapsed.TotalSeconds, 1));
         json.WriteNumber("commands", _sweepRows.Select(r => r.Command).Distinct().Count());
+        foreach (var (name, values, what) in new[] { ("wait20Ms", _sweepWaits, "a 20 ms wait on the UI thread"), ("timer20Ms", _sweepTimers, "a 20 ms timer on the thread pool"), ("postMs", _sweepPosts, "a job posted to the UI thread") })
+        {
+            if (values.Count == 0)
+            {
+                continue;
+            }
+
+            var sorted = values.Order().ToList();
+            json.WriteStartObject(name);
+            json.WriteNumber("count", sorted.Count);
+            json.WriteNumber("p50", Math.Round(sorted[sorted.Count / 2], 1));
+            json.WriteNumber("p90", Math.Round(sorted[sorted.Count * 9 / 10], 1));
+            json.WriteNumber("max", Math.Round(sorted[^1], 1));
+            json.WriteEndObject();
+            var summary = $"{what} took {sorted[sorted.Count / 2]:0} ms at the median, {sorted[sorted.Count * 9 / 10]:0} at the 90th percentile";
+            SweepProgress($"({summary})");
+            Console.Out.WriteLine($"  [sweep] {summary}");
+        }
+
         json.WriteStartObject("totals");
         foreach (var group in _sweepRows.GroupBy(r => r.Entry).OrderBy(g => g.Key, StringComparer.Ordinal))
         {
@@ -1860,23 +1935,224 @@ internal sealed partial class SmokeTest
     /// while a monitor on its own thread saw 57 ms in the same run. While it waits, it notes every 100 ms which posted job
     /// the UI thread is running (<see cref="Ui.RunningJob"/>), to name what the longest wait was spent on.
     /// </summary>
-    internal sealed class SweepStallMonitor
+    internal sealed partial class SweepStallMonitor
     {
         private readonly Lock _gate = new();
         private volatile bool _stopped;
         private long _maxTicks;
         private TimeSpan _maxGcPause;
         private string? _maxJob;
+        private string? _maxCpu;
+        private string? _maxStack;
+        private string? _maxThreads;
         private int _probes;
         private int _probesSent;
         private int _probesAnswered;
         private int _samplesTaken;
         private int _probesRecorded;
 
+        /// <summary>The UI thread, for its processor time: a handle on Windows, its id in the kernel on Linux (0 until known).</summary>
+        private nint _uiThread;
+        private volatile int _uiThreadId;
+
         public SweepStallMonitor()
         {
             Ui.Watch();
+            if (Dispatcher.UIThread.CheckAccess())
+            {
+                KnowUiThread();
+            }
+            else
+            {
+                Dispatcher.UIThread.Post(KnowUiThread, DispatcherPriority.Send);
+            }
+
             new Thread(Loop) { IsBackground = true, Name = "Sweep stall monitor" }.Start();
+        }
+
+        private void KnowUiThread()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                Volatile.Write(ref _uiThread, OpenThread(0x0800 /* THREAD_QUERY_LIMITED_INFORMATION */, false, GetCurrentThreadId()));
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                _uiThreadId = GetTid();
+            }
+        }
+
+        [LibraryImport("kernel32.dll")]
+        private static partial uint GetCurrentThreadId();
+
+        [LibraryImport("kernel32.dll")]
+        private static partial nint OpenThread(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint threadId);
+
+        [LibraryImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetThreadTimes(nint thread, out long creation, out long exit, out long kernel, out long user);
+
+        [LibraryImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetSystemTimes(out long idle, out long kernel, out long user);
+
+        [LibraryImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool CloseHandle(nint handle);
+
+        [LibraryImport("libc", EntryPoint = "gettid")]
+        private static partial int GetTid();
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ProcessMemoryCounters
+        {
+            public uint Cb;
+            public uint PageFaultCount;
+            public nuint PeakWorkingSetSize;
+            public nuint WorkingSetSize;
+            public nuint QuotaPeakPagedPoolUsage;
+            public nuint QuotaPagedPoolUsage;
+            public nuint QuotaPeakNonPagedPoolUsage;
+            public nuint QuotaNonPagedPoolUsage;
+            public nuint PagefileUsage;
+            public nuint PeakPagefileUsage;
+        }
+
+        [LibraryImport("kernel32.dll", EntryPoint = "K32GetProcessMemoryInfo")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static partial bool GetProcessMemoryInfo(nint process, out ProcessMemoryCounters counters, uint size);
+
+        [LibraryImport("kernel32.dll")]
+        private static partial nint GetCurrentProcess();
+
+        /// <summary>
+        /// Page faults so far: the process's, soft and hard together, on Windows; the UI thread's major ones (a page read
+        /// from disk) on Linux; null elsewhere. A stall the UI thread spent waiting, with thousands of faults in it, is code
+        /// or data paged back in from disk: the 1.0 validation's Windows sweep (2026-11-20) stalled nine commands for 516 to
+        /// 1105 ms, most on their first run, the UI thread running 0 to 16 ms of each, at a memory load of 81%.
+        /// </summary>
+        private long? PageFaults()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return GetProcessMemoryInfo(GetCurrentProcess(), out var counters, (uint)Marshal.SizeOf<ProcessMemoryCounters>()) ? counters.PageFaultCount : null;
+            }
+
+            if (OperatingSystem.IsLinux() && _uiThreadId is > 0 and var id)
+            {
+                try
+                {
+                    // majflt, the 12th field.
+                    var stat = File.ReadAllText($"/proc/self/task/{id}/stat");
+                    return long.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[9], CultureInfo.InvariantCulture);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>The UI thread's processor time so far, in ms (Windows, Linux; null elsewhere or when it can't be read).</summary>
+        private double? UiThreadCpuMilliseconds()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return Volatile.Read(ref _uiThread) is not 0 and var thread && GetThreadTimes(thread, out _, out _, out var kernel, out var user)
+                    ? (kernel + user) / 10_000.0
+                    : null;
+            }
+
+            if (OperatingSystem.IsLinux() && _uiThreadId is > 0 and var id)
+            {
+                try
+                {
+                    // utime and stime, the 14th and 15th fields, in clock ticks (USER_HZ, 100 on Linux).
+                    var stat = File.ReadAllText($"/proc/self/task/{id}/stat");
+                    var fields = stat[(stat.LastIndexOf(')') + 2)..].Split(' ');
+                    return (long.Parse(fields[11], CultureInfo.InvariantCulture) + long.Parse(fields[12], CultureInfo.InvariantCulture)) * 10.0;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or IndexOutOfRangeException or ArgumentOutOfRangeException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The UI thread's state in the kernel (Linux): <c>R</c> running or runnable, <c>S</c> asleep in a wait, <c>D</c> in
+        /// an uninterruptible one, with the kernel function it waits in. The 1.0 validation's WSL smoke (2026-11-20) stalled
+        /// two menu items' first runs for 764 and 1077 ms with the UI thread running 0 ms of them on an idle machine and no
+        /// page read from disk: a wait, and this names it (the X server's socket, a lock, a pipe). Null off Linux.
+        /// </summary>
+        private string? KernelState()
+        {
+            if (!OperatingSystem.IsLinux() || _uiThreadId is not (> 0 and var id))
+            {
+                return null;
+            }
+
+            try
+            {
+                var task = $"/proc/self/task/{id}/";
+                var stat = File.ReadAllText(task + "stat");
+                var state = stat.LastIndexOf(')') is var end and >= 0 && end + 2 < stat.Length ? stat[end + 2].ToString() : "?";
+                var wchan = File.ReadAllText(task + "wchan").Trim();
+                return state != "R" && wchan is { Length: > 0 } and not "0" ? $"{state} in {wchan}" : state;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>The machine's processor time so far, busy and in all (any unit; Windows, Linux; null elsewhere).</summary>
+        private static (long Busy, long Total)? MachineTimes()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                return GetSystemTimes(out var idle, out var kernel, out var user) ? (kernel + user - idle, kernel + user) : null; // kernel includes idle
+            }
+
+            if (OperatingSystem.IsLinux())
+            {
+                try
+                {
+                    // "cpu  user nice system idle iowait irq softirq steal ...", in clock ticks.
+                    var times = File.ReadLines("/proc/stat").First().Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).Take(8)
+                        .Select(t => long.Parse(t, CultureInfo.InvariantCulture)).ToArray();
+                    var total = times.Sum();
+                    return (total - times[3] - (times.Length > 4 ? times[4] : 0), total);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The UI thread's processor time in the longest wait, and how busy the machine's cores were (Windows, Linux): a
+        /// thread that ran nearly all of the wait was busy (layout, rendering, a command's own work), one that ran little
+        /// of it waited or wasn't given a core, which a machine whose cores were all busy tells. The 1.0 validation's
+        /// Windows smoke (2026-11-20) stalled three commands for 502 to 979 ms in no posted job, which took 0 to 110 ms on
+        /// CI's runner the same day, and nothing said which. Null when it couldn't be read.
+        /// </summary>
+        public string? CpuOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxCpu;
+                }
+            }
         }
 
         public double MaxMilliseconds
@@ -1914,6 +2190,33 @@ internal sealed partial class SmokeTest
                 lock (_gate)
                 {
                     return _maxJob;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Where the UI thread was asleep 300 ms into the longest wait, on Linux (<see cref="ThreadStack.Scan(int, int, int)"/>):
+        /// its system call and the code addresses on its stack; null for a shorter wait, a running thread or elsewhere.
+        /// </summary>
+        public string? StackOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxStack;
+                }
+            }
+        }
+
+        /// <summary>Every thread's state and stack at the same moment as <see cref="StackOfMax"/> (<see cref="ThreadStack.AllThreads"/>).</summary>
+        public string? ThreadsOfMax
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _maxThreads;
                 }
             }
         }
@@ -1965,6 +2268,9 @@ internal sealed partial class SmokeTest
                 _maxTicks = 0;
                 _maxGcPause = TimeSpan.Zero;
                 _maxJob = null;
+                _maxCpu = null;
+                _maxStack = null;
+                _maxThreads = null;
             }
         }
 
@@ -1974,6 +2280,9 @@ internal sealed partial class SmokeTest
             {
                 var start = Stopwatch.GetTimestamp();
                 var gcBefore = GC.GetTotalPauseDuration();
+                var cpuBefore = UiThreadCpuMilliseconds();
+                var faultsBefore = PageFaults();
+                var machineBefore = MachineTimes();
                 long answered = 0;
                 Task probe;
                 try
@@ -1991,6 +2300,8 @@ internal sealed partial class SmokeTest
                 }
 
                 Dictionary<string, int>? jobs = null;
+                Dictionary<string, int>? kernel = null;
+                string? stack = null, threads = null;
                 var samples = 0;
                 try
                 {
@@ -2004,6 +2315,18 @@ internal sealed partial class SmokeTest
                         jobs ??= new(StringComparer.Ordinal);
                         var job = Ui.RunningJob is { } posted ? "the job posted at " + posted : "no posted job";
                         jobs[job] = jobs.GetValueOrDefault(job) + 1;
+                        if (KernelState() is { } state)
+                        {
+                            kernel ??= new(StringComparer.Ordinal);
+                            kernel[state] = kernel.GetValueOrDefault(state) + 1;
+                            if (samples == 2 && state[0] is 'S' or 'D' && _uiThreadId is > 0 and var id)
+                            {
+                                // 300 ms into the wait, asleep: where, and what every other thread does then (ThreadStack).
+                                stack = ThreadStack.Scan(id);
+                                threads = ThreadStack.AllThreads();
+                            }
+                        }
+
                         samples++;
                         Interlocked.Increment(ref _samplesTaken);
                     }
@@ -2015,6 +2338,7 @@ internal sealed partial class SmokeTest
 
                 var ticks = Interlocked.Read(ref answered) - start;
                 var gcPause = GC.GetTotalPauseDuration() - gcBefore;
+                var (cpuAfter, machineAfter, faultsAfter) = samples > 0 ? (UiThreadCpuMilliseconds(), MachineTimes(), PageFaults()) : (null, null, null);
                 lock (_gate)
                 {
                     _probes++;
@@ -2024,6 +2348,18 @@ internal sealed partial class SmokeTest
                         _maxTicks = ticks;
                         _maxGcPause = gcPause;
                         _maxJob = jobs?.MaxBy(j => j.Value) is { } most ? $"{most.Key} ({most.Value} of {samples} samples)" : null;
+                        if (kernel is { Count: > 0 })
+                        {
+                            _maxJob += "; in the kernel " + string.Join(", ", kernel.OrderByDescending(k => k.Value).Take(3).Select(k => $"{k.Key} {k.Value}×"));
+                        }
+
+                        _maxStack = stack;
+                        _maxThreads = threads;
+                        _maxCpu = cpuBefore is { } a && cpuAfter is { } b
+                            ? $"the UI thread ran {b - a:0} ms of it"
+                              + (machineBefore is { } m && machineAfter is { } n && n.Total > m.Total ? $", the machine's cores were {100.0 * (n.Busy - m.Busy) / (n.Total - m.Total):0}% busy" : string.Empty)
+                              + (faultsBefore is { } f && faultsAfter is { } g ? (OperatingSystem.IsWindows() ? $", {g - f} page fault(s) in the process" : $", {g - f} major page fault(s) on the UI thread") : string.Empty)
+                            : null;
                     }
                 }
 
@@ -2037,6 +2373,10 @@ internal sealed partial class SmokeTest
             {
                 _stopped = true;
                 Ui.Unwatch();
+                if (OperatingSystem.IsWindows() && Interlocked.Exchange(ref _uiThread, 0) is not 0 and var thread)
+                {
+                    CloseHandle(thread);
+                }
             }
         }
     }

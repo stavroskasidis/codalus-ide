@@ -16,6 +16,42 @@ namespace Codalus.LanguageServices.Host.Tests;
 /// </summary>
 public sealed class SolutionSwitchTests
 {
+    /// <summary>
+    /// Saves <paramref name="path"/> as an editor does, waiting while another process reads it. Lib's change has the build
+    /// host evaluate the folder's projects again, and on Windows a write can't open Tool.csproj while that reads it:
+    /// "The process cannot access the file '…\Tool.csproj' because it is being used by another process" (Windows CI,
+    /// develop's dry run 44922234897, with the runner's CPU queue at 57). The wait is logged, so a run says when it waited.
+    /// </summary>
+    private static async Task SaveAsync(string path, string text, Action<string> log, CancellationToken ct)
+    {
+        var waited = Stopwatch.StartNew();
+        var tries = 0;
+        while (true)
+        {
+            try
+            {
+                await File.WriteAllTextAsync(path, text, ct);
+                if (tries > 0)
+                {
+                    log($"saved {Path.GetFileName(path)} after {waited.ElapsedMilliseconds} ms open in another process");
+                }
+
+                return;
+            }
+            catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xFFFF) is 32 or 33)
+            {
+                // ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION: another process has it open.
+                if (waited.Elapsed > TimeSpan.FromSeconds(10))
+                {
+                    throw new IOException($"{path} was open in another process for {waited.ElapsedMilliseconds} ms ({tries} tries).", ex);
+                }
+
+                tries++;
+                await Task.Delay(100, ct);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(false)] // the results arrive while the folder closes: its build host finishes the build before it stops
     [InlineData(true)] // they arrived just before the close, and wait for the next flush
@@ -90,7 +126,7 @@ public sealed class SolutionSwitchTests
             Log("changing Lib and Tool");
             foreach (var project in new[] { lib, tool })
             {
-                await File.WriteAllTextAsync(project, (await File.ReadAllTextAsync(project, ct)).Replace("</Project>", $"<!-- {Guid.NewGuid():N} -->\n</Project>", StringComparison.Ordinal), ct);
+                await SaveAsync(project, (await File.ReadAllTextAsync(project, ct)).Replace("</Project>", $"<!-- {Guid.NewGuid():N} -->\n</Project>", StringComparison.Ordinal), Log, ct);
             }
 
             string Describe() => $"C# {languages.Status("csharp")}; design-time builds: {string.Join(", ", solutions.CompilerInputs.Keys.Select(Path.GetFileName))}\n" + string.Join('\n', log);
@@ -123,6 +159,67 @@ public sealed class SolutionSwitchTests
             Assert.Equal(new[] { blogging }, solutions.CompilerInputs.Keys);
             Assert.Null(languages.Project(lib));
             Assert.Null(languages.Project(tool));
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(root, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+    /// <summary>
+    /// A solution's first design-time builds reach the shell before it says the solution opened: the build host answers
+    /// the open as soon as evaluation starts, and the answer's continuation, which announces the solution, ran after the
+    /// results on a busy machine. The language service took those results for the solution before and dropped them, so
+    /// the C# host never had the project: the smoke test's lambda compiled in Miscellaneous Files (CS1061, Linux CI, run
+    /// 44574066272). Here the announcement waits until the design-time builds are done, and the flushes until it was made.
+    /// </summary>
+    [Fact]
+    public async Task A_solutions_results_that_come_before_its_open_is_announced_reach_the_language_host()
+    {
+        var root = Path.Combine(Codalus.Platform.RealPath.Resolve(Path.GetTempPath()), "codalus-announce-" + Guid.NewGuid().ToString("N"));
+        var data = RepoPaths.CopyFixture("Data", Path.Combine(root, "data"));
+        var blogging = Path.Combine(data, "Blogging", "Blogging.csproj");
+        var policy = new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) };
+        await using var solutions = new SolutionService(() => RepoPaths.BuildHostAssembly, policy);
+        var ct = TestContext.Current.CancellationToken;
+
+        // Ahead of the language service's handler: the announcement is held until the design-time builds are done.
+        var held = false;
+        solutions.SolutionChanged += (_, _) =>
+        {
+            if (solutions.Solution is not null && !held)
+            {
+                held = true;
+                SpinWait.SpinUntil(() => solutions.DesignTimeProgress is { Completed: true }, TimeSpan.FromSeconds(120));
+            }
+        };
+        var registry = new LanguageServiceRegistry();
+        registry.Register(new LanguageServiceDescriptor("csharp", "C#", [".cs"], "C#", () => ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly)) { Languages = ["csharp", "vb"], MoreProjectLanguages = ["VB"] });
+        await using var languages = new LanguageService(registry, solutions, policy);
+        try
+        {
+            // The flushes wait until the announcement was made, as the batch's delay let them on the busy machine.
+            var gate = languages.FlushGate;
+            await gate.WaitAsync(ct);
+            try
+            {
+                await solutions.OpenAsync(Path.Combine(data, "Data.slnx"), trusted: true, restore: false, ct);
+                Assert.True(held);
+                Assert.True(solutions.CompilerInputs.ContainsKey(blogging), "The design-time build was meant to come before the announcement.");
+            }
+            finally
+            {
+                gate.Release();
+            }
+
+            await LanguageFixture.WaitUntilAsync(() => languages.Status("csharp") is { State: WorkspaceStates.Ready, Projects: 1 }, TimeSpan.FromSeconds(120),
+                () => $"C# {languages.Status("csharp")}; the projects' way there: {languages.ProjectHistory()}");
+            Assert.NotNull(languages.Project(blogging));
         }
         finally
         {

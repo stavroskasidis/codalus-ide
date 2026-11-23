@@ -100,13 +100,13 @@
                 <ul>
                     <li>.sln and .slnx, SDK-style projects and solution filters</li>
                     <li>Property pages that show where each value comes from</li>
-                    <li>Launch profiles, Configuration Manager and Reference Manager</li>
+                    <li>Launch profiles in the Start button's drop-down, with the debugging browser and script debugging, as in the classic IDE; Configuration Manager and Reference Manager</li>
                     <li>Browse, update and consolidate packages; Central Package Management</li>
                     <li>nuget.org's verified owners: a badge after a package whose ID prefix nuget.org reserved for one of its owners, shown only when it can be nobody else's copy (never from a mirror), and search that leaves out what package source mapping wouldn't restore</li>
                     <li>New Project as the classic IDE's three-page wizard: recent templates, search and filters, each template's own options, and the framework with its support</li>
                     <li>The Properties window, Show All Files, Sync with Active Document and Track Active Item, Add New Item, templates and External Tools</li>
                     <li>Show All Files as in the classic IDE: bin, obj, node_modules and the other folders outside a project shown dimmed and listed when you expand them; Sync with Active Document and Track Active Item jump straight to the file, in solutions of hundreds of projects</li>
-                    <li>Folder mode for a folder without a solution: each folder is listed when you expand it, so a folder of any size opens at once, and the search box searches all of it in the background</li>
+                    <li>Folder mode for a folder without a solution: each folder is listed when you expand it, so a folder of any size opens at once, the search box searches all of it in the background, Find in Files looks in the entire workspace, the current project or the current directory, and a double-click on a solution file opens the solution</li>
                     <li>A solution reopens as you left it: documents, breakpoints, bookmarks, configuration and the Solution Explorer's expansion, kept in a self-ignoring .codalus/state next to it</li>
                     <li>.NET 11 projects with C# 15, every framework from .NET Core 2.0 to .NET 10, and older SDKs in global.json</li>
                     <li>A start window with your recent solutions, pinned and searchable, that shows at once: an entry on a network share that doesn't answer never holds it up</li>
@@ -142,8 +142,9 @@
                     <li>Long arrays in ranges of 1,000, each read as you expand it, and debugger windows behind other tabs that wait until you show them</li>
                     <li>Dumps, Parallel Stacks and Parallel Watch, and Just-In-Time crash dumps</li>
                     <li>Attach over SSH, in containers and in WSL; console apps in the integrated terminal</li>
+                    <li>The WSL launch profile: run and debug in a WSL distribution from Windows, with the .NET your app needs installed there when it's missing</li>
                     <li>Blazor WebAssembly in Chrome, Edge or Chromium</li>
-                    <li>A .NET debugger of Codalus IDE's own, the Codalus debugger, on .NET and .NET Framework (netcoredbg stays one release as a fallback, a setting away): Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
+                    <li>A .NET debugger of Codalus IDE's own, the Codalus debugger, on .NET and .NET Framework (netcoredbg stays in 1.0 as a fallback, a setting away): Hot Reload while debugging (edits apply as you continue, save or press Alt+F10, and the program's update handlers run; a Blazor Web App's server and its WebAssembly components in the browser included) and Edit and Continue (the method you're stopped in goes on in its new code)</li>
                     <li>Set Next Statement, Step Into Specific, returned values, frozen threads and object IDs; hit counts and logpoints without a stop per hit; lambdas, LINQ and the rest of C# in Watch and conditions, and Visual Basic in Visual Basic code; [DebuggerTypeProxy] and Results View</li>
                     <li>Disassembly, Registers and Memory windows for managed code on x64 and arm64; symbol paths and symbol servers (off until you turn one on); Windows PDBs</li>
                     <li>Several startup projects in one debug session, where a stop in one program pauses the others</li>
@@ -158,7 +159,7 @@
                     <li>Git Changes with thousands of changed files: only the rows on screen are built, and a refresh keeps your selection, scroll position and collapsed folders</li>
                     <li>Open a changed file from Git Changes at its first change</li>
                     <li>Diffs and the merge editor in the editor's colors; diffs open at their first change, with Quick Info and CodeLens on the working tree</li>
-                    <li>A branch drop-down in Git Changes: search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
+                    <li>A branch drop-down in Git Changes: Local and Remote tabs, the branches in folders (or a list), search, outgoing and incoming counts, and each branch's own menu (checkout, merge, rebase, update, push, rename, delete, compare)</li>
                     <li>Update a branch from its remote without checking it out</li>
                     <li>Manage Branches, the classic IDE's Git Repository window: every branch in folders, the remotes, tags, open pull requests and submodules in a tree, and the selected branch's history with its incoming and outgoing commits; thousands of branches and tags, or a commit of 10,000 files, open without a pause</li>
                     <li>Fetch, pull, push and sync show in Git Changes while they run, with Cancel, as in the classic IDE</li>
@@ -166,7 +167,7 @@
                     <li>A folder's menu in Git Changes, as in the classic IDE: stage, discard, stash, ignore, history, reveal, terminal, copy path</li>
                     <li>A history graph in the classic IDE's columns, filtered by message, author or commit ID, with incoming and outgoing commits, each commit's details in a tab of its own (its diff, Revert, Reset, Explain with AI), and any two commits, or a commit and its parent, compared file by file</li>
                     <li>Interactive rebase</li>
-                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions lined up with it row by row</li>
+                    <li>A 3-way merge editor: check boxes beside each conflict, the merge base in the result, both versions lined up with it row by row, and smaller conflicts than git's when a branch re-indented the code</li>
                     <li>Stash, tags, remotes, worktrees and Git LFS</li>
                     <li>Pull requests, with review comments in the editor</li>
                     <li>GitHub, Azure DevOps and GitLab, and their own servers: Azure DevOps Server found from the remote, signed in to with your Windows account</li>
@@ -272,7 +273,10 @@
                     <li>On Windows, the XAML Previewer draws WPF XAML on your app's own WPF as you type: design-time data from d:DesignInstance, the design size, zoom and scale, and a click selects the element's tag</li>
                     <li>On Windows, the Live Visual Tree and Live Property Explorer for running WPF apps: logical and visual trees, dependency property values with their sources, values set live, highlight, pick and Go to XAML</li>
                     <li>On Windows, XAML Hot Reload for running WPF apps when you save, failed bindings in the Error List at their XAML lines, and XAML breakpoints, Break When Value Changes and the style explanation</li>
-                    <li>On Windows, the Windows Forms designer on your app's own Windows Forms: select, move, resize, nudge, copy and paste controls, the Toolbox with an icon for every control and your own controls, the Properties window and its Events view</li>
+                    <li>On Windows, the Windows Forms designer on your app's own Windows Forms: select, move, resize, nudge, copy and paste controls, the Toolbox with an icon for every control, your own controls and those of the control libraries you reference as NuGet packages, the Properties window and its Events view</li>
+                    <li>Forms that derive from a control library's form, as a vendor's project template's do, with the library's controls on them</li>
+                    <li>A control library's controls in the Toolbox as the classic IDE shows them: in its own tabs, with its own pictures; right-click for Choose Items, Sort Items Alphabetically, Show All and Collapse All</li>
+                    <li>A control library's own designers, as DevExpress ships them for the classic IDE: its smart tags and verbs (Run Designer, Add Column), its design-time buttons on the form (the grid's level designer), a grid that creates its view when you drop it, and its dialogs such as the Grid Designer, over the IDE</li>
                     <li>The Properties window as the classic IDE's: categories that collapse, Font, Location, Size and Padding opened into their parts (each written as one assignment), color, alignment, multi-line text, shortcut key and date drop-downs, the font editor, the String Collection Editor and Select Resource, choices for AcceptButton and Cursor, Reset, and a component list</li>
                     <li>Drag, click or double-click from the Toolbox (or press Enter on an item) to add controls, into the selected container as in the classic IDE</li>
                     <li>Build while a form is open: the designer runs on a copy of your build output, as the classic IDE does, and loads the form on the new build after it</li>

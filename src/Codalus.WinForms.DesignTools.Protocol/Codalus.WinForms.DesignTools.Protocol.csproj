@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\Codalus.WinForms.DesignTools.props" />
+  <PropertyGroup>
+    <AssemblyName>Microsoft.DotNet.DesignTools.Protocol</AssemblyName>
+    <RootNamespace>Microsoft.DotNet.DesignTools.Protocol</RootNamespace>
+    <Description>Codalus IDE: the replacement of Microsoft.DotNet.DesignTools.Protocol's API for control libraries' designers (#461, ADR 0106).</Description>
+  </PropertyGroup>
+</Project>

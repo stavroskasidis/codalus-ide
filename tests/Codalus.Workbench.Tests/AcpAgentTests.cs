@@ -523,6 +523,17 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_crash_right_after_many_updates_keeps_every_one_of_them()
+    {
+        // The turn ended on the lost connection before the updates read ahead of it were handled, so the agent's last
+        // words were cut short or lost ("Starting…" came back empty, macOS CI, run 44259758111).
+        await ConfigureAsync();
+        var turn = await AskAsync("crash-chatty");
+        Assert.Equal(new string('w', 400), turn.Answer);
+        Assert.Contains("The agent 'stand-in' stopped.", turn.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task An_agent_that_needs_a_sign_in_shows_its_ways_and_runs_the_chosen_one()
     {
         await ConfigureAsync("ACP_FAKE_AUTH=1");
@@ -547,9 +558,9 @@ public sealed partial class AcpAgentTests : IAsyncDisposable
         Assert.Equal("There is no agent 'evil' in your settings (ai.agents).", turn.Error);
         Assert.False(File.Exists(_log));
 
-        using var parsed = JsonDocument.Parse("""{"pi":{"command":"npx","args":["pi-acp@0.0.34"],"env":{"K":"V"}},"broken":{"args":[]}}""");
+        using var parsed = JsonDocument.Parse("""{"pi":{"command":"npx","args":["pi-acp@0.0.35"],"env":{"K":"V"}},"broken":{"args":[]}}""");
         var pi = Assert.Single(AcpAgents.Parse(parsed.RootElement));
-        Assert.Equal(("pi", "npx", "pi-acp@0.0.34", "V"), (pi.Key, pi.Value.Command, pi.Value.Args.Single(), pi.Value.Env["K"]));
+        Assert.Equal(("pi", "npx", "pi-acp@0.0.35", "V"), (pi.Key, pi.Value.Command, pi.Value.Args.Single(), pi.Value.Env["K"]));
     }
 
     [Fact]

@@ -21,6 +21,9 @@ public sealed partial class ShellHost
 
     private CodeDocument? _previewed;
     private PreviewTarget? _previewTarget;
+
+    /// <summary>The previewed file's project or app couldn't be resolved (not restored yet, say): the next restore tries again.</summary>
+    private bool _previewUnresolved;
     private CancellationTokenSource? _previewEdit;
     private CancellationTokenSource? _previewCaret;
     private (int Version, XamlLogicalNode[] Nodes)? _previewTree;
@@ -88,6 +91,24 @@ public sealed partial class ShellHost
         };
 
         Builds.Finished += (_, _) => Ui.Post(ShowXamlBuildDiagnostics);
+
+        // A preview shown before the restore on open had ended said the app doesn't reference Avalonia (the package's
+        // properties come with the restore) and stayed so, the runner idle until the test's 300 s ran out (Windows CI,
+        // runs 42294063461 and 44031325117): a restore that succeeds resolves again a preview that couldn't resolve.
+        Solutions.RestoreStateChanged += (_, e) =>
+        {
+            if (e.State == "succeeded")
+            {
+                Ui.Post(() =>
+                {
+                    if (_previewUnresolved && _previewed is not null)
+                    {
+                        PreviewerLog.AppendLine("The restore succeeded: preparing the preview again.");
+                        _ = RefreshPreviewAsync(rebuild: false);
+                    }
+                });
+            }
+        };
         Solutions.SolutionChanged += (_, _) => Ui.Post(() =>
         {
             // Another solution (or none): the designer host of the last one goes.
@@ -201,7 +222,20 @@ public sealed partial class ShellHost
                 _previewTarget = null;
             }
 
-            _previewTarget ??= await Previewer.ResolveAsync(model.Path, CancellationToken.None).ConfigureAwait(true);
+            if (_previewTarget is null)
+            {
+                _previewUnresolved = false;
+                try
+                {
+                    _previewTarget = await Previewer.ResolveAsync(model.Path, CancellationToken.None).ConfigureAwait(true);
+                }
+                catch (PreviewerException)
+                {
+                    _previewUnresolved = model == _previewed;
+                    throw;
+                }
+            }
+
             XamlPreview.SupportsThemes = _previewTarget.Dialect == PreviewDialect.Avalonia;
             var text = model.Text.Text;
             var result = await Previewer.ShowAsync(_previewTarget, text, CancellationToken.None).ConfigureAwait(true);

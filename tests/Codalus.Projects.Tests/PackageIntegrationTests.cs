@@ -249,6 +249,41 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
         Assert.Null(status.Packages[1].Latest);
     }
 
+    [Fact]
+    public async Task The_status_asks_only_the_sources_package_source_mapping_lets_restore_take_each_package_from()
+    {
+        // The sample's own mapping, with the mock feed in nuget.org's place: Codalus.Sample.* only from the local feed. The
+        // status asked every source, so the shell's package tests asked nuget.org for the sample's packages and timed out
+        // when it was slow (macOS CI, PR #405's run 43828283396).
+        using var server = new MockNuGetServer();
+        File.WriteAllText(Path.Combine(Fixture, "nuget.config"), $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <configuration>
+              <packageSources>
+                <clear />
+                <add key="local" value="feed" />
+                <add key="mock" value="{server.IndexUrl}" allowInsecureConnections="true" />
+              </packageSources>
+              <packageSourceMapping>
+                <packageSource key="local">
+                  <package pattern="Codalus.Sample.*" />
+                </packageSource>
+                <packageSource key="mock">
+                  <package pattern="*" />
+                </packageSource>
+              </packageSourceMapping>
+            </configuration>
+            """);
+        await _service.OpenAsync(Slnx, trusted: true, restore: false, Timeout());
+
+        var status = await _packages.StatusAsync(
+            [new PackageStatusQuery("Codalus.Sample.Greeting", "1.0.0"), new PackageStatusQuery("Old.Package", "0.9.0")], prerelease: false, Timeout());
+        Assert.Equal(["1.1.0", "1.0.0"], status.Packages.Select(p => p.Latest));
+        Assert.Empty(status.Errors);
+        Assert.Contains(server.Paths, p => p.Contains("old.package", StringComparison.Ordinal));
+        Assert.DoesNotContain(server.Paths, p => p.Contains("codalus.sample", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("netcoreapp2.1", "1.0.0")]
     [InlineData("netcoreapp3.1", "2.0.0")]
@@ -573,7 +608,7 @@ public sealed class PackageIntegrationTests : IAsyncLifetime
             }
         };
 
-        var result = await _service.BuildAsync(BuildTargets.Pack, Plain, Timeout());
+        var result = await _service.BuildAsync(BuildTargets.Pack, Plain, BuildLimit.Token());
         Assert.True(result.Succeeded, string.Join(Environment.NewLine, output));
         var package = Path.Combine(Fixture, "src", "Plain", "bin", "Debug", "Plain.1.0.0.nupkg");
         Assert.True(File.Exists(package), string.Join(Environment.NewLine, output));

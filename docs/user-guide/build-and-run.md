@@ -69,7 +69,13 @@ A `.resx` file opens in the **resource editor**, a table of its resources:
 **Debug → Start Without Debugging** (`Ctrl+F5`) builds the startup project, then starts it:
 
 - **The startup project** is the first executable project in the solution, unless you chose another with **Set as Startup Project** (Solution Explorer) or Debug → Select Startup Project. Your choice is remembered per solution.
-- **Launch profiles** come from `Properties/launchSettings.json`. Pick one with the status bar's startup item, or with Debug → Select Launch Profile. `Project` and `Executable` profiles are supported:
+- **Launch profiles** come from `Properties/launchSettings.json`. Pick one from the arrow beside the toolbar's Start button, or with Debug → Select Launch Profile. The choice is saved with the solution. The Start button's drop-down, as in the classic IDE:
+  - **Start**, with the startup project and its profile;
+  - the startup project's **launch profiles**, the one Start uses checked. A profile Codalus can't run (`IISExpress`) is listed dimmed, and its tooltip says why;
+  - for a web app (a profile with an `applicationUrl`): **Web Browser**, the browser `F5` debugs the page in (the `debug.browser` setting: Automatic, Chrome, Edge or Chromium; a browser that isn't installed is dimmed), and **Script Debugging** (the `debug.javaScript` setting, [JavaScript debugging](web.md#debugging-the-server-and-the-page-together));
+  - ***Project* Debug Properties**, which opens Project Properties on its Debug page, where you edit the profiles.
+
+  The drop-down reads `launchSettings.json` again each time it opens, so profiles you add in the editor show at once. `Project` and `Executable` profiles are supported:
   - command-line arguments
   - working directory
   - environment variables
@@ -77,5 +83,5 @@ A `.resx` file opens in the **resource editor**, a table of its resources:
   - `launchBrowser`, which opens the app's URL once it is listening
 - **Output**: the program's output appears in View → Output → Run: *project*. What it writes to standard error shows in red, and its ANSI colors (a logger's levels, a test runner's results) show as colors, made readable on the theme's background, instead of escape codes. Bold text shows in the bright color at the regular weight. It has no console input there (reads see end of input). A channel holds the last 4 million characters: while a program floods it, the oldest lines drop off steadily, and if you've scrolled up or turned on Scroll Lock your lines stay where they are. On Windows, the setting **Run Console Apps in an External Console** gives console apps a window of their own instead. Where `run.console` sends a console app (a console window, the integrated terminal), a Hot Reload run goes too ([Hot Reload](web.md#hot-reload)).
 - **While it builds and starts**: from the click, the toolbar shows what it's doing ("Building Hello…", then "Starting Hello…") over a running bar in the Start buttons' place, with **Stop** beside it. Stop (or `Shift+F5`) then cancels the build, and the program doesn't start. The same goes for Start Debugging (`F5`) and Start with Hot Reload.
-- **Stop**: Debug → Stop Running Programs (`Shift+F5`), the toolbar's Stop, or the status bar item. This ends the program and the processes it started.
+- **Stop**: Debug → Stop Running Programs (`Shift+F5`), the toolbar's Stop, or the status bar item. This ends the program and the processes it started. Closing the IDE ends them too.
 - **The runtime**: a program runs on the runtimes of the SDK the solution builds with, as with `dotnet run`: its apphost gets that SDK's folder in `DOTNET_ROOT` unless you set it. On Apple silicon, .NET 5 and earlier run as x64 programs on the x64 runtime; on Linux, .NET Core 2.x and 3.x get the system's ICU. The output says when Codalus changed something, and [Older .NET versions](dotnet-versions.md) says why.

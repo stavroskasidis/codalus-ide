@@ -67,6 +67,24 @@ public sealed class DeferredContent : Decorator
         IsBuilt = true;
         EffectiveViewportChanged -= OnEffectiveViewportChanged;
         Child = ContentTemplate?.Build(DataContext);
+
+        // The scroll viewer makes up for the rows above the view only when it arranges, and it arranges only when its
+        // content's height changes: rows made above the view that grow by as much as those made below shrink leave the
+        // list's height as it was, so the list's panel was arranged on its own and what's shown moved (Windows CI, run
+        // 43733266567). So the scroll viewer and everything between are measured and arranged again with this row.
+        if (_anchors is null)
+        {
+            return;
+        }
+
+        foreach (var visual in this.GetVisualAncestors())
+        {
+            (visual as Layoutable)?.InvalidateMeasure();
+            if (ReferenceEquals(visual, _anchors))
+            {
+                break;
+            }
+        }
     }
 
     protected override Size MeasureOverride(Size availableSize)

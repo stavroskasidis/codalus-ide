@@ -27,7 +27,7 @@ public sealed class AllRepositoriesShellTests
         var error = process.StandardError.ReadToEndAsync();
         var output = process.StandardOutput.ReadToEnd();
         process.WaitForExit();
-        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)}: {error.GetAwaiter().GetResult()}");
+        Assert.True(process.ExitCode == 0, $"git {string.Join(' ', arguments)} (exit code {process.ExitCode}, 0x{process.ExitCode:X8}): {error.GetAwaiter().GetResult()}");
         return output;
     }
 
@@ -118,16 +118,28 @@ public sealed class AllRepositoriesShellTests
         Assert.Contains("App: This repository has no remote to push to.", failed, StringComparison.Ordinal);
         Assert.Contains("Library: This repository has no remote to push to.", failed, StringComparison.Ordinal);
 
-        // The branch drop-down: Common branches, then each repository's.
+        // The branch drop-down's Local tab: Common branches, then each repository's, each a group of the tree.
         var branches = f.Shell.GitBranches;
         branches.IsOpen = true;
         await ShellFixture.PumpUntil(() => branches.IsAllRepositories && branches.Rows.Any(r => r.IsCommon));
         Assert.Equal(["develop", "main"], branches.Rows.Where(r => r.IsCommon).Select(r => r.Name));
         Assert.True(branches.Rows.Single(r => r.IsCommon && r.Name == "main").IsCurrent);
         Assert.Equal(
-            ["Common branches", "All branches", "App (main)", "Library (main)"],
-            branches.Rows.Where(r => r.IsHeader).Select(r => r.HeaderText));
+            ["Common branches", "App (main)", "Library (main)"],
+            branches.Rows.Where(r => r.IsFolder && r.Depth == 0).Select(r => r.Name));
         Assert.Contains(branches.Rows, r => r.Name == "only-app" && r.Repository == f.Shell.Git);
+
+        // The list view: the groups are headers; the Remote tab says neither has a remote.
+        branches.IsTreeView = false;
+        Assert.Equal(
+            ["Common branches", "App (main)", "Library (main)"],
+            branches.Rows.Where(r => r.IsHeader).Select(r => r.HeaderText));
+        branches.IsRemoteTab = true;
+        Assert.True(branches.IsNoRemotes);
+        Assert.Equal("None of the repositories has a remote.", branches.NoRemotesText);
+        Assert.Empty(branches.Rows);
+        branches.IsRemoteTab = false;
+        branches.IsTreeView = true;
         NavigationDepthTests.Screenshot(f, "all-repositories-branches");
 
         // A Common branch's menu: what runs in every repository, and nothing that is one repository's.

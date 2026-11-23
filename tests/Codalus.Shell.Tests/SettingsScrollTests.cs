@@ -108,15 +108,85 @@ public class SettingsScrollTests
         Assert.Contains(page.Rows.TakeWhile(r => r != top), r => !r.IsBuilt);
         string State() => $"row {page.Rows.ToList().IndexOf(top)} of {page.Rows.Count()} at {top.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px, "
             + $"offset {page.Scroll.Offset.Y:F0}, extent {page.Scroll.Extent.Height:F0}, viewport {page.Scroll.Viewport.Height:F0}, "
-            + $"built {page.Rows.Count(r => r.IsBuilt)}, row height {top.Bounds.Height:F0}";
+            + $"built {page.Rows.Count(r => r.IsBuilt)}, row height {top.Bounds.Height:F0}, the scroll viewer's anchor {Anchor()}";
+        string Anchor() => page.Scroll.CurrentAnchor is DeferredContent anchor
+            ? $"row {page.Rows.ToList().IndexOf(anchor)} at {anchor.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px"
+            : page.Scroll.CurrentAnchor?.GetType().Name ?? "none";
         var before = State();
+
+        // Each change of the offset while the rows above are made, and what made it: the movement was reproduced locally (2
+        // of 80 jumps at 800×800, in one of five sweeps of window sizes and places) with the row's own height unchanged. The
+        // cause, rows made above and below whose heights changed by as much, is the test below's.
+        var scrolls = new List<string>();
+        var offset = page.Scroll.Offset.Y;
+        void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
+        {
+            var callers = new System.Diagnostics.StackTrace().GetFrames().Select(frame => frame.GetMethod()).OfType<System.Reflection.MethodBase>()
+                .Select(method => $"{method.DeclaringType?.Name}.{method.Name}").Where(name => !name.StartsWith("Dispatcher", StringComparison.Ordinal)).Skip(1).Take(8);
+            scrolls.Add($"{offset:F0} → {page.Scroll.Offset.Y:F0} (row at {top.TranslatePoint(default, page.Scroll)!.Value.Y:F0} px, anchor {Anchor()}) from {string.Join(" < ", callers)}");
+            offset = page.Scroll.Offset.Y;
+        }
+
+        page.Scroll.ScrollChanged += OnScrollChanged;
         ShellFixture.Pump();
         page.Window.UpdateLayout();
         Assert.All(page.Rows, r => Assert.True(r.IsBuilt));
 
-        // Windows CI once had the row 52 px lower (-60 to -8, run 43733266567), with no cause known yet: what the view
-        // and the row were before and after the rows above were made.
+        // Windows CI once had the row 52 px lower (-60 to -8, run 43733266567): what the view and the row were before and
+        // after the rows above were made.
         var moved = top.TranslatePoint(default, page.Scroll)!.Value.Y;
-        Assert.True(Math.Abs(at - moved) <= 1, $"The setting at the top of the view moved from {at:F0} to {moved:F0} px. Before: {before}. After: {State()}.");
+        page.Scroll.ScrollChanged -= OnScrollChanged;
+        Assert.True(Math.Abs(at - moved) <= 1, $"The setting at the top of the view moved from {at:F0} to {moved:F0} px. Before: {before}. After: {State()}. "
+            + $"The offset's changes meanwhile: {(scrolls.Count == 0 ? "none" : string.Join("; ", scrolls))}.");
+    }
+
+    /// <summary>
+    /// The cause of the row above (Windows CI, run 43733266567): the scroll viewer makes up for rows above the view only
+    /// when it arranges, and it arranges only when its content's height changes. When the rows made in the background
+    /// above the view grow by as much as those below shrink, the list's height stays, the list's panel is arranged on its
+    /// own, and what's shown moves by what the rows above grew.
+    /// </summary>
+    [AvaloniaFact]
+    public void A_row_above_that_grows_as_much_as_one_below_shrinks_does_not_move_the_view()
+    {
+        // 30 rows that stand in at 100 px; the template's made rows are 100 px but the 7th (+40) and the 22nd (-40).
+        var heights = Enumerable.Repeat(100.0, 30).ToArray();
+        heights[6] = 140;
+        heights[21] = 60;
+        var template = new Avalonia.Controls.Templates.FuncDataTemplate<int>((index, _) => new Border { Height = heights[index] });
+        var panel = new StackPanel();
+        foreach (var index in Enumerable.Range(0, heights.Length))
+        {
+            panel.Children.Add(new DeferredContent { DataContext = index, ContentTemplate = template });
+        }
+
+        var scroll = new ScrollViewer { Content = panel };
+        var window = new Window { Width = 400, Height = 300, Content = scroll };
+        window.Show();
+        try
+        {
+            window.UpdateLayout();
+            var rows = panel.Children.Cast<DeferredContent>().ToList();
+
+            // Jump to the 16th row: the rows within a view's height of it are made in that layout, at 100 px.
+            scroll.Offset = new Vector(0, 1500);
+            window.UpdateLayout();
+            Assert.False(rows[6].IsBuilt);
+            Assert.False(rows[21].IsBuilt);
+            var top = rows[15];
+            var at = top.TranslatePoint(default, scroll)!.Value.Y;
+
+            // The rest are made in the background, and the list's height doesn't change.
+            ShellFixture.Pump();
+            window.UpdateLayout();
+            Assert.All(rows, r => Assert.True(r.IsBuilt));
+            Assert.Equal(3000, panel.Bounds.Height, tolerance: 1);
+            var moved = top.TranslatePoint(default, scroll)!.Value.Y;
+            Assert.True(Math.Abs(at - moved) <= 1, $"The row at the top of the view moved from {at:F0} to {moved:F0} px (offset {scroll.Offset.Y:F0}).");
+        }
+        finally
+        {
+            window.Close();
+        }
     }
 }

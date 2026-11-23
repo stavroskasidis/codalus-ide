@@ -278,6 +278,40 @@ public sealed class StartupAndExitTests
     }
 
     /// <summary>
+    /// A program Start ran, with the child it started, has ended by the time the window goes for good (the app ends). Only
+    /// the workbench's disposal, last, ended it, without waiting, so the process could exit first: a dotnet watch started
+    /// just before the close outlived the IDE with its server and port (Windows, a stress run of
+    /// BlazorWebAppHotReloadDebugTests on develop ec86e826, 2026-11-21).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Closing_the_window_ends_the_running_programs_before_the_app_ends()
+    {
+        var f = ShellFixture.Create();
+        await using (f)
+        {
+            await ShellFixture.PumpUntil(() => Interactive(f));
+            var (shell, arguments) = OperatingSystem.IsWindows()
+                ? ("cmd.exe", "/c ping -n 120 127.0.0.1 >nul")
+                : ("/bin/sh", "-c \"sleep 120; true\"");
+            var program = f.Shell.Runs.StartPlan("app", "LongRunning", new Workbench.Build.LaunchPlan(shell, arguments, Path.GetTempPath(), new Dictionary<string, string>(), null));
+            var child = 0;
+            await ShellFixture.PumpUntil(() => Codalus.Platform.ProcessTree.Children(program.ProcessId) is [var first, ..] && (child = first) != 0, seconds: 30);
+            var closed = false;
+            string? runningAtClose = null;
+            f.Window.Closed += (_, _) =>
+            {
+                closed = true;
+                runningAtClose = string.Join(", ", new[] { program.ProcessId, child }.Where(Workbench.Debugging.WatchedServer.IsRunning));
+            };
+
+            f.Window.Close();
+
+            await ShellFixture.PumpUntil(() => closed, seconds: 60);
+            Assert.Equal(string.Empty, runningAtClose);
+        }
+    }
+
+    /// <summary>
     /// A service that fails to shut down: the window still goes for good (the app ends) and a requested restart still starts.
     /// The failure escaped the shutdown, which then neither restarted nor ended the app, with its window hidden and its
     /// listener closed, out of the user's reach.

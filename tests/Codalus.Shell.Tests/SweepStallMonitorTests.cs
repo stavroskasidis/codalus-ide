@@ -97,14 +97,97 @@ public sealed class SweepStallMonitorTests
         }
     }
 
+    [AvaloniaFact]
+    public async Task A_stall_says_how_much_of_it_the_UI_thread_ran_and_how_busy_the_machine_was()
+    {
+        var stall = new SmokeTest.SweepStallMonitor();
+        try
+        {
+            await PumpForAsync(TimeSpan.FromMilliseconds(200));
+            stall.Reset();
+
+            // The UI thread busy for 700 ms (layout, a command's own work): it ran on a core for most of the wait.
+            Assert.Null(BlockUntilMeasured(stall, 700, spin: true));
+            await PumpUntilRecordedAsync(stall);
+            if (!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux())
+            {
+                Assert.Null(stall.CpuOfMax); // macOS: not read
+                return;
+            }
+
+            var match = System.Text.RegularExpressions.Regex.Match(stall.CpuOfMax ?? string.Empty, @"^the UI thread ran (\d+) ms of it, the machine's cores were (\d+)% busy, \d+ (page fault\(s\) in the process|major page fault\(s\) on the UI thread)$");
+            Assert.True(match.Success, $"The stall of {stall.MaxMilliseconds:0} ms said: {stall.CpuOfMax ?? "nothing"}.");
+            var ran = int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+            var busy = int.Parse(match.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+            Assert.True(ran >= 200 && ran <= stall.MaxMilliseconds + 50, $"The UI thread spun for 700 ms of a {stall.MaxMilliseconds:0} ms stall: {stall.CpuOfMax}.");
+            Assert.InRange(busy, 0, 100);
+        }
+        finally
+        {
+            stall.Stop();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task A_stall_asleep_says_where_the_UI_thread_slept_and_what_every_thread_did()
+    {
+        var stall = new SmokeTest.SweepStallMonitor();
+        try
+        {
+            await PumpForAsync(TimeSpan.FromMilliseconds(200));
+            stall.Reset();
+
+            // The UI thread asleep on a lock from the probe's first sample on, as in the WSL sweeps' stalls (ThreadStack),
+            // until the monitor has sampled it four times: the third sample reads the stacks.
+            using var release = new ManualResetEventSlim();
+            var sampled = Task.Run(() =>
+            {
+                try
+                {
+                    if (!SpinWait.SpinUntil(() => stall.ProbePending, TimeSpan.FromSeconds(30)))
+                    {
+                        return "No probe of the monitor waited for the blocked UI thread in 30 s.";
+                    }
+
+                    var samples = stall.SamplesTaken;
+                    return SpinWait.SpinUntil(() => stall.SamplesTaken >= samples + 4, TimeSpan.FromSeconds(30))
+                        ? null
+                        : $"The monitor took {stall.SamplesTaken - samples} sample(s) of the blocked UI thread in 30 s.";
+                }
+                finally
+                {
+                    release.Set();
+                }
+            });
+            release.Wait(TimeSpan.FromSeconds(70));
+            Assert.Null(await sampled);
+            await PumpUntilRecordedAsync(stall);
+
+            if (!OperatingSystem.IsLinux())
+            {
+                Assert.Null(stall.StackOfMax); // read on Linux only
+                return;
+            }
+
+            Assert.Matches(@"^system call \d+ at \S+; on its stack .*\.so[.\d]*\+0x[0-9a-f]+", stall.StackOfMax ?? $"nothing (a stall of {stall.MaxMilliseconds:0} ms: {stall.JobOfMax})");
+            Assert.Contains(" in futex", stall.ThreadsOfMax ?? "nothing", StringComparison.Ordinal);
+            Assert.Contains("; on its stack ", stall.ThreadsOfMax, StringComparison.Ordinal);
+        }
+        finally
+        {
+            stall.Stop();
+        }
+    }
+
     /// <summary>
     /// Blocks the UI thread (the caller) until a probe of the monitor waits for it and the monitor has sampled what it runs
     /// three times, then for <paramref name="milliseconds"/> more. A block of a fixed length isn't enough: the monitor
     /// probes every 20 ms and samples every 100 ms, but its thread can wake hundreds of milliseconds late on a loaded
     /// runner (macOS CI, job 122325528410: 2.7 s where the test takes 1.2 s), which could miss a block of 700 ms.
     /// </summary>
+    /// <param name="spin">Busy the thread through the block instead of sleeping it (a stall in its own work).</param>
     /// <returns>Why the monitor didn't measure the block, or null (a posted job can't fail the test itself).</returns>
-    private static string? BlockUntilMeasured(SmokeTest.SweepStallMonitor stall, int milliseconds)
+    private static string? BlockUntilMeasured(SmokeTest.SweepStallMonitor stall, int milliseconds, bool spin = false)
     {
         if (!SpinWait.SpinUntil(() => stall.ProbePending, TimeSpan.FromSeconds(30)))
         {
@@ -117,7 +200,19 @@ public sealed class SweepStallMonitorTests
             return $"The monitor took {stall.SamplesTaken - samples} sample(s) of the blocked UI thread in 30 s.";
         }
 
-        Thread.Sleep(milliseconds);
+        if (spin)
+        {
+            var clock = Stopwatch.StartNew();
+            while (clock.ElapsedMilliseconds < milliseconds)
+            {
+                Thread.SpinWait(1000);
+            }
+        }
+        else
+        {
+            Thread.Sleep(milliseconds);
+        }
+
         return null;
     }
 

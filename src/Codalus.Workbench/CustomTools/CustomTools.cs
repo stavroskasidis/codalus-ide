@@ -40,39 +40,64 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
 
     public event EventHandler<string>? Log;
 
+    /// <remarks>
+    /// A host that ended before the template reached it (it crashed or was ended a moment before, and its connection
+    /// hadn't noticed yet) answers no template: the template runs once more on a new host. On a loaded machine that
+    /// moment lasts: a template run half a second after the host was killed failed "The T4 host exited while running the
+    /// template." (a local Windows run under load; right after the kill, every time).
+    /// </remarks>
     public async Task<T4TransformResult> TransformAsync(T4TransformParams parameters, CancellationToken cancellationToken)
     {
-        var connection = await ConnectionAsync(cancellationToken).ConfigureAwait(false);
-        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        limit.CancelAfter(TimeSpan.FromMinutes(2));
-        var json = TextTemplatingJsonContext.Default;
-        try
+        JsonRpcConnection? lost = null;
+        while (true)
         {
-            return await connection.InvokeAsync(TextTemplatingMethods.Transform, parameters, json.T4TransformParams, json.T4TransformResult, limit.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            await RestartAsync().ConfigureAwait(false);
-            return new T4TransformResult(null, ".cs", [new T4Diagnostic(false, "The template ran for more than two minutes and was stopped.", parameters.TemplatePath, 0, 0)]);
-        }
-        catch (JsonRpcConnectionLostException)
-        {
-            return new T4TransformResult(null, ".cs", [new T4Diagnostic(false, "The T4 host exited while running the template.", parameters.TemplatePath, 0, 0)]);
+            var connection = await ConnectionAsync(lost, cancellationToken).ConfigureAwait(false);
+            using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            limit.CancelAfter(TimeSpan.FromMinutes(2));
+            var json = TextTemplatingJsonContext.Default;
+            try
+            {
+                return await connection.InvokeAsync(TextTemplatingMethods.Transform, parameters, json.T4TransformParams, json.T4TransformResult, limit.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                await RestartAsync().ConfigureAwait(false);
+                return new T4TransformResult(null, ".cs", [new T4Diagnostic(false, "The template ran for more than two minutes and was stopped.", parameters.TemplatePath, 0, 0)]);
+            }
+            catch (JsonRpcConnectionLostException) when (lost is null)
+            {
+                // Once: a template that ends its host itself ends the next one too, and is reported below.
+                lost = connection;
+            }
+            catch (JsonRpcConnectionLostException)
+            {
+                return new T4TransformResult(null, ".cs", [new T4Diagnostic(false, "The T4 host exited while running the template.", parameters.TemplatePath, 0, 0)]);
+            }
         }
     }
 
-    private async Task<JsonRpcConnection> ConnectionAsync(CancellationToken cancellationToken)
+    /// <summary>The running host's connection, started first if needed; never <paramref name="lost"/>, one a transform just lost.</summary>
+    private async Task<JsonRpcConnection> ConnectionAsync(JsonRpcConnection? lost, CancellationToken cancellationToken)
     {
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (_process is not { IsRunning: true })
+            // A host that isn't running is restarting (a crash), or gave up: StartAsync waits for the restart under way, or
+            // starts it again. Dropping it for a new one, as this did, started a second host while the first one's restart
+            // ran, and that restart then failed on its disposed supervisor. A transform that lost its connection can see it
+            // before the supervisor does, which notices on its own read loop: wait for that first, so the restart is the one
+            // the transform runs on again.
+            if (lost is not null && _process is { } current)
             {
-                if (_process is { } stale)
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                while (Holds(current, lost) && waited.Elapsed < TimeSpan.FromSeconds(10))
                 {
-                    await stale.DisposeAsync().ConfigureAwait(false);
+                    await Task.Delay(20, cancellationToken).ConfigureAwait(false);
                 }
+            }
 
+            if (_process is null)
+            {
                 var info = launch() ?? throw new InvalidOperationException("The T4 host (codalus-t4host) was not found.");
                 var process = new SupervisedProcess("T4 host", info, s_policy)
                 {
@@ -84,14 +109,27 @@ public sealed class TextTemplatingService(Func<ProcessLaunchInfo?> launch) : IAs
                 };
                 process.Log += (_, line) => Log?.Invoke(this, line);
                 _process = process;
-                await process.StartAsync(cancellationToken).ConfigureAwait(false);
             }
 
+            await _process.StartAsync(cancellationToken).ConfigureAwait(false);
             return _process.Connection;
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>Whether the supervisor still has <paramref name="lost"/> as its connection (one it dropped throws).</summary>
+    private static bool Holds(SupervisedProcess process, JsonRpcConnection lost)
+    {
+        try
+        {
+            return ReferenceEquals(process.Connection, lost);
+        }
+        catch (JsonRpcConnectionLostException)
+        {
+            return false;
         }
     }
 

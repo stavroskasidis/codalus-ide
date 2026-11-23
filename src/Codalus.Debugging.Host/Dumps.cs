@@ -334,7 +334,7 @@ internal sealed class Dumps : IDisposable
                 throw;
             }
 
-            throw new TimeoutException($"The dump wasn't written within {timeout.TotalSeconds:0} s ({progress}). On macOS, check for a password prompt from the system (developer tools access) and approve it.");
+            throw new TimeoutException(DumpAdvice.NotWrittenWithin(timeout, progress));
         }
 
         return new CreateDumpResult(path, new FileInfo(path).Length);

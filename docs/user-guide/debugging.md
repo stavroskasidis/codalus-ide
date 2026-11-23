@@ -1,6 +1,6 @@
 # Debugging
 
-Codalus IDE debugs .NET programs with **its own debugger**, the Codalus debugger, built on .NET's own debugging API ([below](#the-codalus-debugger)). It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and are debugged by the debugger's x64 build, which Codalus IDE downloads the first time you debug one; those of .NET Core 2.0 and 2.1 are attached to once they run, not held at their start ([Older .NET versions](dotnet-versions.md)). **netcoredbg**, the open-source .NET debugger from Samsung that Codalus IDE used before, is still bundled for one release as a fallback: set `debug.adapter` to `netcoredbg` if something goes wrong, and please report it.
+Codalus IDE debugs .NET programs with **its own debugger**, the Codalus debugger, built on .NET's own debugging API ([below](#the-codalus-debugger)). It debugs programs of every .NET version from .NET Core 2.0. On Apple silicon, the programs of .NET 5 and earlier run as x64 under Rosetta 2, and are debugged by the debugger's x64 build, which Codalus IDE downloads the first time you debug one; those of .NET Core 2.0 and 2.1 are attached to once they run, not held at their start ([Older .NET versions](dotnet-versions.md)). **netcoredbg**, the open-source .NET debugger from Samsung that Codalus IDE used before, is still bundled as a fallback, supported in 1.0 ([below](#the-codalus-debugger)): set `debug.adapter` to `netcoredbg` if something goes wrong, and please report it.
 
 On Windows, **.NET Framework** programs (and their tests) are debugged by Codalus IDE's own .NET Framework debugger, through the .NET Framework's debugging API: F5 on a .NET Framework app, Attach to Process on a .NET Framework process and Debug Test choose it by themselves, and the windows and commands below work the same. What it does and doesn't do is on the [.NET Framework](net-framework.md#debugging-on-windows) page. .NET MAUI apps on Android and iOS use the Mono debugger ([.NET MAUI](maui.md)).
 
@@ -12,7 +12,7 @@ On Windows, **.NET Framework** programs (and their tests) are debugged by Codalu
 | Attach to Process (the .NET and .NET Framework processes are listed first) | `Ctrl+Alt+P` |
 | Reattach to Process (the last one again, by id while it runs, otherwise by name) | `Shift+Alt+P` |
 | Attach to Process on a Remote Machine (over SSH, in a container, in WSL) | Debug menu |
-| Stop (terminates a launched program, detaches from an attached one) | `Shift+F5` |
+| Stop (terminates a launched program and waits until it has ended, detaches from an attached one) | `Shift+F5` |
 | Detach All (an attached program, or one launched in the terminal, keeps running) | Debug menu |
 | Restart | `Ctrl+Shift+F5` |
 | Break All | `Ctrl+Alt+Break` (`⌘⌥P` on macOS) |
@@ -69,7 +69,17 @@ A launch profile with `"commandName": "WSL2"` runs your project in a WSL distrib
 }
 ```
 
-Leave `distributionName` empty for the default distribution. The project builds on Windows, and the distribution's `dotnet` runs the build output through `/mnt/…`, so .NET must be installed in the distribution. Ctrl+F5 runs it, and F5 debugs it with the debugger inside the distribution. Breakpoints work as usual.
+Leave `distributionName` empty for the default distribution. The project builds on Windows, and the distribution's `dotnet` runs the build output through `/mnt/…`. Ctrl+F5 runs it, and F5 debugs it with the debugger inside the distribution. Breakpoints work as usual.
+
+**.NET in the distribution.** Before each start, Codalus IDE looks for a `dotnet` there that has the runtimes your app needs (its `runtimeconfig.json`): the one on the distribution's `PATH` first, then the one in `~/.dotnet`. When neither has them, the start stops and a notification says what's missing, with **Install .NET SDK** for your app's version. It offers the same ways as on Linux, the one that fits picked already:
+
+- the distribution's own `dotnet-sdk-X.Y` package (when apt, dnf or zypper has it), in the terminal, where `sudo` asks for your password;
+- dotnet-install into `~/.dotnet`, with no password. Codalus IDE runs your app on it even though it isn't on the distribution's `PATH`, so typing `dotnet` in a WSL shell won't find it;
+- the .NET download page.
+
+When the install is done and the runtimes are there, the run or the debug session starts again. Your Windows .NET doesn't change.
+
+**Static web assets.** In the Development environment, ASP.NET Core reads the static web assets manifest the build wrote next to your app (`App.staticwebassets.runtime.json`), whose folders are Windows paths that Linux refuses ("The path must be absolute"). Codalus IDE gives the app a copy with the same folders under `/mnt/…`, through `ASPNETCORE_STATICWEBASSETS`; a profile that sets that variable itself keeps its own.
 
 ### Analyzers and source generators
 
@@ -110,7 +120,7 @@ Programs started after you turn it on are covered. Turning it off removes the va
   - **Temporary**: removed once it stops the program. Debug → Insert Temporary Breakpoint (`Shift+Alt+F9`, `T`) adds one on the caret's line.
 - **Function breakpoints**: Debug → New Function Breakpoint breaks when a method is entered: `Method`, `Type.Method` or `Namespace.Type.Method`, with an optional condition.
 - **The Breakpoints window** (`Ctrl+Alt+B`) lists source and function breakpoints with their labels and settings. Search by location, condition or label; enable or disable the ones shown; double-click to open; `Delete` to remove; right-click to edit labels. **Export** and **Import** save breakpoints to a JSON file and read them back.
-- **Edits**: breakpoints follow your edits to the file, and are saved with the solution.
+- **Edits**: breakpoints follow your edits to the file, and changes made to it outside the IDE (a checkout, a pull, a formatter, other line endings), and are saved with the solution.
 - **XAML breakpoints**: in an Avalonia `.axaml` file (or a WPF `.xaml` file on Windows), a breakpoint stops at an element's creation or an attribute's set, through the app's live agent, not the debugger: see [XAML breakpoints](avalonia.md#xaml-breakpoints). The Live Property Explorer's **Break When Value Changes** is the data breakpoint of a XAML property, and `debug.breakOnFailedBinding` stops at a failed binding.
 - **Who counts the hits**: under [the Codalus debugger](#the-codalus-debugger) the debugger itself applies hit counts, filters, dependencies and logpoints, so the program doesn't stop for a hit that doesn't count and a logpoint in a loop costs little. Under netcoredbg, Codalus IDE stops the program at each hit and continues it.
 
@@ -216,7 +226,7 @@ Hover over a variable or a member access (`app`, `app.Properties`) while the pro
 
 The Codalus debugger is Codalus IDE's own .NET debugger, on .NET's own debugging API (the one its .NET Framework debugger uses, through the runtime's `dbgshim`). It is the default: Start Debugging, Attach to Process, debugging tests, several startup projects, remote targets and containers use it, and the first line in the Debug Console says which debugger a session uses.
 
-**netcoredbg is the fallback** for one release: set **`debug.adapter`** to `netcoredbg` (Options › Debugging › **Debugger for .NET programs**) and the next session uses it. It will be removed once the Codalus debugger has been the default for a release, so tell us what made you switch.
+**netcoredbg is the fallback**, supported in 1.0: set **`debug.adapter`** to `netcoredbg` (Options › Debugging › **Debugger for .NET programs**) and the next session uses it. It's the one exception to [what 1.x keeps stable](compatibility.md#netcoredbg): a 1.x minor version may deprecate it, with a warning in Options and the release notes, and a later one may remove it once the Codalus debugger passes the same tests on every operating system. So tell us what made you switch.
 
 What the Codalus debugger does that netcoredbg doesn't:
 - **Hot Reload and Edit and Continue**: edits apply to the program you're debugging, and the method you're stopped in goes on in its new code ([below](#hot-reload-while-debugging))
@@ -246,7 +256,7 @@ If a session goes wrong, start Codalus IDE with `CODALUS_CLR_DEBUGGER_LOG` set t
 The debugger reads most expressions itself, at once: names, members, indexers, method calls (generic ones too), operators, `?:`, `??`, casts, `new`, and its own names (`$exception`, `$ReturnValue`, object IDs like `$1`). What it doesn't read, it has the C# language service compile against the place you're stopped at and runs the result in your program: **lambdas and LINQ** (`orders.Where(o => o.Total > 100).Count()`), extension methods, collection and object initializers, pattern matching, string interpolation, and the rest of C#. Private members can be used, as everywhere in the debugger.
 
 - In **Visual Basic** code, expressions are Visual Basic (`names.Where(Function(n) n.Length > 3).Count()`, `If(x Is Nothing, 0, x.Length)`).
-- Compiling needs the program's project loaded in the solution. Attached to a program whose project isn't open, the debugger's own reader still works.
+- Compiling needs the program's project loaded in the solution. Attached to a program whose project isn't open, the debugger's own reader still works. Right after you open a solution, while its projects are still loading, such an expression says so: ask again in a moment, and it's compiled then.
 - A compiled expression is a small assembly loaded into your program; it stays until the program ends, and the Modules window leaves it out.
 - F# expressions aren't compiled: F# code reads C#'s subset.
 
@@ -319,7 +329,7 @@ Edit and Continue after an `await` and the profiler's .NET Async view haven't be
 
 ## Settings
 
-- `debug.adapter`: the debugger for .NET programs, `codalus` ([the Codalus debugger](#the-codalus-debugger), the default) or `netcoredbg` (the fallback, for one release).
+- `debug.adapter`: the debugger for .NET programs, `codalus` ([the Codalus debugger](#the-codalus-debugger), the default) or `netcoredbg` (the fallback, supported in 1.0; [compatibility.md](compatibility.md#netcoredbg)).
 - `debug.hotReload` (Hot Reload while debugging): saving a file applies the edit to the program being debugged ([under the Codalus debugger](#hot-reload-while-debugging); a Blazor app's WebAssembly components under either debugger). Off, a Blazor Web App's WebAssembly edits wait for a restart.
 - `debug.codalusOffer`: offer the Codalus debugger when you save an edit while netcoredbg debugs.
 - `debug.breakAllProcesses`: with several startup projects, a stop in one program pauses the others (the Codalus debugger's programs; on by default).
@@ -361,6 +371,9 @@ These are netcoredbg's, when you choose it as the fallback; [the Codalus debugge
 - remote debugging covers Linux and macOS targets with `sh`, `tar` and `gzip`; not Windows machines over SSH, nor Windows containers
 - on macOS, the program's exit code is reported as 0
 - no debugger for macOS on Intel
+- on Apple silicon, .NET Core 2.0 and 2.1 programs run as x64 under Rosetta 2 and are left to netcoredbg's x64 build, which can end as it starts them on some macOS versions; later versions are debugged by the Codalus debugger
+- an evaluation that runs past netcoredbg's limit (a property getter blocked in native code) can leave a collection's elements, and an exception's inner exceptions, unshown; the Codalus debugger shows both
+- the last lines a program writes just before it exits are now and then missing from the Debug Console: netcoredbg drops output it already read when both of the program's streams end at once (a fix is proposed upstream)
 - .NET 11 programs debug with the bundled netcoredbg (3.2.0), except exception module conditions: it gives their stack frames no module, so a condition can't tell where an exception was thrown: one that names modules (`MyApp.dll`) doesn't break, and one that only leaves modules out (`!System.*`) always breaks
 
 Under netcoredbg, hit counts, logpoints, filters and dependent breakpoints are implemented by the IDE, so each hit pauses the program briefly; temporary breakpoints, exception module conditions and Run to Cursor are the IDE's under both debuggers.

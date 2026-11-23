@@ -80,6 +80,14 @@ public sealed class LiveAgentTests
         var clicked = false;
         button.Click += (_, _) => clicked = true;
         Assert.Equal("ok", await Ask("pick", "on"));
+
+        // The click's hit test reads the compositor's last rendered frame, not the layout: this test only ran jobs, so a
+        // frame came only when the headless render timer ticked on its own, and under load (M55's validation on WSL, the
+        // whole suite at once) the last one could predate the window's content: "picked Window 1, not the button 4". The
+        // panel moves here, after any frame, so the old frame has the button elsewhere every time; a frame is rendered
+        // before the click.
+        panel.Margin = new Thickness(0, 80, 0, 0);
+        ShellFixture.RenderFrame(window);
         var center = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), window)!.Value;
         window.MouseDown(center, MouseButton.Left);
         window.MouseUp(center, MouseButton.Left);

@@ -44,6 +44,43 @@ public sealed class ContainerShellTests
         return engine;
     }
 
+    /// <summary>
+    /// The engine for the compose tests, or a skip (a failure on CI's Linux runner) when its compose can't reach it.
+    /// An engine whose CLI answers isn't enough: under WSL with podman-docker, <c>docker version</c> answers through
+    /// rootless podman, while <c>docker compose</c> runs docker-compose 1.29, which talks to Docker's API socket
+    /// (<c>/var/run/docker.sock</c>, the system podman socket, not running) and fails at its first command ("Error while
+    /// fetching server API version"). So a <c>compose ps</c> of a project that doesn't exist, which needs the engine's
+    /// API and changes nothing, must succeed too.
+    /// </summary>
+    internal static async Task<ContainerEngine> RequireComposeEngineAsync()
+    {
+        var engine = await RequireEngineAsync();
+        var folder = Directory.CreateTempSubdirectory("codalus-compose-probe-").FullName;
+        try
+        {
+            var file = Path.Combine(folder, "compose.yaml");
+            File.WriteAllText(file, "services:\n  probe:\n    image: mcr.microsoft.com/dotnet/runtime-deps:10.0\n");
+            var result = await engine.RunAsync(ContainerEngine.ComposeArguments(file, "codalus-compose-probe", "ps"), CancellationToken.None);
+            if (!result.Succeeded)
+            {
+                var lines = (result.Error + "\n" + result.Output).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var reason = $"{engine.Name}'s compose doesn't reach the engine (compose ps exited with {result.ExitCode}: {string.Join(' ', lines.TakeLast(2))})";
+                if (Environment.GetEnvironmentVariable("CI") == "true" && OperatingSystem.IsLinux())
+                {
+                    Assert.Fail(reason);
+                }
+
+                Assert.Skip(reason);
+            }
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+
+        return engine;
+    }
+
     [AvaloniaFact]
     public async Task Add_docker_support_writes_the_files_and_the_dcproj_loads_as_a_compose_project()
     {
@@ -126,7 +163,9 @@ public sealed class ContainerShellTests
             await ShellFixture.PumpUntil(() => f.Shell.DebugLog.GetText().Contains("Now listening on", StringComparison.Ordinal), seconds: 180);
             var request = http.GetStringAsync($"http://127.0.0.1:{port}/", TestContext.Current.CancellationToken);
             await ShellFixture.PumpUntil(() => f.Shell.Debugger.State == DebugState.Stopped, seconds: 60);
-            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line);
+            await ShellFixture.PumpUntil(() => f.Shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == line, describe: () =>
+                $"the stop: {f.Shell.Debugger.CurrentStop?.Reason}; frames: {string.Join(" | ", f.Shell.Debugger.Frames.Take(4).Select(s => $"{s.Name} at {s.Source?.Path}:{s.Line}"))}; "
+                + $"the editor: {f.Shell.ActiveEditor?.Model.Path} at {f.Shell.ActiveEditor?.Controller?.CurrentDebugLine()}; expected {program}:{line}\nDebug Console:\n{f.Shell.DebugLog.GetText()[^Math.Min(3000, f.Shell.DebugLog.GetText().Length)..]}");
             await ShellFixture.PumpUntil(() => f.Shell.Locals.Roots.Any(r => r.Name == "host"));
             f.Shell.Debugger.Breakpoints.Clear();
             await f.RunAsync("debug.continue");

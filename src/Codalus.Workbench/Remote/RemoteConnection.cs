@@ -348,8 +348,11 @@ public sealed class RemoteConnection : IAsyncDisposable
         var down = Stopwatch.StartNew();
         var backoff = TimeSpan.FromMilliseconds(250);
         string? failure = null;
+        var attempts = 0;
         while (Volatile.Read(ref _disposed) == 0 && down.Elapsed < ReconnectFor)
         {
+            attempts++;
+            var opening = Stopwatch.StartNew();
             try
             {
                 using var attempt = new CancellationTokenSource(TimeSpan.FromSeconds(30));
@@ -377,12 +380,16 @@ public sealed class RemoteConnection : IAsyncDisposable
 
                 Volatile.Write(ref _reconnecting, 0);
                 Reconnections++;
+                // Where a slow reconnection's time went (a local relay took 8.3 s on a loaded Windows PC, the 1.0 validation).
+                Log?.Invoke(this, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"Reconnected after {down.Elapsed.TotalSeconds:0.0} s, at attempt {attempts}: that attempt opened the link and attached in {opening.Elapsed.TotalSeconds:0.0} s."));
                 Reconnected?.Invoke(this, down.Elapsed);
                 return;
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
             {
-                Log?.Invoke(this, "Reconnecting: " + ex.Message);
+                Log?.Invoke(this, string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"Reconnecting: attempt {attempts} failed after {opening.Elapsed.TotalSeconds:0.0} s ({down.Elapsed.TotalSeconds:0.0} s down): {ex.Message}"));
             }
 
             await Task.Delay(backoff).ConfigureAwait(false);

@@ -34,12 +34,21 @@ namespace Codalus.Shell.Infrastructure;
 internal sealed partial class SmokeTest(Window window, ShellHost shell, string samples)
 {
     private const string Branch = "main";
-    private static readonly TimeSpan s_watchdog = TimeSpan.FromMinutes(40); // the command sweep's 25 at most, with the rest
+    private static readonly TimeSpan s_watchdog = Watchdog(Environment.GetEnvironmentVariable("CODALUS_SMOKE_MINUTES"));
     private static readonly string[] s_commands = ["workbench.showCommandPalette", "build.buildSolution", "debug.start", "git.commit"];
     private static readonly string[] s_themes = ["blue", "light", "highContrast", "dark"];
 
     /// <summary>The themes the M29 step photographs.</summary>
     private static readonly string[] s_chromeThemes = ["blue", "light", "dark"];
+
+    /// <summary>
+    /// How long the whole smoke test may take before it reports itself failed and exits: <c>CODALUS_SMOKE_MINUTES</c>
+    /// minutes, 40 without it (the command sweep's 25 at most, with the rest). CI's step sets it inside its own limit,
+    /// 52 of macOS' 55: with the watchdog at 40 there, the step's 55 never applied, and `develop`'s dry run 44763395108
+    /// stopped at 40 minutes in the sweep's last scenario with every step passing.
+    /// </summary>
+    internal static TimeSpan Watchdog(string? minutes) =>
+        TimeSpan.FromMinutes(int.TryParse(minutes, NumberStyles.None, CultureInfo.InvariantCulture, out var value) && value > 0 ? value : 40);
 
     private readonly List<StepResult> _results = [];
     private readonly Stopwatch _clock = Stopwatch.StartNew();
@@ -804,6 +813,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         // M34d: the UI gallery with data (the Testing solution after its runs), the documents, the chrome and the error states.
         await StepAsync("shell.gallery", "M34d", "The gallery: every tool window with data, the documents and the window's tabs, the error states, Code Search's results, the color theme cards and the WCF references page (M34g), in Classic's four themes and Harbor's three (M34h)", GalleryDataStepAsync, "testing.run").ConfigureAwait(true);
 
+        // M65: an external agent in AI Chat, in the published (Native AOT) app; after the gallery, which photographs the
+        // ai.chat step's conversation (choosing an agent starts a new chat). The Testing solution is the workspace.
+        await StepAsync("ai.externalChat", "M65", "AI Chat with an external agent (the stand-in ACP agent): it answers under its name, reads a workspace file through the IDE as a step, and its codalus mcp is this app, reaching the IDE through the session's pipe", ExternalAgentChatStepAsync, "testing.discover").ConfigureAwait(true);
+
         // M9: NuGet packages, on a copy of samples/Packages and its local feed (ADR 0012).
         await StepAsync("packages.manage", "M9", "The NuGet Package Manager browses a feed, updates a package and restores it", async () =>
         {
@@ -1567,7 +1580,8 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         shell.Debugger.Breakpoints.Clear();
         await RunWhenEnabledAsync("debug.continue").ConfigureAwait(true);
         await WaitAsync(() => shell.Debugger.State == DebugState.Idle, "the program runs to its end", 120).ConfigureAwait(true);
-        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit");
+        // Once under heavy load it didn't (WSL, 2026-11-19), and the failure didn't say what the Debug Console had instead.
+        Check(shell.DebugLog.GetText().Contains("exited with code", StringComparison.Ordinal), "the session reports the exit:\n" + Tail(shell.DebugLog.GetText(), 1500));
     }
 
     /// <summary>M14: Run to Cursor, PerfTips, QuickWatch, the Threads, Modules and Exception Settings windows.</summary>
@@ -1583,8 +1597,13 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await WaitAsync(() => shell.ActiveEditor is { Controller: { } c } && c.CurrentDebugLine() == argsLine, $"the editor shows line {argsLine}").ConfigureAwait(true);
         Check(shell.Debugger.Breakpoints.At(Program, argsLine) is null, "the temporary breakpoint is gone after its stop");
 
+        // Waited for, not read once the call returns: the stop's own refresh of the window is posted when the debugger
+        // raises the stop, just after its state says stopped, and under load it ran once the window was shown and the call
+        // had asked, so the call's answer gave way to that newer one, a moment later. Read at once, QuickWatch was empty
+        // (WSL, 2026-11-19).
         await shell.ShowQuickWatchAsync("args[1]").ConfigureAwait(true);
-        Check(shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"", "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value));
+        await WaitAsync(() => shell.QuickWatch.Roots.SingleOrDefault()?.Value == "\"two words\"",
+            () => "QuickWatch evaluates args[1]: " + (shell.QuickWatch.Error ?? shell.QuickWatch.Roots.SingleOrDefault()?.Value ?? "nothing")).ConfigureAwait(true);
 
         // Run to Cursor while paused, with a PerfTip at the new line.
         await shell.RunToLineAsync(Program, cwdLine).ConfigureAwait(true);
@@ -1592,8 +1611,11 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         Check(PerfTipRenderer.Text(shell.Debugger.CurrentStop?.Elapsed) is not null, "a PerfTip shows the elapsed time");
 
         // Inline values (M62): the lines above the stop show their variables' values, args among them.
+        // Under heavy load nothing was drawn in 30 s, 8 times in 175 runs (WSL, 2026-11-19): a superseded refresh wiped
+        // the newer one's values (CodeEditorController.LoadInlineValuesAsync). The failure says how the last refreshes went.
         await WaitAsync(() => shell.ActiveEditor?.Controller?.InlineValueLines.Any(l => l.Line == argsLine && l.Values.Any(v => v.Name == "args")) == true,
-            "inline values show args after its line").ConfigureAwait(true);
+            () => $"inline values show args after its line (the editor's last refresh: {shell.ActiveEditor?.Controller?.InlineValuesOutcome ?? "no editor"}; "
+                  + $"drawn: {string.Join(", ", shell.ActiveEditor?.Controller?.InlineValueLines.Select(l => $"{l.Line}: {string.Join(" ", l.Values.Select(v => v.Name))}") ?? [])})").ConfigureAwait(true);
 
         // The stop refreshes the window too: a refresh that starts later wins, and the earlier one leaves the rows to it.
         shell.Layout.ShowToolWindow(ThreadsViewModel.ToolWindowId);
@@ -1847,7 +1869,31 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.ActiveEditor?.Controller?.CurrentDebugLine() == measure, "a step goes on from there", 60).ConfigureAwait(true);
 
             // A lambda: the C# language host compiles it, and the program runs it.
-            var counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+            // The C# host may not have the project yet, a moment after the open: it says so, and the expression is asked
+            // again. Once, on Linux CI, it compiled in Miscellaneous Files instead, whose copy of the file has no implicit
+            // usings (CS1061 for the lambda's Count; run 44574066272, docs/ci-flakes.md); what the host was sent comes with
+            // a failure.
+            Codalus.Debugging.EvaluateResponse? counted = null;
+            var asked = System.Diagnostics.Stopwatch.StartNew();
+            while (counted is null)
+            {
+                try
+                {
+                    counted = await shell.Debugger.EvaluateAsync("new[] { 1, 2, 3 }.Count(n => n > count - 2)", "watch").ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex) when (ex.Message.Contains("isn't in a loaded project", StringComparison.Ordinal) && asked.Elapsed < TimeSpan.FromSeconds(120))
+                {
+                    await Task.Delay(500).ConfigureAwait(true);
+                }
+                catch (Codalus.Debugging.DapException ex)
+                {
+                    throw new SmokeFailure($"An expression with a lambda didn't evaluate after {asked.Elapsed.TotalSeconds:0} s: {ex.Message}\n"
+                                           + $"The C# host: {shell.Languages.Status(ShellHost.CSharpLanguageId)}; {string.Join("; ", shell.Languages.Describe())}\n"
+                                           + $"The projects' way to the language hosts:\n{shell.Languages.ProjectHistory()}\n"
+                                           + $"Output 'Language Services':\n{Tail(shell.LanguageLog.GetText(), 6000)}");
+                }
+            }
+
             Check(counted.Result == "2", "an expression with a lambda evaluates to 2: " + counted.Result);
 
             // The machine's side of the stopped frame.
@@ -2232,7 +2278,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             {
                 if (Stopwatch.GetTimestamp() > deadline)
                 {
-                    throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}. The Scaffolding output:\n{Log()}\nThe build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}");
+                    throw new SmokeFailure($"Timed out after {seconds} s waiting for: {what}. The Scaffolding output:\n{Log()}\nThe build output:\n{Tail(shell.Builds.Channel.GetText(), 1500)}{BuildWaitDiagnostics()}");
                 }
 
                 await Task.Delay(100).ConfigureAwait(true);
@@ -2241,6 +2287,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return await task.ConfigureAwait(true);
         }
 
+        shell.Trust.Trust(target); // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=web.scaffolding skips it, and the trust prompt held the step (macOS, 2026-11-19)
         await shell.OpenSolutionAsync(Path.Combine(target, "Scaffolding.slnx")).ConfigureAwait(true);
         await WaitAsync(() => shell.Solutions.Projects.Count == 2 && shell.Solutions.Progress is { Completed: true }, "the Scaffolding solution is open", 300).ConfigureAwait(true);
         var restore = await Bounded(shell.Packages.RunToolCommandAsync(new Projects.Protocol.ToolCommandParams(Projects.Protocol.ToolActions.Restore), CancellationToken.None), "dotnet tool restore of dotnet-aspnet-codegenerator", 240).ConfigureAwait(true);
@@ -3901,7 +3948,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server stops at the breakpoint (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 600).ConfigureAwait(true);
             Check(shell.Debugger.IsCompound && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's: " + Thread());
             var first = shell.Debugger.CurrentStop;
-            await shell.Debugger.ContinueAsync().ConfigureAwait(true);
+            // Continue applies the edits first, and a rude edit asks before it goes on. Nothing is edited here, yet once
+            // it asked, and the step waited on the question until its 12 minutes ran out (macOS CI, the packaged app's
+            // smoke test, develop's dry run 44955780797): a question now fails the step at once, with what it said.
+            const string keepGoing = "Continue with the Old Code";
+            var resumed = shell.Debugger.ContinueAsync();
+            await WaitAsync(() => resumed.IsCompleted || shell.Workbench.Notifications.Items.Any(n => n.Actions.Contains(keepGoing)), "Continue goes on", 120).ConfigureAwait(true);
+            if (shell.Workbench.Notifications.Items.FirstOrDefault(n => n.Actions.Contains(keepGoing)) is { } asked)
+            {
+                shell.Workbench.Notifications.Choose(asked, keepGoing);
+                Check(false, $"Continue asked about an edit nobody made: {asked.Message} (Debug Console:\n{Tail(shell.DebugLog.GetText(), 2000)})");
+            }
+
+            await resumed.ConfigureAwait(true);
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.CurrentStop != first && shell.Debugger.Frames.Count > 0,
                 () => "the page stops at the breakpoint in WebAssembly (Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + ")", 300).ConfigureAwait(true);
             Check(Thread().StartsWith("Browser:", StringComparison.Ordinal), "the second stop is the browser's: " + Thread());
@@ -3931,13 +3990,24 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         var counter = Path.Combine(target, "BlazorHosted.Client", "Pages", "Counter.razor");
         int Line(string marker) => Array.FindIndex(File.ReadAllLines(counter), l => l.Contains($"// [{marker}]", StringComparison.Ordinal)) + 1;
         string Thread() => shell.Debugger.Threads.FirstOrDefault(t => t.Id == shell.Debugger.CurrentStop?.ThreadId)?.Name ?? string.Empty;
-        string Log() => "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
+        // What the follow saw, before the logs: on Windows CI (dry run 44865016075) the next server served and no attach was
+        // tried, and neither log said whether the wait never found it or the attach was skipped.
+        string Log() => $"Debugger: {shell.Debugger.State}{(shell.Debugger.IsActive ? " (active)" : string.Empty)}; dotnet watch's session: "
+            + $"{shell.WatchedServerDebugSession?.State.ToString() ?? "none"} (server {shell.WatchedServerDebugSession?.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"})"
+            + "; Hot Reload: " + (shell.HotReloadProgram?.HotReload is { } hr
+                ? FormattableString.Invariant($"{hr.State}, restarts {hr.Restarts}, \"Now listening on\" {hr.ListeningCount}, the agent's process {hr.AppProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}")
+                : "none")
+            + $"; the wait for the server saw: {shell.WatchedServerWait ?? "nothing"}\n"
+            + "Debug Console:\n" + Tail(shell.DebugLog.GetText(), 2000) + "\nRun:\n" + Tail(shell.HotReloadProgram?.Channel?.GetText() ?? string.Empty, 2000);
         var original = File.ReadAllText(counter);
         shell.Debugger.Breakpoints.Toggle(counter, Line("initialized"));
         shell.Run("debug.start");
         try
         {
             await WaitAsync(() => shell.Debugger.State == DebugState.Stopped && shell.Debugger.Frames.Count > 0, () => "the server under dotnet watch stops at the breakpoint (" + Log() + ")", 600).ConfigureAwait(true);
+            // Not any stop: the server's start failing ("address already in use") stopped at its exception, which this
+            // took for the breakpoint, and the step went on to time out 3 minutes later (Linux CI, dry run 44952519485).
+            Check(shell.Debugger.CurrentStop is { Reason: "breakpoint" }, $"the first stop is the breakpoint's, not {shell.Debugger.CurrentStop?.Reason}: {shell.Debugger.CurrentStop?.Description} ({Log()})");
             Check(shell.Debugger.IsCompound && shell.HotReloadProgram is not null && !Thread().StartsWith("Browser:", StringComparison.Ordinal), "the first stop is the server's, which dotnet watch runs: " + Thread());
             var server = shell.Debugger.ProcessId;
             var watch = shell.HotReloadProgram!;
@@ -4606,13 +4676,19 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             var error = ex is SmokeFailure ? ex.Message
                 : ex is TimeoutException && running is { IsCompleted: false } ? $"The step didn't finish within {(limit ?? s_stepLimit).TotalMinutes:0} minutes."
                 : ex.ToString();
+            if (shell.Builds.IsBuilding && !error.Contains(BuildWaitHeading, StringComparison.Ordinal))
+            {
+                // A build still runs: whatever waited on it (a build's own wait, the step's limit) says what it was doing.
+                error += BuildWaitDiagnostics();
+            }
+
             Report(id, milestone, title, "failed", Stopwatch.GetElapsedTime(start).TotalSeconds, error);
             Screenshot($"smoke-test-{id}.png", keepToasts: true); // the toasts may say why
             if (!_logsShown)
             {
                 // The first failure prints the hosts' logs, so CI's log says why even when the run is cut short.
                 _logsShown = true;
-                foreach (var channel in shell.Workbench.Output.Channels.Where(c => c.Name is "Language Services" or "Build Host" or "Log"))
+                foreach (var channel in FailureLogs(shell.Workbench.Output))
                 {
                     Console.Out.WriteLine($"  --- {channel.Name} (the end) ---");
                     Console.Out.WriteLine(Tail(channel.GetText(), 4000));
@@ -4689,34 +4765,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             return;
         }
 
-        static string Run(string program, params string[] arguments)
-        {
-            try
-            {
-                var start = new ProcessStartInfo(program) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-                foreach (var argument in arguments)
-                {
-                    start.ArgumentList.Add(argument);
-                }
-
-                using var process = Process.Start(start)!;
-                var output = process.StandardOutput.ReadToEndAsync();
-                var error = process.StandardError.ReadToEndAsync();
-                if (!process.WaitForExit(TimeSpan.FromSeconds(60)))
-                {
-                    // The tool alone (ps and dotnet-stack start nothing): ending a process tree lists the system's
-                    // processes, which is what blocks when ps does (the macOS runner, blazor.wasmDebug).
-                    process.Kill();
-                    return "(timed out)";
-                }
-
-                return output.GetAwaiter().GetResult() + error.GetAwaiter().GetResult();
-            }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
-            {
-                return $"({program}: {ex.Message})";
-            }
-        }
+        static string Run(string program, params string[] arguments) => RunTool(program, TimeSpan.FromSeconds(60), arguments);
 
         Console.Out.WriteLine("  --- Processes (by CPU) ---");
         Console.Out.WriteLine(string.Join('\n', (OperatingSystem.IsMacOS() ? Run("ps", "-axro", "pid,ppid,etime,pcpu,rss,command") : Run("ps", "-eo", "pid,ppid,etime,pcpu,rss,args", "--sort=-pcpu")).Split('\n').Take(15).Select(l => l.Length > 200 ? l[..200] : l)));
@@ -4992,6 +5041,9 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         try
         {
             Check(!shell.Debugger.UsesCodalusAdapter, "the setting chooses netcoredbg");
+            // Every step under it, not only the first: without it the compound steps waited out their 7- and 10-minute
+            // limits for a stop that couldn't come (a local Windows run without eng/get-netcoredbg.sh, 2026-11-19).
+            Check(DebugAdapterLocator.Resolve() is not null, $"netcoredbg is installed (debugger/ next to the shell, or {DebugAdapterLocator.EnvironmentVariable})");
             await step().ConfigureAwait(true);
         }
         finally
@@ -5055,6 +5107,12 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         foreach (var toast in shell.Notifications.Toasts)
         {
             Console.Out.WriteLine($"  (a toast hidden for {picture}: {toast.Model.Severity}: {toast.Message})");
+
+            // An error's toast has only the exception's message: its stack is in the IDE's log, which the run doesn't keep.
+            if (toast.Model.Severity == Workbench.Notifications.NotificationSeverity.Error && UnhandledBehind(shell.Workbench.Log.GetText(), toast.Message) is { } behind)
+            {
+                Console.Out.WriteLine("  (the exception behind it)\n" + behind);
+            }
         }
 
         shell.Notifications.HideToasts();

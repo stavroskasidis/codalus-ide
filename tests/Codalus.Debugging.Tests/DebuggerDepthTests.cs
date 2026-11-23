@@ -81,7 +81,8 @@ public sealed class DebuggerDepthTests(DebuggeeFixture debuggee) : IClassFixture
         }
         catch (OperationCanceledException)
         {
-            throw new TimeoutException($"The program did not stop. State: {_debug.State}. Output:\n{Output}");
+            // Two netcoredbg sessions stalled after the runtime's first module on macOS (CI, run 41620973752): where they wait.
+            throw new TimeoutException($"The program did not stop. State: {_debug.State}. Output:\n{Output}\n{NativeStacks.Describe(_debug)}");
         }
     }
 

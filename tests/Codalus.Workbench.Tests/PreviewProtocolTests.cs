@@ -196,6 +196,39 @@ public sealed class PreviewProtocolTests
     }
 
     [Fact]
+    public async Task A_frame_the_designer_holds_back_comes_when_the_session_asks_it_for_an_answer()
+    {
+        // The stand-in designer holds each frame of "held frame" XAML in its queue until it sends anything else, as
+        // Avalonia's designer can: after Scale the 2× frame never came, and the preview kept the 1× one (XamlShellTests
+        // on Windows under load, 2026-11-19). When no frame comes within a second, the session asks for a viewport
+        // measure, and the answer brings what waited before it.
+        var fake = Path.Combine(AcpAgentTests.Metadata("CodalusRepoRoot"), "tests", "Codalus.PreviewerHost.Fake", "bin", AcpAgentTests.Metadata("CodalusConfiguration"), Codalus.Tests.RepoBuild.TargetFramework, "codalus-fake-previewer.dll");
+        await using var session = await PreviewerSession.StartAsync(new PreviewerLaunch(fake, fake, Agent: null), 1, TimeSpan.FromSeconds(60), Ct);
+
+        var first = await session.UpdateXamlAsync("<Window><!--frame--></Window>", fake, "/Frame.axaml", TimeSpan.FromSeconds(60), Ct);
+        Assert.Equal(1, first.Frame?.SequenceId);
+
+        // An update's frame: before, the session waited 10 s for it and took the previous frame for it.
+        var shown = await session.UpdateXamlAsync("<Window><!--held frame--></Window>", fake, "/HeldFrame.axaml", TimeSpan.FromSeconds(60), Ct);
+        Assert.Null(shown.Error);
+        Assert.Equal(2, shown.Frame?.SequenceId);
+        Assert.Equal((100, 50, 1.0), (shown.Frame!.Width, shown.Frame.Height, shown.Frame.Scale));
+        Assert.True(shown.Elapsed < TimeSpan.FromSeconds(9), $"the frame came after {shown.Elapsed.TotalSeconds:0.0} s");
+
+        // A new render scale's frame: before, it never came; and when it took longer to render than the session's first ask
+        // (2.5 s in the stand-in), it waited behind that ask's answer and never came either (Windows under load, stress run
+        // 44992968217). The session asks again each second until it comes.
+        await session.SetScaleAsync(2, Ct);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        while (session.LastFrame is not { Scale: 2 } && waited.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await Task.Delay(50, Ct);
+        }
+
+        Assert.Equal((200, 100, 2.0), (session.LastFrame!.Width, session.LastFrame.Height, session.LastFrame.Scale));
+    }
+
+    [Fact]
     public void Agent_replies_parse()
     {
         var hit = PreviewerSession.ParseHit("12,34.5,100,20\tWindow:0:/DockPanel:0:/Button:1:IncrementButton");

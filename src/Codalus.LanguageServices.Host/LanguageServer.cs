@@ -37,12 +37,16 @@ internal sealed class LanguageServer : IAsyncDisposable
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
         _cleanup = new CodeCleanupFeature(_diagnostics, message => Log(MessageType.Log, message));
         _hotReload = new HotReloadFeature(() => _workspace.CurrentSolution, () => _workspace.Loading);
-        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution);
+        _expressions = new ExpressionCompilerFeature(() => _workspace.CurrentSolution, _workspace.DescribeProject, _workspace.MiscellaneousProjectId,
+            project => _workspace.Loading || _workspace.IsIncomplete(project));
         // Ready only once the solution has loaded: a pass over the projects that arrived so far is not the whole solution.
         _diagnostics.BackgroundPassCompleted += (projects, documents, complete) =>
             _ = Notify(Methods.WorkspaceStatus, new WorkspaceStatusParams(complete ? WorkspaceStates.Ready : WorkspaceStates.Loading, projects, documents), ProtocolJsonContext.Default.WorkspaceStatusParams);
         _workspace.Log += (_, message) => Log(MessageType.Warning, message);
         _connection.Slow += (_, message) => Log(MessageType.Warning, message);
+        // A notification that fails (a projects/update among them) left the workspace as it was without a word: said
+        // now, in the Language Services channel.
+        _connection.HandlerFailed += (_, ex) => Log(MessageType.Error, "A notification failed: " + ex);
         _workspace.FileReloaded += (_, _) => _diagnostics.ScheduleBackground();
     }
 
@@ -194,10 +198,12 @@ internal sealed class LanguageServer : IAsyncDisposable
                 : []);
         OnPosition(Methods.PrepareRename, json.TextDocumentPositionParams, json.PrepareRenameResult, p => (p.TextDocument, p.Position),
             (document, offset, _, ct) => RenameFeature.PrepareAsync(document, offset, ct), null,
-            xaml: (xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
+            razor: (mapping, offset, _, ct) => Razor.RazorRename.PrepareAsync(mapping, offset, ct),
+            xaml:(xaml, offset, _, ct) => Xaml.XamlRename.PrepareAsync(xaml, offset, ct));
         OnPosition(Methods.Rename, json.RenameParams, json.WorkspaceEdit, p => (p.TextDocument, p.Position),
             (document, offset, p, ct) => RenameFeature.RenameAsync(document, offset, p.NewName, _workspace.Version, ct), null,
-            xaml: (xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
+            razor: (mapping, offset, p, ct) => Razor.RazorRename.RenameAsync(mapping, offset, p.NewName, _workspace.Version, ct),
+            xaml:(xaml, offset, p, ct) => Xaml.XamlRename.RenameAsync(xaml, offset, p.NewName, _workspace.Version, ct));
         OnDocument(Methods.CodeAction, json.CodeActionParams, json.CodeActionArray, p => p.TextDocument, async (document, p, ct) =>
         {
             var text = await document.GetTextAsync(ct).ConfigureAwait(false);
@@ -325,7 +331,7 @@ internal sealed class LanguageServer : IAsyncDisposable
         _connection.OnRequest(Methods.WinFormsEdit, json.WinFormsEditParams, json.WinFormsEditResult, (p, ct) =>
             WinForms.WinFormsFeature.EditAsync(_workspace.CurrentSolution, p, _workspace.OpenText, _workspace.Version, ct));
         _connection.OnRequest(Methods.WinFormsToolbox, json.WinFormsToolboxParams, json.WinFormsToolboxResult, (p, ct) =>
-            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct));
+            WinForms.WinFormsFeature.ToolboxAsync(_workspace.CurrentSolution, p.Project, ct, p.Assemblies));
         OnDocument(Methods.XamlLogicalTree, json.XamlLogicalTreeParams, json.XamlLogicalTreeResult, p => p.TextDocument,
             (_, _, _) => Task.FromResult<XamlLogicalTreeResult?>(null), new XamlLogicalTreeResult([]),
             (xaml, _, _) => Task.FromResult<XamlLogicalTreeResult?>(new XamlLogicalTreeResult(Xaml.XamlAnalysis.LogicalTree(xaml))));

@@ -177,7 +177,7 @@ internal sealed partial class DesignerSession
 
     private static ActionItem Describe(DesignerActionList list, DesignerActionPropertyItem item)
     {
-        var property = list.GetType().GetProperty(item.MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        var property = DesignerTypes.Property(list.GetType(), item.MemberName, nonPublic: true);
         var result = new ActionItem(DesignerActionKinds.Property, item.MemberName, item.DisplayName ?? item.MemberName) { Category = item.Category, Description = item.Description };
         if (property is null)
         {
@@ -267,7 +267,104 @@ internal sealed partial class DesignerSession
             return new DesignerChangeResult([], Render()) { Error = $"{parameters.Component} has no action {parameters.Member}." };
         }
 
+        // #461: a control library's dialog the action opened, which its designer left running.
+        VendorDesigners.Continue(Host);
+        _window.WaitForVendorDialog();
         return Result(before);
+    }
+
+    /// <summary>
+    /// A click on the surface, given as the classic IDE's surface gives it to a control library's designer (#461): to the
+    /// glyph there whose behavior takes it (DevExpress's grid's level designer: Add level, Retrieve Details, Run
+    /// Designer), else to the control whose designer's <c>GetHitTest</c> says the point is live, as mouse messages to its
+    /// window (Windows Forms' <c>ControlDesigner</c> asks <c>GetHitTest</c> on <c>WM_NCHITTEST</c> and passes the
+    /// mouse messages that follow to the control when it says yes). Then, as after an action, a dialog the click started
+    /// shows, and what changed comes back as code. Not handled when nothing there takes it.
+    /// </summary>
+    public DesignerChangeResult Click(DesignerClickParams parameters)
+    {
+        var root = Root;
+        var origin = WindowOrigin(root);
+        var screen = new Point(origin.X + (int)Math.Round(parameters.X), origin.Y + (int)Math.Round(parameters.Y));
+        var path = PathAt(root, screen);
+        var designers = path.AsEnumerable().Reverse().Concat(ControlsUnder(root).Except(path))
+            .Select(Host.GetDesigner).OfType<System.ComponentModel.Design.IDesigner>().Where(VendorDesigners.TakesClicks).ToList();
+        if (designers.Count == 0)
+        {
+            return new DesignerChangeResult([], Render());
+        }
+
+        var before = Capture();
+        var windows = NativeMethods.VisibleWindows();
+        if (!VendorDesigners.ClickGlyphs(Host, designers, screen))
+        {
+            var taker = path.AsEnumerable().Reverse().FirstOrDefault(c => Host.GetDesigner(c) is System.Windows.Forms.Design.ControlDesigner designer
+                && VendorDesigners.TakesClicks(designer) && VendorDesigners.HitTest(designer, screen));
+            if (taker is null)
+            {
+                return new DesignerChangeResult([], Render());
+            }
+
+            VendorDesigners.SendClick(taker, screen);
+        }
+
+        // The pointer is the IDE's, not here: the windows under the point lose it, so the frame shows no hover.
+        VendorDesigners.Leave(path);
+
+        _window.WaitForPopups(windows, PopupPoint(parameters));
+        VendorDesigners.Continue(Host);
+        _window.WaitForVendorDialog();
+        return Result(before) with { Handled = true };
+    }
+
+    /// <summary>
+    /// Where a popup the click opens shows: the click's point in the IDE, which the shell gives in physical pixels and the
+    /// host, unaware of DPI, sees scaled: mapped through the IDE's window's rectangle, physical and as the host sees it.
+    /// Null when the shell didn't say where.
+    /// </summary>
+    private Point? PopupPoint(DesignerClickParams parameters)
+    {
+        if (parameters is not { ScreenX: { } x, ScreenY: { } y })
+        {
+            return null;
+        }
+
+        var target = new Point(x, y);
+        var ide = new IntPtr(_window.DialogOwner);
+        if (ide != IntPtr.Zero && NativeMethods.GetPhysicalWindowRect(ide, out var physical) && NativeMethods.GetWindowRect(ide, out var seen)
+            && physical.Right > physical.Left && physical.Bottom > physical.Top)
+        {
+            target = new Point(
+                seen.Left + (int)Math.Round((x - physical.Left) * (double)(seen.Right - seen.Left) / (physical.Right - physical.Left)),
+                seen.Top + (int)Math.Round((y - physical.Top) * (double)(seen.Bottom - seen.Top) / (physical.Bottom - physical.Top)));
+        }
+
+        return target;
+    }
+
+    /// <summary>The controls under <paramref name="screen"/>, from the root to the deepest.</summary>
+    private static List<Control> PathAt(Control root, Point screen)
+    {
+        var path = new List<Control> { root };
+        for (var control = root; control.GetChildAtPoint(control.PointToClient(screen), GetChildAtPointSkip.Invisible) is { } child; control = child)
+        {
+            path.Add(child);
+        }
+
+        return path;
+    }
+
+    /// <summary>Every control under the root, the root included.</summary>
+    private static IEnumerable<Control> ControlsUnder(Control root)
+    {
+        yield return root;
+        foreach (Control child in root.Controls)
+        {
+            foreach (var control in ControlsUnder(child))
+            {
+                yield return control;
+            }
+        }
     }
 
     private bool Run(IComponent component, DesignerInvokeActionParams parameters)
@@ -294,7 +391,7 @@ internal sealed partial class DesignerSession
                 {
                     case DesignerActionPropertyItem property when property.MemberName == parameters.Member:
                     {
-                        var info = list.GetType().GetProperty(property.MemberName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        var info = DesignerTypes.Property(list.GetType(), property.MemberName, nonPublic: true)
                             ?? throw new InvalidOperationException($"{property.DisplayName} isn't a property of its action list.");
                         var type = Nullable.GetUnderlyingType(info.PropertyType) ?? info.PropertyType;
                         info.SetValue(list, TypeDescriptor.GetConverter(type).ConvertFromInvariantString(parameters.Text ?? string.Empty));

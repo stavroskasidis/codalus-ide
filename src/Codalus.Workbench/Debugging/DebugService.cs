@@ -175,7 +175,7 @@ public sealed class DebugService : IAsyncDisposable
     /// <summary>
     /// The adapter that debugs .NET (CoreCLR) programs here, read as each session starts: <c>codalus</c>, Codalus
     /// IDE's own (<c>codalus-debughost --clr-dap</c>, ADR 0086), the default since M58 (ADR 0094), also when nothing is
-    /// set; or <c>netcoredbg</c>, the fallback for one release. <see cref="AdapterVariable"/> overrides it. Remote
+    /// set; or <c>netcoredbg</c>, the fallback, supported in 1.0 (ADR 0105). <see cref="AdapterVariable"/> overrides it. Remote
     /// targets, .NET Framework programs and x64 programs on Apple silicon don't follow it.
     /// </summary>
     public Func<string?> AdapterSetting { get; set; } = () => null;
@@ -253,10 +253,11 @@ public sealed class DebugService : IAsyncDisposable
 
     /// <summary>
     /// The Codalus debugger's launch on another machine: the program, its arguments and environment as they are there.
-    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally.
+    /// The symbol options stay here (their folders are this machine's), and the views are the client's as locally. The
+    /// sources are this machine's (<see cref="NetFxDebugArguments.SourcesOnClient"/>).
     /// </summary>
     private NetFxDebugArguments RemoteCoreClrArguments(LaunchArguments arguments) =>
-        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes);
+        new(arguments.Program, arguments.Args, arguments.Cwd, arguments.Env, JustMyCode: JustMyCode, EnableStepFiltering: StepFiltering, Name: ".NET", Type: "coreclr", ClientViews: CollectionViews.ViewedTypes) { SourcesOnClient = true };
 
     /// <summary>
     /// Compiles the expressions the Codalus debugger's own evaluator doesn't read (M58: lambdas, LINQ, Visual Basic),
@@ -1090,7 +1091,7 @@ public sealed class DebugService : IAsyncDisposable
             await StartAsync(
                 ct => StartRemoteAdapterAsync(remote.Adapter, remote.Map, ct),
                 adapter => remote.Adapter.IsCodalus
-                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId), DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
+                    ? adapter.Inner.AttachAsync(CoreClrAttach(processId) with { SourcesOnClient = true }, DapJsonContext.Default.NetFxDebugArguments, cancellationToken)
                     : adapter.Inner.AttachAsync(new AttachArguments(processId, JustMyCode, EnableStepFiltering: StepFiltering), cancellationToken),
                 attached: true,
                 [process],
@@ -1484,9 +1485,54 @@ public sealed class DebugService : IAsyncDisposable
             await PrepareDetachAsync(adapter).ConfigureAwait(false);
         }
 
+        // Only a program on this machine: behind a path mapping (WSL, a container) its process id is another system's.
+        var launched = !_attached && (adapter is CompoundDebugAdapter compound ? compound.Primary : adapter) is DebugAdapter { Transport: null } ? ProcessId : null;
         await adapter.DisconnectAsync(terminateDebuggee: !_attached, CancellationToken.None).ConfigureAwait(false);
         KillTerminalPrograms();
+        if (launched is { } program)
+        {
+            await EndLaunchedProgramAsync(program).ConfigureAwait(false);
+        }
+
         await EndAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Stop is done when the program it ended has: the next F5 then finds its port free. netcoredbg answered the
+    /// disconnect with "exited" while the Blazor server it had launched still listened, and the next session's server,
+    /// started 6 s later on the same port, failed with "address already in use" (Linux CI, the smoke test's
+    /// blazor.compoundHotReload.netcoredbg, develop's dry run 44952519485). A program still running a few seconds after
+    /// the debugger ended it is ended with its process tree, and the Debug Console says so.
+    /// </summary>
+    private async Task EndLaunchedProgramAsync(int processId)
+    {
+        if (await EndedWithinAsync(processId, TimeSpan.FromSeconds(5)).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) was still running 5 s after the debugger ended it: it is ended with the processes it started.\n"));
+        KillProgram(processId);
+        if (!await EndedWithinAsync(processId, TimeSpan.FromSeconds(10)).ConfigureAwait(false))
+        {
+            Output?.Invoke(this, new DebugOutput("console", $"The program (process {processId.ToString(CultureInfo.InvariantCulture)}) is still running.\n"));
+        }
+    }
+
+    private static async Task<bool> EndedWithinAsync(int processId, TimeSpan limit)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (WatchedServer.IsRunning(processId))
+        {
+            if (clock.Elapsed >= limit)
+            {
+                return false;
+            }
+
+            await Task.Delay(100).ConfigureAwait(false);
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -1620,7 +1666,8 @@ public sealed class DebugService : IAsyncDisposable
         // A launched program's session that ends without the adapter saying how the program exited reports exit code 0,
         // the initial one: so it says so, with what the adapter's process did. netcoredbg (Linux CI, PR #300's run
         // 41898116148) and Codalus IDE's adapter (Linux arm64 CI, run 41547730079) both went silent after the program's
-        // end, without exited or terminated, and the session ended on the connection closing. TODO(issue): why.
+        // end, without exited or terminated, and the session ended on the connection closing. Codalus IDE's adapter ended
+        // its process before it had sent them (fixed: DapServer.SendEndAsync); TODO(issue): why netcoredbg did.
         if (!_exitReported && !_stopRequested && !_attached)
         {
             Output?.Invoke(this, new DebugOutput("console", $"The debugger ended the session without reporting the program's exit code{(adapter.Closed.IsCompleted ? ", its connection closed" : string.Empty)} ({adapter.Describe()}).\n"));
@@ -1801,7 +1848,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         MarkRunning();
-        await adapter.ContinueAsync(CurrentThread, _session.Token).ConfigureAwait(false);
+        await SendResumeAsync(adapter, a => a.ContinueAsync(CurrentThread, _session.Token)).ConfigureAwait(false);
     }
 
     /// <summary>Ends a Run to Cursor: removes its hidden breakpoint.</summary>
@@ -1867,7 +1914,25 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         MarkRunning();
-        await resume(adapter).ConfigureAwait(false);
+        await SendResumeAsync(adapter, resume).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends a resume (a continue, a step). A session that ends before the adapter answers it had its program run to
+    /// its end, so the resume did what it was asked: netcoredbg on macOS reported the program's end before its answer
+    /// to the continue, the end cancelled the request still waiting for it, and Continue threw that cancellation to
+    /// the command (DebugServiceTests, PR #518's run 45089886744).
+    /// </summary>
+    private static async Task SendResumeAsync(IDebugAdapter adapter, Func<IDebugAdapter, Task> resume)
+    {
+        try
+        {
+            await resume(adapter).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            // The session ended, and says so itself (its Ended, the Debug Console).
+        }
     }
 
     private void MarkRunning()

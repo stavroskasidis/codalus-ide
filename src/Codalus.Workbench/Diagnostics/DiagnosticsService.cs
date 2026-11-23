@@ -101,9 +101,17 @@ public sealed class DiagnosticsService : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Stops a counters session and takes what the host still had: on a stop, the host sends the values and events it
+    /// hadn't flushed yet, then the session's end, and only then answers. The monitor was forgotten before the stop, so
+    /// those notifications found no monitor and were dropped, and since an answer completes as it's read while
+    /// notifications wait their turn, the answer alone doesn't say they've been handled. A profiling run whose program
+    /// ended before the host had read its stream (a loaded machine) saved no counter and no event at all (the 1.0
+    /// validation's WSL smoke, 2026-11-20): the monitor now takes them until the session's end arrives.
+    /// </summary>
     internal async Task StopCountersAsync(CounterMonitor monitor, CancellationToken cancellationToken)
     {
-        if (!_monitors.TryRemove(monitor.Id, out _))
+        if (!_monitors.ContainsKey(monitor.Id))
         {
             return;
         }
@@ -113,16 +121,21 @@ public sealed class DiagnosticsService : IAsyncDisposable
             if (_process is { IsRunning: true } running)
             {
                 await running.Connection.InvokeAsync(DiagnosticsMethods.CountersStop, new SessionParams(monitor.Id), Json.SessionParams, Json.DiagnosticsEmpty, cancellationToken).ConfigureAwait(false);
+                await monitor.Ended.WaitAsync(StopEndWait, cancellationToken).ConfigureAwait(false);
             }
         }
-        catch (Exception ex) when (ex is JsonRpcRemoteException or JsonRpcConnectionLostException or ObjectDisposedException or InvalidOperationException)
+        catch (Exception ex) when (ex is JsonRpcRemoteException or JsonRpcConnectionLostException or ObjectDisposedException or InvalidOperationException or TimeoutException)
         {
         }
         finally
         {
+            _monitors.TryRemove(monitor.Id, out _);
             monitor.OnEnded(null);
         }
     }
+
+    /// <summary>How long a stop waits for the session's end after the host answered (its notifications are on their way).</summary>
+    private static readonly TimeSpan StopEndWait = TimeSpan.FromSeconds(10);
 
     /// <summary>Starts recording a CPU trace of a process into <paramref name="outputPath"/>.</summary>
     public Task<TraceRecordingHandle> StartTraceAsync(int processId, string outputPath, CancellationToken cancellationToken) =>

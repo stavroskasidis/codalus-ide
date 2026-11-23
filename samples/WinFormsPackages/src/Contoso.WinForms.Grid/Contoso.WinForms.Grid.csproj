@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <IsPackable>true</IsPackable>
+    <Version>1.0.0</Version>
+    <Authors>Contoso</Authors>
+    <Description>A stand-in for a third-party control library's second package, which depends on the first.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Packed as a dependency on the Contoso.WinForms.Controls package. -->
+    <ProjectReference Include="..\Contoso.WinForms.Controls\Contoso.WinForms.Controls.csproj" />
+  </ItemGroup>
+</Project>

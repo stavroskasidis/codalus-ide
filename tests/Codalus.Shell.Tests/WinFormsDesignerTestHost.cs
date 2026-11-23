@@ -11,7 +11,7 @@ namespace Codalus.Shell.Tests;
 /// </summary>
 internal static class WinFormsDesignerTestHost
 {
-    internal static async Task<(ShellFixture Fixture, string App, List<FakeWinFormsDesignerHost> Hosts)> OpenAsync()
+    internal static async Task<(ShellFixture Fixture, string App, List<FakeWinFormsDesignerHost> Hosts)> OpenAsync(Action<FakeWinFormsDesignerHost>? configure = null)
     {
         var f = ShellFixture.Create();
         var folder = f.CopySample("WindowsDesktop");
@@ -30,6 +30,7 @@ internal static class WinFormsDesignerTestHost
             HostFactory = (_, _) =>
             {
                 var host = new FakeWinFormsDesignerHost();
+                configure?.Invoke(host);
                 hosts.Add(host);
                 return Task.FromResult<IWinFormsDesignerHost>(host);
             },

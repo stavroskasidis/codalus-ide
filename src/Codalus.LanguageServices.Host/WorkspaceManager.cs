@@ -192,6 +192,41 @@ internal sealed class WorkspaceManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// What this host was sent for a project and what of it it holds (failure messages): how many design-time builds
+    /// reached it, the last one's arguments and references, how many of those are on disk now, and the metadata and
+    /// project references applied. A Visual Basic project's workspace once had no references two minutes after the
+    /// stop while the build host's inputs for it had 169 (DebugCodalusTests under load in WSL, docs/ci-flakes.md): this
+    /// says whether the inputs with them never came, came without them, or came and weren't loaded. Null for a
+    /// project that isn't loaded.
+    /// </summary>
+    public string? DescribeProject(string? projectPath)
+    {
+        if (projectPath is null)
+        {
+            return null;
+        }
+
+        lock (_gate)
+        {
+            if (!_projects.TryGetValue(Path.GetFullPath(projectPath), out var entry) || entry.Parsed is not { } parsed)
+            {
+                return null;
+            }
+
+            var arguments = parsed.Data.Arguments.Length;
+            var references = parsed.References.Count;
+            var onDisk = parsed.References.Count(r => File.Exists(r.Path));
+            var project = _workspace.CurrentSolution.GetProject(entry.Id);
+            var metadata = project?.MetadataReferences.Count ?? 0;
+            var projects = project?.ProjectReferences.Count() ?? 0;
+            var ago = (DateTime.UtcNow - entry.Updated).TotalSeconds;
+            var running = (DateTime.UtcNow - System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds;
+            return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"{entry.Updates} design-time build(s) received, the last {ago:0} s ago: {arguments} arguments, {references} references ({onDisk} on disk now); the workspace has {metadata} metadata and {projects} project references; this host has run {running:0} s and was sent {_updates} update(s) of projects");
+        }
+    }
+
     private int _generation;
 
     /// <summary>Changes whenever projects are added, updated or removed, or closed files change on disk (not for edits of open documents).</summary>
@@ -228,22 +263,38 @@ internal sealed class WorkspaceManager : IDisposable
         public IReadOnlyList<MetadataReference> AppliedMetadata { get; set; } = [];
 
         public IReadOnlyList<ProjectReference> AppliedProjects { get; set; } = [];
+
+        /// <summary>How many design-time builds of it this host was sent, and when the last came (<see cref="DescribeProject"/>).</summary>
+        public int Updates { get; set; }
+
+        public DateTime Updated { get; set; }
     }
 
     private sealed record OpenDocument(int Version, SourceText Text, DocumentId? MiscId);
 
     // ------------------------------------------------------------------ projects
 
+    private int _updates;
+
     public void UpdateProjects(IReadOnlyList<ProjectData> projects)
     {
+        Interlocked.Increment(ref _updates);
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         TimeSpan parsing = default, applying = default, referencing = default;
+
+        // Where a slow load is, said while it runs: the C# host's projects/update once ran for minutes after a 15 s
+        // report and nothing said whether it waited for the lock or for a project (the Data fixture, Windows CI, run
+        // 41685545193, docs/ci-flakes.md). Once after 15 s, then every 30 s.
+        var phase = "waiting for the workspace's lock";
+        using var slow = new Timer(_ => Log?.Invoke(this, $"Loading {projects.Count} project(s) has taken {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0} s so far: {Volatile.Read(ref phase)}."),
+            null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30));
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
             foreach (var data in projects)
             {
                 var path = Path.GetFullPath(data.Path);
+                Volatile.Write(ref phase, $"reading {data.Name}");
                 var step = System.Diagnostics.Stopwatch.GetTimestamp();
                 var parsed = _loader.Parse(data with { Path = path });
                 parsing += System.Diagnostics.Stopwatch.GetElapsedTime(step);
@@ -258,16 +309,21 @@ internal sealed class WorkspaceManager : IDisposable
                     _projects[path] = entry;
                 }
 
+                Volatile.Write(ref phase, $"adding {data.Name}");
                 step = System.Diagnostics.Stopwatch.GetTimestamp();
                 solution = Apply(solution, entry, parsed);
                 entry.Parsed = parsed;
+                entry.Updates++;
+                entry.Updated = DateTime.UtcNow;
                 Watch(Path.GetDirectoryName(path)!);
                 applying += System.Diagnostics.Stopwatch.GetElapsedTime(step);
             }
 
+            Volatile.Write(ref phase, "the references between projects");
             var references = System.Diagnostics.Stopwatch.GetTimestamp();
             solution = ApplyReferences(solution);
             referencing = System.Diagnostics.Stopwatch.GetElapsedTime(references);
+            Volatile.Write(ref phase, "the open documents");
             solution = ReconcileOpenDocuments(solution);
             _workspace.Replace(solution);
             _incomplete = Incomplete();
@@ -280,6 +336,7 @@ internal sealed class WorkspaceManager : IDisposable
                               + $"adding {applying.TotalMilliseconds:0}, references {referencing.TotalMilliseconds:0}).");
         }
 
+        Volatile.Write(ref phase, "telling the features the projects changed");
         ProjectsChanged?.Invoke(this, EventArgs.Empty);
     }
 

@@ -29,6 +29,7 @@ public sealed class DiffInsights : IDisposable
     private CancellationTokenSource? _refreshCts;
     private CancellationTokenSource? _resolveCts;
     private int _failures;
+    private int _resolveFailures;
     private bool _disposed;
 
     public DiffInsights(CodeDocument model, IEditorServices services)
@@ -142,6 +143,7 @@ public sealed class DiffInsights : IDisposable
     {
         _version = -1;
         _failures = 0;
+        _resolveFailures = 0;
         _refreshTimer.Stop();
         _ = RefreshAsync();
     }
@@ -322,6 +324,12 @@ public sealed class DiffInsights : IDisposable
         {
             foreach (var lens in _lenses.Where(p => p.Key >= first && p.Key <= last).SelectMany(p => p.Value).Where(l => l.Command is null).ToList())
             {
+                if (FailingResolvesForTests > 0)
+                {
+                    FailingResolvesForTests--;
+                    throw new Codalus.Rpc.JsonRpcRemoteException(-32603, "A failure for the tests.");
+                }
+
                 var resolved = await client.ResolveCodeLensAsync(lens.Value, token).ConfigureAwait(true);
                 if (token.IsCancellationRequested || _disposed || Model.Version != version)
                 {
@@ -337,9 +345,39 @@ public sealed class DiffInsights : IDisposable
         }
         catch (Exception ex) when (IsTransient(ex))
         {
-            // The next scroll or refresh asks again.
+            // A cancellation is a newer resolve's. A failure (the service busy or not ready) is asked again, a few times,
+            // as the editor's are: no scroll may come to ask, and the row stayed blank (WSL validation, 2026-11-19).
+            if (ex is OperationCanceledException || _disposed)
+            {
+                return;
+            }
+
+            LastResolveFailure = $"{ex.GetType().Name}: {ex.Message}";
+            if (_resolveFailures++ < 5)
+            {
+                _services.Log($"{Model.Name} (diff): resolving CodeLens failed ({LastResolveFailure}); retrying");
+                _resolveTimer.Stop();
+                _resolveTimer.Start();
+            }
+
+            return;
         }
+
+        _resolveFailures = 0;
     }
+
+    /// <summary>How many of the next resolves fail as a busy service's do (tests).</summary>
+    internal int FailingResolvesForTests { get; set; }
+    /// <summary>Whether a one-based line's lenses are among those resolved now: near the lines the diff shows (tests).</summary>
+    internal bool IsNearShown(int line) => line >= _shown.First - 5 && line <= _shown.Last + 5;
+
+    /// <summary>The last failure of a lens's resolve (tests' failure messages).</summary>
+    internal string? LastResolveFailure { get; private set; }
+
+    /// <summary>What a line's lenses wait for (tests' failure messages): each one's title, or that it isn't resolved.</summary>
+    internal string LensState(int line) => _lenses.GetValueOrDefault(line) is { } lenses
+        ? string.Join(", ", lenses.Select(l => l.Command is null ? $"unresolved (shown '{l.Title}')" : $"'{l.Title}'"))
+        : "no lens";
 
     /// <summary>The Git history of each member with a lens, from the document's blame (its unsaved text included).</summary>
     private async Task RefreshBlameAsync(int version, CancellationToken token)

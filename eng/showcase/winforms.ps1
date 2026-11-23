@@ -26,7 +26,7 @@ function Story {
     Mark start
     Wait 1
     # A Button from the Toolbox, dropped below the counter.
-    Drag 58 317 352 512; Wait 0.8
+    Drag 58 275 352 512; Wait 0.8
     Click 389 523; Wait 0.6
     # Moved left until it lines up with the list (a snap line), then its Text set in the Properties window.
     Drag 389 523 365 523

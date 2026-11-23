@@ -1573,7 +1573,8 @@ public sealed partial class CodeEditorController : IDisposable
             var caret = Editor.CaretOffset;
             if (caret < start || caret - start > 200)
             {
-                return; // the caret moved away meanwhile
+                _services.Log($"{Model.Name}: completion not shown (the caret moved away meanwhile: at {caret}, the word from {start})");
+                return;
             }
 
             var window = NewCompletionPopup(start, caret);
@@ -2448,6 +2449,40 @@ public sealed partial class CodeEditorController : IDisposable
     internal Task InlineValuesLoaded { get; private set; } = Task.CompletedTask;
 
     /// <summary>
+    /// How the last refreshes of the inline values went, oldest first (failure messages): why one asked nothing, what the
+    /// language service answered and the frame's scopes held, what was drawn, or what failed or was cancelled. Under
+    /// heavy load the smoke test's debug.depth waited 30 s for args's value with nothing drawn, 8 times in 175 runs (WSL,
+    /// 2026-11-19, docs/ci-flakes.md); the last outcome alone said a load cancelled by a newer refresh, not what that did.
+    /// </summary>
+    internal string InlineValuesOutcome
+    {
+        get
+        {
+            lock (_inlineValuesHistory)
+            {
+                return _inlineValuesHistory.Count == 0 ? "not refreshed" : string.Join(" | ", _inlineValuesHistory);
+            }
+        }
+
+        private set
+        {
+            lock (_inlineValuesHistory)
+            {
+                _inlineValuesHistory.Enqueue($"{DateTime.Now:HH:mm:ss.fff} {value}");
+                while (_inlineValuesHistory.Count > 6)
+                {
+                    _inlineValuesHistory.Dequeue();
+                }
+            }
+        }
+    }
+
+    private readonly Queue<string> _inlineValuesHistory = new();
+
+    /// <summary>Awaited once a refresh's answer has come, before it is used (tests: a superseded refresh's answer held until a newer one has drawn).</summary>
+    internal Func<CancellationToken, Task>? InlineValuesAnswered { get; set; }
+
+    /// <summary>
     /// At a stop in this document (the frame selected in the Call Stack), asks the language service which variables each
     /// line of the method reads, up to the current statement, and draws their values: locals and parameters from the
     /// frame's scopes, fields and auto-properties evaluated, each with a timeout. It never blocks typing or stepping: the
@@ -2465,6 +2500,8 @@ public sealed partial class CodeEditorController : IDisposable
 
         if (!_services.Options.InlineValues || CurrentDebugLine() is not { } line || debugger.SelectedFrame is not { } frame || Client is not { } client)
         {
+            InlineValuesOutcome = !_services.Options.InlineValues ? "turned off" : CurrentDebugLine() is null ? "no stop in this document"
+                : debugger.SelectedFrame is null ? "no selected frame" : "no language service for this document";
             _inlineValueLines = [];
             InlineValuesLoaded = Task.CompletedTask;
             return;
@@ -2472,6 +2509,7 @@ public sealed partial class CodeEditorController : IDisposable
 
         var load = new CancellationTokenSource();
         _inlineValuesLoad = load;
+        InlineValuesOutcome = $"line {line}: asking for frame {frame.Id} ({frame.Name})";
         InlineValuesLoaded = LoadInlineValuesAsync(client, frame, line, load.Token);
     }
 
@@ -2482,8 +2520,23 @@ public sealed partial class CodeEditorController : IDisposable
         {
             var stopped = new LanguageServices.Protocol.Range(new Position(line - 1, Math.Max(0, frame.Column - 1)), new Position(line - 1, Math.Max(0, frame.Column - 1)));
             var answer = await client.InlineValuesAsync(DocumentUris.FromPath(Model.Path), new LanguageServices.Protocol.Range(new Position(0, 0), new Position(line, 0)), new InlineValueContext(frame.Id, stopped), cancellationToken).ConfigureAwait(true);
-            if (answer.Length == 0 || cancellationToken.IsCancellationRequested)
+            if (InlineValuesAnswered is { } answered)
             {
+                await answered(cancellationToken).ConfigureAwait(true);
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // A newer refresh owns what is drawn: one that answered first had its values wiped by this one, which
+                // cleared them on its way out (the smoke test's debug.depth under load, WSL, 2026-11-19: three refreshes of
+                // one stop within 30 ms, the last drew args's line, the one it cancelled answered after it and drew none).
+                InlineValuesOutcome = $"line {line}: cancelled by a newer refresh";
+                return;
+            }
+
+            if (answer.Length == 0)
+            {
+                InlineValuesOutcome = $"line {line}: the language service named no values (frame {frame.Name})";
                 _inlineValueLines = [];
                 return;
             }
@@ -2549,6 +2602,8 @@ public sealed partial class CodeEditorController : IDisposable
 
             if (!cancellationToken.IsCancellationRequested)
             {
+                InlineValuesOutcome = $"line {line}: {answer.Length} value(s) named on {answer.Select(v => v.Range.Start.Line).Distinct().Count()} line(s), "
+                    + $"{variables.Count} variable(s) in the frame's scopes ({string.Join(", ", variables.Keys.Take(8))}), {evaluated.Count} evaluated; {lines.Count} line(s) drawn";
                 _inlineValueLines = lines;
                 _lastInlineValues = now;
                 Editor.TextArea.TextView.InvalidateLayer(KnownLayer.Background);
@@ -2556,10 +2611,15 @@ public sealed partial class CodeEditorController : IDisposable
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            InlineValuesOutcome = $"line {line}: cancelled by a newer refresh";
         }
         catch (Exception ex) when (ex is Codalus.Debugging.DapException or InvalidOperationException or IOException or Codalus.Rpc.JsonRpcRemoteException or Codalus.Rpc.JsonRpcConnectionLostException or ObjectDisposedException)
         {
-            _inlineValueLines = []; // the values are a convenience: a failed read draws none
+            InlineValuesOutcome = $"line {line}: failed, {ex.GetType().Name}: {ex.Message}";
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _inlineValueLines = []; // the values are a convenience: a failed read draws none (a newer refresh's stay)
+            }
         }
     }
 

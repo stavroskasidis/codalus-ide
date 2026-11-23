@@ -2,8 +2,8 @@
 # eng/get-fluent-icons.sh copies them from the pinned package into Fluent/; the build compiles Fluent/*.svg into
 # geometries (eng/icons/CompileIcons.cs), so nothing parses SVG at runtime. Our icon names map onto these
 # in Controls/Icon.cs.
+add_16_filled
 add_16_regular
-add_circle_16_filled
 add_subtract_circle_16_regular
 alert_16_regular
 alert_badge_16_regular
@@ -60,8 +60,8 @@ calendar_month_16_regular
 camera_16_regular
 chat_add_16_regular
 checkbox_checked_16_regular
+checkmark_16_filled
 checkmark_16_regular
-checkmark_circle_16_filled
 checkmark_circle_16_regular
 checkmark_starburst_16_filled
 circle_16_filled

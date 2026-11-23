@@ -24,8 +24,9 @@ public sealed class IdeToolsDesktopAppShellTests
     {
         // The app opens a window: on Linux, on the display there is, or on an Xvfb of the IDE's.
         var display = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DISPLAY"));
+        var xvfb = OffScreenDisplay.Locate(Environment.GetEnvironmentVariable("PATH")) is not null;
         Assert.SkipWhen(
-            OperatingSystem.IsLinux() && !display && OffScreenDisplay.Locate(Environment.GetEnvironmentVariable("PATH")) is null,
+            OperatingSystem.IsLinux() && !display && !xvfb,
             "No display and no Xvfb: the Avalonia app can't open its window.");
         await using var f = ShellFixture.Create();
 
@@ -43,9 +44,14 @@ public sealed class IdeToolsDesktopAppShellTests
         {
             var started = await CallAsync(f, "run_project", """{"offScreen":true}""");
             Assert.False(started.IsError, started.Text + Output(f));
-            if (OperatingSystem.IsLinux())
+            if (OperatingSystem.IsLinux() && xvfb)
             {
                 Assert.Contains("Its windows open off-screen (Xvfb, display :", started.Text, StringComparison.Ordinal);
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                // A display and no Xvfb (WSLg): the app opens on the display, and the tool says why.
+                Assert.Contains("Xvfb isn't installed, so the app's windows open as usual", started.Text, StringComparison.Ordinal);
             }
             else
             {

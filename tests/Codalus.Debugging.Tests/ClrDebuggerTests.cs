@@ -68,10 +68,60 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
             // Where a native frame's code is, as a module and an offset: what a wait in native code waits in (the runtime,
             // the OS loader), which "[Native Code]" alone didn't say (Windows CI, run 43731649744, docs/ci-flakes.md).
             Assert.True(System.Text.RegularExpressions.Regex.IsMatch(threads, @"\[Native Code\] at [^\s+]+\+0x[0-9A-F]+"), "The threads:\n" + threads);
+
+            // A dump of the program beside the log, written by its runtime while it was stopped: the native stacks and the
+            // memory, which tell what an eval waiting in native code waits on (Windows CI, runs 41449676058 and
+            // 43731649744; Linux CI, run 43587457886).
+            var dump = Assert.Single(Directory.GetFiles(logs, "func-eval-*.dmp"));
+            Assert.True(new FileInfo(dump).Length > 0, "An empty dump.");
+            Assert.Contains("A dump of the program: " + dump, log, StringComparison.Ordinal);
         }
         finally
         {
             Directory.Delete(logs, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// In a container or on another machine the program's sources are the client's, not where the debugger runs: its
+    /// frames still name their document and line, which the client maps. Asked of the debugger's own disk, every frame
+    /// in a rootless podman container had none, and the editor never showed the stop (ContainerShellTests under WSL,
+    /// docs/ci-flakes.md). Locally a document that isn't on disk stays out, as before.
+    /// </summary>
+    [Fact]
+    public async Task Frames_name_their_document_and_line_when_the_sources_are_the_clients_though_not_on_the_debuggers_disk()
+    {
+        var line = Line("loop");
+        var away = fixture.Program + ".away";
+        File.Move(fixture.Program, away);
+        try
+        {
+            foreach (var sourcesOnClient in new[] { true, false })
+            {
+                await using var adapter = await DebugAdapter.StartAsync(Adapter(), Ct);
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr") { SourcesOnClient = sourcesOnClient }, s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.SetBreakpointsAsync(fixture.Program, [new SourceBreakpoint(line)], Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+                var stop = await events.StoppedAsync();
+                var top = (await adapter.StackTraceAsync(stop.ThreadId!.Value, 1, Ct)).StackFrames[0];
+                if (sourcesOnClient)
+                {
+                    Assert.Equal((Path.GetFileName(fixture.Program), line), (Path.GetFileName(top.Source?.Path), top.Line));
+                    Assert.Equal(fixture.Program, top.Source!.Path, ignoreCase: OperatingSystem.IsWindows());
+                }
+                else
+                {
+                    Assert.Equal((null, 0), (top.Source?.Path, top.Line));
+                }
+
+                await adapter.DisconnectAsync(terminateDebuggee: true, Ct);
+            }
+        }
+        finally
+        {
+            File.Move(away, fixture.Program);
         }
     }
 
@@ -102,6 +152,10 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         Assert.Equal("0", locals.Single(v => v.Name == "i").Value);
         Assert.Equal("5", (await adapter.EvaluateAsync("numbers.Count", top.Id, "watch", Ct)).Result);
         Assert.Equal("3", (await adapter.EvaluateAsync("numbers[2] + total", top.Id, "watch", Ct)).Result);
+
+        // A method of a number in the frame: its func-eval threw "Enum value was out of legal range" for every one.
+        Assert.Equal("\"0\"", (await adapter.EvaluateAsync("total.ToString(System.Globalization.CultureInfo.InvariantCulture)", top.Id, "watch", Ct)).Result);
+        Assert.Equal("-1", (await adapter.EvaluateAsync("total.CompareTo(1)", top.Id, "watch", Ct)).Result);
         await adapter.NextAsync(loop.ThreadId.Value, Ct);
         Assert.Equal("step", (await events.StoppedAsync()).Reason);
 
@@ -138,6 +192,43 @@ public sealed class ClrDebuggerTests(DebuggeeFixture fixture) : IClassFixture<De
         await events.NextAsync(DapEvents.Terminated);
         Assert.Contains("total=15 Ada is 36", events.Output, StringComparison.Ordinal);
         Assert.Contains("done", events.Output, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The session ends when the program does, though the runtime's <c>ExitProcess</c> never reaches the adapter: on
+    /// Linux CI (the nightly, run 44879237998) a program wrote its last line and returned from Main, no ExitProcess came,
+    /// and the session never said "exited". The launcher's word ends it, with the program's exit code and its output.
+    /// </summary>
+    [Fact]
+    public async Task The_session_ends_with_the_program_though_the_runtimes_exit_callback_never_comes()
+    {
+        var logs = Directory.CreateTempSubdirectory("codalus-clr-dap-").FullName;
+        try
+        {
+            var environment = new Dictionary<string, string> { ["CODALUS_CLR_DEBUGGER_LOG"] = logs, ["CODALUS_CLR_DEBUGGER_DROP_EXIT_PROCESS"] = "1" };
+            await using (var adapter = await DebugAdapter.StartAsync(Adapter() with { Environment = environment }, Ct))
+            {
+                var events = new EventLog(adapter);
+                await adapter.LaunchAsync(new NetFxDebugArguments(DebuggeeFixture.DotnetHost, ["exec", fixture.Dll], fixture.Folder, Type: "coreclr"), s_json.NetFxDebugArguments, Ct);
+                await adapter.Initialized.WaitAsync(TimeSpan.FromSeconds(60), Ct);
+                await adapter.ConfigurationDoneAsync(Ct);
+
+                var exited = await events.NextAsync(DapEvents.Exited);
+                Assert.Equal(15, exited.Body.GetProperty("exitCode").GetInt32());
+                await events.NextAsync(DapEvents.Terminated);
+                Assert.Contains("done", events.Output, StringComparison.Ordinal);
+            }
+
+            // The log says the callback came and was dropped, and that the launcher's word ended the session.
+            var log = await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(logs, "clr-dap-*.log")), Ct);
+            Assert.True(log.Contains("[clr] ExitProcess (dropped", StringComparison.Ordinal)
+                && log.Contains("[clr] the launcher says the program ended with exit code 15", StringComparison.Ordinal)
+                && log.Contains("the session ends without it", StringComparison.Ordinal), "The adapter's log:\n" + log);
+        }
+        finally
+        {
+            Directory.Delete(logs, recursive: true);
+        }
     }
 
     [Fact]

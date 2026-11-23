@@ -4,6 +4,7 @@
 - **Date:** 2026-11-11
 - **Deciders:** maintainer (the grilling of 2026-11-11: every answer below is theirs)
 - **Amends:** [ADR 0086](0086-a-managed-coreclr-debugger.md) (its phase 3: the default changes now, not after weeks of nightlies), [ADR 0007](0007-debugging.md) (netcoredbg as the .NET debugger), [ADR 0021](0021-debugger-depth.md) and [ADR 0032](0032-debug-companion-host.md) (their gaps lists), [ADR 0039](0039-debugger-sessions.md) (remote targets' debugger), [ADR 0040](0040-hot-reload-while-debugging.md) (active frames), [ADR 0076](0076-debugging-the-desktop-clr.md) (x86 and Windows PDBs)
+- **Amended by:** [ADR 0105](0105-what-1x-keeps-stable.md) (2026-11-16, D57: `netcoredbg` stays a supported fallback in 1.0, not one release; [below](#amendment-2026-11-16-netcoredbg-stays-a-fallback-in-10))
 
 ## Context
 
@@ -20,7 +21,7 @@ The maintainer's request of 2026-11-11: make the Codalus debugger the default an
 
 | | Decision |
 |---|---|
-| **netcoredbg** | `debug.adapter` defaults to `codalus`. `netcoredbg` stays one release as an opt-in fallback, then a later release removes it with `eng/get-netcoredbg.sh`, its copy in `RemoteDebuggers` and its workarounds in `DebugAdapter` |
+| **netcoredbg** | `debug.adapter` defaults to `codalus`. `netcoredbg` stays one release as an opt-in fallback, then a later release removes it with `eng/get-netcoredbg.sh`, its copy in `RemoteDebuggers` and its workarounds in `DebugAdapter`. *Amended 2026-11-16 (ADR 0105): it stays a supported fallback in 1.0, and leaves only in a 1.x minor after another has deprecated it ([below](#amendment-2026-11-16-netcoredbg-stays-a-fallback-in-10))* |
 | **Native-level gaps** | Managed side only: Memory (`ICorDebugProcess::ReadMemory`, `WriteMemory`), Registers (`ICorDebugRegisterSet`) and Disassembly of JIT-compiled managed code, decoded by Iced (MIT) on x64 and by a decoder of our own on arm64. **Data breakpoints and mixed-mode debugging stay documented gaps** |
 | **Remote targets** | A self-contained, trimmed adapter bundle per platform (`codalus-debughost` with the CoreCLR adapter only), copied with consent as netcoredbg is, and carried by `codalus-server`. Runs on targets that have only the program's runtime |
 | **x64 programs on Apple silicon** | The same bundle for `osx-x64`, an on-demand component (the Components window), downloaded with consent the first time such a program is debugged |
@@ -89,3 +90,12 @@ So where the debugger runs as x64 under Rosetta 2 it doesn't use `RegisterForRun
 - **.NET Core 2.0 and 2.1** run no startup hooks (2.2 is the first that does), so the x64 build can't hold their programs at the start: it attaches once the program runs, after five seconds without the hook's word, and the Debug Console says before the start that breakpoints in the first lines are passed and that a program over sooner isn't debugged (`LaunchPlan.StartsWithoutStartupHooks`, `DebugService.NoStartupHooksNote`). A long-running program (an ASP.NET Core 2.1 site) is debugged; a short one isn't, and the launch says why. Two ways around were tried or looked at and aren't taken. For a day (2026-11-12) the IDE gave these launches to netcoredbg's x64 build: on macOS 26, GitHub's runner, it ends with a segmentation fault on every x64 program, .NET Core 2.0 to .NET 5 (the old-.NET matrix, run 43337656697), so it is no fallback there; it stays a choice (`debug.adapter`). And a hold of our own on the runtime's startup semaphores, which dbgshim's wait uses: dbgshim's source says that since macOS 26 they can't be opened across signing teams (dotnet/runtime issue 116545), and the runtimes that got pipes for it aren't these two. So this is a limit of the platform for two runtimes that are long out of support.
 
 Elsewhere dbgshim's own wait stays: it holds the runtime earlier (before any managed code), needs no hook, and covers .NET Core 2. `CODALUS_DEBUG_HELD_START` chooses either path on any machine, which is how the held start is tested on Linux.
+
+## Amendment (2026-11-16): netcoredbg stays a fallback in 1.0
+
+D57 (2026-11-15) made 1.0 a promise that settings and their values keep working through 1.x ([ADR 0105](0105-what-1x-keeps-stable.md)), and named `debug.adapter`'s `netcoredbg` value as its one exception. This supersedes "one release" in the decision above:
+
+- **In 1.0** `netcoredbg` is a supported fallback, as it is in 0.14.0: the packages carry it, the `debug-netcoredbg` test shard and the smoke test's second pass of the debug steps run under it, and its failures are bugs.
+- **Deprecation**, in a 1.x minor: Options warns that the value is deprecated, and the release notes say so.
+- **Removal**, in a later 1.x minor, once the parity suites pass under the Codalus debugger on every OS (D48): netcoredbg goes with what the decision table lists, and with `debug.codalusOffer`, which exists only for it. A `settings.json` or `CODALUS_DEBUG_ADAPTER` still saying `netcoredbg` then gets the Codalus debugger, since a value neither debugger knows is the default (M58b, above).
+- Until then, the places that still hand a program to netcoredbg (a macOS target over SSH, and an x64 program on Apple silicon when the x64 build is declined or unavailable) keep doing so; the removal has to cover them first.

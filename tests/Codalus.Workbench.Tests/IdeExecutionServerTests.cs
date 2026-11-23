@@ -411,10 +411,6 @@ public sealed class IdeExecutionServerTests
         Assert.True(error.SocketErrorCode is System.Net.Sockets.SocketError.AddressAlreadyInUse or System.Net.Sockets.SocketError.AccessDenied, $"Binding 127.0.0.1:{port}: {error.SocketErrorCode}");
     }
 
-    private static int FreePort()
-    {
-        using var socket = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        socket.Start();
-        return ((System.Net.IPEndPoint)socket.LocalEndpoint).Port;
-    }
+    /// <summary>A port for a server started later, outside the ephemeral range (<see cref="Codalus.Tests.TestPorts"/>).</summary>
+    private static int FreePort() => Codalus.Tests.TestPorts.Free();
 }

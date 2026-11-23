@@ -78,8 +78,8 @@ internal static class MergeAlignment
     public readonly record struct Pane(string[] Lines, (int Start, int End)[] Blocks);
 
     /// <summary>
-    /// Lines the panes up. Between conflicts, each pane is diffed against the last (the result): a line every pane has
-    /// lines up across all of them, and between two such lines each pane gets filler up to the tallest one's lines. Each
+    /// Lines the panes up. Between conflicts, each pane is diffed against the last (the result), on lines without their
+    /// whitespace: a line every pane has (whatever its indentation in each) lines up across all of them, and between two such lines each pane gets filler up to the tallest one's lines. Each
     /// conflict's block gets filler up to the tallest side's block.
     /// </summary>
     public static MergePaneLayout[] Align(IReadOnlyList<Pane> panes)
@@ -154,13 +154,15 @@ internal static class MergeAlignment
         var count = panes.Count;
         var pivot = count - 1;
         var pivotLength = to[pivot] - from[pivot];
-        var pivotLines = new ArraySegment<string>(panes[pivot].Lines, from[pivot], pivotLength);
+        // Lines compare without their whitespace, so a block one side re-indented still lines up with the other's.
+        string[] Keys(int p) => [.. new ArraySegment<string>(panes[p].Lines, from[p], to[p] - from[p]).Select(LineDiff.WithoutWhitespace)];
+        var pivotLines = Keys(pivot);
         var match = new int[count][];
         for (var p = 0; p < pivot; p++)
         {
             match[p] = new int[pivotLength];
             Array.Fill(match[p], -1);
-            foreach (var op in LineDiff.Diff(new ArraySegment<string>(panes[p].Lines, from[p], to[p] - from[p]), pivotLines))
+            foreach (var op in LineDiff.Diff(Keys(p), pivotLines))
             {
                 if (op.Kind == ' ')
                 {

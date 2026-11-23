@@ -503,11 +503,18 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
 
     // ------------------------------------------------------------------ status
 
-    /// <summary>The latest version of each package across the sources, and the badges of the asked-for version.</summary>
+    /// <summary>
+    /// The latest version of each package across the sources package source mapping lets restore take it from (D39, as
+    /// search and the details), and the badges of the asked-for version. Every source was asked: an update restore would
+    /// refuse showed as the latest, and the Installed and Updates lists waited on a source mapped to other packages (the
+    /// package tests' <c>Codalus.Sample.*</c>, mapped to the local feed, went to nuget.org too, and both shell tests that
+    /// read the status timed out at once, 60 s each, on macOS CI: PR #405's run 43828283396).
+    /// </summary>
     public async Task<PackageStatusResult> StatusAsync(PackageStatusParams parameters, CancellationToken cancellationToken)
     {
         var settings = LoadSettings();
-        var sources = Sources(settings, null, parameters.Offline);
+        var all = Sources(settings, null, parameters.Offline);
+        var mapping = NuGetSourceMapping.GetPackageSourceMapping(settings);
         using var cache = Cache(parameters.Refresh);
         var errors = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var results = new PackageStatus[parameters.Packages.Length];
@@ -521,7 +528,8 @@ internal sealed partial class NuGetClient(string root, Func<string, string, Task
                 var prerelease = parameters.Prerelease || version?.IsPrerelease == true;
                 IPackageSearchMetadata? latest = null;
                 IPackageSearchMetadata? current = null;
-                foreach (var source in sources)
+                var allowed = AllowedSources(mapping, all, query.Id);
+                foreach (var source in all.Where(s => allowed.Contains(s.Name, StringComparer.OrdinalIgnoreCase)))
                 {
                     try
                     {

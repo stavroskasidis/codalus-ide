@@ -16,8 +16,9 @@ using Codalus.Shell.Infrastructure;
 namespace Codalus.Shell.Editor;
 
 /// <summary>
-/// A read-only code view with TextMate colors and a highlighted range: Peek Definition and the Code Definition window
-/// (M12a). It has no language service of its own; C# is colored with its grammar.
+/// A read-only code view with a highlighted range: Peek Definition and the Code Definition window (M12a), Entity
+/// Framework's debug view, an HTTP response. It has no language service of its own: C# and Visual Basic take the editor's
+/// colors from their grammar (<see cref="EditorColors"/>), other languages their TextMate colors.
 /// </summary>
 public sealed class CodeViewer : UserControl
 {
@@ -63,9 +64,11 @@ public sealed class CodeViewer : UserControl
     /// <summary>
     /// Colors C# and Visual Basic in the editor theme's colors, the editor's, from their grammar's scopes
     /// (<see cref="GrammarColorizer"/>), instead of the TextMate theme of a view without a language service (M34h: Add
-    /// New Item's preview). Other languages keep their TextMate colors, which are the editor's for them too.
+    /// New Item's preview; every read-only view since M65, Peek Definition's and the Code Definition window's among them,
+    /// which drew C# in TextMate's colors beside the editor's). Other languages keep their TextMate colors, which are the
+    /// editor's for them too. False only in tests of the TextMate grammar's life.
     /// </summary>
-    public bool EditorColors { get; init; }
+    public bool EditorColors { get; init; } = true;
 
     /// <summary>The colorizer of <see cref="EditorColors"/>, or null when the language is colored by TextMate (tests).</summary>
     public GrammarColorizer? GrammarColors => _grammarColors;

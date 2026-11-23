@@ -137,18 +137,29 @@ public sealed class ProfilerToolsShellTests
     public async Task Memory_usage_takes_snapshots_diffs_them_and_inspects_a_full_dump()
     {
         await using var f = ShellFixture.Create();
-        await OpenDiagnosticsAsync(f, "Leaky", "0");
+        await OpenDiagnosticsAsync(f, "Leaky", "0"); // Leaky runs until it's stopped
         var hub = Hub(f, ProfilerTools.Memory);
         var run = await hub.StartAsync();
         Assert.NotNull(run);
-        Assert.True(hub.CanSnapshot);
-        await Task.Delay(1000, TestContext.Current.CancellationToken);
-        await SnapshotAsync(f, hub, "heap-1.nettrace");
-        await Task.Delay(2000, TestContext.Current.CancellationToken);
-        await SnapshotAsync(f, hub, "heap-2.nettrace");
-        Assert.Equal("full.dmp", await hub.CreateDumpAsync());
-        Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
-        await hub.StopAsync();
+        try
+        {
+            Assert.True(hub.CanSnapshot);
+            await Task.Delay(1000, TestContext.Current.CancellationToken);
+            await SnapshotAsync(f, hub, "heap-1.nettrace");
+            await Task.Delay(2000, TestContext.Current.CancellationToken);
+            await SnapshotAsync(f, hub, "heap-2.nettrace");
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var dump = await hub.CreateDumpAsync();
+            Assert.True(dump == "full.dmp", $"The dump is '{dump}', not full.dmp, after {started.Elapsed.TotalSeconds:0} s. Status: {hub.Status}; "
+                + $"notifications: {string.Join(" | ", f.Shell.Workbench.Notifications.Items.Select(n => n.Message))}");
+            Assert.Contains("Snapshots taken: 2", hub.SnapshotText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            // The collection ends, and Leaky with it, whatever failed above.
+            await hub.StopAsync();
+        }
+
         await ShellFixture.PumpUntil(() => !hub.IsCollecting, seconds: 120);
 
         await ShellFixture.PumpUntil(() => Document<ProfilingReportViewModel>(f) is { HeapTypes.Count: > 0 } r && r.Snapshots.Count == 2, seconds: 180);
@@ -178,6 +189,82 @@ public sealed class ProfilerToolsShellTests
         Assert.True(report.HasDump);
         await report.InspectDumpAsync();
         await ShellFixture.PumpUntil(() => f.Shell.Layout.Documents.OfType<DumpDocument>().Any(), seconds: 120);
+    }
+
+    /// <summary>
+    /// A program launched to be profiled stops when the IDE closes during its collection, as Stop Collection stops it.
+    /// It was left running, re-parented to launchd, after the memory test failed before its Stop (the Mac's validation of
+    /// the release candidate); a user closing the IDE while collecting left it the same way. Memory Usage alone: no trace
+    /// or counters whose end would stop the collection by itself.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_program_launched_to_be_profiled_stops_when_the_ide_closes_during_the_collection()
+    {
+        var f = ShellFixture.Create();
+        var disposed = false;
+        System.Diagnostics.Process? program = null;
+        try
+        {
+            await OpenDiagnosticsAsync(f, "Leaky", "0"); // Leaky runs until it's stopped
+            var hub = Hub(f, ProfilerTools.Memory);
+            var run = await hub.StartAsync();
+            Assert.NotNull(run);
+            program = System.Diagnostics.Process.GetProcessById(run.ProcessId);
+            Assert.False(program.HasExited);
+
+            await f.DisposeAsync(); // no Stop Collection
+            disposed = true;
+            Assert.True(program.WaitForExit(TimeSpan.FromSeconds(30)), $"The profiled program (process {run.ProcessId}) still runs after the IDE closed.");
+        }
+        finally
+        {
+            if (!disposed)
+            {
+                await f.DisposeAsync();
+            }
+
+            if (program is { HasExited: false })
+            {
+                Codalus.Platform.ProcessTree.Kill(program); // not left for the tests after this one
+            }
+
+            program?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The profiler's full dump that doesn't come says why, as the debugger's Create Dump does: in the notification and in
+    /// the Performance Profiler's status. On macOS, createdump waits on the system's password prompt (developer tools
+    /// access) the first time in a while, and the dump only returned null (the Mac's validation of the release
+    /// candidate). Here a stand-in for the companion host that never finishes, then one that fails.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_full_dump_that_times_out_or_fails_says_why()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.ProfilingDumpTimeout = TimeSpan.FromSeconds(1);
+        f.Shell.WriteProfilingDump = (_, _, cancellationToken) => Task.Delay(Timeout.Infinite, cancellationToken); // createdump waiting on the prompt
+        var run = await f.Shell.StartProfilingAsync(new ProfilerRequest([ProfilerTools.Memory], Launch: false, Environment.ProcessId), "testhost");
+        Assert.NotNull(run);
+        try
+        {
+            var hub = f.Shell.OpenProfiler(); // follows the collection in progress
+            Assert.True(hub.CanSnapshot);
+            Assert.Null(await hub.CreateDumpAsync());
+            const string Expected = "The dump could not be written: The dump wasn't written within 1 s. On macOS, check for a password prompt from the system (developer tools access) and approve it.";
+            Assert.Equal(Expected, hub.Status);
+            Assert.Contains(f.Shell.Workbench.Notifications.Items, n => n.Message == Expected);
+            Assert.Null(run.Dump);
+
+            // A failure the companion host reports: its reason.
+            f.Shell.WriteProfilingDump = (_, _, _) => Task.FromException(new InvalidOperationException("createdump exited with code 1."));
+            Assert.Null(await hub.CreateDumpAsync());
+            Assert.Equal("The dump could not be written: createdump exited with code 1.", hub.Status);
+        }
+        finally
+        {
+            await f.Shell.StopProfilingAsync();
+        }
     }
 
     [AvaloniaFact]

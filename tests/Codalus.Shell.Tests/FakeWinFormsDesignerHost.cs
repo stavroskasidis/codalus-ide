@@ -60,6 +60,15 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
 
     public List<string> Invoked { get; } = [];
 
+    /// <summary>The controls whose designer takes clicks (#461: a control library's design-time buttons).</summary>
+    public HashSet<string> ClickTakers { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The designer/click requests that came, in the frame's coordinates.</summary>
+    public List<DesignerClickParams> Clicks { get; } = [];
+
+    /// <summary>What a click a designer takes changes, when not the default (its control's Text): a library's level tree, say.</summary>
+    public Func<string, DesignerRenderResult, DesignerChangeResult>? ClickChange { get; set; }
+
     public event EventHandler<string>? Log;
 
     public event EventHandler? Restarted;
@@ -231,6 +240,7 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
                     Text = control.Text,
                     InTray = simple.EndsWith("Strip", StringComparison.Ordinal),
                     Locked = _locked.Contains(name),
+                    TakesClicks = ClickTakers.Contains(name),
                 });
                 Add(name);
                 AddParts(name);
@@ -1229,6 +1239,25 @@ internal sealed class FakeWinFormsDesignerHost : IWinFormsDesignerHost
         }
 
         return Task.FromResult(new DesignerChangeResult([], Render()));
+    }
+
+    /// <summary>A click a control's designer takes (#461): it sets the control's Text, as a design-time button's change would.</summary>
+    public Task<DesignerChangeResult> ClickAsync(DesignerClickParams parameters, CancellationToken cancellationToken)
+    {
+        Clicks.Add(parameters);
+        var taker = Render().Components.LastOrDefault(c => ClickTakers.Contains(c.Name) && parameters.X >= c.X && parameters.X < c.X + c.Width && parameters.Y >= c.Y && parameters.Y < c.Y + c.Height);
+        if (taker is null)
+        {
+            return Task.FromResult(new DesignerChangeResult([], Render()));
+        }
+
+        if (ClickChange is { } change)
+        {
+            return Task.FromResult(change(taker.Name, Render()) with { Handled = true });
+        }
+
+        _controls[taker.Name] = _controls[taker.Name] with { Text = "Clicked" };
+        return Task.FromResult(new DesignerChangeResult([new DesignerPropertyChange(taker.Name, "Text", DesignerValue.String("Clicked"))], Render()) { Handled = true });
     }
 
     public void Restart() => Restarted?.Invoke(this, EventArgs.Empty);

@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Codalus.Shell.Infrastructure;
 using Codalus.Shell.ViewModels;
@@ -114,6 +115,7 @@ public sealed partial class ShellHost
 
         var model = new StartWindowViewModel(this);
         _startWindow = new StartWindow { DataContext = model };
+        _startWindow.Overlays = AddCompanion(_startWindow, new Thickness(0, 0, 14, 64)); // above Continue without code
         model.CloseRequested += (_, _) => _startWindow?.Close();
         _startWindow.Closed += (_, _) => _startWindow = null;
         if (Window is Window owner && owner.IsVisible)

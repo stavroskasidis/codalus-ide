@@ -407,7 +407,7 @@ public sealed class DiagnosticsToolsTests(DiagnosticsSamplesFixture fixture) : I
 
             // The whole last step when it doesn't: on Linux CI most orders were "not reached from a root" (run 40949955263).
             Assert.True(reachedRoot, "a path from Order reaches a root: " + string.Join(" ← ", path)
-                + $". The snapshot: {second.Summary.Objects} objects, {second.Summary.Roots} roots; the last step's referrers: {lastStep}");
+                + $". The snapshot: {second.Summary.Objects} objects, {second.Summary.Roots} roots ({second.Summary.Integrity}); the last step's referrers: {lastStep}");
         }
         finally
         {

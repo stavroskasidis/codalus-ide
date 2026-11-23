@@ -193,6 +193,20 @@ public sealed class EntityFrameworkIntegrationTests : IAsyncLifetime
     /// on macOS launchd adopted it and it stayed for hours after the Shell tests.
     /// </summary>
     [Fact]
+    public async Task A_build_that_fails_says_what_it_reported()
+    {
+        // dotnet ef, building the project itself, says only "Build failed. Use --verbose to see errors." (macOS CI, PR
+        // #507's run 44952891931).
+        Assert.Single(await _ef.ToolContextsAsync(Blogging, Timeout())); // built and restored, as the window does first
+        File.WriteAllText(Path.Combine(Path.GetDirectoryName(Blogging)!, "Broken.cs"), "namespace Blogging; internal static class Broken { private static readonly int s_number = \"not a number\"; }");
+        var json = EntityFrameworkJsonContext.Default;
+        var failure = await Assert.ThrowsAnyAsync<Exception>(() => _solutions.RequestAsync(EfMethods.ContextInfo, new EfTarget(Blogging, Blogging, "Blogging.Data.BloggingContext", NoBuild: false), json.EfTarget, json.EfContextInfoResult, Timeout()));
+        Assert.True(failure.Message.Contains("Build failed", StringComparison.Ordinal), failure.Message + "\n" + _ef.Channel.GetText());
+        Assert.Contains("error CS0029", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("Broken.cs", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Closing_the_solution_ends_a_running_dotnet_ef()
     {
         // Straight to the host, without the window's build first: the host's one new child is dotnet ef (which builds).

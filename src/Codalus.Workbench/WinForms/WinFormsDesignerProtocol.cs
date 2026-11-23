@@ -53,6 +53,12 @@ public static class WinFormsDesignerMethods
     public const string InvokeAction = "designer/invokeAction";
 
     /// <summary>
+    /// A click on a control whose designer takes it (#461: <see cref="DesignerComponentView.TakesClicks"/>, a control
+    /// library's design-time buttons): <see cref="DesignerClickParams"/> → <see cref="DesignerChangeResult"/>.
+    /// </summary>
+    public const string Click = "designer/click";
+
+    /// <summary>
     /// Answered from the host's UI thread once its window's message loop runs: → <see cref="DesignerStatus"/>. The shell's
     /// start waits for it, so a cold start (the runtime, Windows Forms and the app's assemblies loaded for the first time
     /// on a busy machine) has its own limit and a request's limit counts only the request's work.
@@ -67,7 +73,17 @@ public static class WinFormsDesignerMethods
 }
 
 /// <summary>The host's state in words (<see cref="WinFormsDesignerMethods.Ready"/>, <see cref="WinFormsDesignerMethods.Status"/>): its uptime, its window's message loop, the UI thread's work and what waits for it.</summary>
-public sealed record DesignerStatus(string State);
+public sealed record DesignerStatus(string State)
+{
+    /// <summary>
+    /// A dialog is open on the host's UI thread (#461: a control library's designer showed one, the Grid Designer say):
+    /// the request that opened it, and every one after it, wait until the user closes it, however long that takes.
+    /// </summary>
+    public bool DialogOpen { get; init; }
+
+    /// <summary>Seconds since the last such dialog closed (null: none has): the request it opened is finishing its change.</summary>
+    public double? SinceDialog { get; init; }
+}
 
 /// <summary>
 /// What to load: the C# host's model, the project's build output (its types, and its compiled resources for
@@ -86,6 +102,15 @@ public sealed record DesignerLoadParams(DesignerModel Model, string ProjectAssem
 
     /// <summary>The form is localizable: its localizable properties are written to the <c>.resx</c> of <see cref="Culture"/>.</summary>
     public bool Localizable { get; init; }
+
+    /// <summary>
+    /// The design folders of the project's packages (#461, ADR 0106: <c>lib/&lt;tfm&gt;/Design/WinForms/Server</c>), whose
+    /// control libraries' own designers the host loads; empty when there are none or <c>windowsForms.designer.vendorDesigners</c> is off.
+    /// </summary>
+    public string[] DesignFolders { get; init; } = [];
+
+    /// <summary>The IDE's main window (a Windows <c>HWND</c>; 0 for none), which owns the dialogs a control library's designer shows (#461).</summary>
+    public long DialogOwner { get; init; }
 }
 
 /// <summary>A <c>.resx</c> file's text and its culture (empty: the default resources).</summary>
@@ -169,6 +194,12 @@ public sealed record DesignerComponentView(string Name, string Type, string? Par
     /// the classic IDE does. A host older than #67 sends none.
     /// </summary>
     public bool? Locked { get; init; }
+
+    /// <summary>
+    /// Its designer takes some clicks itself (#461: a control library's designer overrides <c>GetHitTest</c>, as
+    /// DevExpress's grid does for its design-time buttons): the surface sends a click on it with <c>designer/click</c>.
+    /// </summary>
+    public bool TakesClicks { get; init; }
 }
 
 /// <summary>The surface after a load or a change: its frame, its components (in z-order, front first, parents before children), and what went wrong.</summary>
@@ -196,6 +227,12 @@ public sealed record DesignerCreateParams(string Type, string Name, string? Pare
 
     /// <summary>The IDE's selection, the primary selection first (for <see cref="AtDefaultLocation"/>).</summary>
     public string[] Selected { get; init; } = [];
+
+    /// <summary>
+    /// The assembly the type comes from when the project doesn't reference it yet (#460: chosen in Choose Toolbox Items;
+    /// the IDE adds the reference): the host loads the type from it, its dependencies from its folder.
+    /// </summary>
+    public string? Assembly { get; init; }
 }
 
 /// <summary>A new component as the code must say it: what the C# host's <c>addComponent</c> edit takes.</summary>
@@ -231,6 +268,14 @@ public sealed record DesignerChildOrder(string Parent, string[] Children);
 public sealed record DesignerCollectionChange(string Component, string Property, string Method, string? ElementType, DesignerValue[] Items)
 {
     public DesignerLocal[] Locals { get; init; } = [];
+
+    /// <summary>
+    /// #461: the statements that set up <see cref="Locals"/>, written just before the collection's statement: a control
+    /// library's objects declared as locals (DevExpress's grid levels, <c>GridLevelNode</c>), their properties and their
+    /// own collections, children before their parents. With them, <see cref="Locals"/> are all the collection's
+    /// locals, written again.
+    /// </summary>
+    public DesignerStatement[] Statements { get; init; } = [];
 }
 
 /// <summary>A local object a collection holds (<c>ListViewItem listViewItem1 = new ListViewItem("Hammer")</c>).</summary>
@@ -269,6 +314,9 @@ public sealed record DesignerChangeResult(DesignerPropertyChange[] Changes, Desi
 
     /// <summary>Components that start or stop getting their properties from the resources.</summary>
     public DesignerLocalized[] Localized { get; init; } = [];
+
+    /// <summary><c>designer/click</c> (#461): a control's designer took the click; false when none did, and nothing ran.</summary>
+    public bool Handled { get; init; }
 }
 
 /// <summary>
@@ -433,6 +481,18 @@ public sealed record DesignerActionsResult(DesignerActionItem[] Items)
     /// inherited read-only component, or from a host older than #67.
     /// </summary>
     public DesignerActionItem[] Verbs { get; init; } = [];
+}
+
+/// <summary>A click at a point of the frame (#461), given to the control there when its designer takes it.</summary>
+public sealed record DesignerClickParams(double X, double Y)
+{
+    /// <summary>
+    /// Where the click was on the screen, in physical pixels (the IDE's surface): a popup the click opens (DevExpress's
+    /// Change view menu) shows there, not where the host's hidden window is. Null: the popup stays where it opened.
+    /// </summary>
+    public int? ScreenX { get; init; }
+
+    public int? ScreenY { get; init; }
 }
 
 /// <summary>A smart tag's method to run, or its property to set to <see cref="Text"/> (through the property's converter).</summary>
@@ -644,6 +704,7 @@ public sealed record DesignerEventsResult(DesignerEventInfo[] Events, string? De
 [JsonSerializable(typeof(DesignerSetCollectionParams))]
 [JsonSerializable(typeof(DesignerActionsResult))]
 [JsonSerializable(typeof(DesignerInvokeActionParams))]
+[JsonSerializable(typeof(DesignerClickParams))]
 [JsonSerializable(typeof(DesignerStatus))]
 [JsonSerializable(typeof(System.Text.Json.JsonElement))]
 public sealed partial class WinFormsDesignerJsonContext : JsonSerializerContext;

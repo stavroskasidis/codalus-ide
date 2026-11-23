@@ -94,7 +94,7 @@
         <DataTemplate x:DataType="vm:KeybindingRowViewModel">
           <Grid ColumnDefinitions="*,150,170,120">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CommandId}" />
+              <TextBlock VerticalAlignment="Center" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CommandId}" />
               <controls:Icon Kind="warning" Classes="warning" IsVisible="{Binding HasConflict}" ToolTip.Tip="{l:T keyboardShortcuts.thisKeyBindingConflictsWithAnother}" />
             </StackPanel>
             <TextBlock Grid.Column="1" Text="{Binding KeyLabel}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding KeyLabel}" />

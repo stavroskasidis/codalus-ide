@@ -72,8 +72,8 @@ public sealed class ExplorerRowViewModel(ExplorerNode node, int depth, bool expa
     public GitFileState GitState => _gitState;
 
     /// <summary>
-    /// The classic IDE's source control glyph over the row's icon (#357): a lock on a committed file, a check mark on a
-    /// changed one, a plus on a new one and an exclamation mark on a conflict; none outside a repository or when ignored.
+    /// The classic IDE's source control glyph, left of the row's icon (#357): a lock on a committed file, a check mark on
+    /// a changed one, a plus on a new one and an exclamation mark on a conflict; none outside a repository or when ignored.
     /// </summary>
     public string? GitGlyph => _gitState switch
     {
@@ -241,7 +241,7 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     private GitFileState GitStateOf(string path) => _gitStates?.StateOf(path) ?? GitFileState.None;
 
     /// <summary>
-    /// Shows the classic IDE's source control glyphs over the rows' icons (#357) from <paramref name="states"/>, and
+    /// Shows the classic IDE's source control glyphs left of the rows' icons (#357) from <paramref name="states"/>, and
     /// refreshes them as the repository's status changes.
     /// </summary>
     internal void AttachGit(GitFileStates states)
@@ -257,9 +257,23 @@ public sealed class SolutionExplorerViewModel : ObservableObject
         RefreshGit();
     }
 
+    private bool _showsGitGlyphs;
+
+    /// <summary>
+    /// Whether the rows keep a column for the source control glyphs left of their icons (#357): while the workspace is
+    /// in a repository and the glyphs are on, for every row, so a folder's icon lines up with its files', as the classic
+    /// IDE's state column does.
+    /// </summary>
+    public bool ShowsGitGlyphs
+    {
+        get => _showsGitGlyphs;
+        private set => SetField(ref _showsGitGlyphs, value);
+    }
+
     private void RefreshGit()
     {
         Volatile.Write(ref _gitRefreshQueued, 0);
+        ShowsGitGlyphs = _gitStates?.HasRepositories == true;
         foreach (var row in Rows)
         {
             row.RefreshGit();
@@ -2372,12 +2386,15 @@ public sealed class SolutionExplorerViewModel : ObservableObject
     /// <summary>
     /// Enter or double-click: files open, an SDK-style project opens its project file (as in the classic IDE; a
     /// non-SDK-style one, or one that isn't loaded, expands or collapses), other containers expand or collapse, project
-    /// references jump to the project.
+    /// references jump to the project. In the folder view a solution file opens the solution, as the classic IDE's does.
     /// </summary>
     public async Task ActivateAsync(ExplorerRowViewModel row)
     {
         switch (row.Node)
         {
+            case { Kind: ExplorerNodeKind.File, Path: { } solution } when IsFolderView && SolutionTree.IsSolutionFile(solution):
+                await _shell.OpenSolutionAsync(solution).ConfigureAwait(true);
+                break;
             case { Kind: ExplorerNodeKind.Project, Path: { } project } when _shell.Solutions.Projects.TryGetValue(project, out var info)
                 && info is { State: ProjectStates.Loaded, IsNonSdkStyle: false } && File.Exists(project):
                 await _shell.OpenFileAsync(project).ConfigureAwait(true);

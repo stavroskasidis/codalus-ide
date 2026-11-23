@@ -17,10 +17,14 @@ public sealed partial class ShellHost
 {
     public const string OpenFormsInDesignerSetting = "windowsForms.openInDesigner";
 
+    /// <summary>Control libraries' own designers (#461, ADR 0106): their smart tags, verbs and dialogs; off, their controls are designed as their base types.</summary>
+    public const string VendorDesignersSetting = "windowsForms.designer.vendorDesigners";
+
     private readonly Dictionary<CodeDocument, int> _heldModels = [];
     private IDesignerPropertySource? _propertySource;
     private bool _toldWindowsOnly;
     private string? _winFormsCSharpState;
+    private bool _winFormsCSharpLoaded;
 
     /// <summary>The designer's service (tests replace it to run a fake designer host on any OS).</summary>
     public WinFormsDesignerService WinFormsDesigner { get; set; } = null!;
@@ -51,10 +55,13 @@ public sealed partial class ShellHost
 
     private void InitializeWinFormsDesigner()
     {
+        InitializeToolbox();
         WinFormsDesigner = new WinFormsDesignerService(Solutions, path => Trust.IsTrusted(path), BuildForPreviewAsync, PreviewPropertiesAsync)
         {
             StartupProject = () => Runs.StartupProject,
             IsBuilding = () => Builds.IsBuilding,
+            VendorDesigners = () => Workbench.Settings.GetBoolean(VendorDesignersSetting, true),
+            DialogOwner = () => (long)(Window?.NativeHandle ?? IntPtr.Zero),
         };
 
         if (OperatingSystem.IsWindows())
@@ -126,7 +133,10 @@ public sealed partial class ShellHost
     /// the active designer asks again for the project's own controls, which a compilation from before the restore lacked
     /// (off Windows, Windows Forms' reference pack comes with the restore, and the C# service is ready before it). Only
     /// on that change: the service is also ready after each pass over the diagnostics (each edit, each change in the
-    /// designer), which changes no project.
+    /// designer), which changes no project. A ready with no project, then one with projects, is also that change: a
+    /// background pass over no project that ends just after the projects arrived says ready with none after their
+    /// loading (the C# host's <c>DiagnosticsService</c> checks its cancellation before it says so, not after), so the
+    /// ready with the projects comes after a ready.
     /// </summary>
     internal void OnWinFormsLanguageStatus(string languageId, WorkspaceStatusParams status)
     {
@@ -136,7 +146,9 @@ public sealed partial class ShellHost
         }
 
         var was = _winFormsCSharpState;
+        var wasLoaded = _winFormsCSharpLoaded;
         _winFormsCSharpState = status.State;
+        _winFormsCSharpLoaded = status.State == WorkspaceStates.Ready && status.Projects > 0;
 
         // Each change the designers see, in their log: a form that wasn't read again in its project (the shell test
         // A_form_opened_before_the_CSharp_service_has_its_project…, a local run of 2026-11-15) shows which ones came.
@@ -145,12 +157,12 @@ public sealed partial class ShellHost
             WinFormsDesignerLog.AppendLine($"The C# service: {was ?? "unknown"} → {status.State} ({status.Projects} project(s)).");
         }
 
-        if (status.State != WorkspaceStates.Ready || was == WorkspaceStates.Ready)
+        if (status.State != WorkspaceStates.Ready || (was == WorkspaceStates.Ready && (wasLoaded || !_winFormsCSharpLoaded)))
         {
             return;
         }
 
-        if (status.Projects > 0)
+        if (_winFormsCSharpLoaded)
         {
             foreach (var document in Layout.Documents.OfType<WinFormsDesignerDocument>().ToList())
             {

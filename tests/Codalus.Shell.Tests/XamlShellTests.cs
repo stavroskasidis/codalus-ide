@@ -89,7 +89,7 @@ public sealed class XamlShellTests
         var frames = preview.FrameCount;
         var text = model.Text.Text.IndexOf("Text=\"{Binding Greeting}\"", StringComparison.Ordinal);
         model.Text.Replace(text, "Text=\"{Binding Greeting}\"".Length, "Text=\"Edited in the editor\"");
-        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 60, describe: () => PreviewState(f));
 
         // Zoom doubles the shown size; the frame is the same.
         preview.ZoomInCommand.Execute(null);
@@ -125,19 +125,20 @@ public sealed class XamlShellTests
         // The loader's errors show with their line; fixing them renders again.
         var list = model.Text.Text.IndexOf("<ListBox x:Name", StringComparison.Ordinal);
         model.Text.Insert(list + "<ListBox".Length, " Orientation=\"Sideways\"");
-        await ShellFixture.PumpUntil(() => preview.Error is not null, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Error is not null, seconds: 60, describe: () => PreviewState(f));
         Assert.Contains("Line 25", preview.Error, StringComparison.Ordinal);
         Assert.Contains("Orientation", preview.Error, StringComparison.Ordinal);
         frames = preview.FrameCount;
         model.Text.Remove(list + "<ListBox".Length, " Orientation=\"Sideways\"".Length);
-        await ShellFixture.PumpUntil(() => preview.Error is null && preview.FrameCount > frames, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Error is null && preview.FrameCount > frames, seconds: 60, describe: () => PreviewState(f));
 
         // The theme variant and the render scale.
         frames = preview.FrameCount;
         preview.SelectedTheme = "Dark";
-        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 30);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > frames, seconds: 30, describe: () => PreviewState(f));
         preview.SelectedScale = "2×";
-        await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60);
+        await ShellFixture.PumpUntil(() => preview.Frame is { Width: 960, Scale: 2 }, seconds: 60,
+            describe: () => $"the last frame {preview.Frame?.Width}x{preview.Frame?.Height} at {preview.Frame?.Scale}, scale \"{preview.SelectedScale}\", error \"{preview.Error}\"\n{PreviewState(f)}");
         Assert.Equal(480d, preview.ImageWidth);
 
         // Fit again: the frame within the pane.
@@ -182,6 +183,32 @@ public sealed class XamlShellTests
         var error = f.Shell.Languages.Diagnostics.Get(styles, XamlBuildDiagnostics.Source)!.Items[0];
         Assert.StartsWith("AVLN", error.Code, StringComparison.Ordinal);
         Assert.Equal(File.ReadAllLines(styles).ToList().FindIndex(l => l.Contains("NoSuchProperty", StringComparison.Ordinal)), error.Range.Start.Line);
+    }
+
+    /// <summary>
+    /// A preview shown before the project is restored can't find Avalonia's previewer (its package's properties come with
+    /// the restore) and says so; the restore's success prepares it again, and it renders. It stayed on that message, the
+    /// restore on open ending after it (Windows CI, runs 42294063461 and 44031325117).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_preview_shown_before_the_restore_renders_once_the_restore_succeeds()
+    {
+        await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(ShellHost.RestoreOnOpenSetting, false, Codalus.Workbench.Settings.SettingScope.User, CancellationToken.None);
+        var folder = f.CopySample("Avalonia");
+        f.Shell.Trust.Trust(Path.GetDirectoryName(folder)!);
+        await f.Shell.OpenSolutionAsync(Path.Combine(folder, "Avalonia.slnx"));
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Projects.Count == 2 && f.Shell.Solutions.Progress is { Completed: true }, seconds: 180);
+        var document = await f.Shell.OpenFileAsync(Path.Combine(folder, "AvaloniaApp", "Views", "TodoItemView.axaml"), preview: false, null);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        f.Shell.ShowXamlPreview();
+        var preview = f.Shell.XamlPreview;
+        await ShellFixture.PumpUntil(() => preview.Status.Contains("doesn't reference Avalonia", StringComparison.Ordinal), seconds: 120, describe: () => PreviewState(f));
+        Assert.Equal(0, preview.FrameCount);
+
+        await f.Shell.Solutions.RestoreAsync(null, CancellationToken.None);
+        await ShellFixture.PumpUntil(() => preview.FrameCount > 0, seconds: 300, describe: () => $"restore {f.Shell.Solutions.RestoreState}, {PreviewState(f)}");
+        Assert.Contains("The restore succeeded: preparing the preview again.", f.Shell.PreviewerLog.GetText(), StringComparison.Ordinal);
     }
 
     /// <summary>The preview's stage and status, its log, and the end of the build output, for a wait that timed out.</summary>

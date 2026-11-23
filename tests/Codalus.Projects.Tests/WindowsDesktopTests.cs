@@ -141,12 +141,12 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
         if (OperatingSystem.IsWindows())
         {
             // The XAML compiler runs here: the app builds, and its errors come back in their .xaml files.
-            var built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
+            var built = await _builds.BuildAsync(BuildTargets.Build, project, BuildLimit.Token());
             Assert.True(built.Succeeded, _builds.Channel.GetText());
             var page = Path.Combine(Fixture, "WinUIApp", "MainPage.xaml");
             var text = await File.ReadAllTextAsync(page, TestContext.Current.CancellationToken);
             await File.WriteAllTextAsync(page, text.Replace("{x:Bind ViewModel.Items}", "{x:Bind ViewModel.NoSuchItems}", StringComparison.Ordinal), TestContext.Current.CancellationToken);
-            built = await _builds.BuildAsync(BuildTargets.Build, project, Timeout());
+            built = await _builds.BuildAsync(BuildTargets.Build, project, BuildLimit.Token());
             Assert.False(built.Succeeded, _builds.Channel.GetText());
             // On dotnet's MSBuild the Windows App SDK's XAML compiler is XamlCompiler.exe, which can't load its own error
             // messages (it embeds them as Microsoft.Windows.UI.Xaml.Build.Tasks.ErrorMessages.resources and looks them
@@ -231,7 +231,7 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
         Assert.Contains(_solutions.CompilerInputs[WinFormsApp].Arguments, a => a.Contains("System.Windows.Forms.dll", StringComparison.OrdinalIgnoreCase));
 
         // The whole solution builds here (Linux and macOS through EnableWindowsTargeting).
-        var result = await _builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await _builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(result.Succeeded, _builds.Channel.GetText());
         Assert.True(File.Exists(Path.Combine(Fixture, "WpfApp", "bin", "Debug", "net11.0-windows", "WpfApp.dll")));
         Assert.True(File.Exists(Path.Combine(Fixture, "WinFormsApp", "bin", "Debug", "net11.0-windows", "WinFormsApp.dll")));
@@ -240,7 +240,7 @@ public sealed class WindowsDesktopTests : IAsyncLifetime
         var window = Path.Combine(Fixture, "WpfApp", "MainWindow.xaml");
         var text = await File.ReadAllTextAsync(window, TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(window, text.Replace("<ListBox Grid.Row=\"1\"", "<ListBox Bogus=\"1\" Grid.Row=\"1\"", StringComparison.Ordinal), TestContext.Current.CancellationToken);
-        result = await _builds.BuildAsync(BuildTargets.Build, WpfApp, Timeout());
+        result = await _builds.BuildAsync(BuildTargets.Build, WpfApp, BuildLimit.Token());
         Assert.False(result.Succeeded);
         var error = Assert.Single(_builds.Diagnostics, d => d.Code?.StartsWith("MC", StringComparison.Ordinal) == true);
         Assert.Equal(window, error.File, ignoreCase: OperatingSystem.IsWindows());

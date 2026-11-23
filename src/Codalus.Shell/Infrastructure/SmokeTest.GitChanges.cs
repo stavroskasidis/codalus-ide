@@ -41,7 +41,7 @@ internal sealed partial class SmokeTest
             Screenshot("smoke-test-git-folder-menu.png", menu.Parent is Popup folderPopup ? [folderPopup] : []);
             menu.Close();
 
-            // The branch drop-down: the button opens it, listing the local branches with the current one first.
+            // The branch drop-down: the button opens it on the Local tab, the local branches in folders, the current one's expanded.
             var button = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "BranchButton");
             Check(AutomationProperties.GetName(button) == "Branch: " + shell.Git.Status!.Branch, "the branch button's name says the branch");
             var current = shell.Git.Status.Branch;
@@ -49,7 +49,8 @@ internal sealed partial class SmokeTest
             await WaitAsync(() => shell.GitBranches.IsOpen && !shell.GitBranches.IsLoading && shell.GitBranches.Rows.Any(r => r.IsCurrent), "the branch drop-down lists the branches").ConfigureAwait(true);
             var popup = view.GetVisualDescendants().OfType<Popup>().Single(p => p.Name == "BranchPopup");
             await WaitAsync(() => popup.IsOpen && popup.Child is { Bounds.Width: > 300 }, "the drop-down is shown, 340 px wide").ConfigureAwait(true);
-            Check(shell.GitBranches.Rows.First(r => r.IsBranch).IsCurrent, "the current branch is first");
+            Check(!shell.GitBranches.IsRemoteTab && shell.GitBranches.IsTreeView, "the drop-down opens on the Local tab, in the tree view");
+            Check(view.BranchPickerView.GetVisualDescendants().OfType<TabStrip>().Single(t => t.Name == "Tabs").SelectedIndex == 0, "the Local tab is selected");
             await RenderedAsync().ConfigureAwait(true);
             Screenshot("smoke-test-git-branch-dropdown.png", [popup]);
 
@@ -58,6 +59,11 @@ internal sealed partial class SmokeTest
             {
                 await shell.Git.CreateBranchAtAsync("smoke/menus", "HEAD", switchTo: false).ConfigureAwait(true);
                 await shell.GitBranches.LoadAsync().ConfigureAwait(true);
+            }
+
+            foreach (var folderRow in shell.GitBranches.Rows.Where(r => r.IsFolder && !r.IsExpanded).ToList())
+            {
+                shell.GitBranches.SetExpandedUnder(folderRow, expanded: true);
             }
 
             var otherRow = shell.GitBranches.Rows.First(r => r.Branch is { IsRemote: false, IsCurrent: false });

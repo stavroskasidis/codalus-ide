@@ -66,7 +66,7 @@ Console apps run with Hot Reload where `run.console` says, as without it: in a *
 
 `.razor` and `.cshtml` files are served by the C# language service, through the same Razor compiler the build uses:
 - **Colors** as the classic IDE gives them, in every theme: components (like types) and their parameters (in the component's color, bold in Classic, so they stand apart from HTML attributes), HTML elements, attributes and values, `@` transitions and directives (`@using`, `@inject`, `@code`), Razor (`@* *@`) and HTML comments, tag helpers in `.cshtml`, and the C# inside the markup as in a `.cs` file. A component is colored as one only when it resolves to a component, so a misspelled tag stays an HTML element. Each kind has its own entry in Fonts and Colors (Razor component element, Markup element…). Until the project has loaded, and for a Razor file outside a project, the Razor grammar colors the file.
-- **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References and highlighting. Errors appear in the editor and the Error List as you type.
+- **C# in a Razor file** (expressions like `@count`, event handlers like `@onclick="Increment"`, `@code` blocks): completion, hover, parameter info, Go to Definition, Find All References, highlighting and rename (`F2`): renaming a field, method or property renames its uses in C# files and in every Razor file, a component parameter's attributes in other components' markup included. Errors appear in the editor and the Error List as you type.
 - **Markup:**
   - after `<`: component names (your own and the framework's), with HTML elements;
   - inside a component's tag: its parameters (`[Parameter]` properties) and directive attributes such as `@onclick` and `@bind`;
@@ -78,7 +78,7 @@ Console apps run with Hot Reload where `run.console` says, as without it: in a *
 
 Run, Debug and Hot Reload work as for other ASP.NET Core apps: with Hot Reload, saving a component applies markup and code changes to the running app.
 
-Not available in Razor files yet: rename, quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
+Not available in Razor files yet: quick actions, formatting and folding. Errors that the Razor compiler itself reports (`RZ…`) appear after a build.
 
 ## Blazor WebAssembly
 
@@ -113,7 +113,7 @@ A **Blazor Web App with WebAssembly components** (its launch profile has `inspec
 - If the debugger can't attach to the server, only the page is debugged, with Hot Reload, and a notification says so. Turn off `debug.hotReload` to debug the server from its start.
 - A Blazor Web App made by the .NET 11 template has no `inspectUri`: .NET 11 expects the IDE to start the WebAssembly debugging proxy, which Codalus IDE doesn't do yet. Its page opens under the browser debugger for scripts, but breakpoints in its WebAssembly components don't bind yet. Add the `inspectUri` line and `app.UseWebAssemblyDebugging()` from the .NET 10 template to debug them.
 
-**Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser.
+**Other ASP.NET Core apps** whose launch profile opens a browser (`launchBrowser`) debug their page's scripts the same way. The **JavaScript debugging for ASP.NET Core** setting (`debug.javaScript`, on by default) controls it; off, the profile's browser opens as a plain browser. The Start button's drop-down sets it (**Script Debugging**) and the browser (**Web Browser**, `debug.browser`) too.
 
 Without Chrome, Edge or Chromium, the server is debugged alone.
 

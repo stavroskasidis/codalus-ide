@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net11.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Description>An assembly the app doesn't reference: Choose Toolbox Items adds it by its path.</Description>
+  </PropertyGroup>
+</Project>

@@ -32,6 +32,110 @@ public class FindInFilesTests
 
         var options = new FindInFilesOptions("value", MatchCase: true, LookIn: FindScopes.CurrentProject, FileTypes: "*.cs");
         Assert.Equal("Find all \"value\", Match case, Current project, \"*.cs\"", options.Describe("Find all"));
+
+        // A walk of the disk doesn't go into the folders a "!…\*" pattern leaves out whole.
+        Assert.True(all.ExcludesFolder(In("src", "App", "bin"), root));
+        Assert.True(all.ExcludesFolder(In("obj"), root));
+        Assert.True(all.ExcludesFolder(In(".git"), root));
+        Assert.False(all.ExcludesFolder(In("src", "App"), root));
+        Assert.False(all.ExcludesFolder(In("binaries"), root));
+        Assert.False(new FileTypeFilter(@"!*\bin\*.cs").ExcludesFolder(In("bin"), root)); // only some of its files
+        Assert.False(new FileTypeFilter(@"*\bin\*").ExcludesFolder(In("bin"), root)); // an including pattern
+    }
+
+    [Fact]
+    public void Look_in_offers_folder_modes_scopes_and_keeps_the_choice_across_them()
+    {
+        var current = Path.Combine(Path.GetTempPath(), "ws", "src");
+        Assert.Equal(
+            [FindScopes.EntireWorkspace, FindScopes.CurrentProject, $"Current directory ({current})", FindScopes.OpenDocuments, FindScopes.CurrentDocument],
+            FindScopes.ForFolder(current));
+        Assert.Equal([FindScopes.EntireWorkspace, FindScopes.CurrentProject, FindScopes.OpenDocuments, FindScopes.CurrentDocument], FindScopes.ForFolder(null));
+        Assert.True(FindScopes.IsCurrentDirectory(FindScopes.CurrentDirectory(current), out var folder));
+        Assert.Equal(current, folder);
+        Assert.False(FindScopes.IsCurrentDirectory(current, out _));
+
+        // The entire solution and the entire workspace stand for each other; a folder that was browsed to stays.
+        Assert.Equal(FindScopes.EntireWorkspace, FindScopes.Equivalent(FindScopes.EntireSolution, FindScopes.ForFolder(current)));
+        Assert.Equal(FindScopes.EntireSolution, FindScopes.Equivalent(FindScopes.EntireWorkspace, FindScopes.All));
+        Assert.Equal(FindScopes.CurrentDocument, FindScopes.Equivalent(FindScopes.CurrentDocument, FindScopes.ForFolder(null)));
+        Assert.Equal(current, FindScopes.Equivalent(current, FindScopes.All));
+        var other = FindScopes.CurrentDirectory(Path.Combine(Path.GetTempPath(), "ws", "docs"));
+        Assert.Equal(FindScopes.CurrentDirectory(current), FindScopes.Equivalent(other, FindScopes.ForFolder(current)));
+        Assert.Equal(FindScopes.EntireWorkspace, FindScopes.Equivalent(other, FindScopes.ForFolder(null)));
+        Assert.Equal(FindScopes.EntireSolution, FindScopes.Equivalent(other, FindScopes.All));
+    }
+
+    [AvaloniaFact]
+    public async Task In_folder_mode_find_in_files_searches_the_folder_with_the_classic_ides_scopes()
+    {
+        // The maintainer's report: with a folder open (no solution, no project loaded), Find All found nothing (the entire
+        // solution was the loaded projects' files), and Look in offered "Entire solution" without one.
+        await using var f = ShellFixture.Create();
+        var folder = Path.Combine(f.UserData, "ws");
+        string In(string relative) => Path.Combine(folder, relative.Replace('/', Path.DirectorySeparatorChar));
+        foreach (var (file, text) in new[]
+        {
+            ("README.md", "needle in the readme\n"),
+            ("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />\n"),
+            ("src/App/Program.cs", "// needle in the program\n"),
+            ("src/App/Models/Person.cs", "class Person { } // needle\n"),
+            ("src/App/bin/Debug/App.txt", "needle in bin\n"),
+            ("src/Lib/Lib.cs", "// needle in another project's folder\n"),
+            (".git/description", "needle in git\n"),
+        })
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(In(file))!);
+            await File.WriteAllTextAsync(In(file), text, TestContext.Current.CancellationToken);
+        }
+
+        f.Shell.Trust.Trust(folder);
+        await f.Shell.OpenFolderWorkspaceAsync(folder);
+        await ShellFixture.PumpUntil(() => f.Shell.Solutions.Solution is { IsFolder: true }, seconds: 60);
+        var find = f.Shell.FindReplace;
+        var results = f.Shell.FindResults;
+        async Task<string[]> FindAllAsync(string lookIn)
+        {
+            f.Shell.FindInFiles();
+            find.Query = "needle";
+            find.LookIn = lookIn;
+            await find.FindAllAsync();
+            return [.. results.Rows.Where(r => r.IsHeader).Select(r => r.Path).Order(StringComparer.Ordinal)];
+        }
+
+        // No document: the folder's scopes without a current directory, the entire workspace chosen.
+        f.Shell.FindInFiles();
+        Assert.Equal(FindScopes.ForFolder(null), find.LookInOptions);
+        Assert.Equal(FindScopes.EntireWorkspace, find.LookIn);
+        string[] everything = [.. new List<string> { "README.md", "src/App/Models/Person.cs", "src/App/Program.cs", "src/Lib/Lib.cs" }.Select(In).Order(StringComparer.Ordinal)];
+        Assert.Equal(everything, await FindAllAsync(FindScopes.EntireWorkspace));
+        NavigationDepthTests.Screenshot(f, "find-in-folder-results");
+        Assert.StartsWith("Find all \"needle\", Entire Workspace", results.Title, StringComparison.Ordinal);
+        Assert.Equal(everything, await FindAllAsync(FindScopes.EntireSolution)); // the agents' search, and an older Look in
+
+        // With a document: its folder is the current directory; the current project is the folder of the project file
+        // nearest above it, which nobody loaded.
+        await f.Shell.OpenFileAsync(In("src/App/Models/Person.cs"));
+        f.Shell.FindInFiles();
+        var models = FindScopes.CurrentDirectory(In("src/App/Models"));
+        Assert.Equal(FindScopes.ForFolder(In("src/App/Models")), find.LookInOptions);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<FindReplaceView>().Any(v => v.IsEffectivelyVisible));
+        var lookIn = f.Window.GetVisualDescendants().OfType<FindReplaceView>().First().GetVisualDescendants().OfType<Avalonia.Controls.ComboBox>()
+            .Single(c => Avalonia.Automation.AutomationProperties.GetName(c) == "Look in");
+        lookIn.IsDropDownOpen = true;
+        NavigationDepthTests.Screenshot(f, "find-in-folder-look-in");
+        lookIn.IsDropDownOpen = false;
+        ShellFixture.Pump();
+        Assert.Equal([In("src/App/Models/Person.cs"), In("src/App/Program.cs")], await FindAllAsync(FindScopes.CurrentProject));
+        Assert.Equal([In("src/App/Models/Person.cs")], await FindAllAsync(models));
+
+        // Another document's folder replaces the current directory, kept as the choice; a browsed folder stays listed.
+        await f.Shell.OpenFileAsync(In("src/Lib/Lib.cs"));
+        find.LookInOptions.Add(In("src"));
+        f.Shell.FindInFiles();
+        Assert.Equal([.. FindScopes.ForFolder(In("src/Lib")), In("src")], find.LookInOptions);
+        Assert.Equal(FindScopes.CurrentDirectory(In("src/Lib")), find.LookIn);
+        Assert.Empty(await FindAllAsync(FindScopes.CurrentProject)); // no project file above it
     }
 
     [AvaloniaFact]

@@ -152,6 +152,7 @@ public sealed class MergeEditorViewModel : ObservableObject
 
     private readonly Func<string, Task> _accept;
     private readonly List<MergeConflictBlock> _blocks = [];
+    private readonly Dictionary<int, IReadOnlyList<(int Start, int Length)>>[] _changedWords;
     private MergeConflictBlock? _applying;
     private int _remaining;
     private int _caretOffset;
@@ -168,10 +169,21 @@ public sealed class MergeEditorViewModel : ObservableObject
         Func<string, Task> accept,
         string? currentName = null,
         string? incomingName = null,
-        TextFileFormat? format = null)
+        TextFileFormat? format = null,
+        string? remerged = null)
     {
         Path = path;
         InitialResult = result;
+        var conflicts = Parse(result);
+
+        // The line-by-line re-merge (GitService.RemergeAsync), when its conflicts aren't git's own.
+        if (remerged is not null && Parse(remerged) is { Count: > 0 } finer && !SameConflicts(conflicts, finer))
+        {
+            GitConflictCount = conflicts.Count;
+            result = remerged;
+            conflicts = finer;
+        }
+
         Ours = ours ?? string.Empty;
         Theirs = theirs ?? string.Empty;
         Base = @base;
@@ -180,13 +192,13 @@ public sealed class MergeEditorViewModel : ObservableObject
         EncodingName = format?.EncodingName ?? "UTF-8";
         Encoding = format?.Encoding;
 
-        var conflicts = Parse(result);
         CurrentName = Name(currentName, conflicts.Count > 0 ? conflicts[0].OursLabel : null);
         IncomingName = Name(incomingName, conflicts.Count > 0 ? conflicts[0].TheirsLabel : null);
         var (display, currentText, incomingText) = Build(result, conflicts);
         CurrentText = currentText;
         IncomingText = incomingText;
         IndentationName = TextFiles.IndentationName(result);
+        _changedWords = [ChangedWords(MergeSide.Current), ChangedWords(MergeSide.Incoming)];
 
         Result = new TextDocument(display);
         Result.UndoStack.ClearAll();
@@ -206,7 +218,7 @@ public sealed class MergeEditorViewModel : ObservableObject
 
     public string FileName => System.IO.Path.GetFileName(Path);
 
-    /// <summary>The file as git left it, with its conflict markers.</summary>
+    /// <summary>The file as git left it, with its conflict markers (git's own, also when the editor shows a re-merge's).</summary>
     public string InitialResult { get; }
 
     /// <summary>The current version from the index (stage 2), or empty.</summary>
@@ -297,6 +309,17 @@ public sealed class MergeEditorViewModel : ObservableObject
         1 => Localizer.Format("mergeEditor.oneConflict", "1 Conflict ({0} Remaining)", _remaining),
         _ => Localizer.Format("mergeEditor.conflicts", "{0} Conflicts ({1} Remaining)", Total, _remaining),
     };
+
+    /// <summary>
+    /// How many conflicts git's markers had when the editor shows the line-by-line re-merge's instead (its conflicts
+    /// differ from git's); null when it shows git's.
+    /// </summary>
+    public int? GitConflictCount { get; }
+
+    /// <summary>The count's tooltip: what git found, when the conflicts are the re-merge's; null otherwise.</summary>
+    public string? SummaryTip => GitConflictCount is { } count
+        ? Localizer.Format("mergeEditor.remergedTip", "Conflicts recomputed with a line-by-line merge (git found {0})", count)
+        : null;
 
     /// <summary>Whether the result differs from what the editor opened with (the tab's <c>*</c>).</summary>
     public bool IsModified => !Result.UndoStack.IsOriginalFile;
@@ -653,9 +676,11 @@ public sealed class MergeEditorViewModel : ObservableObject
         var (current, currentRanges, currentFileLines) = Locate(Ours, oursProjection.ToString(), oursLines);
         var (incoming, incomingRanges, incomingFileLines) = Locate(Theirs, theirsProjection.ToString(), theirsLines);
 
-        // The merge base's text of each conflict: from git's diff3 section, else found through a side's file.
+        // The merge base's text of each conflict: from git's diff3 section, else found through both sides' files. Like
+        // diff3's base section, it spans the base lines either side changed: a side whose block is empty (it deleted
+        // the lines the other side changed) maps to a place between lines, and only the other side finds them.
         LineMap? oursToBase = Base is not null && currentFileLines is not null ? new LineMap(LineDiff.Lines(Ours), LineDiff.Lines(Base)) : null;
-        LineMap? theirsToBase = Base is not null && incomingFileLines is not null && oursToBase is null ? new LineMap(LineDiff.Lines(Theirs), LineDiff.Lines(Base)) : null;
+        LineMap? theirsToBase = Base is not null && incomingFileLines is not null ? new LineMap(LineDiff.Lines(Theirs), LineDiff.Lines(Base)) : null;
         var baseLines = Base is null ? [] : LineDiff.Lines(Base);
 
         var display = new StringBuilder();
@@ -669,19 +694,16 @@ public sealed class MergeEditorViewModel : ObservableObject
             {
                 @base = conflict.Base;
             }
-            else if (oursToBase is not null && oursToBase.Map(currentFileLines![i].Start, currentFileLines[i].End) is var (b0, b1))
+            else if (Span(oursToBase?.Map(currentFileLines![i].Start, currentFileLines[i].End), theirsToBase?.Map(incomingFileLines![i].Start, incomingFileLines[i].End)) is var (b0, b1))
             {
                 @base = Join(baseLines, b0, b1, LineEnding);
-            }
-            else if (theirsToBase is not null && theirsToBase.Map(incomingFileLines![i].Start, incomingFileLines[i].End) is var (t0, t1))
-            {
-                @base = Join(baseLines, t0, t1, LineEnding);
             }
             else
             {
                 @base = string.Empty;
             }
 
+            @base = Reindent(@base, conflict.Ours, conflict.Theirs);
             var block = new MergeConflictBlock(this, i, conflict, @base, currentRanges[i], incomingRanges[i]) { ResultStart = display.Length, ResultLength = @base.Length };
             _blocks.Add(block);
             display.Append(@base);
@@ -691,6 +713,99 @@ public sealed class MergeEditorViewModel : ObservableObject
         display.Append(result, previous, result.Length - previous);
         return (display.ToString(), current, incoming);
     }
+
+    /// <summary>
+    /// A conflict's base text in the indentation of the code around it (ADR 0020, 2026-11-18): when a side re-indented
+    /// a base line (its line is the same without whitespace), the line takes that side's indentation, the current side's
+    /// first, as the merge takes a re-indent; a line neither side still has moves as its nearest such line did. So the
+    /// base's lines sit level with the lines around them when a branch moved the block into a new element.
+    /// </summary>
+    internal static string Reindent(string @base, string ours, string theirs)
+    {
+        if (@base.Length == 0)
+        {
+            return @base;
+        }
+
+        var lines = SplitKeepingEnds(@base);
+        var toOurs = IndentPairs(lines, SplitKeepingEnds(ours));
+        var toTheirs = IndentPairs(lines, SplitKeepingEnds(theirs));
+        var indents = new string?[lines.Count];
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var own = Indent(lines[i]);
+            indents[i] = toOurs[i] is { } o && o != own ? o
+                : toTheirs[i] is { } t && t != own ? t
+                : toOurs[i] is not null || toTheirs[i] is not null ? own
+                : null;
+        }
+
+        var text = new StringBuilder(@base.Length);
+        for (var i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+            var own = Indent(line);
+            var indent = indents[i] ?? Shifted(i, own);
+            text.Append(line.Trim().Length == 0 ? line : indent + line[own.Length..]);
+        }
+
+        return text.ToString();
+
+        // A line no side still has: the change in indentation of the nearest line one has, above it, else below it.
+        string Shifted(int i, string own)
+        {
+            for (var step = -1; step <= 1; step += 2)
+            {
+                for (var j = i + step; j >= 0 && j < lines.Count; j += step)
+                {
+                    if (indents[j] is { } moved)
+                    {
+                        var was = Indent(lines[j]);
+                        return own.StartsWith(was, StringComparison.Ordinal) ? moved + own[was.Length..] : own;
+                    }
+                }
+            }
+
+            return own;
+        }
+    }
+
+    /// <summary>For each base line, the indentation of the side's line that is the same without whitespace, or null.</summary>
+    private static string?[] IndentPairs(List<string> @base, List<string> side)
+    {
+        var pairs = new string?[@base.Count];
+        foreach (var op in LineDiff.Diff([.. @base.Select(KeyOf)], [.. side.Select(KeyOf)]))
+        {
+            if (op.Kind == ' ' && KeyOf(@base[op.OldIndex]).Length > 0)
+            {
+                pairs[op.OldIndex] = Indent(side[op.NewIndex]);
+            }
+        }
+
+        return pairs;
+
+        static string KeyOf(string line) => LineDiff.WithoutWhitespace(line);
+    }
+
+    /// <summary>A line's leading spaces and tabs.</summary>
+    private static string Indent(string line)
+    {
+        var length = 0;
+        while (length < line.Length && line[length] is ' ' or '\t')
+        {
+            length++;
+        }
+
+        return line[..length];
+    }
+
+    /// <summary>The base lines both sides' blocks map to (from the first one's start to the last one's end), or null.</summary>
+    private static (int Start, int End)? Span((int Start, int End)? ours, (int Start, int End)? theirs) => (ours, theirs) switch
+    {
+        ({ } o, { } t) => (Math.Min(o.Start, t.Start), Math.Max(o.End, t.End)),
+        ({ } o, null) => o,
+        (null, var t) => t,
+    };
 
     /// <summary>
     /// A side's pane: its file from the index when each block's lines are found in it (by a line diff against the
@@ -969,6 +1084,57 @@ public sealed class MergeEditorViewModel : ObservableObject
         }
 
         return lines;
+    }
+
+    /// <summary>Whether two parses found the same conflicts (each side's text, whatever the line endings).</summary>
+    private static bool SameConflicts(IReadOnlyList<MergeConflict> a, IReadOnlyList<MergeConflict> b)
+    {
+        static string Lf(string text) => text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        return a.Count == b.Count && a.Zip(b).All(p => Lf(p.First.Ours) == Lf(p.Second.Ours) && Lf(p.First.Theirs) == Lf(p.Second.Theirs));
+    }
+
+    // ------------------------------------------------------------------ changed words
+
+    /// <summary>
+    /// The changed words of a source pane's 0-based line (<see cref="WordDiff.TokenRanges"/>: whole tokens, whitespace left
+    /// out, so a re-indent marks nothing), where the line is in a conflict's block and paired with a line of the other
+    /// side's block (lines compared without their whitespace); none elsewhere.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Length)> ChangedWordsAt(MergeSide side, int line) =>
+        _changedWords[(int)side].TryGetValue(line, out var ranges) ? ranges : [];
+
+    private Dictionary<int, IReadOnlyList<(int Start, int Length)>> ChangedWords(MergeSide side)
+    {
+        var words = new Dictionary<int, IReadOnlyList<(int Start, int Length)>>();
+        var other = side == MergeSide.Current ? MergeSide.Incoming : MergeSide.Current;
+        var starts = LineStarts(TextFor(side));
+        foreach (var block in _blocks)
+        {
+            var mine = LineDiff.Lines(TextIn(block, side));
+            var theirs = LineDiff.Lines(TextIn(block, other));
+            if (mine.Length == 0 || theirs.Length == 0)
+            {
+                continue;
+            }
+
+            var found = starts.BinarySearch(block.RangeIn(side).Start);
+            var first = found >= 0 ? found : ~found - 1;
+            foreach (var row in DiffRows.Align(LineDiff.Diff([.. theirs.Select(LineDiff.WithoutWhitespace)], [.. mine.Select(LineDiff.WithoutWhitespace)])))
+            {
+                if (row is { Kind: '~', OldLine: { } o, NewLine: { } n } && WordDiff.TokenRanges(theirs[o - 1], mine[n - 1]).New is { Count: > 0 } ranges)
+                {
+                    words[first + n - 1] = ranges;
+                }
+            }
+        }
+
+        return words;
+    }
+
+    private string TextIn(MergeConflictBlock block, MergeSide side)
+    {
+        var range = block.RangeIn(side);
+        return TextFor(side).Substring(range.Start, range.Length);
     }
 
     /// <summary>What replaces a conflict: <c>current</c>, <c>incoming</c>, <c>both</c> (current then incoming) or <c>base</c>.</summary>

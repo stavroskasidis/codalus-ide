@@ -182,6 +182,44 @@ public class SolutionTests
     }
 
     [AvaloniaFact]
+    public async Task The_search_box_keeps_the_text_keys_for_its_text()
+    {
+        // #483, #484: Delete, Ctrl+C, Ctrl+V, Ctrl+X and F2 ran the selected item's commands while the search box had the
+        // keyboard (Delete asked to delete the file, Ctrl+C copied it), so the text kept the key.
+        await using var f = await OpenTrustedAsync();
+        var explorer = f.Shell.Explorer;
+        f.Shell.Layout.ShowToolWindow(SolutionExplorerViewModel.ToolWindowId);
+        await ShellFixture.PumpUntil(() => f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Any());
+        explorer.Selected = Row(f, "App");
+        f.Press(Key.Right);
+        explorer.Selected = Row(f, "Program.cs");
+        var box = f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single().SearchBox;
+        box.Focus();
+        await ShellFixture.PumpUntil(() => box.IsKeyboardFocusWithin && Equals(f.Shell.Workbench.Context.GetValue("inputFocus"), true));
+        Assert.Equal(SolutionExplorerViewModel.ToolWindowId, f.Shell.Workbench.Context.GetValue("focusedView"));
+
+        f.Type("Program");
+        box.CaretIndex = 0;
+        f.Press(Key.Delete);
+        Assert.Equal("rogram", box.Text);
+        f.Press(Key.F2);
+        f.Press(Key.X, ShellFixture.Primary);
+        f.Press(Key.C, ShellFixture.Primary);
+        ShellFixture.Pump();
+        Assert.False(f.Shell.Dialogs.IsOpen); // neither Delete nor Rename asked about Program.cs
+        Assert.False(explorer.CanPaste); // nor did Ctrl+X or Ctrl+C take it
+        Assert.True(File.Exists(Path.Combine(Path.GetDirectoryName(f.Shell.Solutions.Solution!.Projects.Single(p => p.Name == "App").Path)!, "Program.cs")));
+
+        // Back in the tree, the same keys act on the item again.
+        var view = f.Window.GetVisualDescendants().OfType<SolutionExplorerView>().Single();
+        explorer.Selected = Row(f, "Program.cs");
+        view.FocusPrimary();
+        await ShellFixture.PumpUntil(() => Equals(f.Shell.Workbench.Context.GetValue("inputFocus"), false));
+        f.Press(Key.C, ShellFixture.Primary);
+        Assert.True(explorer.CanPaste);
+    }
+
+    [AvaloniaFact]
     public async Task The_configuration_picker_switches_the_active_configuration()
     {
         await using var f = await OpenTrustedAsync();

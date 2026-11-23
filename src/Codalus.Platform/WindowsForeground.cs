@@ -42,7 +42,13 @@ public static partial class WindowsForeground
         }
     }
 
+    /// <summary>Lets the process <paramref name="processId"/> set the foreground window (a host about to show a dialog of its own); false when Windows refused.</summary>
+    public static bool AllowSetForeground(int processId) => AllowSetForegroundWindow((uint)processId) != 0;
+
     private const int SwRestore = 9;
+
+    [LibraryImport("user32.dll")]
+    private static partial int AllowSetForegroundWindow(uint processId);
 
     [LibraryImport("user32.dll")]
     private static partial IntPtr GetForegroundWindow();

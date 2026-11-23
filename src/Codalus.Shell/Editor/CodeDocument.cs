@@ -282,9 +282,9 @@ public sealed class CodeDocument : ObservableObject, IDisposable
 
     /// <summary>
     /// Replaces the text with the file's (one undoable change, so the language service sees an edit): only the part that
-    /// differs. A log being written is reloaded at each write, and replacing all of it rebuilt every editor's lines and
-    /// sent the language service the whole text each time (M56); now that's what was appended. Reloads run one at a time,
-    /// each against the text the one before left.
+    /// differs (<see cref="Edits"/>). A log being written is reloaded at each write, and replacing all of it rebuilt every
+    /// editor's lines and sent the language service the whole text each time (M56); now that's what was appended. Reloads
+    /// run one at a time, each against the text the one before left.
     /// </summary>
     public Task ReloadAsync(CancellationToken cancellationToken) => QueueReload(fromWatcher: false, cancellationToken);
 
@@ -320,13 +320,13 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         var version = Version;
         var snapshot = Text.CreateSnapshot();
         var path = Path;
-        var (state, format, text, change) = await Task.Run(
+        var (state, format, text, edits) = await Task.Run(
             async () =>
             {
                 var files = Workbench.FileSystem.FileSystems.For(path);
                 var state = await files.StatAsync(path, cancellationToken).ConfigureAwait(false);
                 var (text, format) = TextFiles.Decode(await files.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false));
-                return (state, format, text, Difference(snapshot.Text, text));
+                return (state, format, text, Edits(snapshot.Text, text));
             },
             cancellationToken).ConfigureAwait(true);
         (_lastWrite, _lastLength) = state.Exists ? (state.ModifiedUtc, state.Size) : (default, -1);
@@ -338,14 +338,14 @@ public sealed class CodeDocument : ObservableObject, IDisposable
                 return;
             }
 
-            change = (0, Text.TextLength, text); // changed while the file was read: all of it, as asked
+            edits = [(0, Text.TextLength, text)]; // changed while the file was read: all of it, as asked
         }
 
         Format = format;
         OnPropertyChanged(nameof(Format));
-        if (change.Removed > 0 || change.Inserted.Length > 0)
+        if (edits.Count > 0)
         {
-            Text.Replace(change.Start, change.Removed, change.Inserted);
+            DocumentEdits.Apply(Text, edits); // one change: the lines whose text stayed keep their anchors
         }
 
         Text.UndoStack.MarkAsOriginalFile();
@@ -383,6 +383,89 @@ public sealed class CodeDocument : ObservableObject, IDisposable
         return (start, before.Length - start - end, after[start..(after.Length - end)]);
 
         static bool IsPair(char first, char second) => (first == '\r' && second == '\n') || (char.IsHighSurrogate(first) && char.IsLowSurrogate(second));
+    }
+
+    /// <summary>
+    /// The edits that turn <paramref name="before"/> into <paramref name="after"/> (offsets in <paramref name="before"/>,
+    /// ascending): the <see cref="Difference"/>, with each of its lines whose text stayed at either end kept and only its
+    /// line break replaced. As one replace, a change of the line endings on disk (git's core.autocrlf, a formatter) ran
+    /// from line 1's end to the file's, and every anchor in it, each breakpoint, bookmark and pinned data tip, ended on
+    /// line 1 (the Windows smoke, 2026-11-20).
+    /// </summary>
+    internal static List<(int Offset, int Length, string Text)> Edits(string before, string after)
+    {
+        var (start, removed, inserted) = Difference(before, after);
+        if (removed == 0 || inserted.Length == 0)
+        {
+            return removed == 0 && inserted.Length == 0 ? [] : [(start, removed, inserted)];
+        }
+
+        var old = Lines(before, start, start + removed);
+        var now = Lines(after, start, start + inserted.Length);
+        var front = 0;
+        while (front < old.Count && front < now.Count && SameText(before, old[front], after, now[front]))
+        {
+            front++;
+        }
+
+        var back = 0;
+        while (back < old.Count - front && back < now.Count - front && SameText(before, old[^(back + 1)], after, now[^(back + 1)]))
+        {
+            back++;
+        }
+
+        var edits = new List<(int Offset, int Length, string Text)>();
+        for (var i = 0; i < front; i++)
+        {
+            Break(old[i], now[i]);
+        }
+
+        var (oldFrom, oldTo) = (front < old.Count ? old[front].Start : start + removed, back > 0 ? old[^back].Start : start + removed);
+        var (nowFrom, nowTo) = (front < now.Count ? now[front].Start : start + inserted.Length, back > 0 ? now[^back].Start : start + inserted.Length);
+        if (oldTo > oldFrom || nowTo > nowFrom)
+        {
+            edits.Add((oldFrom, oldTo - oldFrom, after[nowFrom..nowTo]));
+        }
+
+        for (var i = back; i > 0; i--)
+        {
+            Break(old[^i], now[^i]);
+        }
+
+        return edits;
+
+        void Break((int Start, int End, int BreakEnd) was, (int Start, int End, int BreakEnd) now)
+        {
+            if (!before.AsSpan(was.End, was.BreakEnd - was.End).SequenceEqual(after.AsSpan(now.End, now.BreakEnd - now.End)))
+            {
+                edits.Add((was.End, was.BreakEnd - was.End, after[now.End..now.BreakEnd]));
+            }
+        }
+
+        static bool SameText(string a, (int Start, int End, int BreakEnd) x, string b, (int Start, int End, int BreakEnd) y) =>
+            a.AsSpan(x.Start, x.End - x.Start).SequenceEqual(b.AsSpan(y.Start, y.End - y.Start));
+
+        // The lines of text[from..to]: each one's text, then its line break (none for the last when to isn't after one).
+        static List<(int Start, int End, int BreakEnd)> Lines(string text, int from, int to)
+        {
+            var lines = new List<(int Start, int End, int BreakEnd)>();
+            var i = from;
+            while (i < to)
+            {
+                var lineStart = i;
+                var next = text.AsSpan(i, to - i).IndexOfAny('\r', '\n');
+                i = next < 0 ? to : i + next;
+                var end = i;
+                if (i < to)
+                {
+                    i += text[i] == '\r' && i + 1 < to && text[i + 1] == '\n' ? 2 : 1;
+                }
+
+                lines.Add((lineStart, end, i));
+            }
+
+            return lines;
+        }
     }
 
     public void SetLineEnding(string lineEnding)

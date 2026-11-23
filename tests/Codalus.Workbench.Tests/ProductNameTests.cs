@@ -49,7 +49,25 @@ public sealed class ProductNameTests
         ("src/Codalus.Workbench/Settings/VsCodeImport.cs", $"[\"{Name} Light\"]", "a VS Code theme's name, read from the user's VS Code settings"),
         ("tests/Codalus.Shell.Tests/SweepFindingsTests.cs", $"Contains(\"{Name}\", StringComparison.OrdinalIgnoreCase)", "the check that no UI string names it"),
         ("tests/Codalus.Shell.Tests/UxPassTests.cs", $"Contains(\"{Name}\", StringComparison.OrdinalIgnoreCase)", "the check that no menu title names it"),
+
+        // The one place the UI names it (the maintainer's, for 1.0): where users look for their old IDE by name, the
+        // first-run setup's "I'm coming from" and the .vssettings import; SweepFindingsTests lists their keys.
+        ("src/Codalus.Shell/Localization/en.json", $"\"{Name}\"", ImportName),
+        ("src/Codalus.Shell/Localization/en.json", $"\"Import {Name} Settings", ImportName),
+        ("src/Codalus.Shell/Localization/en.json", $"\"{Name} settings\"", ImportName),
+        ("src/Codalus.Shell/Localization/en.json", $"\"From {Name}\"", ImportName),
+        ("src/Codalus.Shell/Localization/en.json", $"shortcuts {Name} exported", ImportName),
+        ("src/Codalus.Shell/BuiltIns.cs", $"\"Import {Name} Settings (.vssettings)…\"", ImportName),
+        ("src/Codalus.Shell/ShellHost.Import.cs", $"\"Import {Name} Settings\", \"{Name} settings\"", ImportName),
+        ("src/Codalus.Shell/ViewModels/SetupViewModel.cs", $"\"msg.firstRun.originClassic\", \"{Name}\"", ImportName),
+        ("src/Codalus.Shell/ViewModels/SetupViewModel.cs", $"\"Import {Name} Settings\"), Localizer.Get(\"msg.firstRun.vsSettingsFiles\", \"{Name} settings\"", ImportName),
+        ("tests/Codalus.Shell.Tests/FirstRunSetupTests.cs", $"[\"{Name}\", \"VS Code\"", ImportName),
+        ("docs/user-guide/getting-started.md", $"**{Name}**", "the user guide quotes the setup's option"),
+        ("docs/user-guide/getting-started.md", $"(**From {Name}**)", "the user guide quotes the setup's importer"),
+        ("docs/user-guide/settings.md", $"Import {Name} Settings (.vssettings)", "the user guide quotes the command"),
     ];
+
+    private const string ImportName = "the UI's one mention, where users look for their old IDE by name";
 
     [Fact]
     public void No_current_file_names_the_classic_IDE()

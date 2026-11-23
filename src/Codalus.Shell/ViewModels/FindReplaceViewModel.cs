@@ -8,11 +8,55 @@ namespace Codalus.Shell.ViewModels;
 public static class FindScopes
 {
     public const string EntireSolution = "Entire solution";
+
+    /// <summary>Folder mode's whole folder (the classic IDE's Open Folder names it so); the same search as <see cref="EntireSolution"/>.</summary>
+    public const string EntireWorkspace = "Entire Workspace";
     public const string CurrentProject = "Current project";
     public const string CurrentDocument = "Current document";
     public const string OpenDocuments = "All open documents";
 
+    private const string CurrentDirectoryPrefix = "Current directory (";
+
+    /// <summary>A solution's scopes, and those without one.</summary>
     public static IReadOnlyList<string> All { get; } = [EntireSolution, CurrentProject, CurrentDocument, OpenDocuments];
+
+    /// <summary>
+    /// Folder mode's scopes, in the classic IDE's order: the folder, the current project, the active document's folder
+    /// (<paramref name="currentDirectory"/>, when there is one), the open documents and the current document.
+    /// </summary>
+    public static IReadOnlyList<string> ForFolder(string? currentDirectory) =>
+        currentDirectory is null
+            ? [EntireWorkspace, CurrentProject, OpenDocuments, CurrentDocument]
+            : [EntireWorkspace, CurrentProject, CurrentDirectory(currentDirectory), OpenDocuments, CurrentDocument];
+
+    /// <summary>The scope of a folder and its subfolders, named after it: <c>Current directory (C:\src\App)</c>.</summary>
+    public static string CurrentDirectory(string folder) => CurrentDirectoryPrefix + folder + ")";
+
+    /// <summary>Whether <paramref name="lookIn"/> is a <see cref="CurrentDirectory"/> scope, and its folder.</summary>
+    public static bool IsCurrentDirectory(string lookIn, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? folder)
+    {
+        folder = lookIn.StartsWith(CurrentDirectoryPrefix, StringComparison.Ordinal) && lookIn.EndsWith(')') && lookIn.Length > CurrentDirectoryPrefix.Length + 1
+            ? lookIn[CurrentDirectoryPrefix.Length..^1]
+            : null;
+        return folder is not null;
+    }
+
+    /// <summary>A scope (not a folder that was browsed to).</summary>
+    public static bool IsScope(string lookIn) => lookIn == EntireWorkspace || All.Contains(lookIn, StringComparer.Ordinal) || IsCurrentDirectory(lookIn, out _);
+
+    /// <summary>
+    /// What <paramref name="lookIn"/> becomes among <paramref name="scopes"/>: itself when offered or a folder; the
+    /// entire solution and the entire workspace each other; another folder's current directory this one's.
+    /// </summary>
+    public static string Equivalent(string lookIn, IReadOnlyList<string> scopes)
+    {
+        if (!IsScope(lookIn) || scopes.Contains(lookIn, StringComparer.Ordinal) || scopes.Count == 0)
+        {
+            return lookIn;
+        }
+
+        return IsCurrentDirectory(lookIn, out _) && scopes.FirstOrDefault(s => IsCurrentDirectory(s, out _)) is { } current ? current : scopes[0];
+    }
 }
 
 /// <summary>One Find in Files or Replace in Files search: what to find, how to match it, and where.</summary>
@@ -80,6 +124,7 @@ public sealed class FileTypeFilter
 {
     private readonly List<(Regex Pattern, bool OnPath)> _include = [];
     private readonly List<(Regex Pattern, bool OnPath)> _exclude = [];
+    private readonly List<Regex> _excludedFolders = [];
 
     public FileTypeFilter(string patterns)
     {
@@ -92,16 +137,42 @@ public sealed class FileTypeFilter
                 continue;
             }
 
-            var regex = new Regex(
-                "^" + Regex.Escape(body).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            (exclude ? _exclude : _include).Add((regex, body.Contains('/', StringComparison.Ordinal)));
+            (exclude ? _exclude : _include).Add((Glob(body), body.Contains('/', StringComparison.Ordinal)));
+
+            // "!<folder>/*" leaves out everything in the folders it matches: a search needn't go into them.
+            if (exclude && body.Length > 2 && body.EndsWith("/*", StringComparison.Ordinal) && body[..^2].Contains('/', StringComparison.Ordinal))
+            {
+                _excludedFolders.Add(Glob(body[..^2]));
+            }
         }
     }
 
     /// <param name="path">A file's full path.</param>
     /// <param name="root">The folder path patterns are relative to (the solution's), or null for the full path.</param>
     public bool Matches(string path, string? root)
+    {
+        var normalized = Relative(path, root);
+        var name = Path.GetFileName(path);
+        bool Hit((Regex Pattern, bool OnPath) p) => p.Pattern.IsMatch(p.OnPath ? normalized : name);
+        return (_include.Count == 0 || _include.Any(Hit)) && !_exclude.Any(Hit);
+    }
+
+    /// <summary>
+    /// Whether every file in <paramref name="folder"/> (at any depth) is left out by a <c>!…\*</c> pattern, so a walk of
+    /// the disk needn't go into it (<c>bin</c>, <c>obj</c> and dot folders with the default patterns).
+    /// </summary>
+    public bool ExcludesFolder(string folder, string? root)
+    {
+        var normalized = Relative(Path.TrimEndingDirectorySeparator(folder), root);
+        return _excludedFolders.Exists(p => p.IsMatch(normalized));
+    }
+
+    private static Regex Glob(string body) => new(
+        "^" + Regex.Escape(body).Replace(@"\*", ".*", StringComparison.Ordinal).Replace(@"\?", ".", StringComparison.Ordinal) + "$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>The path with <c>/</c> separators, below <paramref name="root"/> (as <c>/src/A.cs</c>) when it's in it.</summary>
+    private static string Relative(string path, string? root)
     {
         var normalized = path.Replace('\\', '/');
         if (root is { Length: > 0 })
@@ -113,9 +184,7 @@ public sealed class FileTypeFilter
             }
         }
 
-        var name = Path.GetFileName(path);
-        bool Hit((Regex Pattern, bool OnPath) p) => p.Pattern.IsMatch(p.OnPath ? normalized : name);
-        return (_include.Count == 0 || _include.Any(Hit)) && !_exclude.Any(Hit);
+        return normalized;
     }
 }
 
@@ -181,6 +250,12 @@ public sealed class FindReplaceViewModel : ObservableObject
 
     /// <summary>The Look in drop-down: the scopes, then folders that were browsed to.</summary>
     public ObservableCollection<string> LookInOptions { get; } = [.. FindScopes.All];
+
+    /// <summary>
+    /// The scopes the workspace offers, asked each time the window shows: a solution's (<see cref="FindScopes.All"/>), or
+    /// folder mode's (<see cref="FindScopes.ForFolder"/>).
+    /// </summary>
+    public Func<IReadOnlyList<string>> Scopes { get; set; } = () => FindScopes.All;
 
     public ObservableCollection<string> FileTypeOptions { get; } =
         [FindInFilesOptions.DefaultFileTypes, "*.cs", "*.cs;*.razor;*.cshtml", "*.axaml;*.xaml", "*.csproj;*.props;*.targets", "*.json;*.xml;*.config", string.Empty];
@@ -321,6 +396,33 @@ public sealed class FindReplaceViewModel : ObservableObject
             Query = query;
         }
 
+        RefreshScopes();
+        Show(replace);
+    }
+
+    /// <summary>
+    /// Look in's scopes as the workspace has them now (folder mode has no solution, and the current directory is the
+    /// active document's), with the folders that were browsed to after them; Look in becomes its equivalent among them.
+    /// </summary>
+    public void RefreshScopes()
+    {
+        var scopes = Scopes();
+        var lookIn = FindScopes.Equivalent(_lookIn, scopes);
+        List<string> options = [.. scopes, .. LookInOptions.Where(o => !FindScopes.IsScope(o))];
+        if (!options.SequenceEqual(LookInOptions, StringComparer.Ordinal))
+        {
+            LookInOptions.Clear();
+            foreach (var option in options)
+            {
+                LookInOptions.Add(option);
+            }
+        }
+
+        LookIn = lookIn;
+    }
+
+    private void Show(bool replace)
+    {
         IsReplace = replace;
         Error = string.Empty;
         IsOpen = true;
@@ -338,23 +440,27 @@ public sealed class FindReplaceViewModel : ObservableObject
             return;
         }
 
+        RefreshScopes();
         Query = options.Query;
         MatchCase = options.MatchCase;
         WholeWord = options.WholeWord;
         UseRegex = options.UseRegex;
-        if (!LookInOptions.Contains(options.LookIn, StringComparer.Ordinal))
+        // The entire solution and the entire workspace are one search; another scope (an earlier document's current
+        // directory) stays the search's own.
+        var lookIn = options.LookIn is FindScopes.EntireSolution or FindScopes.EntireWorkspace ? FindScopes.Equivalent(options.LookIn, LookInOptions) : options.LookIn;
+        if (!LookInOptions.Contains(lookIn, StringComparer.Ordinal))
         {
-            LookInOptions.Add(options.LookIn);
+            LookInOptions.Add(lookIn);
         }
 
-        LookIn = options.LookIn;
+        LookIn = lookIn;
         FileTypes = options.FileTypes;
         if (page.ReplaceWith is { } replaceWith)
         {
             ReplaceWith = replaceWith;
         }
 
-        Open(null, page.ReplaceWith is not null);
+        Show(page.ReplaceWith is not null);
     }
 
     /// <summary>Find All: lists every match in Find Results and closes the window.</summary>

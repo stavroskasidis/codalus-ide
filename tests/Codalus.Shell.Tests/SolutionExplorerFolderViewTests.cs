@@ -702,4 +702,28 @@ public class SolutionExplorerFolderViewTests
         Assert.True(Row(explorer, node.Children[^1].Id) is { IsDimmed: true } row
                     && row.Name.Contains(20_000.ToString("N0", System.Globalization.CultureInfo.CurrentCulture), StringComparison.Ordinal));
     }
+
+    [AvaloniaFact]
+    public async Task Double_clicking_a_solution_file_in_the_folder_view_opens_the_solution()
+    {
+        // The maintainer's report: in folder mode, a double-click on a .slnx opened its XML in the editor, where the classic
+        // IDE's folder view opens the solution. A project file still opens in the editor, as before.
+        var (f, folder) = await OpenAsync(folder => File.WriteAllText(Path.Combine(folder, "Contoso.slnx"), "<Solution />\n"));
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var solution = Path.Combine(folder, "Contoso.slnx");
+        await ShellFixture.PumpUntil(() => Row(explorer, "f:" + solution) is not null, seconds: 60);
+
+        explorer.Selected = Row(explorer, "f:" + solution);
+        NavigationDepthTests.Screenshot(f, "folder-view-solution-file");
+        await explorer.ActivateAsync(Row(explorer, "f:" + solution)!);
+        await ShellFixture.PumpUntil(
+            () => f.Shell.Solutions.Solution is { IsFolder: false } open && SolutionService.PathComparer.Equals(open.Path, solution),
+            seconds: 120,
+            describe: () => $"solution {f.Shell.Solutions.Solution?.Path} (folder {f.Shell.Solutions.Solution?.IsFolder})");
+        Assert.DoesNotContain(f.Shell.Editors, e => SolutionService.PathComparer.Equals(e.Model.Path, solution));
+        Assert.False(explorer.IsFolderView);
+        ShellFixture.Pump();
+        NavigationDepthTests.Screenshot(f, "folder-view-solution-opened");
+    }
 }

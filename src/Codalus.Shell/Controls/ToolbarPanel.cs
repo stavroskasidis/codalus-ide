@@ -272,10 +272,36 @@ public sealed class ToolbarPanel : Panel
                 more.Items.Add(new MenuItem { Header = name, Command = split.Command, CommandParameter = split.CommandParameter });
                 foreach (var choice in flyout.Items.OfType<MenuItem>())
                 {
-                    more.Items.Add(new MenuItem { Header = choice.Header, Command = choice.Command, CommandParameter = choice.CommandParameter, IsEnabled = choice.IsEffectivelyEnabled });
+                    more.Items.Add(Copy(choice));
                 }
 
                 return more;
+
+                // A choice with its check and its submenu (the Start drop-down's profiles and Web Browser).
+                static MenuItem Copy(MenuItem choice)
+                {
+                    var copy = new MenuItem
+                    {
+                        Header = choice.Header,
+                        Command = choice.Command,
+                        CommandParameter = choice.CommandParameter,
+                        IsEnabled = choice.IsEffectivelyEnabled,
+                        ToggleType = choice.ToggleType,
+                        IsChecked = choice.IsChecked,
+                    };
+                    if (ToolTip.GetTip(choice) is { } tip)
+                    {
+                        ToolTip.SetTip(copy, tip);
+                        ToolTip.SetShowOnDisabled(copy, true);
+                    }
+
+                    foreach (var sub in choice.Items.OfType<MenuItem>())
+                    {
+                        copy.Items.Add(Copy(sub));
+                    }
+
+                    return copy;
+                }
             }
 
             // A combo box, or a segmented control (M34h): a submenu of its choices.

@@ -90,6 +90,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// <summary>What the method a step just returned from returned (M58): shown first in Locals, and <c>$ReturnValue</c>.</summary>
     private (int ThreadId, string Method, IClrValue Value)? _returnValue;
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private int _ending;
     private readonly TaskCompletionSource _configured = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private IClrProcess? _process;
 
@@ -101,6 +102,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     private bool _attached;
     private bool _justMyCode = true;
     private bool _stepFiltering = true;
+    private bool _sourcesOnClient;
     private bool _breakOnThrown;
     private bool _breakOnUnhandled = true;
     private string[] _thrownTypes = [];
@@ -745,6 +747,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
 
         _justMyCode = arguments.JustMyCode;
         _stepFiltering = arguments.EnableStepFiltering;
+        _sourcesOnClient = arguments.SourcesOnClient;
         _clientViews = new HashSet<string>(arguments.ClientViews ?? [], StringComparer.Ordinal);
         if (arguments.Symbols is { } symbols && (symbols.SearchPaths.Count > 0 || symbols.Servers.Count > 0))
         {
@@ -776,6 +779,13 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
             target.DescribeThreads = ThreadsOfTimedOutEval;
             target.RunsClassConstructor = RunsClassConstructor;
             target.EvalTimedOut = log.WriteLine;
+            if (Environment.GetEnvironmentVariable("CODALUS_CLR_DEBUGGER_LOG") is { Length: > 0 } logs)
+            {
+                // The adapter's log folder (CI sets it for every shard): a timed-out func-eval's dump goes with the log.
+                var id = _process.Id;
+                target.DumpWhileStopped = () => ProgramDump.Write(id, logs);
+            }
+
             if (Trace is { } trace)
             {
                 target.Continuing = trace.WriteLine; // the log file only: the log also goes to the IDE's Debug log
@@ -903,28 +913,34 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         _ = dap.SendEventAsync(DapEvents.Stopped, new StoppedEvent(reason, description, thread.Id, AllThreadsStopped: true, text, hitBreakpoints is { Length: > 0 } ? hitBreakpoints : null), DapJsonContext.Default.StoppedEvent);
     }
 
+    /// <summary>
+    /// Ends the session: <see cref="Ended"/> completes once <c>exited</c> and <c>terminated</c> are written, since the
+    /// adapter's process ends after it (<see cref="DapServer.SendEndAsync"/>).
+    /// </summary>
     private void End(int? exitCode)
     {
-        if (_ended.TrySetResult())
+        if (Interlocked.Exchange(ref _ending, 1) != 0)
         {
-            if (exitCode is { } code)
-            {
-                _ = dap.SendEventAsync(DapEvents.Exited, new ExitedEvent(code), DapJsonContext.Default.ExitedEvent);
-            }
-
-            _ = dap.SendEventAsync(DapEvents.Terminated);
-            lock (_gate)
-            {
-                foreach (var (_, info) in _modules)
-                {
-                    info.Dispose();
-                }
-
-                _modules.Clear();
-                _objectIds.Clear();
-            }
+            return;
         }
+
+        var written = dap.SendEndAsync(exitCode);
+        lock (_gate)
+        {
+            foreach (var (_, info) in _modules)
+            {
+                info.Dispose();
+            }
+
+            _modules.Clear();
+            _objectIds.Clear();
+        }
+
+        _ = written.ContinueWith(_ => _ended.TrySetResult(), CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
     }
+
+    /// <summary>Whether the session has ended (<see cref="End"/> ran), though its last events may still be on their way.</summary>
+    private bool Ending => Volatile.Read(ref _ending) != 0;
 
     // ------------------------------------------------------------------ modules
 
@@ -1118,7 +1134,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         lock (_gate)
         {
             var index = _modules.FindIndex(m => ReferenceEquals(m.Module, module));
-            if (index < 0 || _ended.Task.IsCompleted)
+            if (index < 0 || Ending)
             {
                 return;
             }
@@ -1253,7 +1269,7 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// </summary>
     private void WhileStopped(Action change)
     {
-        var pause = _process is { } process && _configured.Task.IsCompleted && !_userStopped && !_ended.Task.IsCompleted;
+        var pause = _process is { } process && _configured.Task.IsCompleted && !_userStopped && !Ending;
         if (pause)
         {
             try
@@ -2264,17 +2280,19 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
     /// another thread's stack, with an awaiter of the task in a field (<c>&lt;&gt;u__1</c>) or a local. Or, earlier still
     /// (M61b), before it has the task at all: that thread is still on its way back from the method that the task is
     /// <paramref name="machine"/>'s (in its <c>MoveNext</c>, or the kickoff that started it), and the awaiting state
-    /// machine is the first below that, the frames between being code that isn't the user's. Its frame and its thread's
-    /// frames come with it.
+    /// machine is the first below that, the frames between being code that isn't the user's. Or in between: back in its
+    /// <c>MoveNext</c>, the task just returned to it (<see cref="JustReturned"/>). Its frame and its thread's frames come
+    /// with it.
     /// </summary>
     private StackCaller? AwaiterOnAStack(IClrValue task, IClrThread except, IClrValue? machine = null)
     {
         foreach (var thread in Process.Threads().Where(t => t.Id != except.Id))
         {
             var frames = SafeFrames(thread);
+            var top = frames.FirstOrDefault(f => f.Module is not null);
             for (var i = 0; i < frames.Count; i++)
             {
-                if (AwaiterOf(frames[i], task) is { } awaiting)
+                if ((AwaiterOf(frames[i], task) ?? (ReferenceEquals(frames[i], top) ? JustReturned(thread, frames[i], task) : null)) is { } awaiting)
                 {
                     return new StackCaller(frames[i], awaiting, frames, i);
                 }
@@ -2287,6 +2305,29 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The state machine of a thread's top frame when the call it has just returned from returned <paramref name="task"/>
+    /// (Linux CI, runs 43828283396 and 43865623534): back in its <c>MoveNext</c> from the awaited method, the task only
+    /// in the call's return register, before an awaiter of it is anywhere. A step's end holds a thread right there: a
+    /// step over the method's await whose completion came as the method's resumption elsewhere ended the step, so the
+    /// thread waits for its dropped completion while the program runs on. Null otherwise. Any call of the frame's line
+    /// is tried: at the return address the frame's IL offset is only near the call.
+    /// </summary>
+    private IClrValue? JustReturned(IClrThread thread, IClrFrame frame, IClrValue task)
+    {
+        if (frame.Module is not { } module || Types.Info(module) is not { } info || info.AsyncKind(frame.MethodToken) != ClrAsyncKind.StateMachine
+            || frame.Il() is not { Length: > 0 } il || info.RangeAt(frame.MethodToken, frame.IlOffset, frame.CodeVersion) is not { } range
+            || SafeValue(() => frame.Argument(0)) is not { Kind: ClrValueKind.Object, IsValueType: false, Address: not 0 } machine)
+        {
+            return null;
+        }
+
+        return IlCalls.Of(il).Where(c => c.Offset >= range.Start && c.Offset < range.End)
+            .Any(c => SafeValue(() => Process.ReturnValue(thread, c.Offset)) is { Kind: ClrValueKind.Object, Address: not 0 } returned && returned.Address == task.Address)
+            ? machine
+            : null;
     }
 
     /// <summary>
@@ -2539,7 +2580,10 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
                 var name = info?.MethodDisplayName(frame.MethodToken) ?? $"[{Path.GetFileName(module.Path)}]";
                 var point = info is null ? null : ShownAt(module, info, frame);
                 var file = point?.Document;
-                var hasSource = file is { Length: > 0 } && File.Exists(file);
+                // In a container or on another machine the sources are the client's (its build's paths, which it maps):
+                // asked of this machine, every frame had none and the editor never showed the stop (a rootless podman
+                // container in WSL, ContainerShellTests; CI passed only because its shard had no bundle, so netcoredbg ran).
+                var hasSource = file is { Length: > 0 } && (_sourcesOnClient || File.Exists(file));
                 var userCode = info is { HasSymbols: true, IsOptimized: false } && !info.IsNonUserCode(frame.MethodToken);
                 result.Add(new StackFrame(
                     id,
@@ -3605,9 +3649,17 @@ internal sealed partial class NetFxDebugSession(DapServer dap, TextWriter log, I
         // The same expression at the same place is the same method: a watch compiles once.
         var key = string.Join('\n', expression.Trim(), info.Mvid.ToString("N"), frame.MethodToken.ToString(CultureInfo.InvariantCulture), frame.CodeVersion.ToString(CultureInfo.InvariantCulture),
             point.StartLine.ToString(CultureInfo.InvariantCulture), point.StartColumn.ToString(CultureInfo.InvariantCulture));
+        // Only what compiled is kept. A failure can be the moment's: the project still loading, which says to try again,
+        // or a load into the program that timed out. Kept, it came back for every later try of the session: the Visual
+        // Basic expression of DebugCodalusTests got its first answer, that the project was still loading, for two minutes
+        // after the project had loaded (the 1.0 validation in WSL, docs/ci-flakes.md).
         if (!_compiledExpressions.TryGetValue(key, out var compiled))
         {
-            _compiledExpressions[key] = compiled = Compile(frame, expression, module, point, reason);
+            compiled = Compile(frame, expression, module, point, reason);
+            if (compiled.Error is null && compiled.Module is not null)
+            {
+                _compiledExpressions[key] = compiled;
+            }
         }
 
         if (compiled.Error is { } error || compiled.Module is not { } assembly)

@@ -35,4 +35,20 @@
     <Compile Include="..\Codalus.LanguageServices.Protocol\WinFormsDesign.cs" Link="Protocol\WinFormsDesign.cs" />
     <Compile Include="..\Codalus.Workbench\WinForms\WinFormsDesignerProtocol.cs" Link="Protocol\WinFormsDesignerProtocol.cs" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      #461, ADR 0106: the replacements of the classic IDE's designer-server API, which control libraries' designers are built
+      against. Not copied next to the host: they ship in designtools/ and load only through the host's resolver, when a
+      vendor's design assembly asks for them (the host runs on the app's deps.json, which doesn't list them).
+    -->
+    <ProjectReference Include="..\Codalus.WinForms.DesignTools.Server\Codalus.WinForms.DesignTools.Server.csproj" Private="false" />
+  </ItemGroup>
+
+  <Target Name="CodalusCopyDesignTools" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_CodalusDesignTools Include="$(MSBuildThisFileDirectory)..\Codalus.WinForms.DesignTools.Server\bin\$(Configuration)\net8.0-windows\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_CodalusDesignTools)" DestinationFolder="$(OutDir)designtools" SkipUnchangedFiles="true" />
+  </Target>
 </Project>

@@ -675,9 +675,13 @@ public sealed class LanguageHostClient : IAsyncDisposable
     public Task<WinFormsEditResult?> WinFormsEditAsync(WinFormsEditParams parameters, CancellationToken cancellationToken) =>
         InvokeNullable(Methods.WinFormsEdit, parameters, ProtocolJsonContext.Default.WinFormsEditParams, ProtocolJsonContext.Default.WinFormsEditResult, cancellationToken);
 
-    /// <summary><c>codalus/winforms/toolbox</c>: a project's own components and controls, for the Toolbox (M41a, ADR 0073).</summary>
+    /// <summary><c>codalus/winforms/toolbox</c>: a project's own components and controls, and its packages', for the Toolbox (M41a, #454, ADR 0073).</summary>
     public Task<WinFormsToolboxResult?> WinFormsToolboxAsync(string project, CancellationToken cancellationToken) =>
-        InvokeNullable(Methods.WinFormsToolbox, new WinFormsToolboxParams(project), ProtocolJsonContext.Default.WinFormsToolboxParams, ProtocolJsonContext.Default.WinFormsToolboxResult, cancellationToken);
+        WinFormsToolboxAsync(project, [], cancellationToken);
+
+    /// <summary><c>codalus/winforms/toolbox</c> with the assemblies chosen in Choose Toolbox Items (#460) the project doesn't reference.</summary>
+    public Task<WinFormsToolboxResult?> WinFormsToolboxAsync(string project, IReadOnlyList<string> assemblies, CancellationToken cancellationToken) =>
+        InvokeNullable(Methods.WinFormsToolbox, new WinFormsToolboxParams(project) { Assemblies = [.. assemblies] }, ProtocolJsonContext.Default.WinFormsToolboxParams, ProtocolJsonContext.Default.WinFormsToolboxResult, cancellationToken);
 
     /// <summary>
     /// <c>codalus/hotReload/start</c> (M55): a Hot Reload session for a debugged program built from

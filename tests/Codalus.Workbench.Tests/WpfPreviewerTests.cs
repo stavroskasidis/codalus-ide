@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Codalus.Workbench.Previewer;
 
 namespace Codalus.Workbench.Tests;
@@ -80,7 +81,7 @@ public sealed class WpfFixture : IAsyncLifetime
 /// control at its design size, a resource dictionary and App.xaml, hit testing and bounds through the XAML's paths,
 /// and the render scale.
 /// </summary>
-public sealed class WpfPreviewerTests(WpfFixture wpf, ITestOutputHelper output) : IClassFixture<WpfFixture>
+public sealed partial class WpfPreviewerTests(WpfFixture wpf, ITestOutputHelper output) : IClassFixture<WpfFixture>
 {
     private static readonly TimeSpan s_timeout = TimeSpan.FromSeconds(60);
 
@@ -207,6 +208,55 @@ public sealed class WpfPreviewerTests(WpfFixture wpf, ITestOutputHelper output) 
         hit = await session.HitTestAsync(list!.Value.X + 20, list.Value.Y + 10, Ct);
         Assert.Equal(["MainWindow", "Grid", "ListBox"], hit!.Path.Take(3).Select(s => s.Type));
     }
+
+    [Fact]
+    public async Task Previewing_never_starts_the_apps_own_window()
+    {
+        RequireWindows();
+
+        // The fixture's App.xaml has StartupUri="MainWindow.xaml": the previewer creates the App for its resources,
+        // but never runs it, so no window of the app's opens beside the IDE (#392).
+        await using var session = await StartAsync();
+        var result = await ShowAsync(session, Xaml("MainWindow.xaml"));
+        Assert.True(result.Succeeded, result.Error + "\n" + session.RecentOutput);
+
+        // The app's start was queued (Send priority) before any of the IDE's requests, so it would have run by now; one
+        // more round trip makes sure of it.
+        Assert.True(await session.BoundsAsync(s_remaining, Ct) is not null);
+        var shown = VisibleWindows(session.ProcessId);
+        Assert.True(shown.Count == 0, "the previewer showed windows: " + string.Join(", ", shown));
+    }
+
+    /// <summary>The titles of a process's visible top-level windows.</summary>
+    private static List<string> VisibleWindows(int processId)
+    {
+        var titles = new List<string>();
+        nint window = 0;
+        while ((window = FindWindowExW(0, window, null, null)) != 0)
+        {
+            if (GetWindowThreadProcessId(window, out var owner) != 0 && owner == processId && IsWindowVisible(window))
+            {
+                var buffer = new char[256];
+                var length = GetWindowTextW(window, buffer, buffer.Length);
+                titles.Add("\"" + new string(buffer, 0, Math.Max(length, 0)) + "\"");
+            }
+        }
+
+        return titles;
+    }
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial nint FindWindowExW(nint parent, nint after, string? className, string? title);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool IsWindowVisible(nint window);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int GetWindowTextW(nint window, [Out] char[] text, int count);
 
     [Fact]
     public async Task The_render_scale_multiplies_the_frame()

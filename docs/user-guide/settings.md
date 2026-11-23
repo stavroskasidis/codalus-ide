@@ -19,6 +19,7 @@ Tools → Options… lists every setting in a tree of groups (Environment, Text 
   - Linux: `~/.config/codalus`
 - **Solution settings** live in `.codalus/settings.json` next to the solution and override the user settings for that solution. While a solution is open, **User | Workspace** next to the search box chooses where your changes go; the line under it names the file. Settings that only make sense per user can't be changed on the Workspace side.
 - **Editing the JSON**: open it with "Open User Settings (JSON)" in the command palette.
+- **A settings file that can't be written** (another program, such as an antivirus or a sync client, keeps it locked, or it is read-only): the change you made still applies, a warning names the file and the reason, and Codalus IDE writes the change as soon as the file can be written (it tries again after a second, then less often, and once more when it exits). The warning goes away once the change is saved.
 - **Settings for one language**: as in VS Code, a `"[languageId]"` block in either file sets values for that language's documents only, and wins over the general value in any file:
 
   ```jsonc
@@ -82,7 +83,7 @@ Type a color as `#RRGGBB`, or `#RRGGBBAA` with transparency. **For every theme**
   - Settings that are also ours come over with their values, including the two color settings and the ones in language blocks (`"[markdown]": { … }`). Its built-in themes become ours.
   - Key bindings whose commands exist here come over too.
   - You confirm first. The Codalus IDE log (Help → Show Logs) lists each skipped setting and why.
-- **From a classic IDE** (Tools → Import a .vssettings File): a file exported with that IDE's Import and Export Settings.
+- **From the classic IDE** (Tools → Import Visual Studio Settings (.vssettings)): a file exported with that IDE's Import and Export Settings.
   - The text editor's font and size, and its colors for syntax and editor elements. Colors are added to yours; "automatic" colors stay with the theme.
   - Tab size, tabs or spaces, word wrap and line numbers (All Languages, else C#).
   - Your own keyboard shortcuts, for commands with an equivalent here.

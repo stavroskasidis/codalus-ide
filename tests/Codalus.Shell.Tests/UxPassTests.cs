@@ -391,7 +391,10 @@ public class UxPassTests
         Assert.True(Equals(f.Shell.Workbench.Context.GetValue("editorTextFocus"), true), $"the editor has the keyboard focus: {f.Shell.Workbench.Context.GetValue("focusedView")}, {f.Window.FocusManager?.GetFocusedElement()}, {editor.Editor.TextArea.IsFocused}, {PaneHost.Of(editor.Editor.TextArea)?.Dockable}");
         f.Press(Key.Space, RawInputModifiers.Control);
         Assert.Contains("editor.action.triggerSuggest", executed);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60);
+        // Under the suite's load on the Mac the list never came, or came without Reporter, in 60 s (the 1.0 validation,
+        // 2026-11-19; passed alone): the failure says which, with the editor's own account of each request.
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Reporter"), seconds: 60,
+            describe: () => DescribeCompletion(f, editor));
         Assert.Equal("Reporter", editor.CompletionWindow!.CompletionList.SelectedItem?.Text); // the typed prefix's best match
         Assert.Equal(text, editor.Model.Text.Text); // no space typed
         f.Press(Key.Escape);
@@ -399,7 +402,8 @@ public class UxPassTests
         // After "Con": the shortest of the equal matches, Console (not ConcurrentExclusiveSchedulerPair).
         editor.Editor.CaretOffset = text.IndexOf("Console.WriteLine", StringComparison.Ordinal) + "Con".Length;
         f.Press(Key.Space, RawInputModifiers.Control);
-        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60);
+        await ShellFixture.PumpUntil(() => editor.CompletionWindow is { } w && w.CompletionList.SelectedItem is not null && w.CompletionList.CompletionData.Any(d => d.Text == "Console"), seconds: 60,
+            describe: () => DescribeCompletion(f, editor));
         Assert.Equal("Console", editor.CompletionWindow!.CompletionList.SelectedItem!.Text);
         f.Press(Key.Escape);
 
@@ -409,6 +413,44 @@ public class UxPassTests
         await ShellFixture.PumpUntil(
             () => executed.Contains("editor.action.triggerParameterHints"),
             describe: () => $"commands run: [{string.Join(", ", executed)}]; focus: {f.Window.FocusManager?.GetFocusedElement()}, focusedView {f.Shell.Workbench.Context.GetValue("focusedView")}, editorTextFocus {f.Shell.Workbench.Context.GetValue("editorTextFocus")}; completion window open: {editor.CompletionWindow is not null}; toasts: {f.Shell.Notifications.Toasts.Count}");
+    }
+
+    /// <summary>The completion window's state, the C# service's, and the editor's log of its completion requests.</summary>
+    private static string DescribeCompletion(ShellFixture f, Codalus.Shell.Editor.CodeEditorController editor)
+    {
+        var window = editor.CompletionWindow is { } w
+            ? $"open, {w.CompletionList.CompletionData.Count} items, selected {w.CompletionList.SelectedItem?.Text ?? "none"}, the first: {string.Join(", ", w.CompletionList.CompletionData.Take(10).Select(d => d.Text))}"
+            : "not open";
+        var status = f.Shell.Languages.Status(ShellHost.CSharpLanguageId);
+        var log = f.Shell.LanguageLog.GetText().Split('\n').Where(l => l.Contains("[editor]", StringComparison.Ordinal) || l.Contains("omplet", StringComparison.Ordinal)).TakeLast(15);
+        return $"completion window: {window}; the C# service: {status?.State} with {status?.Projects} projects; caret {editor.Editor.CaretOffset}; the editor's log:\n{string.Join("\n", log)}";
+    }
+
+    [AvaloniaFact]
+    public async Task A_key_pressed_in_a_fixtures_window_reaches_it_though_another_tests_window_took_the_focus()
+    {
+        // Avalonia has one keyboard focus for every window, and tests share the UI thread: another test's window that
+        // focused an element of its own between two presses took the next key (the Ctrl+Shift+Space above, in a local
+        // run of seven Shell test classes).
+        await using var f = ShellFixture.Create();
+        var file = Path.Combine(f.UserData, "notes.txt");
+        File.WriteAllText(file, "notes\n");
+        var document = await f.Shell.OpenFileAsync(file);
+        await ShellFixture.PumpUntil(() => document?.Controller is not null);
+        document!.Controller!.Editor.TextArea.Focus();
+        ShellFixture.Pump();
+        var executed = new List<string>();
+        f.Shell.Workbench.Commands.Executed += (_, e) => executed.Add(e.CommandId);
+
+        // Another test's shell, whose window focuses a box of its own (the Find box of its toolbar's search) meanwhile.
+        await using var other = ShellFixture.Create();
+        var box = other.Window.GetVisualDescendants().OfType<TextBox>().First(t => t.IsEffectivelyVisible);
+        box.Focus();
+        ShellFixture.Pump();
+        Assert.True(box.IsFocused);
+        f.Press(Key.Space, RawInputModifiers.Control | RawInputModifiers.Shift);
+        Assert.Contains("editor.action.triggerParameterHints", executed);
+        Assert.True(document.Controller.Editor.TextArea.IsKeyboardFocusWithin);
     }
 
     // ------------------------------------------------------------------ file icons, the navigation bar, outlining

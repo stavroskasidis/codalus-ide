@@ -489,7 +489,7 @@ public sealed class LaunchProfilesViewModel : ObservableObject
 
         try
         {
-            var text = File.Exists(_path) ? await File.ReadAllTextAsync(_path).ConfigureAwait(true) : null;
+            var text = File.Exists(_path) ? await Codalus.Workbench.FileSystem.SharedFile.ReadAllTextAsync(_path).ConfigureAwait(true) : null;
             if (_isModified && !force)
             {
                 return; // edited while the file was read
@@ -517,7 +517,7 @@ public sealed class LaunchProfilesViewModel : ObservableObject
     {
         try
         {
-            var existing = File.Exists(_path) ? await File.ReadAllTextAsync(_path).ConfigureAwait(true) : null;
+            var existing = File.Exists(_path) ? await Codalus.Workbench.FileSystem.SharedFile.ReadAllTextAsync(_path).ConfigureAwait(true) : null;
             var text = LaunchSettingsEditor.Write(existing, [.. Profiles.Select(p => p.Model)]);
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             await File.WriteAllTextAsync(_path, text).ConfigureAwait(true);

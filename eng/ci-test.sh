@@ -26,6 +26,9 @@ cd "$(dirname "$0")/.."
 # fails instead of being cancelled. HangDump before 2.1 printed nothing: it turned itself off under dotnet test.
 export CODALUS_TEST_WATCHDOG_MINUTES="${CODALUS_TEST_WATCHDOG_MINUTES:-10}"
 results="$PWD/artifacts/test-results/$shard"
+# The tests running now, as the watchdog sees them every 15 s (running-<pid>.txt), which the live output sends off the
+# runner: a runner lost in macOS shell-2 left the tests that had ended, not the ones running (dry run 44944708088).
+export CODALUS_TEST_RUNNING_DIR="$results"
 # On the macOS runner the Shell shards' hang ends the tests without a dump: twice the runner was lost 46 minutes into
 # shell-2 (runs 40255384457 and 40453091722, and the job's timeout in 40241261003), where a hang's 15 minutes after the
 # shard's usual 30 put HangDump dumping the Shell tests' tree (the test process, its hosts and their build nodes) on a
@@ -63,6 +66,13 @@ mkdir -p "$msbuild_debug"
 MSBUILDDEBUGPATH="$msbuild_debug"
 command -v cygpath > /dev/null && MSBUILDDEBUGPATH="$(cygpath -w "$msbuild_debug")" # Git Bash: MSBuild wants a Windows path
 export MSBUILDDEBUGPATH
+# The fixtures' own builds (a test's `dotnet build` of its sample) start MSBuild nodes of their own, which end with the
+# build: by default the CLI leaves its nodes running for the next build to reuse, so the test modules that build at once
+# shared one set of long-lived nodes, connected and handed over between processes. Three times on the macOS runner a
+# fixture's build failed with MSB4166 in such a node, twice reading its pipe ("No buffer space available", ENOBUFS)
+# and once in its shutdown ("MSB0001: Entry must be waiting on another request to be unblocked"), runs 40375629247,
+# 40869489322 and 40918787207 (docs/ci-flakes.md). The IDE's own builds never reuse nodes (SolutionBuilder).
+export MSBUILDDISABLENODEREUSE=1
 started_at="$(date '+%Y-%m-%d %H:%M:%S')"
 touch "$results/.started"
 # Each sample also goes to the log as one line (the free memory, the swap in use, the number of processes and the
@@ -76,12 +86,27 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
         now="$(date -u +%H:%M:%S)"
         free="$(sysctl -n kern.memorystatus_level)"
         swap="$(sysctl -n vm.swapusage)"
+        # The load average, from the kernel's counters: not ps's %cpu, which reads each process's task information
+        # and blocks while ReportCrash holds a crashed one (TestWatchdog). A runner lost with 62% of its memory free
+        # left nothing on its CPU (dry run 44944708088).
+        load="$(sysctl -n vm.loadavg | tr -d '{}' | awk '{ print $1, $2, $3 }')"
         top="$(ps -axo rss=,pid=,ppid=,args= | sort -nr)"
-        echo "$now free=$free% swap: $swap" >> "$results/memory.txt"
+        # A runner lost with its load rising from 39 to 79 in its last minute, on three cores, its memory 70% free
+        # (stress run 44992968217, shell-2) couldn't say whether the tests started that many threads or the VM was
+        # starved: so each sample counts the processes (by program, from the same ps) and top's threads and CPU split.
+        # top reads every task as %cpu does, so it gets 6 seconds and is ended after that ("top: no answer").
+        counts="$(echo "$top" | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); c[n]++ } END { for (n in c) print c[n], n }' | sort -nr | head -5 | tr '\n' ' ')"
+        top -l 2 -n 0 -s 1 > "$results/.top" 2>/dev/null &
+        topper=$!
+        for _ in 1 2 3 4 5 6; do kill -0 "$topper" 2>/dev/null || break; sleep 1; done
+        kill -KILL "$topper" 2>/dev/null && cpu="top: no answer" \
+          || cpu="$(awk '/^Processes:/ { p = $0 } /^CPU usage:/ { c = $0 } END { print p "; " c }' "$results/.top" | tr -s ' ')"
+        echo "$now free=$free% swap: $swap load: $load processes=$(echo "$top" | wc -l | tr -d ' ')" >> "$results/memory.txt"
+        echo "  $cpu; most: $counts" >> "$results/memory.txt"
         echo "$top" | head -6 | cut -c1-200 >> "$results/memory.txt"
         used="$(echo "$swap" | awk '{ for (i = 1; i < NF; i++) if ($i == "used") print $(i + 2) }')"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
-        echo "[memory] $now free=$free% swap=$used processes=$(echo "$top" | wc -l | tr -d ' ') largest:$largest"
+        echo "[memory] $now free=$free% swap=$used load=${load// /,} processes=$(echo "$top" | wc -l | tr -d ' ') largest:$largest"
       } 2>/dev/null || true
       sleep 15
     done
@@ -99,7 +124,9 @@ elif [[ "${CI:-}" == "true" && "$(uname)" == "Linux" ]]; then
         memory="$(awk '/^MemTotal:/ { t = $2 } /^MemAvailable:/ { a = $2 } /^SwapTotal:/ { st = $2 } /^SwapFree:/ { sf = $2 }
           END { printf "free=%d%% available=%dM swap=%dM", a * 100 / t, a / 1024, (st - sf) / 1024 }' /proc/meminfo)"
         top="$(ps -eo rss=,pid=,ppid=,args= --sort=-rss | head -6)"
-        echo "$now $memory" >> "$results/memory.txt"
+        # With the load and the processes and threads, as on macOS (stress run 44992968217).
+        load="$(cut -d' ' -f1-4 /proc/loadavg)"
+        echo "$now $memory load: $load processes=$(ps -e --no-headers | wc -l | tr -d ' ') threads=$(ps -eL --no-headers | wc -l | tr -d ' ')" >> "$results/memory.txt"
         echo "$top" | cut -c1-200 >> "$results/memory.txt"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
         echo "[memory] $now $memory processes=$(ps -e --no-headers | wc -l | tr -d ' ') largest:$largest"

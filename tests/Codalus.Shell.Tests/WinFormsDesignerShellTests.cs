@@ -256,6 +256,29 @@ public sealed class WinFormsDesignerShellTests
         Assert.Contains(f.Shell.Toolbox.Categories, c => c.Title == "WinFormsApp Components");
         var buttonItem = f.Shell.Toolbox.Items.First(i => i.Type == "System.Windows.Forms.Button");
 
+        // #460: Choose Toolbox Items lists the project's items by group, checked; one unchecked is left out of the
+        // Toolbox (the user's setting), and checked again comes back.
+        var choose = f.Shell.ChooseToolboxItemsAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Choose Toolbox Items", f.Shell.Dialogs.Title);
+        Assert.Contains(f.Shell.Dialogs.Choices, c => c is { Id: "group:WinFormsApp Components", Checkable: false });
+        var counterChoice = f.Shell.Dialogs.Choices.Single(c => c.Id == CounterControlType);
+        Assert.True(counterChoice.IsChecked);
+        counterChoice.IsChecked = false;
+        f.Shell.Dialogs.Accept();
+        await choose;
+        Assert.Equal([CounterControlType], f.Shell.Workbench.Settings.GetStrings(ShellHost.ToolboxHiddenItemsSetting));
+        await ShellFixture.PumpUntil(() => !f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType));
+        choose = f.Shell.ChooseToolboxItemsAsync();
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        counterChoice = f.Shell.Dialogs.Choices.Single(c => c.Id == CounterControlType);
+        Assert.False(counterChoice.IsChecked);
+        counterChoice.IsChecked = true;
+        f.Shell.Dialogs.Accept();
+        await choose;
+        Assert.Empty(f.Shell.Workbench.Settings.GetStrings(ShellHost.ToolboxHiddenItemsSetting));
+        await ShellFixture.PumpUntil(() => f.Shell.Toolbox.Items.Any(i => i.Type == CounterControlType));
+
         // A form opened before the restore was read without Windows Forms (#76): once restored, it's read again and loads
         // again on its host. The loads below are counted from there.
         await WhenReadCompleteAsync(f, designer);
@@ -575,6 +598,17 @@ public sealed class WinFormsDesignerShellTests
             Assert.Equal(1, Volatile.Read(ref starts));
             Assert.Equal("System.Windows.Forms.Form", hosts[0].Model!.BaseType);
             Assert.Contains("reading OrderForm.cs again", f.Shell.WinFormsDesignerLog.GetText(), StringComparison.Ordinal);
+
+            // The C# host's statuses as a pass over no project that ends just after the projects arrived sends them: loading
+            // with the project, ready with none (the stale pass), then ready with the project. The last is the change: the
+            // form is read again (the read after the gate never came, a local Linux run of 2026-11-15).
+            static int ReadsAgain(ShellFixture f) => f.Shell.WinFormsDesignerLog.GetText().Split("reading OrderForm.cs again").Length - 1;
+            var readsAgain = ReadsAgain(f);
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Loading, 1, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 0, 0));
+            f.Shell.OnWinFormsLanguageStatus(ShellHost.CSharpLanguageId, new WorkspaceStatusParams(WorkspaceStates.Ready, 1, 0));
+            await ShellFixture.PumpUntil(() => ReadsAgain(f) == readsAgain + 1 && hosts[0].Loads == 4, seconds: 60, () => Describe("a read again after a ready with no project, then one with the project"));
+            await designer.WhenIdleAsync();
 
             // The C# host gets the project (before the restore): the form is read again, now in its project. It's still
             // partial when the design-time build's compilation lacks Windows Forms (off Windows its reference pack comes

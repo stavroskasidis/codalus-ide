@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\Codalus.WinForms.DesignTools.props" />
+  <PropertyGroup>
+    <AssemblyName>Microsoft.WinForms.Utilities.Shared</AssemblyName>
+    <RootNamespace>Microsoft.WinForms.Utilities.Shared</RootNamespace>
+    <Description>Codalus IDE: the replacement of Microsoft.WinForms.Utilities.Shared's API for control libraries' designers (#461, ADR 0106).</Description>
+  </PropertyGroup>
+</Project>

@@ -84,12 +84,10 @@ public sealed class ListenerAcceptTests
 
     private static HttpListener Listen(out int port)
     {
-        using (var socket = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0))
-        {
-            socket.Start();
-            port = ((IPEndPoint)socket.LocalEndpoint).Port;
-        }
-
+        // Outside the ephemeral range (TestPorts): a port the OS picked and the probe released went to another
+        // process's connection before the listener bound it, "Address already in use" (the 1.0 validation in WSL,
+        // 2026-11-19, beside the other test projects).
+        port = Codalus.Tests.TestPorts.Free();
         var listener = new HttpListener();
         listener.Prefixes.Add($"http://localhost:{port}/");
         listener.Start();

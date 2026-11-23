@@ -14,7 +14,7 @@ namespace Codalus.Workbench.Ai.Acp;
 /// <param name="Version">The npm package's pinned version; for an agent that runs its installed CLI, the registry's version it was tested with (whatever is installed runs).</param>
 /// <param name="Command">The command that starts it in ACP mode (<c>npx</c>, or the agent's CLI).</param>
 /// <param name="Args">Its arguments: for npx, <c>-y</c> and the pinned package first.</param>
-/// <param name="Package">The npm package with its exact version (<c>pi-acp@0.0.34</c>); null when the agent runs its installed CLI.</param>
+/// <param name="Package">The npm package with its exact version (<c>pi-acp@0.0.35</c>); null when the agent runs its installed CLI.</param>
 /// <param name="Cli">The agent's own CLI (<c>claude</c>, <c>goose</c>): on the PATH, the list marks it installed.</param>
 public sealed record AcpKnownAgent(string Id, string Name, string Description, string Version, string Command, IReadOnlyList<string> Args, string? Package, string Cli)
 {
@@ -38,18 +38,18 @@ public sealed record AcpKnownAgent(string Id, string Name, string Description, s
 public static class AcpAgentCatalog
 {
     /// <summary>When the entries were last checked against the ACP registry.</summary>
-    public const string RegistryChecked = "2026-11-15";
+    public const string RegistryChecked = "2026-11-22";
 
     /// <summary>The known agents, in the order the list shows them.</summary>
     public static IReadOnlyList<AcpKnownAgent> Agents { get; } =
     [
-        Npx("pi", "pi", "ACP adapter for the pi coding agent", "pi-acp", "0.0.34", [], "pi"),
-        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.107.0", [], "claude"),
-        Npx("codex", "Codex", "ACP adapter for OpenAI's coding assistant", "@agentclientprotocol/codex-acp", "2.6.0", [], "codex"),
-        Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.68.0", ["--acp"], "gemini"),
-        Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.112", ["--acp"], "copilot"),
-        Installed("opencode", "OpenCode", "The open source coding agent", "1.19.5", "opencode", ["acp"]),
-        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.59.1", "goose", ["acp"]),
+        Npx("pi", "pi", "ACP adapter for the pi coding agent", "pi-acp", "0.0.35", [], "pi"),
+        Npx("claude", "Claude", "ACP wrapper for Anthropic's Claude", "@agentclientprotocol/claude-agent-acp", "0.109.1", [], "claude"),
+        Npx("codex", "Codex", "ACP adapter for OpenAI's coding assistant", "@agentclientprotocol/codex-acp", "2.9.0", [], "codex"),
+        Npx("gemini", "Gemini CLI", "Google's official CLI for Gemini", "@google/gemini-cli", "0.70.0", ["--acp"], "gemini"),
+        Npx("copilot", "GitHub Copilot", "GitHub's AI pair programmer", "@github/copilot", "1.0.114", ["--acp"], "copilot"),
+        Installed("opencode", "OpenCode", "The open source coding agent", "1.19.6", "opencode", ["acp"]),
+        Installed("goose", "goose", "A local, extensible, open source AI agent", "1.60.2", "goose", ["acp"]),
     ];
 
     private static AcpKnownAgent Npx(string id, string name, string description, string package, string version, string[] args, string cli) =>

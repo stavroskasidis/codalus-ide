@@ -622,6 +622,13 @@ public sealed record DesignerEdit
 
     public DesignerValue[]? Items { get; init; }
 
+    /// <summary>
+    /// #461: what <see cref="DesignerEditKinds.SetCollection"/> writes just before the collection's statement: the
+    /// properties of the locals its items are, and their own collections (a DevExpress <c>GridLevelNode</c>'s
+    /// <c>RelationName</c> and <c>Nodes.AddRange</c>), as the classic IDE writes them in the owner's section.
+    /// </summary>
+    public DesignerStatement[]? Statements { get; init; }
+
     /// <summary>A <c>.resx</c> key.</summary>
     public string? Key { get; init; }
 
@@ -654,13 +661,38 @@ public sealed record WinFormsEditResult(WorkspaceEdit Edit, DesignerModel? Model
     public Location? Handler { get; init; }
 }
 
-/// <summary><c>codalus/winforms/toolbox</c>: the components a project and the projects it references declare, for the Toolbox.</summary>
-public sealed record WinFormsToolboxParams(string Project);
+/// <summary>
+/// <c>codalus/winforms/toolbox</c>: the components a project and the projects it references declare, and (#454) those
+/// of the assemblies it references (its packages'), for the Toolbox; then (#460) those of <see cref="Assemblies"/>, the
+/// assemblies the user chose in Choose Toolbox Items that the project doesn't reference (paths).
+/// </summary>
+public sealed record WinFormsToolboxParams(string Project)
+{
+    public string[] Assemblies { get; init; } = [];
+}
 
-/// <summary>A component for the Toolbox: its full type name, its display name, and the project that declares it.</summary>
+/// <summary>
+/// A component for the Toolbox: its full type name, its display name, and its group: the project that declares it, else
+/// the package its assembly comes from (the assembly's name outside a package).
+/// </summary>
 public sealed record WinFormsToolboxItem(string Type, string Name, string Project, bool IsControl)
 {
     public string? Description { get; init; }
+
+    /// <summary>
+    /// The Toolbox tab its <c>[ToolboxTabName]</c> names (#460; a control library's, "DX.26.1: Common Controls"): the
+    /// Toolbox groups it there instead of under <see cref="Project"/>.
+    /// </summary>
+    public string? Tab { get; init; }
+
+    /// <summary>
+    /// The picture its <c>[ToolboxBitmap]</c> names (#460), as its assembly embeds it (a <c>.bmp</c>, <c>.png</c> or
+    /// <c>.ico</c>), base64; null when it has none the host could read.
+    /// </summary>
+    public string? Bitmap { get; init; }
+
+    /// <summary>The assembly it comes from, for an item of one of the request's <see cref="WinFormsToolboxParams.Assemblies"/> (a path).</summary>
+    public string? Assembly { get; init; }
 }
 
 public sealed record WinFormsToolboxResult(WinFormsToolboxItem[] Items);

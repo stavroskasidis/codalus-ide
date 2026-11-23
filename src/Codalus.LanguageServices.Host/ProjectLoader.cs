@@ -167,6 +167,8 @@ internal sealed class ProjectLoader
 
     private AnalyzerFileReference Analyzer(string path) => _analyzers.GetOrAdd(path, p =>
     {
+        // Every analyzer the projects name is where another's dependency may be (the compiler's own resolution).
+        _analyzerLoader.AddDependencyLocation(p);
         var reference = new AnalyzerFileReference(p, _analyzerLoader);
         reference.AnalyzerLoadFailed += (_, e) => Log?.Invoke(this, AnalyzerFailure(Path.GetFileName(p), e));
         return reference;

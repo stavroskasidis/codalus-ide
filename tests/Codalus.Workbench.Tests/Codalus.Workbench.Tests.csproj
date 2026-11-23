@@ -33,6 +33,8 @@
     <Compile Include="..\Shared\FakePersistentCredentialStore.cs" Link="Shared\FakePersistentCredentialStore.cs" />
     <!-- Properties and items of the fixtures' projects, read from MSBuild's answer file. -->
     <Compile Include="..\Shared\MSBuildQuery.cs" Link="Shared\MSBuildQuery.cs" />
+    <!-- When a program the scripted adapter started started, as it wrote it (DebugStartAgainTests). -->
+    <Compile Include="..\Shared\ProcessStamp.cs" Link="Shared\ProcessStamp.cs" />
   </ItemGroup>
   <ItemGroup>
     <!--

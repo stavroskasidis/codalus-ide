@@ -72,8 +72,74 @@ public partial class PolishTests
         }
     }
 
+    /// <summary>
+    /// M65 (M34h's open item): Peek Definition, the Code Definition window and every other read-only code view draw C#
+    /// in the editor's colors in each theme, as the editor does, not in TextMate's.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Read_only_code_views_draw_CSharp_in_the_editors_colors_in_every_theme()
+    {
+        await using var f = ShellFixture.Create();
+        var owner = new Border();
+        var peek = new Editor.PeekPresenter(owner, f.Shell, f.Shell.EditorFont, _ => Task.CompletedTask);
+        owner.Child = new Panel { Children = { peek.Popup } }; // as the editor's view holds it
+        var definition = new CodeDefinitionView(f.Shell.CodeDefinition, f.Shell, f.Shell.EditorFont);
+        var plain = new Editor.CodeViewer(f.Shell, f.Shell.EditorFont); // an HTTP response's, Entity Framework's debug view
+        var viewers = new (string Name, Editor.CodeViewer Viewer, Control Content)[]
+        {
+            ("Peek Definition", peek.Viewer, owner),
+            ("Code Definition", definition.Viewer, definition),
+            ("a code view", plain, plain),
+        };
+        var windows = viewers.Select(v => new Window { Width = 500, Height = 300, Content = v.Content }).ToList();
+        windows.ForEach(w => w.Show());
+        var text = string.Join('\n', "namespace Shapes;", "", "/// <summary>A circle.</summary>", "public sealed class Circle(double radius)", "{", "    public string Name => \"circle\"; // its name", "}", "");
+        var circle = new LanguageServices.Protocol.Range(new Position(3, 20), new Position(3, 26));
+        peek.Show(new Rect(0, 0, 400, 16), 400, new LanguageServices.Protocol.Location("file:///Shapes.cs", circle), "Shapes.cs", text, "csharp");
+        definition.Viewer.Show(text, "csharp", circle);
+        plain.Show(text, "csharp", circle);
+        ShellFixture.Pump();
+        Assert.True(peek.IsOpen);
+
+        var keyword = text.IndexOf("class Circle", StringComparison.Ordinal);
+        var tokens = new (int Offset, string Type)[]
+        {
+            (keyword, "keyword"),
+            (keyword + "class ".Length, "class"),
+            (text.IndexOf("\"circle\"", StringComparison.Ordinal), "string"), // its quote too, as the editor draws it
+            (text.IndexOf("\"circle\"", StringComparison.Ordinal) + 1, "string"),
+            (text.IndexOf("// its", StringComparison.Ordinal), "comment"), // and a comment's slashes
+            (text.IndexOf("its name", StringComparison.Ordinal), "comment"),
+        };
+        try
+        {
+            foreach (var theme in new[] { "light", "dark", "harbor.light", "harbor.dark", "harbor.highContrast" })
+            {
+                await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, theme, SettingScope.User, CancellationToken.None);
+                await ShellFixture.PumpUntil(() => f.Shell.Theme.ActiveTheme == theme && f.Shell.EditorTheme.Id == theme);
+                ShellFixture.Pump();
+                ShellFixture.Pump();
+                var colors = f.Shell.EditorTheme;
+                foreach (var (name, viewer, _) in viewers)
+                {
+                    Assert.True(viewer.GrammarColors is not null && !viewer.HasGrammar, $"{name} isn't in the editor's colors in {theme}");
+                    foreach (var (offset, type) in tokens)
+                    {
+                        Assert.True(colors.TokenColor(type) == Drawn(viewer, offset), $"{name} in {theme}: the {type} at {offset} is drawn {Drawn(viewer, offset):X8}, the editor's is {colors.TokenColor(type):X8}");
+                    }
+                }
+            }
+        }
+        finally
+        {
+            await f.Shell.Workbench.Settings.SetAsync(ThemeService.SettingKey, (System.Text.Json.JsonElement?)null, SettingScope.User, CancellationToken.None);
+            windows.ForEach(w => w.Close());
+            peek.Release();
+        }
+    }
+
     /// <summary>The color the code view draws the character at <paramref name="offset"/> in (ARGB).</summary>
-    private static uint? Drawn(Editor.CodeViewer viewer, int offset)
+    internal static uint? Drawn(Editor.CodeViewer viewer, int offset)
     {
         var textView = viewer.Editor.TextArea.TextView;
         var line = textView.GetOrConstructVisualLine(viewer.Editor.Document.GetLineByOffset(offset));

@@ -37,6 +37,21 @@ public sealed class WinFormsDesignerLanguageTests(WinFormsLanguageFixture winFor
     private static string Uri(string path) => DocumentUris.FromPath(path);
 
     [Fact]
+    public async Task Windows_Forms_generator_makes_ApplicationConfiguration()
+    {
+        // The Windows Desktop SDK's C# generator (analyzers/dotnet/cs) uses System.Windows.Forms.Analyzers one folder up
+        // (analyzers/dotnet): loaded only from its own folder it failed, and Program.cs's ApplicationConfiguration.Initialize()
+        // was an error in the editor though the build passed.
+        var program = winForms.File("WinFormsApp", "Program.cs");
+        await winForms.OpenAsync(program);
+        var definition = await winForms.Client.DefinitionAsync(Uri(program), winForms.At(program, "ApplicationConfiguration.Initialize", 2), Ct);
+        var location = Assert.Single(definition);
+        Assert.True(DocumentUris.IsGenerated(location.Uri), location.Uri);
+        var text = await winForms.Client.SourceGeneratedTextAsync(location.Uri, Ct);
+        Assert.Contains("class ApplicationConfiguration", text!.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Reads_a_form_through_the_compilation()
     {
         var result = await winForms.Client.WinFormsReadAsync(Uri(Form("OrderForm.cs")), Ct);

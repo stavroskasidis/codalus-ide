@@ -131,12 +131,56 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         Assert.Null(result.Output);
         Assert.Single(result.Diagnostics, d => !d.IsWarning);
 
-        // A host that dies is started again for the next template.
+        // A host that dies is started again for the next template, even one sent before its connection noticed: the test
+        // waited 500 ms after the kill, which a loaded machine outlasted ("ok" expected, null: the template got "The T4
+        // host exited while running the template."); at once after the kill it failed every time.
         var pid = _templates.ProcessId!.Value;
         System.Diagnostics.Process.GetProcessById(pid).Kill();
-        await Task.Delay(500, TestContext.Current.CancellationToken);
         result = await _templates.TransformAsync(new T4TransformParams(template, "ok", null), Timeout());
-        Assert.Equal("ok", result.Output?.Trim());
+        Assert.True(result.Output?.Trim() == "ok", string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+        Assert.NotEqual(pid, _templates.ProcessId);
+
+        // A template that ends its host is run once more, on a new host, and then reported.
+        result = await _templates.TransformAsync(new T4TransformParams(template, "<# System.Environment.Exit(3); #>", null), Timeout());
+        Assert.Null(result.Output);
+        Assert.Equal("The T4 host exited while running the template.", Assert.Single(result.Diagnostics).Message);
+    }
+
+    [Fact]
+    public async Task A_template_sent_while_the_host_restarts_after_a_crash_waits_for_that_restart()
+    {
+        // The service dropped a host that wasn't running for a new one, so a template sent during the supervisor's restart
+        // (its backoff, or its start) started a second host, and the first one's restart then failed on its disposed
+        // supervisor: "[T4 host] restart failed: Cannot access a disposed object" in this class's output.
+        var launches = 0;
+        var log = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        await using var templates = new TextTemplatingService(() =>
+        {
+            Interlocked.Increment(ref launches);
+            return ProcessLaunchInfo.FromPath(T4HostPath);
+        });
+        templates.Log += (_, line) => log.Enqueue(line);
+        var template = Path.Combine(ItemsDir, "Greeting.tt");
+        Assert.Equal("one", (await templates.TransformAsync(new T4TransformParams(template, "one", null), Timeout())).Output?.Trim());
+
+        using (var host = System.Diagnostics.Process.GetProcessById(templates.ProcessId!.Value))
+        {
+            host.Kill();
+            await host.WaitForExitAsync(Timeout());
+        }
+
+        // Sent as soon as the supervisor saw the crash: its restart waits out its backoff (250 ms) first.
+        var seen = System.Diagnostics.Stopwatch.StartNew();
+        while (templates.IsRunning && seen.Elapsed < TimeSpan.FromSeconds(30))
+        {
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.False(templates.IsRunning, "The supervisor didn't see the host's end in 30 s.");
+        Assert.Equal("two", (await templates.TransformAsync(new T4TransformParams(template, "two", null), Timeout())).Output?.Trim());
+        await Task.Delay(1000, TestContext.Current.CancellationToken); // a restart that would fail does by then
+        Assert.Equal(1, launches);
+        Assert.DoesNotContain(log, line => line.Contains("restart failed", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -185,7 +229,7 @@ public sealed class CustomToolIntegrationTests : IAsyncLifetime
         Assert.Contains("<DependentUpon>Strings.resx</DependentUpon>", project, StringComparison.Ordinal);
 
         // Everything generated compiles.
-        var result = await builds.BuildAsync(BuildTargets.Build, null, Timeout());
+        var result = await builds.BuildAsync(BuildTargets.Build, null, BuildLimit.Token());
         Assert.True(result.Succeeded, builds.Channel.GetText());
     }
 

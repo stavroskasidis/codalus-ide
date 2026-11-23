@@ -45,9 +45,13 @@ public sealed partial class SetupWindow : Window
 
     private SetupViewModel? Model => DataContext as SetupViewModel;
 
+    /// <summary>The main window's notifications and in-window dialogs, drawn over this window while it's open.</summary>
+    internal CompanionOverlays? Overlays { get; set; }
+
     private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
-        if (Model is not { } model)
+        // A dialog over the setup (the .NET install's choice) takes the keys: Escape cancels it, not the setup.
+        if (Model is not { } model || Overlays is { IsModalOpen: true })
         {
             return;
         }
