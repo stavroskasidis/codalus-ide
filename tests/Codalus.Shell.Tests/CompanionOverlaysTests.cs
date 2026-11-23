@@ -157,9 +157,13 @@ public sealed class CompanionOverlaysTests
         await ShellFixture.PumpUntil(() => exit.IsCompleted, 30);
     }
 
-    /// <summary>A program that prints a prompt, waits for a line, then ends with <paramref name="exitCode"/> (Windows: cmd's pause).</summary>
+    /// <summary>
+    /// A program that prints a prompt, waits for a line (Enter), then ends with <paramref name="exitCode"/>, as a password
+    /// prompt does: other keys (the test's Escape) don't end it. On Windows cmd's <c>set /p</c>, whose line read takes
+    /// Escape as "clear the line"; <c>pause</c>, which ends on any key, ended at the test's Escape (Windows CI, run 45277026797).
+    /// </summary>
     private static Codalus.Rpc.ProcessLaunchInfo WaitsForALine(int exitCode) => OperatingSystem.IsWindows()
-        ? new("cmd.exe", ["/c", $"pause & exit {exitCode}"])
+        ? new("cmd.exe", ["/c", $"set /p line=Password: & exit {exitCode}"])
         : new("/bin/sh", ["-c", $"printf 'Password: '; read line; exit {exitCode}"]);
 
     private static bool Shown<T>(Window window) where T : Control =>
