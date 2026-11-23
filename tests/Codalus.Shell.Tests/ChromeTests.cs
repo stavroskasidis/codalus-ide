@@ -130,6 +130,14 @@ public class ChromeTests
         Assert.Contains(explorer.Rows, r => r.Name == "Greeter.cs");
         Assert.Contains(explorer.Rows, r => r.Name == "Core");
         Assert.DoesNotContain(explorer.Rows, r => r.Name == "App");
+
+        // Collapse All collapses the search's rows to the top level (it searched again, every match expanded); clearing
+        // the search puts the tree back.
+        await f.RunAsync("explorer.collapseAll");
+        await ShellFixture.PumpUntil(() => explorer.Rows.All(r => r.Name != "Greeter.cs"));
+        Assert.Equal(["src", "tests"], explorer.Rows.Where(r => r.Depth == 1).Select(r => r.Name));
+        Assert.All(explorer.Rows.Skip(1), r => Assert.Equal((1, false), (r.Depth, r.IsExpanded)));
+        Assert.Equal("greeter", explorer.Filter);
         explorer.Filter = string.Empty;
         Assert.Contains(explorer.Rows, r => r.Name == "App");
 

@@ -667,6 +667,78 @@ public class SolutionExplorerFolderViewTests
     }
 
     [AvaloniaFact]
+    public async Task The_search_boxs_folders_collapse_until_the_search_changes_and_clearing_it_puts_the_tree_back()
+    {
+        var (f, folder) = await OpenAsync();
+        await using var _ = f;
+        var explorer = f.Shell.Explorer;
+        var src = Path.Combine(folder, "src");
+        var docs = "d:" + Path.Combine(folder, "docs");
+        var deep = "d:" + Path.Combine(folder, "docs", "deep");
+        var notes = "f:" + Path.Combine(folder, "docs", "deep", "notes.md");
+        var guide = "f:" + Path.Combine(folder, "docs", "guide.md");
+        var readme = "f:" + Path.Combine(folder, "README.md");
+        await ExpandAsync(explorer, src);
+        static string Shows(ExplorerRowViewModel r) => r.Name + r.Chevron switch { "chevron-down" => " v", "chevron-right" => " >", _ => string.Empty };
+        string Shown() => string.Join(", ", explorer.Rows.Select(Shows));
+
+        // Every match shows with its folders expanded.
+        explorer.Filter = ".md";
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering && Row(explorer, notes) is not null && Row(explorer, readme) is not null, seconds: 60, describe: Shown);
+        Assert.True(Row(explorer, docs)!.IsExpanded);
+
+        // The chevron collapses a folder at the first click, and its rows go (they searched again, all expanded); expanded
+        // again, its folders are as they were.
+        explorer.Toggle(Row(explorer, docs)!);
+        Assert.False(Row(explorer, docs)!.IsExpanded);
+        Assert.Null(Row(explorer, deep));
+        Assert.Null(Row(explorer, guide));
+        Assert.NotNull(Row(explorer, readme));
+        explorer.SetExpanded(Row(explorer, docs)!, true);
+        Assert.True(Row(explorer, deep)!.IsExpanded);
+        Assert.NotNull(Row(explorer, notes));
+
+        // Collapsed, a folder stays so when the same search is found again (a change on disk).
+        explorer.SetExpanded(Row(explorer, deep)!, false);
+        Assert.Null(Row(explorer, notes));
+        explorer.Refresh();
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering, seconds: 60);
+        Assert.False(Row(explorer, deep)!.IsExpanded, Shown());
+        Assert.Null(Row(explorer, notes));
+
+        // Collapse All collapses the search's rows down to the top level.
+        explorer.CollapseAll();
+        Assert.Equal(["Folder 'ws' v", "docs >", "README.md"], explorer.Rows.Select(Shows));
+        Assert.Equal(".md", explorer.Filter);
+
+        // Another search starts expanded.
+        explorer.Filter = "notes";
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering && Row(explorer, notes) is not null, seconds: 60, describe: Shown);
+        Assert.True(Row(explorer, docs)!.IsExpanded);
+        explorer.SetExpanded(Row(explorer, docs)!, false);
+
+        // Cleared, the tree is as it was before the search: src expanded, docs collapsed.
+        explorer.Filter = string.Empty;
+        Assert.True(Row(explorer, "d:" + src)!.IsExpanded);
+        Assert.NotNull(Row(explorer, "d:" + Path.Combine(src, "App")));
+        Assert.False(Row(explorer, docs)!.IsExpanded);
+        Assert.Null(Row(explorer, deep));
+
+        // A collapse in a search is dropped with it: the same text typed again shows every folder expanded.
+        explorer.Filter = "notes";
+        await ShellFixture.PumpUntil(() => !explorer.IsFiltering && Row(explorer, notes) is not null, seconds: 60, describe: Shown);
+        Assert.True(Row(explorer, docs)!.IsExpanded);
+
+        // A reveal (Track Active Item) of a match in a collapsed folder expands it, and the search stays.
+        explorer.SetExpanded(Row(explorer, docs)!, false);
+        explorer.Reveal(notes);
+        Assert.Equal(notes, explorer.Selected?.Id);
+        Assert.True(Row(explorer, docs)!.IsExpanded);
+        Assert.Equal("notes", explorer.Filter);
+        await SettledAsync(explorer);
+    }
+
+    [AvaloniaFact]
     public async Task A_listing_cut_at_the_limit_ends_with_a_row_that_says_so()
     {
         var (f, folder) = await OpenAsync(folder =>
