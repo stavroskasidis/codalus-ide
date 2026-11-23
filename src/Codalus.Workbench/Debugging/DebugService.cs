@@ -1848,7 +1848,7 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         MarkRunning();
-        await adapter.ContinueAsync(CurrentThread, _session.Token).ConfigureAwait(false);
+        await SendResumeAsync(adapter, a => a.ContinueAsync(CurrentThread, _session.Token)).ConfigureAwait(false);
     }
 
     /// <summary>Ends a Run to Cursor: removes its hidden breakpoint.</summary>
@@ -1914,7 +1914,25 @@ public sealed class DebugService : IAsyncDisposable
         }
 
         MarkRunning();
-        await resume(adapter).ConfigureAwait(false);
+        await SendResumeAsync(adapter, resume).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sends a resume (a continue, a step). A session that ends before the adapter answers it had its program run to
+    /// its end, so the resume did what it was asked: netcoredbg on macOS reported the program's end before its answer
+    /// to the continue, the end cancelled the request still waiting for it, and Continue threw that cancellation to
+    /// the command (DebugServiceTests, PR #518's run 45089886744).
+    /// </summary>
+    private static async Task SendResumeAsync(IDebugAdapter adapter, Func<IDebugAdapter, Task> resume)
+    {
+        try
+        {
+            await resume(adapter).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is DapConnectionLostException or OperationCanceledException)
+        {
+            // The session ended, and says so itself (its Ended, the Debug Console).
+        }
     }
 
     private void MarkRunning()
