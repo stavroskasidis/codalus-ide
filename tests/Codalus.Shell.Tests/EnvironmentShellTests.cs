@@ -67,6 +67,60 @@ public sealed class EnvironmentShellTests
         }
     }
 
+    /// <summary>
+    /// The setup's Tools step and Check Environment's Check Again read the user's environment again before they check: a
+    /// .NET SDK or Node.js installed by hand while the IDE ran stayed "missing" until a restart (Linux).
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Check_again_reads_the_users_environment_again_before_it_checks()
+    {
+        await using var f = ShellFixture.Create();
+        var before = f.EnvironmentRefreshes;
+        var setup = new SetupViewModel(f.Shell, firstStart: false);
+        await Within(f, setup.CheckToolsAsync(), 120, "the setup's check");
+        Assert.Equal(before + 1, f.EnvironmentRefreshes);
+
+        var window = new EnvironmentViewModel(f.Shell);
+        await Within(f, window.CheckAsync(), 120, "Check Again");
+        Assert.True(f.EnvironmentRefreshes >= before + 2);
+    }
+
+    /// <summary>
+    /// The refresh itself (<see cref="ShellHost.RefreshEnvironmentAsync"/>), with a stand-in for the login shell: the new
+    /// folders are logged and on this process's PATH, and the .NET root is chosen again. Calls at once share one read.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task Reading_the_environment_again_adds_what_was_installed_since_the_start()
+    {
+        await using var f = ShellFixture.Create();
+        var saved = s_dotnetVariables.ToDictionary(n => n, Environment.GetEnvironmentVariable);
+        var folder = Path.Combine(f.UserData, "nvm-bin");
+        var reads = 0;
+        try
+        {
+            f.Shell.EnvironmentRefreshStandIn = null;
+            f.Shell.ReadUserPath = () =>
+            {
+                Interlocked.Increment(ref reads);
+                Thread.Sleep(200); // long enough for the second call to find this one running
+                Environment.SetEnvironmentVariable("PATH", folder + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"));
+                return [folder];
+            };
+
+            await Within(f, Task.WhenAll(f.Shell.RefreshEnvironmentAsync(), f.Shell.RefreshEnvironmentAsync()), 60, "the refresh");
+            Assert.Equal(1, reads);
+            Assert.Contains(folder, (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator));
+            Assert.Contains($"[setup] The PATH has folders it didn't have when Codalus IDE started: {folder}.", f.Shell.Workbench.Log.GetText(), StringComparison.Ordinal);
+        }
+        finally
+        {
+            foreach (var (name, value) in saved)
+            {
+                Environment.SetEnvironmentVariable(name, value);
+            }
+        }
+    }
+
     [AvaloniaFact]
     public async Task Install_dotnet_offers_each_way_with_the_one_that_fits_picked_and_runs_the_one_picked()
     {

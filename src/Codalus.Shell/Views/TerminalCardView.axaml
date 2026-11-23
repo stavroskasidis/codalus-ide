@@ -1,0 +1,32 @@
+<UserControl xmlns:l="using:Codalus.Shell.Infrastructure"
+             xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Codalus.Shell.ViewModels"
+             xmlns:controls="using:Codalus.Shell.Controls"
+             xmlns:terminal="using:Codalus.Shell.Terminal"
+             x:Class="Codalus.Shell.Views.TerminalCardView"
+             x:DataType="vm:TerminalCardViewModel">
+  <!-- The terminal card: the in-window dialog frame (DialogView's), with the command's terminal for a body. -->
+  <Border Classes="overlay" CornerRadius="{DynamicResource Shell.CornerRadius.Dialog}" Padding="0" ClipToBounds="True"
+          Width="760" Margin="24" KeyboardNavigation.TabNavigation="Cycle" AutomationProperties.Name="{Binding Title}">
+    <DockPanel>
+      <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*,Auto" Margin="20,16,12,8">
+        <Border Width="28" Height="28" CornerRadius="6" Margin="0,0,10,0" VerticalAlignment="Top"
+                BorderThickness="{DynamicResource Shell.Chip.BorderThickness}" BorderBrush="{DynamicResource Shell.Foreground}"
+                Background="{DynamicResource Shell.Status.Info}">
+          <controls:Icon Kind="terminal" Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+          <TextBlock Classes="subheading" Text="{Binding Title}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" />
+          <TextBlock Classes="muted small" Text="{Binding Hint}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Button x:Name="HideButton" Grid.Column="2" Classes="dialog" Margin="8,0,0,0" VerticalAlignment="Top" Command="{Binding HideCommand}"
+                Content="{l:T terminalCard.hide}" ToolTip.Tip="{l:T terminalCard.hideThisTheCommandGoesOn}" />
+      </Grid>
+      <Border Margin="20,0,20,18" Height="340" BorderBrush="{DynamicResource Shell.Input.Border}" BorderThickness="1"
+              CornerRadius="{DynamicResource Shell.Control.CornerRadius}" ClipToBounds="True">
+        <terminal:TerminalControl x:Name="Terminal" AutomationProperties.Name="{l:T terminalCard.terminal}" />
+      </Border>
+    </DockPanel>
+  </Border>
+</UserControl>

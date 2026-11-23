@@ -27,9 +27,12 @@ internal sealed class CompanionOverlays : Panel
     private Panel? _feedbackLayer;
     private Panel? _dialogLayer;
     private Panel? _paletteLayer;
+    private Panel? _terminalLayer;
     private QuickPickView? _palette;
     private IInputElement? _focusBefore;
     private bool _wasModal;
+    private IInputElement? _focusBeforeCard;
+    private bool _cardWasOpen;
 
     private CompanionOverlays(ShellHost shell, Window window, Thickness toastMargin)
     {
@@ -53,7 +56,7 @@ internal sealed class CompanionOverlays : Panel
     /// <summary>Whether a dialog or the palette is open in this window: its own keys (Escape, Alt+Right…) wait.</summary>
     public bool IsModalOpen => IsHost && IsAnyModalOpen;
 
-    private bool IsAnyModalOpen => _shell.Dialogs.IsOpen || _shell.ConnectAgent.IsOpen || _shell.Feedback.IsOpen || _shell.Palette.IsOpen;
+    private bool IsAnyModalOpen => _shell.Dialogs.IsOpen || _shell.ConnectAgent.IsOpen || _shell.Feedback.IsOpen || _shell.Palette.IsOpen || _shell.TerminalCard.IsOpen;
 
     /// <summary>
     /// Puts the overlays over <paramref name="window"/>'s content (before it's shown). <paramref name="toastMargin"/>
@@ -85,6 +88,7 @@ internal sealed class CompanionOverlays : Panel
         shell.ConnectAgent.PropertyChanged += changed;
         shell.Feedback.PropertyChanged += changed;
         shell.Palette.PropertyChanged += changed;
+        shell.TerminalCard.PropertyChanged += changed;
         shell.OverlayWindowChanged += moved;
         window.Closed += (_, _) =>
         {
@@ -92,6 +96,7 @@ internal sealed class CompanionOverlays : Panel
             shell.ConnectAgent.PropertyChanged -= changed;
             shell.Feedback.PropertyChanged -= changed;
             shell.Palette.PropertyChanged -= changed;
+            shell.TerminalCard.PropertyChanged -= changed;
             shell.OverlayWindowChanged -= moved;
             overlays.Detach();
         };
@@ -106,7 +111,7 @@ internal sealed class CompanionOverlays : Panel
     private void Detach()
     {
         _toasts.ItemsSource = null;
-        foreach (var layer in new[] { _connectLayer, _feedbackLayer, _dialogLayer, _paletteLayer })
+        foreach (var layer in new[] { _connectLayer, _feedbackLayer, _dialogLayer, _paletteLayer, _terminalLayer })
         {
             if (layer is { Children: [Control view] })
             {
@@ -123,6 +128,8 @@ internal sealed class CompanionOverlays : Panel
         Show(ref _connectLayer, host && _shell.ConnectAgent.IsOpen, () => new ConnectAgentView { DataContext = _shell.ConnectAgent }, scrim: true, zIndex: 2);
         Show(ref _feedbackLayer, host && _shell.Feedback.IsOpen, () => new FeedbackView { DataContext = _shell.Feedback }, scrim: true, zIndex: 3);
         Show(ref _dialogLayer, host && _shell.Dialogs.IsOpen, () => new DialogView { DataContext = _shell.Dialogs }, scrim: true, zIndex: 4);
+        // The terminal card over all of them: the command it shows may be waiting for a password (an install from the setup).
+        Show(ref _terminalLayer, host && _shell.TerminalCard.IsOpen, () => new TerminalCardView { DataContext = _shell.TerminalCard }, scrim: true, zIndex: 5);
         var paletteOpened = Show(ref _paletteLayer, host && _shell.Palette.IsOpen, () => _palette = new QuickPickView
         {
             DataContext = _shell.Palette,
@@ -133,6 +140,23 @@ internal sealed class CompanionOverlays : Panel
 
         // The focus goes into what opened (the dialog and Connect move it themselves when they open, the palette here),
         // and back to where it was in this window when the last one closes.
+        // The terminal card over a dialog that stays open (Connect): the focus back in that dialog when the card closes.
+        var card = host && _shell.TerminalCard.IsOpen;
+        if (card && !_cardWasOpen)
+        {
+            _focusBeforeCard = _window.FocusManager?.GetFocusedElement();
+        }
+        else if (!card && _cardWasOpen)
+        {
+            if (_focusBeforeCard is Visual before && TopLevel.GetTopLevel(before) == _window)
+            {
+                _focusBeforeCard.Focus();
+            }
+
+            _focusBeforeCard = null;
+        }
+
+        _cardWasOpen = card;
         var modal = host && IsAnyModalOpen;
         if (modal && !_wasModal)
         {

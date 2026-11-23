@@ -99,7 +99,7 @@ public sealed class EnvironmentViewModel : ObservableObject
         IsChecking = true;
         try
         {
-            await _shell.CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
+            await _shell.RecheckEnvironmentAsync().ConfigureAwait(true);
         }
         finally
         {

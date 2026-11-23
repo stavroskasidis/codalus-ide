@@ -123,7 +123,7 @@ public sealed partial class TerminalView : UserControl, IPaneView
         Panes.IsVisible = tab is not null;
         SyncScroll(Primary, PrimaryScroll);
         SyncScroll(Secondary, SecondaryScroll);
-        if (IsKeyboardFocusWithin || tab is not null)
+        if (IsKeyboardFocusWithin || tab is not null && _viewModel?.MayTakeFocus() != false)
         {
             Avalonia.Threading.Dispatcher.UIThread.Post(() => Focus(split && _lastFocused == Secondary ? Secondary : Primary));
         }

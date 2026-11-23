@@ -84,6 +84,79 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
+    /// Tests: what reads the user's environment again (<see cref="RefreshEnvironmentAsync"/>) in place of this machine's.
+    /// <c>ShellFixture</c> counts the calls and changes nothing: the real one runs a login shell and may point the test
+    /// process's <c>DOTNET_ROOT</c> at a described machine's root.
+    /// </summary>
+    internal Func<Task>? EnvironmentRefreshStandIn { get; set; }
+
+    /// <summary>Tests: what reads the user's PATH again in place of <see cref="UserPath.Refresh"/>: the folders it added.</summary>
+    internal Func<IReadOnlyList<string>>? ReadUserPath { get; set; }
+
+    private readonly Lock _refreshGate = new();
+    private Task? _environmentRefresh;
+
+    /// <summary>
+    /// Reads the user's environment again, off the UI thread, before a check the user asked for (Check Again, the setup's
+    /// Tools step, Connect's requirements) and after an install: the login shell's PATH (the registry's on Windows) for
+    /// what was installed since the IDE started (<see cref="UserPath"/>), then the .NET root again
+    /// (<see cref="UseUserDotnet"/>), so an SDK installed by hand into <c>~/.dotnet</c>, or one that brings the runtime the
+    /// hosts need, is used without a restart. Calls while one runs share it.
+    /// </summary>
+    public Task RefreshEnvironmentAsync()
+    {
+        if (EnvironmentRefreshStandIn is { } standIn)
+        {
+            return standIn();
+        }
+
+        lock (_refreshGate)
+        {
+            return _environmentRefresh is { IsCompleted: false } running ? running : _environmentRefresh = Task.Run(RefreshEnvironment);
+        }
+    }
+
+    private void RefreshEnvironment()
+    {
+        try
+        {
+            var added = (ReadUserPath ?? UserPath.Refresh)();
+            if (added.Count > 0)
+            {
+                Workbench.Log.AppendLine($"[setup] The PATH has folders it didn't have when Codalus IDE started: {string.Join(Path.PathSeparator, added)}.");
+                if (_terminalPath is { } terminal)
+                {
+                    _terminalPath = UserPath.AddTo(terminal, added);
+                }
+            }
+
+            UseUserDotnet();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Workbench.Log.AppendLine($"[setup] Reading the environment again failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Check Again (the Check Environment window, the setup's Tools step): the environment read again
+    /// (<see cref="RefreshEnvironmentAsync"/>), then every tool checked; the IDE's hosts that failed for want of the runtime
+    /// start again when it's there now (an SDK installed outside the IDE brought it).
+    /// </summary>
+    public async Task<IReadOnlyList<ToolStatus>> RecheckEnvironmentAsync()
+    {
+        var runtimeWasMissing = Tools.Any(t => t is { Id: "dotnet-runtime", NeedsAttention: true }) || _solutionWaitingForRuntime is not null;
+        await RefreshEnvironmentAsync().ConfigureAwait(true);
+        var tools = await CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
+        if (runtimeWasMissing && tools.Any(t => t is { Id: "dotnet-runtime", NeedsAttention: false }))
+        {
+            await RestartHostsAsync().ConfigureAwait(true);
+        }
+
+        return tools;
+    }
+
+    /// <summary>
     /// The <c>PATH</c> the user's terminal has: the login shell's (or the terminal's that started the IDE), kept before
     /// <see cref="UseUserDotnet"/> first puts a .NET root first on the IDE's own. The <c>dotnet</c> on it is the one
     /// typed in a terminal, which Install .NET's options are measured against (<see cref="DotnetFacts"/>).
@@ -510,7 +583,7 @@ public sealed partial class ShellHost
 
     /// <summary>
     /// The user picks a way to install (<see cref="ChooseInstallAsync"/>), or agrees to the only one, and it runs: the way
-    /// and its exit code. Null when nothing ran to wait for: cancelled, a page opened, or an install left to the terminal.
+    /// and its exit code. Null when nothing ran to wait for: cancelled, or a page opened.
     /// </summary>
     private async Task<(InstallPlan Plan, int Code)?> PickAndRunInstallAsync(ToolStatus tool, IReadOnlyList<InstallPlan> plans, Func<InstallPlan, Task<bool>>? confirm, ProcessRunner? run, Func<IReadOnlyList<InstallPlan>, Task<InstallPlan?>>? choose)
     {
@@ -553,9 +626,11 @@ public sealed partial class ShellHost
                 code = await RunInstallInTerminalAsync(plan).ConfigureAwait(true);
                 break;
             case InstallKind.Terminal:
-                RunInstallInTerminal(plan);
-                Workbench.Notifications.Info(Localizer.Get("msg.setup.terminalStarted", "The install runs in the terminal. When it's done, check the environment again (Help → Check Environment)."));
-                return null;
+                // Git from the distribution's packages, a workload: awaited as .NET's, then checked again (the user had
+                // to check again by hand, and an install that put the tool on the login shell's PATH needed a restart).
+                Workbench.Notifications.Info(Localizer.Get("msg.setup.terminalChecks", "The install runs in the terminal. Codalus IDE checks again when it ends."));
+                code = await RunInstallInTerminalAsync(plan).ConfigureAwait(true);
+                break;
             default:
                 StatusBar.ShowMessage(Localizer.Format("msg.setup.installing", "Installing {0}…", tool.Title), TimeSpan.FromSeconds(10));
                 Workbench.Output.Show(SetupLog);
@@ -613,6 +688,8 @@ public sealed partial class ShellHost
             AddDotnetToEnvironment(folder);
         }
 
+        // What the install put on the user's PATH (a package's /usr/bin, an installer's registry PATH, a profile line).
+        await RefreshEnvironmentAsync().ConfigureAwait(true);
         if (tool.Id is "dotnet" or "dotnet-runtime")
         {
             // M49: the root may have changed (winget installs into Program Files, not where DOTNET_ROOT points; an
@@ -686,8 +763,7 @@ public sealed partial class ShellHost
                 ? ("cmd.exe", ["/c", plan.Command + " & echo. & pause"])
                 : ("bash", ["-c", unix]);
         var session = Terminals.Run(plan.Summary, program, arguments, workingDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), null);
-        Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
-        TerminalWindow.Show(session);
+        ShowCommandTerminal(session, plan.Summary); // over the setup or a dialog when one covers the Terminal
         return session;
     }
 

@@ -17,6 +17,57 @@ public sealed class LoginShellPathTests
         Assert.Equal("/a", LoginShellPath.Merge(null, "/a::"));
     }
 
+    /// <summary>
+    /// Read again while the IDE runs (Check Again): only the folders the IDE's PATH lacks are added, first, in the login
+    /// shell's order (nvm's Node.js before the distribution's older one); what the IDE's PATH has stays in its order (the
+    /// .NET root it put first stays before the system's folders).
+    /// </summary>
+    [Fact]
+    public void Read_again_the_login_shells_new_folders_come_first_and_the_rest_stays()
+    {
+        var (path, added) = LoginShellPath.AddNew(
+            "/home/u/.dotnet:/usr/local/bin:/usr/bin:/bin",
+            "/home/u/.nvm/versions/node/v22.11.0/bin:/usr/local/bin:/usr/bin:/bin:/home/u/.dotnet:/opt/node/bin:/opt/node/bin");
+
+        Assert.Equal(["/home/u/.nvm/versions/node/v22.11.0/bin", "/opt/node/bin"], added);
+        Assert.Equal("/home/u/.nvm/versions/node/v22.11.0/bin:/opt/node/bin:/home/u/.dotnet:/usr/local/bin:/usr/bin:/bin", path);
+        Assert.Empty(LoginShellPath.AddNew("/usr/bin:/bin", "/bin:/usr/bin").Added);
+        Assert.Equal("/a", LoginShellPath.AddNew(null, "/a::").Path);
+    }
+
+    [Fact]
+    public void Read_again_the_login_shell_adds_its_new_folders_and_network_variables_to_the_process()
+    {
+        // A described process: this one's PATH is shared with the tests running beside this one.
+        var process = new Dictionary<string, string> { ["PATH"] = "/usr/bin:/bin" };
+        string? Get(string name) => process.GetValueOrDefault(name);
+        void Set(string name, string value) => process[name] = value;
+        var login = new Dictionary<string, string> { ["PATH"] = "/opt/node/bin:/usr/bin:/bin", ["HTTPS_PROXY"] = "http://proxy.corp:8080", ["PS1"] = "$ " };
+
+        var added = LoginShellPath.Refresh((_, _) => login, Get, Set);
+        Assert.Equal(["/opt/node/bin"], added);
+        Assert.Equal("/opt/node/bin:/usr/bin:/bin", process["PATH"]);
+        Assert.Equal("http://proxy.corp:8080", process["HTTPS_PROXY"]);
+        Assert.False(process.ContainsKey("PS1"));
+
+        // Nothing new the second time; a shell that fails changes nothing; CODALUS_NO_SHELL_PATH: nothing is read.
+        Assert.Empty(LoginShellPath.Refresh((_, _) => login, Get, Set));
+        Assert.Empty(LoginShellPath.Refresh((_, _) => null, Get, Set));
+        process["CODALUS_NO_SHELL_PATH"] = "1";
+        Assert.Empty(LoginShellPath.Refresh((_, _) => throw new InvalidOperationException("not read"), Get, Set));
+        Assert.Equal("/opt/node/bin:/usr/bin:/bin", process["PATH"]);
+    }
+
+    [Fact]
+    public void Folders_read_again_join_another_path_where_they_join_this_processs()
+    {
+        // The terminal's PATH (Install .NET's options) takes them as the IDE's does: first, or at the end on Windows.
+        var separator = Path.PathSeparator.ToString();
+        Assert.Equal(
+            OperatingSystem.IsWindows() ? string.Join(separator, "/home/u/bin", "/opt/node/bin") : "/opt/node/bin:/home/u/bin",
+            UserPath.AddTo("/home/u/bin", ["/opt/node/bin"]));
+    }
+
     [Fact]
     public void Only_an_app_started_outside_a_terminal_asks_its_login_shell()
     {

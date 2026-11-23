@@ -64,6 +64,9 @@ public interface IConnectAgentHost : IAcpConnectHost
 
     /// <summary>Start a Chat: AI Chat picks the agent and takes the focus.</summary>
     void StartChat(string agent);
+
+    /// <summary>Reads the user's environment again before a check (<see cref="ShellHost.RefreshEnvironmentAsync"/>).</summary>
+    Task RefreshEnvironmentAsync();
 }
 
 /// <summary>A program row of Requirements.</summary>
@@ -716,7 +719,10 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
 
     // ------------------------------------------------------------------ requirements and installs
 
-    /// <summary>Checks Again: what the agent needs, off the UI thread.</summary>
+    /// <summary>
+    /// Checks Again: what the agent needs, off the UI thread, after the user's PATH is read again (a Node.js or CLI
+    /// installed by hand since the IDE started is on it).
+    /// </summary>
     public async Task CheckAsync()
     {
         if (_template is not { } template || !IsOpen)
@@ -728,6 +734,12 @@ public sealed class ConnectAgentViewModel : ObservableObject, IAcpConnectHost, I
         UpdateButtons();
         try
         {
+            await _host.RefreshEnvironmentAsync().ConfigureAwait(true);
+            if (!ReferenceEquals(_template, template) || !IsOpen)
+            {
+                return;
+            }
+
             var requirements = await Task.Run(() => _host.Connector.CheckAsync(template, _useCodalusNode, Token)).ConfigureAwait(true);
             if (!ReferenceEquals(_template, template))
             {

@@ -159,6 +159,10 @@
         <Panel x:Name="DialogLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding Dialogs.IsOpen}" ZIndex="2">
           <views:DialogView DataContext="{Binding Dialogs}" HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Panel>
+
+        <!-- The terminal card: a command the IDE runs in the Terminal (an install's sudo, a sign-in) over the dialog that
+             covers the Terminal tool window. Its view is made the first time it opens (MainWindow.axaml.cs). -->
+        <Panel x:Name="TerminalCardLayer" Background="{DynamicResource Shell.Dialog.Scrim}" IsVisible="{Binding TerminalCard.IsOpen}" ZIndex="3" />
       </Panel>
 
       <Panel x:Name="SwitcherLayer" Background="Transparent" IsVisible="{Binding Switcher.IsOpen}" ZIndex="1">

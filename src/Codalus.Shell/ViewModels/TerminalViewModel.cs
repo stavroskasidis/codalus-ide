@@ -268,6 +268,12 @@ public sealed class TerminalViewModel : ObservableObject
         Selected = tab;
     }
 
+    /// <summary>
+    /// Whether the view may put the focus in the terminal it selects: not while something covers the tool window (the
+    /// setup, the start window, an in-window dialog), whose focus it would take; the terminal card shows the command there.
+    /// </summary>
+    public Func<bool> MayTakeFocus { get; set; } = () => true;
+
     /// <summary>Splits the selected tab with a second terminal of the default profile in the same directory.</summary>
     public TerminalSession? Split()
     {

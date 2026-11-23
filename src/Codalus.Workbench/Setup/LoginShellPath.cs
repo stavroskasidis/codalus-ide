@@ -130,7 +130,72 @@ public static class LoginShellPath
     }
 
     /// <summary>
-    /// Asks the login shell (<c>SHELL</c>, else zsh on macOS and bash on Linux) and sets this process's <c>PATH</c> and
+    /// <paramref name="current"/> with the folders of <paramref name="login"/> it lacks put first, in the login shell's
+    /// order; the rest stays as it is, in its order. The folders added, for the log.
+    /// </summary>
+    public static (string Path, IReadOnlyList<string> Added) AddNew(string? current, string? login)
+    {
+        var folders = (current ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries).ToList();
+        var added = new List<string>();
+        foreach (var folder in (login ?? string.Empty).Split(':', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (!folders.Contains(folder, StringComparer.Ordinal) && !added.Contains(folder, StringComparer.Ordinal))
+            {
+                added.Add(folder);
+            }
+        }
+
+        return (string.Join(':', added.Concat(folders)), added);
+    }
+
+    /// <summary>
+    /// Asks the login shell again (Check Again, the setup's Tools step, Connect's requirements, after an install): a
+    /// program installed since the IDE started (Node.js through nvm or from its download page, a <c>~/.dotnet</c> put on
+    /// the PATH by dotnet-install's instructions) is on the PATH its startup files make now, not on the IDE's. The folders
+    /// this process's <c>PATH</c> lacks go first, in the login shell's order (nvm's Node.js before the distribution's
+    /// older one); nothing is removed or reordered. Also for an IDE started from a terminal, whose PATH is that terminal's
+    /// from before the install. The <see cref="NetworkVariables"/> it exports are taken again, as at startup. Not on
+    /// Windows (<see cref="WindowsPath"/>), or with <c>CODALUS_NO_SHELL_PATH</c>. The folders added.
+    /// </summary>
+    /// <param name="read">Reads the login shell's environment (tests give their own).</param>
+    /// <param name="get">Reads this process's variables (tests describe one).</param>
+    /// <param name="set">Sets this process's variables (tests describe one).</param>
+    public static IReadOnlyList<string> Refresh(
+        Func<string, TimeSpan, IReadOnlyDictionary<string, string>?>? read = null, Func<string, string?>? get = null, Action<string, string>? set = null)
+    {
+        get ??= Environment.GetEnvironmentVariable;
+        set ??= Environment.SetEnvironmentVariable;
+        if (read is null && !(OperatingSystem.IsMacOS() || OperatingSystem.IsLinux()) || get("CODALUS_NO_SHELL_PATH") is not null)
+        {
+            return [];
+        }
+
+        if ((read ?? ReadEnvironment)(Shell(), TimeSpan.FromSeconds(5)) is not { } login)
+        {
+            return [];
+        }
+
+        foreach (var (name, value) in Imported(login).Where(v => v.Key != "PATH"))
+        {
+            set(name, value);
+        }
+
+        var (path, added) = AddNew(get("PATH"), login.GetValueOrDefault("PATH"));
+        if (added.Count > 0)
+        {
+            set("PATH", path);
+        }
+
+        return added;
+    }
+
+    /// <summary>The user's login shell: <c>SHELL</c>, else zsh on macOS and bash on Linux.</summary>
+    private static string Shell() =>
+        Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } configured && File.Exists(configured) ? configured
+            : OperatingSystem.IsMacOS() ? "/bin/zsh" : "/bin/bash";
+
+    /// <summary>
+    /// Asks the login shell (<see cref="Shell"/>) and sets this process's <c>PATH</c> and
     /// <see cref="NetworkVariables"/>, which every host and tool the IDE starts inherits; returns whether it did.
     /// </summary>
     public static bool Import()
@@ -140,9 +205,7 @@ public static class LoginShellPath
             return false;
         }
 
-        var shell = Environment.GetEnvironmentVariable("SHELL") is { Length: > 0 } configured && File.Exists(configured) ? configured
-            : OperatingSystem.IsMacOS() ? "/bin/zsh" : "/bin/bash";
-        if (ReadEnvironment(shell, TimeSpan.FromSeconds(5)) is not { } login)
+        if (ReadEnvironment(Shell(), TimeSpan.FromSeconds(5)) is not { } login)
         {
             return false;
         }

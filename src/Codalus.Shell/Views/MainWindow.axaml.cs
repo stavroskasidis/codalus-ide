@@ -92,6 +92,37 @@ public sealed partial class MainWindow : Window, IShellWindow
                 });
             }
         };
+        // The terminal card over a dialog here: made the first time it opens, the focus back where it was when it closes.
+        shell.TerminalCard.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName != nameof(ViewModels.TerminalCardViewModel.IsOpen) || shell.OverlayWindow is not null)
+            {
+                return;
+            }
+
+            if (shell.TerminalCard.IsOpen)
+            {
+                _focusBeforeTerminalCard = FocusManager?.GetFocusedElement();
+                if (TerminalCardLayer.Children.Count == 0)
+                {
+                    TerminalCardLayer.Children.Add(new TerminalCardView
+                    {
+                        DataContext = shell.TerminalCard,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
+                        VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+                    });
+                }
+            }
+            else
+            {
+                if (_focusBeforeTerminalCard is Visual visual && TopLevel.GetTopLevel(visual) == this)
+                {
+                    _focusBeforeTerminalCard.Focus();
+                }
+
+                _focusBeforeTerminalCard = null;
+            }
+        };
         // The setup and the start window stay above this window (it owns them): while one is open, it draws the
         // notifications, the palette and the in-window dialogs, which here would be under it.
         shell.OverlayWindowChanged += (_, _) => ShowOverlaysHere(shell.OverlayWindow is null);
@@ -227,6 +258,9 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// under the first row's) drag the window like the first row's, through <see cref="Window.BeginMoveDrag"/>.
     /// </remarks>
     /// <summary>Shows this window's notifications, palette and in-window dialogs, or hides them while a window over it draws them.</summary>
+    /// <summary>Where the focus was when the terminal card opened over a dialog here.</summary>
+    private IInputElement? _focusBeforeTerminalCard;
+
     private void ShowOverlaysHere(bool here)
     {
         ModalLayers.IsVisible = here;
