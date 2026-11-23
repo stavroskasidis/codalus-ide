@@ -51,7 +51,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         _server = server;
         _port = port;
         _adapterId = adapterId;
-        _launch = new Session(client);
+        _launch = new Session(client, "the launch session");
         _launch.Connection.EventReceived += OnLaunchEventAsync;
         _launch.Connection.ReverseRequestReceived += OnReverseRequestAsync;
         _launch.Connection.HandlerFailed += (_, ex) => Log?.Invoke(this, "Event handler failed: " + ex);
@@ -77,6 +77,39 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
                 return _children.Count;
             }
         }
+    }
+
+    /// <summary>
+    /// What each of the server's sessions waits for and heard last (<see cref="DapConnection.Describe"/>): the launch
+    /// session's, then each page's and worker's, with the one requests go to marked. Without it a browser session that
+    /// stopped making progress said nothing: a step that js-debug never answered held its test until the hang dump, and
+    /// nothing said which session held it (macOS CI, run 45077032327).
+    /// </summary>
+    public string Describe()
+    {
+        List<Session> children;
+        Session? active;
+        int attaching;
+        lock (_gate)
+        {
+            children = [.. _children];
+            active = _active;
+            attaching = _attaching;
+        }
+
+        string server;
+        try
+        {
+            server = _server.HasExited ? "exited" : "running";
+        }
+        catch (InvalidOperationException)
+        {
+            server = "disposed";
+        }
+
+        var parts = new List<string> { $"vscode-js-debug {server}, {children.Count} target(s), {attaching} attaching; the launch session: {_launch.Connection.Describe()}" };
+        parts.AddRange(children.Select(c => $"{c.Name}{(ReferenceEquals(c, active) ? " (active)" : string.Empty)}: {c.Connection.Describe()}"));
+        return string.Join(" | ", parts);
     }
 
     /// <summary>
@@ -206,15 +239,19 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
 
     private sealed class Session
     {
-        public Session(TcpClient client)
+        public Session(TcpClient client, string name)
         {
             Client = client;
+            Name = name;
             var stream = client.GetStream();
             Connection = new DapConnection(stream, stream);
             Connection.Accept("startDebugging");
         }
 
         public TcpClient Client { get; }
+
+        /// <summary>The target's name in js-debug's configuration for it (a page's title or address), for <see cref="Describe"/>.</summary>
+        public string Name { get; }
 
         public DapConnection Connection { get; }
 
@@ -267,7 +304,7 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
         {
             var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, _port).ConfigureAwait(false);
-            child = new Session(client);
+            child = new Session(client, TargetName(arguments.Configuration));
             var session = child;
             session.Connection.EventReceived += e => OnChildEventAsync(session, e);
             session.Connection.ReverseRequestReceived += OnReverseRequestAsync;
@@ -356,6 +393,12 @@ public sealed partial class JsDebugAdapter : IDebugAdapter
             Log?.Invoke(this, $"The page {url} couldn't be opened: {ex.Message}");
         }
     }
+
+    /// <summary>A child's name in js-debug's configuration for it (<c>name</c>), quoted; "a target" without one.</summary>
+    private static string TargetName(JsonElement configuration) =>
+        configuration.ValueKind == JsonValueKind.Object && configuration.TryGetProperty("name", out var name) && name.ValueKind == JsonValueKind.String
+            ? $"target \"{name.GetString()}\""
+            : "a target";
 
     /// <summary>Sends the session's breakpoints and exception settings to a new child, and reports their states.</summary>
     private async Task ReplayAsync(Session child)
