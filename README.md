@@ -17,6 +17,19 @@ What sets it apart:
 
 > **Status: pre-release (0.x).** The MVP (milestones M0–M7) is done, and the post-MVP milestones are under way ([roadmap](docs/roadmap.md#status)). Installers for Windows, macOS and Linux are on the [download page](https://codalus.dev/download/) and the [releases page](https://github.com/stavroskasidis/codalus-ide/releases): stable releases come from `master`, and nightly builds follow `develop` ([installing](docs/user-guide/getting-started.md)). The UI stack is Avalonia ([ADR 0001](docs/adr/0001-ui-stack.md)).
 
+## How Codalus is built
+
+Codalus is developed with an AI coding assistant (Claude Code), which writes most of the code. The maintainer decides what gets built and how: the [roadmap](docs/roadmap.md), the scope of each milestone, and the design decisions recorded as [ADRs](docs/adr). The assistant works under the project's rules in [CLAUDE.md](CLAUDE.md), and every change reaches `develop` through a pull request.
+
+Every change is checked by:
+
+- unit, integration and headless UI tests, and a smoke test that drives the real, windowed app through each major feature;
+- CI on every pull request, with the full suite on Windows, macOS and Linux for nightly and stable releases;
+- releases that publish nothing unless the tests, the smoke test, the packages and the benchmarks pass on the release's commit;
+- performance budgets ([ADR 0002](docs/adr/0002-performance-budgets.md)) measured in CI.
+
+The other IDEs named in the benchmarks are performance comparisons, measured from the outside; none of their code is in Codalus. Third-party code is listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
 ## Features
 
 - **Solutions and projects**:
