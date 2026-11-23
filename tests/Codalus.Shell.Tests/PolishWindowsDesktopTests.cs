@@ -161,6 +161,13 @@ public partial class PolishTests
                 case "tools":
                     setup.ShowTools([new ToolStatus("dotnet", ".NET SDK", true, ToolState.Missing, "Opening .NET projects"), new ToolStatus("git", "Git", true, ToolState.Found, "Source control") { Version = "2.47.1" }]);
                     setup.Tools[0].InstallCommand.Execute(null);
+
+                    // .NET's ways are picked in the install's dialog, which shows over the setup: closed before the step
+                    // is checked, as it would cover the page (it was drawn under the setup, in the main window, until
+                    // CompanionOverlays).
+                    await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen, describe: () => "the .NET install's choice didn't open");
+                    f.Shell.Dialogs.Cancel();
+                    await ShellFixture.PumpUntil(() => !f.Shell.Dialogs.IsOpen);
                     break;
                 case "ai agent":
                     setup.AiPaths.Single(p => p.Path == SetupAiPath.Agent).SelectCommand.Execute(null);

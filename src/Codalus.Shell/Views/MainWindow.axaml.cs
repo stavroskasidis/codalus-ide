@@ -92,6 +92,9 @@ public sealed partial class MainWindow : Window, IShellWindow
                 });
             }
         };
+        // The setup and the start window stay above this window (it owns them): while one is open, it draws the
+        // notifications, the palette and the in-window dialogs, which here would be under it.
+        shell.OverlayWindowChanged += (_, _) => ShowOverlaysHere(shell.OverlayWindow is null);
         SetUpTitleBar();
 
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
@@ -116,6 +119,11 @@ public sealed partial class MainWindow : Window, IShellWindow
         };
         shell.Palette.Opened += (_, _) =>
         {
+            if (shell.OverlayWindow is not null)
+            {
+                return; // the window over this one draws it (CompanionOverlays)
+            }
+
             _focusBeforePalette = FocusManager?.GetFocusedElement();
             Dispatcher.UIThread.Post(Palette.FocusInput, DispatcherPriority.Loaded);
         };
@@ -218,6 +226,14 @@ public sealed partial class MainWindow : Window, IShellWindow
     /// classic IDE, and the second row is ordinary client area. Its empty parts (around the search box, the drag area
     /// under the first row's) drag the window like the first row's, through <see cref="Window.BeginMoveDrag"/>.
     /// </remarks>
+    /// <summary>Shows this window's notifications, palette and in-window dialogs, or hides them while a window over it draws them.</summary>
+    private void ShowOverlaysHere(bool here)
+    {
+        ModalLayers.IsVisible = here;
+        PaletteHost.IsVisible = here;
+        Toasts.IsVisible = here;
+    }
+
     private void SetUpTitleBar()
     {
         if (!OperatingSystem.IsWindows())
