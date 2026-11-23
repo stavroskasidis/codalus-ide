@@ -33,6 +33,25 @@ public sealed class LanguageTests
     }
 
     [AvaloniaFact]
+    public async Task An_edit_tokenizes_again_the_lines_whose_state_it_changed()
+    {
+        await using var f = ShellFixture.Create();
+        var lines = string.Join('\n', Enumerable.Range(0, 300).Select(i => $"a{i} {{ color: red; }}")) + "\n";
+        var css = await OpenAsync(f, "site.css", lines);
+        await ShellFixture.PumpUntil(css.GrammarComplete, seconds: 20, describe: css.DescribeGrammar);
+        bool InComment(int line) => css.GrammarScopesAt(line, 1)?.Contains("comment.block.css") == true;
+        Assert.False(InComment(300));
+
+        // A comment opened on the first line runs to the end of the file; closed on the second, the lines after it come back.
+        css.Editor.Document.Insert(0, "/* ");
+        await ShellFixture.PumpUntil(() => InComment(300) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        css.Editor.Document.Insert(css.Editor.Document.GetLineByNumber(2).Offset, "*/\n");
+        await ShellFixture.PumpUntil(() => !InComment(301) && css.GrammarComplete(), seconds: 20, describe: css.DescribeGrammar);
+        Assert.True(InComment(1));
+        Assert.Equal(css.Editor.Document.LineCount, css.Grammar?.LineCount);
+    }
+
+    [AvaloniaFact]
     public async Task Files_get_their_language_and_grammar_colors()
     {
         await using var f = ShellFixture.Create();

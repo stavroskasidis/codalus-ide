@@ -397,13 +397,13 @@ public sealed partial class CodeEditorController : IDisposable
 
     private void OnThemeChanged(object? sender, EventArgs e) => ApplyTheme();
 
-    private AvaloniaEdit.TextMate.TextMate.Installation? _textMate;
+    private TintColorizer? _grammar;
 
     /// <summary>The TextMate grammar scope coloring this document, or null (tests).</summary>
     public string? GrammarScope { get; private set; }
 
-    /// <summary>The TextMate model of a grammar-colored document (tests).</summary>
-    internal AvaloniaEdit.TextMate.TextMate.Installation? TextMate => _textMate;
+    /// <summary>The grammar colorizer of a grammar-colored document (tests).</summary>
+    internal TintColorizer? Grammar => _grammar;
 
     /// <summary>The distinct text colors on a rendered line (smoke test, benchmarks).</summary>
     internal int LineColors(int line)
@@ -434,48 +434,50 @@ public sealed partial class CodeEditorController : IDisposable
         }
 
         GrammarScope = scope;
+        RemoveGrammar();
         if (scope is null)
         {
-            _textMate?.Dispose();
-            _textMate = null;
             return;
         }
 
         try
         {
-            if (_textMate is null)
-            {
-                _textMate = AvaloniaEdit.TextMate.TextMate.InstallTextMate(Editor, _services.TextMate, initCurrentDocument: true, ex => _services.Log("TextMate: " + ex.Message));
-                _textMate.SetTheme(_services.TextMate.ThemeFor(_services.Theme.Id));
-            }
-
-            // TODO(issue): AvaloniaEdit.TextMate copies each visible line whole on the UI thread at every scroll, to
-            // tokenize its first 10,000 characters there, and keeps a thread per editor: a megabyte line under the
-            // large-file limits costs a copy per scroll step. A colorizer on one shared tokenizer (as GrammarColorizer
-            // tokenizes) that reads only what's drawn, visible lines first, would end both.
-            _textMate.SetGrammar(scope);
+            var grammar = new TintColorizer(
+                Editor.TextArea.TextView, _services.TextMate, scope, _services.TextMate.ThemeFor(_services.Theme.Id), _services.Log);
+            _grammar = grammar;
+            Editor.TextArea.TextView.LineTransformers.Add(grammar);
             KeepSemanticColorsOverGrammar();
             _insights.KeepColorizerLast();
             KeepLongLinesLast();
-            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden: setting a grammar starts the thread
+            MatchGrammarToView(); // a tab not shown yet, or the language changed while hidden
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
             _services.Log($"TextMate: {Model.Name}: {ex.Message}");
-            _textMate?.Dispose();
-            _textMate = null;
+            RemoveGrammar();
             GrammarScope = null;
         }
     }
 
+    private void RemoveGrammar()
+    {
+        if (_grammar is { } grammar)
+        {
+            _grammar = null;
+            Editor.TextArea.TextView.LineTransformers.Remove(grammar);
+            grammar.Dispose();
+            Editor.TextArea.TextView.Redraw();
+        }
+    }
+
     /// <summary>
-    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which AvaloniaEdit's TextMate adds
-    /// last: where the language service classified the text (Razor's markup and C#), its colors win.
+    /// Puts the semantic tokens (and the diagnostics' marks) after the grammar's colors, which are added last: where the
+    /// language service classified the text (Razor's markup and C#), its colors win.
     /// </summary>
     private void KeepSemanticColorsOverGrammar()
     {
         var transformers = Editor.TextArea.TextView.LineTransformers;
-        var grammar = transformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
+        var grammar = transformers.OfType<TintColorizer>().FirstOrDefault();
         if (grammar is null || transformers.IndexOf(_colorizer) > transformers.IndexOf(grammar))
         {
             return;
@@ -489,8 +491,8 @@ public sealed partial class CodeEditorController : IDisposable
 
     // ------------------------------------------------------------------ the grammar's tokenizer while hidden
 
-    /// <summary>Whether the grammar's tokenizer has a thread now (tests: a hidden editor's has none).</summary>
-    internal bool GrammarTokenizing => _textMate is { } installation && Tokenizer(installation) is { IsStopped: false };
+    /// <summary>Whether the grammar's tokenizer may run now (tests: a hidden editor's doesn't).</summary>
+    internal bool GrammarTokenizing => _grammar is { IsTokenizing: true };
 
     /// <summary>
     /// Whether the grammar has tokenized every visible line and they were drawn with its colors (benchmarks: unlike
@@ -500,37 +502,27 @@ public sealed partial class CodeEditorController : IDisposable
     {
         var view = Editor.TextArea.TextView;
         view.EnsureVisualLines();
-        if (GrammarScope is null || !view.VisualLinesValid || view.VisualLines.Count == 0
-            || _textMate is not { } installation || Tokenizer(installation) is not { } model)
+        if (GrammarScope is null || !view.VisualLinesValid || view.VisualLines.Count == 0 || _grammar is not { } grammar)
         {
             return false;
         }
 
         var last = view.VisualLines[^1].LastDocumentLine.LineNumber - 1;
         var plain = (Editor.Foreground as Avalonia.Media.ISolidColorBrush)?.Color;
-        return !model.IsLineInvalid(last) && model.GetLineTokens(last) is not null
+        return grammar.IsLineTokenized(last)
             && view.VisualLines.Any(l => l.Elements.Any(e => e.TextRunProperties.ForegroundBrush is Avalonia.Media.ISolidColorBrush brush && brush.Color != plain));
     }
 
     /// <summary>Whether the grammar's tokenizer has tokenized the document's last line (benchmarks: the whole file is colored).</summary>
     internal bool GrammarComplete() =>
-        _textMate is { } installation && Tokenizer(installation) is { } model && model.GetLines().GetNumberOfLines() is var count and > 0
-        && !model.IsLineInvalid(count - 1) && model.GetLineTokens(count - 1) is not null;
+        _grammar is { } grammar && grammar.LineCount is var count and > 0 && grammar.IsLineTokenized(count - 1);
 
     /// <summary>The scopes the grammar's tokenizer has for a one-based line's column, null when it has none (tests).</summary>
-    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) =>
-        _textMate is { } installation && Tokenizer(installation)?.GetLineTokens(line - 1) is { } tokens
-            ? tokens.LastOrDefault(t => t.StartIndex <= column)?.Scopes
-            : null;
+    internal IReadOnlyList<string>? GrammarScopesAt(int line, int column) => _grammar?.ScopesAt(line - 1, column);
 
     /// <summary>The tokenizer's state and its first lines', for a test's failure: whether each is waiting to be tokenized, and its tokens.</summary>
-    internal string DescribeGrammar() =>
-        _textMate is { } installation && Tokenizer(installation) is { } model
-            ? $"tokenizer {(model.IsStopped ? "stopped" : "running")}; lines " + string.Join(", ", Enumerable.Range(0, Math.Min(model.GetLines().GetNumberOfLines(), 20))
-                .Select(line => $"{line + 1} {(model.IsLineInvalid(line) ? "waiting" : "tokenized")} ({model.GetLineTokens(line)?.Count ?? 0} tokens)"))
-            : "no tokenizer";
+    internal string DescribeGrammar() => _grammar?.Describe() ?? "no tokenizer";
 
-    private static bool s_noTokenizer;
     private bool _grammarCheckScheduled;
 
     private void OnViewAttached(object? sender, VisualTreeAttachmentEventArgs e) => ScheduleGrammarCheck();
@@ -562,85 +554,29 @@ public sealed partial class CodeEditorController : IDisposable
     }
 
     /// <summary>
-    /// Lets go of the grammar's tokenizer thread while the editor isn't shown (an inactive tab: Dock detaches its view), and
-    /// starts it again when the editor shows. AvaloniaEdit.TextMate's model keeps a thread blocked for each editor as long
-    /// as its tab is open (a thread-pool thread up to TextMateSharp 2.0.3, its own thread since 2.0.5), and a session of
-    /// many JSON, XML or Markdown tabs starved the pool (M56). The
-    /// model and its lines' states stay: edits meanwhile mark their lines, and the thread starts again from there. What's
-    /// running is read from the model, not kept in a flag: setting a grammar starts its thread whatever its listeners.
-    /// <para>
-    /// A worker in the middle of a batch when its editor hides finishes that batch (a few milliseconds); shown again
-    /// before then, a second worker starts on the same model. AvaloniaEdit.TextMate tokenizes from two threads anyway (the
-    /// visible lines on the UI thread at each scroll, beside the worker): TextMateSharp serializes them since 2.0.5 (2.0.3
-    /// gave a line wrong tokens; <c>GrammarTokenizerThreadTests</c>), and queues a line that failed again.
-    /// </para>
+    /// Stops the grammar's tokenizer while the editor isn't shown (an inactive tab: Dock detaches its view), and starts
+    /// it again when the editor shows: a session of many JSON, XML or Markdown tabs doesn't tokenize them all at once
+    /// (M56). The lines' states stay: edits meanwhile mark their lines, and the tokenizer goes on from there.
     /// </summary>
     private void MatchGrammarToView()
     {
-        if (_textMate is not { } installation || Tokenizer(installation) is not { } model || GrammarTransformer() is not { } transformer)
+        if (_grammar is not { } grammar)
         {
             return;
         }
 
         if (TopLevel.GetTopLevel(Editor.TextArea.TextView) is null)
         {
-            model.RemoveModelTokensChangedListener(transformer); // its only listener: the model stops its thread
+            grammar.Pause();
         }
         else
         {
-            // The model starts its thread before it adds the listener, so lines tokenized in between tell nobody: the
-            // redraw, after the listener is in, shows them.
-            model.AddModelTokensChangedListener(transformer);
-            QueueFirstWaitingLine(model);
+            grammar.Resume();
             Editor.TextArea.TextView.Redraw();
         }
     }
 
-    /// <summary>
-    /// Queues again the first line still waiting to be tokenized. A worker stopped just after it took a line off the
-    /// model's queue drops it: the line stays waiting, nothing queues it again, and the next worker waits for work with
-    /// the file uncolored (TextMateSharp 2.0.5: an editor hidden and shown as it opened, <c>LanguageTests</c>, half its
-    /// runs). The worker walks on from that line to the end, as it would have.
-    /// </summary>
-    private static void QueueFirstWaitingLine(TextMateSharp.Model.TMModel model)
-    {
-        var count = model.GetLines().GetNumberOfLines();
-        for (var line = 0; line < count; line++)
-        {
-            if (model.IsLineInvalid(line))
-            {
-                model.InvalidateLine(line);
-                return;
-            }
-        }
-    }
-
-    private AvaloniaEdit.TextMate.TextMateColoringTransformer? GrammarTransformer() =>
-        Editor.TextArea.TextView.LineTransformers.OfType<AvaloniaEdit.TextMate.TextMateColoringTransformer>().FirstOrDefault();
-
-    /// <summary>The installation's model, or null when the package has none by that name: no pausing then, rather than an exception at each tab switch.</summary>
-    private static TextMateSharp.Model.TMModel? Tokenizer(AvaloniaEdit.TextMate.TextMate.Installation installation)
-    {
-        if (!s_noTokenizer)
-        {
-            try
-            {
-                return TokenizerModel(installation);
-            }
-            catch (MissingFieldException)
-            {
-                s_noTokenizer = true;
-            }
-        }
-
-        return null;
-    }
-
-    // The installation's model isn't public; Native AOT resolves this accessor at compile time.
-    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = "_tmModel")]
-    private static extern ref TextMateSharp.Model.TMModel? TokenizerModel(AvaloniaEdit.TextMate.TextMate.Installation installation);
-
-    /// <summary>The cut of long lines after every colorizer (a grammar's installs itself last): nothing draws past it.</summary>
+    /// <summary>The cut of long lines after every colorizer (a grammar's is added last): nothing draws past it.</summary>
     private void KeepLongLinesLast()
     {
         var transformers = Editor.TextArea.TextView.LineTransformers;
@@ -663,7 +599,7 @@ public sealed partial class CodeEditorController : IDisposable
         Editor.TextArea.SelectionBrush = theme.Selection;
         Editor.TextArea.TextView.CurrentLineBackground = theme.CurrentLine;
         Editor.TextArea.TextView.CurrentLineBorder = new Avalonia.Media.Pen(Avalonia.Media.Brushes.Transparent, 0);
-        _textMate?.SetTheme(_services.TextMate.ThemeFor(theme.Id));
+        _grammar?.SetTheme(_services.TextMate.ThemeFor(theme.Id));
         Editor.TextArea.TextView.Redraw();
     }
 
@@ -3031,7 +2967,7 @@ public sealed partial class CodeEditorController : IDisposable
         _hoverPopup.Closed -= OnHoverClosed;
         Editor.TextArea.TextView.AttachedToVisualTree -= OnViewAttached;
         Editor.TextArea.TextView.DetachedFromVisualTree -= OnViewDetached;
-        _textMate?.Dispose();
+        _grammar?.Dispose();
         _insights.Dispose();
         _inline.Dispose();
         _nextEdit.Dispose();
