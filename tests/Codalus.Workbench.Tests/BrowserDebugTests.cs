@@ -49,23 +49,35 @@ public sealed class BrowserDebugTests : IDisposable
         await File.WriteAllTextAsync(script, "function add(a, b) {\n  const sum = a + b;\n  return sum;\n}\nsetTimeout(() => {\n  document.getElementById('t').textContent = String(add(2, 3));\n}, 1000);\n", TestContext.Current.CancellationToken);
 
         var debug = new DebugService(() => null);
-        var stops = new List<StopInfo>();
-        debug.Stopped += (_, stop) =>
+        var console = new System.Text.StringBuilder();
+        debug.Output += (_, output) =>
         {
-            lock (stops)
+            lock (console)
             {
-                stops.Add(stop);
+                console.Append(output.Text);
             }
         };
+
+        // What the session waits for, and js-debug's own log (CODALUS_JSDEBUG_TRACE, which CI sets to the shard's
+        // results), for a failure: Step Over once hung here with nothing to say why (macOS CI, run 45077032327).
+        var trace = Browsers.TraceFile();
+        string Describe()
+        {
+            lock (console)
+            {
+                return $"The session: {debug.Describe()}.{(trace is null ? string.Empty : " vscode-js-debug's log: " + trace + ".")} Debug Console:\n{console}";
+            }
+        }
+
         debug.Breakpoints.Toggle(script, 2);
         var url = new Uri(Path.Combine(_site, "index.html")).AbsoluteUri;
         await debug.LaunchBrowserAsync(
             ct => JsDebugAdapter.StartAsync(jsDebug.NodePath, jsDebug.ServerScript, browser.LaunchType, ct),
-            new BrowserLaunchArguments(browser.LaunchType, url, _site, RuntimeExecutable: browser.Path, RuntimeArgs: ["--headless=new"]),
+            new BrowserLaunchArguments(browser.LaunchType, url, _site, RuntimeExecutable: browser.Path, RuntimeArgs: ["--headless=new"], Trace: trace is null ? null : new JsDebugTrace(trace)),
             Timeout());
         try
         {
-            await WaitAsync(() => debug.State == DebugState.Stopped);
+            await WaitAsync(() => debug.State == DebugState.Stopped, () => "The page didn't stop at the breakpoint. " + Describe());
             Assert.Equal("breakpoint", debug.CurrentStop!.Reason);
             Assert.True(debug.Breakpoints.StateOf(debug.Breakpoints.At(script, 2)!) is { Verified: true }, "the breakpoint was reported bound");
             var top = debug.Frames[0];
@@ -74,13 +86,13 @@ public sealed class BrowserDebugTests : IDisposable
             Assert.Equal("5", (await debug.EvaluateAsync("a + b", "repl", Timeout())).Result);
 
             // A step lands on the next line of the same function.
-            await debug.StepOverAsync();
-            await WaitAsync(() => debug.State == DebugState.Stopped && debug.Frames.Count > 0 && debug.Frames[0].Line == 3);
+            await AnsweredAsync(debug.StepOverAsync(), "Step Over", Describe);
+            await WaitAsync(() => debug.State == DebugState.Stopped && debug.Frames.Count > 0 && debug.Frames[0].Line == 3, () => "The step didn't stop on line 3. " + Describe());
             Assert.Equal("5", (await debug.EvaluateAsync("sum", "repl", Timeout())).Result);
 
             debug.Breakpoints.Clear();
-            await debug.ContinueAsync();
-            await WaitAsync(() => debug.State == DebugState.Running);
+            await AnsweredAsync(debug.ContinueAsync(), "Continue", Describe);
+            await WaitAsync(() => debug.State == DebugState.Running, () => "The page didn't run on. " + Describe());
         }
         finally
         {
@@ -187,6 +199,26 @@ public sealed class BrowserDebugTests : IDisposable
         Assert.Null(LaunchPlanner.PageDebugTarget(web with { LaunchBrowser = false }, javaScript: true));
         Assert.Null(LaunchPlanner.PageDebugTarget(new LaunchProfile("console", "Project"), javaScript: true));
         Assert.Null(LaunchPlanner.PageDebugTarget(null, javaScript: true));
+    }
+
+    /// <summary>
+    /// Waits for a step's or a continue's answer. The session waits for it with no limit of its own (its token ends only
+    /// with the session), and one that vscode-js-debug never answered held the test until the 15-minute hang dump, with
+    /// node and the browser still running and nothing to say which request it waited for (macOS CI, run 45077032327).
+    /// It fails instead, saying what each of js-debug's sessions waits for. TODO(issue): why js-debug didn't answer.
+    /// </summary>
+    private static async Task AnsweredAsync(Task resume, string what, Func<string> describe)
+    {
+        try
+        {
+            await resume.WaitAsync(TimeSpan.FromSeconds(90), TestContext.Current.CancellationToken);
+        }
+        catch (TimeoutException)
+        {
+            // The stop that follows fails it (its connection closes): observed, not left to the finalizer.
+            _ = resume.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+            Assert.Fail($"{what} got no answer from vscode-js-debug in 90 s. {describe()}");
+        }
     }
 
     private static async Task WaitAsync(Func<bool> condition, Func<string>? describe = null)
