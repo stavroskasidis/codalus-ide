@@ -404,7 +404,10 @@ public sealed class TestItemCollection : IReadOnlyCollection<TestItem>
         lock (_gate)
         {
             var keep = next.Select(i => i.Id).ToHashSet(StringComparer.Ordinal);
-            foreach (var old in _order.Where(o => !keep.Contains(o.Id) || !next.Contains(o)))
+
+            // By instance, in a set: a project's thousands of tests checked each against the whole new list.
+            var instances = new HashSet<TestItem>(next, ReferenceEqualityComparer.Instance);
+            foreach (var old in _order.Where(o => !keep.Contains(o.Id) || !instances.Contains(o)))
             {
                 removed.Add(old);
                 old.Parent = null;
