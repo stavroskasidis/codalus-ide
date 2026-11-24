@@ -186,6 +186,29 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Documents_are_parsed_while_the_solution_loads_and_nothing_is_published_before_it_has()
+    {
+        if (Environment.ProcessorCount <= 2)
+        {
+            Assert.Skip("The warm-up leaves machines of two processors to the design-time builds.");
+        }
+
+        var session = new Session(new LanguageHostClient("C# language service", ProcessLaunchInfo.FromPath(RepoPaths.HostAssembly), policy: new SupervisionPolicy { InitialBackoff = TimeSpan.FromMilliseconds(50) }), 2);
+        await using (session)
+        {
+            await session.Client.StartAsync(Ct);
+            ProjectData[] projects = [Project("Lib", ["Context.cs", "Warnings.cs"]), Project("App", ["Page.cs", "Closed.cs"], ["Lib"])];
+            await session.Client.UpdateProjectsAsync(projects, Ct, loading: true);
+            await LanguageFixture.WaitUntilAsync(() => session.Logged("Loading: 4 document(s) parsed ahead of the background pass."), TimeSpan.FromSeconds(60), () => Describe(session));
+            Assert.Empty(session.For(Path.Combine(_root, "App", "Closed.cs"))); // the pass waits for the end of the loading
+
+            await session.Client.UpdateProjectsAsync(projects, Ct, loading: false);
+            await session.ReadyAsync();
+            await LanguageFixture.WaitUntilAsync(() => session.Has(Path.Combine(_root, "App", "Closed.cs"), "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+        }
+    }
+
+    [Fact]
     public void CS4014_on_a_call_into_another_project_is_left_out_in_methods_that_are_not_async()
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)

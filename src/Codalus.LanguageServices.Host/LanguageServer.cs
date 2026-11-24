@@ -26,12 +26,15 @@ internal sealed class LanguageServer : IAsyncDisposable
     private readonly AnalysisSolution _analysis;
     private readonly Xaml.XamlDiagnostics _xamlDiagnostics;
     private readonly TaskCompletionSource _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly CancellationTokenSource _stopping = new();
+    private readonly LoadingWarmUp _loadingWarmUp;
 
     public LanguageServer(JsonRpcConnection connection)
     {
         _connection = connection;
         _razor = new Razor.RazorFeatures(_completion, message => Log(MessageType.Log, message));
         _analysis = new AnalysisSolution(_workspace, message => Log(MessageType.Log, message));
+        _loadingWarmUp = new LoadingWarmUp(_workspace, _stopping.Token, message => Log(MessageType.Log, message));
         _diagnostics = new DiagnosticsService(_workspace, _analysis, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _xamlDiagnostics = new Xaml.XamlDiagnostics(_workspace, p => Notify(Methods.PublishDiagnostics, p, ProtocolJsonContext.Default.PublishDiagnosticsParams), message => Log(MessageType.Warning, message));
         _codeActions = new CodeActionsFeature(_diagnostics, message => Log(MessageType.Log, message));
@@ -155,6 +158,7 @@ internal sealed class LanguageServer : IAsyncDisposable
             if (p.Projects.Length > 0)
             {
                 _workspace.UpdateProjects(p.Projects);
+                _loadingWarmUp.ProjectsChanged(); // their files parsed while the rest loads
             }
 
             if (p.Projects.Length > 0 || loadingChanged)
@@ -669,8 +673,13 @@ internal sealed class LanguageServer : IAsyncDisposable
         _ = Notify(Methods.LogMessage, new LogMessageParams(type, message), ProtocolJsonContext.Default.LogMessageParams);
     }
 
+    /// <summary>The loading warm-up (tests).</summary>
+    internal LoadingWarmUp LoadingWarmUp => _loadingWarmUp;
+
     public ValueTask DisposeAsync()
     {
+        _stopping.Cancel();
+        _stopping.Dispose();
         _diagnostics.Dispose();
         _xamlDiagnostics.Dispose();
         _workspace.Dispose();
