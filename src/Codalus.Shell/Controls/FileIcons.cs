@@ -1,5 +1,6 @@
 using Codalus.Projects.Protocol;
 using Codalus.Workbench.Projects;
+using Codalus.Workbench.WinForms;
 
 namespace Codalus.Shell.Controls;
 
@@ -109,13 +110,18 @@ public static class FileIcons
     /// <summary>A Windows Forms form's or user control's icon (M41a): a window with a C# badge (Material has none: its C# file).</summary>
     public static string Form => Material ? Mi + "csharp" : Cl + "form";
 
+    /// <summary>A form's icon by its code file's language: a window with the C# or the VB badge (Material: its language's file).</summary>
+    public static string FormOf(string path) => path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase)
+        ? Material ? ForFile(path) : Cl + "form-vb"
+        : Form;
+
     /// <summary>
-    /// Whether a Solution Explorer node is a form or user control of a Windows Forms project: a <c>.cs</c> file with its
-    /// <c>.Designer.cs</c> nested under it.
+    /// Whether a Solution Explorer node is a form or user control of a Windows Forms project: a <c>.cs</c> or <c>.vb</c>
+    /// file with its <c>.Designer.cs</c> or <c>.Designer.vb</c> nested under it.
     /// </summary>
     public static bool IsForm(ExplorerNode node, Func<string, ProjectInfo?> project) =>
-        node is { Kind: ExplorerNodeKind.File, ProjectPath: { } owner } && node.Name.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) && !node.Name.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase)
-        && node.Children.Any(c => string.Equals(c.Name, node.Name[..^3] + ".Designer.cs", StringComparison.OrdinalIgnoreCase))
+        node is { Kind: ExplorerNodeKind.File, ProjectPath: { } owner } && WinFormsDesignerService.IsFormLanguage(node.Name) && !WinFormsDesignerService.IsDesignerFile(node.Name)
+        && node.Children.Any(c => string.Equals(c.Name, Path.GetFileName(WinFormsDesignerService.DesignerFileOf(node.Name)), StringComparison.OrdinalIgnoreCase))
         && project(owner) is { UsesWindowsForms: true };
 
     /// <summary>The solution's icon (a classic IDE's purple solution glyph).</summary>
@@ -249,7 +255,7 @@ public static class FileIcons
         ExplorerNodeKind.Folder => ForFolder(node.Name, expanded),
         ExplorerNodeKind.Project => node.Path is { } path ? ForProject(path, project(path)) : node.Icon,
         ExplorerNodeKind.File or ExplorerNodeKind.SolutionItem => node.Icon == "project" && node.Path is { } projectFile ? ForProject(projectFile, project(projectFile))
-            : Theme is null && IsForm(node, project) ? Form : ForFile(node.Name),
+            : Theme is null && IsForm(node, project) ? FormOf(node.Name) : ForFile(node.Name),
         ExplorerNodeKind.Dependencies => Material ? Mi + "folder-packages" + (expanded ? "-open" : string.Empty) : Cl + "dependencies",
         _ => node.Icon,
     };

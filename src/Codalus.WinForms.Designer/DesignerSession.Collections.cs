@@ -466,7 +466,7 @@ internal sealed partial class DesignerSession
             }
 
             var created = new ListViewItem(item.Text ?? string.Empty);
-            _locals[item.Name ?? NewLocalName("listViewItem")] = created;
+            _locals[item.Name ?? NewLocalName(DesignerLanguages.NameStem(_language, "listViewItem"))] = created;
             wanted.Add(created);
         }
 
@@ -505,8 +505,8 @@ internal sealed partial class DesignerSession
         _imageListVersions[imageList] = _imageListVersions.GetValueOrDefault(imageList) + 1;
     }
 
-    /// <summary>The classic IDE's name for a new component: its type's name, first letter lowercased, and the first free number.</summary>
-    private string NewComponentName(Type type, IContainer? container = null) => NewLocalName(char.ToLowerInvariant(type.Name[0]) + type.Name[1..], container);
+    /// <summary>The classic IDE's name for a new component: its type's name in the form's language's case (<c>tabPage3</c>, <c>TabPage3</c>), and the first free number.</summary>
+    private string NewComponentName(Type type, IContainer? container = null) => NewLocalName(DesignerLanguages.NameStem(_language, type.Name), container);
 
     /// <summary>The first free name of a stem and a number (<c>listViewItem3</c>).</summary>
     private string NewLocalName(string stem, IContainer? container = null)

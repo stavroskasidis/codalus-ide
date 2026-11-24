@@ -272,7 +272,7 @@ public sealed partial class WinFormsDesignerDocument
         }
 
         // TODO(issue): a .NET Framework (non-SDK) project also needs the new file as an EmbeddedResource with DependentUpon; the C# host's own creation (a culture's .resx) has the same gap.
-        var path = CodePath[..^".cs".Length] + ".resx";
+        var path = Path.ChangeExtension(CodePath, ".resx");
         var newLine = _designerCode?.Text.Text.Contains("\r\n", StringComparison.Ordinal) == true ? "\r\n" : "\n";
         try
         {

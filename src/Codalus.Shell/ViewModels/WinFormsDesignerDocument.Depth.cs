@@ -51,7 +51,7 @@ public sealed partial class WinFormsDesignerDocument
     /// <summary>A resource file's culture: <c>fr</c> for <c>OrderForm.fr.resx</c>, empty for <c>OrderForm.resx</c>.</summary>
     private string CultureOf(string path)
     {
-        var stem = CodePath[..^".cs".Length];
+        var stem = CodePath[..^Path.GetExtension(CodePath).Length];
         return path.Length > stem.Length + ".resx".Length ? path[(stem.Length + 1)..^".resx".Length] : string.Empty;
     }
 
@@ -409,7 +409,7 @@ public sealed partial class WinFormsDesignerDocument
     {
         if (ProjectResxPath() is not { } resx)
         {
-            Status = Localizer.Get("msg.winFormsDesigner.noProjectResources", "The project has no Properties/Resources.resx: add a resources file there first, or import the image into the form's resources.");
+            Status = Localizer.Format("msg.winFormsDesigner.noProjectResources", "The project has no {0}: add a resources file there first, or import the image into the form's resources.", ProjectResxName);
             return;
         }
 
@@ -466,7 +466,7 @@ public sealed partial class WinFormsDesignerDocument
     internal async Task UseProjectResourceAsync(string component, string property, string name, byte[] bytes)
     {
         var rootNamespace = _read?.ClassFullName is { } full && full.Contains('.', StringComparison.Ordinal) ? full[..full.IndexOf('.', StringComparison.Ordinal)] : _model?.Namespace;
-        var member = DesignerValue.MemberOf((rootNamespace is null ? string.Empty : rootNamespace + ".") + "Properties.Resources", name);
+        var member = DesignerValue.MemberOf((rootNamespace is null ? string.Empty : rootNamespace + ".") + ProjectResourcesClass, name);
         await RunAsync(async host =>
         {
             var result = await host.SetPropertiesAsync(new DesignerSetPropertiesParams([new DesignerPropertyEdit(ComponentOf(component), property) { Bytes = Convert.ToBase64String(bytes) }]), CancellationToken.None).ConfigureAwait(true);
@@ -969,11 +969,19 @@ public sealed partial class WinFormsDesignerDocument
 
     public void CloseStringsEditor() => StringsEditor = null;
 
-    /// <summary>The project's resources file (<c>Properties/Resources.resx</c> beside the project), or null when it has none.</summary>
+    private bool IsVisualBasic => _model?.Language == DesignerLanguages.VisualBasic || CodePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The project's resources file from its folder: <c>Properties/Resources.resx</c>, a Visual Basic project's <c>My Project/Resources.resx</c>.</summary>
+    private string ProjectResxName => IsVisualBasic ? "My Project/Resources.resx" : "Properties/Resources.resx";
+
+    /// <summary>The class the project's resources are read through: <c>Properties.Resources</c>, Visual Basic's <c>My.Resources.Resources</c> (after the root namespace).</summary>
+    private string ProjectResourcesClass => IsVisualBasic ? "My.Resources.Resources" : "Properties.Resources";
+
+    /// <summary>The project's resources file (<see cref="ProjectResxName"/> beside the project), or null when it has none.</summary>
     private string? ProjectResxPath()
     {
         var project = _read?.Project is { } projectPath ? Path.GetDirectoryName(projectPath)! : Path.GetDirectoryName(CodePath)!;
-        var resx = Path.Combine(project, "Properties", "Resources.resx");
+        var resx = Path.Combine([project, .. ProjectResxName.Split('/')]);
         return File.Exists(resx) ? resx : null;
     }
 
@@ -999,7 +1007,7 @@ public sealed partial class WinFormsDesignerDocument
 
         var target = ComponentOf(component);
         var current = _model?.Statements.LastOrDefault(s => s.Kind == DesignerStatementKinds.Assign && s.Target == target && s.Member == property) is
-            { Value: { Kind: DesignerValueKinds.Member, Type: { } type, Value: { } member } } && type.EndsWith("Properties.Resources", StringComparison.Ordinal) ? member : null;
+            { Value: { Kind: DesignerValueKinds.Member, Type: { } type, Value: { } member } } && type.EndsWith(ProjectResourcesClass, StringComparison.Ordinal) ? member : null;
         ResourcePicker = new DesignerResourcePickerViewModel(this, component, property, EditorContext([component], property), resx, images, current);
     }
 
@@ -1226,17 +1234,17 @@ public sealed partial class WinFormsDesignerDocument
     {
         var typeName = type[(type.LastIndexOf('.') + 1)..];
         var stem = new string((text ?? string.Empty).Where(char.IsLetterOrDigit).ToArray());
-        var taken = new HashSet<string>(_model?.Components.Select(c => c.Name) ?? [], StringComparer.Ordinal);
+        var taken = new HashSet<string>(_model?.Components.Select(c => c.Name) ?? [], DesignerLanguages.NameComparer(_model?.Language));
         taken.UnionWith(_components.Select(c => c.Name));
         if (stem.Length == 0 || char.IsDigit(stem[0]))
         {
             return NewName(type);
         }
 
-        var name = char.ToLowerInvariant(stem[0]) + stem[1..] + typeName;
+        var name = DesignerLanguages.NameStem(_model?.Language, stem) + typeName;
         for (var i = 1; taken.Contains(name); i++)
         {
-            name = char.ToLowerInvariant(stem[0]) + stem[1..] + typeName + i.ToString(CultureInfo.InvariantCulture);
+            name = DesignerLanguages.NameStem(_model?.Language, stem) + typeName + i.ToString(CultureInfo.InvariantCulture);
         }
 
         return name;

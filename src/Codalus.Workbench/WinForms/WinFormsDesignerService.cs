@@ -144,26 +144,41 @@ public sealed class WinFormsDesignerService
         return candidates.FirstOrDefault(File.Exists);
     }
 
-    /// <summary>A form's code file (<c>MainForm.cs</c>) for its code or designer file, or null when it has no designer file.</summary>
+    /// <summary>Whether <paramref name="path"/> is in a language the designer writes: C# (<c>.cs</c>) or Visual Basic (<c>.vb</c>).</summary>
+    public static bool IsFormLanguage(string path) =>
+        path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Whether <paramref name="path"/> is a form's designer file: <c>MainForm.Designer.cs</c>, <c>MainForm.Designer.vb</c>.</summary>
+    public static bool IsDesignerFile(string path) =>
+        IsFormLanguage(path) && Path.GetFileNameWithoutExtension(path).EndsWith(".Designer", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A form's designer file for its code file, in its language: <c>MainForm.Designer.cs</c>, <c>MainForm.Designer.vb</c>.</summary>
+    public static string DesignerFileOf(string codeFile)
+    {
+        var extension = Path.GetExtension(codeFile);
+        return codeFile[..^extension.Length] + ".Designer" + extension;
+    }
+
+    /// <summary>A form's code file (<c>MainForm.cs</c>, <c>MainForm.vb</c>) for its code or designer file, or null when it has no designer file.</summary>
     public static string? CodeFileOf(string path)
     {
-        if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+        if (!IsFormLanguage(path))
         {
             return null;
         }
 
-        var code = path.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase) ? path[..^".Designer.cs".Length] + ".cs" : path;
-        var designer = code[..^".cs".Length] + ".Designer.cs";
-        return File.Exists(code) && File.Exists(designer) ? code : null;
+        var extension = Path.GetExtension(path);
+        var code = IsDesignerFile(path) ? path[..^(".Designer" + extension).Length] + extension : path;
+        return File.Exists(code) && File.Exists(DesignerFileOf(code)) ? code : null;
     }
 
     /// <summary>
-    /// Whether <paramref name="path"/> (a code file) opens in the designer: a <c>.cs</c> file of a Windows Forms project
-    /// with a <c>.Designer.cs</c> next to it that has InitializeComponent (a form, a user control).
+    /// Whether <paramref name="path"/> (a code file) opens in the designer: a <c>.cs</c> or <c>.vb</c> file of a Windows
+    /// Forms project with a <c>.Designer.cs</c> or <c>.Designer.vb</c> next to it that has InitializeComponent (a form, a user control).
     /// </summary>
     public bool HasDesigner(string path)
     {
-        if (path.EndsWith(".Designer.cs", StringComparison.OrdinalIgnoreCase) || CodeFileOf(path) is not { } code)
+        if (IsDesignerFile(path) || CodeFileOf(path) is not { } code)
         {
             return false;
         }
@@ -175,8 +190,8 @@ public sealed class WinFormsDesignerService
 
         try
         {
-            var designer = code[..^".cs".Length] + ".Designer.cs";
-            return File.ReadAllText(designer).Contains("InitializeComponent()", StringComparison.Ordinal);
+            // Visual Basic's names ignore case (Sub InitializeComponent()).
+            return File.ReadAllText(DesignerFileOf(code)).Contains("InitializeComponent()", StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -259,7 +274,7 @@ public sealed class WinFormsDesignerService
         }
 
         var built = File.GetLastWriteTimeUtc(target.ProjectAssembly);
-        var designer = target.CodeFile[..^".cs".Length] + ".Designer.cs";
+        var designer = DesignerFileOf(target.CodeFile);
         foreach (var project in new[] { target.Project, target.HostProject }.OfType<string>().Distinct(SolutionService.PathComparer))
         {
             if (!_solutions.Projects.TryGetValue(project, out var info))

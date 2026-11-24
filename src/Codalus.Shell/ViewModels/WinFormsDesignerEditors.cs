@@ -685,6 +685,7 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
     private readonly WinFormsDesignerDocument _document;
     private readonly string _component;
     private readonly string _property;
+    private readonly bool _isVisualBasic;
     private bool _isProject;
     private string? _localFile;
     private bool _cleared;
@@ -698,6 +699,7 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
         _document = document;
         _component = component;
         _property = property;
+        _isVisualBasic = document.CodePath.EndsWith(".vb", StringComparison.OrdinalIgnoreCase);
         Context = context;
         ResxPath = resxPath;
         ProjectResources = new(resources);
@@ -726,11 +728,14 @@ public sealed class DesignerResourcePickerViewModel : ObservableObject
     /// <summary>The project's resources files, as the combo box under Project resource file lists them (D41 panel k): <c>Properties\Resources.resx</c>, or none.</summary>
     public IReadOnlyList<string> ResourceFiles => HasResourceFile ? [ResourceFileName] : [];
 
-    /// <summary>The project's resources file as the classic IDE names it, from the project's folder.</summary>
-    public const string ResourceFileName = "Properties\\Resources.resx";
+    /// <summary>
+    /// The project's resources file as the classic IDE names it, from the project's folder: <c>Properties\Resources.resx</c>,
+    /// a Visual Basic project's <c>My Project\Resources.resx</c>.
+    /// </summary>
+    public string ResourceFileName => _isVisualBasic ? "My Project\\Resources.resx" : "Properties\\Resources.resx";
 
     /// <summary>Why Project resource file is grayed: the project has no resources file.</summary>
-    public string NoResourceFileText => Localizer.Get("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add Properties/Resources.resx to the project)");
+    public string NoResourceFileText => Localizer.Format("msg.winFormsDesigner.noProjectResourceFile", "Project resource file: none (add {0} to the project)", ResourceFileName.Replace('\\', '/'));
 
     /// <summary>The first entry of the project's list: no image (D41 panel k), which OK sets as Clear does.</summary>
     public static DesignerProjectResource NoResource { get; } = new(string.Empty, null, null);
