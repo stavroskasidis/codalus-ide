@@ -200,10 +200,12 @@ internal sealed class ProjectKeys
     private readonly IReadOnlyDictionary<ProjectId, WorkspaceManager.ProjectSnapshot> _projects;
     private readonly IReadOnlyDictionary<string, SourceText> _open;
     private readonly HashSet<string> _outputs;
-    private readonly Dictionary<ProjectId, string?> _keys = [];
-    private readonly Dictionary<ProjectId, string?> _ownKeys = [];
-    private readonly Dictionary<string, string> _files = new(Paths.Comparer);
-    private readonly Lock _gate = new();
+    // Computed in parallel (the background pass's and the analysis solution's loops ask at once): no lock, each value
+    // the first one stored. A key depends only on the snapshot of projects, the open texts and the disk, so two threads
+    // computing the same one get the same value; one lock made every file's stat wait for every other.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ProjectId, string?> _keys = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ProjectId, string?> _ownKeys = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _files = new(Paths.Comparer);
 
     public ProjectKeys(IReadOnlyDictionary<ProjectId, WorkspaceManager.ProjectSnapshot> projects, IReadOnlyDictionary<string, SourceText> open)
     {
@@ -225,15 +227,9 @@ internal sealed class ProjectKeys
     public WorkspaceManager.ProjectSnapshot? Project(ProjectId id) => _projects.GetValueOrDefault(id);
 
     /// <summary>The project's key, or null when it isn't a loaded project (Miscellaneous Files).</summary>
-    public string? Key(ProjectId id)
-    {
-        lock (_gate)
-        {
-            return KeyLocked(id, []);
-        }
-    }
+    public string? Key(ProjectId id) => KeyOf(id, []);
 
-    private string? KeyLocked(ProjectId id, HashSet<ProjectId> visiting)
+    private string? KeyOf(ProjectId id, HashSet<ProjectId> visiting)
     {
         if (_keys.TryGetValue(id, out var known))
         {
@@ -250,19 +246,16 @@ internal sealed class ProjectKeys
         AppendOwn(project, Append);
         foreach (var reference in project.References.OrderBy(r => _projects.GetValueOrDefault(r)?.Parsed.Data.Path, Paths.Comparer))
         {
-            if (KeyLocked(reference, visiting) is not { } key)
+            if (KeyOf(reference, visiting) is not { } key)
             {
-                _keys[id] = null; // a referenced project that isn't loaded: no key
-                return null;
+                return _keys.GetOrAdd(id, (string?)null); // a referenced project that isn't loaded: no key
             }
 
             Append("project " + key);
         }
 
         visiting.Remove(id);
-        var result = Convert.ToHexString(hash.GetHashAndReset());
-        _keys[id] = result;
-        return result;
+        return _keys.GetOrAdd(id, Convert.ToHexString(hash.GetHashAndReset()));
     }
 
     /// <summary>
@@ -271,24 +264,19 @@ internal sealed class ProjectKeys
     /// </summary>
     public string? OwnKey(ProjectId id)
     {
-        lock (_gate)
+        if (_ownKeys.TryGetValue(id, out var known))
         {
-            if (_ownKeys.TryGetValue(id, out var known))
-            {
-                return known;
-            }
-
-            if (!_projects.TryGetValue(id, out var project))
-            {
-                return null;
-            }
-
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            AppendOwn(project, value => hash.AppendData(Encoding.UTF8.GetBytes(value + "\n")));
-            var result = "own " + Convert.ToHexString(hash.GetHashAndReset());
-            _ownKeys[id] = result;
-            return result;
+            return known;
         }
+
+        if (!_projects.TryGetValue(id, out var project))
+        {
+            return null;
+        }
+
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        AppendOwn(project, value => hash.AppendData(Encoding.UTF8.GetBytes(value + "\n")));
+        return _ownKeys.GetOrAdd(id, "own " + Convert.ToHexString(hash.GetHashAndReset()));
     }
 
     /// <summary>What a project's key holds of its own: the compiler, its command line and every input but the projects it references.</summary>
@@ -341,10 +329,7 @@ internal sealed class ProjectKeys
             return false;
         }
 
-        lock (_gate)
-        {
-            return File(path).Contains("|open|", StringComparison.Ordinal);
-        }
+        return File(path).Contains("|open|", StringComparison.Ordinal);
     }
 
     /// <summary>A file's length and time written, or an open document's text when it differs from the file.</summary>
@@ -370,8 +355,7 @@ internal sealed class ProjectKeys
             result = $"{path}|unreadable";
         }
 
-        _files[path] = result;
-        return result;
+        return _files.GetOrAdd(path, result); // the first one stored, so the key and IsOpenWithOtherText agree
     }
 
     private static bool SameText(string path, SourceText text)
