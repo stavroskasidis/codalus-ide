@@ -77,6 +77,9 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
             Assert.Single(first.For(page), d => d.Code == "CS4014"); // in the async method only: the build reports it there too
             Assert.Contains(first.For(Path.Combine(_root, "App", "Closed.cs")), d => d.Code == "CS0219");
             Assert.Contains(first.For(Path.Combine(_root, "Lib", "Warnings.cs")), d => d.Code == "CS0219");
+
+            // Lib's reference assembly is emitted after the pass has published.
+            await LanguageFixture.WaitUntilAsync(() => first.Logged("Reference assemblies for the next session: 1 written."), TimeSpan.FromSeconds(60), () => Describe(first));
         }
 
         Assert.True(File.Exists(Path.Combine(_root, "Lib", "obj", LanguageStateCache.StateFile)));
@@ -129,6 +132,7 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
         {
             await first.ReadyAsync();
             await LanguageFixture.WaitUntilAsync(() => first.Has(use, "CS0020"), TimeSpan.FromSeconds(60), () => Describe(first));
+            await LanguageFixture.WaitUntilAsync(() => first.Logged("Reference assemblies for the next session: 2 written."), TimeSpan.FromSeconds(60), () => Describe(first));
         }
 
         Assert.True(File.Exists(Path.Combine(_root, "Mid", "obj", LanguageStateCache.ReferenceFile)));

@@ -93,7 +93,12 @@ internal sealed class LanguageServer : IAsyncDisposable
                 new ServerInfo("codalus-lshost", version)));
         });
         _connection.OnNotification(Methods.Initialized, json.EmptyObject, _ => { });
-        _connection.OnRequest(Methods.Shutdown, (_, _) => Task.FromResult<JsonElement?>(null));
+        _connection.OnRequest(Methods.Shutdown, async (_, _) =>
+        {
+            // The reference assemblies the last pass left for the next session, within the shutdown's time.
+            await _diagnostics.FlushReferencesAsync(TimeSpan.FromSeconds(1.5)).ConfigureAwait(false);
+            return (JsonElement?)null;
+        });
         _connection.OnNotification(Methods.Exit, json.EmptyObject, _ => _exit.TrySetResult());
         _connection.OnNotification(Methods.DidChangeConfiguration, json.DidChangeConfigurationParams, p =>
         {

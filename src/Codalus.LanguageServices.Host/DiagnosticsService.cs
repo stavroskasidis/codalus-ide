@@ -42,6 +42,18 @@ internal sealed class DiagnosticsService : IDisposable
     private readonly MemoryTrimmer _trimmer = new();
     private CancellationTokenSource? _backgroundPass;
 
+    /// <summary>
+    /// The reference assemblies the next session takes (M34c), emitted after the pass has published, one at a time: a
+    /// project's latest only, carried over passes until written. <see cref="_entryWrites"/> counts each project's
+    /// state writes, so an emit for a pass a newer one replaced doesn't mark the newer entry as having it.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ProjectId, PendingReference> _pendingReferences = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ProjectId, int> _entryWrites = new();
+    private readonly SemaphoreSlim _referenceWriter = new(1, 1);
+    private Task _referenceWrites = Task.CompletedTask;
+
+    private sealed record PendingReference(ProjectId Project, string Folder, LanguageStateCache.Entry Entry, string? OwnKey, Compilation Compilation, int Write);
+
     public DiagnosticsService(WorkspaceManager workspace, AnalysisSolution analysis, Func<PublishDiagnosticsParams, Task> publish, Action<string> log)
     {
         _workspace = workspace;
@@ -534,10 +546,26 @@ internal sealed class DiagnosticsService : IDisposable
             };
             if (!provisional.Contains(project.Id) && keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
             {
-                // For the next session (M34c): the diagnostics and, for a project others reference, its reference assembly.
-                var reference = hasDependents.Contains(project.Id) && LanguageStateCache.WriteReference(folder, compilation, token);
-                LanguageStateCache.Write(folder, new LanguageStateCache.Entry(LanguageStateCache.Schema, key, scope, project.DocumentIds.Count,
-                    [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]) { ReferenceKey = reference ? key : null, OwnKey = reference ? keys.OwnKey(project.Id) : null });
+                // For the next session (M34c): the diagnostics now and, for a project others reference, its reference
+                // assembly once the pass has published (its emit isn't on the way to the diagnostics).
+                var entry = new LanguageStateCache.Entry(LanguageStateCache.Schema, key, scope, project.DocumentIds.Count,
+                    [.. found.Select(f => new LanguageStateCache.FileDiagnostics(f.Item1, f.Item2))]);
+                await _referenceWriter.WaitAsync(token).ConfigureAwait(false);
+                int write;
+                try
+                {
+                    write = _entryWrites.AddOrUpdate(project.Id, 1, (_, n) => n + 1);
+                    LanguageStateCache.Write(folder, entry);
+                }
+                finally
+                {
+                    _referenceWriter.Release();
+                }
+
+                if (hasDependents.Contains(project.Id))
+                {
+                    _pendingReferences[project.Id] = new PendingReference(project.Id, folder, entry, keys.OwnKey(project.Id), compilation, write);
+                }
             }
         }
 
@@ -627,6 +655,7 @@ internal sealed class DiagnosticsService : IDisposable
 
         BackgroundPassCompleted?.Invoke(compiled, documents, true);
         _trimmer.WorkDone();
+        WriteReferences();
         if (GeneratorTimings.Enabled)
         {
             await GeneratorTimings.LogAsync(toCompile, _log, cancellationToken).ConfigureAwait(false);
@@ -640,6 +669,83 @@ internal sealed class DiagnosticsService : IDisposable
     }
 
     private int _persistedGeneration = -1;
+
+    /// <summary>Emits the pending reference assemblies, after what is emitting now.</summary>
+    private void WriteReferences()
+    {
+        if (_pendingReferences.IsEmpty)
+        {
+            return;
+        }
+
+        var token = _lifetime.Token;
+        lock (_gate)
+        {
+            _referenceWrites = _referenceWrites.ContinueWith(_ => WriteReferencesAsync(token), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default).Unwrap();
+        }
+    }
+
+    private async Task WriteReferencesAsync(CancellationToken cancellationToken)
+    {
+        var written = 0;
+        foreach (var id in _pendingReferences.Keys.ToList())
+        {
+            if (cancellationToken.IsCancellationRequested || !_pendingReferences.TryRemove(id, out var pending))
+            {
+                break;
+            }
+
+            try
+            {
+                await _referenceWriter.WaitAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+
+            try
+            {
+                // A newer pass wrote this project's state since: its own pending emit stands for it.
+                if (_entryWrites.GetValueOrDefault(pending.Project) != pending.Write)
+                {
+                    continue;
+                }
+
+                if (await Task.Run(() => LanguageStateCache.WriteReference(pending.Folder, pending.Compilation, cancellationToken), CancellationToken.None).ConfigureAwait(false))
+                {
+                    LanguageStateCache.Write(pending.Folder, pending.Entry with { ReferenceKey = pending.Entry.Key, OwnKey = pending.OwnKey });
+                    written++;
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            finally
+            {
+                _referenceWriter.Release();
+            }
+        }
+
+        if (written > 0)
+        {
+            _log($"Reference assemblies for the next session: {written} written.");
+            _trimmer.WorkDone();
+        }
+    }
+
+    /// <summary>Waits, up to <paramref name="limit"/>, for the pending reference assemblies to be written (the host's shutdown).</summary>
+    public Task FlushReferencesAsync(TimeSpan limit)
+    {
+        Task writes;
+        lock (_gate)
+        {
+            writes = _referenceWrites;
+        }
+
+        return writes.WaitAsync(limit).ContinueWith(_ => { }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+    }
 
     /// <summary>The projects the next pass checks again from source (#208), and writes for the next session.</summary>
     private readonly HashSet<ProjectId> _checkAgain = [];
