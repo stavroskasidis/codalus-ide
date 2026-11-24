@@ -152,6 +152,10 @@ public sealed class BuildHostIntegrationTests : IAsyncLifetime
 
         var core = Project(CoreProject);
         Assert.Equal(["net10.0", "netstandard2.0"], core.TargetFrameworks);
+
+        // Both frameworks list Greeter.cs: once in the project's items, as each framework's own are.
+        Assert.Single(core.Items, i => Path.GetFileName(i.Path) == "Greeter.cs");
+        Assert.Equal(core.Items.Length, core.Items.DistinctBy(i => (i.Kind, i.Path)).Count());
     }
 
     [Fact]
