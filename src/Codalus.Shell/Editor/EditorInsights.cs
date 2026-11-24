@@ -785,18 +785,17 @@ public sealed class EditorInsights : IDisposable
         var model = Model;
         var version = model.Version;
         var range = new LanguageServices.Protocol.Range(new Position(first - 1, 0), new Position(last, 0));
+        // Both asked at once, the hints shown as soon as they come: the margin's glyphs (a walk of every type in the
+        // range) used to hold them back until both had answered one after the other.
+        Task<InheritanceMarginItem[]>? marginRequest = client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast)
+            ? client.InheritanceMarginAsync(model.Uri, range, token)
+            : null;
         try
         {
             InlayHint[] hints = [];
             if (client?.Capabilities?.InlayHintProvider == true && (Options.InlayParameterNames || Options.InlayTypes))
             {
                 hints = await client.InlayHintsAsync(model.Uri, range, token).ConfigureAwait(true);
-            }
-
-            InheritanceMarginItem[]? margin = null;
-            if (client is not null && Options.InheritanceMargin && model.LanguageId == ShellHost.CSharpLanguageId && Margin.NeedsRange(visibleFirst, visibleLast))
-            {
-                margin = await client.InheritanceMarginAsync(model.Uri, range, token).ConfigureAwait(true);
             }
 
             if (token.IsCancellationRequested || _disposed || model.Version != version)
@@ -828,17 +827,33 @@ public sealed class EditorInsights : IDisposable
                     }
                 }, TimeSpan.FromSeconds(_emptyHints));
             }
-            if (margin is not null)
+
+            _editor.TextArea.TextView.Redraw();
+            Updated?.Invoke(this, EventArgs.Empty);
+            if (marginRequest is null)
             {
-                Margin.Set(margin, first, last);
+                return;
             }
 
+            var margin = await marginRequest.ConfigureAwait(true);
+            marginRequest = null;
+            if (token.IsCancellationRequested || _disposed || model.Version != version)
+            {
+                return;
+            }
+
+            Margin.Set(margin, first, last);
             _editor.TextArea.TextView.Redraw();
             Updated?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or System.Text.Json.JsonException or Codalus.Rpc.JsonRpcConnectionLostException or Codalus.Rpc.JsonRpcRemoteException or ObjectDisposedException or InvalidOperationException)
         {
             RetryAfterFailure(ex, _hintTimer);
+        }
+        finally
+        {
+            // The hints failed or went stale while the margin was asked: its answer is dropped, and observed.
+            marginRequest?.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
         }
     }
 
@@ -917,19 +932,27 @@ public sealed class EditorInsights : IDisposable
             var (first, last) = VisibleLines();
             var start = _editor.Document.GetLineByNumber(Math.Max(1, first - 5)).Offset;
             var end = _editor.Document.GetLineByNumber(Math.Min(_editor.Document.LineCount, last + 5)).EndOffset;
-            foreach (var segment in _lenses.FindOverlappingSegments(start, end - start).Where(l => !l.Resolved).ToList())
+            var shown = _lenses;
+            var failure = await BoundedResolve.RunAsync(
+                shown.FindOverlappingSegments(start, end - start).Where(l => !l.Resolved).ToList(),
+                segment => client.ResolveCodeLensAsync(segment.Lens, token),
+                () => !token.IsCancellationRequested && !_disposed && model.Version == version && ReferenceEquals(shown, _lenses),
+                (segment, resolved) =>
+                {
+                    if (resolved.Command is { } command)
+                    {
+                        segment.Resolve(command);
+                        _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(segment.StartOffset));
+                    }
+                }).ConfigureAwait(true);
+            if (failure is OperationCanceledException && (token.IsCancellationRequested || _disposed || model.Version != version || !ReferenceEquals(shown, _lenses)))
             {
-                var resolved = await client.ResolveCodeLensAsync(segment.Lens, token).ConfigureAwait(true);
-                if (token.IsCancellationRequested || _disposed || model.Version != version)
-                {
-                    return;
-                }
+                return; // stale: a newer edit's lenses are on their way
+            }
 
-                if (resolved.Command is { } command)
-                {
-                    segment.Resolve(command);
-                    _editor.TextArea.TextView.Redraw(_editor.Document.GetLineByOffset(segment.StartOffset));
-                }
+            if (failure is not null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
             }
 
             Updated?.Invoke(this, EventArgs.Empty);
