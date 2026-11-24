@@ -824,51 +824,80 @@ public sealed class FindResultsPage : ObservableObject, IDisposable
             await Task.Run(async () =>
             {
                 var batch = new List<FindResultRow>();
-                foreach (var file in files)
+
+                // A few files read ahead of the search, taken in the files' order: the matches, the limit and the files
+                // counted are those of reading them one after another, without waiting for each read in turn.
+                const int ReadAhead = 8;
+                var reads = new Queue<Task<string?>>();
+                var next = 0;
+                async Task<string?> ReadAsync(string file)
                 {
-                    cts.Token.ThrowIfCancellationRequested();
-                    string text;
                     try
                     {
-                        text = openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file, cts.Token).ConfigureAwait(false);
+                        return openTexts.TryGetValue(file, out var open) ? open : await File.ReadAllTextAsync(file, cts.Token).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
                     {
-                        continue;
+                        return null;
                     }
+                }
 
-                    if (text.Contains('\0', StringComparison.Ordinal) || !MayMatch(regex, text, options.UseRegex))
+                try
+                {
+                    foreach (var file in files)
                     {
-                        continue; // binary, or the text doesn't hold the words
-                    }
-
-                    var found = false;
-                    ForEachLine(text, (lineNumber, line) =>
-                    {
-                        if (!regex.IsMatch(line) || MatchLine(file, lineNumber + 1, line.ToString(), regex) is not { } row)
+                        cts.Token.ThrowIfCancellationRequested();
+                        while (reads.Count < ReadAhead && next < files.Count)
                         {
-                            return true;
+                            reads.Enqueue(ReadAsync(files[next++]));
                         }
 
-                        batch.Add(row);
-                        found = true;
-                        return ++lines < MaxMatches;
-                    });
+                        if (await reads.Dequeue().ConfigureAwait(false) is not { } text)
+                        {
+                            continue;
+                        }
 
-                    if (found)
-                    {
-                        matchedFiles++;
+                        if (text.Contains('\0', StringComparison.Ordinal) || !MayMatch(regex, text, options.UseRegex))
+                        {
+                            continue; // binary, or the text doesn't hold the words
+                        }
+
+                        var found = false;
+                        ForEachLine(text, (lineNumber, line) =>
+                        {
+                            if (!regex.IsMatch(line) || MatchLine(file, lineNumber + 1, line.ToString(), regex) is not { } row)
+                            {
+                                return true;
+                            }
+
+                            batch.Add(row);
+                            found = true;
+                            return ++lines < MaxMatches;
+                        });
+
+                        if (found)
+                        {
+                            matchedFiles++;
+                        }
+
+                        if (batch.Count >= 200 || lines >= MaxMatches)
+                        {
+                            await PostAsync(batch, cts.Token).ConfigureAwait(false);
+                            batch = [];
+                        }
+
+                        if (lines >= MaxMatches)
+                        {
+                            break;
+                        }
                     }
-
-                    if (batch.Count >= 200 || lines >= MaxMatches)
+                }
+                finally
+                {
+                    // Reads still running when the search stopped: observed, their texts dropped.
+                    foreach (var read in reads)
                     {
-                        await PostAsync(batch, cts.Token).ConfigureAwait(false);
-                        batch = [];
-                    }
-
-                    if (lines >= MaxMatches)
-                    {
-                        break;
+                        _ = read.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
                     }
                 }
 
