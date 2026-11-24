@@ -134,16 +134,42 @@ internal static class LanguageStateCache
     {
         try
         {
-            return MetadataReference.CreateFromImage(
+            // Read again only when the image or its documentation changed: each generation of the analysis solution
+            // (each project change) read every referenced project's image, its bytes and its XML, again.
+            var stamp = new ImageStamp(Stamp(path), documentation is null ? default : Stamp(documentation));
+            if (s_images.TryGetValue((path, documentation), out var kept) && kept.Stamp == stamp)
+            {
+                return kept.Reference;
+            }
+
+            var reference = MetadataReference.CreateFromImage(
                 File.ReadAllBytes(path),
                 documentation: documentation is not null && File.Exists(documentation) ? XmlDocumentationProvider.CreateFromFile(documentation) : null,
                 filePath: path);
+            s_images[(path, documentation)] = (stamp, reference);
+            return reference;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
         {
             return null;
         }
     }
+
+    /// <summary>A file's length and time written (none for a missing file).</summary>
+    private readonly record struct FileStamp(long Length, long Written);
+
+    private readonly record struct ImageStamp(FileStamp Image, FileStamp Documentation);
+
+    private static FileStamp Stamp(string path)
+    {
+        var info = new FileInfo(path);
+        return info.Exists ? new FileStamp(info.Length, info.LastWriteTimeUtc.Ticks) : default;
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string Path, string? Documentation), (ImageStamp Stamp, MetadataReference Reference)> s_images = new();
+
+    /// <summary>Forgets the images kept (the analysis solution let go of them; they're read again when asked for).</summary>
+    public static void ForgetReferences() => s_images.Clear();
 
     private static void TryDelete(string path)
     {

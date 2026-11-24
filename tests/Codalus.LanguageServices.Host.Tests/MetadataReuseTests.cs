@@ -50,4 +50,27 @@ public sealed class MetadataReuseTests : IDisposable
         File.SetLastWriteTimeUtc(dll, DateTime.UtcNow.AddMinutes(1));
         Assert.NotSame(shared, new ProjectLoader().Metadata(dll, MetadataReferenceProperties.Assembly));
     }
+
+    [Fact]
+    public void A_kept_reference_image_is_read_once_until_it_or_its_documentation_changes()
+    {
+        var dll = CopyAssembly("Image.dll");
+        var xml = Path.Combine(_root, "Image.xml");
+        File.WriteAllText(xml, "<doc><members/></doc>");
+        var first = LanguageStateCache.Reference(dll, xml);
+        Assert.NotNull(first);
+        Assert.Same(first, LanguageStateCache.Reference(dll, xml));
+
+        // Its documentation rewritten with the same length: a new time written, a new reference.
+        File.WriteAllText(xml, "<doc><members/></doc>");
+        File.SetLastWriteTimeUtc(xml, DateTime.UtcNow.AddMinutes(1));
+        var second = LanguageStateCache.Reference(dll, xml);
+        Assert.NotSame(first, second);
+
+        File.SetLastWriteTimeUtc(dll, DateTime.UtcNow.AddMinutes(2));
+        Assert.NotSame(second, LanguageStateCache.Reference(dll, xml));
+
+        LanguageStateCache.ForgetReferences();
+        Assert.NotNull(LanguageStateCache.Reference(dll, xml));
+    }
 }
