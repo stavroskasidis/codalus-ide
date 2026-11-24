@@ -32,6 +32,7 @@ public sealed class CodeEditorView : UserControl, IPaneView
     private readonly Popup _hover = new() { IsLightDismissEnabled = true };
     private readonly Popup _exception = new() { IsLightDismissEnabled = true };
     private PeekPresenter? _peek;
+    private LensResultsPresenter? _lensResults;
     private EditorParts? _primary;
     private EditorParts? _split;
     private readonly NavigationBar _navigationBar = new();
@@ -191,6 +192,36 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _peek.Show(new Rect(origin.X, origin.Y, 1, 1), primary.Editor.Bounds.Width - origin.X - 24, location, title, text, languageId);
     }
 
+    /// <summary>The CodeLens popup, once shown (tests).</summary>
+    public LensResultsPresenter? LensResults => _lensResults;
+
+    /// <summary>
+    /// The popup style's CodeLens results (<c>editor.codeLensStyle</c>): a list under the clicked count, at
+    /// <paramref name="anchor"/> in <paramref name="target"/> (the editor's text view).
+    /// </summary>
+    public void ShowLensResults(Visual target, Point anchor, string title, IReadOnlyList<LensResultItem> items, Func<Location, Task> open, Action openWindow)
+    {
+        if (_primary is null)
+        {
+            return;
+        }
+
+        if (_lensResults is null)
+        {
+            _lensResults = new LensResultsPresenter(this);
+            _lensResults.Popup.Closed += (_, _) =>
+            {
+                if (_primary is { } primary && TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null or ListBoxItem)
+                {
+                    primary.Editor.TextArea.Focus(); // Escape: back to the code
+                }
+            };
+            ((Panel)Content!).Children.Add(_lensResults.Popup);
+        }
+
+        _lensResults.Show(target, anchor, title, items, open, openWindow);
+    }
+
     /// <summary>The lightbulb next to the caret's line when it has diagnostics: click for code fixes (or Ctrl+.).</summary>
     private void OnLightbulbChanged(object? sender, EventArgs e)
     {
@@ -269,6 +300,8 @@ public sealed class CodeEditorView : UserControl, IPaneView
         _split?.Controller.Dispose();
         _peek?.Release();
         _peek = null;
+        _lensResults?.Close();
+        _lensResults = null;
         _primary = null;
         _split = null;
         _editors.Children.Clear();

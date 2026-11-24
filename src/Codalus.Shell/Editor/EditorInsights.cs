@@ -565,6 +565,30 @@ public sealed class EditorInsights : IDisposable
     internal bool? LensResolvedAbove(int line) => _generator.LensAbove(_editor.Document.GetLineByNumber(line))?.Lens?.Resolved;
 
     /// <summary>
+    /// The middle of the first letter of the first title that contains <paramref name="title"/> on the CodeLens row above a
+    /// one-based line, in the text view's coordinates; null when the row isn't built or has no such title (tests).
+    /// </summary>
+    internal Point? LensTitlePoint(int line, string title)
+    {
+        if (line < 2 || _generator.LensAbove(_editor.Document.GetLineByNumber(line)) is not { } row
+            || row.Parts.FirstOrDefault(p => row.Text.AsSpan(p.Start, p.Length).Contains(title, StringComparison.Ordinal)) is not { } part)
+        {
+            return null;
+        }
+
+        var view = _editor.TextArea.TextView;
+        view.EnsureVisualLines();
+        if (view.GetVisualLine(line - 1) is not { } visualLine || visualLine.Elements.OfType<LensRowElement>().FirstOrDefault() is not { } element)
+        {
+            return null;
+        }
+
+        var start = visualLine.GetVisualPosition(element.TitlesColumn + part.Start, VisualYPosition.TextMiddle);
+        var next = visualLine.GetVisualPosition(element.TitlesColumn + part.Start + 1, VisualYPosition.TextMiddle);
+        return new Point((start.X + next.X) / 2, start.Y) - view.ScrollOffset;
+    }
+
+    /// <summary>
     /// A visual line's height without the CodeLens row that may end it (the next line's): what a line background covers.
     /// </summary>
     public static double CodeHeight(VisualLine line) =>
@@ -1013,9 +1037,10 @@ public sealed class EditorInsights : IDisposable
 
     // ------------------------------------------------------------------ actions
 
-    private void RunLens(LensSegment lens) => _ = RunLensAsync(lens);
+    /// <param name="anchor">Where the lens's popup goes (the bottom of its title, in the text view's coordinates), or null.</param>
+    private void RunLens(LensSegment lens, Point? anchor) => _ = RunLensAsync(lens, anchor);
 
-    private async Task RunLensAsync(LensSegment lens)
+    private async Task RunLensAsync(LensSegment lens, Point? anchor)
     {
         // A refresh's lenses keep their titles but get their commands one request at a time, near the viewport: one
         // clicked before its turn is resolved now, or the click did nothing (Linux CI, run 40706281162).
@@ -1060,7 +1085,21 @@ public sealed class EditorInsights : IDisposable
         }
 
         _editor.TextArea.Caret.Offset = Model.OffsetAt(position);
-        _services.RunCommand(command.CommandId);
+        var view = _editor.TextArea.TextView;
+        var line = _editor.Document.GetLineByOffset(lens.StartOffset);
+        var kind = LensTitles.KindOf(lens.Lens);
+        _services.RunCodeLens(new CodeLensClick(
+            command.CommandId,
+            LensTitles.Subject(kind, _editor.Document.GetText(line.Offset, lens.StartOffset - line.Offset)),
+            view,
+            anchor ?? Caret(view, _editor.TextArea.Caret)));
+    }
+
+    /// <summary>Below the caret's line, at the caret: where a lens's popup goes when it wasn't clicked on its row.</summary>
+    private static Point Caret(TextView view, Caret caret)
+    {
+        var bottom = view.GetVisualPosition(new AvaloniaEdit.TextViewPosition(caret.Line, caret.Column), AvaloniaEdit.Rendering.VisualYPosition.LineBottom);
+        return bottom - view.ScrollOffset;
     }
 
     private void ShowTargets(InheritanceMarginItem item, Control anchor)
@@ -1177,8 +1216,18 @@ public sealed class EditorInsights : IDisposable
         public ReviewSegment? Review { get; init; }
     }
 
-    /// <summary>A line's CodeLens titles (<paramref name="Text"/>), and the indentation that lines them up with its code.</summary>
-    private sealed record LensRow(string Indent, string Text, LensSegment? Lens);
+    /// <summary>
+    /// A line's CodeLens titles (<paramref name="Text"/>), and the indentation that lines them up with its code; each of
+    /// <paramref name="Parts"/> is where one title is in the text and the lens it runs (null for the editor's own, Git and
+    /// test status, which aren't links).
+    /// </summary>
+    private sealed record LensRow(string Indent, string Text, LensSegment? Lens, IReadOnlyList<LensPart> Parts)
+    {
+        /// <summary>The lens of the title at <paramref name="index"/> in the text; a separator belongs to the title before it.</summary>
+        public LensSegment? LensAt(int index) => Parts.LastOrDefault(p => p.Start <= index)?.Lens;
+    }
+
+    private sealed record LensPart(int Start, int Length, LensSegment? Lens);
 
     /// <summary>
     /// Inserts the hints (zero-length elements) and, at the end of a line, its own end-of-line text (diagnostic, review
@@ -1229,7 +1278,12 @@ public sealed class EditorInsights : IDisposable
             }
 
             var lenses = owner._lenses.FindOverlappingSegments(line.Offset, line.Length);
-            var titles = lenses.Where(l => l.Title is not null && l.Title != "-").Select(l => l.Title!).Concat(owner.ExtraLenses(line.LineNumber)).ToList();
+            var shown = lenses.Where(l => l.Title is not null && l.Title != "-").ToList();
+            var popups = owner.Options.CodeLensPopups;
+            var titled = shown.Select(l => (Title: LensTitles.Display(l.Title!, LensTitles.KindOf(l.Lens), DeclarationBefore(line, l.StartOffset), popups), Lens: (LensSegment?)l))
+                .Concat(owner.ExtraLenses(line.LineNumber).Select(t => (Title: t, Lens: (LensSegment?)null)))
+                .ToList();
+            var titles = titled.Select(t => t.Title).ToList();
             if (titles.Count == 0 && lenses.Count == 0 && owner._estimates?.FindOverlappingSegments(line.Offset, line.Length).Count is not > 0)
             {
                 return null;
@@ -1254,9 +1308,21 @@ public sealed class EditorInsights : IDisposable
                 }
             }
 
-            var first = lenses.FirstOrDefault(l => l.Title is not null && l.Title != "-") ?? lenses.FirstOrDefault();
-            return new LensRow(indent.ToString(), string.Join(" | ", titles), first);
+            var first = shown.FirstOrDefault() ?? lenses.FirstOrDefault();
+            var parts = new List<LensPart>(titled.Count);
+            var at = 0;
+            foreach (var (title, lens) in titled)
+            {
+                parts.Add(new LensPart(at, title.Length, lens));
+                at += title.Length + " | ".Length;
+            }
+
+            return new LensRow(indent.ToString(), string.Join(" | ", titles), first, parts);
         }
+
+        /// <summary>The declaration's text before its name (<c>public abstract class </c>): what a type's lens counts.</summary>
+        private string DeclarationBefore(DocumentLine line, int offset) =>
+            offset >= line.Offset && offset <= line.EndOffset ? owner._editor.Document.GetText(line.Offset, offset - line.Offset) : string.Empty;
 
         /// <summary>A line's CodeLens shows above it when the line before is there to end with it (not folded away).</summary>
         private bool CanShowAbove(DocumentLine line) =>
@@ -1295,15 +1361,14 @@ public sealed class EditorInsights : IDisposable
                 : eol?.Lens is not null ? owner.Brush("Shell.Editor.CodeLens.Foreground")
                 : owner.Brush("Shell.Editor.InlayHint.Foreground");
             Action? click = eol?.Review is { } review ? () => owner._services.ShowReviewThreads(review.Threads, owner._editor.TextArea)
-                : eol?.Lens is { } lens ? () => owner.RunLens(lens)
+                : eol?.Lens is { } lens ? () => owner.RunLens(lens, null)
                 : null;
             if (below is null)
             {
                 return new InlineTextElement(text, color, null, click);
             }
 
-            Action? lensClick = below is { Lens: { } nextLens, Text.Length: > 0 } ? () => owner.RunLens(nextLens) : null; // an empty row isn't a link
-            return new LensRowElement(owner, text, color, click, below, lensClick);
+            return new LensRowElement(owner, text, color, click, below);
         }
     }
 
@@ -1311,8 +1376,8 @@ public sealed class EditorInsights : IDisposable
     /// The end of a line's text and the next line's CodeLens row: the line's own end-of-line text (if any), a line break,
     /// the next line's indentation and its CodeLens, smaller, muted and in the UI's proportional font (compact, as in the
     /// classic IDE). None of it is part of the document or takes the caret; the next line itself keeps its height (no
-    /// taller caret or selection), and the row clicks run its first lens. A row without titles yet holds a space in the
-    /// titles' font, so it is exactly as tall as the row they fill.
+    /// taller caret or selection), and a click on a title runs that title's lens. A row without titles yet holds a space in
+    /// the titles' font, so it is exactly as tall as the row they fill.
     /// </summary>
     private sealed class LensRowElement : VisualLineElement
     {
@@ -1322,9 +1387,8 @@ public sealed class EditorInsights : IDisposable
         private readonly Action? _click;
         private readonly LensRow _row;
         private readonly string _titles;
-        private readonly Action? _lensClick;
 
-        public LensRowElement(EditorInsights owner, string text, IBrush color, Action? click, LensRow row, Action? lensClick)
+        public LensRowElement(EditorInsights owner, string text, IBrush color, Action? click, LensRow row)
             : base(text.Length + 1 + row.Indent.Length + Math.Max(1, row.Text.Length), 0)
         {
             _owner = owner;
@@ -1333,8 +1397,10 @@ public sealed class EditorInsights : IDisposable
             _click = click;
             _row = row;
             _titles = row.Text.Length > 0 ? row.Text : " ";
-            _lensClick = lensClick;
         }
+
+        /// <summary>The visual column where the row's titles start.</summary>
+        public int TitlesColumn => VisualColumn + _text.Length + 1 + _row.Indent.Length;
 
         public override TextRun CreateTextRun(int startVisualColumn, ITextRunConstructionContext context)
         {
@@ -1376,18 +1442,43 @@ public sealed class EditorInsights : IDisposable
 
         public override bool IsWhitespace(int visualColumn) => false;
 
-        /// <summary>The click that the pointer's row takes: the line's own text on the first, the CodeLens on the one below.</summary>
+        /// <summary>
+        /// The click that the pointer takes: the line's own text on the first row; on the CodeLens row below, the lens of
+        /// the title under the pointer (none on an empty row, past the titles or on Git and test status), which opens its
+        /// popup under the row at the pointer.
+        /// </summary>
         private Action? ClickAt(PointerEventArgs e)
         {
             var view = _owner._editor.TextArea.TextView;
-            var y = e.GetPosition(view).Y + view.ScrollOffset.Y;
+            var pointer = e.GetPosition(view);
+            var y = pointer.Y + view.ScrollOffset.Y;
             if (view.GetVisualLineFromVisualTop(y) is not { } visualLine)
             {
                 return null;
             }
 
             var textLine = visualLine.GetTextLineByVisualYPosition(y);
-            return visualLine.TextLines.IndexOf(textLine) > 0 ? _lensClick : _click;
+            var index = visualLine.TextLines.IndexOf(textLine);
+            if (index == 0)
+            {
+                return _click;
+            }
+
+            if (_row.Text.Length == 0)
+            {
+                return null; // an empty row isn't a link
+            }
+
+            var column = visualLine.GetVisualColumnFloor(new Point(pointer.X + view.ScrollOffset.X, y));
+            var at = column - TitlesColumn;
+            if (at < 0 || at >= _row.Text.Length || _row.LensAt(at) is not { } lens)
+            {
+                return null;
+            }
+
+            var rowTop = visualLine.VisualTop + visualLine.TextLines.Take(index).Sum(l => l.Height) - view.ScrollOffset.Y;
+            var anchor = new Point(pointer.X, rowTop + textLine.Height);
+            return () => _owner.RunLens(lens, anchor);
         }
 
         protected override void OnQueryCursor(PointerEventArgs e)

@@ -29,6 +29,7 @@ public sealed class EditorOptions : ObservableObject
     public const string CodeLensKey = "editor.codeLens";
     public const string GitCodeLensKey = "editor.gitCodeLens";
     public const string TestCodeLensKey = "editor.testCodeLens";
+    public const string CodeLensStyleKey = "editor.codeLensStyle";
     public const string InlineDiagnosticsKey = "editor.inlineDiagnostics";
     public const string InheritanceMarginKey = "editor.inheritanceMargin";
     public const string IndentGuidesKey = "editor.guides.indentation";
@@ -136,6 +137,13 @@ public sealed class EditorOptions : ObservableObject
     /// <summary>CodeLens shows each test's (and test class's) last outcome.</summary>
     public bool TestCodeLens { get; private set; }
 
+    /// <summary>
+    /// CodeLens in the popup style (<c>editor.codeLensStyle</c> "popup", Rider's): counts read <c>3 usages | 2
+    /// inheritors</c> and a click lists them in a popup under the row; the default style keeps the classic IDE's
+    /// <c>references | implementations</c> and opens the References window.
+    /// </summary>
+    public bool CodeLensPopups { get; private set; }
+
     public bool InlineDiagnostics { get; private set; }
 
     public bool InheritanceMargin { get; private set; }
@@ -164,6 +172,7 @@ public sealed class EditorOptions : ObservableObject
         CodeLens = settings.GetBoolean(CodeLensKey, true);
         GitCodeLens = settings.GetBoolean(GitCodeLensKey, true);
         TestCodeLens = settings.GetBoolean(TestCodeLensKey, true);
+        CodeLensPopups = settings.GetString(CodeLensStyleKey, CodeLensStyles.Default) == CodeLensStyles.Popup;
         InlineDiagnostics = settings.GetBoolean(InlineDiagnosticsKey, false);
         InheritanceMargin = settings.GetBoolean(InheritanceMarginKey, true);
         IndentGuides = settings.GetBoolean(IndentGuidesKey, true);
@@ -324,6 +333,12 @@ public interface IEditorServices
 
     /// <summary>Runs a command on the active editor (CodeLens).</summary>
     void RunCommand(string commandId);
+
+    /// <summary>
+    /// A click on a CodeLens title, the caret on its symbol: its command, or (by <c>editor.codeLensStyle</c>) its results
+    /// in the References window or a popup under the title.
+    /// </summary>
+    void RunCodeLens(CodeLensClick click) => RunCommand(click.CommandId);
 
     /// <summary>The benchmarks of the solution, for the benchmark glyphs (M18b).</summary>
     Codalus.Workbench.Diagnostics.BenchmarkService Benchmarks { get; }

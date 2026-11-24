@@ -185,6 +185,16 @@ internal static partial class BuiltIns
                 Scope = SettingScope.User,
                 Order = 3,
             },
+            SettingDescriptor.Create(Editor.EditorOptions.CodeLensStyleKey, "\"" + Editor.CodeLensStyles.Default + "\"", SettingType.String, shell) with
+            {
+                Title = "CodeLens Style",
+                Category = "Appearance",
+                Description = "How the counts above declarations read and open. Default: the classic IDE's (3 references | 2 implementations), and a click shows them in the References window at the bottom. Popup: Rider's (3 usages | 2 inheritors), and a click lists them in a popup under the count, whose header button shows them in the References window instead.",
+                Enum = [Editor.CodeLensStyles.Default, Editor.CodeLensStyles.Popup],
+                EnumDescriptions = ["Default", "Popup"],
+                Scope = SettingScope.User,
+                Order = 3,
+            },
             SettingDescriptor.Create(Theming.ColorCustomizations.TokensKey, "{}", SettingType.Object, shell) with
             {
                 Title = "Syntax Colors",
