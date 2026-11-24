@@ -110,6 +110,12 @@ public sealed class CodeSearchIndex
                     map[path] = file;
                 }
 
+                if (removed.Count == 0 && Incremental(basis, map) is { } updated)
+                {
+                    Interlocked.Increment(ref _incrementalUpdates);
+                    return updated;
+                }
+
                 return Build(map, basis.Files, loaded: true, basis.Complete, basis.CompletedAt);
             }).ConfigureAwait(false);
             lock (_gate)
@@ -802,6 +808,189 @@ public sealed class CodeSearchIndex
 
     // ------------------------------------------------------------------ snapshot
 
+    private int _incrementalUpdates;
+
+    /// <summary>How many updates were made from the last snapshot rather than built whole (tests).</summary>
+    internal int IncrementalUpdates => Volatile.Read(ref _incrementalUpdates);
+
+    /// <summary>
+    /// The snapshot <see cref="Build"/> would make of <paramref name="documents"/> (<paramref name="basis"/>'s, some
+    /// replaced, some added), made from <paramref name="basis"/>: only the names the changed documents had or have are
+    /// grouped again, the rest of the 144k declarations kept as they are, in the same order (names in their first
+    /// declaration's, a name's declarations by path, then line, then the index's order). Null when documents went
+    /// (their numbers would move) or too many names changed: a full build then.
+    /// </summary>
+    private static Snapshot? Incremental(Snapshot basis, Dictionary<string, IndexedFile> documents)
+    {
+        var sources = documents.Values.ToArray();
+        if (sources.Length < basis.Sources.Length || basis.Sources.Length == 0)
+        {
+            return null;
+        }
+
+        var changedSources = new HashSet<int>();
+        for (var i = 0; i < sources.Length; i++)
+        {
+            if (i >= basis.Sources.Length)
+            {
+                changedSources.Add(i);
+            }
+            else if (!ReferenceEquals(sources[i], basis.Sources[i]))
+            {
+                if (!string.Equals(sources[i].Path, basis.Sources[i].Path, StringComparison.Ordinal))
+                {
+                    return null; // not the same document at that number
+                }
+
+                changedSources.Add(i);
+            }
+        }
+
+        if (changedSources.Count == 0 || changedSources.Count > 64)
+        {
+            return null;
+        }
+
+        // The names the changed documents had and have, and their new declarations.
+        var added = new Dictionary<string, List<Entry>>(StringComparer.Ordinal);
+        var affected = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var s in changedSources)
+        {
+            if (s < basis.Sources.Length)
+            {
+                foreach (var symbol in basis.Sources[s].Symbols)
+                {
+                    affected.Add(symbol.Name);
+                }
+            }
+
+            var file = sources[s];
+            for (var y = 0; y < file.Symbols.Count; y++)
+            {
+                var symbol = file.Symbols[y];
+                affected.Add(symbol.Name);
+                if (!added.TryGetValue(symbol.Name, out var list))
+                {
+                    added[symbol.Name] = list = [];
+                }
+
+                list.Add(new Entry(symbol.Name, symbol.Kind, IsTypeKind(symbol.Kind), symbol.Line, symbol.Character, symbol.Container, file, s, y));
+            }
+        }
+
+        if (affected.Count > Math.Max(256, basis.Names.Length / 5))
+        {
+            return null;
+        }
+
+        // Each name's declarations, the unchanged documents' kept: unaffected names as they are, affected ones grouped again.
+        var groups = new List<(long Key, string Name, Entry[] Entries, ulong Mask, bool Ascii)>(basis.Names.Length + added.Count);
+        var known = new HashSet<string>(StringComparer.Ordinal);
+        var regrouped = new List<(long Key, string Name, Entry[] Entries, ulong Mask, bool Ascii)>();
+        for (var n = 0; n < basis.Names.Length; n++)
+        {
+            var name = basis.Names[n];
+            var group = basis.Entries.AsSpan(basis.Starts[n], basis.Starts[n + 1] - basis.Starts[n]);
+            if (!affected.Contains(name))
+            {
+                var first = long.MaxValue;
+                foreach (var entry in group)
+                {
+                    first = Math.Min(first, entry.Key);
+                }
+
+                groups.Add((first, name, group.ToArray(), basis.Masks[n], basis.NameIsAscii[n]));
+                continue;
+            }
+
+            known.Add(name);
+            var kept = new List<Entry>(group.Length);
+            foreach (var entry in group)
+            {
+                if (!changedSources.Contains(entry.Source))
+                {
+                    kept.Add(entry);
+                }
+            }
+
+            if (added.TryGetValue(name, out var fresh))
+            {
+                kept.AddRange(fresh);
+            }
+
+            if (kept.Count > 0)
+            {
+                regrouped.Add(Regroup(name, kept, basis.Masks[n], basis.NameIsAscii[n]));
+            }
+        }
+
+        foreach (var (name, fresh) in added)
+        {
+            if (!known.Contains(name))
+            {
+                regrouped.Add(Regroup(name, fresh, CharMask(name), Ascii.IsValid(name)));
+            }
+        }
+
+        // Names in their first declaration's order: the kept ones are; the regrouped ones are merged in.
+        regrouped.Sort(static (a, b) => a.Key.CompareTo(b.Key));
+        var merged = new List<(long Key, string Name, Entry[] Entries, ulong Mask, bool Ascii)>(groups.Count + regrouped.Count);
+        var r = 0;
+        for (var k = 0; k < groups.Count; k++)
+        {
+            if (k > 0 && groups[k].Key < groups[k - 1].Key)
+            {
+                return null; // not in the order assumed: a full build
+            }
+
+            while (r < regrouped.Count && regrouped[r].Key < groups[k].Key)
+            {
+                merged.Add(regrouped[r++]);
+            }
+
+            merged.Add(groups[k]);
+        }
+
+        while (r < regrouped.Count)
+        {
+            merged.Add(regrouped[r++]);
+        }
+
+        var total = merged.Sum(g => g.Entries.Length);
+        var names = new string[merged.Count];
+        var masks = new ulong[merged.Count];
+        var ascii = new bool[merged.Count];
+        var starts = new int[merged.Count + 1];
+        var entries = new Entry[total];
+        var at = 0;
+        for (var n = 0; n < merged.Count; n++)
+        {
+            (_, names[n], var group, masks[n], ascii[n]) = merged[n];
+            starts[n] = at;
+            group.CopyTo(entries, at);
+            at += group.Length;
+        }
+
+        starts[merged.Count] = at;
+        var entrySources = new int[total];
+        var entryTypes = new bool[total];
+        for (var e = 0; e < total; e++)
+        {
+            entrySources[e] = entries[e].Source;
+            entryTypes[e] = entries[e].IsType;
+        }
+
+        return new Snapshot(entries, entrySources, entryTypes, names, masks, ascii, starts, sources, Lookup(sources, f => f.Path), Lookup(sources, f => f.Project), documents, basis.Files, true, basis.Complete, basis.CompletedAt);
+
+        // As Build orders a name's declarations: by path, then line, ties in the index's order.
+        static (long, string, Entry[], ulong, bool) Regroup(string name, List<Entry> list, ulong mask, bool isAscii)
+        {
+            var first = list.Min(e => e.Key);
+            var ordered = list.OrderBy(e => e.File.Path, StringComparer.OrdinalIgnoreCase).ThenBy(e => e.Line).ThenBy(e => e.Key).ToArray();
+            return (first, name, ordered, mask, isAscii);
+        }
+    }
+
     /// <summary>
     /// The snapshot with <paramref name="changed"/>'s new stamps, when their declarations are those it has (an edit in a
     /// method's body, the common case while typing): only those documents' entries are made again, and every array and
@@ -858,9 +1047,10 @@ public sealed class CodeSearchIndex
         for (var s = 0; s < sources.Length; s++)
         {
             var file = sources[s];
-            foreach (var symbol in file.Symbols)
+            for (var y = 0; y < file.Symbols.Count; y++)
             {
-                entries.Add(new Entry(symbol.Name, symbol.Kind, IsTypeKind(symbol.Kind), symbol.Line, symbol.Character, symbol.Container, file, s));
+                var symbol = file.Symbols[y];
+                entries.Add(new Entry(symbol.Name, symbol.Kind, IsTypeKind(symbol.Kind), symbol.Line, symbol.Character, symbol.Container, file, s, y));
             }
         }
 
@@ -897,13 +1087,14 @@ public sealed class CodeSearchIndex
 
         return new Snapshot(grouped, entrySources, entryTypes, names, masks, ascii, starts, sources, Lookup(sources, f => f.Path), Lookup(sources, f => f.Project), documents, files, loaded, complete, completedAt);
 
-        // The documents' numbers by path or project, case ignored as the ranking compares them.
-        static Dictionary<string, int[]> Lookup(IndexedFile[] sources, Func<IndexedFile, string?> key) =>
-            Enumerable.Range(0, sources.Length)
-                .Where(s => key(sources[s]) is not null)
-                .GroupBy(s => key(sources[s])!, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>The documents' numbers by path or project, case ignored as the ranking compares them.</summary>
+    private static Dictionary<string, int[]> Lookup(IndexedFile[] sources, Func<IndexedFile, string?> key) =>
+        Enumerable.Range(0, sources.Length)
+            .Where(s => key(sources[s]) is not null)
+            .GroupBy(s => key(sources[s])!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Classes, interfaces, structs and enums are types; the rest are members.</summary>
     public static bool IsTypeKind(int kind) => kind is SymbolKind.Class or SymbolKind.Interface or SymbolKind.Struct or SymbolKind.Enum or SymbolKind.Module;
@@ -918,7 +1109,11 @@ public sealed class CodeSearchIndex
         public static Snapshot Empty { get; } = new([], [], [], [], [], [], [0], [], [], [], new Dictionary<string, IndexedFile>(), [], false, false, null);
     }
 
-    private sealed record Entry(string Name, int Kind, bool IsType, int Line, int Character, string? Container, IndexedFile File, int Source);
+    private sealed record Entry(string Name, int Kind, bool IsType, int Line, int Character, string? Container, IndexedFile File, int Source, int Symbol)
+    {
+        /// <summary>Where it is declared in the index's order (document, then its place in the document): names come in their first's.</summary>
+        public long Key => ((long)Source << 32) | (uint)Symbol;
+    }
 }
 
 /// <summary>The saved index (<see cref="CodeSearchIndex.FileName"/>).</summary>

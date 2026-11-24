@@ -132,6 +132,52 @@ public sealed partial class CodeSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task Incremental_updates_give_the_index_a_full_build_gives()
+    {
+        var random = new Random(42);
+        string[] pool = ["Widget", "WidgetFactory", "Run", "Main", "Count", "Area", "Circle", "Shape", "Load", "Save", "Parse", "Render", "Item", "Items", "Value"];
+        IndexedSymbol[] Symbols() => [.. Enumerable.Range(0, random.Next(1, 12)).Select(i => Symbol(pool[random.Next(pool.Length)], i % 3 == 0 ? SymbolKind.Class : SymbolKind.Method, "C", random.Next(0, 50)))];
+        var files = Enumerable.Range(0, 30).Select(i => File($"P{i % 4}/F{i}.cs")).ToList();
+        IndexedDocument[] initial = [.. files.Select((f, i) => Document(f, $"P{i % 4}", Symbols()))];
+        var incremental = new CodeSearchIndex();
+        var full = new CodeSearchIndex();
+        incremental.Replace(initial);
+        full.Replace(initial);
+        var context = new CodeSearchRankContext([files[3], files[7]], ActiveProject: "P1");
+        string[] queries = ["W", "Wid", "WF", "Run", "R", "a", "Items", "Ite", "Sh", "v"];
+
+        for (var step = 0; step < 60; step++)
+        {
+            var changed = new List<IndexedDocument>();
+            for (var k = random.Next(1, 4); k > 0; k--)
+            {
+                var file = files[random.Next(files.Count)];
+                changed.Add(Document(file, files.IndexOf(file) % 4 is var p ? $"P{p}" : "P0", step % 7 == 0 ? [] : Symbols()));
+            }
+
+            if (step % 5 == 0)
+            {
+                var added = File($"P2/New{step}.cs");
+                files.Add(added);
+                changed.Add(Document(added, "P2", Symbols()));
+            }
+
+            Assert.True(await incremental.UpdateAsync(changed, []));
+            Assert.True(await full.UpdateAsync(changed, [Path.Combine(_root, "absent.cs")])); // a removal: always a full build
+            Assert.Equal((full.SymbolCount, full.DocumentCount), (incremental.SymbolCount, incremental.DocumentCount));
+            foreach (var query in queries)
+            {
+                IEnumerable<(string, string?, int, int)> Of(CodeSearchIndex index) =>
+                    index.Search(CodeSearchQuery.Parse(query), context, null, 30, Ct).Select(r => (r.Name, r.Path, r.Line, r.Score));
+                Assert.Equal(Of(full), Of(incremental));
+            }
+        }
+
+        Assert.InRange(incremental.IncrementalUpdates, 40, 60); // most made from the snapshot, not built whole
+        Assert.Equal(0, full.IncrementalUpdates);
+    }
+
+    [Fact]
     public void Ranking_prefers_exact_names_types_recent_files_and_the_active_project()
     {
         var a = File("A/Widget.cs");
