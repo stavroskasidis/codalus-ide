@@ -17,8 +17,8 @@ ssh="${2:-}"
 
 # The pinned packages, as src/Codalus.Workbench/Ai/Acp/AcpAgentCatalog.cs has them.
 case "$template" in
-  claude) package="@agentclientprotocol/claude-agent-acp"; version="0.109.1"; args=() ;;
-  codex) package="@agentclientprotocol/codex-acp"; version="2.9.0"; args=() ;;
+  claude) package="@agentclientprotocol/claude-agent-acp"; version="0.110.0"; args=() ;;
+  codex) package="@agentclientprotocol/codex-acp"; version="2.10.0"; args=() ;;
   gemini) package="@google/gemini-cli"; version="0.70.0"; args=(--acp) ;;
   copilot) package="@github/copilot"; version="1.0.114"; args=(--acp) ;;
   pi) package="pi-acp"; version="0.0.35"; args=() ;;
