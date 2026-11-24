@@ -35,20 +35,29 @@ internal sealed class JsonSchema(JsonElement root)
                 return default;
             }
 
-            var current = Root;
-            foreach (var segment in target.TrimStart('#').Split('/', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var name = Uri.UnescapeDataString(segment).Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
-                if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(name, out current))
-                {
-                    return default;
-                }
-            }
-
-            schema = current;
+            // A reference's target, found once per schema (each value of a large file followed its references again).
+            schema = _references.GetOrAdd(target, Hop);
         }
 
         return schema;
+    }
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, JsonElement> _references = new(StringComparer.Ordinal);
+
+    /// <summary>One <c>$ref</c>'s target in <see cref="Root"/>, or none.</summary>
+    private JsonElement Hop(string target)
+    {
+        var current = Root;
+        foreach (var segment in target.TrimStart('#').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var name = Uri.UnescapeDataString(segment).Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
+            if (current.ValueKind != JsonValueKind.Object || !current.TryGetProperty(name, out current))
+            {
+                return default;
+            }
+        }
+
+        return current;
     }
 
     /// <summary>The schema and its <c>allOf</c>/<c>anyOf</c>/<c>oneOf</c> branches, flattened (for completion and hover).</summary>
@@ -355,13 +364,38 @@ internal sealed class JsonSchema(JsonElement root)
 
     private static bool Matches(string pattern, string text)
     {
-        try
+        // Each pattern made once (more of a schema's than Regex's own cache keeps); an invalid one matches everything.
+        if (s_patterns.Count > 2_000)
         {
-            return Regex.IsMatch(text, pattern, RegexOptions.None, TimeSpan.FromMilliseconds(50));
+            s_patterns.Clear();
         }
-        catch (Exception e) when (e is ArgumentException or RegexMatchTimeoutException)
+
+        if (s_patterns.GetOrAdd(pattern, Compile) is not { } regex)
         {
             return true;
         }
+
+        try
+        {
+            return regex.IsMatch(text);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return true;
+        }
+
+        static Regex? Compile(string pattern)
+        {
+            try
+            {
+                return new Regex(pattern, RegexOptions.None, TimeSpan.FromMilliseconds(50));
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Regex?> s_patterns = new(StringComparer.Ordinal);
 }
