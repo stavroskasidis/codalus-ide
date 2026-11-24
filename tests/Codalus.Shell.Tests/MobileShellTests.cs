@@ -48,6 +48,40 @@ public sealed class MobileShellTests
             Assert.DoesNotContain(info.MissingWorkloadPacks, p => p.Contains("Android", StringComparison.OrdinalIgnoreCase));
         }
 
+        // Install Workloads shows the exact command first: under sudo, by dotnet's full path, when the .NET root is one
+        // only an administrator can change (dotnet workload doesn't ask by itself); on Windows the SDK's installer asks.
+        f.Shell.CanWriteDotnet = _ => false;
+        var install = f.Shell.InstallWorkloadsAsync(info);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Equal("Install .NET Workloads", f.Shell.Dialogs.Title);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Contains($"\ndotnet workload restore \"{app}\"", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain("sudo", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        }
+        else
+        {
+            Assert.Matches(@"\nsudo \S*/dotnet workload restore \S*TodoApp\.csproj", f.Shell.Dialogs.Message);
+            Assert.Contains("can only be changed by an administrator: it runs with sudo in the terminal.", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        }
+
+        f.Shell.Dialogs.Accept();
+        await install;
+        var plan = Assert.Single(f.TerminalInstalls); // the fixture's stand-in: nothing installs
+        Assert.Equal(OperatingSystem.IsWindows(), plan.Command.StartsWith("dotnet workload restore ", StringComparison.Ordinal));
+        f.TerminalInstalls.Clear();
+        f.Shell.Workbench.Notifications.DismissAll();
+
+        // A root the user can write: no sudo.
+        f.Shell.CanWriteDotnet = _ => true;
+        install = f.Shell.InstallWorkloadsAsync(info);
+        await ShellFixture.PumpUntil(() => f.Shell.Dialogs.IsOpen);
+        Assert.Contains("\ndotnet workload restore ", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("sudo", f.Shell.Dialogs.Message, StringComparison.Ordinal);
+        f.Shell.Dialogs.Cancel();
+        await install;
+        Assert.Empty(f.TerminalInstalls);
+
         // The startup project gets the device picker.
         f.Shell.SetStartupProject(app);
         await ShellFixture.PumpUntil(() => f.Shell.Toolbar.HasDevice);

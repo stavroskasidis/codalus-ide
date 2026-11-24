@@ -114,6 +114,26 @@ public static class Elevation
         return line.ToString();
     }
 
+    /// <summary>
+    /// A <c>dotnet workload</c> command line for the terminal (ADR 0064). <c>dotnet workload</c> doesn't ask for
+    /// permission itself outside Windows: in a .NET root the user can't write (<c>/usr/local/share/dotnet</c>, a
+    /// distribution's package) it ends with "requires elevated privileges", so there it runs under <c>sudo</c>, with
+    /// <paramref name="dotnet"/>'s full path (sudo's own <c>PATH</c> may not have it). On Windows the SDK's installer
+    /// asks (UAC) by itself.
+    /// </summary>
+    /// <param name="dotnet">The <c>dotnet</c> the terminal runs, when it's known.</param>
+    /// <param name="writable">Whether the user can write its root.</param>
+    public static string WorkloadCommand(Codalus.Platform.PlatformKind platform, string? dotnet, bool writable, IReadOnlyList<string> arguments)
+    {
+        if (platform == Codalus.Platform.PlatformKind.Windows)
+        {
+            return "dotnet " + string.Join(' ', arguments.Select(a => a.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-') ? a : "\"" + a + "\""));
+        }
+
+        var line = string.Join(' ', arguments.Select(ShellQuote));
+        return writable || dotnet is null ? "dotnet " + line : "sudo " + ShellQuote(dotnet) + " " + line;
+    }
+
     /// <summary>A POSIX shell word: as is when it's safe, else in single quotes.</summary>
     public static string ShellQuote(string value) =>
         value.Length > 0 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '/' or '.' or '_' or '-' or '=' or ':' or '+' or ',' or '@')
