@@ -62,6 +62,13 @@ internal sealed class LanguageServer : IAsyncDisposable
                 ApplySettings(options);
             }
 
+            // A client that asks for syntactic tokens again (the shell's editor) takes them for a file's first colors.
+            _coldWait = p.Capabilities is { ValueKind: JsonValueKind.Object } capabilities
+                && capabilities.TryGetProperty("experimental", out var experimental) && experimental.ValueKind == JsonValueKind.Object
+                && experimental.TryGetProperty("codalusSyntacticTokens", out var wait) && wait.TryGetInt32(out var milliseconds) && milliseconds >= 0
+                    ? TimeSpan.FromMilliseconds(milliseconds)
+                    : null;
+
             var version = typeof(LanguageServer).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
             return Task.FromResult(new InitializeResult(
@@ -190,10 +197,12 @@ internal sealed class LanguageServer : IAsyncDisposable
             (xaml, _, _) => Task.FromResult<FoldingRange[]?>(Xaml.XamlAnalysis.Folding(xaml)));
         OnDocument(Methods.SemanticTokensFull, json.SemanticTokensParams, json.SemanticTokens, p => p.TextDocument,
             async (document, _, ct) => await SemanticTokensFeature.TokensAsync(document, null, ct).ConfigureAwait(false), new SemanticTokens([]),
-            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
+            razor: async (mapping, _, ct) => await Razor.RazorClassifier.TokensAsync(mapping, null, ct).ConfigureAwait(false), semantics: Semantics.Analysis,
+            cold: (document, _, ct) => SemanticTokensFeature.SyntacticAsync(document, null, ct), answered: t => t.Data.Length > 0);
         OnDocument(Methods.SemanticTokensRange, json.SemanticTokensRangeParams, json.SemanticTokens, p => p.TextDocument,
             async (document, p, ct) => await SemanticTokensFeature.TokensAsync(document, p.Range, ct).ConfigureAwait(false), new SemanticTokens([]),
-            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis);
+            razor: async (mapping, p, ct) => await Razor.RazorClassifier.TokensAsync(mapping, p.Range, ct).ConfigureAwait(false), semantics: Semantics.Analysis,
+            cold: (document, p, ct) => SemanticTokensFeature.SyntacticAsync(document, p.Range, ct), answered: t => t.Data.Length > 0);
         OnDocument(Methods.DocumentOptions, json.DocumentOptionsParams, json.DocumentOptions, p => p.TextDocument,
             DocumentOptionsAsync, new DocumentOptions(true, 4, 4, null));
         OnPosition(Methods.References, json.ReferenceParams, json.LocationArray, p => (p.TextDocument, p.Position),
@@ -469,9 +478,57 @@ internal sealed class LanguageServer : IAsyncDisposable
         Func<Xaml.XamlContext, TParams, CancellationToken, Task<TResult?>>? xaml = null,
         Func<Razor.RazorMapping, TParams, CancellationToken, Task<TResult?>>? razor = null,
         Semantics semantics = Semantics.Workspace,
-        Func<string, TParams, CancellationToken, Task<TResult?>>? outside = null)
+        Func<string, TParams, CancellationToken, Task<TResult?>>? outside = null,
+        Func<Document, TParams, CancellationToken, Task<TResult?>>? cold = null,
+        Func<TResult, bool>? answered = null)
     {
         _connection.OnRequest(method, paramsInfo, resultInfo, async (p, ct) =>
+        {
+            if (cold is null || _coldWait is not { } coldWait || DocumentUris.ToPath(where(p).Uri) is not { } path || !path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+            {
+                return await AnswerAsync(p, ct).ConfigureAwait(false);
+            }
+
+            // A C# file's first answer (its colors): what its syntax gives when the full answer, which needs the
+            // project's compilation, isn't there within a moment of the open, and the one after waits for the full answer.
+            path = Path.GetFullPath(path);
+            if (_coldAnswers.TryAdd(path, ColdAnswer.Partial))
+            {
+                var full = AnswerAsync(p, ct);
+                var quick = await Task.WhenAny(full, Task.Delay(coldWait, CancellationToken.None)).ConfigureAwait(false) == full && full.IsCompletedSuccessfully;
+                if (quick && answered!(full.Result))
+                {
+                    _coldAnswers[path] = ColdAnswer.Full;
+                    return full.Result;
+                }
+
+                if (await WorkspaceManager.FindDocumentAsync(_workspace.CurrentSolution, where(p).Uri, ct).ConfigureAwait(false) is { } document
+                    && await cold(document, p, ct).ConfigureAwait(false) is { } partial)
+                {
+                    _ = full.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted, TaskScheduler.Default);
+                    return partial;
+                }
+
+                _coldAnswers.TryRemove(path, out _);
+                var result = await full.ConfigureAwait(false);
+                if (answered!(result))
+                {
+                    _coldAnswers[path] = ColdAnswer.Full;
+                }
+
+                return result;
+            }
+
+            var answer = await AnswerAsync(p, ct).ConfigureAwait(false);
+            if (answered!(answer))
+            {
+                _coldAnswers[path] = ColdAnswer.Full;
+            }
+
+            return answer;
+        });
+
+        async Task<TResult> AnswerAsync(TParams p, CancellationToken ct)
         {
             var solution = await SolutionForAsync(where(p), semantics, ct).ConfigureAwait(false);
             if (DocumentUris.ToPath(where(p).Uri) is { } xamlPath && Xaml.XamlContext.IsXaml(xamlPath))
@@ -498,7 +555,22 @@ internal sealed class LanguageServer : IAsyncDisposable
             return outside is not null && DocumentUris.ToPath(where(p).Uri) is { } outsidePath
                 ? await outside(outsidePath, p, ct).ConfigureAwait(false) ?? empty!
                 : empty!;
-        });
+        }
+    }
+
+    /// <summary>
+    /// How long a C# file's first token request waits for the full answer before it answers from the syntax: the
+    /// client's <c>codalusSyntacticTokens</c> capability; null (other clients), never.
+    /// </summary>
+    private TimeSpan? _coldWait;
+
+    /// <summary>Each C# file's token answers so far: a partial one (the next waits for the full answer), or a full one.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ColdAnswer> _coldAnswers = new(Paths.Comparer);
+
+    private enum ColdAnswer
+    {
+        Partial,
+        Full,
     }
 
     /// <summary>Which solution a request reads (M34c).</summary>

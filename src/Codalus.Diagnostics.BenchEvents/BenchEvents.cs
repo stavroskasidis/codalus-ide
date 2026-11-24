@@ -119,6 +119,9 @@ public static class BenchEventNames
     /// <summary>The open document shows semantic highlighting for the visible range.</summary>
     public const string HighlightReady = "highlight_ready";
 
+    /// <summary>A C# document shows its syntax's colors (keywords, literals, comments) before <see cref="HighlightReady"/>.</summary>
+    public const string SyntacticHighlightReady = "syntactic_highlight_ready";
+
     /// <summary>One keystroke: <c>latency_us</c> from the OS input timestamp to the frame showing it.</summary>
     public const string KeyLatency = "key_latency";
 

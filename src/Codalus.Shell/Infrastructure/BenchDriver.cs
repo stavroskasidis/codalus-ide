@@ -94,6 +94,7 @@ internal sealed partial class BenchDriver(Window window, ShellHost shell)
         // The first colors, not the first answer: a language service that hasn't loaded the file yet answers with no
         // tokens, and the editor asks again once it's ready. Counted, that empty answer was a second, faster mode of
         // file_highlight_ms on the Mac's CI runners (1.0-2.1 s, where the first colors took 2.3-3.8 s).
+        // The full answer's colors; the syntax's, shown before them for a C# file, are their own event.
         controller.TokensApplied += (_, _) =>
         {
             if (controller.Colorizer.HasTokens)
@@ -101,7 +102,8 @@ internal sealed partial class BenchDriver(Window window, ShellHost shell)
                 highlighted.TrySetResult();
             }
         };
-        if (controller.Colorizer.HasTokens)
+        controller.SyntacticTokensApplied += (_, _) => BenchEvents.Emit(BenchEventNames.SyntacticHighlightReady);
+        if (controller.Colorizer.HasTokens && controller.SemanticTokensShown)
         {
             highlighted.TrySetResult();
         }

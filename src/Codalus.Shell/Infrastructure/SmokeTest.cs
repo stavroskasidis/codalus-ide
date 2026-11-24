@@ -370,7 +370,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
         await StepAsync("editor.highlighting", "M3", "Semantic highlighting and folding", async () =>
         {
             var greeter = await OpenAsync(Greeter).ConfigureAwait(true);
-            await WaitAsync(() => greeter.Colorizer.HasTokens, "semantic tokens arrive", 90).ConfigureAwait(true);
+            await WaitAsync(() => greeter.SemanticTokensShown, "semantic tokens arrive", 90).ConfigureAwait(true);
             Check(shell.StatusBar.Right.Any(i => i.Item.Id == "codalus.editor.language" && i.Text == "C#"), "the status bar shows C#");
         }, "language.ready").ConfigureAwait(true);
 

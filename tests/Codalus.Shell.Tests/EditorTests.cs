@@ -36,7 +36,7 @@ public class EditorTests
         var folder = await f.OpenLanguageFeaturesAsync();
 
         var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
-        await ShellFixture.PumpUntil(() => shapes.Colorizer.HasTokens && shapes.Folding.AllFoldings.Any());
+        await ShellFixture.PumpUntil(() => shapes.SemanticTokensShown && shapes.Folding.AllFoldings.Any());
         Assert.Contains(shapes.Folding.AllFoldings, folding => folding.Title == "Squares");
         Assert.Equal("C#", f.Shell.StatusBar.Right.Single(i => i.Item.Id == "codalus.editor.language").Text);
         Assert.Contains(f.Window.GetVisualDescendants().OfType<Minimap>(), m => m.IsEffectivelyVisible);
@@ -186,15 +186,17 @@ public class EditorTests
         // refresh) may have gone out since; on CI the count read here was 2 after the first request's colors had come
         // (Expected 2, Actual 1).
         var sent = sentWhenApplied is null ? editor.TokenRequests : 1;
-        for (var i = 0; i < 20 && !editor.Colorizer.HasTokens; i++)
+        for (var i = 0; i < 20 && !editor.SemanticTokensShown; i++)
         {
             editor.Editor.TextArea.TextView.Redraw();
             ShellFixture.Pump();
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
 
-        await ShellFixture.PumpUntil(() => editor.Colorizer.HasTokens, seconds: 120);
-        Assert.Equal(sent, sentWhenApplied);
+        await ShellFixture.PumpUntil(() => editor.SemanticTokensShown, seconds: 120);
+
+        // A C# file's syntax colors (when the full answer took longer) are asked again once, by design.
+        Assert.Equal(sent + editor.SyntacticAnswers, sentWhenApplied);
     }
 
     [AvaloniaFact]

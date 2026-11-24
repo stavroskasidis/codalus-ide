@@ -186,6 +186,11 @@ public sealed partial class ShellHost
         var version = model.Version;
         var range = provider.Range ? new LanguageServices.Protocol.Range(new Position(0, 0), new Position(model.Text.LineCount, 0)) : null;
         var tokens = await client.SemanticTokensAsync(model.Uri, range, cancellationToken).ConfigureAwait(true);
+        if (tokens.ResultId == CodeEditorController.SyntacticResult)
+        {
+            tokens = await client.SemanticTokensAsync(model.Uri, range, cancellationToken).ConfigureAwait(true); // the full answer, waited for
+        }
+
         return version == model.Version ? SemanticColorizer.Remap(tokens.Data, provider.Legend.TokenTypes) : null;
     }
 }

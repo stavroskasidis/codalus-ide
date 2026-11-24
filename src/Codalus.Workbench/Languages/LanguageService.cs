@@ -287,6 +287,7 @@ public sealed class LanguageService : IAsyncDisposable
             LoadingProvider = () => descriptor.ProjectLanguage is null ? null : IsLoading,
             OpenDocumentsProvider = () => [.. _documents.Values.Where(d => descriptor.IsLinter ? Takes(descriptor, d) : descriptor.Serves(d.LanguageId)).Select(Reopened)],
             InitializationOptions = descriptor.InitializationOptions,
+            SyntacticTokensWait = TimeSpan.FromMilliseconds(150), // the C# service's first colors from the syntax (the editor asks again)
             ScopedConfigurationProvider = descriptor.ScopedConfiguration,
             AcceptedRequests = descriptor.AcceptedRequests,
             ApplyEditHandler = edit => ApplyEditHandler?.Invoke(edit) ?? Task.FromResult(false),
