@@ -84,6 +84,7 @@ This is the plan for everything after the MVP, M0–M7. The MVP's milestones cam
 | M63 | Services under the debugger: compose and Aspire | done ([m63](checkpoints/m63.md), [ADR 0102](adr/0102-services-under-the-debugger.md), D55): compose fast mode by default (Debug builds mounted on the `base` stage through the IDE's override in the state folder; reruns and builds restart only changed services); Debug Compose debugs every .NET service in one session; one service restarted, stopped, debugged or detached alone; Apply Code Changes in containers; every Aspire project under the debugger (64 programs), one resource debugged alone. Profiling in containers, Hot Reload without the debugger, Blazor WebAssembly in containers and a smoke step deferred |
 | M64 | XAML depth: Hot Reload, refactorings and XAML debugging | done ([m64](checkpoints/m64.md), [m64b](checkpoints/m64b.md), [ADR 0103](adr/0103-xaml-depth.md), D56): rename across C# and XAML both ways (binding paths, `x:Class`, types, `{x:Static}`, handlers, resource keys); Extract Resource, Extract Style and generate from use; failed bindings from the running app in the Error List at their XAML lines; XAML Hot Reload on save through the live agent (Avalonia; WPF on Windows only); XAML breakpoints (element creation, attribute set), Break When Value Changes, break at a failed binding (`debug.breakOnFailedBinding`) and the Live Property Explorer's style explanation built in M64b ([m64b](checkpoints/m64b.md)); binding values while stopped deferred |
 | M65 | 1.0: hardening and the 1.0.0 release | planned 2026-11-15 (D57): after the 0.14.0 release, `develop` moves to 1.0.0 under a feature freeze; every open flake and bug fixed, M34 closed for 1.0, the 1.x promise (settings, the command line, user data) written down, netcoredbg kept as a fallback, macOS notarization verified (Windows signing in 1.0.x), one validation pass on every platform, then `release/1.0.0` after five green nightlies in a row |
+| M66 | 1.1: performance pass, round 4 | built 2026-11-24 ([m66](checkpoints/m66.md)), validated on Linux, not yet on Windows and macOS: every project type's load (no evaluation for the Start drop-down, design-time cache lookups once per batch, parsing while loading, critical events only in design-time builds), code analysis (one bind per project, dependents kept across method-body edits, reference assemblies written after the pass), a C# file's first colors from its syntax, and scaling with solution size and project size in files (Solution Explorer, Find in Files, Task List, Code Search, Test Explorer); the Start page as a built-in and memory-mapped packages deferred |
 
 New milestones get the next free number and join the phase they belong to, so the numbers stay stable. The phase tables give the order.
 
@@ -2922,6 +2923,17 @@ D57 records the maintainer's answers to that day's questions.
 Then `release/1.0.0` is cut from `develop` and released through the usual pipeline (`docs/release/releasing.md`).
 
 **Status.** Planned 2026-11-15. Everything but the release gate done 2026-11-20, the validation pass on every platform included ([checkpoint](../checkpoints/m65.md)); M49's check on the Mac by hand is the maintainer's. Next: the five dispatched dry-run nightlies, then `release/1.0.0`.
+
+### M66 — 1.1: performance pass, round 4
+
+**Why.** The maintainer's request of 2026-11-24: a performance pass for every project type: load time, code analysis time, code highlighting, and scaling with solution size and project size in files, finding gains in every part of the product.
+
+**Scope.**
+1. A survey of every area, with fixtures measured, each finding reviewed for whether its path is hot and whether its fix keeps behavior.
+2. The units the review kept, maybes included (the maintainer's choice), each with tests.
+3. A C# file's first colors from its syntax while its project compiles (the maintainer's choice), and analyzers' suppressors applied to compiler warnings in the editor, as in the build (the maintainer's choice).
+
+**Status.** Built 2026-11-24 ([m66](checkpoints/m66.md)): 28 of 30 units. The Start page as a built-in and memory-mapped package assemblies are its checkpoint's deferred work.
 
 ---
 
