@@ -72,6 +72,9 @@ live_output() {
     for sample in "$folder/$shard"/memory.txt "$folder/$shard"/load.txt "$folder/$shard"/disk.txt; do
       [[ -s "$sample" ]] && printf 'live\t%s %s: %s\n' "$shard" "$(basename "$sample" .txt)" "$(grep -E '^[0-9]{2}:[0-9]{2}:[0-9]{2} |^\[disk\]' "$sample" | tail -1 | cut -c1-200)"
     done
+    # macOS's busiest processes by CPU in the last sample (eng/ci-test.sh).
+    busiest="$(grep -E '^  busiest: ' "$folder/$shard/memory.txt" 2>/dev/null | tail -1 | sed 's/^  //' | cut -c1-240 || true)"
+    [[ -n "$busiest" ]] && printf 'live\t%s %s\n' "$shard" "$busiest"
     # The tests running at the watchdog's last look, per test process (tests/Shared/TestWatchdog.cs).
     for sample in "$folder/$shard"/running-*.txt; do
       [[ -s "$sample" ]] && head -6 "$sample" | while IFS= read -r line; do printf 'live\t%s running: %s\n' "$shard" "${line:0:200}"; done
