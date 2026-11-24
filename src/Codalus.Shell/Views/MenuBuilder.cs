@@ -38,7 +38,7 @@ internal static class MenuBuilder
             var nativeShown = string.Empty;
             void RebuildNative() => nativeShown = BuildNative(native, shell);
             RebuildNative();
-            menus.Changed += (_, _) => Ui.Post(RebuildNative);
+            menus.Changed += Coalesced(RebuildNative);
             RebuildOnActiveDocument(shell, () => nativeShown, RebuildNative);
             return;
         }
@@ -46,8 +46,28 @@ internal static class MenuBuilder
         var shown = string.Empty;
         void Rebuild() => shown = Build(menuBar, shell);
         Rebuild();
-        menus.Changed += (_, _) => Ui.Post(Rebuild);
+        menus.Changed += Coalesced(Rebuild);
         RebuildOnActiveDocument(shell, () => shown, Rebuild);
+    }
+
+    /// <summary>
+    /// One rebuild on the UI thread for a burst of changes (startup registers the menus a registry at a time, plugins
+    /// theirs as they load): each change posted a whole rebuild of the bar. A change while a rebuild runs posts another.
+    /// </summary>
+    private static EventHandler Coalesced(Action rebuild)
+    {
+        var pending = 0;
+        return (_, _) =>
+        {
+            if (Interlocked.Exchange(ref pending, 1) == 0)
+            {
+                Ui.Post(() =>
+                {
+                    Volatile.Write(ref pending, 0);
+                    rebuild();
+                });
+            }
+        };
     }
 
     /// <summary>
