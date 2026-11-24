@@ -96,13 +96,20 @@ if [[ "${CI:-}" == "true" && "$(uname)" == "Darwin" ]]; then
         # starved: so each sample counts the processes (by program, from the same ps) and top's threads and CPU split.
         # top reads every task as %cpu does, so it gets 6 seconds and is ended after that ("top: no answer").
         counts="$(echo "$top" | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); c[n]++ } END { for (n in c) print c[n], n }' | sort -nr | head -5 | tr '\n' ' ')"
-        top -l 2 -n 0 -s 1 > "$results/.top" 2>/dev/null &
+        # A runner lost with its CPU busy, not starved (0% idle, 67 to 82% user, the load 22 to 29 on three cores, its
+        # memory 73% free; PR #530's run 45328698794, shell-1) couldn't say what kept it busy: the processes below are
+        # the largest, not the busiest. So top also lists its five busiest processes by CPU, with their threads, from
+        # its second sample (the first one's %CPU is since the process started).
+        top -l 2 -n 5 -o cpu -stats pid,cpu,th,command -s 1 > "$results/.top" 2>/dev/null &
         topper=$!
         for _ in 1 2 3 4 5 6; do kill -0 "$topper" 2>/dev/null || break; sleep 1; done
+        busiest=
         kill -KILL "$topper" 2>/dev/null && cpu="top: no answer" \
-          || cpu="$(awk '/^Processes:/ { p = $0 } /^CPU usage:/ { c = $0 } END { print p "; " c }' "$results/.top" | tr -s ' ')"
+          || { cpu="$(awk '/^Processes:/ { p = $0 } /^CPU usage:/ { c = $0 } END { print p "; " c }' "$results/.top" | tr -s ' ')"
+               busiest="$(awk '/^PID/ { n++; next } n == 2 && NF >= 4 && k < 5 { c = $4; for (i = 5; i <= NF; i++) c = c " " $i; printf "%s%s %s %s%% th=%s", (k++ ? ", " : ""), c, $1, $2, $3 }' "$results/.top")"; }
         echo "$now free=$free% swap: $swap load: $load processes=$(echo "$top" | wc -l | tr -d ' ')" >> "$results/memory.txt"
         echo "  $cpu; most: $counts" >> "$results/memory.txt"
+        [[ -n "$busiest" ]] && echo "  busiest: $busiest" >> "$results/memory.txt"
         echo "$top" | head -6 | cut -c1-200 >> "$results/memory.txt"
         used="$(echo "$swap" | awk '{ for (i = 1; i < NF; i++) if ($i == "used") print $(i + 2) }')"
         largest="$(echo "$top" | head -3 | awk '{ n = $4; for (i = 5; i <= NF; i++) if ($i ~ /\.dll$/) { n = $i; break }; sub(".*/", "", n); printf " %dM %s", $1 / 1024, n }')"
