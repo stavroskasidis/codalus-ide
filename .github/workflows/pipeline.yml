@@ -499,26 +499,27 @@ jobs:
         run: |
           live=artifacts/smoke-live/smoke
           mkdir -p "$live"
-          # The free memory and the largest processes every 30 s (Linux and macOS), for the live output.
-          sampler=
-          if [ "$RUNNER_OS" != Windows ]; then
-            (
-              while sleep 30; do
-                case "$RUNNER_OS" in
-                  macOS) memory="free=$(sysctl -n kern.memorystatus_level)%" ;;
-                  *) memory="$(awk '/^MemAvailable:/ { print "available=" int($2 / 1024) "M" }' /proc/meminfo)" ;;
-                esac
-                echo "$(date +%H:%M:%S) $memory largest: $(ps -A -o rss=,comm= | sort -rn | head -3 | awk '{ printf "%dM %s  ", $1 / 1024, $2 }')" >> "$live/memory.txt"
-              done
-            ) &
-            sampler=$!
-          fi
+          # The free memory and the largest processes every 30 s, for the live output: what a runner that went silent was
+          # short of, and, as the file grows, when it went silent (the uploader sends only what changed). Windows' too: its
+          # smoke runner went silent in profiler.memory with nothing but the console, which had stopped growing (run
+          # 45434861768, docs/ci-flakes.md).
+          (
+            while sleep 30; do
+              case "$RUNNER_OS" in
+                macOS) sample="free=$(sysctl -n kern.memorystatus_level)% largest: $(ps -A -o rss=,comm= | sort -rn | head -3 | awk '{ printf "%dM %s  ", $1 / 1024, $2 }')" ;;
+                Windows) sample="$(powershell -NoProfile -NonInteractive -Command '$f = [int]((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1024); $p = (Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 3 | ForEach-Object { "{0}M {1}" -f [int]($_.WorkingSet64 / 1MB), $_.ProcessName }) -join "  "; "available=${f}M largest: $p"' 2>&1 | tr -d '\r')" ;;
+                *) sample="$(awk '/^MemAvailable:/ { print "available=" int($2 / 1024) "M" }' /proc/meminfo) largest: $(ps -A -o rss=,comm= | sort -rn | head -3 | awk '{ printf "%dM %s  ", $1 / 1024, $2 }')" ;;
+              esac
+              echo "$(date +%H:%M:%S) $sample" >> "$live/memory.txt"
+            done
+          ) > /dev/null 2>&1 &
+          sampler=$!
           # Through a process substitution, not a pipe: a pipe into tee ends only when every process holding it has, and
           # a process the smoke test left running held it on Windows, so the step ran on to its
           # limit 17 minutes after the smoke test passed (run 44034803336). The step's own status is the smoke test's.
           status=0
           bash eng/smoke-test.sh artifacts/shell/codalus artifacts/smoke-test > >(tee "$live/console.txt") 2>&1 || status=$?
-          if [ -n "$sampler" ]; then kill "$sampler" 2> /dev/null || true; fi
+          kill "$sampler" 2> /dev/null || true
           exit "$status"
       - name: Anything downloaded (Node.js, vscode-js-debug)
         id: downloaded

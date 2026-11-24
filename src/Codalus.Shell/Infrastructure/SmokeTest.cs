@@ -111,6 +111,7 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             };
         }
 
+        StartHangReporter();
         DispatcherTimer.RunOnce(() =>
         {
             Report("watchdog", "-", $"The smoke test did not finish within {s_watchdog.TotalMinutes} minutes.", "failed", 0, null);
@@ -3621,6 +3622,10 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
             Copy(Path.Combine(samples, "Diagnostics"), target);
         }
 
+        // projects.open trusts the work folder; CODALUS_SMOKE_ONLY=profiler.memory skips it, and the trust prompt held
+        // the step to its limit, unanswered (as web.scaffolding's did).
+        shell.Trust.Trust(target);
+
         // Still open from profiler.cpu (its path is the real one, which differs from target's under macOS's /private).
         if (!shell.Solutions.Projects.Values.Any(p => p.Name == "CpuBound"))
         {
@@ -3691,23 +3696,28 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
 
     private async Task ProfilerMemoryStepAsync()
     {
-        await DiagnosticsStartupAsync("Leaky", "0").ConfigureAwait(true);
+        // Leaky for five minutes at most, not until it's stopped ("0"): it leaks about 400 MB a minute, and a step that
+        // hung left it leaking until the runner ran out of memory and went silent with no log, the step limit's report
+        // and the watchdog's included (Windows smoke, run 45434861768, docs/ci-flakes.md). The step needs it for seconds.
+        await DiagnosticsStartupAsync("Leaky", "300").ConfigureAwait(true);
         var before = LatestReport();
         var hub = ProfilerWith(Workbench.Diagnostics.ProfilerTools.Memory);
-        var run = await hub.StartAsync().ConfigureAwait(true);
+
+        // Each call within its own time, so a hang says which one it was (the same run gave no sign of it).
+        var run = await WithinAsync(hub.StartAsync(), 300, "profiling starts (Leaky built and launched)").ConfigureAwait(true);
         Check(run is not null, "profiling starts: " + hub.Status + " " + LastNotifications());
         try
         {
             await Task.Delay(1000).ConfigureAwait(true);
             var clock = Stopwatch.StartNew();
-            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the first snapshot is taken: " + hub.Status);
+            Check(await WithinAsync(hub.TakeSnapshotAsync(), 120, "the first heap snapshot").ConfigureAwait(true) is not null, "the first snapshot is taken: " + hub.Status);
             Console.Out.WriteLine(string.Create(CultureInfo.InvariantCulture, $"  heap snapshot in {clock.ElapsedMilliseconds} ms"));
             await Task.Delay(2000).ConfigureAwait(true);
-            Check(await hub.TakeSnapshotAsync().ConfigureAwait(true) is not null, "the second snapshot is taken: " + hub.Status);
+            Check(await WithinAsync(hub.TakeSnapshotAsync(), 120, "the second heap snapshot").ConfigureAwait(true) is not null, "the second snapshot is taken: " + hub.Status);
         }
         finally
         {
-            await hub.StopAsync().ConfigureAwait(true);
+            await WithinAsync(hub.StopAsync(), 120, "the collection stops (and Leaky with it)").ConfigureAwait(true);
         }
 
         await WaitAsync(() => !hub.IsCollecting, "the collection stops", 120).ConfigureAwait(true);
@@ -4908,6 +4918,26 @@ internal sealed partial class SmokeTest(Window window, ShellHost shell, string s
     /// Asks <paramref name="probe"/> until it answers non-null, each try cut off after 10 s, without ever blocking the
     /// UI thread: a host that stops answering fails the step instead of hanging the app.
     /// </summary>
+    /// <summary>
+    /// <paramref name="task"/>'s result, or a failure naming <paramref name="what"/> when it takes more than
+    /// <paramref name="seconds"/>: a call of the IDE's that never returns fails its step with its name, not as the step's limit.
+    /// </summary>
+    private async Task<T> WithinAsync<T>(Task<T> task, int seconds, string what)
+    {
+        try
+        {
+            return await task.WaitAsync(TimeSpan.FromSeconds(seconds)).ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            throw new SmokeFailure($"Not done within {seconds} s: {what}.");
+        }
+    }
+
+    /// <inheritdoc cref="WithinAsync{T}(Task{T}, int, string)"/>
+    private async Task WithinAsync(Task task, int seconds, string what) =>
+        await WithinAsync(task.ContinueWith(t => { t.GetAwaiter().GetResult(); return true; }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default), seconds, what).ConfigureAwait(true);
+
     private static async Task<T> WaitForAsync<T>(Func<CancellationToken, Task<T?>> probe, string what, int seconds = 30) where T : class
     {
         var deadline = Stopwatch.GetTimestamp() + (seconds * Stopwatch.Frequency);
