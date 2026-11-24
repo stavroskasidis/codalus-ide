@@ -94,6 +94,11 @@ public sealed class CodeSearchIndex
             var basis = _snapshot;
             var built = await Task.Run(() =>
             {
+                if (removed.Count == 0 && SameDeclarations(basis, changed) is { } stamped)
+                {
+                    return stamped;
+                }
+
                 var map = new Dictionary<string, IndexedFile>(basis.Documents, SolutionService.PathComparer);
                 foreach (var path in removed)
                 {
@@ -796,6 +801,55 @@ public sealed class CodeSearchIndex
     }
 
     // ------------------------------------------------------------------ snapshot
+
+    /// <summary>
+    /// The snapshot with <paramref name="changed"/>'s new stamps, when their declarations are those it has (an edit in a
+    /// method's body, the common case while typing): only those documents' entries are made again, and every array and
+    /// lookup of the 144k-declaration snapshot is shared; null otherwise, for a full build.
+    /// </summary>
+    private static Snapshot? SameDeclarations(Snapshot basis, Dictionary<string, IndexedFile> changed)
+    {
+        if (changed.Count == 0 || changed.Count > 8)
+        {
+            return null;
+        }
+
+        var replaced = new Dictionary<int, IndexedFile>();
+        foreach (var (path, file) in changed)
+        {
+            if (!basis.Documents.TryGetValue(path, out var before) || before.Path != file.Path || before.Project != file.Project
+                || !before.Symbols.SequenceEqual(file.Symbols)
+                || !basis.SourcesByPath.TryGetValue(path, out var numbers) || numbers.Length != 1 || !ReferenceEquals(basis.Sources[numbers[0]], before))
+            {
+                return null;
+            }
+
+            replaced[numbers[0]] = file;
+        }
+
+        var sources = (IndexedFile[])basis.Sources.Clone();
+        foreach (var (number, file) in replaced)
+        {
+            sources[number] = file;
+        }
+
+        var entries = (Entry[])basis.Entries.Clone();
+        for (var e = 0; e < entries.Length; e++)
+        {
+            if (replaced.TryGetValue(basis.EntrySource[e], out var file))
+            {
+                entries[e] = entries[e] with { File = file };
+            }
+        }
+
+        var documents = new Dictionary<string, IndexedFile>(basis.Documents, SolutionService.PathComparer);
+        foreach (var (path, file) in changed)
+        {
+            documents[path] = file;
+        }
+
+        return basis with { Entries = entries, Sources = sources, Documents = documents, Loaded = true };
+    }
 
     private static Snapshot Build(Dictionary<string, IndexedFile> documents, IReadOnlyList<string> files, bool loaded, bool complete, DateTime? completedAt)
     {

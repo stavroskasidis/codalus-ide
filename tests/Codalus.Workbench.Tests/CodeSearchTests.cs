@@ -103,6 +103,35 @@ public sealed partial class CodeSearchTests : IDisposable
     }
 
     [Fact]
+    public async Task An_edit_that_keeps_a_documents_declarations_keeps_the_results_and_one_that_changes_them_shows()
+    {
+        var shapes = File("Lib/Shapes.cs");
+        var program = File("App/Program.cs");
+        var index = new CodeSearchIndex();
+        IndexedDocument[] documents =
+        [
+            Document(shapes, "Lib", Symbol("Circle", SymbolKind.Class, "Lib"), Symbol("Radius", SymbolKind.Property, "Circle", 2)),
+            Document(program, "App", Symbol("Program", SymbolKind.Class, null), Symbol("Main", SymbolKind.Method, "Program", 3), Symbol("Circle", SymbolKind.Field, "Program", 5)),
+        ];
+        index.Replace(documents);
+        IReadOnlyList<(string, string?, int)> Results(string text) =>
+            [.. index.Search(CodeSearchQuery.Parse(text), CodeSearchRankContext.Empty, null, 50, Ct).Select(r => (r.Name, r.Path, r.Line))];
+        var (circles, mains) = (Results("Circle"), Results("Main"));
+
+        // A method's body typed in: the same declarations, a new stamp.
+        await System.IO.File.AppendAllTextAsync(program, "// typed\n", Ct);
+        Assert.True(await index.UpdateAsync([documents[1]], []));
+        Assert.Equal(circles, Results("Circle"));
+        Assert.Equal(mains, Results("Main"));
+        Assert.True(index is { SymbolCount: 5, DocumentCount: 2 });
+
+        // A declaration moved: the full build shows it.
+        Assert.True(await index.UpdateAsync([Document(program, "App", Symbol("Program", SymbolKind.Class, null), Symbol("Main", SymbolKind.Method, "Program", 4))], []));
+        Assert.Equal([("Main", (string?)program, 4)], Results("Main"));
+        Assert.DoesNotContain(Results("Circle"), r => r.Item2 == program);
+    }
+
+    [Fact]
     public void Ranking_prefers_exact_names_types_recent_files_and_the_active_project()
     {
         var a = File("A/Widget.cs");
