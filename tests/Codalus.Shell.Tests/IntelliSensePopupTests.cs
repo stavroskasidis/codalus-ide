@@ -223,6 +223,38 @@ public class IntelliSensePopupTests
         }
     }
 
+    [AvaloniaFact]
+    public void A_query_that_grows_matches_the_last_matches_and_the_list_is_that_of_a_full_match()
+    {
+        var window = new Window();
+        var editor = new TextEditor { Document = new AvaloniaEdit.Document.TextDocument("") };
+        window.Content = editor;
+        window.Show();
+        var names = Enumerable.Range(0, 20_000).Select(i => (i % 7) switch
+        {
+            0 => $"String{i}", 1 => $"StringBuilder{i}", 2 => $"Stream{i}", 3 => $"SetText{i}", 4 => $"strip{i}", 5 => $"ToString{i}", _ => $"Other{i}",
+        }).ToList();
+        var popup = CompletionOf(editor, 0, names.Select(n => Item(n, SymbolGlyphs.Method)));
+        var full = CompletionOf(editor, 0, names.Select(n => Item(n, SymbolGlyphs.Method)));
+        try
+        {
+            foreach (var query in new[] { "S", "St", "Str", "Stri", "Str", "S", "StB", "StBu" })
+            {
+                popup.CompletionList.SelectItem(query); // typed: narrowed while it grows
+                full.CompletionList.SelectItem(string.Empty);
+                full.CompletionList.SelectItem(query); // from nothing: every item matched
+                Assert.Equal(full.CompletionList.CurrentList.Select(i => i.Text), popup.CompletionList.CurrentList.Select(i => i.Text));
+                Assert.Equal(full.CompletionList.SelectedItem?.Text, popup.CompletionList.SelectedItem?.Text);
+            }
+        }
+        finally
+        {
+            popup.Hide();
+            full.Hide();
+            window.Close();
+        }
+    }
+
     private static CompletionPopup CompletionOf(TextEditor editor, int start, IEnumerable<CompletionItem> items, Func<string, string?>? keyLabel = null)
     {
         var popup = new CompletionPopup(editor.TextArea, () => EditorTheme.Dark, keyLabel ?? (_ => null)) { StartOffset = start, EndOffset = editor.CaretOffset };
