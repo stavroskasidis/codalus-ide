@@ -344,13 +344,16 @@ public sealed partial class GitService : IDisposable
     {
         Close();
         var directory = Directory.Exists(path) ? path : Path.GetDirectoryName(path)!;
-        var (code, output, _) = await RunAsync(directory, ["rev-parse", "--show-toplevel"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
-        if (code != 0 || output.Trim().Length == 0)
+        // The work tree and its git directory in one process: each status read asked git for the directory again.
+        var (code, output, _) = await RunAsync(directory, ["rev-parse", "--show-toplevel", "--absolute-git-dir"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (code != 0 || lines.Length == 0)
         {
             return false;
         }
 
-        Root = Path.GetFullPath(output.Trim());
+        Root = Path.GetFullPath(lines[0]);
+        _gitDirectory = lines.Length > 1 ? new KnownGitDirectory(Root, lines[1]) : null;
         _lifetime = new CancellationTokenSource();
         if (_watch)
         {
@@ -371,6 +374,7 @@ public sealed partial class GitService : IDisposable
         _debounce = null;
         var had = Root is not null;
         Root = null;
+        _gitDirectory = null;
         Status = null;
         if (had)
         {
@@ -421,7 +425,9 @@ public sealed partial class GitService : IDisposable
             index = Interlocked.Exchange(ref _sawIndex, 0) == 1;
             changedFile = Interlocked.Exchange(ref _sawChangedFile, 0) == 1;
             var (_, output, _) = await RunAsync(root, ["status", "--porcelain=v2", "-z", "--branch", "--untracked-files=all"], cancellationToken, readOnly: true).ConfigureAwait(false);
-            var (gitDirCode, gitDir, _) = await RunAsync(root, ["rev-parse", "--absolute-git-dir"], cancellationToken, check: false, readOnly: true).ConfigureAwait(false);
+            var gitDir = await GitDirectoryOfAsync(root, cancellationToken).ConfigureAwait(false);
+            var gitDirCode = gitDir is null ? 1 : 0;
+            gitDir ??= string.Empty;
             var merging = gitDirCode == 0 && File.Exists(Path.Combine(gitDir.Trim(), "MERGE_HEAD"));
             if (Root != root)
             {
