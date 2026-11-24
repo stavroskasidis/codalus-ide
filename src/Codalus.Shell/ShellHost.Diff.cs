@@ -177,7 +177,8 @@ public sealed partial class ShellHost
     /// </summary>
     private async Task<int[]?> SemanticTokensForAsync(string path, string text, CancellationToken cancellationToken)
     {
-        if (OpenDocumentOf(path) is not { } model || model.Text.Text != text
+        // The lengths first: the open document's text is made a string for the comparison.
+        if (OpenDocumentOf(path) is not { } model || model.Text.TextLength != text.Length || model.Text.Text != text
             || ((IEditorServices)this).Client(model) is not { Capabilities.SemanticTokensProvider: { } provider } client)
         {
             return null;
