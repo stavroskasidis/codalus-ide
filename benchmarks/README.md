@@ -44,6 +44,10 @@ The `shell` target is the published product shell in `artifacts/shell` (`CODALUS
 | `terminal` | The shell only (in-app events, no keystroke injection): a terminal prints a 1M-line file (`cat`, `type` on Windows), then a keystroke is written to the default shell 60 times. | `terminal_frame_ms` (frame intervals while printing), `terminal_cat_ms` and `terminal_cat_lines_per_s`, `terminal_memory_mb` (managed memory the terminal keeps, 10k lines of scrollback), `terminal_echo_ms` (write → echo rendered) |
 | `binary-size` | Static measurement of what the packages ship: debug symbols (`*.pdb`, and Native AOT's `*.dbg` and `*.dSYM`) are left out, as `eng/package.sh` leaves them out ([ADR 0002, amendment](../docs/adr/0002-performance-budgets.md#amendment-2026-11-05-binary-size-is-what-ships)). | `shell_mb`, `shell_zip_mb` and one `<helper>_mb` per helper folder (`pluginhost`, `buildhost`, `plugins`, `lshost`, `replhost`); IDEs: `install_mb` (informative) |
 
+## The wire: `codalus-rpcbench`
+
+`dotnet run --project benchmarks/Codalus.Benchmarks.Rpc -c Release -- [rounds]` times JSON-RPC round trips over an in-memory pipe: an echo of 1 KB (a completion request), 1 MB (a large file's semantic tokens) and 15 MB (a large file's `didOpen`), as code and as markup (the characters the default JSON encoder escapes). Each size prints one JSON line: the median and best microseconds per round trip and the bytes allocated per round trip. It uses only `JsonRpcConnection`'s public raw API, so the same source builds against an older `Codalus.Rpc` for a same-runner comparison; like every number here, only CI's decide anything.
+
 ## Methods
 
 - **Black-box (Windows):** the method is the same for every target.

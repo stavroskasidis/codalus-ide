@@ -2,6 +2,7 @@
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Codalus.Benchmarks.FixtureGen/Codalus.Benchmarks.FixtureGen.csproj" />
     <Project Path="benchmarks/Codalus.Benchmarks.Harness/Codalus.Benchmarks.Harness.csproj" />
+    <Project Path="benchmarks/Codalus.Benchmarks.Rpc/Codalus.Benchmarks.Rpc.csproj" />
   </Folder>
   <Folder Name="/eng/">
     <Project Path="eng/Codalus.Release/Codalus.Release.csproj" />
