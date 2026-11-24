@@ -75,7 +75,18 @@ internal static class FoldingFeature
         }
 
         // #region … #endregion
-        foreach (var region in root.DescendantTrivia(descendIntoTrivia: true).Select(t => t.GetStructure()).OfType<RegionDirectiveTriviaSyntax>())
+        // The tree's directives, in document order: a walk of every trivia (into documentation comments' structure too)
+        // was a large file's slowest folding pass.
+        var regions = new List<RegionDirectiveTriviaSyntax>();
+        if (root is CSharpSyntaxNode csharp && root.ContainsDirectives)
+        {
+            for (var directive = csharp.GetFirstDirective(d => d is RegionDirectiveTriviaSyntax); directive is not null; directive = directive.GetNextDirective(d => d is RegionDirectiveTriviaSyntax))
+            {
+                regions.Add((RegionDirectiveTriviaSyntax)directive);
+            }
+        }
+
+        foreach (var region in regions)
         {
             if (region.GetRelatedDirectives().OfType<EndRegionDirectiveTriviaSyntax>().FirstOrDefault() is { } end)
             {
@@ -85,7 +96,7 @@ internal static class FoldingFeature
         }
 
         AddUsingGroups(root, Add);
-        AddCommentBlocks(root, text, Add);
+        AddCommentBlocks(root, text, Add, cancellationToken);
         return [.. ranges.DistinctBy(r => (r.StartLine, r.EndLine)).OrderBy(r => r.StartLine)];
     }
 
@@ -105,7 +116,9 @@ internal static class FoldingFeature
 
     private static void AddUsingGroups(SyntaxNode root, Action<int, int, string?, string?> add)
     {
-        foreach (var container in root.DescendantNodesAndSelf().Where(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax))
+        // Usings are only in the compilation unit and namespaces: a walk into those, not into every member's body.
+        foreach (var container in root.DescendantNodesAndSelf(descendIntoChildren: n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+                     .Where(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax))
         {
             var usings = container switch
             {
@@ -121,7 +134,7 @@ internal static class FoldingFeature
     }
 
     /// <summary>Runs of two or more single-line comments, documentation comments, and multi-line block comments.</summary>
-    private static void AddCommentBlocks(SyntaxNode root, SourceText text, Action<int, int, string?, string?> add)
+    private static void AddCommentBlocks(SyntaxNode root, SourceText text, Action<int, int, string?, string?> add, CancellationToken cancellationToken)
     {
         int? runStart = null;
         int runEnd = 0, runLine = -2, runCount = 0;
@@ -139,6 +152,7 @@ internal static class FoldingFeature
 
         foreach (var trivia in root.DescendantTrivia())
         {
+            cancellationToken.ThrowIfCancellationRequested();
             switch (trivia.Kind())
             {
                 case SyntaxKind.SingleLineCommentTrivia:
