@@ -163,6 +163,28 @@ public sealed class TerminalSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// The view that sizes the session while it's set (the terminal card over a dialog, ADR 0014): another view showing the
+    /// session at the same time (the Terminal tool window, behind it) draws it as it is instead of resizing it to its own
+    /// bounds, and sizes it again when it's let go (<see cref="SizeOwnerChanged"/>). Null: whichever view resizes last.
+    /// </summary>
+    public object? SizeOwner
+    {
+        get => Volatile.Read(ref _sizeOwner);
+        set
+        {
+            if (!ReferenceEquals(Interlocked.Exchange(ref _sizeOwner, value), value))
+            {
+                SizeOwnerChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    private object? _sizeOwner;
+
+    /// <summary><see cref="SizeOwner"/> changed (raised on the thread that set it).</summary>
+    public event EventHandler? SizeOwnerChanged;
+
     public void Resize(int columns, int rows)
     {
         Terminal.Resize(columns, rows);

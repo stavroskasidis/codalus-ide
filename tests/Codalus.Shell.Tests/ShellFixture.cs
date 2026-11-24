@@ -105,6 +105,13 @@ internal sealed class ShellFixture : IAsyncDisposable
             TerminalInstalls.Add(plan);
             return TerminalInstallExitCode;
         };
+        // Nor is the user's environment read again (Check Again, Connect, after an install): that runs a login shell, and
+        // choosing the .NET root again would point this process's DOTNET_ROOT at a test's described machine. Counted.
+        Shell.EnvironmentRefreshStandIn = () =>
+        {
+            Interlocked.Increment(ref _environmentRefreshes);
+            return Task.CompletedTask;
+        };
         Window = new MainWindow(Shell);
         s_windows.Add(Window);
         Window.Closed += (_, _) =>
@@ -149,6 +156,11 @@ internal sealed class ShellFixture : IAsyncDisposable
 
     /// <summary>The installs meant for the terminal that the shell asked for: none of them ran.</summary>
     public List<Codalus.Workbench.Setup.InstallPlan> TerminalInstalls { get; } = [];
+
+    private int _environmentRefreshes;
+
+    /// <summary>How many times the shell read the user's environment again (the fixture's stand-in changes nothing).</summary>
+    public int EnvironmentRefreshes => Volatile.Read(ref _environmentRefreshes);
 
     public string UserData { get; }
 

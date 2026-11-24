@@ -86,6 +86,86 @@ public sealed class CompanionOverlaysTests
         await ShellFixture.PumpUntil(() => Shown<NotificationCard>(main));
     }
 
+    /// <summary>
+    /// A command the IDE runs in the Terminal while the setup is open (Linux: git or .NET from the distribution's packages,
+    /// under sudo) ran in the main window's Terminal, under the setup, where its password prompt couldn't be seen. It
+    /// shows over the setup now, with the focus in it and its own size, until it ends; Hide leaves it running in the
+    /// Terminal tool window, and Show Terminal brings it back while the setup covers that.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task A_command_in_the_terminal_shows_over_the_setup_until_it_ends()
+    {
+        await using var f = ShellFixture.Create();
+        f.Shell.ShowSetup();
+        await ShellFixture.PumpUntil(() => f.Shell.IsSetupOpen);
+        var setup = f.Shell.SetupWindowView!;
+        var main = (Window)f.Shell.Window!;
+
+        var exit = f.Shell.RunAgentTerminalAsync("Install Git", WaitsForALine(exitCode: 4), TestContext.Current.CancellationToken);
+        var card = f.Shell.TerminalCard;
+        await ShellFixture.PumpUntil(() => Shown<TerminalCardView>(setup), 30, () => $"the setup shows no terminal card (open: {card.IsOpen}); the main window {(Shown<TerminalCardView>(main) ? "does" : "doesn't either")}");
+        Assert.False(Shown<TerminalCardView>(main));
+        Assert.Equal("Install Git", card.Title);
+        var session = card.Session!;
+        var control = setup.GetVisualDescendants().OfType<TerminalCardView>().Single().GetVisualDescendants().OfType<Codalus.Shell.Terminal.TerminalControl>().Single();
+        await ShellFixture.PumpUntil(() => ReferenceEquals(setup.FocusManager?.GetFocusedElement(), control), describe: () => $"the focus is on {setup.FocusManager?.GetFocusedElement()} in {(setup.FocusManager?.GetFocusedElement() is Visual v ? TopLevel.GetTopLevel(v)?.GetType().Name : "no window")}, not in the card's terminal (visible {control.IsEffectivelyVisible}, focusable {control.Focusable}, focused {control.IsFocused}, in the tree {control.IsAttachedToVisualTree()})");
+        await ShellFixture.PumpUntil(() => session.Terminal.Columns == control.Columns, describe: () => $"the session is {session.Terminal.Columns} columns wide, the card {control.Columns}");
+        Assert.Same(control, session.SizeOwner);
+
+        // Escape goes to the command, not to the setup's Skip.
+        setup.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
+        setup.KeyRelease(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
+        ShellFixture.Pump();
+        Assert.True(f.Shell.IsSetupOpen);
+
+        // Hide: the card closes, the command goes on; Show Terminal brings it back while the setup covers the Terminal.
+        card.HideCommand.Execute(null);
+        await ShellFixture.PumpUntil(() => !Shown<TerminalCardView>(setup));
+        Assert.Null(session.ExitCode);
+        Assert.Null(session.SizeOwner);
+        f.Shell.ShowTerminalForCommand();
+        await ShellFixture.PumpUntil(() => Shown<TerminalCardView>(setup) && card.Session == session);
+
+        // The command ends (the user answered): the card closes by itself, and its exit code is the caller's.
+        await session.WhenStartedAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+        session.Write(OperatingSystem.IsWindows() ? "\r" : "\n");
+        await ShellFixture.PumpUntil(() => exit.IsCompleted && !card.IsOpen, 30, () => $"exited: {(session.ExitCode is { } code ? code.ToString(System.Globalization.CultureInfo.InvariantCulture) : "no")}");
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Equal(4, await exit);
+        }
+
+        ShellFixture.Pump();
+        Assert.False(Shown<TerminalCardView>(setup));
+        Assert.True(f.Shell.IsSetupOpen);
+    }
+
+    /// <summary>With nothing over the Terminal tool window, a command shows there alone, as before.</summary>
+    [AvaloniaFact]
+    public async Task A_command_in_the_terminal_shows_in_the_tool_window_alone_when_nothing_covers_it()
+    {
+        await using var f = ShellFixture.Create();
+        Assert.False(f.Shell.TerminalIsCovered);
+        var exit = f.Shell.RunAgentTerminalAsync("Install Git", WaitsForALine(exitCode: 0), TestContext.Current.CancellationToken);
+        await ShellFixture.PumpUntil(() => f.Shell.Terminals.Sessions.Any(s => s.Name == "Install Git"));
+        var session = f.Shell.Terminals.Sessions.Single(s => s.Name == "Install Git");
+        ShellFixture.Pump();
+        Assert.False(f.Shell.TerminalCard.IsOpen);
+        Assert.Null(session.SizeOwner);
+        await session.WhenStartedAsync(TimeSpan.FromSeconds(20), TestContext.Current.CancellationToken);
+        session.Write(OperatingSystem.IsWindows() ? "\r" : "\n");
+        await ShellFixture.PumpUntil(() => exit.IsCompleted, 30);
+    }
+
+    /// <summary>
+    /// A program that prints a prompt, waits for a line (Enter), then ends with <paramref name="exitCode"/>, as a password
+    /// prompt does: other keys (the test's Escape) don't end it. On Windows cmd's <c>set /p</c>, whose line read takes
+    /// Escape as "clear the line"; <c>pause</c>, which ends on any key, ended at the test's Escape (Windows CI, run 45277026797).
+    /// </summary>
+    private static Codalus.Rpc.ProcessLaunchInfo WaitsForALine(int exitCode) => OperatingSystem.IsWindows()
+        ? new("cmd.exe", ["/c", $"set /p line=Password: & exit {exitCode}"])
+        : new("/bin/sh", ["-c", $"printf 'Password: '; read line; exit {exitCode}"]);
+
     private static bool Shown<T>(Window window) where T : Control =>
         window.GetVisualDescendants().OfType<T>().Any(v => v.IsEffectivelyVisible);
 }

@@ -80,6 +80,7 @@ public sealed class TerminalControl : Control
             if (_session is { } old)
             {
                 old.Terminal.Changed -= OnTerminalChanged;
+                old.SizeOwnerChanged -= OnSizeOwnerChanged;
             }
 
             _session = value;
@@ -88,6 +89,7 @@ public sealed class TerminalControl : Control
             if (value is { } session)
             {
                 session.Terminal.Changed += OnTerminalChanged;
+                session.SizeOwnerChanged += OnSizeOwnerChanged;
                 session.Terminal.DefaultForegroundRgb = _theme.ForegroundRgb;
                 session.Terminal.DefaultBackgroundRgb = _theme.BackgroundRgb;
                 ApplySize();
@@ -175,7 +177,8 @@ public sealed class TerminalControl : Control
         var rows = Math.Max(1, (int)((Bounds.Height - (2 * Padding)) / _cellHeight));
         Columns = columns;
         Rows = rows;
-        if (_session is { } session && (session.Terminal.Columns != columns || session.Terminal.Rows != rows))
+        if (_session is { } session && (session.SizeOwner is null || ReferenceEquals(session.SizeOwner, this))
+            && (session.Terminal.Columns != columns || session.Terminal.Rows != rows))
         {
             session.Resize(columns, rows);
             _top = MaximumTop;
@@ -184,6 +187,15 @@ public sealed class TerminalControl : Control
 
         InvalidateVisual();
     }
+
+    /// <summary>Another view let go of the session's size (the terminal card closed): this one sizes it to its bounds again.</summary>
+    private void OnSizeOwnerChanged(object? sender, EventArgs e) => Dispatcher.UIThread.Post(() =>
+    {
+        if (ReferenceEquals(sender, _session) && _session is { SizeOwner: null })
+        {
+            ApplySize();
+        }
+    });
 
     // ------------------------------------------------------------------ output
 

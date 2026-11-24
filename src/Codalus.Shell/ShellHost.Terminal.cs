@@ -41,6 +41,44 @@ public sealed partial class ShellHost
 
     internal TerminalAppearance TerminalLook { get; } = new();
 
+    private TerminalCardViewModel? _terminalCard;
+
+    /// <summary>The terminal card: a command shown over what covers the Terminal tool window (<see cref="ShowCommandTerminal"/>).</summary>
+    public TerminalCardViewModel TerminalCard => _terminalCard ??= new TerminalCardViewModel(TerminalLook);
+
+    /// <summary>
+    /// Whether the Terminal tool window is out of sight: under the setup or the start window (which the main window owns,
+    /// so they stay above it), or under an in-window dialog (Connect, the dialog frame, Report a Problem).
+    /// </summary>
+    internal bool TerminalIsCovered => OverlayWindow is not null || Dialogs.IsOpen || ConnectAgent.IsOpen || Feedback.IsOpen;
+
+    /// <summary>
+    /// A command the IDE started in the Terminal that the user may have to answer (an install's sudo password, an agent's
+    /// sign-in): the Terminal tool window shows it, and when that is covered (<see cref="TerminalIsCovered"/>), the terminal
+    /// card shows it over what covers it too, until it ends or the user hides it.
+    /// </summary>
+    internal void ShowCommandTerminal(TerminalSession session, string title)
+    {
+        // Covered, the tool window shows it without taking the focus from the window in front: the card has it.
+        var covered = TerminalIsCovered;
+        Layout.ShowToolWindow(TerminalViewModel.ToolWindowId, focus: !covered);
+        TerminalWindow.Show(session);
+        if (covered)
+        {
+            Workbench.Log.AppendLine($"[terminal] {title}: shown over the {(OverlayWindow is not null ? "window in front" : "dialog")}, where it may ask for something.");
+            TerminalCard.Show(session, title);
+        }
+    }
+
+    /// <summary>Show Terminal (Connect's step): the command hidden from the card, again, while something covers the tool window.</summary>
+    internal void ShowTerminalForCommand()
+    {
+        if (!TerminalIsCovered || !TerminalCard.ShowHidden())
+        {
+            Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
+        }
+    }
+
     /// <summary>Detects the shells (for the default-profile setting) before settings are read.</summary>
     private void InitializeTerminalProfiles()
     {
@@ -56,6 +94,7 @@ public sealed partial class ShellHost
             () => Workbench.Settings.GetString(TerminalDefaultProfileSetting) is { Length: > 0 } id ? id : null,
             TerminalLook,
             OpenTerminalLink);
+        TerminalWindow.MayTakeFocus = () => !TerminalIsCovered;
         ApplyTerminalSettings();
         Workbench.Settings.Changed += (_, e) =>
         {

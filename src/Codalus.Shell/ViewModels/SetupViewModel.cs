@@ -995,7 +995,7 @@ public sealed class SetupViewModel : ObservableObject
         IsChecking = true;
         try
         {
-            await _shell.CheckEnvironmentAsync(offer: false).ConfigureAwait(true);
+            await _shell.RecheckEnvironmentAsync().ConfigureAwait(true);
         }
         finally
         {

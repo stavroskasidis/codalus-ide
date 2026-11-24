@@ -182,6 +182,13 @@ public sealed class AcpConnectShellTests
         Assert.True(File.Exists(marker));
         Assert.Equal(terminals + 1, f.Shell.Terminals.Sessions.Count);
         Assert.Equal("Claude sign-in", f.Shell.Terminals.Sessions[^1].Name);
+
+        // Connect covered the Terminal tool window: the sign-in showed over it, and closed with it.
+        Assert.Contains("[terminal] Claude sign-in: shown over the dialog", f.Shell.Workbench.Log.GetText(), StringComparison.Ordinal);
+        await ShellFixture.PumpUntil(() => !f.Shell.TerminalCard.IsOpen);
+
+        // The requirements were checked with the user's PATH read again (a Node.js installed by hand since the start).
+        Assert.True(f.EnvironmentRefreshes > 0);
         var entry = f.Shell.Workbench.Settings.GetLayerValue(AcpAgents.AgentsSetting, SettingScope.User)!.Value.GetProperty("claude");
         Assert.Equal(["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"], entry.GetProperty("unsetEnv").EnumerateArray().Select(e => e.GetString()));
         dialog.Close();

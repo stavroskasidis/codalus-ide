@@ -350,8 +350,7 @@ public sealed partial class ShellHost
                 exited.TrySetResult(early);
             }
 
-            Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
-            TerminalWindow.Show(session);
+            ShowCommandTerminal(session, title); // over Connect or the setup, where the sign-in's code or password is asked
             await using var registration = cancellationToken.Register(() => Ui.Post(session.Kill)).ConfigureAwait(true);
             return await exited.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
         }).Unwrap().ConfigureAwait(false);
@@ -374,7 +373,7 @@ public sealed partial class ShellHost
 
         public void OpenUrl(string url) => shell.OpenUrl(url);
 
-        public void ShowTerminal() => shell.Layout.ShowToolWindow(TerminalViewModel.ToolWindowId);
+        public void ShowTerminal() => shell.ShowTerminalForCommand();
 
         public void ShowOutput() => shell.ShowAiLog();
 
@@ -403,5 +402,7 @@ public sealed partial class ShellHost
 
         public Task<int?> RunInTerminalAsync(string title, string commandLine, ProcessLaunchInfo launch, string? hint, CancellationToken cancellationToken) =>
             shell.RunAgentTerminalAsync(title, launch, cancellationToken);
+
+        public Task RefreshEnvironmentAsync() => shell.RefreshEnvironmentAsync();
     }
 }
