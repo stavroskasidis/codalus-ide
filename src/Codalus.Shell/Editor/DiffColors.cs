@@ -245,9 +245,9 @@ public sealed class SourceLineColorizer(Func<int, (SourceTokens? Tokens, int Lin
 
         foreach (var token in tokens.Line(source - 1))
         {
-            if (token.Start >= line.Length)
+            if (token.Start >= line.Length || token.Start >= LongLineCutter.MaxDrawnToCaret)
             {
-                continue;
+                continue; // past the line, or past where a long line is cut
             }
 
             var brush = token.Argb != 0 ? BrushOf(token.Argb) : Theme.Token(token.Type);

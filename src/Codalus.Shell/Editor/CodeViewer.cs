@@ -102,7 +102,8 @@ public sealed class CodeViewer : UserControl
         _textMate = null;
         _scope = null;
         RemoveGrammarColors();
-        if (Editor.Document.Text != text)
+        // The length first: the document's text is made a string for the comparison.
+        if (Editor.Document.TextLength != text.Length || Editor.Document.Text != text)
         {
             Editor.Document = new TextDocument(text);
         }
@@ -117,7 +118,7 @@ public sealed class CodeViewer : UserControl
     /// <summary>Shows <paramref name="text"/> with <paramref name="highlight"/> marked and scrolled into view.</summary>
     public void Show(string text, string? languageId, LanguageServices.Protocol.Range? highlight)
     {
-        if (Editor.Document.Text != text)
+        if (Editor.Document.TextLength != text.Length || Editor.Document.Text != text)
         {
             Editor.Document = new TextDocument(text);
             _textMate?.Dispose();
@@ -183,13 +184,27 @@ public sealed class CodeViewer : UserControl
         _grammarColors.Theme = _services.Theme;
         if (_services.TextMate.GrammarFor(languageId) is { } grammar)
         {
-            _grammarColors.Tokenize(Editor.Document, grammar);
+            // The same text shown again (a peek or a result view's refresh): its tokens stand.
+            var tokenized = (Editor.Document, Editor.Document.Version, grammar, _grammarColors);
+            if (!Equals(_tokenized, tokenized))
+            {
+                _grammarColors.Tokenize(Editor.Document, grammar);
+                _tokenized = tokenized;
+                Tokenizations++;
+            }
         }
         else
         {
             _grammarColors.Clear();
+            _tokenized = null;
         }
     }
+
+    /// <summary>What the grammar colors were last made for: the document, its version, the grammar and the colorizer.</summary>
+    private object? _tokenized;
+
+    /// <summary>How many times the text was tokenized (tests).</summary>
+    internal int Tokenizations { get; private set; }
 
     /// <summary>The cut of long lines after the colorizers (a grammar's installs itself last): nothing draws past it.</summary>
     private void KeepLongLinesLast()
