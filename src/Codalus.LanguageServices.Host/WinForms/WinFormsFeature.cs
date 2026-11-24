@@ -95,8 +95,35 @@ internal static class WinFormsFeature
 
         /// <summary>The model with, for a Visual Basic form, the events its <c>Handles</c> clauses hook (in the code file's text <paramref name="code"/> and the designer file's <paramref name="designer"/>).</summary>
         public DesignerModel WithHandles(DesignerModel model, SourceText? code, SourceText designer) => IsVisualBasic
-            ? VisualBasicHandles.WithHandles(model, code is null ? null : Parse(code, CodePath, ParseOptions).GetRoot(), Parse(designer, DesignerPath, ParseOptions).GetRoot())
+            ? VisualBasicHandles.WithHandles(model, (component, written) => DeclaredEvent(model, component, written),
+                code is null ? null : Parse(code, CodePath, ParseOptions).GetRoot(), Parse(designer, DesignerPath, ParseOptions).GetRoot())
             : model;
+
+        /// <summary>The project's compilation, when the form was read through it.</summary>
+        public Compilation? Compilation { get; init; }
+
+        /// <summary>
+        /// An event of <paramref name="component"/> (the root when empty) as its declaration spells it, from the compilation:
+        /// Visual Basic's <c>Handles Button1.click</c> hooks <c>Click</c>. As written without a compilation or such an event.
+        /// </summary>
+        private string DeclaredEvent(DesignerModel model, string component, string written)
+        {
+            var typeName = component.Length == 0 ? model.BaseType : model.Components.FirstOrDefault(c => c.Name == component)?.Type;
+            if (typeName is null || Compilation?.GetTypeByMetadataName(typeName) is not { } type)
+            {
+                return written;
+            }
+
+            for (ITypeSymbol? current = type; current is not null; current = current.BaseType)
+            {
+                if (current.GetMembers().OfType<IEventSymbol>().FirstOrDefault(e => string.Equals(e.Name, written, StringComparison.OrdinalIgnoreCase)) is { } declared)
+                {
+                    return declared.Name;
+                }
+            }
+
+            return written;
+        }
     }
 
     /// <summary>A form file's tree in its language.</summary>
@@ -185,6 +212,7 @@ internal static class WinFormsFeature
         var resolver = new ReplayDesignerTypeResolver();
         string[] globalUsings = isVisualBasic ? VisualBasicDesignerSyntax.WindowsFormsImplicitImports : DesignerReader.WindowsFormsImplicitUsings;
         string? rootNamespace = null;
+        Compilation? compilation = null;
         INamedTypeSymbol? type = null;
         string? baseType = null;
         var withoutProjectTypes = true;
@@ -193,6 +221,7 @@ internal static class WinFormsFeature
         {
             resolver.Semantic = new SemanticDesignerTypeResolver(model);
             resolver.SemanticTree = designerTree;
+            compilation = model.Compilation;
             type = model.GetDeclaredSymbol(classNode, cancellationToken) as INamedTypeSymbol;
             baseType = type?.BaseType is { TypeKind: not TypeKind.Error } baseSymbol ? SemanticDesignerTypeResolver.Name(baseSymbol) : null;
             withoutProjectTypes = baseType is null || model.Compilation.GetTypeByMetadataName(ControlType) is null;
@@ -240,6 +269,7 @@ internal static class WinFormsFeature
             DesignerTree = designerTree,
             Language = language,
             RootNamespace = rootNamespace,
+            Compilation = compilation,
         };
     }
 
@@ -896,6 +926,9 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
     private readonly Dictionary<string, string> _names = new(StringComparer.Ordinal);
     private readonly Dictionary<string, bool> _enums = new(StringComparer.Ordinal);
 
+    /// <summary>Each member name as written (<c>text</c>) and as declared (<c>Text</c>), from the compilation's read.</summary>
+    private readonly Dictionary<string, string> _members = new(StringComparer.Ordinal);
+
     public SemanticDesignerTypeResolver? Semantic { get; set; }
 
     /// <summary>The tree <see cref="Semantic"/>'s model is of; other trees (edited text) replay what it said.</summary>
@@ -939,4 +972,24 @@ internal sealed class ReplayDesignerTypeResolver : IDesignerTypeResolver
 
     public bool? IsEnum(string fullName) =>
         Semantic?.IsEnum(fullName) ?? (_enums.TryGetValue(fullName, out var isEnum) ? isEnum : new SyntacticDesignerTypeResolver(null).IsEnum(fullName));
+
+    /// <summary>
+    /// Through the compilation for the file as read; for edited text, as that read named the same spelling: a Visual Basic
+    /// name ignores case, so <c>text</c> is <c>Text</c> wherever the file writes it.
+    /// </summary>
+    public string MemberName(SyntaxNode name, string written)
+    {
+        if (name.SyntaxTree == SemanticTree && Semantic is { } semantic)
+        {
+            var declared = semantic.MemberName(name, written);
+            if (!string.Equals(declared, written, StringComparison.Ordinal))
+            {
+                _members[written] = declared;
+            }
+
+            return declared;
+        }
+
+        return _members.GetValueOrDefault(written, written);
+    }
 }

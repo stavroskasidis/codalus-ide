@@ -195,7 +195,7 @@ A Visual Basic project's forms and user controls (`Form1.vb` with `Form1.Designe
 - a new control is a `Friend WithEvents` field, named as Visual Basic names it (`Button1`, `FileToolStripMenuItem`);
 - an event handler is a method in `Form1.vb` with a `Handles` clause: `Private Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click`, and `Handles MyBase.Load` for the form's own events. A method that already exists gets the event added to its `Handles` clause. Removing an event, or deleting its control, takes it out of the clause and leaves the method;
 - a form whose fields aren't `WithEvents` and whose events are hooked with `AddHandler` in `InitializeComponent` (written by hand for .NET Framework) opens too: those events keep their `AddHandler`, and a control that gets a new event handler becomes `WithEvents`, which .NET's Windows Forms analyzers ask for (`WFO3011`, `WFO3012`);
-- names ignore case, as Visual Basic's do: a name that differs from another only in case is taken, and renaming a control renames its uses and its `Handles` clauses in the form's code.
+- names ignore case, as Visual Basic's do: a name that differs from another only in case is taken, renaming a control renames its uses and its `Handles` clauses in the form's code, and a property written in another case than its declaration's (`button1.text = "Go"`) is that property, changed where it is.
 
 An image from the project's resources is a Visual Basic project's `My Project\Resources.resx`, written `Global.WinFormsApp1.My.Resources.Resources.Logo`.
 

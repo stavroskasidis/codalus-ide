@@ -52,10 +52,11 @@ internal static class VisualBasicHandles
 
     /// <summary>
     /// <paramref name="model"/> with the events the class's <c>Handles</c> clauses hook (in <paramref name="roots"/>: the code
-    /// file's and the designer file's), after InitializeComponent's statements, each named as its component is. Their
-    /// <see cref="DesignerStatement.Line"/> is -1: they aren't InitializeComponent's.
+    /// file's and the designer file's), after InitializeComponent's statements, each named as its component is and its event
+    /// as <paramref name="declaredEvent"/> says it's declared (<c>Handles Button1.click</c> is <c>Click</c>; without it, as
+    /// written). Their <see cref="DesignerStatement.Line"/> is -1: they aren't InitializeComponent's.
     /// </summary>
-    public static DesignerModel WithHandles(DesignerModel model, params SyntaxNode?[] roots)
+    public static DesignerModel WithHandles(DesignerModel model, Func<string, string, string>? declaredEvent, params SyntaxNode?[] roots)
     {
         var names = model.Components.Where(c => !c.IsRoot).ToDictionary(c => c.Name, c => c.Name, StringComparer.OrdinalIgnoreCase);
         var events = new List<DesignerStatement>();
@@ -70,7 +71,7 @@ internal static class VisualBasicHandles
                     continue;
                 }
 
-                events.Add(new DesignerStatement { Kind = DesignerStatementKinds.Event, Target = component, Member = item.Event, Handler = item.Handler, Line = -1 });
+                events.Add(new DesignerStatement { Kind = DesignerStatementKinds.Event, Target = component, Member = declaredEvent?.Invoke(component, item.Event) ?? item.Event, Handler = item.Handler, Line = -1 });
             }
         }
 

@@ -12,6 +12,12 @@ internal interface IDesignerTypeResolver
 
     /// <summary>Whether <paramref name="fullName"/> is an enum (null when unknown).</summary>
     bool? IsEnum(string fullName);
+
+    /// <summary>
+    /// The member a name refers to as its declaration spells it (<c>Text</c> for Visual Basic's <c>Button1.text</c>, whose
+    /// names ignore case), or <paramref name="written"/> when that isn't known (without a compilation).
+    /// </summary>
+    string MemberName(SyntaxNode name, string written) => written;
 }
 
 /// <summary>Through the project's compilation: what the compiler binds the name to.</summary>
@@ -43,6 +49,16 @@ internal sealed class SemanticDesignerTypeResolver(SemanticModel model) : IDesig
     }
 
     public bool? IsEnum(string fullName) => _seen.TryGetValue(fullName, out var type) ? type.TypeKind == TypeKind.Enum : null;
+
+    /// <summary>The member the compiler binds the name to (a property, field, event or method), as declared.</summary>
+    public string MemberName(SyntaxNode name, string written)
+    {
+        var info = model.GetSymbolInfo(name);
+        return (info.Symbol ?? info.CandidateSymbols.FirstOrDefault()) is { Kind: SymbolKind.Property or SymbolKind.Field or SymbolKind.Event or SymbolKind.Method } symbol
+            && string.Equals(symbol.Name, written, StringComparison.OrdinalIgnoreCase)
+            ? symbol.Name
+            : written;
+    }
 
     public static string Name(ITypeSymbol type) => type.SpecialType switch
     {

@@ -166,6 +166,38 @@ public sealed class WinFormsDesignerVisualBasicLanguageTests(WinFormsVbLanguageF
     }
 
     [Fact]
+    public async Task Members_and_Handles_events_written_in_another_case_are_read_as_declared()
+    {
+        // Visual Basic compiles customerlabel.text and Handles customertextbox.textchanged: the compilation names them.
+        var designer = Form("OrderForm.Designer.vb");
+        var code = Form("OrderForm.vb");
+        await winForms.OpenAsync(designer);
+        await winForms.OpenAsync(code);
+        const string Text = "CustomerLabel.Text = \"&Customer:\"", CasedText = "customerlabel.text = \"&Customer:\"";
+        const string Handles = "Handles CustomerTextBox.TextChanged", CasedHandles = "Handles customertextbox.textchanged";
+        await winForms.EditAsync(designer, Text, CasedText);
+        await winForms.EditAsync(code, Handles, CasedHandles);
+        try
+        {
+            var read = await winForms.Client.WinFormsReadAsync(Uri(code), Ct);
+            Assert.True(read!.IsDesignable, read.Problem);
+            var model = read.Model!;
+            Assert.Single(model.Statements, s => s is { Kind: DesignerStatementKinds.Assign, Target: "CustomerLabel", Member: "Text" });
+            Assert.Contains(model.Statements, s => s is { Kind: DesignerStatementKinds.Event, Target: "CustomerTextBox", Member: "TextChanged", Handler: "CustomerTextBox_TextChanged" });
+
+            // Its Text changed where it is, as written: no second Text line.
+            var result = await EditAsync("OrderForm.Designer.vb", new DesignerEdit { Kind = DesignerEditKinds.SetProperty, Component = "CustomerLabel", Property = "Text", Value = DesignerValue.String("&Name:") });
+            var edit = Assert.Single(EditOf(result, "OrderForm.Designer.vb").Edits);
+            Assert.Equal("        customerlabel.text = \"&Name:\"\n", edit.NewText);
+        }
+        finally
+        {
+            await winForms.EditAsync(designer, CasedText, Text);
+            await winForms.EditAsync(code, CasedHandles, Handles);
+        }
+    }
+
+    [Fact]
     public async Task Toolbox_lists_the_projects_components()
     {
         var toolbox = await winForms.Client.WinFormsToolboxAsync(winForms.File("WinFormsVbApp", "WinFormsVbApp.vbproj"), Ct);

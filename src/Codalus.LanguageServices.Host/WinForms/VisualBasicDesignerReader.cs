@@ -69,13 +69,20 @@ internal static class VisualBasicDesignerSyntax
 /// C#'s: what the classic IDE's designer writes for .NET (<c>Button1 = New Button()</c>) and for .NET Framework
 /// (<c>Me.Button1 = New System.Windows.Forms.Button()</c>, CodeDOM's <c>CType</c> and <c>ChrW</c>), components declared
 /// <c>Friend WithEvents</c>, events hooked by <c>AddHandler</c> (a <c>Handles</c> clause is the class's, read by
-/// <see cref="VisualBasicHandles"/>). Names ignore case as Visual Basic does: each is read as its declaration spells it.
-/// TODO(issue): members are read as written, so one written in another case than its declaration's (<c>Button1.text</c>,
-/// which Visual Basic compiles) is another property to the designer and the writer; the classic IDE writes them as declared.
+/// <see cref="VisualBasicHandles"/>). Names ignore case as Visual Basic does: each is read as its declaration spells it,
+/// a component's and a local's by their declarations in the file, a member's (<c>Button1.text</c> is <c>Text</c>) by the
+/// compilation's (<see cref="IDesignerTypeResolver.MemberName"/>), the designer's own (<c>suspendlayout</c>,
+/// <c>resources.getobject</c>) by theirs. Without a compilation a member is read as written.
 /// </summary>
 internal static class VisualBasicDesignerReader
 {
-    private static readonly HashSet<string> s_layoutMethods = new(StringComparer.Ordinal) { "SuspendLayout", "ResumeLayout", "PerformLayout" };
+    private static readonly string[] s_layoutMethods = ["SuspendLayout", "ResumeLayout", "PerformLayout"];
+
+    /// <summary>The designer's own names (InitializeComponent's layout calls, the resources'), as declared, matched without case.</summary>
+    private static readonly string[] s_designerNames = [.. s_layoutMethods, "BeginInit", "EndInit", "ApplyResources", "GetObject", "GetString"];
+
+    /// <summary><paramref name="written"/> as the designer's own name it is, in its declaration's case, or null when it's none of them.</summary>
+    internal static string? DesignerName(string written) => s_designerNames.FirstOrDefault(n => string.Equals(n, written, StringComparison.OrdinalIgnoreCase));
 
     public static DesignerSource Read(SyntaxTree tree, string baseType, IEnumerable<string> globalImports, IDesignerTypeResolver? resolver, string? rootNamespace)
     {
@@ -270,7 +277,8 @@ internal static class VisualBasicDesignerReader
             .Select(i =>
             {
                 var literal = (LiteralExpressionSyntax)((SimpleArgumentSyntax)i.ArgumentList!.Arguments[^1]).Expression;
-                return new DesignerResourceKey(((MemberAccessExpressionSyntax)i.Expression!).Name.Identifier.ValueText, literal.Token.ValueText, literal.Span);
+                var method = ((MemberAccessExpressionSyntax)i.Expression!).Name.Identifier.ValueText;
+                return new DesignerResourceKey(DesignerName(method) ?? method, literal.Token.ValueText, literal.Span);
             })];
 
     /// <summary>The state of one read: the names in scope (as declared) and the style seen so far.</summary>
@@ -283,6 +291,9 @@ internal static class VisualBasicDesignerReader
         public bool Qualified { get; private set; }
 
         private DesignerReadException Fail(SyntaxNode node, string message) => new(message, DesignerReader.Line(tree, node));
+
+        /// <summary>A member's name as its declaration spells it (Visual Basic's names ignore case), through the compilation.</summary>
+        private string Declared(SimpleNameSyntax name) => resolver.MemberName(name, name.Identifier.ValueText);
 
         /// <summary>A component's or local's name as declared, or null when <paramref name="name"/> isn't one (<c>components</c> is).</summary>
         private string? Known(string name) => (names.Contains(name) || string.Equals(name, "components", StringComparison.OrdinalIgnoreCase)) ? spelled[name] : null;
@@ -391,10 +402,10 @@ internal static class VisualBasicDesignerReader
             switch (Unwrap(expression))
             {
                 case IdentifierNameSyntax identifier when Known(identifier.Identifier.ValueText) is null:
-                    return identifier.Identifier.ValueText;
+                    return Declared(identifier);
                 case MemberAccessExpressionSyntax { Expression: MeExpressionSyntax, Name: IdentifierNameSyntax name }:
                     UsesThis = true;
-                    return name.Identifier.ValueText;
+                    return Declared(name);
                 default:
                     return null;
             }
@@ -407,7 +418,7 @@ internal static class VisualBasicDesignerReader
             var arguments = invocation?.ArgumentList?.Arguments.ToList() ?? [];
 
             // CType(Me.x, System.ComponentModel.ISupportInitialize).BeginInit()
-            if (callee is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax initName, Expression: { } initOf } && initName.Identifier.ValueText is "BeginInit" or "EndInit"
+            if (callee is MemberAccessExpressionSyntax { Name: IdentifierNameSyntax initName, Expression: { } initOf } && DesignerName(initName.Identifier.ValueText) is "BeginInit" or "EndInit"
                 && Unwrap(initOf) is CastExpressionSyntax cast && arguments.Count == 0)
             {
                 var (castTarget, castPath) = TargetPath(Unwrap(cast.Expression));
@@ -417,7 +428,7 @@ internal static class VisualBasicDesignerReader
                 }
 
                 NoteQualified(cast.Type);
-                return new DesignerStatement { Kind = DesignerStatementKinds.Layout, Target = castTarget, Member = initName.Identifier.ValueText, Line = line };
+                return new DesignerStatement { Kind = DesignerStatementKinds.Layout, Target = castTarget, Member = DesignerName(initName.Identifier.ValueText), Line = line };
             }
 
             if (arguments.Any(a => a is not SimpleArgumentSyntax { NameColonEquals: null }))
@@ -428,7 +439,7 @@ internal static class VisualBasicDesignerReader
             var values = arguments.Cast<SimpleArgumentSyntax>().Select(a => a.Expression).ToList();
 
             // resources.ApplyResources(Me.x, "x")
-            if (callee is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "ApplyResources" } apply && IsResources(apply.Expression) && values.Count is 2 or 3)
+            if (callee is MemberAccessExpressionSyntax apply && DesignerName(apply.Name.Identifier.ValueText) == "ApplyResources" && IsResources(apply.Expression) && values.Count is 2 or 3)
             {
                 var target = Value(values[0]);
                 if (target.Kind != DesignerValueKinds.Reference || Value(values[1]) is not { Kind: DesignerValueKinds.Literal, Type: "string" } key)
@@ -445,9 +456,12 @@ internal static class VisualBasicDesignerReader
                 throw Fail(expression, $"a call to {callee}");
             }
 
-            var method = callPath.Contains('.', StringComparison.Ordinal) ? callPath[(callPath.LastIndexOf('.') + 1)..] : callPath;
-            if (s_layoutMethods.Contains(method))
+            var dot = callPath.LastIndexOf('.');
+            var method = callPath[(dot + 1)..];
+            if (s_layoutMethods.FirstOrDefault(m => string.Equals(m, method, StringComparison.OrdinalIgnoreCase)) is { } layout)
             {
+                // suspendlayout() without a compilation: the designer's own call, as declared.
+                callPath = callPath[..(dot + 1)] + layout;
                 return new DesignerStatement { Kind = DesignerStatementKinds.Layout, Target = callTarget, Member = callPath, Arguments = [.. values.Select(Value)], Line = line };
             }
 
@@ -469,7 +483,7 @@ internal static class VisualBasicDesignerReader
                 switch (current)
                 {
                     case MemberAccessExpressionSyntax { RawKind: (int)SyntaxKind.SimpleMemberAccessExpression, Expression: { } inner, Name: IdentifierNameSyntax name }:
-                        parts.Add(name.Identifier.ValueText);
+                        parts.Add(Declared(name));
                         current = inner;
                         continue;
                     case MeExpressionSyntax:
@@ -480,7 +494,9 @@ internal static class VisualBasicDesignerReader
                         parts.Reverse();
                         return Split(parts, fromMe: true);
                     case IdentifierNameSyntax identifier:
-                        parts.Add(identifier.Identifier.ValueText);
+                        // A component, resources, or a member of the root's (text = "Order": the form's Text).
+                        var first = identifier.Identifier.ValueText;
+                        parts.Add(Known(first) is not null || string.Equals(first, "resources", StringComparison.OrdinalIgnoreCase) ? first : Declared(identifier));
                         parts.Reverse();
                         return Split(parts, fromMe: false);
                     case ParenthesizedExpressionSyntax parenthesized:
@@ -740,7 +756,7 @@ internal static class VisualBasicDesignerReader
                         }
 
                         type = memberType;
-                        members.Add(member.Identifier.ValueText);
+                        members.Add(Declared(member));
                         break;
                     default:
                         throw Fail(part, $"the expression {Shorten(part.ToString())} in a combination of flags");
@@ -774,7 +790,7 @@ internal static class VisualBasicDesignerReader
 
             // Type.Member: an enum member or a shared field or property (Color.Red, SystemColors.Control, My.Resources.Resources.Logo).
             var type = TypeName(access.Expression);
-            var member = access.Name.Identifier.ValueText;
+            var member = Declared(access.Name);
             return resolver.IsEnum(type) == true
                 ? new DesignerValue { Kind = DesignerValueKinds.Enum, Type = type, Members = [member] }
                 : DesignerValue.MemberOf(type, member);
@@ -798,10 +814,10 @@ internal static class VisualBasicDesignerReader
             }
 
             var arguments = Arguments(invocation.ArgumentList, invocation).ToList();
-            if (IsResources(of) && method.Identifier.ValueText is "GetObject" or "GetString" && arguments is [{ Kind: DesignerValueKinds.Literal, Type: "string" } key])
+            if (IsResources(of) && DesignerName(method.Identifier.ValueText) is "GetObject" or "GetString" && arguments is [{ Kind: DesignerValueKinds.Literal, Type: "string" } key])
             {
                 UsesResources = true;
-                return new DesignerValue { Kind = DesignerValueKinds.Resource, Type = method.Identifier.ValueText == "GetString" ? "System.String" : castType, Value = key.Value };
+                return new DesignerValue { Kind = DesignerValueKinds.Resource, Type = DesignerName(method.Identifier.ValueText) == "GetString" ? "System.String" : castType, Value = key.Value };
             }
 
             if (RootName(of) is { } root && (Known(root) is not null || string.Equals(root, "resources", StringComparison.OrdinalIgnoreCase)) || of is MeExpressionSyntax)
@@ -813,7 +829,7 @@ internal static class VisualBasicDesignerReader
             {
                 Kind = DesignerValueKinds.Call,
                 Type = TypeName(of),
-                Value = method.Identifier.ValueText,
+                Value = Declared(method),
                 Arguments = [.. arguments],
             };
         }
