@@ -35,6 +35,12 @@ public sealed class DiagnosticMarkers : DocumentColorizingTransformer, IBackgrou
 
     public IEnumerable<DiagnosticSegment> Segments => _segments;
 
+    /// <summary>
+    /// Whether a diagnostic touches <paramref name="offset"/> to <paramref name="offset"/> + <paramref name="length"/>,
+    /// ends included: through the collection's tree (the lightbulb asks at every caret move, and walked them all).
+    /// </summary>
+    public bool AnyOn(int offset, int length) => _segments.FindOverlappingSegments(offset, length).Count > 0;
+
     /// <summary>Replaces the markers with <paramref name="diagnostics"/> (positions in the current text).</summary>
     public void Set(IReadOnlyList<Diagnostic> diagnostics, Func<Position, int> offsetAt)
     {

@@ -73,6 +73,8 @@ public sealed partial class CodeEditorController : IDisposable
     private readonly DispatcherTimer _gitTimer = new() { Interval = TimeSpan.FromMilliseconds(300) };
     private BlameMargin? _blameMargin;
     private string? _indexText;
+    private string? _indexLinesOf; // the index text _indexLines were split from
+    private string[]? _indexLines;
     private bool _indexLoaded;
     private string? _indexKey; // what the status knew the index version read by (IndexKey)
     private bool _indexMayHaveChanged; // the repository's index changed since it was read
@@ -1537,7 +1539,7 @@ public sealed partial class CodeEditorController : IDisposable
         get
         {
             var line = Model.Text.GetLineByOffset(Editor.CaretOffset);
-            return _markers.Segments.Any(s => s.StartOffset <= line.EndOffset && s.EndOffset >= line.Offset) ? line.LineNumber : null;
+            return _markers.AnyOn(line.Offset, line.Length) ? line.LineNumber : null;
         }
     }
 
@@ -2409,10 +2411,20 @@ public sealed partial class CodeEditorController : IDisposable
                 return;
             }
 
-            var changes = await Task.Run(() => LineDiff.Changes(LineDiff.Lines(baseline), LineDiff.Lines(current.Text)), cancellationToken).ConfigureAwait(true);
+            // The index's lines, split once per read of it: each pause in typing split the whole index text again.
+            var known = ReferenceEquals(_indexLinesOf, baseline) ? _indexLines : null;
+            var (changes, baselineLines) = await Task.Run(() =>
+            {
+                var lines = known ?? LineDiff.Lines(baseline);
+                return (LineDiff.Changes(lines, LineDiff.Lines(current.Text)), lines);
+            }, cancellationToken).ConfigureAwait(true);
             if (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 _gitMargin.Changes = changes;
+                if (ReferenceEquals(baseline, _indexText))
+                {
+                    (_indexLinesOf, _indexLines) = (baseline, baselineLines);
+                }
             }
         }
         catch (OperationCanceledException)
