@@ -426,6 +426,22 @@ public sealed partial class ShellHost
 
     // ------------------------------------------------------------------ installing
 
+    /// <summary>Tests: whether the user can write the .NET root, in place of trying (<see cref="WorkloadCommand"/>).</summary>
+    internal Func<string, bool> CanWriteDotnet { get; set; } = Elevation.CanWrite;
+
+    /// <summary>
+    /// A <c>dotnet workload</c> command line for the terminal, under <c>sudo</c> when the root of the <c>dotnet</c> it
+    /// runs can't be written by the user (<see cref="Elevation.WorkloadCommand"/>): the line, and that root when sudo is
+    /// in it.
+    /// </summary>
+    private (string Command, string? SudoRoot) WorkloadCommand(params string[] arguments)
+    {
+        var dotnet = EnvironmentCheck.FindDotnet();
+        var root = dotnet is null ? null : Path.GetDirectoryName(EnvironmentCheck.RealPath(dotnet));
+        var sudo = Workbench.Platform != Codalus.Platform.PlatformKind.Windows && root is not null && !CanWriteDotnet(root);
+        return (Elevation.WorkloadCommand(Workbench.Platform, dotnet, !sudo, arguments), sudo ? root : null);
+    }
+
     /// <summary>Offers <c>dotnet workload restore</c> for a project whose workloads aren't installed.</summary>
     private async Task OfferWorkloadsAsync(ProjectInfo project)
     {
@@ -439,16 +455,19 @@ public sealed partial class ShellHost
     }
 
     /// <summary>
-    /// <c>dotnet workload restore</c> for the project, in the terminal (it may need an administrator, and the terminal
-    /// is where <c>sudo</c> asks), after the user agrees to the exact command. It runs in the project's folder: the SDK
-    /// its <c>global.json</c> picks is the one whose workloads it needs.
+    /// <c>dotnet workload restore</c> for the project, in the terminal, after the user agrees to the exact command. In
+    /// a .NET root only an administrator can change it runs under <c>sudo</c>, which asks in the terminal
+    /// (<see cref="WorkloadCommand"/>). It runs in the project's folder: the SDK its <c>global.json</c> picks is the one
+    /// whose workloads it needs.
     /// </summary>
     public async Task InstallWorkloadsAsync(ProjectInfo project)
     {
-        var command = $"dotnet workload restore \"{project.Path}\"";
+        var (command, sudoRoot) = WorkloadCommand("workload", "restore", project.Path);
+        var elevation = sudoRoot is null ? string.Empty
+            : Localizer.Format("msg.mobile.androidSudo", "\n\n{0} can only be changed by an administrator: it runs with sudo in the terminal.", sudoRoot);
         if (!await Dialogs.ConfirmAsync(
                 Localizer.Get("msg.mobile.installWorkloadsTitle", "Install .NET Workloads"),
-                Localizer.Format("msg.mobile.installWorkloadsMessage", "This installs the workloads {0} needs (they're large, and take a while).\n\nThis runs in the terminal:\n{1}", project.Name, command),
+                Localizer.Format("msg.mobile.installWorkloadsMessage", "This installs the workloads {0} needs (they're large, and take a while).\n\nThis runs in the terminal:\n{1}", project.Name, command) + elevation,
                 Localizer.Get("msg.setup.runInTerminal", "Run in Terminal")).ConfigureAwait(true))
         {
             return;
