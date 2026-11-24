@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Codalus.LanguageServices.Host.Tests;
 
 /// <summary>
-/// CodeLens's count of derived types on every class something can derive from (Rider's inheritors), not only abstract
+/// CodeLens's count of derived types on every class something can derive from (its inheritors), not only abstract
 /// ones: shown when the class has some, hidden ("-") when it has none, and not offered on sealed or static classes or on
 /// structs.
 /// </summary>

@@ -192,7 +192,7 @@ internal static class CodeLensFeature
             var position = Positions.ToPosition(text, identifier.SpanStart);
             var range = Positions.ToRange(text, identifier.Span);
             lenses.Add(Lens(range, new LensData(uri, position.Line, position.Character, "references")));
-            // Every class something can derive from has a count of its derived types (Rider's inheritors), not only the
+            // Every class something can derive from has a count of its derived types (its inheritors), not only the
             // abstract ones: a plain class shows it only when it has some ("-" at zero, below).
             var canBeImplemented = node is InterfaceDeclarationSyntax
                 || node.Parent is InterfaceDeclarationSyntax

@@ -84,7 +84,7 @@ public class NavigationDepthTests
         var shapes = await OpenAsync(f, Path.Combine(folder, "src", "Lib", "Shapes.cs"));
         var interfaceLine = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("interface IShape", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.EndOfLineText(interfaceLine) is { } eol && eol.Contains("implementations", StringComparison.Ordinal), seconds: 60);
-        Assert.Contains("2 references", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal);
+        Assert.Contains("2 usages", shapes.Insights.LensRowAbove(interfaceLine), StringComparison.Ordinal); // the popup style, the default
         var areaDeclaration = shapes.Model.Text.GetLineByOffset(shapes.Model.Text.Text.IndexOf("double Area();", StringComparison.Ordinal)).LineNumber;
         await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) is { Length: > 0 }, seconds: 60); // its counts, to click: the row is there before them
         ShellFixture.Pump();
@@ -137,12 +137,12 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => view.VerticalOffset == 0 && view.GetVisualLine(areaDeclaration - 1) is { TextLines.Count: 2 }, describe: () => $"offset {view.VerticalOffset}, lines {view.GetVisualLine(areaDeclaration - 1)?.TextLines.Count}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', folded {shapes.Insights.IsFoldedAway?.Invoke(shapes.Model.Text.GetLineByNumber(areaDeclaration - 1).EndOffset)}");
         before = view.GetVisualLine(areaDeclaration - 1)!;
         rowTop = before.VisualTop + before.TextLines[0].Height - view.VerticalOffset;
-        var references = 0;
-        f.Shell.Workbench.Commands.Executed += (_, e) => references += e.CommandId is "editor.action.showReferences" or "editor.action.referenceSearch" ? 1 : 0;
         var click = Avalonia.VisualExtensions.TranslatePoint(view, new Avalonia.Point(codeX + 8, rowTop + before.TextLines[1].Height / 2), f.Window)!.Value;
         f.Window.MouseDown(click, Avalonia.Input.MouseButton.Left);
         f.Window.MouseUp(click, Avalonia.Input.MouseButton.Left);
-        await ShellFixture.PumpUntil(() => references > 0, describe: () => $"commands run: {references}; row '{shapes.Insights.LensRowAbove(areaDeclaration)}'");
+        await ShellFixture.PumpUntil(() => shapesView.LensResults is { IsOpen: true, Title: "Usages of 'Area'" },
+            describe: () => $"popup '{shapesView.LensResults?.Title}' open {shapesView.LensResults?.IsOpen}; row '{shapes.Insights.LensRowAbove(areaDeclaration)}'");
+        shapesView.LensResults!.Close();
 
         // CodeLens can be turned off.
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
@@ -223,7 +223,7 @@ public class NavigationDepthTests
             describe: () => string.Join("; ", declarations.Select(code => $"{code}: '{shapes.Insights.LensRowAbove(LineOf(code))}'"))
                 + $"; estimates left: {shapes.Insights.HasLensEstimates}; {shapes.Insights.DescribeLenses()}");
         view.EnsureVisualLines();
-        Assert.Contains("reference", shapes.Insights.LensRowAbove(LineOf("class Geometry")), StringComparison.Ordinal);
+        Assert.Contains("usage", shapes.Insights.LensRowAbove(LineOf("class Geometry")), StringComparison.Ordinal);
         Screenshot(f, "codelens-resolved");
         Assert.True(frames.Count > 0, $"no frame showed line {LineOf(probe)}; frames' last lines: {string.Join(", ", seen)}");
         Assert.True(frames[0].Rows, "the first frame didn't keep every declaration's row: " + shapes.Insights.DescribeLenses());
@@ -268,8 +268,9 @@ public class NavigationDepthTests
         // ones that keep their titles and get their commands one request at a time. A click on such a row did nothing:
         // Linux CI's run 40706281162 clicked IShape.Area's after an option change and a scroll away and back, before the
         // refresh had resolved it. Here the click comes as the refresh replaces the lenses (its Updated), before any
-        // of them is resolved again.
+        // of them is resolved again. The References window style, whose click runs the lens's command: exactly once.
         await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensStyleKey, CodeLensStyles.Window, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         f.Window.Width = 1200;
         f.Window.Height = 800;
         var folder = await f.OpenLanguageFeaturesAsync();
@@ -332,7 +333,7 @@ public class NavigationDepthTests
         await ShellFixture.PumpUntil(() => view.VisualLinesValid && view.VisualLines[0].FirstDocumentLine.LineNumber > 60);
 
         // Both of the row's lenses, each resolved on its own.
-        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 references | 1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
+        await ShellFixture.PumpUntil(() => shapes.Insights.LensRowAbove(areaDeclaration) == "2 usages | 1 implementation", seconds: 30, describe: () => $"resolved {shapes.Insights.LensResolvedAbove(areaDeclaration)}, row '{shapes.Insights.LensRowAbove(areaDeclaration)}', first line in view {view.VisualLines[0].FirstDocumentLine.LineNumber}");
     }
 
     [AvaloniaFact]

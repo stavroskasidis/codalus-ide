@@ -123,7 +123,7 @@ public sealed class CodeLensDetailsTests
         // history can come first.)
         await f.Shell.Workbench.Settings.SetAsync(EditorOptions.GitCodeLensKey, false, Workbench.Settings.SettingScope.User, TestContext.Current.CancellationToken);
         await ShellFixture.PumpUntil(
-            () => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal) && eol.Contains("references", StringComparison.Ordinal),
+            () => shapes.Insights.EndOfLineText(line) is { } eol && !eol.Contains("Ada Tester", StringComparison.Ordinal) && eol.Contains("usages", StringComparison.Ordinal),
             seconds: 60,
             describe: () => $"'{shapes.Insights.EndOfLineText(line)}'");
     }

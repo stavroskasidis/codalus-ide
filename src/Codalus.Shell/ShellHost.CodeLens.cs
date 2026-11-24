@@ -6,10 +6,10 @@ using Codalus.Shell.ViewModels;
 namespace Codalus.Shell;
 
 /// <summary>
-/// CodeLens clicks (<c>editor.codeLensStyle</c>): in the default style a count of references runs Find All References
-/// and a count of implementations or derived types lists them in the References window (one goes straight there); in
-/// the popup style, as in Rider, both list them in a popup under the count, whose header button shows them in the
-/// References window instead.
+/// CodeLens clicks (<c>editor.codeLensStyle</c>): in the popup style (the default) a count lists its results in a popup
+/// under it, whose header button shows them in the References window instead; in the References window style a count
+/// of references runs Find All References and a count of implementations or derived types lists them in the References
+/// window (one goes straight there).
 /// </summary>
 public sealed partial class ShellHost
 {

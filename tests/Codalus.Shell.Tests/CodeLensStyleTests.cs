@@ -7,8 +7,8 @@ using Codalus.Workbench.Settings;
 namespace Codalus.Shell.Tests;
 
 /// <summary>
-/// <c>editor.codeLensStyle</c> (Options → Environment → Appearance): the default style's counts open the References
-/// window; the popup style's read as Rider's (usages, inheritors) and list their results in a popup under the count.
+/// <c>editor.codeLensStyle</c> (Options → Environment → Appearance): the popup style's counts (the default) read usages
+/// and inheritors and list their results in a popup under the count; the References window style's open that window.
 /// A click runs the title under the pointer, not the row's first.
 /// </summary>
 public class CodeLensStyleTests
@@ -59,9 +59,10 @@ public class CodeLensStyleTests
     }
 
     [AvaloniaFact]
-    public async Task The_default_style_lists_a_classes_derived_types_in_the_References_window()
+    public async Task The_window_style_lists_a_classes_derived_types_in_the_References_window()
     {
         await using var f = ShellFixture.Create();
+        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensStyleKey, CodeLensStyles.Window, SettingScope.User, TestContext.Current.CancellationToken);
         f.Window.Width = 1200;
         f.Window.Height = 1600;
         var shapes = await OpenShapesAsync(f);
@@ -86,12 +87,12 @@ public class CodeLensStyleTests
     }
 
     [AvaloniaFact]
-    public async Task The_popup_style_lists_derived_types_and_usages_under_the_count()
+    public async Task The_popup_style_is_the_default_and_lists_derived_types_and_usages_under_the_count()
     {
         await using var f = ShellFixture.Create();
         f.Window.Width = 1200;
         f.Window.Height = 1600;
-        await f.Shell.Workbench.Settings.SetAsync(EditorOptions.CodeLensStyleKey, CodeLensStyles.Popup, SettingScope.User, TestContext.Current.CancellationToken);
+        Assert.True(f.Shell.EditorOptions.CodeLensPopups); // nothing set: the popup style
         var shapes = await OpenShapesAsync(f);
         var shapeLine = LineOf(shapes, "public abstract class Shape");
         var interfaceLine = LineOf(shapes, "public interface IShape");

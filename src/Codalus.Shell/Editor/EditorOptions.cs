@@ -138,8 +138,8 @@ public sealed class EditorOptions : ObservableObject
     public bool TestCodeLens { get; private set; }
 
     /// <summary>
-    /// CodeLens in the popup style (<c>editor.codeLensStyle</c> "popup", Rider's): counts read <c>3 usages | 2
-    /// inheritors</c> and a click lists them in a popup under the row; the default style keeps the classic IDE's
+    /// CodeLens in the popup style (<c>editor.codeLensStyle</c> "popup", the default): counts read <c>3 usages | 2
+    /// inheritors</c> and a click lists them in a popup under the row; the "window" style keeps the classic IDE's
     /// <c>references | implementations</c> and opens the References window.
     /// </summary>
     public bool CodeLensPopups { get; private set; }
@@ -172,7 +172,7 @@ public sealed class EditorOptions : ObservableObject
         CodeLens = settings.GetBoolean(CodeLensKey, true);
         GitCodeLens = settings.GetBoolean(GitCodeLensKey, true);
         TestCodeLens = settings.GetBoolean(TestCodeLensKey, true);
-        CodeLensPopups = settings.GetString(CodeLensStyleKey, CodeLensStyles.Default) == CodeLensStyles.Popup;
+        CodeLensPopups = settings.GetString(CodeLensStyleKey, CodeLensStyles.Popup) != CodeLensStyles.Window;
         InlineDiagnostics = settings.GetBoolean(InlineDiagnosticsKey, false);
         InheritanceMargin = settings.GetBoolean(InheritanceMarginKey, true);
         IndentGuides = settings.GetBoolean(IndentGuidesKey, true);

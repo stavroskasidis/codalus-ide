@@ -16,14 +16,14 @@ using Codalus.Workbench.Localization;
 
 namespace Codalus.Shell.Editor;
 
-/// <summary>The values of <c>editor.codeLensStyle</c> (Options → Environment → Appearance → CodeLens Style).</summary>
+/// <summary>The values of <c>editor.codeLensStyle</c> (Options → Environment → Appearance → CodeLens Style); popup by default.</summary>
 public static class CodeLensStyles
 {
-    /// <summary>The classic IDE's: <c>3 references | 2 implementations</c>; a click opens the References window.</summary>
-    public const string Default = "default";
-
-    /// <summary>Rider's: <c>3 usages | 2 inheritors</c>; a click lists them in a popup under the row.</summary>
+    /// <summary>The popup style, the default: <c>3 usages | 2 inheritors</c>; a click lists them in a popup under the row.</summary>
     public const string Popup = "popup";
+
+    /// <summary>The classic IDE's: <c>3 references | 2 implementations</c>; a click opens the References window.</summary>
+    public const string Window = "window";
 }
 
 /// <summary>What a CodeLens count counts, which decides its wording and its popup's title.</summary>
@@ -35,7 +35,7 @@ public enum LensSubject
     /// <summary>The references to a type or member.</summary>
     Usages,
 
-    /// <summary>The classes derived from a class (Rider's inheritors).</summary>
+    /// <summary>The classes derived from a class (its inheritors).</summary>
     DerivedTypes,
 
     /// <summary>The types that implement an interface.</summary>
@@ -74,8 +74,9 @@ public static partial class LensTitles
     };
 
     /// <summary>
-    /// A title as the row shows it: the service's (<c>3 references</c>) in the default style; in the popup style, Rider's
-    /// words for references (<c>3 usages</c>) and a class's derived types (<c>2 inheritors</c>).
+    /// A title as the row shows it: in the popup style, <c>usages</c> for references (<c>3 usages</c>) and
+    /// <c>inheritors</c> for a class's derived types (<c>2 inheritors</c>); the service's own (<c>3 references</c>) in the
+    /// References window style.
     /// </summary>
     public static string Display(string title, string? kind, string declaration, bool popups)
     {
@@ -107,7 +108,7 @@ public static partial class LensTitles
 public sealed record LensResultItem(string Icon, string Name, string? Detail, string? Project, Location Location);
 
 /// <summary>
-/// The popup style's CodeLens list (as Rider's): under the clicked count, its title (<c>Derived types of 'Shape'</c>)
+/// The popup style's CodeLens list: under the clicked count, its title (<c>Derived types of 'Shape'</c>)
 /// with a button that shows the results in the References window instead, then a row per result. Up and Down move,
 /// Enter or a click opens the row's location, Escape (or a click elsewhere) closes.
 /// </summary>
