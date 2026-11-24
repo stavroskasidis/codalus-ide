@@ -76,6 +76,20 @@ public class SolutionExplorerRevealTests
         var (f, folder) = await OpenAsync();
         await using var _ = f;
         var explorer = f.Shell.Explorer;
+
+        // TODO(issue): on the Mac session's whole run of the shell tests (fbba0582, 2026-11-24) the reveal of F150.cs left
+        // the selection on the last row, as if F150.cs had no node then; it passed alone 3 of 3. Not known yet: the
+        // failure now says what the tree and the App project held, and what changed them during the test.
+        var changed = new List<string>();
+        void OnProjectChanged(object? sender, Codalus.Projects.Protocol.ProjectInfo project)
+        {
+            lock (changed)
+            {
+                changed.Add($"{project.Name} {project.State} ({project.Items.Length} items)");
+            }
+        }
+
+        f.Shell.Solutions.ProjectChanged += OnProjectChanged;
         var last = explorer.Rows[^1]; // below App, whose rows come in above it
         Assert.True(explorer.Rows.IndexOf(last) > explorer.Rows.IndexOf(explorer.Rows.First(r => r.Name == "App")));
         explorer.Reveal(last.Id);
@@ -98,8 +112,21 @@ public class SolutionExplorerRevealTests
             ShellFixture.Pump();
         }
 
+        string Describe()
+        {
+            var app = f.Shell.Solutions.Projects.Values.FirstOrDefault(p => p.Name == "App");
+            var many = app?.Items.Count(i => i.Path.Contains($"{Path.DirectorySeparatorChar}Many{Path.DirectorySeparatorChar}", StringComparison.Ordinal)) ?? -1;
+            var inApp = app?.Items.Any(i => Codalus.Workbench.Projects.SolutionService.PathComparer.Equals(i.Path, target)) == true;
+            lock (changed)
+            {
+                return $"selected {explorer.Selected?.Node.Path ?? "nothing"}; F150.cs's row {(explorer.Rows.Any(r => r.Id == "f:" + target) ? "is" : "isn't")} in the list; "
+                    + $"the tree built {explorer.Builds - builds} more time(s); App is {app?.State ?? "missing"} with {many} of Many's files, F150.cs {(inApp ? "among them" : "not among them")}; "
+                    + $"projects changed during the test: {(changed.Count == 0 ? "none" : string.Join(", ", changed))}";
+            }
+        }
+
         Assert.True(scrolls <= 1 && anchors <= 2, $"the list scrolled {scrolls} times, its anchor moved {anchors} times");
-        Assert.Equal(target, explorer.Selected?.Node.Path);
+        Assert.True(string.Equals(target, explorer.Selected?.Node.Path, StringComparison.Ordinal), Describe());
         Assert.True(InView(f, explorer.Selected!), "F150.cs isn't in view");
         Assert.Equal([NotifyCollectionChangedAction.Add], changes); // App's rows, with Many's, in one insertion
         Assert.Equal(builds, explorer.Builds); // and the tree wasn't built again
@@ -117,6 +144,7 @@ public class SolutionExplorerRevealTests
 
         Assert.True(scrolls <= 1, $"Collapse All scrolled {scrolls} times");
         Assert.True(changes.Count <= 2, string.Join(", ", changes));
+        f.Shell.Solutions.ProjectChanged -= OnProjectChanged;
     }
 
     [AvaloniaFact]
