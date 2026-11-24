@@ -725,6 +725,10 @@ public sealed partial class ShellHost
         }
         else
         {
+            // The details the message promises: what the check found after the install. A terminal's install wrote its own
+            // output in the terminal only, where the package manager may have said no more than "Nothing to do".
+            var row = after.FirstOrDefault(t => t.Id == tool.Id);
+            SetupLog.AppendLine($"[{DateTime.Now:T}] {tool.Title} still isn't found after the install: {row?.Detail ?? "the check doesn't say why."}");
             Workbench.Notifications.Warning(Localizer.Format("msg.setup.stillMissing", "The install finished, but {0} still isn't found. The Environment Setup output has the details.", tool.Title));
         }
     }
