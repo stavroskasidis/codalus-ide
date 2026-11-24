@@ -173,6 +173,51 @@ public sealed class DiffDocumentTests
     }
 
     [AvaloniaFact]
+    public async Task A_large_open_side_asks_for_the_lines_shown_and_keeps_the_grammars_colors_elsewhere()
+    {
+        await using var f = ShellFixture.Create();
+        var path = Path.Combine(f.UserData, "Large.cs");
+        var newText = string.Concat(Enumerable.Range(0, 5_000).Select(i => $"class C{i} : IThing {{ }}\n"));
+        var interfaceType = TokenTypes.IndexOf("interface");
+        var asked = new List<(int Start, int End)>();
+
+        // The service colors IThing on every line it's asked for (as a range answer: lines are the file's).
+        var services = new DiffServices(f.Shell)
+        {
+            LanguageOf = _ => "csharp",
+            OpenText = (file, text) => file == path && text == newText,
+            SemanticTokensAsync = (_, _, _) => throw new InvalidOperationException("A large file isn't asked for whole."),
+            SemanticTokensInAsync = (file, text, start, end, _) =>
+            {
+                asked.Add((start, end));
+                var data = new List<int>();
+                var previous = 0;
+                for (var line = start; line < end; line++)
+                {
+                    data.AddRange([line - previous, $"class C{line} : ".Length, 6, interfaceType, 0]);
+                    previous = line;
+                }
+
+                return Task.FromResult<int[]?>([.. data]);
+            },
+        };
+        var vm = new DiffViewModel(path, "test", "old", () => Task.FromResult(newText.Replace("C0 ", "D0 ", StringComparison.Ordinal)), "new", () => Task.FromResult(newText)) { Services = services };
+        await vm.LoadAsync();
+        await ShellFixture.PumpUntil(() => vm.OpenSideIsOld is false && asked.Count > 0);
+
+        Assert.Equal((0, DiffViewModel.WindowMargin * 3), asked[0]);
+        Assert.Equal(interfaceType, vm.NewColors!.TypeAt(0, "class C0 : ".Length));
+        Assert.NotEqual(interfaceType, vm.NewColors.TypeAt(4_000, "class C4000 : ".Length)); // not asked for: the grammar's
+
+        // Lines shown far below: asked for once, with a margin; shown again, not asked for again.
+        await vm.SemanticLinesShownAsync(4_001, 4_030);
+        await vm.SemanticLinesShownAsync(4_010, 4_020);
+        Assert.Equal([(0, DiffViewModel.WindowMargin * 3), (4_000 - DiffViewModel.WindowMargin, 4_030 + DiffViewModel.WindowMargin)], asked);
+        Assert.Equal(interfaceType, vm.NewColors!.TypeAt(4_000, "class C4000 : ".Length));
+        Assert.Equal(interfaceType, vm.NewColors.TypeAt(0, "class C0 : ".Length)); // the first window's kept
+    }
+
+    [AvaloniaFact]
     public async Task The_merge_editors_panes_are_colored_by_the_grammar()
     {
         await using var f = ShellFixture.Create();

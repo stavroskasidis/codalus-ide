@@ -57,6 +57,12 @@ public sealed class DiffServices
     public Func<string, string, CancellationToken, Task<int[]?>> SemanticTokensAsync { get; init; } = (_, _, _) => Task.FromResult<int[]?>(null);
 
     /// <summary>
+    /// As <see cref="SemanticTokensAsync"/>, for the 0-based lines <c>start</c> to <c>end</c> (end excluded) of a large file:
+    /// the tokens' lines are the file's. A service without range requests answers for the whole file.
+    /// </summary>
+    public Func<string, string, int, int, CancellationToken, Task<int[]?>> SemanticTokensInAsync { get; init; } = (_, _, _, _, _) => Task.FromResult<int[]?>(null);
+
+    /// <summary>
     /// Holds a file's document while a working-tree diff shows it (its language service then knows the file, open in an
     /// editor or not), or null when it can't be read; <see cref="ReleaseDocument"/> lets go of it.
     /// </summary>

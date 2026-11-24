@@ -22,6 +22,7 @@ public sealed partial class ShellHost
         OpenDocument = OpenDocumentOf,
         OpenEditor = path => OpenDocumentOf(path) is { } model ? Layout.Documents.OfType<CodeEditorDocument>().FirstOrDefault(d => d.Model == model)?.Controller : null,
         SemanticTokensAsync = SemanticTokensForAsync,
+        SemanticTokensInAsync = (path, text, start, end, ct) => SemanticTokensForAsync(path, text, (start, end), ct),
         SaveAsync = SaveAsync,
         ShowDialogAsync = request => Dialogs.ShowAsync(request),
         ShowMessage = message => Workbench.Notifications.Warning(message),
@@ -175,7 +176,10 @@ public sealed partial class ShellHost
     /// The language service's semantic tokens for the whole open document of <paramref name="path"/> while its text is
     /// <paramref name="text"/> (the side of a diff that is the open document), in the shell's legend; null otherwise.
     /// </summary>
-    private async Task<int[]?> SemanticTokensForAsync(string path, string text, CancellationToken cancellationToken)
+    private async Task<int[]?> SemanticTokensForAsync(string path, string text, CancellationToken cancellationToken) =>
+        await SemanticTokensForAsync(path, text, null, cancellationToken).ConfigureAwait(true);
+
+    private async Task<int[]?> SemanticTokensForAsync(string path, string text, (int Start, int End)? lines, CancellationToken cancellationToken)
     {
         // The lengths first: the open document's text is made a string for the comparison.
         if (OpenDocumentOf(path) is not { } model || model.Text.TextLength != text.Length || model.Text.Text != text
@@ -185,7 +189,9 @@ public sealed partial class ShellHost
         }
 
         var version = model.Version;
-        var range = provider.Range ? new LanguageServices.Protocol.Range(new Position(0, 0), new Position(model.Text.LineCount, 0)) : null;
+        var range = !provider.Range ? null
+            : lines is { } window ? new LanguageServices.Protocol.Range(new Position(Math.Max(0, window.Start), 0), new Position(Math.Min(model.Text.LineCount, window.End), 0))
+            : new LanguageServices.Protocol.Range(new Position(0, 0), new Position(model.Text.LineCount, 0));
         var tokens = await client.SemanticTokensAsync(model.Uri, range, cancellationToken).ConfigureAwait(true);
         if (tokens.ResultId == CodeEditorController.SyntacticResult)
         {
