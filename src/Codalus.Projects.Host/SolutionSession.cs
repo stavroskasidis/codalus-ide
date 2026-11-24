@@ -914,8 +914,9 @@ internal sealed partial class SolutionSession : IAsyncDisposable
     private Task<string[]> PauseDesignTimeBuildsAsync() => _designTimeQueue.PauseAsync();
 
     /// <summary>How to start a project: the SDK's run properties for the active configuration and target framework.</summary>
-    public RunInfo GetRunInfo(string projectPath, string? targetFramework = null)
+    public RunInfo GetRunInfo(string projectPath, string? targetFramework = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!Trusted)
         {
             throw new InvalidOperationException("Projects run only in trusted solutions.");
@@ -934,7 +935,10 @@ internal sealed partial class SolutionSession : IAsyncDisposable
             properties["TargetFramework"] = framework;
         }
 
+        // A request dropped while it waited (a menu's refresh the next one replaced) evaluates nothing.
+        cancellationToken.ThrowIfCancellationRequested();
         using var gate = StringCacheGate.Enter();
+        cancellationToken.ThrowIfCancellationRequested();
         using var collection = new ProjectCollection(properties);
         var project = collection.LoadProject(path);
         string? Property(string name) => project.GetPropertyValue(name) is { Length: > 0 } value ? value : null;
