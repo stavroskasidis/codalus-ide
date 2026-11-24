@@ -181,14 +181,37 @@ internal sealed class JsonSchema(JsonElement root)
             Validate(all, value, problems, depth + 1);
         }
 
-        foreach (var keyword in new[] { "anyOf", "oneOf" })
+        foreach (var keyword in s_alternatives)
         {
             var branches = Branches(schema, keyword);
-            if (branches.Count > 0 && !branches.Any(b => Valid(b, value, depth)))
+            if (branches.Count == 0)
             {
-                // Report the closest branch's problems: the one with the fewest.
-                var best = branches.Select(b => { var p = new List<SchemaProblem>(); Validate(b, value, p, depth + 1); return p; }).OrderBy(p => p.Count).First();
-                problems.AddRange(best.Count > 0 ? best : [new SchemaProblem(value.Start, value.End, "The value doesn't match any of the allowed forms.", false)]);
+                continue;
+            }
+
+            // Each branch validated once (it was twice: to find a valid one, then for the closest one's problems, at every
+            // level of nested alternatives): none is reported if one is valid, else the closest one's, the first of the fewest.
+            List<SchemaProblem>? best = null;
+            var matched = false;
+            foreach (var branch in branches)
+            {
+                var found = new List<SchemaProblem>();
+                Validate(branch, value, found, depth + 1);
+                if (found.Count == 0)
+                {
+                    matched = true;
+                    break;
+                }
+
+                if (best is null || found.Count < best.Count)
+                {
+                    best = found;
+                }
+            }
+
+            if (!matched)
+            {
+                problems.AddRange(best is { Count: > 0 } ? best : [new SchemaProblem(value.Start, value.End, "The value doesn't match any of the allowed forms.", false)]);
             }
         }
 
@@ -307,6 +330,8 @@ internal sealed class JsonSchema(JsonElement root)
             }
         }
     }
+
+    private static readonly string[] s_alternatives = ["anyOf", "oneOf"];
 
     private bool Valid(JsonElement schema, JsonNodeInfo value, int depth)
     {
