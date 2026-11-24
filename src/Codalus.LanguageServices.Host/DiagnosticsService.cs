@@ -261,7 +261,13 @@ internal sealed class DiagnosticsService : IDisposable
     /// Restarts the background pass after a quiet period: <paramref name="delay"/>, or 1.5 s, which lets a burst of edits
     /// settle (projects that finished loading need no such wait, M34c).
     /// </summary>
-    public void ScheduleBackground(TimeSpan? delay = null)
+    public void ScheduleBackground(TimeSpan? delay = null) => ScheduleBackground(delay, full: false);
+
+    /// <summary>
+    /// The background pass after <paramref name="delay"/>; a <paramref name="full"/> one analyzes whole every project a
+    /// partial pass analyzed in part (an edit's own pass, scheduled again meanwhile, replaces it, and schedules it again).
+    /// </summary>
+    private void ScheduleBackground(TimeSpan? delay, bool full)
     {
         CancellationToken token;
         CancellationTokenSource? previous;
@@ -279,7 +285,7 @@ internal sealed class DiagnosticsService : IDisposable
             try
             {
                 await Task.Delay(delay ?? s_backgroundDelay, token).ConfigureAwait(false);
-                await BackgroundPassAsync(token).ConfigureAwait(false);
+                await BackgroundPassAsync(full, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -327,6 +333,65 @@ internal sealed class DiagnosticsService : IDisposable
     {
         /// <summary>What the project's source generators wrote, when it compiled in the pass and others reference it.</summary>
         public string? Generated { get; init; }
+
+        /// <summary>Its documents' text versions and its semantic version when it was analyzed (for a partial pass).</summary>
+        public IReadOnlyDictionary<DocumentId, VersionStamp>? Texts { get; init; }
+
+        public VersionStamp? Semantic { get; init; }
+
+        /// <summary>Only its changed documents were analyzed: a full pass, after a pause, checks it whole.</summary>
+        public bool Partial { get; init; }
+    }
+
+    /// <summary>
+    /// The compiler's diagnostics that only a whole compilation reports (fields and events never used or assigned): a
+    /// partial pass keeps a changed file's from the last full one.
+    /// </summary>
+    private static readonly HashSet<string> s_compilationLevel = new(["CS0067", "CS0169", "CS0414", "CS0649"], StringComparer.Ordinal);
+
+    /// <summary>At most this many changed documents of a project are analyzed alone; more, and the project is analyzed whole.</summary>
+    private const int PartialDocuments = 8;
+
+    /// <summary>How long after a partial pass, with no edit, the full pass checks the projects it analyzed in part.</summary>
+    private static readonly TimeSpan s_fullPassDelay = TimeSpan.FromSeconds(10);
+
+    private static Dictionary<DocumentId, VersionStamp> TextVersions(Project project)
+    {
+        var versions = new Dictionary<DocumentId, VersionStamp>();
+        foreach (var document in project.Documents)
+        {
+            if (document.TryGetTextVersion(out var version))
+            {
+                versions[document.Id] = version;
+            }
+        }
+
+        return versions;
+    }
+
+    /// <summary>The documents whose text changed since <paramref name="texts"/>, or null when documents came or went.</summary>
+    private static List<Document>? ChangedDocuments(Project project, IReadOnlyDictionary<DocumentId, VersionStamp> texts)
+    {
+        if (project.DocumentIds.Count != texts.Count)
+        {
+            return null;
+        }
+
+        var changed = new List<Document>();
+        foreach (var document in project.Documents)
+        {
+            if (!texts.TryGetValue(document.Id, out var before))
+            {
+                return null;
+            }
+
+            if (!document.TryGetTextVersion(out var now) || now != before)
+            {
+                changed.Add(document);
+            }
+        }
+
+        return changed;
     }
 
     /// <summary>
@@ -389,11 +454,11 @@ internal sealed class DiagnosticsService : IDisposable
     /// assemblies of unchanged projects) when the projects they reference haven't compiled. Then the projects the open
     /// documents reference compile in the workspace (<see cref="WarmUp"/>), for navigation.
     /// </summary>
-    private async Task BackgroundPassAsync(CancellationToken cancellationToken)
+    private async Task BackgroundPassAsync(bool full, CancellationToken cancellationToken)
     {
         // A pass cancelled by an edit keeps what it had finished: each project's entry stands for its version only, so
         // the next pass takes those whose versions didn't change instead of compiling them again.
-        var progress = new PassProgress(Interlocked.Increment(ref _passSequence));
+        var progress = new PassProgress(Interlocked.Increment(ref _passSequence)) { Full = full };
         try
         {
             await RunPassAsync(progress, cancellationToken).ConfigureAwait(false);
@@ -413,6 +478,9 @@ internal sealed class DiagnosticsService : IDisposable
         public System.Collections.Concurrent.ConcurrentDictionary<ProjectId, ProjectPass>? Results { get; set; }
 
         public HashSet<ProjectId>? Provisional { get; set; }
+
+        /// <summary>Every project analyzed whole: none in part, and none of a partial pass's kept.</summary>
+        public bool Full { get; init; }
     }
 
     private long _passSequence;
@@ -503,7 +571,7 @@ internal sealed class DiagnosticsService : IDisposable
         {
             var version = versions[project.Id] = await VersionOfAsync(project, token).ConfigureAwait(false);
             var scope = ScopeFor(project);
-            if (previous.TryGetValue(project.Id, out var cached) && (cached.Version.Dependent == version.Dependent || cached.Version.Own == version.Own) && cached.Scope == scope
+            if (previous.TryGetValue(project.Id, out var cached) && !(progress.Full && cached.Partial) && (cached.Version.Dependent == version.Dependent || cached.Version.Own == version.Own) && cached.Scope == scope
                 && cached.References.SequenceEqual(project.MetadataReferences) && cached.Analyzers.SequenceEqual(project.AnalyzerReferences))
             {
                 // Unchanged since the last pass, with everything it references, or what changed below were bodies.
@@ -564,6 +632,51 @@ internal sealed class DiagnosticsService : IDisposable
             }
 
             var scope = ScopeFor(project);
+            var semantic = await project.GetSemanticVersionAsync(token).ConfigureAwait(false);
+
+            // Only method bodies of a few of its files changed (its semantic version stands): those files are analyzed
+            // alone, the rest keep the last pass's diagnostics, and a full pass after a pause checks the project whole.
+            if (!progress.Full && !provisional.Contains(project.Id) && previous.TryGetValue(project.Id, out var before)
+                && before is { Texts: { } texts, Semantic: { } kept } && kept == semantic && before.Scope == scope
+                && before.References.SequenceEqual(project.MetadataReferences) && before.Analyzers.SequenceEqual(project.AnalyzerReferences)
+                && ChangedDocuments(project, texts) is { Count: > 0 and <= PartialDocuments } changed)
+            {
+                var partial = before.Found.Where(f => !changed.Any(d => Paths.Comparer.Equals(d.FilePath, f.Path))).ToList();
+                foreach (var document in changed)
+                {
+                    if (document.FilePath is not { Length: > 0 } path || await document.GetSyntaxTreeAsync(token).ConfigureAwait(false) is not { } tree
+                        || await document.GetSemanticModelAsync(token).ConfigureAwait(false) is not { } model)
+                    {
+                        continue;
+                    }
+
+                    var items = model.GetDiagnostics(null, token).Where(d => !BuildDivergence.IsCompilationReferenceArtifact(d, model.Compilation, token)).ToList();
+                    if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } fileAnalyzers)
+                    {
+                        items.AddRange(await fileAnalyzers.GetAnalyzerSyntaxDiagnosticsAsync(tree, token).ConfigureAwait(false));
+                        items.AddRange(await fileAnalyzers.GetAnalyzerSemanticDiagnosticsAsync(model, null, token).ConfigureAwait(false));
+                    }
+
+                    var converted = Convert(items, tree);
+                    var carried = before.Found.Where(f => Paths.Comparer.Equals(f.Path, path)).SelectMany(f => f.Items).Where(d => d.Code is { } code && s_compilationLevel.Contains(code));
+                    Diagnostic[] all = [.. converted, .. carried.Where(c => !converted.Contains(c, DiagnosticComparer.Instance))];
+                    if (all.Length > 0)
+                    {
+                        partial.Add((path, all));
+                    }
+                }
+
+                // Not written for the next session, nor its reference assembly: the full pass does.
+                results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, partial)
+                {
+                    Generated = before.Generated,
+                    Texts = TextVersions(project),
+                    Semantic = semantic,
+                    Partial = true,
+                };
+                return;
+            }
+
             List<RoslynDiagnostic> diagnostics;
             if (scope == ScopeSolution && Analyzers(project, compilation, includeProject: true, includeIde: false) is { } analyzers)
             {
@@ -603,6 +716,8 @@ internal sealed class DiagnosticsService : IDisposable
             results[project.Id] = new ProjectPass(version, [.. project.MetadataReferences], [.. project.AnalyzerReferences], scope, project.DocumentIds.Count, found)
             {
                 Generated = hasDependents.Contains(project.Id) ? await GeneratedOfAsync(project, token).ConfigureAwait(false) : null,
+                Texts = TextVersions(project),
+                Semantic = semantic,
             };
             if (!provisional.Contains(project.Id) && keys?.Key(project.Id) is { } key && LanguageStateCache.Folder(keys.Project(project.Id)?.Parsed) is { } folder)
             {
@@ -726,6 +841,11 @@ internal sealed class DiagnosticsService : IDisposable
         if (provisional.Count > 0)
         {
             ScheduleBackground(TimeSpan.Zero);
+        }
+        else if (results.Values.Count(r => r.Partial) is var parts and > 0)
+        {
+            _log($"Solution diagnostics: {parts} project(s) analyzed in part (their changed files only), checked whole after a pause.");
+            ScheduleBackground(s_fullPassDelay, full: true);
         }
     }
 

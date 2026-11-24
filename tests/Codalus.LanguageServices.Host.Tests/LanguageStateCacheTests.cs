@@ -209,6 +209,22 @@ public sealed class LanguageStateCacheTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_body_edit_analyzes_its_file_alone_and_the_projects_other_files_keep_theirs()
+    {
+        var context = Path.Combine(_root, "Lib", "Context.cs");
+        var warnings = Path.Combine(_root, "Lib", "Warnings.cs");
+        await using var session = await SessionAsync(context);
+        await session.ReadyAsync();
+        await LanguageFixture.WaitUntilAsync(() => session.Has(warnings, "CS0219"), TimeSpan.FromSeconds(60), () => Describe(session));
+
+        // A method's body: Context.cs alone is analyzed, Warnings.cs (closed) keeps its warning.
+        var uri = DocumentUris.FromPath(context);
+        await session.Client.DidChangeTextAsync(uri, 2, () => LibSource.Replace("internal static int Hidden() => 1;", "internal static int Hidden() => 2;", StringComparison.Ordinal), Ct);
+        await LanguageFixture.WaitUntilAsync(() => session.Logged("analyzed in part (their changed files only)"), TimeSpan.FromSeconds(60), () => Describe(session));
+        Assert.True(session.Has(warnings, "CS0219"));
+    }
+
+    [Fact]
     public void CS4014_on_a_call_into_another_project_is_left_out_in_methods_that_are_not_async()
     {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator)
