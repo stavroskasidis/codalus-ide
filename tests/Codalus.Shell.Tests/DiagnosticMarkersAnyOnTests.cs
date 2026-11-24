@@ -1,3 +1,4 @@
+using Avalonia.Headless.XUnit;
 using AvaloniaEdit.Document;
 using Codalus.LanguageServices.Protocol;
 using Codalus.Shell.Editor;
@@ -11,7 +12,7 @@ public sealed class DiagnosticMarkersAnyOnTests
     private static Diagnostic At(int startLine, int startCharacter, int endLine, int endCharacter) =>
         new(new Range(new Position(startLine, startCharacter), new Position(endLine, endCharacter)), DiagnosticSeverity.Error, "CS1", "csharp", "x");
 
-    [Fact]
+    [AvaloniaFact] // the markers are an Avalonia object: made on the UI thread
     public void A_diagnostic_lights_the_lines_it_touches_and_not_the_next_ones()
     {
         var document = new TextDocument("first line\r\nsecond\r\nthird\r\nfourth");
