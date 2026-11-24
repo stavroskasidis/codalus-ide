@@ -404,7 +404,7 @@ public sealed class WinFormsDesignerVisualBasicCodeTests
     {
         var model = Read(OrderForm).Model;
         var tree = VisualBasicSyntaxTree.ParseText(OrderCode, cancellationToken: TestContext.Current.CancellationToken);
-        var events = VisualBasicHandles.WithHandles(model, tree.GetRoot(TestContext.Current.CancellationToken)).Statements.Where(s => s.Kind == DesignerStatementKinds.Event)
+        var events = VisualBasicHandles.WithHandles(model, null, tree.GetRoot(TestContext.Current.CancellationToken)).Statements.Where(s => s.Kind == DesignerStatementKinds.Event)
             .Select(s => (s.Target, s.Member, s.Handler)).ToList();
         Assert.Equal(
         [
