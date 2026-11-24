@@ -32,7 +32,13 @@ internal sealed class WorkspaceManager : IDisposable
             .Concat([typeof(Microsoft.CodeAnalysis.Completion.CompletionService).Assembly, Assembly.Load("Microsoft.CodeAnalysis.CSharp.Features")])
             .Distinct()));
 
-    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() => FrameworkReferences(RuntimeEnvironment.GetRuntimeDirectory()));
+    private static readonly Lazy<MetadataReference[]> s_frameworkReferences = new(() =>
+    {
+        // Projects on the same .NET reference the same pack: they take these instead of reading it again.
+        var references = FrameworkReferences(RuntimeEnvironment.GetRuntimeDirectory());
+        ProjectLoader.Share(references);
+        return references;
+    });
 
     /// <summary>
     /// What Miscellaneous Files compiles against: the reference pack of the .NET in <paramref name="runtimeDirectory"/>
@@ -288,16 +294,39 @@ internal sealed class WorkspaceManager : IDisposable
         var phase = "waiting for the workspace's lock";
         using var slow = new Timer(_ => Log?.Invoke(this, $"Loading {projects.Count} project(s) has taken {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalSeconds:0} s so far: {Volatile.Read(ref phase)}."),
             null, TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30));
+
+        // The command lines are read in parallel and outside the lock (each a few ms, hundreds of them in a large
+        // solution's first update), then applied in order: of a path given twice, the later counts. Parsing is the
+        // wall time of the whole read.
+        Volatile.Write(ref phase, $"reading {projects.Count} project(s)");
+        var reading = System.Diagnostics.Stopwatch.GetTimestamp();
+        var items = projects.Select(p => p with { Path = Path.GetFullPath(p.Path) }).ToArray();
+        var read = new ProjectLoader.Parsed?[items.Length];
+        if (items.Length > 1)
+        {
+            try
+            {
+                Parallel.For(0, items.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount / 2) }, i => read[i] = _loader.Parse(items[i]));
+            }
+            catch (AggregateException ex) when (ex.InnerExceptions.Count > 0)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerExceptions[0]).Throw();
+            }
+        }
+        else if (items.Length == 1)
+        {
+            read[0] = _loader.Parse(items[0]);
+        }
+
+        parsing = System.Diagnostics.Stopwatch.GetElapsedTime(reading);
+        Volatile.Write(ref phase, "waiting for the workspace's lock");
         lock (_gate)
         {
             var solution = _workspace.CurrentSolution;
-            foreach (var data in projects)
+            for (var i = 0; i < items.Length; i++)
             {
-                var path = Path.GetFullPath(data.Path);
-                Volatile.Write(ref phase, $"reading {data.Name}");
-                var step = System.Diagnostics.Stopwatch.GetTimestamp();
-                var parsed = _loader.Parse(data with { Path = path });
-                parsing += System.Diagnostics.Stopwatch.GetElapsedTime(step);
+                var (data, parsed) = (items[i], read[i]);
+                var path = data.Path;
                 if (parsed is null)
                 {
                     continue;
@@ -310,7 +339,7 @@ internal sealed class WorkspaceManager : IDisposable
                 }
 
                 Volatile.Write(ref phase, $"adding {data.Name}");
-                step = System.Diagnostics.Stopwatch.GetTimestamp();
+                var step = System.Diagnostics.Stopwatch.GetTimestamp();
                 solution = Apply(solution, entry, parsed);
                 entry.Parsed = parsed;
                 entry.Updates++;
@@ -554,7 +583,7 @@ internal sealed class WorkspaceManager : IDisposable
                 }
                 else if (_loader.Metadata(path, properties) is { } aliased)
                 {
-                    metadata.Add(aliased);
+                    metadata.Add(aliased); // the same instance while the file is unchanged
                 }
             }
 
@@ -813,7 +842,7 @@ internal sealed class WorkspaceManager : IDisposable
 
         if (DocumentUris.GeneratedPath(uri) is { } generatedPath)
         {
-            foreach (var project in solution.Projects)
+            foreach (var project in GeneratorCandidates(solution, generatedPath))
             {
                 foreach (var generated in await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false))
                 {
@@ -828,10 +857,25 @@ internal sealed class WorkspaceManager : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// The projects whose generators may have written <paramref name="generatedPath"/>, those under whose folder it is
+    /// first (Roslyn puts a generated document's path under its project's), each group in the solution's order: asking
+    /// every project in turn ran the generators of every project before the one that has it.
+    /// </summary>
+    private static IEnumerable<Project> GeneratorCandidates(Solution solution, string generatedPath)
+    {
+        static bool Under(Project project, string path) =>
+            Path.GetDirectoryName(project.FilePath) is { Length: > 0 } directory
+            && path.StartsWith(Path.TrimEndingDirectorySeparator(directory) + Path.DirectorySeparatorChar, Paths.Comparer == StringComparer.Ordinal ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+
+        var projects = solution.Projects.ToList();
+        return projects.Where(p => Under(p, generatedPath)).Concat(projects.Where(p => !Under(p, generatedPath)));
+    }
+
     /// <summary>The source-generated document of a syntax tree (its virtual path identifies it).</summary>
     public static async ValueTask<Document?> FindGeneratedAsync(Solution solution, SyntaxTree tree, CancellationToken cancellationToken)
     {
-        foreach (var project in solution.Projects)
+        foreach (var project in GeneratorCandidates(solution, tree.FilePath))
         {
             foreach (var generated in await project.GetSourceGeneratedDocumentsAsync(cancellationToken).ConfigureAwait(false))
             {

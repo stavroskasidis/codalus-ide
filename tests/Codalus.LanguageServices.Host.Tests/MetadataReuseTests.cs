@@ -1,0 +1,53 @@
+using System.Collections.Immutable;
+using Microsoft.CodeAnalysis;
+
+namespace Codalus.LanguageServices.Host.Tests;
+
+/// <summary>
+/// Metadata references are made once per unchanged file: with aliases too (a new one each update dropped the
+/// project's compilation), and shared with what the host made for Miscellaneous Files.
+/// </summary>
+public sealed class MetadataReuseTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "codalus-metadata-" + Guid.NewGuid().ToString("N"));
+
+    public MetadataReuseTests() => Directory.CreateDirectory(_root);
+
+    public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    private string CopyAssembly(string name)
+    {
+        var path = Path.Combine(_root, name);
+        File.Copy(typeof(MetadataReuseTests).Assembly.Location, path);
+        return path;
+    }
+
+    [Fact]
+    public void An_aliased_reference_is_the_same_instance_until_its_file_changes()
+    {
+        var dll = CopyAssembly("Aliased.dll");
+        var loader = new ProjectLoader();
+        var aliased = MetadataReferenceProperties.Assembly.WithAliases(ImmutableArray.Create("Old"));
+        var first = loader.Metadata(dll, aliased);
+        Assert.NotNull(first);
+        Assert.Same(first, loader.Metadata(dll, aliased));
+        Assert.Same(first, loader.Metadata(dll, MetadataReferenceProperties.Assembly.WithAliases(ImmutableArray.Create("Old"))));
+        Assert.NotSame(first, loader.Metadata(dll, MetadataReferenceProperties.Assembly.WithEmbedInteropTypes(true)));
+        Assert.Equal(["Old"], first!.Properties.Aliases);
+
+        File.SetLastWriteTimeUtc(dll, DateTime.UtcNow.AddMinutes(1));
+        Assert.NotSame(first, loader.Metadata(dll, aliased));
+    }
+
+    [Fact]
+    public void Projects_take_the_references_the_host_shares_while_the_file_is_unchanged()
+    {
+        var dll = CopyAssembly("Shared.dll");
+        var shared = MetadataReference.CreateFromFile(dll);
+        ProjectLoader.Share([shared]);
+        Assert.Same(shared, new ProjectLoader().Metadata(dll, MetadataReferenceProperties.Assembly));
+
+        File.SetLastWriteTimeUtc(dll, DateTime.UtcNow.AddMinutes(1));
+        Assert.NotSame(shared, new ProjectLoader().Metadata(dll, MetadataReferenceProperties.Assembly));
+    }
+}
