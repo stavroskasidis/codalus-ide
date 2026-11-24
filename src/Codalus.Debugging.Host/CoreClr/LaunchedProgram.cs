@@ -213,14 +213,14 @@ internal sealed class LaunchedProgram : IDisposable
             Task.WaitAny(connected, exited);
             if (!connected.IsCompletedSuccessfully)
             {
-                throw new ClrException(_launcher is { HasExited: true } ended
-                    ? $"The debugger's launcher ended before starting {program} (exit code {ExitCodeOf(ended)})."
-                    : $"The debugger's launcher didn't start {program} in {StartTimeout.TotalSeconds:0} seconds.");
+                throw _launcher is { HasExited: true } ended
+                    ? new ClrException($"The debugger's launcher ended before starting {program} (exit code {ExitCodeOf(ended)}).")
+                    : new ClrStartTimeoutException($"The debugger's launcher didn't start {program} in {StartTimeout.TotalSeconds:0} seconds.");
             }
         }
         catch (AggregateException ex) when (ex.InnerException is OperationCanceledException)
         {
-            throw new ClrException($"The debugger's launcher didn't start {program} in {StartTimeout.TotalSeconds:0} seconds.");
+            throw new ClrStartTimeoutException($"The debugger's launcher didn't start {program} in {StartTimeout.TotalSeconds:0} seconds.");
         }
 
         // Connected: setting AutoFlush flushes, which an unconnected pipe refuses.
@@ -228,18 +228,26 @@ internal sealed class LaunchedProgram : IDisposable
         var reader = new StreamReader(_pipe, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
         var first = reader.ReadLineAsync(timeout.Token).AsTask();
         string? report;
+        var timedOut = false;
         try
         {
             report = first.Wait(StartTimeout) ? first.Result : null;
+            timedOut = report is null && !first.IsCompleted;
         }
-        catch (AggregateException)
+        catch (AggregateException ex)
         {
             report = null;
+            timedOut = ex.InnerException is OperationCanceledException;
         }
 
         if (report is not null && report.StartsWith("error ", StringComparison.Ordinal))
         {
             throw new ClrException(report[6..]);
+        }
+
+        if (report is null && timedOut)
+        {
+            throw new ClrStartTimeoutException($"The debugger's launcher didn't report {program}'s process id in {StartTimeout.TotalSeconds:0} seconds.");
         }
 
         if (report is null || !report.StartsWith("pid ", StringComparison.Ordinal) || !int.TryParse(report.AsSpan(4), NumberStyles.None, CultureInfo.InvariantCulture, out var id))

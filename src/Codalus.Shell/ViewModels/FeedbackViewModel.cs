@@ -15,6 +15,9 @@ public interface IFeedbackHost
     /// <summary>The IDE's own log: Output's Codalus IDE channel.</summary>
     string LogText { get; }
 
+    /// <summary>The last debug session's log (<see cref="Workbench.Debugging.DebugSessionLog"/>), or null when there is none.</summary>
+    string? DebugSessionLog => null;
+
     /// <summary>The user's home folder, written as <c>~</c> in what's attached.</summary>
     string? Home { get; }
 
@@ -52,6 +55,7 @@ public sealed class FeedbackViewModel : ObservableObject, IDisposable
     private IssueKind _kind;
     private IssueEnvironment? _environment;
     private string? _logs;
+    private string? _debugLog;
     private string _issueTitle = string.Empty;
     private string _description = string.Empty;
     private string _details = string.Empty;
@@ -166,9 +170,11 @@ public sealed class FeedbackViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool CanIncludeLogs => IsProblem && _logs is { Length: > 0 };
+    public bool CanIncludeLogs => IsProblem && (_logs is { Length: > 0 } || _debugLog is { Length: > 0 });
 
-    public string IncludeLogsLabel => Localizer.Format("msg.feedback.includeLogs", "Include the last {0} lines of the IDE's log (secrets and your home folder redacted)", IssueReport.LogLines);
+    public string IncludeLogsLabel => _debugLog is { Length: > 0 }
+        ? Localizer.Format("msg.feedback.includeLogsAndDebug", "Include the last {0} lines of the IDE's log and of the last debug session's (secrets and your home folder redacted)", IssueReport.LogLines)
+        : Localizer.Format("msg.feedback.includeLogs", "Include the last {0} lines of the IDE's log (secrets and your home folder redacted)", IssueReport.LogLines);
 
     /// <summary>Exactly what is attached besides the text above it, as it is sent.</summary>
     public string Preview
@@ -207,6 +213,7 @@ public sealed class FeedbackViewModel : ObservableObject, IDisposable
     public IssueDraft Draft => new(Kind, _issueTitle.Trim(), _description.Trim(), _details.Trim(), _environment ?? _host.Environment)
     {
         Logs = IsProblem && _includeLogs ? _logs : null,
+        DebugLog = IsProblem && _includeLogs ? _debugLog : null,
     };
 
     /// <summary>Opens the dialog for <paramref name="kind"/>; completes when it closes. Called again while open, it returns the open one.</summary>
@@ -221,6 +228,7 @@ public sealed class FeedbackViewModel : ObservableObject, IDisposable
         _cts = new CancellationTokenSource();
         _environment = _host.Environment;
         _logs = kind == IssueKind.Problem ? IssueReport.LogTail(_host.LogText, _host.Home) : null;
+        _debugLog = kind == IssueKind.Problem ? IssueReport.LogTail(_host.DebugSessionLog, _host.Home, IssueReport.DebugLogLines) : null;
         Kind = kind;
         OnPropertyChanged(nameof(Context));
         OnPropertyChanged(nameof(CanIncludeLogs));

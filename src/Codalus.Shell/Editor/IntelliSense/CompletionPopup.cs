@@ -437,6 +437,25 @@ public sealed class CompletionPopup : IntelliSensePopup
     /// <summary>The end of the text being completed.</summary>
     public int EndOffset { get; set; }
 
+    /// <summary>
+    /// The rest of the word after <see cref="EndOffset"/> that the list's range covers (completion asked for in the middle
+    /// of a word): it filters the list with the typed text, and a commit replaces it, as the classic IDE does with Roslyn's
+    /// span. Typing before "InitializeComponent" filters by "vInitializeComponent", which nothing matches, so Space types.
+    /// </summary>
+    public int TailLength { get; set; }
+
+    /// <summary>Where the list was asked for, in the document as it was then: the list's ranges are positions in it.</summary>
+    public Position? RequestedAt { get; set; }
+
+    /// <summary>The text the list is filtered by with the caret at <paramref name="caret"/>: the typed text and the word's rest.</summary>
+    public string FilterText(int caret)
+    {
+        var document = TextArea.Document;
+        var typed = document.GetText(StartOffset, Math.Max(0, caret - StartOffset));
+        var tail = Math.Clamp(TailLength, 0, Math.Max(0, document.TextLength - EndOffset));
+        return tail == 0 ? typed : typed + document.GetText(EndOffset, tail);
+    }
+
     /// <summary>Closes when the caret moves back to <see cref="StartOffset"/> (after Ctrl+Space or a ".", not a "(").</summary>
     public bool CloseWhenCaretAtBeginning { get; set; }
 
@@ -463,7 +482,8 @@ public sealed class CompletionPopup : IntelliSensePopup
 
         // Closed first: committing may open another popup (a snippet's choices, signature help after "(").
         Hide();
-        item.Complete(new AnchorSegment(TextArea.Document, StartOffset, Math.Max(0, EndOffset - StartOffset)));
+        var tail = Math.Clamp(TailLength, 0, Math.Max(0, TextArea.Document.TextLength - EndOffset));
+        item.Complete(new CompletionSpan(StartOffset, Math.Max(0, EndOffset - StartOffset), tail, RequestedAt));
     }
 
     /// <summary>
@@ -478,7 +498,9 @@ public sealed class CompletionPopup : IntelliSensePopup
             return false;
         }
 
-        return !item.Text.StartsWith(CompletionList.Query + typed, StringComparison.CurrentCultureIgnoreCase);
+        // What was typed, without the word's rest that the query also holds.
+        var typedSoFar = TailLength == 0 ? CompletionList.Query : TextArea.Document.GetText(StartOffset, Math.Max(0, TextArea.Caret.Offset - StartOffset));
+        return !item.Text.StartsWith(typedSoFar + typed, StringComparison.CurrentCultureIgnoreCase);
     }
 
     /// <summary>Commits the selected item for a typed commit character, which the editor then types.</summary>
@@ -508,8 +530,11 @@ public sealed class CompletionPopup : IntelliSensePopup
             Hide();
         }
 
+        // The word's rest after the typed text keeps its end (text typed at its end isn't part of it) and loses what's deleted.
+        var tailEnd = EndOffset + TailLength;
         StartOffset = e.GetNewOffset(StartOffset, AnchorMovementType.BeforeInsertion);
         EndOffset = e.GetNewOffset(EndOffset, AnchorMovementType.AfterInsertion);
+        TailLength = TailLength == 0 ? 0 : Math.Max(0, e.GetNewOffset(tailEnd, AnchorMovementType.BeforeInsertion) - EndOffset);
     }
 
     private void OnCaretChanged(object? sender, EventArgs e)
@@ -532,7 +557,7 @@ public sealed class CompletionPopup : IntelliSensePopup
             return;
         }
 
-        CompletionList.SelectItem(TextArea.Document.GetText(StartOffset, offset - StartOffset));
+        CompletionList.SelectItem(FilterText(offset));
         if (CompletionList.CurrentList.Count == 0)
         {
             Hide();
